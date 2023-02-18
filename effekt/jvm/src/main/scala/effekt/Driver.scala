@@ -22,9 +22,7 @@ import java.io.IOException
 /**
  * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
  */
-trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektError] { outer =>
-
-  val name = "effekt"
+trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
   object messaging extends AnsiColoredMessaging
 
@@ -39,8 +37,8 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
   override def run(config: EffektConfig): Unit =
     if (config.filenames().isEmpty && !config.server() && !config.compile()) {
       new Repl(this).run(config)
-    } else {
-      super.run(config)
+    } else for (filename <- config.filenames()) {
+      compileFile(filename, config)
     }
 
   override def createConfig(args: Seq[String]) =
@@ -59,6 +57,12 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
 
     implicit val C = context
     C.setup(config)
+
+    def saveOutput(path: String, doc: String): Unit =
+      if (C.config.requiresCompilation()) {
+        C.config.outputPath().mkdirs
+        IO.createFile(path, doc)
+      }
 
     C.backend match {
 
@@ -84,13 +88,6 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     afterCompilation(source, config)(context)
   }
 
-  // TODO check whether we still need requiresCompilation
-  private def saveOutput(path: String, doc: String)(implicit C: Context): Unit =
-    if (C.config.requiresCompilation()) {
-      C.config.outputPath().mkdirs
-      IO.createFile(path, doc)
-    }
-
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode
    */
@@ -98,23 +95,4 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     // report messages
     report(source, C.messaging.buffer, config)
   }
-
-  def report(in: Source)(implicit C: Context): Unit =
-    report(in, C.messaging.buffer, C.config)
-
-  /**
-   * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
-   * Not used anymore
-   */
-  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
-
-  /**
-   * Originally called by kiama, not used anymore.
-   */
-  override final def parse(source: Source): ParseResult[ModuleDecl] = ???
-
-  /**
-   * Originally called by kiama, not used anymore.
-   */
-  override final def format(m: ModuleDecl): Document = ???
 }

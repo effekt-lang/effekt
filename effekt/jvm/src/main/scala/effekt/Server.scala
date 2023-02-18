@@ -18,11 +18,13 @@ import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteComman
  *     v
  * effekt.Compiler
  */
-trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, EffektError] with Driver with Intelligence {
+trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with Driver with Intelligence {
 
   import effekt.symbols._
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+
+  val name = "effekt"
 
   // Diagnostics
   object lspMessaging extends PlainMessaging
@@ -250,7 +252,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
   // Class to easily test custom LSP services not (yet) meant to go into kiama.Services
-  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig, EffektError](server, config) {}
+  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, EffektConfig, EffektError](server, config) {}
 }
 
 /**
