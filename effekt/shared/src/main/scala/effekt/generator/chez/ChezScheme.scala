@@ -3,221 +3,76 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.core.*
-import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
+import effekt.symbols.{ Module, Symbol }
 
-import scala.language.implicitConversions
-import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
+import kiama.util.Source
 
-object ChezSchemeMonadic extends ChezScheme {
-
-  def run(expr: chez.Expr): chez.Expr =
-    Builtin("run", expr)
-
-  def pure(expr: chez.Expr): chez.Expr =
-    Builtin("pure", expr)
-
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    Builtin("then", binding, chez.Lambda(List(param), body))
-
-  def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", chez.Call(main))
+class ChezSchemeMonadic extends ChezScheme {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
+    chez.TransformerMonadic.compilationUnit(mainSymbol, mod, decl)
 }
 
-object ChezSchemeCallCC extends ChezScheme {
 
-  def run(expr: chez.Expr): chez.Expr = expr
-
-  def pure(expr: chez.Expr): chez.Expr = expr
-
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    chez.Let(List(Binding(param, binding)), body)
-
-  def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", Variable(main))
+class ChezSchemeCallCC extends ChezScheme {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
+    chez.TransformerCallCC.compilationUnit(mainSymbol, mod, decl)
 }
 
-trait ChezScheme {
 
-  def run(expr: chez.Expr): chez.Expr
-  def pure(expr: chez.Expr): chez.Expr
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
+trait ChezScheme extends Compiler[String] {
 
-  def runMain(main: ChezName): chez.Expr
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
-    val definitions = toChez(core)
-    chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
+  // Implementation of the Compiler Interface:
+  // -----------------------------------------
+  def extension = ".ss"
+
+  override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Lifted => None
+    case Stage.Machine => None
+    case Stage.Target => Separate(source).map { res => pretty(res) }
   }
 
-  def toChez(p: Param): ChezName = nameDef(p.id)
+  override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
+    case Stage.Core => Core(source).map { res => res.core }
+    case Stage.Lifted => None
+    case Stage.Machine => None
+    case Stage.Target => Separate(source)
+  }
 
-  def toChez(module: ModuleDecl): List[chez.Def] = {
-    val decls = module.declarations.flatMap(toChez)
-    val externs = module.externs.map(toChez)
-     // TODO FIXME, once there is a let _ = ... in there, we are doomed!
-    val defns = module.definitions.map(toChez).flatMap {
-      case Left(d) => Some(d)
-      case Right(None) => None
-      case Right(e) => ???
+  override def compile(source: Source)(using C: Context) = Compile(source)
+
+  // The Compilation Pipeline
+  // ------------------------
+  // Source => Core => Chez
+  lazy val Compile =
+    allToCore(Core) andThen Aggregate andThen Chez map { case (main, expr) =>
+      (Map(main -> pretty(expr)), main)
     }
-    decls ++ externs ++ defns
+
+  lazy val Core = Phase.cached("core") {
+    Frontend andThen Middleend
   }
 
-  def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Return(e) => pure(toChez(e))
-    case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
-    case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
-    case Match(scrutinee, clauses, default) =>
-      val sc = toChez(scrutinee)
-      val cls = clauses.map { case (constr, branch) =>
-        val names = RecordNames(constr)
-        val pred = chez.Call(chez.Variable(names.predicate), List(sc))
-        val matcher = chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch)))
-        (pred, matcher)
-      }
-      chez.Cond(cls, default.map(toChezExpr))
-
-    case Hole() => chez.Builtin("hole")
-
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
-
-    case State(id, init, region, body) =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
-
-    case Try(body, handler) =>
-      val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.interface.name)
-        chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, tps, cps, vps, bps, resume, body) =>
-            chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
-        })
-      }
-      chez.Handle(handlers, toChez(body))
-
-    case Region(body) => chez.Builtin("with-region", toChez(body))
-
-    case other => chez.Let(Nil, toChez(other))
+  lazy val Chez = Phase("chez") {
+    case CoreTransformed(source, tree, mod, core) =>
+      val mainSymbol = Context.checkMain(mod)
+      val mainFile = path(mod)
+      mainFile -> chez.Let(Nil, compilationUnit(mainSymbol, mod, core))
   }
 
-  def toChez(decl: core.Declaration): List[chez.Def] = decl match {
-    case Data(did, tparams, ctors) =>
-      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
+  // The Compilation Pipeline for VSCode
+  // -----------------------------------
+  lazy val Separate =
+    allToCore(Core) map { all => all.main } andThen Chez map { case (_, expr) => expr }
 
-    // We use chez scheme records to also represent capabilities.
-    case Declaration.Interface(id, tparams, operations) =>
-      generateConstructor(id, operations.map(op => op.id))
-  }
+  // Helpers
+  // -------
+  def pretty(expr: chez.Expr): Document =
+    chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(expr), 100)
 
-  def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
-      chez.Constant(nameDef(id),
-        chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
-          chez.RawExpr(body)))
-
-    case Extern.Include(contents) =>
-      RawDef(contents)
-  }
-
-  def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
-    case Definition.Def(id, block) =>
-      Left(chez.Constant(nameDef(id), toChez(block)))
-
-    case Definition.Let(Wildcard(), binding) =>
-      toChez(binding) match {
-        // drop the binding altogether, if it is of the form:
-        //   let _ = myVariable; BODY
-        // since this might lead to invalid scheme code.
-        case _: chez.Variable => Right(None)
-        case other => Right(Some(other))
-      }
-
-    // we could also generate a let here...
-    case Definition.Let(id, binding) =>
-      Left(chez.Constant(nameDef(id), toChez(binding)))
-  }
-
-  def toChez(stmt: Stmt): chez.Block = stmt match {
-    // TODO maybe this can be simplified after also introducing mutual definitions
-    case Scope(definitions, body) =>
-      definitions.map(toChez).foldRight(toChez(body)) {
-        case (Left(defn), chez.Block(defns, exprs, result)) => chez.Block(defn :: defns, exprs, result)
-        case (Right(Some(expr)), chez.Block(Nil, exprs, result)) => chez.Block(Nil, expr :: exprs, result)
-        case (Right(Some(expr)), rest) => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
-        case (Right(None), rest) => rest
-      }
-
-    case other => chez.Block(Nil, Nil, toChezExpr(other))
-  }
-
-  def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(tps, cps, vps, bps, body) =>
-      chez.Lambda((vps ++ bps) map toChez, toChez(body))
-  }
-
-  def toChez(block: Block): chez.Expr = block match {
-    case BlockVar(id, _, _) =>
-      Variable(nameRef(id))
-
-    case b @ BlockLit(tps, cps, vps, bps, body) => toChez(b)
-
-    case Member(b, field, tpe) =>
-      chez.Call(Variable(nameRef(field)), List(toChez(b)))
-
-    case Unbox(e) => toChez(e)
-
-    case New(impl) => toChez(impl)
-  }
-
-  def toChez(impl: Implementation): chez.Expr =
-    val ChezName(name) = nameRef(impl.interface.name)
-    chez.Call(Variable(ChezName(name)), impl.operations.map(toChez))
-
-  def toChez(op: Operation): chez.Expr = op match {
-    case Operation(name, tps, cps, vps, bps, resume, body) =>
-      chez.Lambda((vps ++ bps) map toChez, toChez(body))
-  }
-
-  def toChez(expr: Expr): chez.Expr = expr match {
-    case Literal((), _)         => chez.RawValue("#f")
-    case Literal(s: String, _)  => ChezString(s)
-    case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
-    case l: Literal             => chez.RawValue(l.value.toString)
-    case ValueVar(id, _)        => chez.Variable(nameRef(id))
-
-    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
-    case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
-
-    case Select(b, field, _) =>
-      chez.Call(nameRef(field), toChez(b))
-
-    case Box(b, _) => toChez(b)
-
-    case Run(s) => run(toChezExpr(s))
-  }
-
-
-  // STATE
-  // -----
-
-  // (define (getter ref)
-  //  (lambda () (pure (unbox ref))))
-  //
-  // (define (setter ref)
-  //  (lambda (v) (pure (set-box! ref v))))
-  def generateStateAccessors(pure: chez.Expr => chez.Expr): List[chez.Function] = {
-    val ref = ChezName("ref")
-    val value = ChezName("value")
-
-    val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-      chez.Lambda(Nil, pure(chez.Builtin("unbox", Variable(ref)))))
-
-    val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-      chez.Lambda(List(value), pure(chez.Builtin("set-box!", Variable(ref), Variable(value)))))
-
-    List(getter, setter)
-  }
+  def pretty(defs: List[chez.Def]): Document =
+    chez.PrettyPrinter.format(defs)
 }

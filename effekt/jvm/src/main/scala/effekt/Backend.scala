@@ -1,5 +1,7 @@
 package effekt
 
+import effekt.generator.*
+
 /**
  * A Backend is composed of a compiler implementation and a runner.
  *
@@ -12,6 +14,9 @@ package effekt
  * Compiler and Runner can communicate via a self-chosen type [[E]] -- the executable. Most
  * of the time, [[E]] will be String and correspond to the name of the generated file.
  *
+ * The lifetime of a backend is tightly coupled to a corresponding instance of [[EffektConfig]].
+ * This is important for the right caching / recomputation behavior.
+ *
  * @param name the name of the backend (should be identical to the --backend flag)
  * @param compiler the compiler for this backend
  * @param runner the runner for this backend
@@ -20,19 +25,13 @@ package effekt
 case class Backend[E](name: String, compiler: Compiler[E], runner: Runner[E])
 
 object Backend {
-  def js = Backend("js", JSCompiler(), JSRunner)
-  def chezMonadic = Backend("chez-monadic", ChezMonadicCompiler(), ChezMonadicRunner)
-  def chezCallCC = Backend("chez-callcc", ChezCallCCCompiler(), ChezCallCCRunner)
-  def chezLift = Backend("chez-lift", ChezLiftCompiler(), ChezLiftRunner)
-  def llvm = Backend("llvm", LLVMCompiler(), LLVMRunner)
-  def ml = Backend("ml", MLCompiler(), MLRunner)
 
   def backend(name: String): Backend[_] = name match {
-    case "js" => Backend.js
-    case "chez-monadic" => Backend.chezMonadic
-    case "chez-callcc" => Backend.chezCallCC
-    case "chez-lift" => Backend.chezLift
-    case "llvm" => Backend.llvm
-    case "ml" => Backend.ml
+    case "js"           => Backend("js", js.JavaScript(), JSRunner)
+    case "chez-monadic" => Backend("chez-monadic", chez.ChezSchemeMonadic(), ChezMonadicRunner)
+    case "chez-callcc"  => Backend("chez-callcc", chez.ChezSchemeCallCC(), ChezCallCCRunner)
+    case "chez-lift"    => Backend("chez-lift", chez.ChezSchemeLift(), ChezLiftRunner)
+    case "llvm"         => Backend("llvm", llvm.LLVM(), LLVMRunner)
+    case "ml"           => Backend("ml", ml.ML(), MLRunner)
   }
 }

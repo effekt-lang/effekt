@@ -10,7 +10,6 @@ import effekt.symbols.Module
 import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
-import effekt.generator.js.JavaScript
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -90,6 +89,12 @@ enum Stage { case Core; case Lifted; case Machine; case Target; }
  * - Writing to files is performed by the hook [[Compiler.saveOutput]], which is implemented
  *   differently for the JS and JVM versions.
  *
+ * Backends that implement this interface:
+ *
+ * - [[generator.js.JavaScript]]
+ * - [[generator.chez.ChezScheme]] (in three variants)
+ * - [[generator.llvm.LLVM]]
+ * - [[generator.ml.ML]]
  *
  * @tparam Executable information of this compilation run, which is passed to
  *                 the corresponding backend runner (e.g. the name of the main file)
