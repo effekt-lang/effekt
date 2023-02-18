@@ -36,27 +36,12 @@ object Elaborator extends Phase[Typechecked, Typechecked] {
   }
 }
 
-trait ElaborationOps extends ContextOps { Context: Context =>
-
-  private[source] def freshReferenceTo(s: symbols.BlockParam): IdRef =
-    val id = IdRef(s.name.name)
-    assignSymbol(id, s)
-    id
-
-  private[source] def definitionFor(s: symbols.BlockParam): source.BlockParam =
-    val id = IdDef(s.name.name)
-    assignSymbol(id, s)
-    val tree: source.BlockParam = source.BlockParam(id, source.BlockTypeTree(s.tpe))
-    tree
-
-}
-
 object ExplicitCapabilities extends Rewrite {
 
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
-      val capParams = capabilities.map(Context.definitionFor)
+      val capParams = capabilities.map(definitionFor)
 
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
   }
@@ -125,7 +110,7 @@ object ExplicitCapabilities extends Rewrite {
       val hs = (handlers zip capabilities).map {
         case (h, cap) => visit(h) {
           // here we annotate the synthesized capability
-          case h @ Handler(_, impl) => Handler(Some(Context.definitionFor(cap)), rewrite(impl))
+          case h @ Handler(_, impl) => Handler(Some(definitionFor(cap)), rewrite(impl))
         }
       }
 
@@ -133,14 +118,22 @@ object ExplicitCapabilities extends Rewrite {
 
     case b @ source.BlockLiteral(tps, vps, bps, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
-      val capParams = capabilities.map(Context.definitionFor)
+      val capParams = capabilities.map(definitionFor)
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body))
   }
 
-  def referenceToCapability(capability: BlockParam)(using Context): Var =
-    val ref: Var = Var(Context.freshReferenceTo(capability))
-    Context.annotate(Annotations.InferredBlockType, ref, Context.blockTypeOf(capability))
+  def referenceToCapability(capability: BlockParam)(using C: Context): Var =
+    val id = IdRef(capability.name.name)
+    C.assignSymbol(id, capability)
+    val ref: Var = Var(id)
+    C.annotate(Annotations.InferredBlockType, ref, C.blockTypeOf(capability))
     ref
+
+  def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
+    val id = IdDef(s.name.name)
+    C.assignSymbol(id, s)
+    val tree: source.BlockParam = source.BlockParam(id, source.BlockTypeTree(s.tpe))
+    tree
 }
 
 object ExplicitRegions extends Rewrite {

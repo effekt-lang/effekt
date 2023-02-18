@@ -4,9 +4,10 @@ package context
 import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
-import effekt.source.{ ElaborationOps, Tree }
+import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, EffektMessages }
 import effekt.symbols.Module
+
 import kiama.util.Positions
 
 /**
@@ -39,7 +40,6 @@ abstract class Context(val positions: Positions)
     extends NamerOps
     with TyperOps
     with ModuleDB
-    with ElaborationOps
     with TransformerOps {
 
   // bring the context itself in scope
