@@ -18,7 +18,7 @@ import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, _ }
  * A language server that is mixed with a compiler that provide the basis
  * for its services. Allows specialisation of configuration via `C`.
  */
-trait Server[N, T <: N, C <: Config, M <: Message] extends Compiler[N, T, C, M] with LanguageService[N] {
+trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageService[N] {
 
   import com.google.gson.{ JsonArray, JsonElement, JsonObject }
   import java.util.Collections
@@ -28,6 +28,12 @@ trait Server[N, T <: N, C <: Config, M <: Message] extends Compiler[N, T, C, M] 
 
   import kiama.util.Severities._
   import org.eclipse.lsp4j.jsonrpc.Launcher
+
+  /**
+   * The name of the language that this compiler processes. The best choice
+   * is the extension used for files containing this language.
+   */
+  def name: String
 
   // Overriding endpoints to enable server functionality
 
@@ -42,24 +48,6 @@ trait Server[N, T <: N, C <: Config, M <: Message] extends Compiler[N, T, C, M] 
       publishMessages(messages)
     else
       super.report(source, messages, config)
-
-  override def clearSyntacticMessages(source: Source, config: C): Unit =
-    if (config.server()) {
-      publishSourceProduct(source)
-      publishSourceTreeProduct(source)
-    }
-
-  // Monto support
-
-  override def publishSourceProduct(source: Source, document: => Document = emptyDocument): Unit = {
-    if (settingBool("showSource"))
-      publishProduct(source, "source", name, document)
-  }
-
-  override def publishSourceTreeProduct(source: Source, document: => Document = emptyDocument): Unit = {
-    if (settingBool("showSourceTree"))
-      publishProduct(source, "sourcetree", "scala", document)
-  }
 
   // Client saving
 
@@ -174,7 +162,7 @@ trait Server[N, T <: N, C <: Config, M <: Message] extends Compiler[N, T, C, M] 
     launcher.startListening()
   }
 
-  def createServices(config: C): Services[N, T, C, M] = new Services(this, config)
+  def createServices(config: C): Services[N, C, M] = new Services(this, config)
 
   // User messages
 
@@ -431,8 +419,8 @@ trait LanguageService[N] {
 
 }
 
-class Services[N, T <: N, C <: Config, M <: Message](
-  server: Server[N, T, C, M],
+class Services[N, C <: Config, M <: Message](
+  server: Server[N, C, M],
   config: C
 ) {
 
