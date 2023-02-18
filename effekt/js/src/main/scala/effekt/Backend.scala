@@ -1,6 +1,6 @@
 package effekt
 
 class Backend {
-  val compiler = JSCompiler()
+  val compiler = generator.js.JavaScript()
   val runner = ()
 }

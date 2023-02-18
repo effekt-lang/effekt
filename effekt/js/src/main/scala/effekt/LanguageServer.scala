@@ -1,15 +1,16 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.generator.js.JavaScript
+import effekt.generator.js.Transformer
 import effekt.lifted.LiftInference
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
+
 import kiama.util.{ Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
-import js.JSConverters.*
+import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.*
 
 // the LSP types
@@ -189,7 +190,7 @@ class LanguageServer extends Intelligence {
   }
 
   private def path(m: symbols.Module)(using C: Context): String =
-    (C.config.outputPath() / JavaScript.jsModuleFile(m.path)).unixPath
+    (C.config.outputPath() / Transformer.jsModuleFile(m.path)).unixPath
 }
 
 @JSExportTopLevel("effekt")
