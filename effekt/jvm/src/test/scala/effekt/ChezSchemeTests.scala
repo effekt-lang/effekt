@@ -50,53 +50,22 @@ abstract class ChezSchemeTests extends EffektTests {
 
     examplesDir / "pos" / "io", // async io is only implemented for monadic JS
   )
-
-  def interpretCS(file: File, variant: String): String = {
-    val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq(
-      "--Koutput", "string",
-      "--backend", s"chez-$variant",
-      "--includes", "libraries/chez/common",
-      "--includes", ".",
-      "--lib", s"libraries/chez/$variant",
-      "--out", output.getPath
-    ))
-    configs.verify()
-    compiler.compileFile(file.getPath, configs)
-    configs.stringEmitter.result()
-  }
-
-  def canRun() = canRunExecutable("scheme", "--help")
 }
 
 class ChezSchemeMonadicTests extends ChezSchemeTests {
-  def runTestFor(input: File, check: File, expected: String): Unit = {
-    test(input.getPath + " (monadic)") {
-      val out = interpretCS(input, "monadic")
-      assertNoDiff(out, expected)
-    }
-  }
+  def backendName = "chez-monadic"
 }
 
 class ChezSchemeCallCCTests extends ChezSchemeTests {
-  def runTestFor(input: File, check: File, expected: String): Unit = {
-    test(input.getPath + " (callcc)") {
-      val out = interpretCS(input, "callcc")
-      assertNoDiff(out, expected)
-    }
-  }
+  def backendName = "chez-callcc"
 }
 class ChezSchemeLiftTests extends ChezSchemeTests {
+
+  def backendName = "chez-lift"
+
   override def ignored: List[File] = super.ignored ++ List(
     // known issues:
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidecen, which it does not need
   )
-
-  def runTestFor(input: File, check: File, expected: String): Unit = {
-    test(input.getPath + " (lift)") {
-      val out = interpretCS(input, "lift")
-      assertNoDiff(out, expected)
-    }
-  }
 }

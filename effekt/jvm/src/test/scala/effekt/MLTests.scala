@@ -8,6 +8,8 @@ import scala.language.implicitConversions
 
 class MLTests extends EffektTests {
 
+  def backendName: String = "ml"
+
   override lazy val included: List[File] = List(
     examplesDir / "ml",
     examplesDir / "benchmarks"
@@ -88,24 +90,4 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "probabilistic.effekt",
     examplesDir / "pos" / "stream_pull.effekt",
   )
-//in: OutputStream => Unit, out: InputStream => Unit, err: InputStream => Unit
-  def canRun() = canRunExecutable("mlton")
-
-  def runTestFor(input: java.io.File, check: File, expected: String): Unit =
-    test(input.getPath + " (ml)") {
-      val out = runML(input)
-      assertNoDiff(out, expected)
-    }
-
-  def runML(input: File): String = {
-    val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq(
-      "--Koutput", "string",
-      "--backend", "ml",
-      "--out", output.getPath
-    ))
-    configs.verify()
-    compiler.compileFile(input.getPath, configs)
-    configs.stringEmitter.result()
-  }
 }

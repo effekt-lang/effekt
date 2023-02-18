@@ -18,11 +18,13 @@ import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteComman
  *     v
  * effekt.Compiler
  */
-trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, EffektError] with Driver with Intelligence {
+trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with Driver with Intelligence {
 
   import effekt.symbols._
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+
+  val name = "effekt"
 
   // Diagnostics
   object lspMessaging extends PlainMessaging
@@ -36,7 +38,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   /**
    * Overriding hook to also publish core and target for LSP server
    */
-  override def afterCompilation(source: Source, config: EffektConfig)(using C: Context): Unit = {
+  override def afterCompilation(source: Source, config: EffektConfig)(using C: Context): Unit =  try {
     super.afterCompilation(source, config)
 
     // don't do anything, if we aren't running as a language server
@@ -54,44 +56,30 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     if (showIR == "none") { return; }
 
     if (showIR == "source") {
-      val tree = C.getAST(source).getOrElseAborting { return; }
+      val tree = C.compiler.getAST(source).getOrElseAborting { return; }
       publishTree("source", tree)
+      return;
     }
 
-    if (List("target", "core", "lifted-core") contains showIR) {
+    def unsupported =
+      throw new RuntimeException(s"Combination of '${showIR}' and showTree=${showTree} not supported by backend ${C.config.backend().name}")
 
-      val (transformed, out) = C.compileSeparate(source).getOrElseAborting { return; }
-
-      if (showIR == "target") {
-        val extension = C.config.backend() match {
-          case "js" => "js"
-          case "chez-monadic" | "chez-callcc" | "chez-lift" => "ss"
-          case "llvm" => "ll"
-          case "ml" => "sml"
-        }
-        publishProduct(source, "target", extension, out)
-      }
-
-      if (showIR == "core") {
-        if (showTree) publishTree("core", transformed.core)
-        else publishIR("core", core.PrettyPrinter.format(transformed.core))
-      }
-
-      if (showIR == "lifted-core") {
-        val liftedCore = LiftInference.run(transformed).getOrElseAborting { return; }
-        if (showTree) publishTree("lifted", liftedCore.core)
-        else publishIR("lifted", lifted.PrettyPrinter.format(liftedCore.core))
-      }
+    val stage = showIR match {
+      case "core" => Stage.Core
+      case "lifted-core" => Stage.Lifted
+      case "machine" => Stage.Machine
+      case "target" => Stage.Target
+      case _ => unsupported
     }
 
-    if (showIR == "machine") {
-      val main = C.compileAll(source).getOrElseAborting { return; }
-      val machineProg = machine.Transformer.transform(main, symbols.TmpValue())
-
-      if (showTree) publishTree("machine", machineProg.program)
-      else publishIR("machine", machine.PrettyPrinter.format(machineProg.program))
+    if (showTree) {
+      publishTree(showIR, C.compiler.treeIR(source, stage).getOrElse(unsupported))
+    } else if (showIR == "target") {
+      publishProduct(source, "target", C.runner.extension, C.compiler.prettyIR(source, Stage.Target).getOrElse(unsupported))
+    } else {
+      publishIR(showIR, C.compiler.prettyIR(source, stage).getOrElse(unsupported))
     }
-  }
+  } catch { e => logMessage(e.getMessage) }
 
   override def getHover(position: Position): Option[String] =
     getSymbolHover(position) orElse getHoleHover(position)
@@ -143,7 +131,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
 
-    context.runFrontend(source)(using context)
+    context.compiler.runFrontend(source)(using context)
 
     val documentSymbols = for {
       sym <- context.sourceSymbolsFor(source).toVector
@@ -264,7 +252,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
   // Class to easily test custom LSP services not (yet) meant to go into kiama.Services
-  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig, EffektError](server, config) {}
+  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, EffektConfig, EffektError](server, config) {}
 }
 
 /**

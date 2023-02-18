@@ -2,48 +2,69 @@ package effekt
 package generator
 package llvm
 
-import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
-import kiama.util.{ Source, Counter }
-
 import effekt.context.Context
-import effekt.lifted.*
+import effekt.lifted.LiftInference
 import effekt.machine
-import effekt.llvm.*
-import effekt.symbols.{ Module, BlockSymbol, Name, Symbol, ValueSymbol, TermSymbol }
-import effekt.context.assertions.*
-import effekt.util.paths.*
 
-object LLVM extends Backend {
-  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using Context): Option[Compiled] = {
-    val mainFile = path(main.mod)
-    val machineMod = machine.Transformer.transform(main, mainSymbol)
-    val llvmDefinitions = Transformer.transform(machineMod)
+import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
+import kiama.util.Source
 
-    val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
 
-    val result = Document(llvmString, emptyLinks)
+class LLVM extends Compiler[String] {
 
-    Some(Compiled(main.source, mainFile, Map(mainFile -> result)))
+  // Implementation of the Compiler Interface:
+  // -----------------------------------------
+  def extension = ".ll"
+
+  override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
+    case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }
+    case Stage.Machine => steps.afterMachine(source).map { res => machine.PrettyPrinter.format(res.program) }
+    case Stage.Target => steps.afterLLVM(source).map { res => pretty(res) }
   }
 
-  def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
-
-  /**
-   * Only used by LSP to show the generated LLVM code in VSCode.
-   *
-   * Right now, we use the same mechanism as for [[compileWhole]].
-   * This could be optimized in the future to (for instance) not show the standard library
-   * and the prelude.
-   */
-  def compileSeparate(main: AllTransformed)(using Context): Option[Document] = {
-    val machine.Program(decls, prog) = machine.Transformer.transform(main.main, symbols.TmpValue())
-
-    // we don't print declarations here.
-    val llvmDefinitions = Transformer.transform(machine.Program(Nil, prog))
-
-    val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
-
-    Some(Document(llvmString, emptyLinks))
+  override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
+    case Stage.Core => steps.afterCore(source).map { res => res.core }
+    case Stage.Lifted => steps.afterLift(source).map { res => res.core }
+    case Stage.Machine => steps.afterMachine(source).map { res => res.program }
+    case Stage.Target => steps.afterLLVM(source)
   }
+
+  override def compile(source: Source)(using C: Context) =
+    Compile(source) map { (mod, defs) =>
+      val mainFile = path(mod)
+      (Map(mainFile -> pretty(defs)), mainFile)
+    }
+
+
+  // The Compilation Pipeline
+  // ------------------------
+  // Source => Core => Lifted => Machine => LLVM
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen Machine map {
+    case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
+  }
+
+  lazy val Core = Phase.cached("core") {
+    Frontend andThen Middleend andThen core.PolymorphismBoxing
+  }
+
+
+  // The Compilation Pipeline for VSCode
+  // -----------------------------------
+  object steps {
+    // intermediate steps for VSCode
+    val afterCore = allToCore(Core) map { c => c.main }
+    val afterLift = afterCore andThen LiftInference
+    val afterMachine = afterLift andThen Machine map { case (mod, main, prog) => prog }
+    val afterLLVM = afterMachine map {
+      case machine.Program(decls, prog) =>
+        // we don't print declarations here.
+        llvm.Transformer.transform(machine.Program(Nil, prog))
+    }
+  }
+
+  // Helpers
+  // -------
+  private def pretty(defs: List[llvm.Definition])(using Context): Document =
+    Document(llvm.PrettyPrinter.show(defs), emptyLinks)
 }
