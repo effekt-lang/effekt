@@ -7,7 +7,7 @@ import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.source.{ ExplicitRegions, ExplicitCapabilities, AnnotateCaptures, ModuleDecl }
 import effekt.symbols.Module
-import effekt.typer.{ PostTyper, PreTyper, Typer }
+import effekt.typer.{ Wellformedness, BoxUnboxInference, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import kiama.output.PrettyPrinterTypes.Document
@@ -202,7 +202,7 @@ trait Compiler[Executable] {
        * Explicit box transformation
        *   [[NameResolved]] --> [[NameResolved]]
        */
-      PreTyper andThen
+      BoxUnboxInference andThen
       /**
        * Type checks and annotates trees with inferred types and effects
        *   [[NameResolved]] --> [[Typechecked]]
@@ -212,7 +212,7 @@ trait Compiler[Executable] {
        * Wellformedness checks (exhaustivity, non-escape)
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      PostTyper
+      Wellformedness
   }
 
   /**
