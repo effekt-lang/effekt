@@ -287,8 +287,8 @@ trait Compiler {
   object llvm {
     import effekt.generator.llvm.LLVM
 
-    val toCore = Phase.cached("to-core") { Frontend andThen Middleend andThen core.PolymorphismBoxing }
-    val allCore = allToCore(toCore) andThen Aggregate
+    val toCore = Phase.cached("to-core") { Frontend andThen Middleend }
+    val allCore = allToCore(toCore) andThen Aggregate andThen core.PolymorphismBoxing
 
     // TODO move lift inference and machine transformations from individual backends to toplevel.
     val lifted = allCore andThen LiftInference andThen Machine
@@ -300,8 +300,8 @@ trait Compiler {
   object jit {
     import effekt.generator.jit.JIT
 
-    val toCore = Phase.cached("to-core") { Frontend andThen Middleend andThen core.PolymorphismBoxing }
-    val allCore = allToCore(toCore) andThen Aggregate
+    val toCore = Phase.cached("to-core") { Frontend andThen Middleend }
+    val allCore = allToCore(toCore) andThen Aggregate andThen core.PolymorphismBoxing
 
     // TODO move lift inference and machine transformations from individual backends to toplevel.
     val lifted = allCore andThen LiftInference andThen Machine
