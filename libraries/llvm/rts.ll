@@ -76,7 +76,11 @@
 ;
 ; In addition, the total size of used memory is tracked for backup allocation
 ; (excluding the pointers to the following arena)
-%RegionVal = type { [ 3 x { %Mem, %Bounds } ], i64 }
+;
+;  +----------+------+----+
+;  | Pointers | Size | Rc |
+;  +----------+------+----+
+%RegionVal = type { [ 3 x { %Mem, %Bounds } ], i64, %Rc }
 
 ; Fixed pointer used to allocate states
 %Region = type ptr
@@ -326,7 +330,7 @@ define %Stk @newStack() alwaysinline {
     ; TODO find actual size of stack
     %stk = call ptr @malloc(i64 56)
 
-    %region = call ptr @malloc(i64 128)
+    %region = call ptr @malloc(i64 136)
     store %RegionVal zeroinitializer, %Region %region
 
     ; TODO initialize to zero and grow later
@@ -407,7 +411,7 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     %newstk = load %StkVal, %Stk %stk
 
     %region = load %Region, ptr @region
-    call void @eraseRegion(%Region %region)
+    call void @eraseRegionContent(%Region %region)
 
     call void @setStk(%StkVal %newstk)
 
@@ -550,6 +554,12 @@ copy:
 define %RegionBackup @backupRegion(%Region %region) {
 entry:
     %regionval = load %RegionVal, %Region %region
+
+    %rc = extractvalue %RegionVal %regionval, 2
+    %newrc = add %Rc %rc, 1
+    %rcp = getelementptr %RegionVal, %Region %region, i64 0, i32 2
+    store %Rc %newrc, ptr %rcp
+
     %size.0 = extractvalue %RegionVal %regionval, 1
     %size.1 = add i64 %size.0, 24 ; add 3 x i64
     %backup = call ptr @malloc(i64 %size.1)
@@ -643,9 +653,24 @@ define void @eraseStack(%Stk %stk) alwaysinline {
     %sp = load %Sp, ptr %stksp
     call fastcc void @eraseFrames(%Sp %sp)
 
+    %regionp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
+    %region = load %Region, ptr %regionp
+
     %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
     %backup = load %RegionBackup, ptr %backupp
+    %hasbackup = icmp ne %RegionBackup %backup, null
+    br i1 %hasbackup, label %erasebackup, label %eraseregion
+
+erasebackup:
     call void @eraseBackup(%RegionBackup %backup)
+    br label %continue
+
+eraseregion:
+    call void @eraseRegionContent(%Region %region)
+    br label %continue
+
+continue:
+    call void @eraseRegion(%Region %region)
 
     call void @free(%Stk %stk)
     ret void
@@ -706,7 +731,7 @@ continue:
 
 }
 
-define void @eraseRegion(%Region %region) alwaysinline {
+define void @eraseRegionContent(%Region %region) alwaysinline {
 entry:
     %regionval = load %RegionVal, %Region %region
 
@@ -745,6 +770,7 @@ erase:
     %str = getelementptr i64, ptr %backup.2, i64 1
     call void @forEachObject(ptr %str, ptr %end, %Eraser @c_buffer_refcount_decrement)
 
+    call void @free(ptr %backup.0)
     ret void
 }
 
@@ -775,6 +801,43 @@ erase:
     ret void
 }
 
+define void @eraseRegion(%Region %region) alwaysinline {
+    %regionval = load %RegionVal, %Region %region
+    %rc = extractvalue %RegionVal %regionval, 2
+    %cmp = icmp eq %Rc %rc, 0
+    br i1 %cmp, label %free, label %decrement
+
+free:
+    %base.0 = extractvalue %RegionVal %regionval, 0, 0, 1, 0
+    call void @freeArenas(%Base  %base.0)
+    %base.1 = extractvalue %RegionVal %regionval, 0, 1, 1, 0
+    call void @freeArenas(%Base  %base.1)
+    %base.2 = extractvalue %RegionVal %regionval, 0, 2, 1, 0
+    call void @freeArenas(%Base  %base.2)
+    call void @free(%Region %region)
+    ret void
+
+decrement:
+    %newrc = sub %Rc %rc, 1
+    %newregionval = insertvalue %RegionVal %regionval, %Rc %rc, 2
+    store %RegionVal %newregionval, %Region %region
+    ret void
+}
+
+define void @freeArenas(%Base %base) alwaysinline {
+    %isnull = icmp eq %Base %base, null
+    br i1 %isnull, label %done, label %free
+
+free:
+    %nextbase = load %Base, ptr %base
+    call void @free(%Base %base)
+    tail call void @freeArenas(%Base %nextbase)
+    ret void
+
+done:
+    ret void
+}
+
 ; RTS initialization
 
 define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
@@ -800,7 +863,7 @@ define fastcc void @topLevelEraser(%Env %env) {
 }
 
 define void @initRegion() alwaysinline {
-    %region = call ptr @malloc(i64 128)
+    %region = call ptr @malloc(i64 136)
     store %RegionVal zeroinitializer, %Region %region
 
     store %Region %region, ptr @region
