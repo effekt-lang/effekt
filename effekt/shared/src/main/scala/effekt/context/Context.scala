@@ -4,9 +4,10 @@ package context
 import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
-import effekt.source.{ ElaborationOps, Tree }
+import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, EffektMessages }
 import effekt.symbols.Module
+
 import kiama.util.Positions
 
 /**
@@ -39,9 +40,7 @@ abstract class Context(val positions: Positions)
     extends NamerOps
     with TyperOps
     with ModuleDB
-    with ElaborationOps
-    with TransformerOps
-    with Compiler {
+    with TransformerOps {
 
   // bring the context itself in scope
   implicit val context: Context = this
@@ -54,6 +53,11 @@ abstract class Context(val positions: Positions)
 
   var _config: EffektConfig = _
   def config = _config
+
+  // We assume the backend never changes
+  lazy val backend = config.backend()
+  lazy val compiler = backend.compiler
+  lazy val runner = backend.runner
 
   /**
    * Clear current context to start processing a fresh unit
@@ -95,5 +99,9 @@ abstract class Context(val positions: Positions)
     messaging.buffer = bufferBefore
     (msgs, res)
   }
-
 }
+
+/**
+ * Helper method to find the currently implicit context
+ */
+def Context(using C: Context): C.type = C

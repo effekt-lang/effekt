@@ -10,6 +10,9 @@ import scala.language.implicitConversions
 
 trait EffektTests extends munit.FunSuite {
 
+  // The name of the backend as it is passed to the --backend flag.
+  def backendName: String
+
   def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
 
   // The sources of all testfiles are stored here:
@@ -21,15 +24,28 @@ trait EffektTests extends munit.FunSuite {
   // Folders to discover and run tests in
   def included: List[File] = List()
 
-  def runTestFor(input: File, check: File, expectedResult: String): Unit
+  def runTestFor(input: File, expected: String): Unit =
+    test(input.getPath + s" (${backendName})") {
+      assertNoDiff(run(input), expected)
+    }
 
-  def canRun(): Boolean
+  def run(input: File): String =
+    val compiler = new effekt.Driver {}
+    val configs = compiler.createConfig(Seq(
+      "--Koutput", "string",
+      "--backend", backendName,
+      "--out", output.getPath
+    ))
+    configs.verify()
+    compiler.compileFile(input.getPath, configs)
+    configs.stringEmitter.result()
+
 
   def runTests() =
-    if canRun() then
-      included.foreach(runPositiveTestsIn)
-    else
-      test(s"${this.getClass.getName}: Binary not found!".ignore) { () }
+    Backend.backend(backendName).runner.checkSetup() match {
+      case Left(msg) => test(s"${this.getClass.getName}: ${msg}".ignore) { () }
+      case Right(value) => included.foreach(runPositiveTestsIn)
+    }
 
   def runPositiveTestsIn(dir: File): Unit = //describe(dir.getName) {
     dir.listFiles.foreach {
@@ -49,15 +65,11 @@ trait EffektTests extends munit.FunSuite {
           test(f.getName.ignore) { () }
         } else {
           val contents = IO.read(checkfile)
-          runTestFor(f, checkfile, contents)
+          runTestFor(f, contents)
         }
 
       case _ => ()
     }
-
-  // utils to check whether a command is available
-  def canRunExecutable(command: String*): Boolean =
-    try { Process(command).run(ProcessIO(out => (), in => (), err => ())).exitValue() == 0 } catch { _ => false }
 
   runTests()
 }

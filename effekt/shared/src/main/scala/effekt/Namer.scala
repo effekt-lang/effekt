@@ -34,7 +34,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def run(input: Parsed)(using Context): Option[NameResolved] = {
     val Parsed(source, tree) = input
-    //println(s"Creating a new module for ${tree.path}")
     val mod = Module(tree, source)
     Context.using(module = mod, focus = tree) { resolve(tree) }
     Some(NameResolved(source, tree, mod))

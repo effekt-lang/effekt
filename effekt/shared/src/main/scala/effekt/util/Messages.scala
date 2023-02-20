@@ -27,7 +27,7 @@ object messages {
    *
    * Messages are part of the reporting pipeline and can be backtracked by Typer
    */
-  case class FatalPhaseError(message: EffektError) extends Exception
+  case class FatalPhaseError(message: EffektError) extends Exception(message.toString)
 
   /**
    * Error that aborts the whole compilation and shows a stack trace
