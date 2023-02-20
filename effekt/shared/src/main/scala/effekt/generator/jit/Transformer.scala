@@ -77,7 +77,7 @@ object Transformer {
         val vd = transformParameter(v);
         vd.typ match {
           case Type.Datatype(adtType) => {
-              emit(Construct(outs(RegisterType.Datatype).head, adtType, tag, transformArguments(environment)))
+              emit(Construct(outs(RegisterType.Ptr).head, adtType, tag, transformArguments(environment)))
               emitInlined(restBlock)
           }
           case Type.Unit() => {
@@ -134,7 +134,7 @@ object Transformer {
           case machine.Clause(parameters, body) => transformInline(machine.Clause(parameters, body), false)
         });
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
-        val out = outs(RegisterType.Codata).head
+        val out = outs(RegisterType.Ptr).head
         val targets = transformedClauses.map({case (_,_,block) => emit(block)})
         val env = transformArguments(BC.environment)
         emit(New(out, targets, env))
@@ -174,7 +174,7 @@ object Transformer {
       }
       case machine.LiteralUTF8String(out, value, rest) => {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
-        emit(ConstString(outs(RegisterType.String).head, new String(value, StandardCharsets.UTF_8))); // TODO: Escape or encode somehow
+        emit(ConstString(outs(RegisterType.Ptr).head, new String(value, StandardCharsets.UTF_8))); // TODO: Escape or encode somehow
         emitInlined(block)
       }
       case machine.Statement.LiteralEvidence(name, value, rest) => {
@@ -191,8 +191,7 @@ object Transformer {
       case machine.NewStack(name, region, frame, rest) => {
         val (closesOver, _, target) = transformClosure(frame);
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name, region), rest));
-        val out = outs(RegisterType.Continuation).head
-        val regReg = outs(RegisterType.Region).head
+        val List(out, regReg) = outs(RegisterType.Ptr) : @unchecked
         emit(NewStack(out, regReg, target, closesOver));
         emitInlined(restBlock)
       }
@@ -202,15 +201,15 @@ object Transformer {
       }
       case machine.PopStacks(name, n, rest) => {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
-        val out = outs(RegisterType.Continuation).head;
+        val out = outs(RegisterType.Ptr).head;
         emit(ShiftDyn(out, transformArgument(n).id));
         emitInlined(block)
       }
       case machine.Allocate(name, init, mRegion, rest) =>
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(name, mRegion), rest));
         val tpe = transform(init.tpe)
-        val out = outs(RegisterType.Reference).head
-        val region = outs(RegisterType.Region).last
+        val out = outs(RegisterType.Ptr).head
+        val region = outs(RegisterType.Ptr).last
         emit(Allocate(out, tpe.registerType, transformArgument(init).id, region))
         emitInlined(block)
       case machine.Load(name, ref, rest) =>
