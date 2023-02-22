@@ -73,12 +73,12 @@ object TransformerLift {
 
     case Hole() => CPS.inline { k => chez.Builtin("hole") }
 
-    case State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
+    case Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body, k))
       }
 
-    case State(id, init, region, ev, body) =>
+    case Alloc(id, init, region, ev, body) =>
       CPS.inline { k =>
        chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }

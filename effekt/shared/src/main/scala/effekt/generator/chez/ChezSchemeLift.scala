@@ -3,7 +3,7 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.lifted.LiftInferenceState
+import effekt.lifted.{ LiftInferenceState, LiftInference }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 

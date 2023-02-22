@@ -230,7 +230,7 @@ object Transformer {
           NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter, transform(body))))
 
-      case lifted.State(id, init, region, ev, body) =>
+      case lifted.Alloc(id, init, region, ev, body) =>
         transform(init).run { value =>
           val tpe = value.tpe;
           val name = transform(id)

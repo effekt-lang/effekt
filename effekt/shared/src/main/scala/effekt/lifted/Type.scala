@@ -129,7 +129,7 @@ object Type {
       val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
       allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
 
-    case Stmt.State(id, init, region, ev, body) => body.tpe
+    case Stmt.Alloc(id, init, region, ev, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
 

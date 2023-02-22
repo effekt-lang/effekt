@@ -154,13 +154,13 @@ object Transformer {
 
     case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
 
-    case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
+    case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
-    case lifted.State(id, init, region, ev, body) =>
+    case lifted.Alloc(id, init, region, ev, body) =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k))
