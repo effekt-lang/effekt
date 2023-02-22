@@ -83,6 +83,8 @@ object TransformerLift {
        chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }
 
+    case Var(init, body) => ???
+
     case Try(body, handler) =>
       val handlers = handler.map { h =>
         val names = RecordNames(h.interface.name)

@@ -166,6 +166,8 @@ object Transformer {
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
+    case lifted.Var(init, body) => ???
+
     case lifted.Try(body, handler) =>
       val args = ml.Consts.lift :: handler.map(toML)
       CPS.inline { k =>
