@@ -18,7 +18,7 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
   def env(using env: Environment): Environment = env
 
   def run(input: CoreTransformed)(using Context): Option[CoreLifted] =
-    given Environment = Environment(Map.empty)
+    given Environment = Environment(Map.empty, Id("dummy"))
     val transformed = transform(input.core)
     Some(CoreLifted(input.source, input.tree, input.mod, transformed))
 
@@ -126,8 +126,6 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Stmt)(using Environment, ErrorReporter): Stmt = tree match {
     case core.Try(core.BlockLit(tparams, _, _, params, body), handler) =>
 
-      val tpe = body.tpe
-
       // (1) Transform handlers first in unchanged environment.
       val transformedHandler = handler.map { transform }
 
@@ -152,22 +150,10 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Try(_, _) => ErrorReporter.panic("Should not happen. Handle always take block literals as body.")
 
-    // [[ region { {cap}... => s } ]] = region { [ev]{cap}... => s }
-    case core.Region(core.BlockLit(tparams, _, _, params, body)) =>
-      var environment = env
-
-      // evidence for the region body itself
-      val selfEvidence = EvidenceSymbol()
-
-      environment = environment.adapt(Lift.Var(selfEvidence))
-
-      // introduce one evidence symbol per blockparam
-      val transformedParams = params map {
-        case p @ core.BlockParam(id, tpe) =>
-          environment = environment.bind(id)
-          transform(p)
-      }
-      Region(lifted.BlockLit(tparams, Param.EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, ErrorReporter)))
+    // ATM regions are not supported, we just remember what the current region is:
+    //   [[ region r { {reg} => s } ]] = [[ s ]]
+    case core.Region(core.BlockLit(tparams, _, _, List(reg), body)) =>
+      transform(body)(using env.copy(currentRegion = reg.id), ErrorReporter)
 
     case core.Region(_) => ErrorReporter.panic("Should not happen. Regions always take block literals as body.")
 
@@ -189,6 +175,15 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
+
+    // [[ var x in this = init; stmt ]] = state(init) { (ev){x} }
+    case core.State(id, init, region, body) if region == env.currentRegion =>
+      val stateEvidence = EvidenceSymbol()
+      val environment = env.adapt(Lift.Var(stateEvidence)).bind(id)
+      val stateCapability = lifted.Param.BlockParam(id, lifted.Type.TState(transform(init.tpe)))
+      val transformedBody = transform(body)(using environment, ErrorReporter)
+      Var(transform(init), lifted.BlockLit(Nil, List(Param.EvidenceParam(stateEvidence), stateCapability),
+        transformedBody))
 
     case core.State(id, init, region, body) =>
       Alloc(id, transform(init), region, env.evidenceFor(region), transform(body))
@@ -303,7 +298,7 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
   }
 
 
-  case class Environment(env: Map[Symbol, List[Lift]]) {
+  case class Environment(env: Map[Symbol, List[Lift]], currentRegion: Id) {
     def bind(s: Symbol) = copy(env = env + (s -> Nil))
     def bind(s: Symbol, ev: List[Lift]) = copy(env = env + (s -> ev))
     def bind(s: Symbol, init: Lift) = copy(env = env + (s -> List(init)))

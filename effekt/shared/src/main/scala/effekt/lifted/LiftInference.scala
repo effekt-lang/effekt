@@ -126,8 +126,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Stmt)(using Environment, ErrorReporter): Stmt = tree match {
     case core.Try(core.BlockLit(tparams, _, _, params, body), handler) =>
 
-      val tpe = body.tpe
-
       // (1) Transform handlers first in unchanged environment.
       val transformedHandler = handler.map { transform }
 

@@ -42,6 +42,7 @@ object Type {
   val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
 
   val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
+  def TState(tpe: ValueType) = BlockType.Interface(builtins.TState.interface, List(tpe))
 
   /**
    * Function types are the only type constructor that we have subtyping on.
