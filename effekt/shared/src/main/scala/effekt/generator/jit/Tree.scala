@@ -73,8 +73,8 @@ enum Type extends Tree {
   def registerType: RegisterType = this match {
     case Unit() => RegisterType.Erased
     case Continuation() => RegisterType.Ptr
-    case Integer() => RegisterType.Integer
-    case Double() => RegisterType.Double
+    case Integer() => RegisterType.Number
+    case Double() => RegisterType.Number
     case String() => RegisterType.Ptr
     case Codata(index) => RegisterType.Ptr
     case Datatype(index) => RegisterType.Ptr
@@ -84,7 +84,7 @@ enum Type extends Tree {
 }
 
 enum RegisterType {
-  case Integer, Double, Erased, Ptr
+  case Number, Erased, Ptr
 
   def isErased: Boolean = this match {
     case Erased => true

@@ -49,8 +49,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   extension(rtpe: RegisterType) {
     def name: String = rtpe match {
-      case RegisterType.Integer => "int"
-      case RegisterType.Double => "double"
+      case RegisterType.Number => "num"
       case RegisterType.Ptr => "ptr"
       case _ => sys error "Cannot print erased register type"
     }
@@ -75,9 +74,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(instruction: Instruction): Doc = instruction match {
     case Const(out, value) => jsonObjectSmall(ListMap("op" -> "\"Const\"",
-      "type" -> toDoc(RegisterType.Integer), "out" -> toDoc(out), "value" -> value.toString))
+      "type" -> toDoc(RegisterType.Number), "format" -> "\"int\"", "out" -> toDoc(out), "value" -> value.toString))
     case ConstDouble(out, value) => jsonObjectSmall(ListMap("op" -> "\"Const\"",
-      "type" -> toDoc(RegisterType.Double), "out" -> toDoc(out), "value" -> value.toString))
+      "type" -> toDoc(RegisterType.Number), "format" -> "\"double\"", "out" -> toDoc(out), "value" -> value.toString))
     case ConstString(out, value) => jsonObjectSmall(ListMap("op" -> "\"Const\"",
       "type" -> toDoc(RegisterType.Ptr), "format" -> "\"string\"", "out" -> toDoc(out), "value" -> "\"%s\"".format(value)))
     case PrimOp(name, out, in) => jsonObjectSmall(ListMap("op" -> "\"PrimOp\"",

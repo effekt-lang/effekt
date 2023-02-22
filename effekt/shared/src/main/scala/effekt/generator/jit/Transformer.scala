@@ -85,7 +85,7 @@ object Transformer {
             emitInlined(restBlock)
           }
           case Type.Integer() => {
-            emit(Const(outs(RegisterType.Integer).head, tag))
+            emit(Const(outs(RegisterType.Number).head, tag))
             emitInlined(restBlock)
           }
           case _ => ???
@@ -164,12 +164,12 @@ object Transformer {
       case machine.LiteralInt(out, n, rest) => {
         //extendEnvironment(Environment.from(List(transformParameter(out))));
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
-        emit(Const(outs(RegisterType.Integer).head, n));
+        emit(Const(outs(RegisterType.Number).head, n));
         emitInlined(block)
       }
       case machine.LiteralDouble(out, value, rest) => {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
-        emit(ConstDouble(outs(RegisterType.Double).head, value));
+        emit(ConstDouble(outs(RegisterType.Number).head, value));
         emitInlined(block)
       }
       case machine.LiteralUTF8String(out, value, rest) => {
@@ -179,12 +179,12 @@ object Transformer {
       }
       case machine.Statement.LiteralEvidence(name, value, rest) => {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
-        emit(Const(outs(RegisterType.Integer).head, value))
+        emit(Const(outs(RegisterType.Number).head, value))
         emitInlined(block)
       }
       case machine.Statement.ComposeEvidence(name, l, r, rest)  => {
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
-        val out = outs(RegisterType.Integer).head
+        val out = outs(RegisterType.Number).head
         emit(Add(out, transformArgument(l).id, transformArgument(r).id))
         emitInlined(restBlock)
       }
