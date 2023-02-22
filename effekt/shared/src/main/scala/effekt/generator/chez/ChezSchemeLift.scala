@@ -3,7 +3,7 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.lifted.LiftInference
+import effekt.lifted.{ LiftInference, Monomorphize }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -34,7 +34,7 @@ class ChezSchemeLift extends Compiler[String] {
   // ------------------------
   // Source => Core => Lifted => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen LiftInference andThen ToChez map { case (main, expr) =>
+    allToCore(Core) andThen Aggregate andThen LiftInference andThen Monomorphize andThen ToChez map { case (main, expr) =>
       (Map(main -> pretty(expr)), main)
     }
 
@@ -49,12 +49,10 @@ class ChezSchemeLift extends Compiler[String] {
 
   // The Compilation Pipeline for VSCode
   // -----------------------------------
-    // The Compilation Pipeline for VSCode
-  // -----------------------------------
   object steps {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) map { c => c.main }
-    val afterLift = afterCore andThen LiftInference
+    val afterLift = afterCore andThen LiftInference andThen Monomorphize
     val afterChez = afterLift andThen ToChez map { case (f, prog) => prog }
   }
 

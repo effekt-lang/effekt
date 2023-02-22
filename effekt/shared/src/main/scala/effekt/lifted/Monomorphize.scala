@@ -1,8 +1,8 @@
 package effekt
 package lifted
 
+import effekt.PhaseResult.CoreLifted
 import effekt.context.Context
-
 import mono.*
 
 // TODO Known limitations:
@@ -17,11 +17,14 @@ import mono.*
 //
 
 
-object Monomorphize {
+object Monomorphize extends Phase[CoreLifted, CoreLifted] {
 
   val phaseName = "lift-inference"
 
-  def run(mod: ModuleDecl)(using C: Context): ModuleDecl = try {
+  def run(lifted: CoreLifted)(using Context): Option[CoreLifted] =
+    run(lifted.core).map { mono => lifted.copy(core = mono) }
+
+  def run(mod: ModuleDecl)(using C: Context): Option[ModuleDecl] = try {
     given analysis: FlowAnalysis()
     Evidences.last = -1;
     analyze(mod)
@@ -73,6 +76,6 @@ object Monomorphize {
 
     // println(PrettyPrinter.format(elaborated))
 
-    elaborated
-  } finally { }
+    Some(elaborated)
+  } catch { case _ => None }
 }

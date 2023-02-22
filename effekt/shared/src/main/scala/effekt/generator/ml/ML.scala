@@ -3,7 +3,7 @@ package generator
 package ml
 
 import effekt.context.Context
-import effekt.lifted.LiftInference
+import effekt.lifted.{ LiftInference, Monomorphize }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -55,7 +55,7 @@ class ML extends Compiler[String] {
   object steps {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) map { c => c.main }
-    val afterLift = afterCore andThen LiftInference
+    val afterLift = afterCore andThen LiftInference andThen Monomorphize
     val afterML = afterLift andThen ToML map { case (f, prog) => prog }
   }
 
