@@ -12,9 +12,6 @@ class JITTests extends EffektTests {
   override lazy val included: List[File] = List(examplesDir / "jit")
 
   override lazy val ignored: List[File] = List(
-    // polymorphic effect operations not supported, yet
-    examplesDir / "jit" / "choice.effekt",
-    examplesDir / "jit" / "triples.effekt",
   )
 
 
