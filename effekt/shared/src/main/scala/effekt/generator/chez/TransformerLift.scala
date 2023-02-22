@@ -7,6 +7,7 @@ import effekt.context.Context
 import effekt.lifted.*
 import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
 import effekt.util.paths.*
+import effekt.symbols.builtins
 
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -48,6 +49,26 @@ object TransformerLift {
 
   def toChezExpr(stmt: Stmt): CPS = stmt match {
     case Return(e) => CPS.pure(toChez(e))
+
+    // TODO maybe add as node to lifted.Tree
+    case App(lifted.Block.Member(x, builtins.TState.get, _), _, List(ev)) =>
+      def get = {
+        val k = freshName("k")
+        val s = freshName("s")
+        // ev (k => s => k s s)
+        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s), chez.Call(chez.Call(k, s), s))))
+      }
+      CPS.reflect(get)
+
+    case App(lifted.Block.Member(x, builtins.TState.put, _), _, List(ev, value)) =>
+      def set = {
+        val k = freshName("k")
+        val s2 = freshName("s2")
+        // ev (k => s2 => k () value)
+        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s2), chez.Call(chez.Call(k, chez.unit), toChez(value)))))
+      }
+      CPS.reflect(set)
+
     case App(b, targs, args) => CPS.inline { k => chez.Call(chez.Call(toChez(b), args map toChez), List(k.reify)) }
 
     case If(cond, thn, els) =>
@@ -64,8 +85,8 @@ object TransformerLift {
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)
-        val pred = chez.Call(chez.Variable(names.predicate), List(sc))
-        val matcher = chez.Call(chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch))), List(k.reify))
+        val pred = chez.Call(names.predicate, sc)
+        val matcher = chez.Call(chez.Call(names.matcher, sc, toChez(branch)), k.reify)
         (pred, matcher)
       }
       chez.Cond(cls, default.map { d => toChezExpr(d)(k) })
@@ -83,7 +104,29 @@ object TransformerLift {
        chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }
 
-    case Var(init, body) => ???
+    // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
+    case Var(init, Block.BlockLit(Nil, List(ev, x), body)) => CPS.join { k =>
+        // TODO refactor into CPS.resetState
+        // a => s => k a
+        val returnCont = {
+          val a = freshName("a")
+          val s = freshName("s")
+          chez.Lambda(List(a), chez.Lambda(List(s), chez.Call(k.reify, a)))
+        }
+
+        // m => k => s => m (a => k a s)
+        def lift = {
+          val m = freshName("m")
+          val k = freshName("k")
+          val a = freshName("a")
+          val s = freshName("s")
+          chez.Lambda(List(m), chez.Lambda(List(k), chez.Lambda(List(s),
+            chez.Call(m, chez.Lambda(List(a), chez.Call(chez.Call(k, a), s))))))
+        }
+
+        chez.Let(List(Binding(nameDef(ev.id), lift)),
+          chez.Call(chez.Call(toChezExpr(body).reify(), returnCont), toChez(init)))
+      }
 
     case Try(body, handler) =>
       val handlers = handler.map { h =>
@@ -171,7 +214,7 @@ object TransformerLift {
       val k = freshName("k")
       chez.Lambda((params map toChez),
         chez.Lambda(List(k),
-          toChez(body, Continuation.Dynamic(chez.Variable(k)))))
+          toChez(body, Continuation.Dynamic(k))))
   }
 
   def toChez(block: Block): chez.Expr = block match {
@@ -244,7 +287,7 @@ object TransformerLift {
       case Continuation.Dynamic(k) => k
       case Continuation.Static(k) =>
         val a = freshName("a")
-        chez.Lambda(List(a), k(chez.Variable(a)))
+        chez.Lambda(List(a), k(a))
     }
 
     def reflect: chez.Expr => chez.Expr = this match {
@@ -273,7 +316,7 @@ object TransformerLift {
       case k: Continuation.Static =>
         val kName = freshName("k")
         chez.Let(List(Binding(kName, k.reify)),
-          prog(Continuation.Dynamic(chez.Variable(kName))))
+          prog(Continuation.Dynamic(kName)))
     }
 
     def reflect(e: chez.Expr): CPS =
@@ -302,7 +345,7 @@ object TransformerLift {
     def pure: chez.Expr =
       val a = freshName("a")
       val k2 = freshName("k2")
-      chez.Lambda(List(a), chez.Lambda(List(k2), chez.Call(k2, chez.Variable(a))))
+      chez.Lambda(List(a), chez.Lambda(List(k2), chez.Call(k2, a)))
 
     // TODO generate
     def lift: chez.Expr = chez.Variable(ChezName("lift"))
@@ -313,7 +356,7 @@ object TransformerLift {
 
     def id =
       val a = ChezName("a")
-      chez.Lambda(List(a), chez.Variable(a))
+      chez.Lambda(List(a), a)
 
   }
 
@@ -331,6 +374,9 @@ object TransformerLift {
     val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
       chez.Lambda(List(ev, value), CPS.pure(chez.Builtin("set-box!", Variable(ref), Variable(value))).reify()))
 
+
+
     List(getter, setter)
   }
+
 }

@@ -729,10 +729,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
     c =>
       def isIO = c == builtins.IOCapability.capture
+      // mutable state is now in CPS and not considered IO anymore.
       def isMutableState = c.isInstanceOf[LexicalRegion]
       def isResource = c.isInstanceOf[Resource]
       def isControl = c == builtins.ControlCapability.capture
-      !isControl && (isIO || isMutableState || isResource)
+      !(isControl || isMutableState) && (isIO || isResource)
   }
 }
 

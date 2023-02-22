@@ -182,6 +182,7 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
       val environment = env.adapt(Lift.Var(stateEvidence)).bind(id)
       val stateCapability = lifted.Param.BlockParam(id, lifted.Type.TState(transform(init.tpe)))
       val transformedBody = transform(body)(using environment, ErrorReporter)
+
       Var(transform(init), lifted.BlockLit(Nil, List(Param.EvidenceParam(stateEvidence), stateCapability),
         transformedBody))
 

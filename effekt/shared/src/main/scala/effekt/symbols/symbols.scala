@@ -286,7 +286,7 @@ enum Capture extends CaptVar {
   case CaptureParam(name: Name)
 
   /**
-   * Self region of functions and handlers (they count in as `io` when considering direct style)
+   * Self region of functions and handlers (they count in as `control` when considering direct style)
    */
   case LexicalRegion(name: Name, tree: source.Tree)
 
