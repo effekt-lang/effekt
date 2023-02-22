@@ -13,11 +13,6 @@ import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 
-/**
- * Lifted variant of Chez Scheme. Mostly copy-and-paste from [[ChezScheme]].
- *
- * Difficult to share the code, since core and lifted are different IRs.
- */
 object Transformer {
 
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
@@ -106,33 +101,30 @@ object Transformer {
         val pattern = ml.Pattern.Datatype(name(caseName), patterns)
         val args = List(ml.Param.Patterned(pattern))
         val body = ml.Expr.Variable(name(fieldName))
-        ml.Binding.FunBind(dataSelectorName(caseName, fieldName), args, body)
+        ml.Binding.FunBind(name(fieldName), args, body)
     }
     dataDecl :: accessors
   }
 
   def toML(ext: Extern)(using Context): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      ml.FunBind(name(id), params map (paramToML(_, false)), RawExpr(body))
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, RawExpr(body))
     case Extern.Include(contents) =>
       RawBind(contents)
-  }
-
-  def paramToML(p: Param, unique: Boolean = true)(using Context): ml.Param = {
-    val id = if (unique) name(p.id) else MLName(p.id.name.toString)
-    ml.Param.Named(id)
   }
 
   def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
 
-    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), List(), List(ev)) =>
+    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), _, List(ev)) =>
       CPS.pure(ml.Expr.Deref(ml.Variable(name(x))))
 
-    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), List(), List(ev, arg)) =>
-      CPS.pure(ml.Expr.Assign(ml.Variable(name(x)), toML(arg)))
+    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), _, List(ev, value)) =>
+      CPS.pure(ml.Expr.Assign(ml.Variable(name(x)), toML(value)))
 
-    case lifted.App(b, targs, args) => CPS.inline { k => ml.Expr.Call(ml.Expr.Call(toML(b), args map toML), List(k.reify)) }
+    case lifted.App(b, targs, args) => CPS.inline { k =>
+      ml.Expr.Call(toML(b), (args map toML) ++ List(k.reify))
+    }
 
     case lifted.If(cond, thn, els) =>
       CPS.join { k =>
@@ -223,7 +215,7 @@ object Transformer {
   def toML(block: BlockLit)(using Context): ml.Lambda = block match {
     case BlockLit(tparams, params, body) =>
       val k = freshName("k")
-      ml.Lambda(params.map(paramToML(_)) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+      ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
   }
 
   def toML(block: Block)(using C: Context): ml.Expr = block match {
@@ -234,13 +226,7 @@ object Transformer {
       toML(b)
 
     case lifted.Member(b, field, annotatedType) =>
-      val selector = field match {
-        case op: symbols.Operation =>
-          dataSelectorName(op.interface, op)
-        case f: symbols.Field => fieldSelectorName(f)
-        case _: symbols.TermSymbol => C.panic("TermSymbol Member is not supported")
-      }
-      ml.Call(selector)(toML(b))
+      ml.Call(name(field))(toML(b))
 
     case lifted.Unbox(e) => toML(e) // not sound
 
@@ -252,10 +238,7 @@ object Transformer {
       ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
   }
 
-  def toML(op: Operation)(using Context): ml.Expr = {
-    val Operation(_, implementation) = op
-    toML(implementation)
-  }
+  def toML(op: Operation)(using Context): ml.Expr = toML(op.implementation)
 
   def toML(scope: Evidence): ml.Expr = scope match {
     case Evidence(Nil) => Consts.here
@@ -300,6 +283,7 @@ object Transformer {
         case e: Evidence => toML(e)
       }
       b match {
+        // TODO do not use symbols here, but look up in module declaration
         case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _)), _) =>
           ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
         case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _)), _) =>
@@ -308,7 +292,7 @@ object Transformer {
       }
 
     case Select(b, field, _) =>
-      ml.Call(fieldSelectorName(field))(toML(b))
+      ml.Call(name(field))(toML(b))
 
     case Run(s) => toMLExpr(s).run
 
@@ -407,19 +391,4 @@ object Transformer {
     case one :: Nil => Some(one)
     case exps => Some(ml.Expr.Tuple(exps))
   }
-
-  def fieldSelectorName(f: Symbol)(using C: Context): MLName = f match {
-    case f: symbols.Field =>
-      dataSelectorName(f.constructor, f)
-    case _ => C.panic("Record fields are not actually a field")
-  }
-
-  def dataSelectorName(data: Id, selection: Id)(using C: Context): MLName = {
-    val dataName = name(data)
-    val selectionName = name(selection)
-    MLName(dataName.name + selectionName.name)
-  }
-
-  def freshName(s: String): MLName =
-    MLName(s + Symbol.fresh.next())
 }

@@ -4,7 +4,6 @@ package ml
 
 import effekt.context.Context
 import effekt.lifted.LiftInference
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -23,8 +22,8 @@ class ML extends Compiler[String] {
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
-    case Stage.Core => Core(source).map { res => res.core }
-    case Stage.Lifted => (Core andThen LiftInference)(source).map { res => res.core }
+    case Stage.Core => steps.afterCore(source).map { res => res.core }
+    case Stage.Lifted => steps.afterLift(source).map { res => res.core }
     case Stage.Machine => None
     case Stage.Target => steps.afterML(source)
   }
