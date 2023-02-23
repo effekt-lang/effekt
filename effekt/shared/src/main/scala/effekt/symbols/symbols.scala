@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef, RegDef }
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -82,20 +82,21 @@ case class Module(
 sealed trait Param extends TermSymbol
 case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSymbol
 
-enum TrackedParam(val name: Name) extends Param, BlockSymbol {
 
-  case BlockParam(n: Name, tpe: BlockType) extends TrackedParam(n)
-  case ResumeParam(module: Module) extends TrackedParam(Name.local("resume"))
-  case VarParam(n: Name, tree: source.Tree) extends TrackedParam(n)
-  case ExternResource(n: Name, tpe: BlockType) extends TrackedParam(n)
-
+sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
   lazy val capture: Capture = this match {
     case b: BlockParam => CaptureParam(b.name)
     case r: ResumeParam => ???
-    case s: VarParam => LexicalRegion(name, s.tree)
+    case s: VarBinder => LexicalRegion(name, s.decl)
     case r: ExternResource => Resource(name)
   }
+}
+object TrackedParam {
+  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
+  case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
+  case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
+
 }
 export TrackedParam.*
 
@@ -145,7 +146,8 @@ enum Binder extends TermSymbol {
   def decl: Def
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
-  case VarBinder(name: Name, tpe: Option[ValueType], region: TrackedParam, decl: VarDef) extends Binder, BlockSymbol
+  case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, BlockSymbol
+  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, BlockSymbol, TrackedParam
   case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
@@ -286,7 +288,7 @@ enum Capture extends CaptVar {
   case CaptureParam(name: Name)
 
   /**
-   * Self region of functions and handlers (they count in as `control` when considering direct style)
+   * Region of local mutable state (they count in as `control` when considering direct style)
    */
   case LexicalRegion(name: Name, tree: source.Tree)
 

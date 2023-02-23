@@ -45,11 +45,11 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def stmt(using Context, WFContext) = {
-    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, None, binding), rest) =>
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, binding), rest) =>
       val tpe = Context.inferredTypeOf(rest)
 
       val free = freeCapture(tpe)
-      val capt = tree.symbol.region.capture
+      val capt = tree.symbol.capture
 
       if free contains capt then Context.at(stmt) {
         Context.error(pp"Local variable ${id} escapes through the returned value of type ${tpe}.")

@@ -188,6 +188,15 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
 
+    case core.Var(id, init, cap, body) =>
+      val stateEvidence = EvidenceSymbol()
+      val environment = env.adapt(Lift.Var(stateEvidence)).bind(id)
+      val stateCapability = lifted.Param.BlockParam(id, lifted.Type.TState(transform(init.tpe)))
+      val transformedBody = transform(body)(using environment, ErrorReporter)
+
+      Var(transform(init), lifted.BlockLit(Nil, List(Param.EvidenceParam(stateEvidence), stateCapability),
+        transformedBody))
+
     case core.Alloc(id, init, region, body) =>
       Alloc(id, transform(init), region, env.evidenceFor(region), transform(body))
 

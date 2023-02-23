@@ -137,8 +137,11 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case ValDef(id, annot, binding) =>
       ValDef(id, annot, rewrite(binding))
 
-    case VarDef(id, annot, region, binding) =>
-      VarDef(id, annot, region, rewrite(binding))
+    case RegDef(id, annot, region, binding) =>
+      RegDef(id, annot, region, rewrite(binding))
+
+    case VarDef(id, annot, binding) =>
+      VarDef(id, annot, rewrite(binding))
 
     case DefDef(id, annot, binding) =>
       val block = rewriteAsBlock(binding)

@@ -168,6 +168,7 @@ object Type {
       allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
 
     case Stmt.Alloc(id, init, region, body) => body.tpe
+    case Stmt.Var(id, init, cap, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
 
@@ -187,6 +188,7 @@ object Type {
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.Alloc(id, init, region, body) => Set(region) ++ body.capt
+    case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
     case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
     case Stmt.Region(body) => body.capt
     case Stmt.Hole() => Set.empty

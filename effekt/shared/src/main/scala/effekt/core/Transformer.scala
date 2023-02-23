@@ -74,8 +74,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       additionalDefinitions ++ List(definition)
 
-    case v @ source.VarDef(id, _, reg, binding) =>
-      Context.at(d) { Context.abort("Mutable variable bindings currently not allowed on the toplevel") }
+    case _: source.VarDef | _: source.RegDef =>
+      Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
       val interface = d.symbol
@@ -149,10 +149,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           Def(sym, transformAsBlock(binding), transform(rest))
         }
 
-      case v @ source.VarDef(id, _, reg, binding) =>
+      case v @ source.RegDef(id, _, reg, binding) =>
         val sym = v.symbol
         insertBindings {
           Alloc(sym, Context.bind(transform(binding)), sym.region, transform(rest))
+        }
+
+      case v @ source.VarDef(id, _, binding) =>
+        val sym = v.symbol
+        insertBindings {
+          Var(sym, Context.bind(transform(binding)), sym.capture, transform(rest))
         }
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")

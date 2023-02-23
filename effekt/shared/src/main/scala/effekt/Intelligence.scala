@@ -76,7 +76,6 @@ trait Intelligence {
     case u: Binder       => Some(u.decl)
     case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
-    case s: VarParam     => Some(s.tree)
     case u => C.definitionTreeOption(u)
   }
 
@@ -201,7 +200,7 @@ trait Intelligence {
 
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
-    case s: VarParam =>
+    case s: VarBinder =>
 
       val ex =
         s"""|Each variable declaration introduces a new scope.
@@ -210,6 +209,16 @@ trait Intelligence {
             |""".stripMargin
 
       SymbolInfo(s, "Local variable", None, Some(ex))
+
+    case s: RegBinder =>
+
+      val ex =
+        pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
+             |also its backtracking behavior in combination with continuation capture and
+             |resumption.
+             |""".stripMargin
+
+      SymbolInfo(s, "Variable in region", None, Some(ex))
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }

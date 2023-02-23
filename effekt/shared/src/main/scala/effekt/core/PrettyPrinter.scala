@@ -161,6 +161,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Alloc(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 
+    case Var(id, init, cap, body) =>
+      "var" <+> toDoc(id.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
+
     case Region(body) =>
       "region" <+> toDoc(body)
 

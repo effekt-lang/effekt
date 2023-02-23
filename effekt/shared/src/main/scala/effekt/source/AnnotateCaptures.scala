@@ -78,8 +78,8 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def stmt(using Context, Unit) = {
     // local state
-    case source.DefStmt(tree @ VarDef(id, annot, None, binding), rest) =>
-      query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.region.capture))
+    case source.DefStmt(tree @ VarDef(id, annot, binding), rest) =>
+      query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.capture))
   }
 
   override def defn(using Context, Unit) = {
@@ -91,7 +91,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       cpt
 
     // regions
-    case tree @ VarDef(id, annot, Some(region), binding) =>
+    case tree @ RegDef(id, annot, region, binding) =>
       query(binding) ++ captureOf(tree.symbol.region)
   }
 

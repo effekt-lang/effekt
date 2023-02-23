@@ -83,7 +83,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.ValDef(id, annot, binding) =>
       ()
 
-    case d @ source.VarDef(id, annot, region, binding) =>
+    case d @ source.VarDef(id, annot, binding) =>
+      ()
+
+    case d @ source.RegDef(id, annot, region, binding) =>
       ()
 
     case d @ source.DefDef(id, annot, block) =>
@@ -230,19 +233,25 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
-    case d @ source.VarDef(id, annot, region, binding) =>
+
+    // Local mutable state
+    case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
-      val reg = region.map(Context.resolveTerm).getOrElse {
-        val sym = VarParam(Name.local(id), d)
-        // Context.bind(id.name, sym.capture)
-        sym
-      } match {
-        case t: TrackedParam => t
+
+      resolveGeneric(binding)
+      val sym = VarBinder(Context.nameFor(id), tpe, d)
+      Context.define(id, sym)
+
+    // allocation into a region
+    case d @ source.RegDef(id, annot, region, binding) =>
+      val tpe = annot.map(resolve)
+      val reg = Context.resolveTerm(region) match {
+        case t: BlockSymbol => t
         case _ => Context.abort("Region needs to be a block.")
       }
 
       resolveGeneric(binding)
-      val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
+      val sym = RegBinder(Context.nameFor(id), tpe, reg, d)
 
       Context.define(id, sym)
 
@@ -444,7 +453,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Var(id) => Context.resolveVar(id)
 
     case source.Assign(id, expr) => Context.resolveVar(id) match {
-      case x: VarBinder => resolveGeneric(expr)
+      case _: VarBinder | _: RegBinder => resolveGeneric(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")

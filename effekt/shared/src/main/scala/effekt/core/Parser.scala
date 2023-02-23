@@ -116,6 +116,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | `region` ~> blockLit ^^ Stmt.Region.apply
     | `try` ~> blockLit ~ many(`with` ~> implementation) ^^ Stmt.Try.apply
     | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
+    | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
     | `<>` ^^^ Hole()
     | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )

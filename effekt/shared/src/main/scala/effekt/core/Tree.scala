@@ -245,8 +245,9 @@ enum Stmt extends Tree {
   case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
-  // e.g. state(init) { (ev){x: Ref} => ... }
-  // case Var(init: Expr, body: Block)
+  // [[capture]] is a binding occurence.
+  // e.g. state(init) { [x]{x: Ref} => ... }
+  case Var(id: Id, init: Expr, capture: Id, body: Stmt)
 
   case Try(body: Block, handlers: List[Implementation])
 

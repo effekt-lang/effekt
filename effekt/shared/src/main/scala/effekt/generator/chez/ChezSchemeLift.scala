@@ -3,7 +3,7 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.lifted.{ LiftInferenceState, LiftInference }
+import effekt.lifted.LiftInference
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -35,7 +35,7 @@ class ChezSchemeLift extends Compiler[String] {
   // ------------------------
   // Source => Core => Lifted => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen LiftInferenceState andThen ToChez map { case (main, expr) =>
+    allToCore(Core) andThen Aggregate andThen LiftInference andThen ToChez map { case (main, expr) =>
       (Map(main -> pretty(expr)), main)
     }
 
@@ -55,7 +55,7 @@ class ChezSchemeLift extends Compiler[String] {
   object steps {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) map { c => c.main }
-    val afterLift = afterCore andThen LiftInferenceState
+    val afterLift = afterCore andThen LiftInference
     val afterChez = afterLift andThen ToChez map { case (f, prog) => prog }
   }
 

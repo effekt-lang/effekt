@@ -673,9 +673,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result((), effBinding)
 
       // local mutable state
-      case d @ source.VarDef(id, annot, None, binding) =>
+      case d @ source.VarDef(id, annot, binding) =>
         val sym = d.symbol
-        val stCapt = CaptureSet(sym.region.capture)
+        val stCapt = CaptureSet(sym.capture)
 
         val Result(tpeBind, effBind) = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
@@ -685,10 +685,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Context.bind(sym, stTpe, stCapt)
 
+        //        val reg = tree.symbol
+        //        Context.bind(reg)
+        //
+        //        val inferredCapture = Context.freshCaptVar(CaptUnificationVar.RegionRegion(tree))
+        //        given Captures = Context.without(inferredCapture, List(reg.capture))
+        //        checkStmt(body, expected)
+
         Result((), effBind)
 
       // regions
-      case d @ source.VarDef(id, annot, Some(reg), binding) =>
+      case d @ source.RegDef(id, annot, reg, binding) =>
         val sym = d.symbol
         // we use the current region as an approximation for the state
         val stCapt = Context.symbolOf(reg) match {
@@ -1371,7 +1378,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
       s match {
         case b: BlockParam => CaptureSet(b.capture)
-        case b: VarParam => CaptureSet(b.capture)
+        case b: VarBinder => CaptureSet(b.capture)
         case _ => panic(pretty"Shouldn't happen: we do not have a capture for ${s}, yet.")
       }
     }
@@ -1401,7 +1408,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
-    case s : VarParam => bind(s, CaptureSet(s.capture))
+    case s : VarBinder => bind(s, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
   }
 
