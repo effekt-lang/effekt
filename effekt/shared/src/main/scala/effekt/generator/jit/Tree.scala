@@ -23,6 +23,9 @@ case class BasicBlock(
 case class VariableDescriptor(typ: Type, id: Register) extends Tree
 case class FrameDescriptor(locals: Map[RegisterType, Int]) extends Tree
 case class RegList(regs: Map[RegisterType, List[Register]])
+object RegList {
+  val empty = RegList(Map.empty)
+}
 case class Clause(params: RegList, target: BlockLabel)
 
 sealed trait Instruction extends Tree

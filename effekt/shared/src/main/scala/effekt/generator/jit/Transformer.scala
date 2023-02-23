@@ -224,6 +224,9 @@ object Transformer {
         assert(tpe == transform(value.tpe))
         emit(Store(transformArgument(ref).id, tpe.registerType, transformArgument(value).id))
         transform(rest)
+      case machine.Statement.Hole =>
+        emit(PrimOp("hole", RegList.empty, RegList.empty))
+        Return(RegList.empty)
   }
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
