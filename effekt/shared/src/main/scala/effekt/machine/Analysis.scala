@@ -57,4 +57,5 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
       arguments.toSet ++ freeVariables(rest) - name
+    case Hole => Set.empty
   }

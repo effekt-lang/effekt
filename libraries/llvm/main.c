@@ -12,6 +12,7 @@
 #include "types.c"
 #include "buffer.c"
 #include "io.c"
+#include "hole.c"
 
 
 extern void effektMain();

@@ -195,6 +195,11 @@ enum Statement {
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
   case LiteralEvidence(name: Variable, value: Evidence, rest: Statement)
+
+  /**
+   * Statement that is executed when a Hole is encountered.
+   */
+  case Hole
 }
 export Statement.*
 
