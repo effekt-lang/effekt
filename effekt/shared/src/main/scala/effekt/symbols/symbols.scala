@@ -315,6 +315,7 @@ object CaptUnificationVar {
   case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
   case class HandlerRegion(handler: source.TryHandle) extends Role
   case class RegionRegion(handler: source.Region) extends Role
+  case class VarRegion(definition: source.VarDef) extends Role
   case class FunctionRegion(fun: source.FunDef) extends Role
   case class BlockRegion(fun: source.DefDef) extends Role
   case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role

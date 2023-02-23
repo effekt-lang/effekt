@@ -505,6 +505,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(stmt, expected) {
+      // local mutable state
+      case source.DefStmt(d @ source.VarDef(id, annot, binding), rest) =>
+        val sym = d.symbol
+        val stCapt = CaptureSet(sym.capture)
+
+        val Result(tpeBind, effBind) = d.symbol.tpe match {
+          case Some(t) => binding checkAgainst t
+          case None    => checkStmt(binding, None)
+        }
+        val stTpe = TState(tpeBind)
+
+        Context in {
+          Context.bind(sym, stTpe, stCapt)
+          val inferredCapture = Context.freshCaptVar(CaptUnificationVar.VarRegion(d))
+          given Captures = Context.without(inferredCapture, List(sym.capture))
+          checkStmt(rest, expected)
+        }
+
       case source.DefStmt(b, rest) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
         val Result(r, effStmt) = checkStmt(rest, expected)
@@ -672,28 +690,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), effBinding)
 
-      // local mutable state
-      case d @ source.VarDef(id, annot, binding) =>
-        val sym = d.symbol
-        val stCapt = CaptureSet(sym.capture)
-
-        val Result(tpeBind, effBind) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding, None)
-        }
-        val stTpe = TState(tpeBind)
-
-        Context.bind(sym, stTpe, stCapt)
-
-        //        val reg = tree.symbol
-        //        Context.bind(reg)
-        //
-        //        val inferredCapture = Context.freshCaptVar(CaptUnificationVar.RegionRegion(tree))
-        //        given Captures = Context.without(inferredCapture, List(reg.capture))
-        //        checkStmt(body, expected)
-
-        Result((), effBind)
-
       // regions
       case d @ source.RegDef(id, annot, reg, binding) =>
         val sym = d.symbol
@@ -722,11 +718,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case d @ source.DefDef(id, annot, binding) =>
 
-        given inferredCapture: Captures = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+        given inferredCapture: CaptUnificationVar = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
 
-        val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
-        Context.bind(d.symbol, t, inferredCapture)
-        Result((), effBinding)
+        // we require inferred Capture to be solved after checking this block.
+        Context.withUnificationScope(List(inferredCapture)) {
+          val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
+          Context.bind(d.symbol, t, inferredCapture)
+          Result((), effBinding)
+        }
 
       case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
