@@ -17,6 +17,12 @@ class MLTests extends EffektTests {
 
   override lazy val ignored: List[File] = List(
 
+    // requires monomorphization of rank-2 types, related to lift
+    examplesDir / "benchmarks" / "tree.effekt",
+    examplesDir / "ml" / "raytracer.effekt",
+    examplesDir / "ml" / "nim.effekt",
+    examplesDir / "ml" / "naturalisticdsls.md",
+
     // Broken tests
     examplesDir / "ml" / "probabilistic.effekt",
     examplesDir / "ml" / "triples.effekt",
