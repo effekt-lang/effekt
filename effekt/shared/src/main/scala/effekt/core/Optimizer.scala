@@ -48,18 +48,18 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
         optimized = constantPropagation(optimized) // Constant Propagation
 
-        val dependencyGraph = rmIdKey[Set[Id]](constructDependencyGraph(optimized), Set("main"))
-        optimized = staticArgumentTransformation(optimized, dependencyGraph) //Static Argument Transformation
+        val recursiveFunctions = findRecursiveFunctions(optimized)
+        optimized = staticArgumentTransformation(optimized, recursiveFunctions) //Static Argument Transformation
 
-        var occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
+        var occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
         var bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
         optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
         bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
         optimized = inlineGeneral(optimized, bodies, 10) // Inline General
 
-        occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
-        optimized = removeUnusedFunctions(optimized, occurences, dependencyGraph, exports) //Remove Unused Functions
+        occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
+        optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
 
         optimized = betaReduction(optimized) // Beta Reduction
 

@@ -125,9 +125,8 @@ def dealiasing(op: Operation)(using aliases: Map[Id, Id]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, dealiasing(body))
 
-def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], dependencyGraph: Map[Id, Set[Id]], exports: List[Id]): ModuleDecl =
+def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], recursiveFunctions: Set[Id], exports: List[Id]): ModuleDecl =
   val calls = count.filter(!exports.contains(_))
-  val recursiveFunctions = dependencyGraph.filter((id, fs) => fs.contains(id)).keySet -- exports
   removeUnusedFunctionsWorker(start)(using calls, recursiveFunctions)
 
 def removeUnusedFunctionsWorker(module: ModuleDecl)(using count: Map[Id, Int], recursiveFunctions: Set[Id]): ModuleDecl =
@@ -136,7 +135,7 @@ def removeUnusedFunctionsWorker(module: ModuleDecl)(using count: Map[Id, Int], r
       ModuleDecl(path, imports, declarations, externs, definitions.filter{
         case Definition.Def(id, body) =>
           if(recursiveFunctions.contains(id))
-            val recCalls = countFunctionCalls(body)
+            val recCalls = countFunctionOccurences(body)
             recCalls.contains(id) && count(id) == recCalls(id)
           else !(count.contains(id) && count(id) == 0)
         case _ => true
@@ -167,7 +166,7 @@ def removeUnusedFunctionsWorker(statement: Stmt)(using count: Map[Id, Int], recu
       val defs = definitions.filter {
         case Definition.Def(id, _) =>
           !(count.contains(id) && (count(id) == 0 ||
-            (recursiveFunctions.contains(id) && count(id) == countFunctionCalls(body)(id))))
+            (recursiveFunctions.contains(id) && count(id) == countFunctionOccurences(body)(id))))
         case _ => true
       }.map(removeUnusedFunctionsWorker)
 
@@ -248,8 +247,8 @@ def removeUnusedFunctionsWorker(op: Operation)(using count: Map[Id, Int], recurs
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, removeUnusedFunctionsWorker(body))
 
-def staticArgumentTransformation(module: ModuleDecl, dependencyGraph: Map[Id, Set[Id]]): ModuleDecl =
-  staticArgumentTransformationWorker(module)(using dependencyGraph.filter((id, fs) => fs.contains(id)).keySet)
+def staticArgumentTransformation(module: ModuleDecl, recursiveFunctions: Set[Id]): ModuleDecl =
+  staticArgumentTransformationWorker(module)(using recursiveFunctions)
 
 def staticArgumentTransformationWorker(module: ModuleDecl)(using recursiveFunctions: Set[Id]): ModuleDecl =
   module match
@@ -518,6 +517,7 @@ def replaceCalls(op: Operation)(using newName: Id, params: StaticParams): Operat
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, replaceCalls(body))
 
+//TODO: Doesn't terminate or takes forever, idk
 def inliningWorker(module: ModuleDecl)(using inlines: Map[Id, BlockLit]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
@@ -545,7 +545,9 @@ def inliningWorker(expr: Expr)(using inlines: Map[Id, BlockLit]): Expr =
 def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
   statement match
     case Scope(definitions, body) =>
-      Scope(definitions.map(inliningWorker), inliningWorker(body))
+      Scope(definitions.map{
+        case d@Definition.Def(id, _) => inliningWorker(d)(using inlines - id)
+        case l@Definition.Let(id,_) => inliningWorker(l)(using inlines - id)}, inliningWorker(body))
 
     case Return(expr) =>
       Return(inliningWorker(expr))
@@ -554,7 +556,7 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
       Val(id, inliningWorker(binding), inliningWorker(body))
 
     case App(b@BlockVar(id, _, _), targs, vargs, bargs) =>
-      if(inlines.contains(id)) substitute(inlines(id), targs, vargs, bargs)
+      if(inlines.contains(id)) substitute(inlines(id), targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
       else App(b, targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
 
     case App(callee, targs, vargs, bargs) =>
@@ -625,124 +627,6 @@ def inliningWorker(op: Operation)(using inlines: Map[Id, BlockLit]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, inliningWorker(body))
 
-def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
-  block match
-    case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      val tSubst = (tparams zip targs).toMap
-      val cSubst = (cparams zip bargs.map(_.capt)).toMap
-      val vSubst = (vparams.map(_.id) zip vargs).toMap
-      val bSubst = (bparams.map(_.id) zip bargs).toMap
-
-      substitute(body)(using tSubst, cSubst, vSubst, bSubst)
-
-def substitute(definition: Definition)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                                       vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Definition =
-  definition match
-    case Definition.Def(id, block) =>
-      Definition.Def(id, substitute(block))
-
-    case Definition.Let(id, binding) =>
-      Definition.Let(id, substitute(binding))
-
-def substitute(expression: Expr)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                                 vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Expr =
-  expression match
-    case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(substitute(b), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
-
-    case Run(s) =>
-      Run(substitute(s))
-
-    case p: Pure =>
-      substitute(p)
-
-def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                                vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Stmt =
-  statement match
-    case Scope(definitions, body) =>
-      Scope(definitions.map(substitute), substitute(body)(using tSubst, cSubst, vSubst, bSubst -- definitions.map{
-        case Definition.Def(id, _) => id
-        case Definition.Let(id, _) => id
-      }))
-
-    case Return(expr) =>
-      Return(substitute(expr))
-
-    case Val(id, binding, body) =>
-      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
-
-    case App(callee, targs, vargs, bargs) =>
-      App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
-
-    case If(cond, thn, els) =>
-      If(substitute(cond), substitute(thn), substitute(els))
-
-    case Match(scrutinee, clauses, default) =>
-      Match(substitute(scrutinee), clauses.map{case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])},
-        default match
-          case Some(s) => Some(substitute(s))
-          case None => None)
-
-    case State(id, init, region, body) =>
-      State(id, substitute(init), region, substitute(body))
-
-    case Try(body, handlers) =>
-      Try(substitute(body), handlers)
-
-    case Region(body) =>
-      Region(substitute(body))
-
-    case Hole() =>
-      Hole()
-
-def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                             vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Block =
-  block match
-    case BlockVar(id, annotatedTpe, annotatedCapt) =>
-      if(bSubst.contains(id)) bSubst(id)
-      else BlockVar(id, Type.substitute(annotatedTpe, tSubst, cSubst), Type.substitute(annotatedCapt, cSubst))
-
-    case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams.map(substitute(_).asInstanceOf[ValueParam]), bparams.map(substitute(_).asInstanceOf[BlockParam]), substitute(body))
-
-    case Member(block, field, annotatedTpe) =>
-      Member(substitute(block), field, Type.substitute(annotatedTpe, tSubst, cSubst))
-
-    case Unbox(pure) =>
-      Unbox(substitute(pure))
-
-    case n: New =>
-      n
-
-def substitute(param: Param)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                             vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Param =
-  param match
-    case ValueParam(id, tpe) =>
-      ValueParam(id, Type.substitute(tpe, tSubst, cSubst))
-
-    case BlockParam(id, tpe) =>
-      BlockParam(id, Type.substitute(tpe, tSubst, cSubst))
-
-def substitute(pure: Pure)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                           vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Pure =
-  pure match
-    case ValueVar(id, annotatedType) =>
-      if(vSubst.contains(id)) vSubst(id)
-      else ValueVar(id, Type.substitute(annotatedType, tSubst, cSubst))
-
-    case Literal(value, annotatedType) =>
-      Literal(value, Type.substitute(annotatedType, tSubst, cSubst))
-
-    case PureApp(b, targs, vargs) =>
-      PureApp(substitute(b), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute))
-
-    case Select(target, field, annotatedType) =>
-      Select(substitute(target), field, Type.substitute(annotatedType, tSubst, cSubst))
-
-    case Box(b, annotatedCapture) =>
-      Box(substitute(b), Type.substitute(annotatedCapture, cSubst))
-
-//TODO: Are all unique functions safe to inline?
 def inlineUnique(module: ModuleDecl, bodies: Map[Id, Block], count: Map[Id, Int]): ModuleDecl =
   val inlines = bodies.filter((id, b) => count.contains(id) && count(id) == 1 && b.isInstanceOf[BlockLit]).asInstanceOf[Map[Id, BlockLit]]
   inliningWorker(module)(using inlines)
@@ -976,5 +860,3 @@ def betaReduction(op: Operation): Operation =
   op match
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, betaReduction(body))
-
-//TODO: Case-of-known-case
