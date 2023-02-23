@@ -54,32 +54,37 @@ object Transformer {
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
+      noteBlockParams(name, params map transform, List.empty)
       Extern(transform(name), transformedParams, transform(ret), body)
 
     case lifted.Extern.Include(contents) =>
       Include(contents)
   }
 
-  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Statement =
+  def transform(stmt: lifted.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
     stmt match {
       case lifted.Scope(definitions, rest) =>
 
         definitions.foreach {
           case Definition.Def(id,  block @ lifted.BlockLit(tparams, params, body)) =>
             // TODO does not work for mutually recursive local definitions
-            val freeParams = lifted.freeVariables(block).toList.collect {
-              case lifted.ValueParam(id, tpe) => Variable(transform(id), transform(tpe))
-              case lifted.BlockParam(id: (symbols.BlockParam | symbols.ResumeParam), tpe) =>
-                // TODO find out if this is a block parameter or a function without inspecting the symbol
-                Variable(transform(id), transform(tpe))
-              case lifted.EvidenceParam(id) => Variable(transform(id), builtins.Evidence)
-              // we ignore functions since we do not "close" over them.
-
-              // TODO
-              //          case id: lifted.ScopeId => ???
+            val freeParams = lifted.freeVariables(block).toList.toSet.flatMap {
+              case lifted.ValueParam(id, tpe) => Set(Variable(transform(id), transform(tpe)))
+              case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
+                Set(Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe))))
+              case lifted.BlockParam(resume: symbols.TrackedParam.ResumeParam, _) =>
+                // resume parameters are represented as Stacks in machine
+                // TODO How can we not match on the symbol here?
+                Set(Variable(transform(resume), Type.Stack()))
+              case lifted.BlockParam(pid, tpe)
+                if !BPC.blockParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
+                Set(Variable(transform(pid), transform(tpe)))
+              case lifted.BlockParam(pid, tpe) if BPC.freeParams.contains(pid) && id != pid =>
+                BPC.freeParams(pid).toSet
+              case lifted.EvidenceParam(id) => Set(Variable(transform(id), builtins.Evidence))
+              case _ => Set.empty
             }
-            val allParams = params.map(transform) ++ freeParams;
-            noteBlockParams(id, allParams)
+            noteBlockParams(id, params.map(transform), freeParams.toList)
           case _ => ()
         }
 
@@ -253,6 +258,8 @@ object Transformer {
               transform(body))
         }
 
+      case lifted.Hole() => machine.Statement.Hole
+
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
@@ -281,7 +288,20 @@ object Transformer {
     }
   }
 
-  def transform(block: lifted.Block)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = block match {
+  def transform(block: lifted.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+    case lifted.BlockVar(id, tpe) if BPC.blockParams.contains(id) =>
+      // passing a function directly, so we need to eta-expand
+      // TODO cache the closure somehow to prevent it from being created on every call
+      val parameters = BPC.blockParams(id)
+      val variable = Variable(freshName(id.name.name ++ "$closure"), Negative("<function>"))
+      val environment = getBlocksParams(id)
+      Binding { k =>
+        New(variable, List(Clause(parameters,
+          // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
+          Jump(Label(transform(id), environment))
+        )), k(variable))
+      }
+
     case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -416,8 +436,7 @@ object Transformer {
   }
 
   def transform(tpe: lifted.BlockType)(using ErrorReporter): Type = tpe match {
-    case lifted.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
-    case lifted.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+    case lifted.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative("<function>")
     case lifted.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
   }
 
@@ -438,7 +457,7 @@ object Transformer {
   def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
       case Definition.Def(blockName, lifted.BlockLit(tparams, params, body)) =>
-        noteBlockParams(blockName, params.map(transform))
+        noteBlockParams(blockName, params.map(transform), Nil)
       case _ => ()
     }
 
@@ -448,18 +467,20 @@ object Transformer {
    */
 
   class BlocksParamsContext() {
-    var blocksParams: Map[Symbol, Environment] = Map()
+    var freeParams: Map[Symbol, Environment] = Map()
+    var blockParams: Map[Symbol, Environment] = Map()
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
-  def noteBlockParams(id: Symbol, params: Environment)(using BC: BlocksParamsContext): Unit = {
-    BC.blocksParams = BC.blocksParams + (id -> params)
+  def noteBlockParams(id: Symbol, blockParams: Environment, freeParams: Environment)(using BC: BlocksParamsContext): Unit = {
+    BC.blockParams = BC.blockParams + (id -> blockParams)
+    BC.freeParams = BC.freeParams + (id -> freeParams)
   }
 
   def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = {
     // TODO what if this is not found?
-    BC.blocksParams(id)
+    BC.blockParams(id) ++ BC.freeParams(id)
   }
 
   case class Binding[A](run: (A => Statement) => Statement) {

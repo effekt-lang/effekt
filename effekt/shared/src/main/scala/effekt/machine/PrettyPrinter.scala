@@ -106,6 +106,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralEvidence(name, evidence, rest) =>
       "let" <+> name <+> "=" <+> evidenceToDoc(evidence) <> ";" <> line <> toDoc(rest)
+
+    case Hole => "<>"
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

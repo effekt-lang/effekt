@@ -149,8 +149,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-      val blockTpe = BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), body.tpe)
-      val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, body)
+      val blockTpe = BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), transform(body.tpe))
+      val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, transform(body))
       val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
       Operation(name, transformed.tparams, transformed.cparams, transformed.vparams, transformed.bparams,
         resume map transform,
