@@ -15,3 +15,6 @@ def uniqueName(id: Symbol): String = id.name.toString + "_" + id.id
 def name(id: Symbol): MLName = MLName(uniqueName(id))
 
 def name(id: Name): MLName = MLName(id.name)
+
+def freshName(s: String): MLName =
+  MLName(s + Symbol.fresh.next())

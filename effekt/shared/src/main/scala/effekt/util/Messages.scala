@@ -27,7 +27,7 @@ object messages {
    *
    * Messages are part of the reporting pipeline and can be backtracked by Typer
    */
-  case class FatalPhaseError(message: EffektError) extends Exception
+  case class FatalPhaseError(message: EffektError) extends Exception(message.toString)
 
   /**
    * Error that aborts the whole compilation and shows a stack trace
@@ -37,6 +37,20 @@ object messages {
   case class CompilerPanic(message: EffektError) extends Exception {
     override def toString = message.toString // TODO render!
   }
+
+  def TODO(msg: String = ""): Nothing =
+    val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
+    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
+
+  def FIXME[A](a: A, msg: String = ""): A = a
+
+  def NOT_SUPPORTED(msg: String = ""): Nothing =
+    val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
+    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
+
+  def INTERNAL_ERROR(msg: String = ""): Nothing =
+    val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
+    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
 
   /**
    * Stores messages in a mutable field

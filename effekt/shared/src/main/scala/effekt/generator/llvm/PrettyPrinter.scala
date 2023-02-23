@@ -1,7 +1,8 @@
-package effekt.llvm
+package effekt
+package generator
+package llvm
 
 import effekt.context.Context
-import effekt.llvm.Operand.LocalReference
 
 object PrettyPrinter {
 

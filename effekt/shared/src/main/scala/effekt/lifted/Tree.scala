@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.symbols.{ Constructor, Name, Symbol }
 import scala.collection.immutable
 
-import effekt.core.Id
+export effekt.core.Id
 
 sealed trait Tree
 /**
@@ -125,6 +125,9 @@ enum Stmt extends Tree  {
   case Try(body: Block, handler: List[Implementation])
   case Region(body: Block)
 
+  // e.g. shift(ev) { {resume} => ... }
+  case Shift(ev: Evidence, body: Block.BlockLit)
+
   // Others
   case Hole()
 
@@ -148,26 +151,32 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 
 
 
+enum Lift {
+  case Var(ev: EvidenceSymbol)
+  case Try()
+  case Reg()
+}
+
 /**
  * Evidence for lifts
  */
-case class Evidence(scopes: List[EvidenceSymbol]) extends Argument
+case class Evidence(lifts: List[Lift]) extends Argument
 
 def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-case class FreeVariables(vars: immutable.HashMap[core.Id, lifted.Param]) {
+case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def ++(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.merged(o.vars){ case ((leftId -> leftParam), (rightId -> rightParam)) =>
-      assert(leftParam == rightParam, "Same core.Id occurs free with different types.")
+      assert(leftParam == rightParam, "Same id occurs free with different types.")
       (leftId -> leftParam)
     })
   }
   def --(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.filter{ case (leftId -> leftParam) =>
       if(o.vars.contains(leftId)) {
-        assert(leftParam == o.vars(leftId), "core.Id bound with different type than it's occurences.")
+        assert(leftParam == o.vars(leftId), "Id bound with different type than it's occurences.")
         false
       } else { true }
     })
@@ -217,6 +226,7 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
+  case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }
 
@@ -252,5 +262,8 @@ def freeVariables(impl: Implementation): FreeVariables = impl match {
   case Implementation(id, operations) => operations.map(freeVariables).combineFV
 }
 
-def freeVariables(ev: Evidence): FreeVariables = ev.scopes.map{ e => EvidenceParam(e) }.toFV
-
+def freeVariables(ev: Evidence): FreeVariables = ev.lifts.flatMap {
+  case Lift.Var(ev) => List(lifted.Param.EvidenceParam(ev))
+  case Lift.Try() => List()
+  case Lift.Reg() => List()
+}.toFV

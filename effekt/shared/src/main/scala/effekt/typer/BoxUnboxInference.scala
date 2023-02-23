@@ -4,23 +4,19 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 
-object PreTyper extends Phase[NameResolved, NameResolved] {
+object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
-  val phaseName = "pre-typer"
+  import source._
 
-  def run(input: NameResolved)(implicit C: Context) = {
-    val traversal = new BoxUnboxInference
-    val transformedTree = traversal.rewrite(input.tree)
+  val phaseName = "box-unbox"
+
+  def run(input: NameResolved)(using Context) = {
+    val transformedTree = rewrite(input.tree)
 
     if (Context.messaging.hasErrors) { None }
     else { Some(input.copy(tree = transformedTree)) }
   }
-}
 
-
-class BoxUnboxInference {
-
-  import source._
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
     case ModuleDecl(path, imports, defs) =>

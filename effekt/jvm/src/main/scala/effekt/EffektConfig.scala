@@ -37,19 +37,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     required = false
   )
 
-  val jitBinaryPath: ScallopOption[File] = opt[File](
-    "jit-binary",
-    descr = "Path to JIT binary to be used",
-    required = false
-  )
-
-  val backend: ScallopOption[String] = choice(
+  val backend: ScallopOption[Backend[_]] = choice(
     choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "jit", "ml"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
     noshort = true
-  )
+  ).map(Backend.backend)
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
@@ -74,6 +68,9 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
    * 4) relative to to the executed JAR file (effekt.jar)
    */
   def findStdLib: util.paths.File = {
+
+    def backendStdLibPath(path: util.paths.File) =
+      backend().runner.standardLibraryPath(path)
 
     // 1) in config?
     if (stdlibPath.isDefined) {
@@ -109,85 +106,15 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     sys.error("Cannot find path to standard library")
   }
 
-  /**
-   * Tries to find the path to the JIT binary. Proceeds in the following order:
-   * 1) specified as part of the settings arg `jit-binary`
-   * 2) specified in an environment variable `EFFEKT_JIT_BIN`
-   * 3) relative to the current working directory
-   * 4) relative to the executed JAR file (effekt.jar)
-   *
-   * If successful, returns `Right(file)`, otherwise `Left(errorMessage)`
-   */
-  def findJITBinary(platform: String): Either[String, effekt.util.paths.File] = {
-    // TODO better error handling than Left(String)
-    import effekt.util.paths.file
-    val supportedJITPlatforms = List("x86_64-Linux", "arm64-Darwin")
-
-    if(!supportedJITPlatforms.contains(platform)) {
-      return Left(s"Unsupported platform ${platform}. Currently supported platforms: ${supportedJITPlatforms.mkString(", ")}")
-    }
-
-    val binaryName = s"${platform}/rpyeffect-jit";
-
-    // 1) in config
-    if(jitBinaryPath.isDefined) {
-      return Right(jitBinaryPath())
-    }
-
-    // 2) iin Environment variable EFFEKT_BIN
-    if (System.getenv.containsKey("EFFEKT_JIT_BIN")) {
-      return Right(System.getenv("EFFEKT_JIT_BIN"))
-    }
-
-    // 3) in PWD
-    val pwd = file(".")
-    if((pwd / "bin" / binaryName).exists) {
-      return Right(pwd / "bin" / binaryName)
-    }
-
-    // 4) next to JAR
-    val jarPath = effekt.util.paths.file(getClass.getProtectionDomain.getCodeSource.getLocation.toURI).parent;
-    if((jarPath / binaryName).exists) {
-      return Right(jarPath / binaryName)
-    }
-
-    return Left("Cannot find path to the JIT binary")
-  }
-
   lazy val libPath: File = findStdLib.canonicalPath.toFile
 
-  def includes(): List[File] = backendIncludes(libPath).map(_.toFile) ++ includePath()
+  def includes(): List[File] = libPath :: backend().runner.includes(libPath).map(_.toFile) ++ includePath()
 
-  def prelude(): List[String] = preludePath.getOrElse(backendPrelude())
+  def prelude(): List[String] = preludePath.getOrElse(backend().runner.prelude)
 
   def requiresCompilation(): Boolean = !server()
 
   def interpret(): Boolean = !server() && !compile()
-
-  private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {
-    case "js" => path / "libraries" / "js"
-    case "chez-monadic" => path / "libraries" / "chez" / "monadic"
-    case "chez-callcc" => path / "libraries" / "chez" / "callcc"
-    case "chez-lift" => path / "libraries" / "chez" / "lift"
-    case "llvm" => path / "libraries" / "llvm"
-    case "jit" => path / "libraries" / "jit"
-    case "ml" => path / "libraries" / "ml"
-    case b => sys error s"Unrecognized backend ${ b }"
-  }
-
-  private def backendIncludes(path: util.paths.File): List[util.paths.File] = backend() match {
-    case "chez-monadic" | "chez-callcc" | "chez-lift" => List(path, path / ".." / "common")
-    case b => List(path)
-  }
-
-  private def backendPrelude() = backend() match {
-    case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
-      List("effekt", "immutable/option", "immutable/list")
-    case "ml" =>
-      List("effekt", "immutable/option", "immutable/list")
-    case b =>
-      List("effekt")
-  }
 
   validateFilesIsDirectory(includePath)
 

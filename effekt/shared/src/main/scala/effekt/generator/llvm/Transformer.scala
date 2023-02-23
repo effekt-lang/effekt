@@ -1,9 +1,11 @@
-package effekt.llvm
+package effekt
+package generator
+package llvm
 
-import scala.collection.mutable
-import effekt.llvm.Operand.LocalReference
 import effekt.machine
 import effekt.machine.analysis.*
+
+import scala.collection.mutable
 
 object Transformer {
 

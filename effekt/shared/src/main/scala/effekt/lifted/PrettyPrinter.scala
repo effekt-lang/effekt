@@ -25,17 +25,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
-      emptyline <> signatures(m) <>
+      emptyline <> vcat(m.externs.map(toDoc)) <>
+      emptyline <> vcat(m.decls.map(toDoc)) <>
       emptyline <> toDoc(m.definitions)
   }
 
-  def signatures(m: ModuleDecl): Doc = {
-    val defs = m.definitions.map {
-      case Definition.Def(name, block) => "def" <+> toDoc(name) <> ":" <+> toDoc(block.tpe)
-      case Definition.Let(name, expr) => "let" <+> toDoc(name) <> ":" <+> toDoc(expr.tpe)
-    }
-    "// Signatures" <@> vcat(defs)
-  }
+  def signature(tparams: List[Id], params: List[Param], ret: ValueType): Doc =
+    val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+    val ps = parens(params.map(toDoc))
+    tps <> ps <> ":" <+> toDoc(ret)
 
   def toDoc(p: Param): Doc = p match {
     case Param.ValueParam(id, tpe) => id.name.toString <> ":" <+> toDoc(tpe)
@@ -45,7 +43,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(params.map(toDoc), comma)) <+> "=" <+> "\"" <> body <> "\""
+      "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
 
@@ -69,7 +67,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal              => l.value.toString
     case ValueVar(id, _)         => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case PureApp(b, targs, args) =>
+      val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+      toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))
 
     case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
@@ -86,7 +86,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Evidence): Doc = e match {
     case Evidence(Nil)  => "<>"
-    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev.name) }, ","))
+    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev) }, ","))
+  }
+
+  def toDoc(l: Lift): Doc = l match {
+    case Lift.Var(ev) => toDoc(ev.name)
+    case Lift.Try() => "Try"
+    case Lift.Reg() => "Reg"
   }
 
   def toDoc(impl: Implementation): Doc = {
@@ -98,17 +104,29 @@ object PrettyPrinter extends ParenPrettyPrinter {
     handlerName <+> block(vsep(clauses))
   }
 
-  def toDoc(d: core.Declaration): Doc = d match {
-    case core.Declaration.Data(did, _, ctors) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { ctor => toDoc(ctor.id.name) })
+  def toDoc(d: Declaration): Doc = d match {
+    case Declaration.Data(did, tparams, ctors) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      "type" <+> toDoc(did.name) <> tps <+> braces(ctors.map(toDoc))
 
-    case core.Declaration.Interface(id, _, operations) =>
-      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.id.name) })
+    case Declaration.Interface(id, tparams, operations) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      "interface" <+> toDoc(id.name) <> tps <+> braces(operations.map(toDoc))
+  }
+
+  def toDoc(c: Constructor): Doc = c match {
+    case Constructor(id, fields) => toDoc(id) <> parens(fields.map(toDoc))
+  }
+  def toDoc(f: Field): Doc = f match {
+    case Field(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
+  }
+  def toDoc(f: Property): Doc = f match {
+    case Property(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
   }
 
   def toDoc(d: Definition): Doc = d match {
     case Definition.Def(id, BlockLit(tparams, params, body)) =>
-      "def" <+> toDoc(id.name) <> parens(params.map(toDoc)) <> ":" <+> toDoc(body.tpe) <+> "=" <> nested(toDoc(body))
+      "def" <+> toDoc(id.name) <> signature(tparams, params, body.tpe) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
     case Definition.Let(id, binding) =>
@@ -131,7 +149,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
         toDoc(body)
 
     case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+      val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+      toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
@@ -141,6 +160,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
+
+    case Shift(ev, body) =>
+      "shift" <> parens(toDoc(ev)) <+> toDoc(body)
 
     case State(id, init, region, ev, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)

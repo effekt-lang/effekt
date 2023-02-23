@@ -7,18 +7,6 @@ import effekt.context.assertions.*
 import effekt.source.{ Def, ExprTarget, IdTarget, MatchPattern, Tree }
 import effekt.source.Tree.{ Query, Visit }
 
-object PostTyper extends Phase[Typechecked, Typechecked] {
-
-  val phaseName = "post-typer"
-
-  def run(input: Typechecked)(implicit C: Context) =
-    val Typechecked(source, tree, mod) = input
-    Wellformedness.check(mod, tree)
-
-    if (Context.messaging.hasErrors) { None }
-    else { Some(input) }
-}
-
 class WFContext(var effectsInScope: List[Interface]) {
   def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
 }
@@ -32,7 +20,16 @@ class WFContext(var effectsInScope: List[Interface]) {
  * - lexical scoping of effects
  * - escape of capabilities through types
  */
-object Wellformedness extends Visit[WFContext] {
+object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] {
+
+  val phaseName = "wellformedness"
+
+  def run(input: Typechecked)(implicit C: Context) =
+    val Typechecked(source, tree, mod) = input
+    check(mod, tree)
+
+    if (Context.messaging.hasErrors) { None }
+    else { Some(input) }
 
   def check(mod: Module, tree: source.ModuleDecl)(using Context): Unit = {
 

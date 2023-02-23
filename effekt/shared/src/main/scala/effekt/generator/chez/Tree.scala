@@ -170,6 +170,9 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
     case chez.Constant(name, expr) => query(expr)
   }
 
+  override def query(operation: Operation)(using Unit): Set[ChezName] =
+    query(operation.body) -- operation.params.toSet - operation.k
+
   override def query(b: Block)(using Unit): Set[ChezName] = b match {
     // defs are potentially recursive!
     case Block(defs, exprs, result) =>

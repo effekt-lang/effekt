@@ -66,6 +66,11 @@
        (cap1 (define-effect-op ev (arg1 ...) kid exp) ...) ...))]))
 
 
+(define-syntax shift
+  (syntax-rules ()
+    [(_ ev body)
+     (ev body)]))
+
 ;; REGIONS
 
 (define (with-region body)
