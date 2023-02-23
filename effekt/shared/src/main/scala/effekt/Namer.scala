@@ -233,9 +233,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.VarDef(id, annot, region, binding) =>
       val tpe = annot.map(resolve)
       val reg = region.map(Context.resolveTerm).getOrElse {
-        Context.getSelfRegion()
+        val sym = VarParam(Name.local(id), d)
+        // Context.bind(id.name, sym.capture)
+        sym
       } match {
-        case t: BlockSymbol => t
+        case t: TrackedParam => t
         case _ => Context.abort("Region needs to be a block.")
       }
 
@@ -256,7 +258,6 @@ object Namer extends Phase[Parsed, NameResolved] {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        Context.bindSelfRegion(f)
 
         resolveGeneric(body)
       }
@@ -340,8 +341,6 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
         }
 
-        Context.bindSelfRegion(tree)
-
         resolveGeneric(body)
       }
 
@@ -349,7 +348,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       val reg = BlockParam(Name.local(name.name), builtins.TRegion)
       Context.define(name, reg)
       Context scoped {
-        Context.bindSelfRegion(tree, reg)
         Context.bindBlock(reg)
         resolveGeneric(body)
       }
@@ -408,7 +406,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         Context.bindValues(vps)
         Context.bindBlocks(bps)
-        Context.bindSelfRegion(f)
 
         resolveGeneric(stmt)
       }
@@ -731,18 +728,6 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def bindBlocks(params: List[BlockParam]) =
     // bind the block parameter as a term
     params.foreach { bindBlock }
-
-  private[namer] def bindSelfRegion(tree: Tree): Unit = {
-    bindSelfRegion(tree, SelfParam(tree))
-  }
-
-  private[namer] def bindSelfRegion(tree: Tree, sym: TrackedParam): Unit = {
-    Context.bindBlock("this", sym)
-    Context.annotate(Annotations.SelfRegion, tree, sym)
-  }
-
-  private[namer] def getSelfRegion(): TermSymbol =
-    scope.lookupFirstTerm("this")
 
   private[namer] def bindBlock(p: TrackedParam) = {
     // bind the block parameter as a term

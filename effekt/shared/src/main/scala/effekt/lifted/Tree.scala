@@ -118,13 +118,13 @@ enum Stmt extends Tree  {
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
 
   // allocates into a (type-monomorphic?) region.
   // e.g. var x in r = init; body
-  case Alloc(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
+  case Alloc(id: Id, init: Expr, region: Id, ev: Evidence, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
   // e.g. state(init) { (ev){x: Ref} => ... }

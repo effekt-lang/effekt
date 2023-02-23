@@ -233,7 +233,7 @@ trait Compiler[Executable] {
      * Introduces explicit regions for functions and mutable state
      * [[Typechecked]] --> [[Typechecked]]
      */
-    ExplicitRegions andThen
+    //ExplicitRegions andThen
     /**
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]

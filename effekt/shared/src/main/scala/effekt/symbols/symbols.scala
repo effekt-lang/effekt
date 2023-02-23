@@ -86,14 +86,14 @@ enum TrackedParam(val name: Name) extends Param, BlockSymbol {
 
   case BlockParam(n: Name, tpe: BlockType) extends TrackedParam(n)
   case ResumeParam(module: Module) extends TrackedParam(Name.local("resume"))
-  case SelfParam(tree: source.Tree) extends TrackedParam(Name.local("this"))
+  case VarParam(n: Name, tree: source.Tree) extends TrackedParam(n)
   case ExternResource(n: Name, tpe: BlockType) extends TrackedParam(n)
 
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
   lazy val capture: Capture = this match {
     case b: BlockParam => CaptureParam(b.name)
     case r: ResumeParam => ???
-    case s: SelfParam => LexicalRegion(name, s.tree)
+    case s: VarParam => LexicalRegion(name, s.tree)
     case r: ExternResource => Resource(name)
   }
 }
@@ -145,7 +145,7 @@ enum Binder extends TermSymbol {
   def decl: Def
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
-  case VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder, BlockSymbol
+  case VarBinder(name: Name, tpe: Option[ValueType], region: TrackedParam, decl: VarDef) extends Binder, BlockSymbol
   case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*

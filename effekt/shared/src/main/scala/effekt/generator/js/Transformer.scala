@@ -199,11 +199,11 @@ object Transformer {
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)
       (js.Const(nameDef(id), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
 
-    case State(id, init, region, body) =>
+    case Alloc(id, init, region, body) =>
       val (stmts, ret) = toJSStmt(body)
       (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
 

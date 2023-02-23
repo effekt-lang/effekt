@@ -152,7 +152,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case v @ source.VarDef(id, _, reg, binding) =>
         val sym = v.symbol
         insertBindings {
-          State(sym, Context.bind(transform(binding)), sym.region, transform(rest))
+          Alloc(sym, Context.bind(transform(binding)), sym.region, transform(rest))
         }
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")

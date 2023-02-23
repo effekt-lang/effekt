@@ -177,7 +177,7 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
       Val(id, transform(binding), transform(body))
 
     // [[ var x in this = init; stmt ]] = state(init) { (ev){x} }
-    case core.State(id, init, region, body) if region == env.currentRegion =>
+    case core.Alloc(id, init, region, body) if region == env.currentRegion =>
       val stateEvidence = EvidenceSymbol()
       val environment = env.adapt(Lift.Var(stateEvidence)).bind(id)
       val stateCapability = lifted.Param.BlockParam(id, lifted.Type.TState(transform(init.tpe)))
@@ -186,7 +186,7 @@ object LiftInferenceState extends Phase[CoreTransformed, CoreLifted] {
       Var(transform(init), lifted.BlockLit(Nil, List(Param.EvidenceParam(stateEvidence), stateCapability),
         transformedBody))
 
-    case core.State(id, init, region, body) =>
+    case core.Alloc(id, init, region, body) =>
       Alloc(id, transform(init), region, env.evidenceFor(region), transform(body))
 
     case core.Match(scrutinee, clauses, default) =>

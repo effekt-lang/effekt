@@ -188,7 +188,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
 
-    case core.State(id, init, region, body) =>
+    case core.Alloc(id, init, region, body) =>
       Alloc(id, transform(init), region, env.evidenceFor(region), transform(body))
 
     case core.Match(scrutinee, clauses, default) =>

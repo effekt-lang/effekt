@@ -181,8 +181,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           }, default map transform)
         case t => Context.abort(s"Match on value of type ${PrettyPrinter.format(t)}")
       }
-    case Stmt.State(id, init, region, body) =>
-      Stmt.State(id, transform(init), region, transform(body))
+    case Stmt.Alloc(id, init, region, body) =>
+      Stmt.Alloc(id, transform(init), region, transform(body))
     case Stmt.Try(body, handlers) =>
       Stmt.Try(transform(body), handlers map transform)
     case Stmt.Region(body) => Stmt.Region(transform(body))

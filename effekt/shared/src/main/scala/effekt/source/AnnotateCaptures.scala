@@ -12,7 +12,6 @@ import kiama.util.Source
 /**
  * Computes the capture of each subexpression, provided that Typer already solved the constraints.
  *
- * TODO remove self-regions
  * TODO annotate unbox in Typer and use it here
  */
 object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, CaptureSet] {
@@ -56,10 +55,12 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
     case t @ source.TryHandle(prog, handlers) =>
       val progCapture = query(prog)
-      val selfRegion = Context.annotation(Annotations.SelfRegion, t)
-      val boundCapture = boundCapabilities(t) ++ CaptureSet(selfRegion.capture)
+      val boundCapture = boundCapabilities(t)
       val usedCapture = combineAll(handlers.map(query))
       (progCapture -- boundCapture) ++ usedCapture
+
+    case t @ source.Region(id, body) =>
+      query(body) -- captureOf(id.symbol.asBlockSymbol)
 
     case c @ source.Call(target, targs, vargs, bargs) =>
       // TODO what's with unboxed value references???
@@ -72,23 +73,25 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       tcaps ++ combineAll(vargs map query) ++ combineAll(bargs map query)
 
     case b @ source.BlockLiteral(tps, vps, bps, body) =>
-      val selfRegion = Context.annotation(Annotations.SelfRegion, b)
-      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
+      query(body) -- boundCapabilities(b) -- CaptureSet(bps.map(_.symbol.capture))
+  }
+
+  override def stmt(using Context, Unit) = {
+    // local state
+    case source.DefStmt(tree @ VarDef(id, annot, None, binding), rest) =>
+      query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.region.capture))
   }
 
   override def defn(using Context, Unit) = {
-    /**
-     * For functions we check that the self region does not leave as part of the return type.
-     */
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
-      val selfRegion = Context.annotation(Annotations.SelfRegion, tree)
-      val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
+      val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.map(_.symbol.capture))
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
       Context.annotate(Annotations.Captures, tree.symbol, cpt)
       cpt
 
-    case tree @ VarDef(id, annot, region, binding) =>
+    // regions
+    case tree @ VarDef(id, annot, Some(region), binding) =>
       query(binding) ++ captureOf(tree.symbol.region)
   }
 

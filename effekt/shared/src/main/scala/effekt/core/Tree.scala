@@ -240,10 +240,16 @@ enum Stmt extends Tree {
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
-  // Effects
-  case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
-  case Try(body: Block, handlers: List[Implementation])
+  // (Type-monomorphic?) Regions
   case Region(body: Block)
+  case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // e.g. state(init) { (ev){x: Ref} => ... }
+  // case Var(init: Expr, body: Block)
+
+  case Try(body: Block, handlers: List[Implementation])
+
 
   // Others
   case Hole()
