@@ -209,7 +209,7 @@ object Transformer {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(name, mRegion), rest));
         val tpe = transform(init.tpe)
         val out = outs(RegisterType.Ptr).head
-        val region = outs(RegisterType.Ptr).last
+        val region = transformArgument(mRegion).id // outs(RegisterType.Ptr).last
         emit(Allocate(out, tpe.registerType, transformArgument(init).id, region))
         emitInlined(block)
       case machine.Load(name, ref, rest) =>
