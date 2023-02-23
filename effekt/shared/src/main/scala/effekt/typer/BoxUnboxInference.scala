@@ -49,7 +49,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
-      case sym: (ValueSymbol | symbols.VarBinder) => v
+      case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol => Box(None, v).inheritPosition(v)
     }
 

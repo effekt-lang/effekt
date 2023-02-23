@@ -114,7 +114,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result(TUnit, condEffs ++ bodyEffs)
 
       case source.Var(id) => id.symbol match {
-        case x: VarBinder => Context.lookup(x) match {
+        case x: RefBinder => Context.lookup(x) match {
           case (btpe, capt) =>
             val vtpe = TState.extractType(btpe)
             usingCapture(capt)
@@ -125,7 +125,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       case e @ source.Assign(id, expr) => e.definition match {
-        case x: VarBinder =>
+        case x: RefBinder =>
           val stTpe = Context.lookup(x) match {
             case (btpe, capt) =>
               usingCapture(capt)
@@ -1376,8 +1376,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def lookupCapture(s: BlockSymbol) =
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
       s match {
-        case b: BlockParam => CaptureSet(b.capture)
-        case b: VarBinder => CaptureSet(b.capture)
+        case b: TrackedParam => CaptureSet(b.capture)
         case _ => panic(pretty"Shouldn't happen: we do not have a capture for ${s}, yet.")
       }
     }

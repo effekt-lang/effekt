@@ -552,7 +552,7 @@ object Named {
 
     // Vars
     case Var    => symbols.TermSymbol
-    case Assign => symbols.Binder.VarBinder
+    case Assign => symbols.RefBinder
 
     // CallLike
     case Do         => symbols.Operation

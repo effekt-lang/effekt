@@ -79,6 +79,12 @@ case class Module(
   }
 }
 
+/**
+ * A binder of references (type Ref[T]), can be a local variable
+ * or a region allocation.
+ */
+sealed trait RefBinder extends BlockSymbol
+
 sealed trait Param extends TermSymbol
 case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSymbol
 
@@ -146,8 +152,8 @@ enum Binder extends TermSymbol {
   def decl: Def
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
-  case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, BlockSymbol
-  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, BlockSymbol, TrackedParam
+  case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
+  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
   case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*

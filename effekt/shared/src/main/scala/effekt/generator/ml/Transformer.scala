@@ -116,10 +116,22 @@ object Transformer {
     case lifted.Return(e) => CPS.pure(toML(e))
 
     case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), _, List(ev)) =>
-      CPS.pure(ml.Expr.Deref(ml.Variable(name(x))))
+      def get = {
+        val k = freshName("k")
+        val s = freshName("s")
+        // ev (k => s => k s s)
+        ml.Call(toML(ev))(ml.Lambda(k)(ml.Lambda(s)(ml.Call(ml.Call(k)(s))(s))))
+      }
+      CPS.reflect(get)
 
     case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), _, List(ev, value)) =>
-      CPS.pure(ml.Expr.Assign(ml.Variable(name(x)), toML(value)))
+      def set = {
+        val k = freshName("k")
+        val s2 = freshName("s2")
+        // ev (k => s2 => k () value)
+        ml.Call(toML(ev))(ml.Lambda(k)(ml.Lambda(s2)(ml.Call(ml.Call(k)(ml.Consts.unitVal))(toML(value)))))
+      }
+      CPS.reflect(set)
 
     case lifted.App(b, targs, args) => CPS.inline { k =>
       ml.Expr.Call(toML(b), (args map toML) ++ List(k.reify))
@@ -166,7 +178,30 @@ object Transformer {
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
-    case lifted.Var(init, body) => ???
+    // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
+    case Var(init, Block.BlockLit(_, List(ev, x), body)) => CPS.join { k =>
+        // TODO refactor into CPS.resetState
+        // a => s => k a
+        val returnCont = {
+          val a = freshName("a")
+          val s = freshName("s")
+          ml.Lambda(a)(ml.Lambda(s)(ml.Call(k.reify)(a)))
+        }
+
+        // m => k => s => m (a => k a s)
+        def lift = {
+          val m = freshName("m")
+          val k = freshName("k")
+          val a = freshName("a")
+          val s = freshName("s")
+          ml.Lambda(m)(ml.Lambda(k)(ml.Lambda(s)(
+            ml.Call(m)(ml.Lambda(a)(ml.Call(ml.Call(k)(a))(s))))))
+        }
+
+        ml.mkLet(List(Binding.ValBind(name(ev.id), lift)),
+          ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init)))
+      }
+    case v: Var => C.panic("The body of var is always a block lit with two arguments (evidence and block)")
 
     case lifted.Try(body, handler) =>
       val args = ml.Consts.lift :: handler.map(toML)

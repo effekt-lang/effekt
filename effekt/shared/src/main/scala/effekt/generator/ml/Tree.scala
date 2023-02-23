@@ -127,13 +127,14 @@ object Consts {
 }
 
 // smart constructors
-def Call(name: MLName)(args: Expr*): Expr = Expr.Call(Variable(name), args.toList)
-
 def Call(expr: Expr)(args: Expr*): Expr = Expr.Call(expr, args.toList)
 
 def Lambda(params: Param*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
 
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")
+
+implicit def autoVar(n: MLName): Expr = Variable(n)
+implicit def autoParam(n: MLName): Param = Param.Named(n)
 
 @tailrec
 def mkLet(bindings: List[Binding], body: Expr): Expr = body match {
