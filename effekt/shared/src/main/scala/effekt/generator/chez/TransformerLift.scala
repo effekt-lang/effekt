@@ -114,7 +114,7 @@ object TransformerLift {
 
     // TODO properly CPS translate
     case Region(body) =>
-     CPS.inline { k => chez.Call(chez.Builtin("with-region", toChez(body)), List(k.reify)) }
+     CPS.inline { k => chez.Call(chez.Builtin("with-region-non-mono", toChez(body)), List(k.reify)) }
 
     case other => CPS.inline { k => chez.Let(Nil, toChez(other, k)) }
   }
@@ -131,7 +131,9 @@ object TransformerLift {
   def toChez(decl: lifted.Extern): chez.Def = decl match {
     case Extern.Def(id, tparams, params, ret, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda( params.map { p => ChezName(p.id.name.name) },
+        chez.Lambda( params.flatMap {
+          case p: Param.EvidenceParam => None
+          case p => Some(ChezName(p.id.name.name)) },
           chez.RawExpr(body)))
 
     case Extern.Include(contents) =>
