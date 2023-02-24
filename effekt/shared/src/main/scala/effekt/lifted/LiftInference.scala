@@ -180,10 +180,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       App(transform(b), targs.map(transform), (ev :: blockEv) ++ vargsT ++ bargsT)
 
     case core.Get(id, capt, tpe) =>
-      Get(env.evidenceFor(id), id, transform(tpe))
+      Get(id, env.evidenceFor(id), transform(tpe))
 
     case core.Put(id, capt, value) =>
-      Put(env.evidenceFor(id), id, transform(value))
+      Put(id, env.evidenceFor(id), transform(value))
 
     case core.Scope(definitions, rest) =>
       val env = pretransform(definitions)

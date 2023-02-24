@@ -131,7 +131,7 @@ object TransformerLift {
           chez.Call(chez.Call(toChezExpr(body).reify(), returnCont), toChez(init)))
       }
 
-    case Get(ev, x, tpe) =>
+    case Get(x, ev, tpe) =>
       def get = {
         val k = freshName("k")
         val s = freshName("s")
@@ -140,7 +140,7 @@ object TransformerLift {
       }
       CPS.reflect(get)
 
-    case Put(ev, x, value) =>
+    case Put(x, ev, value) =>
       def set = {
         val k = freshName("k")
         val s2 = freshName("s2")

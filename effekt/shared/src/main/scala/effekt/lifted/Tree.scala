@@ -129,8 +129,8 @@ enum Stmt extends Tree  {
   // creates a fresh state handler to model local (backtrackable) state.
   // e.g. state(init) { (ev){x: Ref} => ... }
   case Var(init: Expr, body: Block.BlockLit)
-  case Get(ev: Evidence, id: Id, annotatedTpe: ValueType)
-  case Put(ev: Evidence, id: Id, value: Expr)
+  case Get(id: Id, ev: Evidence, annotatedTpe: ValueType)
+  case Put(id: Id, ev: Evidence, value: Expr)
 
   case Try(body: Block, handler: List[Implementation])
   case Region(body: Block)
@@ -236,8 +236,8 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Var(init, body) => freeVariables(init) ++ freeVariables(body)
-  case Get(ev, id, tpe) => freeVariables(ev)
-  case Put(ev, id, value) => freeVariables(ev) ++ freeVariables(value)
+  case Get(id, ev, tpe) => freeVariables(ev)
+  case Put(id, ev, value) => freeVariables(ev) ++ freeVariables(value)
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)

@@ -115,7 +115,7 @@ object Transformer {
   def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
 
-    case lifted.Get(ev, id, tpe) =>
+    case lifted.Get(id, ev, tpe) =>
       def get = {
         val k = freshName("k")
         val s = freshName("s")
@@ -124,7 +124,7 @@ object Transformer {
       }
       CPS.reflect(get)
 
-    case lifted.Put(ev, id, value) =>
+    case lifted.Put(id, ev, value) =>
       def set = {
         val k = freshName("k")
         val s2 = freshName("s2")
