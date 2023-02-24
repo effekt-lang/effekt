@@ -259,10 +259,10 @@ object Transformer {
               transform(body))
         }
 
-      case lifted.Hole() => machine.Statement.Hole
-
-      case lifted.Var(init, body) =>
+      case _: lifted.Var | _: lifted.Get | _: lifted.Put =>
         ErrorReporter.abort("Local mutable state not supported in machine, yet.")
+
+      case lifted.Hole() => machine.Statement.Hole
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")

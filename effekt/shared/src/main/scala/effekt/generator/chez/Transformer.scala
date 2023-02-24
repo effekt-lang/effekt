@@ -89,6 +89,12 @@ trait Transformer {
     case Var(id, init, capt, body) =>
       state(nameDef(id), toChez(init), toChez(body))
 
+    case Get(id, capt, tpe) =>
+      chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(id)))
+
+    case Put(id, capt, value) =>
+      chez.Call(chez.Call(nameRef(symbols.builtins.TState.put), nameRef(id)), toChez(value))
+
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
 

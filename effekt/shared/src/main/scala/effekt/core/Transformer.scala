@@ -2,11 +2,12 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{Annotations, Context, ContextOps}
+import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
-import effekt.source.{MatchPattern, Term}
+import effekt.source.{ MatchPattern, Term }
+import effekt.symbols.Binder.{ RegBinder, VarBinder }
 import effekt.typer.Substitutions
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
@@ -281,7 +282,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
     case v: source.Var => v.definition match {
-      case sym: RefBinder =>
+      case sym: VarBinder =>
+        val stateType = Context.blockTypeOf(sym)
+        val tpe = TState.extractType(stateType)
+        Context.bind(Get(sym, Set(sym.capture), transform(tpe)))
+      case sym: RegBinder =>
         val stateType = Context.blockTypeOf(sym)
         val getType = operationType(stateType, TState.get)
         Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
@@ -366,12 +371,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(stmts) =>
       Context.bind(Hole())
 
-    case a @ source.Assign(id, expr) =>
-      val e = transformAsPure(expr)
-      val sym = a.definition
-      val stateType = Context.blockTypeOf(sym)
-      val putType = operationType(stateType, TState.put)
-      Context.bind(App(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil))
+    case a @ source.Assign(id, expr) => a.definition match {
+      case sym: VarBinder => Context.bind(Put(sym, Set(sym.capture), transformAsPure(expr)))
+      case sym: RegBinder =>
+        val e = transformAsPure(expr)
+        val sym = a.definition
+        val stateType = Context.blockTypeOf(sym)
+        val putType = operationType(stateType, TState.put)
+        Context.bind(App(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil))
+    }
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>

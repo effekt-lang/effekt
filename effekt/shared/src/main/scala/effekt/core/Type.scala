@@ -61,6 +61,7 @@ object Type {
   val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
 
   val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
+  def TState(tpe: ValueType) = BlockType.Interface(builtins.TState.interface, List(tpe))
 
   /**
    * Function types are the only type constructor that we have subtyping on.
@@ -169,6 +170,8 @@ object Type {
 
     case Stmt.Alloc(id, init, region, body) => body.tpe
     case Stmt.Var(id, init, cap, body) => body.tpe
+    case Stmt.Get(id, capt, tpe) => tpe
+    case Stmt.Put(id, capt, value) => TUnit
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
 
@@ -189,6 +192,8 @@ object Type {
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.Alloc(id, init, region, body) => Set(region) ++ body.capt
     case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
+    case Stmt.Get(id, capt, tpe) => capt
+    case Stmt.Put(id, capt, value) => capt
     case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
     case Stmt.Region(body) => body.capt
     case Stmt.Hole() => Set.empty
