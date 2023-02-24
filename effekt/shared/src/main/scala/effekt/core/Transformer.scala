@@ -281,7 +281,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
     case v: source.Var => v.definition match {
-      case sym: VarBinder =>
+      case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)
         val getType = operationType(stateType, TState.get)
         Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))

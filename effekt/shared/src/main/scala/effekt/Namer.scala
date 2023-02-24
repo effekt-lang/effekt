@@ -822,8 +822,8 @@ trait NamerOps extends ContextOps { Context: Context =>
   private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
-    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[VarBinder]
-    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[VarBinder]
+    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[RefBinder]
+    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[RefBinder]
 
     candidates match {
       case Nil => Right(Nil)

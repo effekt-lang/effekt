@@ -33,7 +33,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
    */
   def rewriteAsBlock(e: Term)(using C: Context): Term = visit(e) {
     case v: Var => v.definition match {
-      case sym: (ValueSymbol | symbols.VarBinder) => Unbox(v).inheritPosition(v)
+      case sym: (ValueSymbol | symbols.RefBinder) => Unbox(v).inheritPosition(v)
       case sym: BlockSymbol => v
     }
 
@@ -122,7 +122,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
     case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
-      case sym: (ValueSymbol | symbols.VarBinder) =>
+      case sym: (ValueSymbol | symbols.RefBinder) =>
         source.ExprTarget(source.Unbox(source.Var(t.id).inheritPosition(t)).inheritPosition(t)).inheritPosition(t)
       case sym: BlockSymbol =>
         t
