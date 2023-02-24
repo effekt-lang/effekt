@@ -141,6 +141,10 @@ object Transformer {
     case Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
+    case Var(id, init, cap, body) =>
+      val (stmts, ret) = toJSStmt(body)
+      monadic.State(nameDef(id), toJS(init), stmts, ret)
+
     case App(b, targs, vargs, bargs) =>
       monadic.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
 

@@ -1,10 +1,10 @@
 effect Raise(msg: String): Unit
 effect Yield(): Unit
 
-def main() = {
+def main() = region this {
 
   // here we use the region of the main function
-  var cont: () => Unit at {this} = fun() { () }
+  var cont: () => Unit at {this} in this = fun() { () }
 
   try {
     try {

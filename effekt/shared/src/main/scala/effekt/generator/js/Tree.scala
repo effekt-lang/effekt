@@ -158,6 +158,9 @@ object monadic {
   def Pure(expr: Expr): Control = Builtin("pure", expr)
   def Run(m: Control): Expr = MethodCall(m, `run`)
 
+  def State(id: JSName, init: Expr, stmts: List[Stmt], ret: Control): Control =
+    Builtin("state", init, Lambda(List(id), stmts, ret))
+
   def Bind(m: Control, body: Control): Control = MethodCall(m, `then`, js.Lambda(Nil, body))
   def Bind(m: Control, param: JSName, body: Control): Control = MethodCall(m, `then`, js.Lambda(List(param), body))
 
