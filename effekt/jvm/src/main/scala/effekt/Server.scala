@@ -79,7 +79,9 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     } else {
       publishIR(showIR, C.compiler.prettyIR(source, stage).getOrElse(unsupported))
     }
-  } catch { e => logMessage(e.getMessage) }
+  } catch {
+    case e => logMessage(e.toString + ":" + e.getMessage)
+  }
 
   override def getHover(position: Position): Option[String] =
     getSymbolHover(position) orElse getHoleHover(position)

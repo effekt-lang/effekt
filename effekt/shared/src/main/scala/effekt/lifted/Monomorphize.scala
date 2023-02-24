@@ -24,7 +24,7 @@ object Monomorphize extends Phase[CoreLifted, CoreLifted] {
   def run(lifted: CoreLifted)(using Context): Option[CoreLifted] =
     run(lifted.core).map { mono => lifted.copy(core = mono) }
 
-  def run(mod: ModuleDecl)(using C: Context): Option[ModuleDecl] = try {
+  def run(mod: ModuleDecl)(using C: Context): Option[ModuleDecl] = {
     given analysis: FlowAnalysis()
     Evidences.last = -1;
     analyze(mod)
@@ -77,5 +77,5 @@ object Monomorphize extends Phase[CoreLifted, CoreLifted] {
     // println(PrettyPrinter.format(elaborated))
 
     Some(elaborated)
-  } catch { case _ => None }
+  }
 }
