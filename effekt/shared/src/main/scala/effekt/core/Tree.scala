@@ -194,7 +194,6 @@ enum Block extends Tree {
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
-
   val tpe: BlockType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
@@ -248,6 +247,8 @@ enum Stmt extends Tree {
   // [[capture]] is a binding occurence.
   // e.g. state(init) { [x]{x: Ref} => ... }
   case Var(id: Id, init: Expr, capture: Id, body: Stmt)
+  case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
+  case Put(id: Id, annotatedCapt: Captures, value: Pure)
 
   case Try(body: Block, handlers: List[Implementation])
 

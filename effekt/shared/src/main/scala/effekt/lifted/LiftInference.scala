@@ -179,6 +179,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // adds evidence parameters for block arguments
       App(transform(b), targs.map(transform), (ev :: blockEv) ++ vargsT ++ bargsT)
 
+    case core.Get(id, capt, tpe) =>
+      Get(env.evidenceFor(id), id, transform(tpe))
+
+    case core.Put(id, capt, value) =>
+      Put(env.evidenceFor(id), id, transform(value))
+
     case core.Scope(definitions, rest) =>
       val env = pretransform(definitions)
       val body = transform(rest)(using env, ErrorReporter)

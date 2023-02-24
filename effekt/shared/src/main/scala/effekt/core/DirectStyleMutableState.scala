@@ -48,6 +48,9 @@ object DirectStyleMutableState extends Phase[CoreTransformed, CoreTransformed] {
   object Get {
     def unapply(s: Stmt): Option[(Block, BlockType.Function)] = s match {
       case Stmt.App(Block.Member(x, TState.get, tpe: BlockType.Function), Nil, Nil, Nil) => Some((x, tpe))
+      case Stmt.Get(id, capt, tpe) =>
+        val stateType = Type.TState(tpe)
+        Some(BlockVar(id, stateType, capt), BlockType.Function(Nil, Nil, Nil, Nil, tpe))
       case _ => None
     }
     def apply(x: Block, tpe: BlockType): Expr =
@@ -57,6 +60,10 @@ object DirectStyleMutableState extends Phase[CoreTransformed, CoreTransformed] {
   object Put {
     def unapply(s: Stmt): Option[(Block, BlockType.Function, Pure)] = s match {
       case Stmt.App(Block.Member(x, TState.put, tpe: BlockType.Function), Nil, List(v), Nil) => Some((x, tpe, v))
+      case Stmt.Put(id, capt, value) =>
+        val tpe = value.tpe
+        val stateType = Type.TState(tpe)
+        Some(BlockVar(id, stateType, capt), BlockType.Function(Nil, Nil, List(tpe), Nil, Type.TUnit), value)
       case _ => None
     }
     def apply(x: Block, tpe: BlockType, value: Pure): Expr =

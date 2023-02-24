@@ -50,6 +50,7 @@ object TransformerLift {
   def toChezExpr(stmt: Stmt): CPS = stmt match {
     case Return(e) => CPS.pure(toChez(e))
 
+    // Region based state
     // TODO maybe add as node to lifted.Tree
     case App(lifted.Block.Member(x, builtins.TState.get, _), _, List(ev)) =>
       def get = {
@@ -104,6 +105,8 @@ object TransformerLift {
        chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }
 
+    // local state
+
     // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
     case Var(init, Block.BlockLit(Nil, List(ev, x), body)) => CPS.join { k =>
         // TODO refactor into CPS.resetState
@@ -127,6 +130,24 @@ object TransformerLift {
         chez.Let(List(Binding(nameDef(ev.id), lift)),
           chez.Call(chez.Call(toChezExpr(body).reify(), returnCont), toChez(init)))
       }
+
+    case Get(ev, x, tpe) =>
+      def get = {
+        val k = freshName("k")
+        val s = freshName("s")
+        // ev (k => s => k s s)
+        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s), chez.Call(chez.Call(k, s), s))))
+      }
+      CPS.reflect(get)
+
+    case Put(ev, x, value) =>
+      def set = {
+        val k = freshName("k")
+        val s2 = freshName("s2")
+        // ev (k => s2 => k () value)
+        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s2), chez.Call(chez.Call(k, chez.unit), toChez(value)))))
+      }
+      CPS.reflect(set)
 
     case Try(body, handler) =>
       val handlers = handler.map { h =>

@@ -132,6 +132,8 @@ object Type {
 
     case Stmt.Alloc(id, init, region, ev, body) => body.tpe
     case Stmt.Var(init, body) => body.returnType
+    case Stmt.Get(ev, id, tpe) => tpe
+    case Stmt.Put(ev, id, value) => TUnit
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
 

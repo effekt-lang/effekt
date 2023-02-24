@@ -253,7 +253,7 @@ object Transformer {
               transform(body))
         }
 
-      case lifted.Var(init, body) =>
+      case _: lifted.Var | _: lifted.Get | _: lifted.Put =>
         ErrorReporter.abort("Local mutable state not supported in machine, yet.")
 
       case _ =>
