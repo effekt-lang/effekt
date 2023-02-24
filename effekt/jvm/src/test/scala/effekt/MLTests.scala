@@ -12,28 +12,32 @@ class MLTests extends EffektTests {
 
   override lazy val included: List[File] = List(
     examplesDir / "ml",
-    examplesDir / "benchmarks"
+    examplesDir / "benchmarks",
+    examplesDir / "pos"
   )
 
   override lazy val ignored: List[File] = List(
 
-    // requires monomorphization of rank-2 types, related to lift
-    examplesDir / "benchmarks" / "tree.effekt",
+    // bug with monomorphization
     examplesDir / "ml" / "raytracer.effekt",
     examplesDir / "ml" / "nim.effekt",
-    examplesDir / "ml" / "naturalisticdsls.md",
+
+    // requires monomorphization of rank-2 types, related to lift
+    // examplesDir / "benchmarks" / "tree.effekt",
+    //examplesDir / "ml" / "naturalisticdsls.md",
 
     // Broken tests
     examplesDir / "ml" / "probabilistic.effekt",
     examplesDir / "ml" / "triples.effekt",
 
+
     // Tests with box
-    //    examplesDir / "pos" / "capture" / "defdef.effekt",
+    examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
     //    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "resources.effekt",
-    //    examplesDir / "pos" / "capture" / "selfregion.effekt",
+    examplesDir / "pos" / "capture" / "selfregion.effekt",
     //    examplesDir / "pos" / "infer" / "infer_boxed.effekt",
     //    examplesDir / "pos" / "infer" / "infer_effect_polymorphic.effekt",
     examplesDir / "pos" / "issue108.effekt",
@@ -42,9 +46,19 @@ class MLTests extends EffektTests {
     //    examplesDir / "pos" / "lambdas" / "generators.effekt",
     //    examplesDir / "pos" / "lambdas" / "higherorder.effekt",
     //    examplesDir / "pos" / "lambdas" / "localstate.effekt",
-    examplesDir / "pos" / "lambdas" / "scheduler.effekt",
+    examplesDir / "pos" / "lambdas", // / "scheduler.effekt",
     //    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
     examplesDir / "benchmarks" / "generator.effekt",
+
+    // missing "show" instance
+    examplesDir / "pos" / "nim.effekt",
+    examplesDir / "pos" / "builtins.effekt",
+    examplesDir / "pos" / "either.effekt",
+    examplesDir / "pos" / "namespaces.effekt",
+    examplesDir / "pos" / "overloading.effekt",
+    examplesDir / "pos" / "dequeue.effekt",
+    examplesDir / "pos" / "matchblock.effekt",
+    examplesDir / "pos" / "polymorphic" / "exceptions.effekt",
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
@@ -79,6 +93,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "maps.effekt",
 
     // Unclear issue
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
     examplesDir / "casestudies" / "buildsystem.md",
     examplesDir / "casestudies" / "naturalisticdsls.md",
     examplesDir / "features" / "adt.md",
@@ -87,13 +102,13 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "emptymatch.effekt",
 //    examplesDir / "pos" / "imports.effekt",
     examplesDir / "pos" / "liftinference.effekt",
-//    examplesDir / "pos" / "lists.effekt",
-//    examplesDir / "pos" / "matchdef.effekt",
+    //    examplesDir / "pos" / "lists.effekt",
+    //    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
-    examplesDir / "pos" / "parametrized.effekt",
+    // examplesDir / "pos" / "parametrized.effekt",
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
-    examplesDir / "pos" / "stream_pull.effekt",
+    // examplesDir / "pos" / "stream_pull.effekt",
   )
 }
