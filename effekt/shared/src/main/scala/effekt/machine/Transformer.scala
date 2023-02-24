@@ -49,10 +49,11 @@ object Transformer {
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case lifted.Extern.Def(name, tps, params, ret, body) =>
-      val transformedParams = params.map {
-        case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
+      val transformedParams = params.flatMap {
+        case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
-        case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
+        // for now, in machine we do not pass evidence to externs
+        case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       Extern(transform(name), transformedParams, transform(ret), body)
 
