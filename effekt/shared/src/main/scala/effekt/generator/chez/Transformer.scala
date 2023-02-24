@@ -47,6 +47,9 @@ trait Transformer {
 
   def runMain(main: ChezName): chez.Expr
 
+  def state(id: ChezName, init: chez.Expr, body: chez.Block): chez.Expr =
+    Builtin("state", init, chez.Lambda(List(id), body))
+
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
@@ -82,6 +85,9 @@ trait Transformer {
       chez.Cond(cls, default.map(toChezExpr))
 
     case Hole() => chez.Builtin("hole")
+
+    case Var(id, init, capt, body) =>
+      state(nameDef(id), toChez(init), toChez(body))
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
