@@ -20,7 +20,7 @@ import scala.language.implicitConversions
 object TransformerLift {
 
   def runMain(main: ChezName): chez.Expr =
-    val monomorphized = true
+    val monomorphized = false
     if (monomorphized) chez.Call(chez.Call(main), List(CPS.id))
     else chez.Call(chez.Call(main, CPS.id), List(CPS.id))
 

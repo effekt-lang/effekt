@@ -1,0 +1,10 @@
+
+def main() = { 
+    var x = 0
+    def next() = {
+        x = x + 1;
+        x
+    }
+    println(next())
+    println(next())
+}

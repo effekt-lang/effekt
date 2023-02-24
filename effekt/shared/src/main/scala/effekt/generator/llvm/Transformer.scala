@@ -338,6 +338,10 @@ object Transformer {
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, foreign), values.map(transform)));
         transform(rest)
+
+      case machine.Statement.Hole =>
+        emit(Call("_", VoidType(), ConstantGlobal(FunctionType(VoidType(), Nil), "hole"), List.empty))
+        RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =
