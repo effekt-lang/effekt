@@ -50,10 +50,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
         var occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
         var bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-        //optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
+        optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
         bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-        //optimized = inlineGeneral(optimized, bodies, 10) // Inline General
+        optimized = inlineGeneral(optimized, bodies, 10) // Inline General
 
         occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
         optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions

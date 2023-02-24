@@ -69,7 +69,7 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
       State(id, substitute(init), region, substitute(body))
 
     case Try(body, handlers) =>
-      Try(substitute(body), handlers)
+      Try(substitute(body), handlers.map(substitute))
 
     case Region(body) =>
       Region(substitute(body))
@@ -84,8 +84,8 @@ def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, C
       if(bSubst.contains(id)) bSubst(id)
       else BlockVar(id, Type.substitute(annotatedTpe, tSubst, cSubst), Type.substitute(annotatedCapt, cSubst))
 
-    case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams.map(substitute(_).asInstanceOf[ValueParam]), bparams.map(substitute(_).asInstanceOf[BlockParam]), substitute(body))
+    case BlockLit(tparams, cparams, vparams, bparams, body) => //TODO: Do I have to look at params?
+      BlockLit(tparams, cparams, vparams, bparams, substitute(body))
 
     case Member(block, field, annotatedTpe) =>
       Member(substitute(block), field, Type.substitute(annotatedTpe, tSubst, cSubst))
@@ -93,8 +93,8 @@ def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, C
     case Unbox(pure) =>
       Unbox(substitute(pure))
 
-    case n: New =>
-      n
+    case New(impl) =>
+      New(substitute(impl))
 
 def substitute(param: Param)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
                              vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Param =
@@ -123,6 +123,18 @@ def substitute(pure: Pure)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Cap
 
     case Box(b, annotatedCapture) =>
       Box(substitute(b), Type.substitute(annotatedCapture, cSubst))
+
+def substitute(impl: Implementation)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
+                                     vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(substitute))
+
+def substitute(op: Operation)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
+                              vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, substitute(body))
 
 def renameBoundIds(module: ModuleDecl)(using newNames: Map[Id, Id]): ModuleDecl =
   module match
