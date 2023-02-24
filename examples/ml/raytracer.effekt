@@ -115,9 +115,9 @@ def intersectSphere(pos: Point, dir: Vector, sphere: SceneObject): Option[Double
 def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] = {
 
   // TODO this is still way to Javascripty
-  var bestDist in global = 0.0;
-  var bestObj in global = DUMMY;
-  var found in global = false;
+  var bestDist = 0.0;
+  var bestObj = DUMMY;
+  var found = false;
 
   scene.objects.foreach { sphere =>
     intersectSphere(pos, dir, sphere).foreach { dist =>
@@ -149,10 +149,11 @@ def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
       intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
 
     def lambert(): Double = {
-      var lambertAmount in global = 0.0;
+      var lambertAmount = 0.0;
       scene.lights.foreach { light =>
         if (isLightVisible(pointAtTime, scene, light)) {
           lambertAmount = lambertAmount + dot((light - pointAtTime).unit, normal)
+          ()
         } else { () }
       };
 
@@ -231,9 +232,9 @@ def render(scene: Scene, image: Buffer) = {
     put(image, index + 3, opaque)
   }
 
-  var x: Int in global = 0;
+  var x: Int = 0;
   while (x < width) {
-    var y: Int in global = 0;
+    var y: Int = 0;
     while (y < height) {
       castRay(x.toDouble, y.toDouble).storeAt(x, y);
       y = y + 1

@@ -11,9 +11,9 @@ def numbers() = {
   do Yield(3)
 }
 
-def main() = {
+def main() = region this {
 
-  var generator: () => Result at {this} = fun() { Done() }
+  var generator: () => Result at {this} in this = fun() { Done() }
 
   try {
     numbers()

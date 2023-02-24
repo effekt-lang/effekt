@@ -74,8 +74,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       additionalDefinitions ++ List(definition)
 
-    case v @ source.VarDef(id, _, reg, binding) =>
-      Context.at(d) { Context.abort("Mutable variable bindings currently not allowed on the toplevel") }
+    case _: source.VarDef | _: source.RegDef =>
+      Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
       val interface = d.symbol
@@ -149,10 +149,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           Def(sym, transformAsBlock(binding), transform(rest))
         }
 
-      case v @ source.VarDef(id, _, reg, binding) =>
+      case v @ source.RegDef(id, _, reg, binding) =>
         val sym = v.symbol
         insertBindings {
-          State(sym, Context.bind(transform(binding)), sym.region, transform(rest))
+          Alloc(sym, Context.bind(transform(binding)), sym.region, transform(rest))
+        }
+
+      case v @ source.VarDef(id, _, binding) =>
+        val sym = v.symbol
+        insertBindings {
+          Var(sym, Context.bind(transform(binding)), sym.capture, transform(rest))
         }
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
@@ -275,7 +281,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
     case v: source.Var => v.definition match {
-      case sym: VarBinder =>
+      case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)
         val getType = operationType(stateType, TState.get)
         Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
@@ -729,10 +735,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
     c =>
       def isIO = c == builtins.IOCapability.capture
+      // mutable state is now in CPS and not considered IO anymore.
       def isMutableState = c.isInstanceOf[LexicalRegion]
       def isResource = c.isInstanceOf[Resource]
       def isControl = c == builtins.ControlCapability.capture
-      !isControl && (isIO || isMutableState || isResource)
+      !(isControl || isMutableState) && (isIO || isResource)
   }
 }
 

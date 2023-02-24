@@ -171,7 +171,8 @@ enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
@@ -506,7 +507,7 @@ object Named {
 
   type Params = ValueParam | BlockParam
   type Externs = ExternDef | ExternResource | ExternInterface | ExternType
-  type Defs = FunDef | ValDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
+  type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
   type Types = ValueTypeRef | BlockTypeRef
@@ -519,6 +520,7 @@ object Named {
     case FunDef       => symbols.UserFunction
     case ValDef       => symbols.Binder.ValBinder // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
     case VarDef       => symbols.Binder.VarBinder
+    case RegDef       => symbols.Binder.RegBinder
     case DefDef       => symbols.Binder.DefBinder
     case InterfaceDef => symbols.BlockTypeConstructor.Interface
     case DataDef      => symbols.TypeConstructor.DataType
@@ -550,7 +552,7 @@ object Named {
 
     // Vars
     case Var    => symbols.TermSymbol
-    case Assign => symbols.Binder.VarBinder
+    case Assign => symbols.RefBinder
 
     // CallLike
     case Do         => symbols.Operation

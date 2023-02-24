@@ -9,8 +9,8 @@ effect Proc {
   def exit(): Unit
 }
 
-def scheduler { prog: => Unit / Proc } = {
-  var queue: Dequeue[() => Unit at {this, prog}] = emptyQueue();
+def scheduler { prog: => Unit / Proc } = region this {
+  var queue: Dequeue[() => Unit at {this, prog}] in this = emptyQueue();
 
   def run(): Unit = queue.popBack match {
     case None() => ()

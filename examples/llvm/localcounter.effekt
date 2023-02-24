@@ -1,6 +1,6 @@
 
-def main() = { 
-    var x = 0
+def main() = region r {
+    var x in r = 0
     def next() = {
         x = x + 1;
         x

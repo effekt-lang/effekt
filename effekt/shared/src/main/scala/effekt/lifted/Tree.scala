@@ -118,10 +118,18 @@ enum Stmt extends Tree  {
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
+
+  // allocates into a (type-monomorphic?) region.
+  // e.g. var x in r = init; body
+  case Alloc(id: Id, init: Expr, region: Id, ev: Evidence, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // e.g. state(init) { (ev){x: Ref} => ... }
+  case Var(init: Expr, body: Block.BlockLit)
+
   case Try(body: Block, handler: List[Implementation])
 
   // after lift inference -- does not pass evidence to body
@@ -224,10 +232,12 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
-  case State(id, init, region, ev, body) =>
+  case Alloc(id, init, region, ev, body) =>
     freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
+  case Var(init, body) =>
+    freeVariables(init) ++ freeVariables(body)
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
   case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)

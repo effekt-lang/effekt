@@ -167,8 +167,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Shift(ev, body) =>
       "shift" <> parens(toDoc(ev)) <+> toDoc(body)
 
-    case State(id, init, region, ev, body) =>
+    case Alloc(id, init, region, ev, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
+
+    case Var(init, body) =>
+      "state" <+> parens(toDoc(init)) <+> toDoc(body)
 
     case Region(body) =>
       "region" <+> toDoc(body)

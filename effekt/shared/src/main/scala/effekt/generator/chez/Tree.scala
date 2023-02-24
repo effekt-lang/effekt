@@ -2,6 +2,8 @@ package effekt
 package generator
 package chez
 
+import scala.language.implicitConversions
+
 // TODO choose appropriate representation and apply conversions
 case class ChezName(name: String)
 
@@ -65,7 +67,7 @@ enum Def {
 export Def.*
 
 // smart constructors
-def Call(name: ChezName, args: Expr*): Expr = Call(Variable(name), args.toList)
+def Call(callee: Expr, args: Expr*): Expr = Call(callee, args.toList)
 
 def Lambda(params: List[ChezName], body: Expr): Lambda = Lambda(params, Block(Nil, Nil, body))
 
@@ -80,6 +82,10 @@ def Builtin(name: String, args: Expr*): Expr = Call(Variable(ChezName(name)), ar
 def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](chez.Lambda(Nil, lam.body)) {
   case (p, body) => chez.Lambda(List(p), body)
 }
+
+def unit = chez.Expr.RawExpr("'()")
+
+implicit def autoVar(n: ChezName): Expr = Variable(n)
 
 def cleanup(expr: Expr): Expr = LetFusion.rewrite(DeadCodeElimination.rewrite(expr)(using ()))(using ())
 

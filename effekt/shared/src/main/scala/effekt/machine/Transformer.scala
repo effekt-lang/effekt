@@ -236,7 +236,7 @@ object Transformer {
           NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter, transform(body))))
 
-      case lifted.State(id, init, region, ev, body) =>
+      case lifted.Alloc(id, init, region, ev, body) =>
         transform(init).run { value =>
           val tpe = value.tpe;
           val name = transform(id)
@@ -260,6 +260,9 @@ object Transformer {
         }
 
       case lifted.Hole() => machine.Statement.Hole
+
+      case lifted.Var(init, body) =>
+        ErrorReporter.abort("Local mutable state not supported in machine, yet.")
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")

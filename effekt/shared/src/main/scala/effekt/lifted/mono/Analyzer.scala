@@ -272,7 +272,7 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
     analyze(body)
 
   // def x: { def get(ev): T; def put(ev, T): Unit }
-  case Stmt.State(id, init, region, ev, body) =>
+  case Stmt.Alloc(id, init, region, ev, body) =>
 
     val stateType = init.tpe
 
@@ -290,6 +290,7 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
     analyze(init)
     analyze(body)
     FIXME((), "implement")
+
   case _ => INTERNAL_ERROR(s"Not covered: ${s}")
 }
 
