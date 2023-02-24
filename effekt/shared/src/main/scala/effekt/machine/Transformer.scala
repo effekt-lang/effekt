@@ -253,6 +253,9 @@ object Transformer {
               transform(body))
         }
 
+      case lifted.Var(init, body) =>
+        ErrorReporter.abort("Local mutable state not supported in machine, yet.")
+
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
