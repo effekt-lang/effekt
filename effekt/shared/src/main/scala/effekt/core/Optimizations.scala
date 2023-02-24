@@ -134,10 +134,8 @@ def removeUnusedFunctionsWorker(module: ModuleDecl)(using count: Map[Id, Int], r
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
       ModuleDecl(path, imports, declarations, externs, definitions.filter{
         case Definition.Def(id, body) =>
-          if(recursiveFunctions.contains(id))
-            val recCalls = countFunctionOccurences(body)
-            recCalls.contains(id) && count(id) == recCalls(id)
-          else !(count.contains(id) && count(id) == 0)
+          !(count.contains(id) && (count(id) == 0 ||
+            (recursiveFunctions.contains(id) && count(id) == countFunctionOccurences(body)(id))))
         case _ => true
       }.map(removeUnusedFunctionsWorker), exports)
 
@@ -186,7 +184,7 @@ def removeUnusedFunctionsWorker(statement: Stmt)(using count: Map[Id, Int], recu
       If(removeUnusedFunctionsWorker(cond), removeUnusedFunctionsWorker(thn), removeUnusedFunctionsWorker(els))
 
     case Match(scrutinee, clauses, default) =>
-      Match(removeUnusedFunctionsWorker(scrutinee), clauses.map{case (c, b) => (c, removeUnusedFunctionsWorker(b).asInstanceOf[BlockLit])},
+      Match(removeUnusedFunctionsWorker(scrutinee), clauses.map{case (id, b) => (id, removeUnusedFunctionsWorker(b).asInstanceOf[BlockLit])},
         default match
           case Some(s) => Some(removeUnusedFunctionsWorker(s))
           case None => None)
@@ -270,14 +268,6 @@ def staticArgumentTransformationWorker(definition: Definition)(using recursiveFu
 
     case Definition.Let(id, binding) =>
       Definition.Let(id, staticArgumentTransformationWorker(binding))
-
-def staticArgumentTransformationWorker(arg: Argument)(using recursiveFunctions: Set[Id]): Argument =
-  arg match
-    case pure: Pure =>
-      staticArgumentTransformationWorker(pure)
-
-    case block: Block =>
-      staticArgumentTransformationWorker(block)
 
 def staticArgumentTransformationWorker(expr: Expr)(using recursiveFunctions: Set[Id]): Expr =
   expr match
@@ -517,7 +507,6 @@ def replaceCalls(op: Operation)(using newName: Id, params: StaticParams): Operat
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, replaceCalls(body))
 
-//TODO: Doesn't terminate or takes forever, idk
 def inliningWorker(module: ModuleDecl)(using inlines: Map[Id, BlockLit]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>

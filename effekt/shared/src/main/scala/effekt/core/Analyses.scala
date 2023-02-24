@@ -261,9 +261,6 @@ def countFunctionOccurences(start: Tree|Definition): Map[Id, Int] =
     case m: ModuleDecl =>
       countFunctionOccurencesWorker(m)(using res)
 
-    case a: Argument =>
-      countFunctionOccurencesWorker(a)(using res)
-
     case e: Expr =>
       countFunctionOccurencesWorker(e)(using res)
 
@@ -308,7 +305,7 @@ def countFunctionOccurencesWorker(expr: Expr)(using count: mutable.Map[Id, Int])
 def countFunctionOccurencesWorker(statement: Stmt)(using count: mutable.Map[Id, Int]): Unit =
   statement match
     case Scope(definitions, body) =>
-      definitions.foreach(countFunctionOccurencesWorker(_)(using count))
+      definitions.foreach(countFunctionOccurencesWorker)
       countFunctionOccurencesWorker(body)
 
     case Return(p) =>
@@ -366,14 +363,6 @@ def countFunctionOccurencesWorker(block: Block)(using count: mutable.Map[Id, Int
     case New(impl) =>
       countFunctionOccurencesWorker(impl)
 
-def countFunctionOccurencesWorker(arg: Argument)(using count: mutable.Map[Id, Int]): Unit =
-  arg match
-    case p: Pure =>
-      countFunctionOccurencesWorker(p)
-
-    case b: Block =>
-      countFunctionOccurencesWorker(b)
-
 def countFunctionOccurencesWorker(pure: Pure)(using count: mutable.Map[Id, Int]): Unit =
   pure match
     case _: ValueVar =>
@@ -401,7 +390,7 @@ def countFunctionOccurencesWorker(op: Operation)(using ocunt: mutable.Map[Id, In
 
 def findRecursiveFunctions(module: ModuleDecl): Set[Id] =
   module match
-    case ModuleDecl(_, _, _, _, definitions, exports) =>
+    case ModuleDecl(_, _, _, _, definitions, _) =>
       definitions.map(findRecursiveFunctions).fold(Set[Id]())(_ ++ _)
 
 def findRecursiveFunctions(definition: Definition): Set[Id] =
@@ -543,14 +532,6 @@ def findStaticArgumentsWorker(definition: Definition)(using params: StaticParams
 
     case Definition.Let(_, binding) =>
       findStaticArgumentsWorker(binding)
-
-def findStaticArgumentsWorker(arg: Argument)(using params: StaticParamsUnfinished): Unit =
-  arg match
-    case p: Pure =>
-      findStaticArgumentsWorker(p)
-
-    case b: Block =>
-      findStaticArgumentsWorker(b)
 
 def findStaticArgumentsWorker(expr: Expr)(using params: StaticParamsUnfinished): Unit =
   expr match
