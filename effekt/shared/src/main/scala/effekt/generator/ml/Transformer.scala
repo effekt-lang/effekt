@@ -179,6 +179,7 @@ object Transformer {
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
+    // before monomorphization
     // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
     case Var(init, Block.BlockLit(_, List(ev, x), body)) => CPS.join { k =>
         // TODO refactor into CPS.resetState
@@ -202,6 +203,17 @@ object Transformer {
         ml.mkLet(List(Binding.ValBind(name(ev.id), lift)),
           ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init)))
       }
+    // after monomorphization
+    case Var(init, Block.BlockLit(_, List(x), body)) => CPS.join { k =>
+        // TODO refactor into CPS.resetState
+        // a => s => k a
+        val returnCont = {
+          val a = freshName("a")
+          val s = freshName("s")
+          ml.Lambda(a)(ml.Lambda(s)(ml.Call(k.reify)(a)))
+        }
+        ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init))
+      }
     case v: Var => C.panic("The body of var is always a block lit with two arguments (evidence and block)")
 
     case lifted.Try(body, handler) =>
@@ -212,18 +224,23 @@ object Transformer {
 
     case Reset(body) => CPS.join { k => ml.Call(toMLExpr(body).apply(CPS.pure), List(k.reify)) }
 
+    // non-monomorphized version (without the scoped resumptions requirement)
     // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
-    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
-      CPS.lift(ev.lifts, CPS.inline { k1 =>
-        val a = freshName("a")
-        val ev = freshName("ev")
-        mkLet(List(
-          ml.Binding.FunBind(toML(kparam), List(ml.Param.Named(ev), ml.Param.Named(a)),
-            ml.Call(ev)(ml.Call(k1.reify)(ml.Expr.Variable(a))))),
-          toMLExpr(body).reify())
-      })
+    //    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
+    //      CPS.lift(ev.lifts, CPS.inline { k1 =>
+    //        val a = freshName("a")
+    //        val ev = freshName("ev")
+    //        mkLet(List(
+    //          ml.Binding.FunBind(toML(kparam), List(ml.Param.Named(ev), ml.Param.Named(a)),
+    //            ml.Call(ev)(ml.Call(k1.reify)(ml.Expr.Variable(a))))),
+    //          toMLExpr(body).reify())
+    //      })
 
-    case Shift(_, _) => INTERNAL_ERROR("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
+    // monomorphized version (with scoped resumptions requirement)
+    case Shift(ev, body) =>
+      CPS.lift(ev.lifts, CPS.reflect(toML(body)))
+
+    //    case Shift(_, _) => INTERNAL_ERROR("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
 
     case Region(body) =>
       CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
@@ -396,21 +413,32 @@ object Transformer {
     // [[ Try() ]] = m k1 k2 => m (fn a => k1 a k2);
     def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
 
-      // TODO implement lift for reg properly
-      case (Lift.Try() | Lift.Reg()) :: lifts =>
+      // [[ [Try :: evs](m) ]] = [[evs]](k1 => k2 => m(a => k1 a k2))
+      case Lift.Try() :: lifts =>
         val k2 = freshName("k2")
         lift(lifts, CPS.inline { k1 => ml.Lambda(ml.Param.Named(k2)) {
           m.apply(a => ml.Call(k1.reify)(a, ml.Expr.Variable(k2)))
         }})
 
-      // [[ [ev :: evs](m) ]] = ev([[ [evs](m) ]])
+      // [[ [Try :: evs](m) ]] = [[evs]](k => s => m(a => k a s))
+      case Lift.Reg() :: lifts =>
+        val s = freshName("s")
+        lift(lifts, CPS.inline { k => ml.Lambda(ml.Param.Named(s)) {
+          m.apply(a => ml.Call(k.reify)(a, ml.Expr.Variable(s)))
+        }})
+
+      // [[ [ev :: evs](m) ]] = [[evs]]( [[ev]](m) )
       case Lift.Var(x) :: lifts =>
         CPS.reflect(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
 
       case Nil => m
     }
 
-    def runMain(main: MLName): ml.Expr = ml.Call(main)(id, id)
+    def runMain(main: MLName): ml.Expr =
+      // when using monomorphization
+      ml.Call(main)(id)
+      // when not using monomorphization
+      // ml.Call(main)(id, id)
 
     def id =
       val a = MLName("a")

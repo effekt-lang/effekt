@@ -273,23 +273,36 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
 
   // def x: { def get(ev): T; def put(ev, T): Unit }
   case Stmt.Alloc(id, init, region, ev, body) =>
+    //
+    //    val stateType = init.tpe
+    //
+    //    // TODO maybe add a fresh interface for every cell?
+    //    //   Now elaboration would need to create instances of it.
+    //    val refId = Id("Ref")
+    //    val getVar = Evidences.fresh(1)
+    //    val getTpe = FlowType.Function(getVar, Nil, Nil, Nil, stateType)
+    //    val putTpe = FlowType.Function(getVar, Nil, List(stateType), Nil, lifted.Type.TUnit)
+    //    F.addInterface(refId, InterfaceDeclaration(Map(TState.get -> getTpe, TState.put -> putTpe)))
+    //
+    //    val bft = freshFlowType(BlockType.Interface(refId, List(init.tpe)))
+    //    F.addDefinition(id, bft)
+    //
+    //    analyze(init)
+    //    analyze(body)
+    //    FIXME((), "implement")
+    FIXME((), "Implement monomorphization for region based state")
 
-    val stateType = init.tpe
-
-    // TODO maybe add a fresh interface for every cell?
-    //   Now elaboration would need to create instances of it.
-    val refId = Id("Ref")
-    val getVar = Evidences.fresh(1)
-    val getTpe = FlowType.Function(getVar, Nil, Nil, Nil, stateType)
-    val putTpe = FlowType.Function(getVar, Nil, List(stateType), Nil, lifted.Type.TUnit)
-    F.addInterface(refId, InterfaceDeclaration(Map(TState.get -> getTpe, TState.put -> putTpe)))
-
-    val bft = freshFlowType(BlockType.Interface(refId, List(init.tpe)))
-    F.addDefinition(id, bft)
-
+  case Stmt.Var(init, Block.BlockLit(Nil, List(ev, x), body)) =>
     analyze(init)
+    F.bindEvidence(ev.id, Ev(List(Lift.Reg())))
+    bindBlockParams(List(x))
     analyze(body)
-    FIXME((), "implement")
+
+  case Stmt.Get(x, ev, tpe) =>
+    ()
+
+  case Stmt.Put(x, ev, value) =>
+     analyze(value)
 
   case _ => INTERNAL_ERROR(s"Not covered: ${s}")
 }

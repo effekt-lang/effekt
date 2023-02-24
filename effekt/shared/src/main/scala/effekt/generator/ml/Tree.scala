@@ -119,7 +119,9 @@ object Consts {
   val reset: Expr = Variable(MLName("reset"))
   val run: Expr = Variable(MLName("run"))
   val nested: Expr = Variable(MLName("nested"))
-  val here: Expr = Variable(MLName("here"))
+  def here: Expr =
+    val a = freshName("a")
+    ml.Lambda(a)(a)
   val withRegion: Expr = Variable(MLName("withRegion"))
   val fresh: Expr = Variable(MLName("fresh"))
   val backup: Expr = Variable(MLName("backup"))

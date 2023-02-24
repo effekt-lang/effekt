@@ -174,10 +174,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "state" <+> parens(toDoc(init)) <+> toDoc(body)
 
     case Get(id, ev, tpe) =>
-      toDoc(id.name)
+      "get" <+>  toDoc(id.name) <> parens(toDoc(ev))
 
     case Put(id, ev, value) =>
-      toDoc(id.name) <+> "=" <+> toDoc(value)
+      "put" <+> toDoc(id.name) <> parens(List(toDoc(ev), toDoc(value)))
 
     case Region(body) =>
       "region" <+> toDoc(body)

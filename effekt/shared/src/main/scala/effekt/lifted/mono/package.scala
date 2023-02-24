@@ -10,7 +10,7 @@ package mono
  */
 enum Lift {
   case Try()
-  case Reg()
+  case Reg() // used for local variables AND region based state.
   case Var(x: Evidences.FlowVar, selector: Int)
 
   def show: String = this match {

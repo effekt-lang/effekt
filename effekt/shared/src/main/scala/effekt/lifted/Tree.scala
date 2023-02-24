@@ -167,7 +167,7 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 enum Lift {
   case Var(ev: EvidenceSymbol)
   case Try()
-  case Reg()
+  case Reg() // used for local mutable state AND region based state
 }
 
 /**

@@ -267,6 +267,7 @@ def elaborate(b: Block)(using T: TransformationContext): Block = b match {
   case Block.New(impl) => Block.New(elaborate(impl))
 
   // we do not need to touch variables
+  // TODO what about their types.
   case Block.BlockVar(id, annotatedType) => b
 
   // unsupported cases
@@ -371,8 +372,23 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
     }, default.map(elaborate))
   case Stmt.Alloc(id, init, region, ev, body) =>
     FIXME(Stmt.Alloc(id, elaborate(init), region, ev, elaborate(body)), "Support mutable state")
-  case Stmt.Var(init, body) =>
-    TODO("Implement monomorphization for local mutable state")
+
+  case Stmt.Var(init, BlockLit(Nil, List(ev, x), body)) =>
+    val elaboratedInit = elaborate(init)
+    val elaboratedBody = {
+      given TransformationContext = T.withChoices(List(ev.id -> Ev(List(Lift.Reg()))))
+      elaborate(body)
+    }
+    Stmt.Var(elaboratedInit, BlockLit(Nil, List(x), elaboratedBody))
+
+  case Stmt.Var(_, _) => INTERNAL_ERROR("unreachable, body of var should always be a blocklit.")
+
+  case Stmt.Get(x, ev, tpe) =>
+    Stmt.Get(x, translate(elaborate(ev)), tpe)
+
+  case Stmt.Put(x, ev, value) =>
+    Stmt.Put(x, translate(elaborate(ev)), elaborate(value))
+
   case Stmt.Region(Block.BlockLit(tparams, params, body)) =>
     val (evidenceIds, remainingParams) = params.partitionMap(elaborate)
     val elaboratedBody = {
@@ -380,7 +396,8 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
       elaborate(body)
     }
     Stmt.Region(Block.BlockLit(Nil, remainingParams, elaboratedBody))
-  case Stmt.Region(_) => INTERNAL_ERROR("unreachable, body should always be a blocklit.")
+
+  case Stmt.Region(_) => INTERNAL_ERROR("unreachable, body of region should always be a blocklit.")
   case Stmt.Hole() => Stmt.Hole()
 }
 
