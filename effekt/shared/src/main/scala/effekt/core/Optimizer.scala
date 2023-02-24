@@ -7,9 +7,6 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 
-def rmIdKey[T](input: Map[Id, T], rm: Set[String]): Map[Id, T] =
-  input.filter((x, _) => !rm.contains(x.name.name))
-
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   val phaseName: String = "core-optimizer"
@@ -55,8 +52,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         var bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
         optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
-        bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-        optimized = inlineGeneral(optimized, bodies, 10) // Inline General
+        //bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+        //optimized = inlineGeneral(optimized, bodies, 10) // Inline General
 
         occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
         optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions

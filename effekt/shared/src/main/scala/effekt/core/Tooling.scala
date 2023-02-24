@@ -3,6 +3,9 @@ package core
 
 import scala.collection.{GenMap, mutable}
 
+def rmIdKey[T](input: Map[Id, T], rm: Set[String]): Map[Id, T] =
+  input.filter((x, _) => !rm.contains(x.name.name))
+
 //TODO: make more general
 def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
   block match
@@ -157,9 +160,9 @@ def renameBoundIds(expr: Expr)(using newNames: Map[Id, Id]): Expr =
 def renameBoundIds(statement: Stmt)(using newNames: Map[Id, Id]): Stmt =
   statement match
     case Scope(definitions, body) =>
-      val scopeNames = rmIdKey[Id](definitions.map {
+      val scopeNames = definitions.map{
         case Definition.Def(id, _) => Map[Id, Id](id -> symbols.TmpBlock())
-        case Definition.Let(id, _) => Map[Id, Id](id -> symbols.TmpValue())}.fold(Map[Id, Id]())(_ ++ _), Set("main"))
+        case Definition.Let(id, _) => Map[Id, Id](id -> symbols.TmpValue())}.fold(Map[Id, Id]())(_ ++ _)
       Scope(definitions.map(renameBoundIds(_)(using newNames ++ scopeNames)), renameBoundIds(body)(using newNames ++ scopeNames))
 
     case Return(expr) =>
@@ -185,12 +188,12 @@ def renameBoundIds(statement: Stmt)(using newNames: Map[Id, Id]): Stmt =
           case None => None)
 
     case State(id, init, region, body) =>
-      if(newNames.contains(id)) State(newNames(id), renameBoundIds(init), (if (newNames.contains(region)) newNames(region) else region), renameBoundIds(body))
+      if(newNames.contains(id)) State(newNames(id), renameBoundIds(init), if (newNames.contains(region)) newNames(region) else region, renameBoundIds(body))
       else
         val newName = symbols.TmpBlock()
         State(newName,
           renameBoundIds(init)(using newNames ++ Map[Id, Id](id -> newName)),
-          (if (newNames.contains(region)) newNames(region) else region),
+          if (newNames.contains(region)) newNames(region) else region,
           renameBoundIds(body)(using newNames ++ Map[Id, Id](id -> newName)))
 
     case Try(body, handlers) =>
