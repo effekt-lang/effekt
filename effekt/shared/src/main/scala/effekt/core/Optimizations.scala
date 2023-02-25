@@ -622,7 +622,7 @@ def inlineUnique(module: ModuleDecl, bodies: Map[Id, Block], count: Map[Id, Int]
 
 def inlineGeneral(module: ModuleDecl, bodies: Map[Id, Block], inlineThreshhold: Int): ModuleDecl =
   val callSizes = bodies.map((id, b) => (id, size(b)))
-  val inlines = bodies.filter((id, _) => callSizes(id) <= inlineThreshhold).asInstanceOf[Map[Id, BlockLit]]
+  val inlines = bodies.filter((id, b) => callSizes(id) <= inlineThreshhold && b.isInstanceOf[BlockLit]).asInstanceOf[Map[Id, BlockLit]]
   inliningWorker(module)(using inlines)
 
 def extractConstants(definitions: List[Definition]): (List[Definition], Map[Id, Literal]) =
