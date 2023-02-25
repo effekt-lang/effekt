@@ -121,18 +121,18 @@ object Transformer {
         val k = freshName("k")
         val s = freshName("s")
         // ev (k => s => k s s)
-        ml.Call(toML(ev))(ml.Lambda(k)(ml.Lambda(s)(ml.Call(ml.Call(k)(s))(s))))
+        CPS.lift(ev.lifts, CPS.reflect(ml.Lambda(k)(ml.Lambda(s)(ml.Call(ml.Call(k)(s))(s)))))
       }
-      CPS.reflect(get)
+      get
 
     case lifted.Put(id, ev, value) =>
       def set = {
         val k = freshName("k")
         val s2 = freshName("s2")
         // ev (k => s2 => k () value)
-        ml.Call(toML(ev))(ml.Lambda(k)(ml.Lambda(s2)(ml.Call(ml.Call(k)(ml.Consts.unitVal))(toML(value)))))
+        CPS.lift(ev.lifts, CPS.reflect(ml.Lambda(k)(ml.Lambda(s2)(ml.Call(ml.Call(k)(ml.Consts.unitVal))(toML(value))))))
       }
-      CPS.reflect(set)
+      set
 
     case lifted.App(b, targs, args) => CPS.inline { k =>
       ml.Expr.Call(toML(b), (args map toML) ++ List(k.reify))
@@ -190,6 +190,7 @@ object Transformer {
           ml.Lambda(a)(ml.Lambda(s)(ml.Call(k.reify)(a)))
         }
 
+        // NOTE this is alpha equivalent to CPS.lift
         // m => k => s => m (a => k a s)
         def lift = {
           val m = freshName("m")
@@ -304,7 +305,7 @@ object Transformer {
   def toML(l: Lift): ml.Expr = l match {
     case Lift.Try() => Consts.lift
     case Lift.Var(x) => Variable(name(x))
-    case Lift.Reg() => effekt.util.messages.FIXME(Consts.lift, "Translate to proper lift on state")
+    case Lift.Reg() => Consts.lift
   }
 
   def toML(expr: Expr)(using C: Context): ml.Expr = expr match {
