@@ -545,7 +545,7 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
       Val(id, inliningWorker(binding), inliningWorker(body))
 
     case App(b@BlockVar(id, _, _), targs, vargs, bargs) =>
-      if(inlines.contains(id)) substitute(inlines(id), targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
+      if(inlines.contains(id)) renameBoundIds(substitute(inlines(id), targs, vargs.map(inliningWorker), bargs.map(inliningWorker)))(using Map[Id, Id]())
       else App(b, targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
 
     case App(callee, targs, vargs, bargs) =>
@@ -574,7 +574,7 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
 def inliningWorker(block: Block)(using inlines: Map[Id, BlockLit]): Block =
   block match
     case b@BlockVar(id, _, _) =>
-      if(inlines.contains(id)) inlines(id)
+      if(inlines.contains(id)) renameBoundIds(inlines(id))(using Map[Id, Id]())
       else b
 
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
