@@ -147,10 +147,12 @@ def renameBoundIds(module: ModuleDecl)(using newNames: Map[Id, Id]): ModuleDecl 
 def renameBoundIds(definition: Definition)(using newNames: Map[Id, Id]): Definition =
   definition match
     case Definition.Def(id, block) =>
-      if(newNames.contains(id)) Definition.Def(newNames(id), renameBoundIds(block))
+      if(id.name.name == "main") Definition.Def(id, renameBoundIds(block))
       else
-        val newName = symbols.TmpBlock()
-        Definition.Def(newName, renameBoundIds(block)(using newNames ++ Map[Id, Id](id -> newName)))
+        if(newNames.contains(id)) Definition.Def(newNames(id), renameBoundIds(block))
+        else
+          val newName = symbols.TmpBlock()
+          Definition.Def(newName, renameBoundIds(block)(using newNames ++ Map[Id, Id](id -> newName)))
 
     case Definition.Let(id, binding) =>
       if (newNames.contains(id)) Definition.Let(newNames(id), renameBoundIds(binding))
