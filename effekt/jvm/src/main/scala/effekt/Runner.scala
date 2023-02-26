@@ -180,7 +180,7 @@ object MLRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "ml"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def prelude: List[String] = List("effekt", "immutable/option",  "internal/option", "immutable/list", "text/string")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("mlton") then Right(())

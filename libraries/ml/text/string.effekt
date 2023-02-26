@@ -1,5 +1,6 @@
 module text/string
 
+import effekt
 import immutable/option
 import internal/option
 

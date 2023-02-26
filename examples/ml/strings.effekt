@@ -1,5 +1,3 @@
-import text/string
-
 def main() = {
   val str = "Hello" ++ " " ++ "World!";
   println(str)
