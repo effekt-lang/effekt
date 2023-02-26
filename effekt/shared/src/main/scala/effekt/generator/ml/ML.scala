@@ -14,6 +14,20 @@ class ML extends Compiler[String] {
   // -----------------------------------------
   def extension = ".sml"
 
+  def buildFile(mainFile: String): String =
+    s"""local
+       |  (* import libraries *)
+       |  $$(SML_LIB)/basis/basis.mlb (* for string reader *)
+       |  $$(SML_LIB)/basis/mlton.mlb
+       |  $$(SML_LIB)/smlnj-lib/RegExp/regexp-lib.mlb (* for regular expressions *)
+       |
+       |
+       |  (* program files *)
+       |  ${mainFile}
+       |in
+       |end
+      |""".stripMargin
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }
@@ -35,7 +49,7 @@ class ML extends Compiler[String] {
   // ------------------------
   // Source => Core => Lifted => ML
   lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen ToML map {
-    case (mainFile, prog) => (Map(mainFile -> pretty(prog)), mainFile)
+    case (mainFile, prog) => (Map("main.mlb" -> buildFile(mainFile),  mainFile -> pretty(prog).layout), mainFile)
   }
 
   lazy val Core = Phase.cached("core") {

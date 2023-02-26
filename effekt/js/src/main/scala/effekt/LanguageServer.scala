@@ -152,7 +152,7 @@ class LanguageServer extends Intelligence {
       context.compiler.compileSeparate(src).map {
         case (core, doc) =>
           val filepath = path(core.mod)
-          writeFile(filepath, doc.layout)
+          writeFile(filepath, doc)
           (filepath, core)
       }
   }

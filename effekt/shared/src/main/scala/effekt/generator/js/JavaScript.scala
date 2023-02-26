@@ -31,8 +31,8 @@ class JavaScript extends Compiler[String] {
 
   override def compile(source: Source)(using C: Context) = Compile(source)
 
-  override def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    Separate(source).map { (core, prog) => (core, pretty(prog.virtual)) }
+  override def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, String)] =
+    Separate(source).map { (core, prog) => (core, pretty(prog.virtual).layout) }
 
 
   // The Compilation Pipeline
@@ -47,7 +47,7 @@ class JavaScript extends Compiler[String] {
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
       val doc = pretty(Transformer.compile(input, mainSymbol).commonjs)
-      (Map(mainFile -> doc), mainFile)
+      (Map(mainFile -> doc.layout), mainFile)
   }
 
   // The Compilation Pipeline for VSCode

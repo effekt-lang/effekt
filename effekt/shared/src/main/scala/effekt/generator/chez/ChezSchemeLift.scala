@@ -36,7 +36,7 @@ class ChezSchemeLift extends Compiler[String] {
   // Source => Core => Lifted => Chez
   lazy val Compile =
     allToCore(Core) andThen Aggregate andThen LiftInference andThen ToChez map { case (main, expr) =>
-      (Map(main -> pretty(expr)), main)
+      (Map(main -> pretty(expr).layout), main)
     }
 
   lazy val Core = Phase.cached("core") { Frontend andThen Middleend }
