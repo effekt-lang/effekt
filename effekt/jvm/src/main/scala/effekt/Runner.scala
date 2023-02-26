@@ -93,8 +93,10 @@ object JSRunner extends Runner[String] {
     if canRunExecutable("node", "--version") then Right(())
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
 
-  def eval(path: String)(using Context): Unit =
-    val jsScript = s"require('${path}').main().run()"
+  def eval(path: String)(using C: Context): Unit =
+    val out = C.config.outputPath()
+    val jsFile = (out / path).unixPath
+    val jsScript = s"require('${jsFile}').main().run()"
     exec("node", "--eval", jsScript)
 }
 
@@ -109,7 +111,9 @@ trait ChezRunner extends Runner[String] {
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
   def eval(path: String)(using C: Context): Unit =
-    exec("scheme", "--script", path)
+    val out = C.config.outputPath()
+    val chezFile = (out / path).unixPath
+    exec("scheme", "--script", chezFile)
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -147,7 +151,9 @@ object LLVMRunner extends Runner[String] {
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
   def eval(path: String)(using C: Context): Unit =
-    val basePath = path.stripSuffix(".ll")
+    val out = C.config.outputPath()
+    val basePath = (out / path.stripSuffix(".ll")).unixPath
+    val llPath  = basePath + ".ll"
     val optPath = basePath + ".opt.ll"
     val objPath = basePath + ".o"
 
@@ -156,7 +162,7 @@ object LLVMRunner extends Runner[String] {
     val llc = llcCmd.getOrElse(missing("llc"))
     val opt = optCmd.getOrElse(missing("opt"))
 
-    exec(opt, path, "-S", "-O2", "-o", optPath)
+    exec(opt, llPath, "-S", "-O2", "-o", optPath)
     exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
 
     val gccMainFile = (C.config.libPath / "main.c").unixPath
@@ -174,7 +180,7 @@ object MLRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "ml"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def prelude: List[String] = List("effekt", "immutable/option",  "internal/option", "immutable/list", "text/string")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("mlton") then Right(())
@@ -187,7 +193,9 @@ object MLRunner extends Runner[String] {
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
   def eval(path: String)(using C: Context): Unit =
-    val executable = (C.config.outputPath() / "mlton-main").canonicalPath
-    exec("mlton", "-output", executable, path)
+    val out = C.config.outputPath()
+    val buildFile = (out / "main.mlb").canonicalPath
+    val executable = (out / "mlton-main").canonicalPath
+    exec("mlton", "-output", executable, buildFile)
     exec(executable)
 }

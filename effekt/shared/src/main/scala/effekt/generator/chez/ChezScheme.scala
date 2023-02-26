@@ -49,7 +49,7 @@ trait ChezScheme extends Compiler[String] {
   // Source => Core => Chez
   lazy val Compile =
     allToCore(Core) andThen Aggregate andThen Chez map { case (main, expr) =>
-      (Map(main -> pretty(expr)), main)
+      (Map(main -> pretty(expr).layout), main)
     }
 
   lazy val Core = Phase.cached("core") {
