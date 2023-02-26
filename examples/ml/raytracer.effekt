@@ -258,7 +258,7 @@ def renderExample(width: Int, height: Int): Unit = {
   val buffer: Buffer = array(width * height * 4, 0);
   render(scene, buffer);
 
-  var i in global = 0;
+  var i = 0;
   while (i < buffer.size) {
     println(buffer.unsafeGet(i).show ++ ", " ++ buffer.unsafeGet(i + 1).show ++ ", " ++ buffer.unsafeGet(i + 2).show);
     i = i + 4

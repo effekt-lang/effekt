@@ -13,7 +13,8 @@ class MLTests extends EffektTests {
   override lazy val included: List[File] = List(
     examplesDir / "ml",
     examplesDir / "benchmarks",
-    examplesDir / "pos"
+    examplesDir / "pos",
+    examplesDir / "features"
   )
 
   override lazy val ignored: List[File] = List(
@@ -90,26 +91,20 @@ class MLTests extends EffektTests {
     // async
     examplesDir / "pos" / "io" / "async_file_io.effekt",
 
-    // mut map
+    // mutable map
     examplesDir / "pos" / "maps.effekt",
 
     // Unclear issue
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
     examplesDir / "casestudies" / "buildsystem.md",
     examplesDir / "casestudies" / "naturalisticdsls.md",
-    examplesDir / "features" / "adt.md",
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
     examplesDir / "pos" / "emptymatch.effekt",
-//    examplesDir / "pos" / "imports.effekt",
     examplesDir / "pos" / "liftinference.effekt",
-    //    examplesDir / "pos" / "lists.effekt",
-    //    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
-    // examplesDir / "pos" / "parametrized.effekt",
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
-    // examplesDir / "pos" / "stream_pull.effekt",
   )
 }
