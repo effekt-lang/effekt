@@ -136,6 +136,21 @@ def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] 
   } else { None() }
 }
 
+def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
+    intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
+
+def lambert(scene: Scene, normal: Vector, pointAtTime: Point): Double = {
+  var lambertAmount = 0.0;
+  scene.lights.foreach { light =>
+    if (isLightVisible(pointAtTime, scene, light)) {
+      lambertAmount = lambertAmount + dot((light - pointAtTime).unit, normal)
+      ()
+    } else { () }
+  };
+
+  // normalize lambert
+  min(1.0, lambertAmount)
+}
 
 def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
 
@@ -144,30 +159,13 @@ def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
     val pointAtTime = intersection.pointAtTime;
     val normal = intersection.normal;
 
-
-    def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
-      intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
-
-    def lambert(): Double = {
-      var lambertAmount = 0.0;
-      scene.lights.foreach { light =>
-        if (isLightVisible(pointAtTime, scene, light)) {
-          lambertAmount = lambertAmount + dot((light - pointAtTime).unit, normal)
-          ()
-        } else { () }
-      };
-
-      // normalize lambert
-      min(1.0, lambertAmount)
-    }
-
     def reflect(): ColorV = trace(pointAtTime, reflectThrough(dir, normal), scene, depth + 1);
 
     val baseColor = material.color.toVector;
 
     // we could omit the following computation if material.lambert == 0.0
     val lambertColor = if (material.lambert > 0.0)
-      baseColor.scale(lambert() * material.lambert)
+      baseColor.scale(lambert(scene, normal, pointAtTime) * material.lambert)
     else BLACK;
 
     // we could omit the following computation if material.specular == 0.0

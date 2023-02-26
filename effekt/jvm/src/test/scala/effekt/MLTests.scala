@@ -18,13 +18,12 @@ class MLTests extends EffektTests {
 
   override lazy val ignored: List[File] = List(
 
-    // bug with monomorphization
-    examplesDir / "ml" / "raytracer.effekt",
+    // `gametree` uses `resume` in a different region (under `var i` in `range`)
     examplesDir / "ml" / "nim.effekt",
+    examplesDir / "ml" / "non_scoped_resume.effekt", // minified version
 
-    // requires monomorphization of rank-2 types, related to lift
-    // examplesDir / "benchmarks" / "tree.effekt",
-    //examplesDir / "ml" / "naturalisticdsls.md",
+    // monomorphization of global state is not yet implemented (minified version of original raytracer)
+    examplesDir / "ml" / "global.effekt",
 
     // Broken tests
     examplesDir / "ml" / "probabilistic.effekt",
@@ -41,13 +40,15 @@ class MLTests extends EffektTests {
     //    examplesDir / "pos" / "infer" / "infer_boxed.effekt",
     //    examplesDir / "pos" / "infer" / "infer_effect_polymorphic.effekt",
     examplesDir / "pos" / "issue108.effekt",
+
+    examplesDir / "pos" / "lambdas",
     //    examplesDir / "pos" / "lambdas" / "annotated.effekt",
     //    examplesDir / "pos" / "lambdas" / "effects.effekt",
     //    examplesDir / "pos" / "lambdas" / "generators.effekt",
     //    examplesDir / "pos" / "lambdas" / "higherorder.effekt",
     //    examplesDir / "pos" / "lambdas" / "localstate.effekt",
-    examplesDir / "pos" / "lambdas", // / "scheduler.effekt",
     //    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+
     examplesDir / "benchmarks" / "generator.effekt",
 
     // missing "show" instance
