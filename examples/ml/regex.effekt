@@ -1,0 +1,39 @@
+import text/regex
+
+def tryMatch(r: Regex, str: String) = r.exec(str) match {
+  case None() => println("No match")
+  case Some(Match(m)) => println(m)
+}
+
+def internalMatch(r: Regex, chars: Chars): Option[(String, Chars)] =
+  r.unsafeMatchPrefix(chars).toOption.map {
+    m => (m.getMatch, m.getRemainder)
+  }
+
+val r1 = regex("[a-zA-Z]+")
+val r2 = regex("[0-9]+")
+
+def publicUsage() = {
+  r1.tryMatch("foo123")
+  r1.tryMatch("123foo")
+  r2.tryMatch("foo123")
+  r2.tryMatch("123foo")
+}
+
+def internalUsage() = {
+  val in = "acb123".chars
+  r1.internalMatch(in) match {
+    case None() => println("fail")
+    case Some((matched, rest)) =>
+      println(matched);
+      println("Rest: " ++ rest.toString ++ "'");
+      r2.internalMatch(rest) match {
+        case None() => println("fail")
+        case Some((matched, rest)) =>
+          println(matched)
+          println("Rest: '" ++ rest.toString ++ "'");
+      }
+  }
+}
+
+def main() = { publicUsage(); internalUsage() }
