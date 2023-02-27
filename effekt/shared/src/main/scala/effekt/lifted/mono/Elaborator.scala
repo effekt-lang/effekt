@@ -210,7 +210,9 @@ def elaborate(d: Declaration)(using T: TransformationContext): Declaration = d m
           val newTpe = T.elaborate(flowType) // TODO check!
           Property(newId, newTpe)
         }
-    }
+    // we have to establish a canonical ordering, such that implementations align with declarations
+    // otherwise this results in flaky ordering problems since Sets do not have a guaranteed order of traversal
+    }.sortBy(_.id.id)
     Declaration.Interface(id, tparams, newProps)
 
 
@@ -287,7 +289,8 @@ def elaborate(impl: Implementation)(using T: TransformationContext): Implementat
             val newName = T.specializationFor(name, ev)
             Operation(newName, impl)
         }
-    }
+    // we have to establish a canonical ordering (see counterpart in elaborate(Declaration)
+    }.sortBy(_.name.id)
     Implementation(interface, newOps)
 }
 
