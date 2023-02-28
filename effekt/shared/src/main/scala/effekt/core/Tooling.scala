@@ -3,10 +3,14 @@ package core
 
 import scala.collection.{GenMap, mutable}
 
+/*
+No functions in this file call other functions
+rmIdKey, substitute, renameBoundIds
+*/
+
 def rmIdKey[T](input: Map[Id, T], rm: Set[String]): Map[Id, T] =
   input.filter((x, _) => !rm.contains(x.name.name))
 
-//TODO: make more general
 def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
   block match
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -42,16 +46,13 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
                                 vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Stmt =
   statement match
     case Scope(definitions, body) =>
-      Scope(definitions.map(substitute), substitute(body)(using tSubst, cSubst, vSubst, bSubst -- definitions.map{
-        case Definition.Def(id, _) => id
-        case Definition.Let(id, _) => id
-      }))
+      Scope(definitions.map(substitute), substitute(body))
 
     case Return(expr) =>
       Return(substitute(expr))
 
     case Val(id, binding, body) =>
-      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
+      Val(id, substitute(binding), substitute(body))
 
     case App(callee, targs, vargs, bargs) =>
       App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
@@ -66,7 +67,16 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
           case None => None)
 
     case State(id, init, region, body) =>
-      State(id, substitute(init), region, substitute(body))
+      if(bSubst.contains(region))
+        bSubst(region) match
+          case BlockVar(x, _, _) => State(id, substitute(init), x, substitute(body))
+          case u:Unbox =>
+            val name = symbols.TmpBlock()
+            Scope(List(Definition.Def(name, u)), State(id, substitute(init), name, substitute(body)))
+          case _ => State(id, substitute(init), region, substitute(body))
+
+      else State(id, substitute(init), region, substitute(body))
+
 
     case Try(body, handlers) =>
       Try(substitute(body), handlers.map(substitute))
@@ -74,17 +84,17 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
     case Region(body) =>
       Region(substitute(body))
 
-    case Hole() =>
-      Hole()
+    case h:Hole =>
+      h
 
 def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
                              vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Block =
   block match
-    case BlockVar(id, annotatedTpe, annotatedCapt) =>
+    case b@BlockVar(id, _, _) =>
       if(bSubst.contains(id)) bSubst(id)
-      else BlockVar(id, Type.substitute(annotatedTpe, tSubst, cSubst), Type.substitute(annotatedCapt, cSubst))
+      else b
 
-    case BlockLit(tparams, cparams, vparams, bparams, body) => //TODO: Do I have to look at params?
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
       BlockLit(tparams, cparams, vparams, bparams, substitute(body))
 
     case Member(block, field, annotatedTpe) =>
@@ -96,21 +106,12 @@ def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, C
     case New(impl) =>
       New(substitute(impl))
 
-def substitute(param: Param)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                             vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Param =
-  param match
-    case ValueParam(id, tpe) =>
-      ValueParam(id, Type.substitute(tpe, tSubst, cSubst))
-
-    case BlockParam(id, tpe) =>
-      BlockParam(id, Type.substitute(tpe, tSubst, cSubst))
-
 def substitute(pure: Pure)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
                            vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Pure =
   pure match
-    case ValueVar(id, annotatedType) =>
+    case v@ValueVar(id, _) =>
       if(vSubst.contains(id)) vSubst(id)
-      else ValueVar(id, Type.substitute(annotatedType, tSubst, cSubst))
+      else v
 
     case Literal(value, annotatedType) =>
       Literal(value, Type.substitute(annotatedType, tSubst, cSubst))
@@ -136,6 +137,7 @@ def substitute(op: Operation)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, 
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, substitute(body))
 
+//Generates new names for all definitions (Def, Let, Val, State), replaces old names in rest of program
 def renameBoundIds(module: ModuleDecl)(using newNames: Map[Id, Id]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>

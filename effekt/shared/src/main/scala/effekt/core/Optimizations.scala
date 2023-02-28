@@ -3,6 +3,12 @@ package core
 
 import scala.collection.{GenMap, mutable}
 
+/*
+
+
+*/
+
+// substitutes all alias BlockVars with BlockVar of the original function
 def dealiasing(module: ModuleDecl)(using aliases: Map[Id, Id]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
@@ -125,6 +131,9 @@ def dealiasing(op: Operation)(using aliases: Map[Id, Id]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, dealiasing(body))
 
+// Removes functions that are defined but never mentioned
+// Also removes recursive functions, that are only mentioned within themselves
+// Doesn't remove exports
 def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], recursiveFunctions: Set[Id], exports: List[Id]): ModuleDecl =
   val calls = count.filter(!exports.contains(_))
   removeUnusedFunctionsWorker(start)(using calls, recursiveFunctions)
@@ -245,6 +254,7 @@ def removeUnusedFunctionsWorker(op: Operation)(using count: Map[Id, Int], recurs
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, removeUnusedFunctionsWorker(body))
 
+// Applies SAT to Module. Only inspects recursive functions with static arguments
 def staticArgumentTransformation(module: ModuleDecl, recursiveFunctions: Set[Id]): ModuleDecl =
   staticArgumentTransformationWorker(module)(using recursiveFunctions)
 
@@ -359,13 +369,15 @@ def staticArgumentTransformationWorker(op: Operation)(using recursiveFunctions: 
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, staticArgumentTransformationWorker(body))
 
+// Input definition is recursive function with static arguments
+// Returns worker definition without static arguments and call of that worker
 def transformStaticArguments(definition: Definition.Def, params: StaticParams): Definition.Def =
   definition match
     case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
       val (ti, ci, vi, bi) = params.unpackIndices
       val workerName = symbols.TmpBlock()
 
-      val newTParams = tparams.zipWithIndex.filter(x => !ti.contains(x._2)).map(_._1)
+      val newTParams = tparams.zipWithIndex.filter(x => !ti.contains(x._2)).map(_._1) //TODO: refactor
       val newCParams = cparams.zipWithIndex.filter(x => !ci.contains(x._2)).map(_._1)
       val newVParams = vparams.zipWithIndex.filter(x => !vi.contains(x._2)).map(_._1)
       val newBParams = bparams.zipWithIndex.filter(x => !bi.contains(x._2)).map(_._1)
@@ -382,6 +394,8 @@ def transformStaticArguments(definition: Definition.Def, params: StaticParams): 
     case _ =>
       definition
 
+// Replaces old calls to function before SAT with calls to worker.
+// Needs StaticParams to remove static args from BlockType
 def replaceCalls(statement: Stmt)(using newName: Id, params: StaticParams): Stmt =
   statement match
     case Scope(definitions, body) =>
@@ -507,12 +521,13 @@ def replaceCalls(op: Operation)(using newName: Id, params: StaticParams): Operat
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, replaceCalls(body))
 
-def inliningWorker(module: ModuleDecl)(using inlines: Map[Id, BlockLit]): ModuleDecl =
+// Inlines all functions contained in inlines Map
+def inliningWorker(module: ModuleDecl)(using inlines: Map[Id, Block]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
       ModuleDecl(path, imports, declarations, externs, definitions.map(inliningWorker), exports)
 
-def inliningWorker(definition: Definition)(using inlines: Map[Id, BlockLit]): Definition =
+def inliningWorker(definition: Definition)(using inlines: Map[Id, Block]): Definition =
   definition match
     case Definition.Def(id, block) =>
       Definition.Def(id, inliningWorker(block)(using inlines - id))
@@ -520,7 +535,7 @@ def inliningWorker(definition: Definition)(using inlines: Map[Id, BlockLit]): De
     case Definition.Let(id, binding) =>
       Definition.Let(id, inliningWorker(binding))
 
-def inliningWorker(expr: Expr)(using inlines: Map[Id, BlockLit]): Expr =
+def inliningWorker(expr: Expr)(using inlines: Map[Id, Block]): Expr =
   expr match
     case DirectApp(b, targs, vargs, bargs) =>
       DirectApp(inliningWorker(b), targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
@@ -531,7 +546,7 @@ def inliningWorker(expr: Expr)(using inlines: Map[Id, BlockLit]): Expr =
     case p: Pure =>
       inliningWorker(p)
 
-def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
+def inliningWorker(statement: Stmt)(using inlines: Map[Id, Block]): Stmt =
   statement match
     case Scope(definitions, body) =>
       Scope(definitions.map{
@@ -543,10 +558,6 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
 
     case Val(id, binding, body) =>
       Val(id, inliningWorker(binding), inliningWorker(body))
-
-    case App(b@BlockVar(id, _, _), targs, vargs, bargs) =>
-      if(inlines.contains(id)) renameBoundIds(substitute(inlines(id), targs, vargs.map(inliningWorker), bargs.map(inliningWorker)))(using Map[Id, Id]())
-      else App(b, targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
 
     case App(callee, targs, vargs, bargs) =>
       App(inliningWorker(callee), targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
@@ -571,7 +582,7 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, BlockLit]): Stmt =
     case h: Hole =>
       h
 
-def inliningWorker(block: Block)(using inlines: Map[Id, BlockLit]): Block =
+def inliningWorker(block: Block)(using inlines: Map[Id, Block]): Block =
   block match
     case b@BlockVar(id, _, _) =>
       if(inlines.contains(id)) renameBoundIds(inlines(id))(using Map[Id, Id]())
@@ -589,7 +600,7 @@ def inliningWorker(block: Block)(using inlines: Map[Id, BlockLit]): Block =
     case New(impl) =>
       New(inliningWorker(impl))
 
-def inliningWorker(pure: Pure)(using inlines: Map[Id, BlockLit]): Pure =
+def inliningWorker(pure: Pure)(using inlines: Map[Id, Block]): Pure =
   pure match
     case v: ValueVar =>
       v
@@ -606,25 +617,29 @@ def inliningWorker(pure: Pure)(using inlines: Map[Id, BlockLit]): Pure =
     case Box(b, annotatedCapture) =>
       Box(inliningWorker(b), annotatedCapture)
 
-def inliningWorker(impl: Implementation)(using inlines: Map[Id, BlockLit]): Implementation =
+def inliningWorker(impl: Implementation)(using inlines: Map[Id, Block]): Implementation =
   impl match
     case Implementation(interface, operations) =>
       Implementation(interface, operations.map(inliningWorker))
 
-def inliningWorker(op: Operation)(using inlines: Map[Id, BlockLit]): Operation =
+def inliningWorker(op: Operation)(using inlines: Map[Id, Block]): Operation =
   op match
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, inliningWorker(body))
 
+// Wrapper, passes unique functions to inlining worker
 def inlineUnique(module: ModuleDecl, bodies: Map[Id, Block], count: Map[Id, Int]): ModuleDecl =
-  val inlines = bodies.filter((id, b) => count.contains(id) && count(id) == 1 && b.isInstanceOf[BlockLit]).asInstanceOf[Map[Id, BlockLit]]
+  val inlines = bodies.filter((id, _) => count.contains(id) && count(id) == 1)
   inliningWorker(module)(using inlines)
 
+// Wrapper, passes functions with max size of inlineThreshhold to inliningWorker
 def inlineGeneral(module: ModuleDecl, bodies: Map[Id, Block], inlineThreshhold: Int): ModuleDecl =
   val callSizes = bodies.map((id, b) => (id, size(b)))
-  val inlines = bodies.filter((id, b) => callSizes(id) <= inlineThreshhold && b.isInstanceOf[BlockLit]).asInstanceOf[Map[Id, BlockLit]]
+  val inlines = bodies.filter((id, b) => callSizes(id) <= inlineThreshhold)
   inliningWorker(module)(using inlines)
 
+// Helper function for constantPropagation
+// Returns input list without constants and Map of constants
 def extractConstants(definitions: List[Definition]): (List[Definition], Map[Id, Literal]) =
   val constants = definitions.map{
     case Definition.Let(id, binding: Literal) => Map[Id, Literal](id -> binding)
@@ -637,6 +652,7 @@ def extractConstants(definitions: List[Definition]): (List[Definition], Map[Id, 
 
   (newDefinitions, constants)
 
+// Performs constant Propagation on Tree
 def constantPropagation(module: ModuleDecl): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
@@ -744,6 +760,7 @@ def constantPropagation(op: Operation)(using constants: Map[Id, Literal]): Opera
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, constantPropagation(body))
 
+// Apps applying arguments to BlockLits are replaced with body of BlockLit, filled with arguments
 def betaReduction(module: ModuleDecl): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>

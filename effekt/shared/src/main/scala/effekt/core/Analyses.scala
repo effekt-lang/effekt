@@ -3,23 +3,29 @@ package core
 
 import scala.collection.{GenMap, mutable}
 
-class StaticParamsUnfinished(fname: Id,
-                             tparams: Array[Option[Id]],
-                             cparams: Array[Option[Id]],
-                             vparams: Array[Option[Id]],
+/*
+
+*/
+
+// used by findStaticArguments
+class StaticParamsUnfinished(fname: Id, //name of examined function
+                             tparams: Array[Option[Id]], //Arrays of params
+                             cparams: Array[Option[Id]], //None if param is not static
+                             vparams: Array[Option[Id]], //Some(id) else
                              bparams: Array[Option[Id]]):
   def unpackParams: (Array[Option[Id]], Array[Option[Id]], Array[Option[Id]], Array[Option[Id]]) =
     (tparams, cparams, vparams, bparams)
 
   def id: Id = fname
 
-class StaticParams(fname: Id,
-                   tparams: Set[Id],
-                   cparams: Set[Id],
+// used by findStaticArguments
+class StaticParams(fname: Id, //name of examined function
+                   tparams: Set[Id], //Sets of static args
+                   cparams: Set[Id], //obtained by filtering None from unfinished arrays
                    vparams: Set[Id],
                    bparams: Set[Id],
-                   tIndices: List[Int],
-                   cIndices: List[Int],
+                   tIndices: List[Int], //List of indices of static args
+                   cIndices: List[Int], //obtained by finding indices where unfinished arrays != None
                    vIndices: List[Int],
                    bIndices: List[Int]):
   def id: Id = fname
@@ -29,11 +35,14 @@ class StaticParams(fname: Id,
 
   def unpackIndices: (List[Int], List[Int], List[Int], List[Int]) =
     (tIndices, cIndices, vIndices, bIndices)
-    
+
+  // Check if result of findStaticArguments is non empty. If #t apply SAT to function
   def nonEmpty: Boolean =
     tparams.nonEmpty || cparams.nonEmpty || vparams.nonEmpty || bparams.nonEmpty
 
-
+// Finds all functions, defined as BlockVar of another
+// Returns Map of alias along with original name
+// Def(alias@id, og@BlockVar) => Map(alias -> og)
 def collectAliases(module: ModuleDecl): Map[Id, Id] =
   module.definitions.map(collectAliases).fold(Map[Id, Id]())(_ ++ _)
 
@@ -146,6 +155,8 @@ def collectAliases(op: Operation): Map[Id, Id] =
     case Operation(_, _, _, _, _, _, body) =>
       collectAliases(body)
 
+// Collects all function definitions in Map (only Def)
+// Def(id, body) => Map(alias -> body)
 def collectFunctionDefinitions(module: ModuleDecl): Map[Id,Block] =
   module.definitions.map(collectFunctionDefinitions).fold(Map[Id,Block]())(_ ++ _)
 
@@ -254,6 +265,9 @@ def collectFunctionDefinitions(op: Operation): Map[Id, Block] =
     case Operation(_, _, _, _, _, _, body) =>
       collectFunctionDefinitions(body)
 
+// Counts occurences of every function (not just calls)
+// Definition only => 0 occurences
+// Wrapper passes mutable map to worker and returns immutable result
 def countFunctionOccurences(start: Tree|Definition): Map[Id, Int] =
   val res = mutable.Map[Id, Int]()
 
@@ -388,6 +402,8 @@ def countFunctionOccurencesWorker(op: Operation)(using ocunt: mutable.Map[Id, In
     case Operation(_, _, _, _, _, _, body) =>
       countFunctionOccurencesWorker(body)
 
+// Returns Set of Ids of recursive functions
+// Def(id, body) recursive if count(body)[id] > 0
 def findRecursiveFunctions(module: ModuleDecl): Set[Id] =
   module match
     case ModuleDecl(_, _, _, _, definitions, _) =>
@@ -500,10 +516,10 @@ def findRecursiveFunctions(op: Operation): Set[Id] =
     case Operation(_, _, _, _, _, _, body) =>
       findRecursiveFunctions(body)
 
-//TODO: Refactor
+// Finds all static arguments in recursive calls of input definition
 def findStaticArguments(start: Definition.Def): StaticParams =
   start match
-    case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+    case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => //TODO: Refactor
       val ts: Array[Option[Id]] = tparams.map(x => Some(x)).toArray
       val cs: Array[Option[Id]] = cparams.map(x => Some(x)).toArray
       val vs: Array[Option[Id]] = vparams.map(x => Some(x.id)).toArray
@@ -652,6 +668,7 @@ def findStaticArgumentsWorker(op: Operation)(using params: StaticParamsUnfinishe
     case Operation(_, _, _, _, _, _, body) =>
       findStaticArgumentsWorker(body)
 
+// Computes size of Tree. Counts every node as 1
 def size(module: ModuleDecl): Int =
   module match
     case ModuleDecl(_, _, _, _, definitions, _) =>
