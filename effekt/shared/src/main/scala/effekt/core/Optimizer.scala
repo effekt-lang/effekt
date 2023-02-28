@@ -53,11 +53,12 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
         bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-        optimized = inlineGeneral(optimized, bodies, 10) // Inline General
+        optimized = inlineGeneral(optimized, bodies, 30) // Inline General
 
         occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
         optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
 
+        optimized = betaReduction(optimized) // Beta Reduction
         optimized = betaReduction(optimized) // Beta Reduction
 
         optimized
