@@ -275,6 +275,12 @@ def countFunctionOccurences(start: Tree|Definition): Map[Id, Int] =
     case m: ModuleDecl =>
       countFunctionOccurencesWorker(m)(using res)
 
+    case b: Block =>
+      countFunctionOccurencesWorker(b)(using res)
+
+    case p: Pure =>
+      countFunctionOccurencesWorker(p)(using res)
+
     case e: Expr =>
       countFunctionOccurencesWorker(e)(using res)
 
@@ -291,13 +297,12 @@ def countFunctionOccurences(start: Tree|Definition): Map[Id, Int] =
   res.toMap[Id, Int]
 
 def countFunctionOccurencesWorker(module: ModuleDecl)(using count: mutable.Map[Id, Int]): Unit =
-  module.definitions.foreach(countFunctionOccurencesWorker(_)(using count))
+  module.definitions.foreach(countFunctionOccurencesWorker)
 
 def countFunctionOccurencesWorker(definition: Definition)(using count: mutable.Map[Id, Int]): Unit =
   definition match
     case Definition.Def(id, block) =>
-      if(!count.contains(id))
-        count += (id -> 0)
+      if(!count.contains(id)) count += (id -> 0)
       countFunctionOccurencesWorker(block)
 
     case Definition.Let(_, binding) =>
@@ -341,9 +346,9 @@ def countFunctionOccurencesWorker(statement: Stmt)(using count: mutable.Map[Id, 
 
     case Match(scrutinee, clauses, default) =>
       countFunctionOccurencesWorker(scrutinee)
-      clauses.foreach{(_, b) => countFunctionOccurencesWorker(b)}
+      clauses.foreach{case (_, b) => countFunctionOccurencesWorker(b)}
       default match
-        case Some(s: Stmt) => countFunctionOccurencesWorker(s)
+        case Some(s) => countFunctionOccurencesWorker(s)
         case _ =>
 
     case State(_, init, _, body) =>

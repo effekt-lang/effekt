@@ -143,8 +143,11 @@ def removeUnusedFunctionsWorker(module: ModuleDecl)(using count: Map[Id, Int], r
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
       ModuleDecl(path, imports, declarations, externs, definitions.filter{
         case Definition.Def(id, body) =>
-          !(count.contains(id) && (count(id) == 0 ||
-            (recursiveFunctions.contains(id) && count(id) == countFunctionOccurences(body)(id))))
+          if(recursiveFunctions.contains(id))
+            val recursiveOccurences = countFunctionOccurences(body)
+            !(recursiveOccurences.contains(id) && count.contains(id) && count(id) == recursiveOccurences(id))
+          else
+            !(count.contains(id) && count(id) == 0)
         case _ => true
       }.map(removeUnusedFunctionsWorker), exports)
 
@@ -172,8 +175,11 @@ def removeUnusedFunctionsWorker(statement: Stmt)(using count: Map[Id, Int], recu
     case Scope(definitions, body) =>
       val defs = definitions.filter {
         case Definition.Def(id, _) =>
-          !(count.contains(id) && (count(id) == 0 ||
-            (recursiveFunctions.contains(id) && count(id) == countFunctionOccurences(body)(id))))
+          if (recursiveFunctions.contains(id))
+            val recursiveOccurences = countFunctionOccurences(body)
+            !(recursiveOccurences.contains(id) && count.contains(id) && count(id) == recursiveOccurences(id))
+          else
+            !(count.contains(id) && count(id) == 0)
         case _ => true
       }.map(removeUnusedFunctionsWorker)
 
@@ -559,6 +565,12 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, Block]): Stmt =
     case Val(id, binding, body) =>
       Val(id, inliningWorker(binding), inliningWorker(body))
 
+    case App(b@BlockVar(id, _, _), targs, vargs, bargs) =>
+      if(inlines.contains(id) && inlines(id).isInstanceOf[BlockLit])
+        renameBoundIds(substitute(inlines(id).asInstanceOf[BlockLit], targs, vargs, bargs))(using Map[Id, Id]())
+      else
+        App(b, targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
+
     case App(callee, targs, vargs, bargs) =>
       App(inliningWorker(callee), targs, vargs.map(inliningWorker), bargs.map(inliningWorker))
 
@@ -649,7 +661,6 @@ def extractConstants(definitions: List[Definition]): (List[Definition], Map[Id, 
     case Definition.Let(id, _) => !constants.contains(id)
     case _ => true
   }
-
   (newDefinitions, constants)
 
 // Performs constant Propagation on Tree

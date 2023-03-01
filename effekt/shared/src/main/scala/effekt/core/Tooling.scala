@@ -46,13 +46,16 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
                                 vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Stmt =
   statement match
     case Scope(definitions, body) =>
-      Scope(definitions.map(substitute), substitute(body))
+      Scope(definitions.map(substitute), substitute(body)(using tSubst, cSubst, vSubst, bSubst --
+        definitions.map{
+          case Definition.Def(id, _) => id
+          case Definition.Let(id, _) => id}))
 
     case Return(expr) =>
       Return(substitute(expr))
 
     case Val(id, binding, body) =>
-      Val(id, substitute(binding), substitute(body))
+      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
 
     case App(callee, targs, vargs, bargs) =>
       App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
@@ -69,13 +72,17 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
     case State(id, init, region, body) =>
       if(bSubst.contains(region))
         bSubst(region) match
-          case BlockVar(x, _, _) => State(id, substitute(init), x, substitute(body))
-          case u:Unbox =>
+          //case _: BlockLit => Context.panic("Should not happen since block lits never have type Region")
+          case BlockVar(x, _, _) => State(id, substitute(init), x, substitute(body)(using tSubst, cSubst, vSubst, bSubst - id))
+          case b =>
             val name = symbols.TmpBlock()
-            Scope(List(Definition.Def(name, u)), State(id, substitute(init), name, substitute(body)))
-          case _ => State(id, substitute(init), region, substitute(body))
+            Scope(List(Definition.Def(name, b)),
+              State(id,
+                substitute(init)(using tSubst, cSubst, vSubst, bSubst - name),
+                name,
+                substitute(body)(using tSubst, cSubst, vSubst, bSubst -- Set(name, id))))
 
-      else State(id, substitute(init), region, substitute(body))
+      else State(id, substitute(init), region, substitute(body)(using tSubst, cSubst, vSubst, bSubst - id))
 
 
     case Try(body, handlers) =>
@@ -95,7 +102,8 @@ def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, C
       else b
 
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams, bparams, substitute(body))
+      BlockLit(tparams, cparams, vparams, bparams,
+        substitute(body)(using tSubst -- tparams, cSubst -- cparams, vSubst -- vparams.map(_.id), bSubst -- bparams.map(_.id)))
 
     case Member(block, field, annotatedTpe) =>
       Member(substitute(block), field, Type.substitute(annotatedTpe, tSubst, cSubst))
