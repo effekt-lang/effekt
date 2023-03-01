@@ -59,7 +59,6 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
 
         optimized = betaReduction(optimized) // Beta Reduction
-        optimized = betaReduction(optimized) // Beta Reduction
 
         optimized
   }
