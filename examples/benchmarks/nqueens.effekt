@@ -15,7 +15,6 @@ def sum(xs: List[Int]): Int = xs match {
 }
 
 type Solution = List[Int]
-
 effect Search {
   def pick(size: Int): Int
   def fail(): Nothing
