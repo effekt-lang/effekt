@@ -399,6 +399,12 @@ define {%Stk, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
     store %StkVal %oldstk, %Stk %rest
 
+    %regionp = getelementptr %StkVal, %Stk %rest, i64 0, i32 2
+    %region = load %Region, ptr %regionp
+    %backupp = getelementptr %StkVal, %Stk %rest, i64 0, i32 3
+    %backup = call %RegionBackup @backupRegion(%Region %region)
+    store %RegionBackup %backup, ptr %backupp
+
     %newsp = extractvalue %StkVal %newstk, 1, 0
     %ret.0 = insertvalue {%Stk, %Sp} undef, %Stk %rest, 0
     %ret.1 = insertvalue {%Stk, %Sp} %ret.0, %Sp %newsp, 1
@@ -412,6 +418,7 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
 
     %region = load %Region, ptr @region
     call void @eraseRegionContent(%Region %region)
+    call void @eraseRegion(%Region %region)
 
     call void @setStk(%StkVal %newstk)
 
@@ -422,27 +429,24 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     ret %Sp %newsp
 }
 
-define void @prepareRegion(%Stk %stk) alwaysinline {
-    %rcp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+define void @restoreRegion(%Stk %stk) alwaysinline {
+entry:
     %regionp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
 
     %region = load %Region, ptr %regionp
     %backup = load %RegionBackup, ptr %backupp
-    %rc = load %Rc, ptr %rcp
 
     %hasbackup = icmp ne %RegionBackup %backup, null
-    %needsbackup = icmp ne %Rc %rc, 0
+    br i1 %hasbackup, label %loop, label %return
 
-    br i1 %hasbackup, label %restoreRegion, label %continue
-
-restoreRegion:
-    br label %loop
+return:
+    ret void
 
 loop:
-    %i = phi i64 [0, %restoreRegion], [%nexti, %loop]
-    %ptr = phi ptr [%backup, %restoreRegion], [%nextptr, %loop]
-    %fullsize.0 = phi i64 [0, %restoreRegion], [%fullsize, %loop]
+    %i = phi i64 [0, %entry], [%nexti, %loop]
+    %ptr = phi ptr [%backup, %entry], [%nextptr, %loop]
+    %fullsize.0 = phi i64 [0, %entry], [%fullsize, %loop]
 
     %size = load i64, ptr %ptr
     %fullsize = add i64 %fullsize.0, %size
@@ -464,7 +468,11 @@ loop:
 storesize:
     %sizep = getelementptr %RegionVal, %Region %region, i64 0, i32 1
     store i64 %fullsize, ptr %sizep
-    br i1 %needsbackup, label %shareBackup, label %deleteBackup
+
+    %rcp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %rc = load %Rc, ptr %rcp
+    %isunique = icmp eq %Rc %rc, 0
+    br i1 %isunique, label %deleteBackup, label %shareBackup
 
 deleteBackup:
     call void @free(%RegionBackup %backup)
@@ -474,17 +482,6 @@ shareBackup:
     call void @shareBackup(%RegionBackup %backup)
     ret void
 
-continue:
-    br i1 %needsbackup, label %backupRegion, label %return
-
-backupRegion:
-    %newbackup = call %RegionBackup @backupRegion(%Region %region)
-    call void @shareBackup(%RegionBackup %newbackup)
-    store %RegionBackup %newbackup, ptr %backupp
-    ret void
-
-return:
-    ret void
 }
 
 define %Stk @uniqueStack(%Stk %stk) alwaysinline {
@@ -548,17 +545,17 @@ copy:
     %newoldrc = sub %Rc %rc, 1
     store %Rc %newoldrc, ptr %stkrc
 
+    %regionrcp = getelementptr %RegionVal, %Region %region, i64 0, i32 2
+    %regionrc = load %Rc, ptr %regionrcp
+    %newregionrc = add %Rc %regionrc, 1
+    store %Rc %newregionrc, ptr %regionrcp
+
     ret %Stk %newstk
 }
 
 define %RegionBackup @backupRegion(%Region %region) {
 entry:
     %regionval = load %RegionVal, %Region %region
-
-    %rc = extractvalue %RegionVal %regionval, 2
-    %newrc = add %Rc %rc, 1
-    %rcp = getelementptr %RegionVal, %Region %region, i64 0, i32 2
-    store %Rc %newrc, ptr %rcp
 
     %size.0 = extractvalue %RegionVal %regionval, 1
     %size.1 = add i64 %size.0, 24 ; add 3 x i64
@@ -658,18 +655,9 @@ define void @eraseStack(%Stk %stk) alwaysinline {
 
     %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
     %backup = load %RegionBackup, ptr %backupp
-    %hasbackup = icmp ne %RegionBackup %backup, null
-    br i1 %hasbackup, label %erasebackup, label %eraseregion
 
-erasebackup:
     call void @eraseBackup(%RegionBackup %backup)
-    br label %continue
 
-eraseregion:
-    call void @eraseRegionContent(%Region %region)
-    br label %continue
-
-continue:
     call void @eraseRegion(%Region %region)
 
     call void @free(%Stk %stk)
