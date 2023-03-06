@@ -45,6 +45,14 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true
   )
 
+  val no_optimize: ScallopOption[String] = choice(
+    choices = List("none", "all", "inlining", "sat", "beta", "dead"),
+    name = "no_optimize",
+    descr = "Optimizations that should not be used",
+    default = Some("none"),
+    noshort = true
+  )
+
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
     descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",

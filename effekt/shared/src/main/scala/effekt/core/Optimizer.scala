@@ -45,20 +45,31 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
         optimized = constantPropagation(optimized) // Constant Propagation
 
-        val recursiveFunctions = findRecursiveFunctions(optimized)
-        optimized = staticArgumentTransformation(optimized, recursiveFunctions) //Static Argument Transformation
+        val optim_config = Context.config.no_optimize()
 
+        var recursiveFunctions = findRecursiveFunctions(optimized)
         var occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
         var bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-        optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
-        bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-        optimized = inlineGeneral(optimized, bodies, 30) // Inline General
+        if(!List("all", "sat").contains(optim_config))
+          optimized = staticArgumentTransformation(optimized, recursiveFunctions) //Static Argument Transformation
 
-        occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
-        optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
+        if(!List("all", "inlining").contains(optim_config))
+          bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+          occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
+          optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
-        optimized = betaReduction(optimized) // Beta Reduction
+        if(!List("all", "inlining").contains(optim_config))
+          bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+          optimized = inlineGeneral(optimized, bodies, 30) // Inline General
+
+        if(!List("all", "dead").contains(optim_config))
+          recursiveFunctions = findRecursiveFunctions(optimized)
+          occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
+          optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
+
+        if(!List("all", "beta").contains(optim_config))
+          optimized = betaReduction(optimized) // Beta Reduction
 
         optimized
   }
