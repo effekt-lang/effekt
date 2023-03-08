@@ -64,8 +64,9 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
     def saveOutput(path: String, doc: String): Unit =
       if (C.config.requiresCompilation()) {
-        C.config.outputPath().mkdirs
-        IO.createFile(path, doc)
+        val out = C.config.outputPath()
+        out.mkdirs
+        IO.createFile((out / path).unixPath, doc)
       }
 
     C.backend match {
@@ -75,7 +76,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           case (outputFiles, exec) =>
             outputFiles.foreach {
               case (filename, doc) =>
-                saveOutput(filename, doc.layout)
+                saveOutput(filename, doc)
             }
             exec
         }

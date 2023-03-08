@@ -154,14 +154,14 @@ trait Compiler[Executable] {
    * Should compile [[source]] with this backend. Each backend can
    * choose the representation of the executable.
    */
-  def compile(source: Source)(using Context): Option[(Map[String, Document], Executable)]
+  def compile(source: Source)(using Context): Option[(Map[String, String], Executable)]
 
   /**
    * Should compile [[source]] with this backend, the compilation result should only include
    * the contents of this file, not its dependencies. Only used by the website and implemented
    * by the JS backend. All other backends can return `None`.
    */
-  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] = None
+  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, String)] = None
 
 
   // The Compiler Compiler Phases:
@@ -285,6 +285,10 @@ trait Compiler[Executable] {
   // Helpers
   // -------
   import effekt.util.paths.file
+
+  /**
+   * Path relative to the output folder
+   */
   def path(m: symbols.Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_').replace('-', '_')).unixPath + extension
+    (m.path.replace('/', '_').replace('-', '_')) + extension
 }

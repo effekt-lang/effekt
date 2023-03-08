@@ -33,7 +33,7 @@ class LLVM extends Compiler[String] {
   override def compile(source: Source)(using C: Context) =
     Compile(source) map { (mod, defs) =>
       val mainFile = path(mod)
-      (Map(mainFile -> pretty(defs)), mainFile)
+      (Map(mainFile -> pretty(defs).layout), mainFile)
     }
 
 
