@@ -205,8 +205,7 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case lifted.Try(lifted.BlockLit(tparams, List(ev, id), body), List(handler)) =>
-        // TODO more than one handler
+      case lifted.Try(lifted.BlockLit(tparams, ev :: ids, body), handlers) =>
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
@@ -215,8 +214,10 @@ object Transformer {
         LiteralEvidence(transform(ev), builtins.There,
           NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter,
-              New(transform(id), transform(handler),
-                transform(body)))))
+              (ids zip handlers).foldRight(transform(body)){
+                case ((id, handler), body) =>
+                  New(transform(id), transform(handler), body)
+              })))
 
       // TODO what about the evidence passed to resume?
       case lifted.Shift(ev, lifted.Block.BlockLit(tparams, List(kparam), body)) =>
