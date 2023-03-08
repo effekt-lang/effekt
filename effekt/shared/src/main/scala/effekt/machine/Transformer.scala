@@ -122,6 +122,9 @@ object Transformer {
       case lifted.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
+      case lifted.Val(id, binding, lifted.Return(lifted.ValueVar(id2, tpe))) if id == id2 =>
+        transform(binding)
+
       case lifted.Val(id, binding, rest) =>
         PushFrame(
           Clause(List(transform(lifted.ValueParam(id, binding.tpe))), transform(rest)),
