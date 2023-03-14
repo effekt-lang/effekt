@@ -4,7 +4,21 @@ package core
 import scala.collection.{GenMap, mutable}
 
 /*
+Functions called by functions.
 
+collectAliases: -
+
+collectFunctionDefinitions: -
+
+countFunctionOccurences: countFunctionOccurencesWorker
+
+countFunctionOccurencesWorker: -
+
+findRecursiveFunctions: countFunctionOccurences
+
+findStaticArguments: findStaticArgumentsWorker
+
+size: -
 */
 
 // used by findStaticArguments
@@ -273,7 +287,7 @@ def countFunctionOccurences(start: Tree|Definition): Map[Id, Int] =
 
   start match
     case m: ModuleDecl =>
-      countFunctionOccurencesWorker(m)(using res)
+      countFunctionOccurencesWorker(m)(using res) //TODO: There must be a nice way to do this
 
     case b: Block =>
       countFunctionOccurencesWorker(b)(using res)
@@ -407,7 +421,7 @@ def countFunctionOccurencesWorker(op: Operation)(using ocunt: mutable.Map[Id, In
     case Operation(_, _, _, _, _, _, body) =>
       countFunctionOccurencesWorker(body)
 
-// Returns Set of Ids of recursive functions
+// Returns Set of Ids of directly recursive functions
 // Def(id, body) recursive if count(body)[id] > 0
 def findRecursiveFunctions(module: ModuleDecl): Set[Id] =
   module match
@@ -522,6 +536,8 @@ def findRecursiveFunctions(op: Operation): Set[Id] =
       findRecursiveFunctions(body)
 
 // Finds all static arguments in recursive calls of input definition
+
+// Wrapper that initializes worker and filters result
 def findStaticArguments(start: Definition.Def): StaticParams =
   start match
     case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) => //TODO: Refactor

@@ -54,19 +54,20 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         if(!List("all", "sat").contains(optim_config))
           optimized = staticArgumentTransformation(optimized, recursiveFunctions) //Static Argument Transformation
 
-        if(!List("all", "inlining").contains(optim_config))
-          bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-          occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
-          optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
+        for(_ <- List(1,2))
+          if(!List("all", "inlining").contains(optim_config))
+            bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+            occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
+            optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
-        if(!List("all", "inlining").contains(optim_config))
-          bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
-          optimized = inlineGeneral(optimized, bodies, 30) // Inline General
+          if(!List("all", "inlining").contains(optim_config))
+            bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+            optimized = inlineGeneral(optimized, bodies, 30) // Inline General
 
-        if(!List("all", "dead").contains(optim_config))
-          recursiveFunctions = findRecursiveFunctions(optimized)
-          occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
-          optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
+          if(!List("all", "dead").contains(optim_config))
+            recursiveFunctions = findRecursiveFunctions(optimized)
+            occurences = rmIdKey[Int](countFunctionOccurences(optimized), Set("main"))
+            optimized = removeUnusedFunctions(optimized, occurences, recursiveFunctions, exports) //Remove Unused Functions
 
         if(!List("all", "beta").contains(optim_config))
           optimized = betaReduction(optimized) // Beta Reduction

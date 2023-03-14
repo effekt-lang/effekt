@@ -8,9 +8,11 @@ No functions in this file call other functions
 rmIdKey, substitute, renameBoundIds
 */
 
+//Filters keys from input, that have a name contained in rm
 def rmIdKey[T](input: Map[Id, T], rm: Set[String]): Map[Id, T] =
   input.filter((x, _) => !rm.contains(x.name.name))
 
+//Starting point for inlining, creates Maps(params -> args) and passes to normal substitute
 def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
   block match
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -21,6 +23,7 @@ def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs
 
       substitute(body)(using tSubst, cSubst, vSubst, bSubst)
 
+//Replaces all variables contained in one of the Maps with their value
 def substitute(definition: Definition)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
                                        vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Definition =
   definition match
@@ -101,8 +104,8 @@ def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, C
       if(bSubst.contains(id)) bSubst(id)
       else b
 
-    case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams, bparams,
+    case BlockLit(tparams, cparams, vparams, bparams, body) => //Removing these params from maps is really important.
+      BlockLit(tparams, cparams, vparams, bparams,             //If not inlining functions after SAT will break them because params in worker are named the same.
         substitute(body)(using tSubst -- tparams, cSubst -- cparams, vSubst -- vparams.map(_.id), bSubst -- bparams.map(_.id)))
 
     case Member(block, field, annotatedTpe) =>
