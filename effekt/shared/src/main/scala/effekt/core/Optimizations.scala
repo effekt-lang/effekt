@@ -4,8 +4,33 @@ package core
 import scala.collection.{GenMap, mutable}
 
 /*
+Functions called by functions.
 
+dealiasing: -
 
+removeUnusedFunctions: removeUnusedFunctionsWorker
+
+removeUnusedFunctionsWorker: countFunctionOccurences
+
+staticArgumentTransformation: staticArgumentTransformationWorker
+
+staticArgumentTransformationWorker: findStaticArguments, transformStaticArguments
+
+transformStaticArguments: replaceCalls
+
+replaceCalls: -
+
+inliningWorker: substitute
+
+inlineUnique: inliningWorker
+
+inlineGeneral: inliningWorker
+
+extractConstants: -
+
+constantPropagation: extractConstants
+
+betaReduction: substitute
 */
 
 // substitutes all alias BlockVars with BlockVar of the original function
@@ -80,7 +105,7 @@ def dealiasing(block: Block)(using aliases: Map[Id, Id]): Block =
     case BlockVar(id, annotatedTpe, annotatedCapt) =>
       if (aliases.contains(id))
         var og = aliases(id)
-        while (aliases.contains(og))
+        while (aliases.contains(og)) //loop until new id is no longer an alias
           og = aliases(og)
         BlockVar(og, annotatedTpe, annotatedCapt)
 
@@ -134,6 +159,8 @@ def dealiasing(op: Operation)(using aliases: Map[Id, Id]): Operation =
 // Removes functions that are defined but never mentioned
 // Also removes recursive functions, that are only mentioned within themselves
 // Doesn't remove exports
+
+//Wrapper removes exports and calls worker
 def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], recursiveFunctions: Set[Id], exports: List[Id]): ModuleDecl =
   val calls = count.filter(!exports.contains(_))
   removeUnusedFunctionsWorker(start)(using calls, recursiveFunctions)
@@ -261,6 +288,8 @@ def removeUnusedFunctionsWorker(op: Operation)(using count: Map[Id, Int], recurs
       Operation(name, tparams, cparams, vparams, bparams, resume, removeUnusedFunctionsWorker(body))
 
 // Applies SAT to Module. Only inspects recursive functions with static arguments
+
+//Wrapper calls worker. Only effect is that (using ...) bracket doesn't have to be used
 def staticArgumentTransformation(module: ModuleDecl, recursiveFunctions: Set[Id]): ModuleDecl =
   staticArgumentTransformationWorker(module)(using recursiveFunctions)
 
@@ -400,7 +429,8 @@ def transformStaticArguments(definition: Definition.Def, params: StaticParams): 
     case _ =>
       definition
 
-// Replaces old calls to function before SAT with calls to worker.
+// Replaces old calls of function before SAT with calls of worker.
+// Most important function is adjustment of BlockType
 // Needs StaticParams to remove static args from BlockType
 def replaceCalls(statement: Stmt)(using newName: Id, params: StaticParams): Stmt =
   statement match
@@ -419,7 +449,7 @@ def replaceCalls(statement: Stmt)(using newName: Id, params: StaticParams): Stmt
       if(id == params.id)
         App(BlockVar(newName,
           BlockType.Function(tparams.zipWithIndex.filter(x => !ti.contains(x._2)).map(_._1),
-            cparams.zipWithIndex.filter(x => !ci.contains(x._2)).map(_._1),
+            cparams.zipWithIndex.filter(x => !ci.contains(x._2)).map(_._1), //TODO: refactor
             vparams.zipWithIndex.filter(x => !vi.contains(x._2)).map(_._1),
             bparams.zipWithIndex.filter(x => !bi.contains(x._2)).map(_._1),
             result), annotatedCaptures ++ bs),
