@@ -85,21 +85,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "in" -> toDoc(in)))
     case Add(out, in1, in2) => jsonObjectSmall(ListMap("op" -> "\"Add\"",
       "out" -> toDoc(out), "in1" -> toDoc(in1), "in2" -> toDoc(in2)))
-    case Mul(out, in1, in2) => jsonObjectSmall(ListMap("op" -> "\"Mul\"",
-      "out" -> toDoc(out), "in1" -> toDoc(in1), "in2" -> toDoc(in2)))
     case Push(target, args) => jsonObjectSmall(ListMap("op" -> "\"Push\"",
       "target" -> toDoc(target), "args" -> toDoc(args)))
     case Shift(out, n) => jsonObjectSmall(ListMap("op" -> "\"Shift\"",
       "out" -> toDoc(out), "n" -> n.toString))
     case ShiftDyn(out, n) => jsonObjectSmall(ListMap("op" -> "\"ShiftDyn\"",
       "out" -> toDoc(out), "n" -> toDoc(n)))
-    case Reset() => jsonObjectSmall(ListMap("op" -> "\"Reset\""))
-    case Print(arg) => jsonObjectSmall(ListMap("op" -> "\"Print\"", "arg" -> toDoc(arg)))
     case IfZero(arg, thenClause) => jsonObjectSmall(ListMap("op" -> "\"IfZero\"",
       "cond" -> toDoc(arg),
       "then" -> toDoc(thenClause)))
-    case IsZero(out, arg) => jsonObjectSmall(ListMap("op" -> "\"IsZero\"", "out" -> toDoc(out), "arg" -> toDoc(arg)))
-    case Subst(args) => jsonObjectSmall(ListMap("op" -> "\"Subst\"", "args" -> toDoc(args)))
     case Copy(tpe, from, to) => jsonObjectSmall(ListMap("op" -> "\"Copy\"",
       "type" -> toDoc(tpe),
       "from" -> toDoc(from), "to" -> toDoc(to)
@@ -151,7 +145,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(terminator: Terminator): Doc = terminator match {
     case Return(args) => jsonObjectSmall(ListMap("op" -> "\"Return\"", "args" -> toDoc(args)))
     case Jump(target) => jsonObjectSmall(ListMap("op" -> "\"Jump\"", "target" -> toDoc(target)))
-    case Resume(cont) => jsonObjectSmall(ListMap("op" -> "\"Resume\"", "cont" -> toDoc(cont)))
     case Match(adt_type, scrutinee, clauses, default) => jsonObjectSmall(ListMap("op" -> "\"Match\"",
       "type" -> adt_type.toString,
       "scrutinee" -> toDoc(scrutinee),

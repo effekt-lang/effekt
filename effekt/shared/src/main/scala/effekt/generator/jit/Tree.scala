@@ -34,15 +34,10 @@ case class ConstDouble(out: Register, value: scala.Double) extends Instruction
 case class ConstString(out: Register, value: String) extends Instruction
 case class PrimOp(name: String, out: RegList, in: RegList) extends Instruction
 case class Add(out: Register, in1: Register, in2: Register) extends Instruction
-case class Mul(out: Register, in1: Register, in2: Register) extends Instruction
 case class Push(target: BlockLabel, args: RegList) extends Instruction
 case class Shift(out: Register, n: Int) extends Instruction
 case class ShiftDyn(out: Register, n: Register) extends Instruction
-case class Reset() extends Instruction
-case class Print(arg: Register) extends Instruction
 case class IfZero(arg: Register, thenClause: Clause) extends Instruction
-case class IsZero(out: Register, arg: Register) extends Instruction
-case class Subst(args: RegList) extends Instruction
 case class Copy(tpe: RegisterType, from: Register, to: Register) extends Instruction
 case class Drop(tpe: RegisterType, reg: Register) extends Instruction
 case class Swap(tpe: RegisterType, a: Register, b: Register) extends Instruction
@@ -58,7 +53,6 @@ case class New(out: Register, targets: List[BlockLabel], args: RegList) extends 
 sealed trait Terminator extends Tree
 case class Return(args: RegList) extends Terminator
 case class Jump(target: BlockLabel) extends Terminator
-case class Resume(cont: Register) extends Terminator
 case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause], default: Clause) extends Terminator
 case class Invoke(receiver: Register, tag: MethodTag, args: RegList) extends Terminator
 
