@@ -232,10 +232,11 @@ object JITRunner extends Runner[String] {
   }
 
   override def eval(executable: String)(using C: Context): Unit = {
+    val out = C.config.outputPath()
     findJITBinary(platform) match {
       case Left(err) => sys.error(err)
       case Right(jitBinary) =>
-        exec(jitBinary.unixPath, executable)
+        exec(jitBinary.unixPath, (out / executable).canonicalPath)
     }
   }
 }
