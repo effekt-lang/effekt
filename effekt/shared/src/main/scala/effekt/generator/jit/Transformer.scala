@@ -130,13 +130,14 @@ object Transformer {
         }
       }
       case machine.New(name, clauses, rest) => {
+        val frees = transformParameters(clauses.map{ clause => analysis.freeVariables(clause) }.reduce(_ ++ _).toList)
         val transformedClauses = clauses.map({
-          case machine.Clause(parameters, body) => transformInline(machine.Clause(parameters, body), false)
+          case machine.Clause(parameters, body) => transformInEnv(machine.Clause(parameters, body), frees)
         });
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
         val out = outs(RegisterType.Ptr).head
         val targets = transformedClauses.map({case (_,_,block) => emit(block)})
-        val env = transformArguments(BC.environment)
+        val env = transformArguments(frees)
         emit(New(out, targets, env))
         emitInlined(restBlock)
       }
@@ -268,6 +269,17 @@ object Transformer {
     val block = transform("?generated", locals, machineBody);
     extendFrameDescriptorTo(block.frameDescriptor);
     (transformArguments(BC.environment), args, block)
+  }
+
+  def transformInEnv(machineClause: machine.Clause, env: Environment)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
+    val machine.Clause(machineParams, machineBody) = machineClause;
+    val jitParams = transformParameters(machineParams);
+    val envArgs = transformArguments(env)
+    val locals = jitParams ++ env;
+    val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
+    val block = transform("?generated", locals, machineBody);
+    extendFrameDescriptorTo(block.frameDescriptor);
+    (transformArguments(env), args, block)
   }
 
   def transformParameters(params: List[machine.Variable])(using ProgramContext): Environment =
