@@ -5,10 +5,11 @@ import effekt.PhaseResult.CoreLifted
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.lifted.{ DeclarationContext, Definition, Lift, LiftInference, given }
+import effekt.lifted.{DeclarationContext, Definition, Lift, LiftInference, given}
 import effekt.lifted
+import effekt.machine.Statement.LiteralEvidence
 import effekt.symbols
-import effekt.symbols.{ Symbol, TermSymbol }
+import effekt.symbols.{Symbol, TermSymbol}
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
 
@@ -277,11 +278,16 @@ object Transformer {
   def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
-    case lifted.Evidence(scopes) => {
+    case lifted.Evidence(Nil) => {
+      val res = Variable(freshName("ev_zero"), builtins.Evidence)
+      Binding { k =>
+        LiteralEvidence(res, builtins.Here, k(res))
+      }
+    }
+    case lifted.Evidence(scope :: scopes) => {
       scopes.map(transform).foldRight {
-        val res = Variable(freshName("ev_zero"), builtins.Evidence)
         Binding { k =>
-          LiteralEvidence(res, builtins.Here, k(res))
+          k(transform(scope))
         }: Binding[Variable]
       } { (evi, acc) =>
         val res = Variable(freshName("ev_acc"), builtins.Evidence)
