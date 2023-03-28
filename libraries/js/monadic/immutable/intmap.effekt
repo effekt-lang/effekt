@@ -1,1 +1,369 @@
 module immutable/intmap
+
+import immutable/option
+import immutable/list
+
+// the final intmap version based on the Patricia Tree
+
+// bitwise and
+extern pure def andbit(x: Int, y: Int): Int = 
+    "(x & y)" 
+
+// bitwise not
+extern pure def notbit(x: Int): Int =
+    "(~x)"
+
+// bitwise xor
+extern pure def xorbit(x: Int, y: Int): Int =
+    "(x ^ y)"
+
+//floor
+extern pure def floor(x: Int): Int =
+    "(x)"
+
+//the type definition of the dictionary structure
+type Dict[A] {
+    Empty();
+    Leaf(actualkey: Int, value: A);
+    Branch(prefix: Int, branchbit: Int, leftbranch: Dict[A], rightbranch: Dict[A])
+}
+
+//some side functions 
+
+def even(x: Int) = {
+    mod(x,2) == 0
+}
+
+def odd(x: Int) = {
+    not(even(x))
+}
+
+def zerobit(x: Int, y: Int) = {
+    andbit(x, y) == 0
+}
+
+def mask(x: Int, y: Int): Int={
+    andbit(x, y-1)
+}
+
+def matchprefix(x: Int, y: Int, z: Int) = {
+    mask(x, z) == y
+}
+
+// helperfuncion
+// finds the first bit where x and y disagree
+def branchingbit(x: Int, y: Int): Int={
+    lowestbit(xorbit(x, y))
+}
+
+// helperfunction
+// gives the lowest bit of an Integer
+def lowestbit(x: Int): Int={
+    if(odd(x)){
+        1
+    }else{
+        2*lowestbit(floor(x/2))
+    }
+}
+
+// finds the value bound to a key
+def lookup[A](key: Int, dict: Dict[A]): Option[A]={
+    dict match{
+        case Empty() => None()
+        case Leaf(actualkey, value) => if(actualkey == key){
+            Some(value)
+            } else {None()}
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(not (matchprefix(key, prefix, branchbit))){ 
+            None()                                                   
+        } else if(zerobit(key, branchbit)){
+            lookup(key, leftbranch)
+        } else {
+            lookup(key, rightbranch)
+        }
+    } 
+}
+
+// joins two non empty trees into one
+// verbindet zwei nicht-leere Bäume miteinander, deren längste Prefixe nicht ineinander enthalten sein dürfen
+def join[A](xprefix: Int, xdict: Dict[A], yprefix: Int, ydict: Dict[A]): Dict[A]={ 
+    val m = branchingbit(xprefix, yprefix)
+    if(zerobit(xprefix, m)){
+        branch(mask(xprefix, m), m, xdict, ydict)
+    } else{
+        branch(mask(xprefix, m), m, ydict, xdict)
+    }
+}
+
+// insert a value into a tree at a key position
+def insert[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
+    dict match{
+        case Empty() => Leaf(key, insvalue)
+        case Leaf(actualkey, actualvalue) => if(actualkey == key){
+            Leaf(key, insvalue) 
+        }else {
+            join(key, Leaf(key, insvalue), actualkey, dict)
+        }
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(matchprefix(key, prefix, branchbit)){
+            if(zerobit(key, branchbit)){
+                branch(prefix, branchbit, insert(key, insvalue, leftbranch), rightbranch)
+            }else{
+                branch(prefix, branchbit, leftbranch, insert(key, insvalue, rightbranch))
+            }
+        }else{
+            join(key, Leaf(key, insvalue), prefix, dict)
+        }
+        
+    }
+}
+
+// basicly the same as insert, but if a key is already binded to a value we keep the binded value - important for merge
+def insert2[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
+    dict match{
+        case Empty() => Leaf(key, insvalue)
+        case Leaf(actualkey, actualvalue) => if(actualkey == key){
+            Leaf(actualkey, actualvalue) 
+        }else {
+            join(key, Leaf(key, insvalue), actualkey, dict)
+        }
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(matchprefix(key, prefix, branchbit)){
+            if(zerobit(key, branchbit)){
+                branch(prefix, branchbit, insert2(key, insvalue, leftbranch), rightbranch)
+            }else{
+                branch(prefix, branchbit, leftbranch, insert2(key, insvalue, rightbranch))
+            }
+        }else{
+            join(key, Leaf(key, insvalue), prefix, dict)
+        }
+        
+    }
+}
+
+// merges two trees into one
+def merge[A](xdict: Dict[A], ydict: Dict[A]): Dict[A]={
+    (xdict, ydict) match{
+        case (Empty(), ydict) => ydict
+        case (xdict, Empty()) => xdict
+        case (Leaf(xkey, xvalue), ydict) => insert(xkey, xvalue, ydict)
+        case (xdict, Leaf(ykey, yvalue)) => insert2(ykey, yvalue, xdict) 
+        case (Branch(xprefix, xbranchbit, xleftbranch, xrightbranch), 
+              Branch(yprefix, ybranchbit, yleftbranch, yrightbranch)) => if(xbranchbit  == ybranchbit && xprefix == yprefix){// Bäume haben selben Prefix
+                branch(xprefix, xbranchbit, merge(xleftbranch, yleftbranch), merge(xrightbranch, yrightbranch))
+              } else if(xbranchbit < ybranchbit && matchprefix(yprefix, xprefix, xbranchbit)){  //xprefix ist in yprefix enthalten
+                if(zerobit(yprefix, xbranchbit)){
+                    branch(xprefix, xbranchbit, merge(xleftbranch, ydict), xrightbranch)
+                } else {
+                    branch(xprefix, xbranchbit, xleftbranch, merge(xrightbranch, ydict))
+                }
+              } else if(xbranchbit > ybranchbit && matchprefix(xprefix, yprefix, ybranchbit)){ //yprefix ist in xprefix enthalten
+                if(zerobit(xprefix, ybranchbit)){
+                    branch(yprefix, ybranchbit, merge(xdict, yleftbranch), yrightbranch)
+                } else {
+                    branch(yprefix, ybranchbit, yleftbranch, merge(xdict, yrightbranch))
+                }
+              } else { //xdict und ydict haben keinen gemeinsamen prefix
+                join(xprefix, xdict, yprefix, ydict)
+              }
+    }
+}
+
+//deletes the binding of a value on a key position in a tree
+def delete[A](delkey: Int, dict: Dict[A]): Dict[A] = {
+    dict match{
+        case Empty() => Empty()
+        case Leaf(actualkey, value) => if(actualkey == delkey){
+            Empty()
+        } else {
+            Leaf(actualkey, value)
+        }
+        case Branch(prefix, branchbit, Leaf(actualkey1, value1), Leaf(actualkey2, value2)) => if(actualkey1 == delkey){
+            branch(prefix, branchbit, Empty(), Leaf(actualkey2, value2))
+        } else if(actualkey2 == delkey){
+            branch(prefix, branchbit, Leaf(actualkey1, value1), Empty())
+        } else {
+            Branch(prefix, branchbit, Leaf(actualkey1, value1), Leaf(actualkey2, value2))
+        }
+        case Branch(prefix, branchbit, leftbranch, Leaf(actualkey, value)) => if(actualkey == delkey){
+            branch(prefix, branchbit, leftbranch, Empty())
+        } else {
+            branch(prefix, branchbit, delete(delkey, leftbranch), Leaf(actualkey, value))
+        }
+        case Branch(prefix, branchbit, Leaf(actualkey, value), rightbranch) => if(actualkey == delkey){
+            branch(prefix, branchbit, Empty(), rightbranch)
+        } else {
+            branch(prefix, branchbit, Leaf(actualkey, value), delete(delkey, rightbranch))
+        }
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(lookup(delkey, dict) == None()){
+            dict //noch wegmachen
+        } else if(zerobit(delkey, branchbit)){
+            branch(prefix, branchbit, delete(delkey, leftbranch), rightbranch)
+        } else {
+            branch(prefix, branchbit, leftbranch, delete(delkey, rightbranch))
+        }
+    }
+}
+
+// creates a tree with an amount of n values
+def fillup(amount: Int): Dict[Int]={
+    var t = Empty();
+    var x = 1;
+    while (x <= amount) {
+        t = insert(x, x*10, t);
+        x = x + 1;
+    }
+    t
+}
+
+
+// the smart constructor for the intmap structure 
+// no empty child-nodes allowed
+// collapsing the tree so that there are no unnecessary long paths to non-empty leafs. 
+// the collapsed path will be stored as a prefix.
+def branch[A](prefix: Int, branchbit: Int, dict1: Dict[A], dict2: Dict[A]): Dict[A]={
+    (dict1, dict2) match{
+        case (Empty(), Empty()) => Empty() 
+        case (Empty(), rightbranch) => rightbranch
+        case (leftbranch, Empty()) => leftbranch
+        case (leftbranch, rightbranch) => Branch(prefix, branchbit, leftbranch, rightbranch)
+    } 
+}
+
+def main() = {
+    val t0 = branch(0, 1, branch(2, 4, Leaf(2, "A"), Leaf(6, "B")), Leaf(1, "C"));
+    val t1 = branch(0, 1, Leaf(0, "X"), branch(3, 4, Leaf(3, "Y"), Leaf(7, "Z")));
+    val t2 = branch(0, 1, branch(0, 2, Leaf(0, "A"), Leaf(2, "B")), branch(1, 2, Leaf(1, "C"), Leaf(3, "D")));
+    val t3 = branch(0, 2, Leaf(0 , 17), branch(2, 4, Leaf(2, 42), Leaf(6, 29)));
+    val t4 = branch(3, 4, Leaf(3, 77), Leaf(7, 66));
+    val t5 = branch(0, 4, Leaf(0, false), Leaf(4, true));
+    val t6 = branch(0, 4, Leaf(0, true), Leaf(4, false));
+
+    //test for fillup
+    val f1 = fillup(10)
+    println(f1)
+    
+    // tests for lookup ------------------------------------------------------------
+    
+    // Some(t0)
+    val lu0 = lookup(1, Leaf(1, t0))
+    println(lu0)
+
+    // None()
+    val lu1 = lookup(1, Empty[Int]())
+    println(lu1)
+
+    // Some(true)
+    val lu2 = lookup(1, Leaf(1, true))
+    println(lu2)
+    
+    // None()
+    val lu3 = lookup(2, Leaf(1, true))
+    println(lu3)
+
+    // Some(29)
+    val lu4 = lookup(6, t3)
+    println(lu4)
+
+    // None()
+    val lu5 = lookup(0, t4)
+    println(lu5)
+    
+    // tests for join---------------------------------------------------------------
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, 17), Branch(2, 4, Leaf(2, 42), Leaf(6, 29))), Branch(3, 4, Leaf(3, 77), Leaf(7, 66)))
+    val jo0 = join(2, t3, 3, t4)
+    println(jo0)
+
+    //Branch(0, 1, Leaf(0, 17), Leaf(1, 42))
+    val jo1 = join(0, Leaf(0, 17), 1, Leaf(1, 42))
+    println(jo1)
+
+    // tests for insert-------------------------------------------------------------
+
+    //Leaf(1, true)
+    val ins0 = insert(1, true, Empty())
+    println(ins0)
+
+    //Leaf(1, true)
+    val ins1 = insert(1, true, Leaf(1, false))
+    println(ins1)
+
+    //Branch(0, 1, Leaf(0, false), Leaf(1, true))
+    val ins2 = insert(1, true, Leaf(0, false))
+    println(ins2)
+
+    //Branch(0, 1, Branch(2, 4, Leaf(2, A), Leaf(6, B)), Branch(1, 2, Leaf(1, C), Leaf(3, D)))
+    val ins3 = insert(3, "D", t0)
+    println(ins3)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, X), Leaf(2, D)), Branch(3, 4, Leaf(3, Y), Leaf(7, Z)))
+    val ins4 = insert(2, "D", t1)
+    println(ins4)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, A), Leaf(2, B)), Branch(1, 2, Branch(1, 4, Leaf(1, C), Leaf(5, E)), Leaf(3, D)))
+    val ins5 = insert(5, "E", t2)
+    println(ins5)
+
+    // tests for delete ------------------------------------------------------------
+
+    // Empty()
+    val del1 = delete(3,  Leaf(3, "D"))
+    println(del1)
+
+    // Leaf(7, 66)
+    val del2 = delete(3,  t4)
+    println(del2)
+
+    // t4
+    val del3 = delete(1,  t4)
+    println(del3)
+
+    // Branch(2, 4, Leaf(2, A), Leaf(6, B))
+    val del4 = delete(1,  t0)
+    println(del4)
+
+    //Branch(0, 1, Leaf(2, A), Leaf(1, C))
+    val del5 = delete(6,  t0)
+    println(del5)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, A), Leaf(2, B)), Leaf(1, C))
+    val del6 = delete(3,  t2)
+    println(del6)
+
+    //tests for merge----------------------------------------------------------
+
+    //Ergebnis: t0
+    val mrg1 = merge(Empty(), t0)
+    println(mrg1)
+
+    //Ergebnis: t0
+    val mrg2 = merge(t0, Empty())
+    println(mrg2)
+
+    //Branch(0, 1, Branch(2, 4, Leaf(2, A), Leaf(6, B)), Branch(1, 2, Leaf(1, C), Leaf(3, D)))
+    val mrg3 = merge(t0, Leaf(3, "D"))
+    println(mrg3)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, A), Leaf(2, X)), Branch(1, 2, Leaf(1, C), Leaf(3, D)))
+    val mrg4 = merge(Leaf(2, "X"), t2)
+    println(mrg4)
+
+    //t2
+    val mrg5 = merge(t2, Leaf(2, "X"))
+    println(mrg5)
+    
+    //Ergebnis: t3
+    val mrg6 = merge(t3, t3)
+    println(mrg6)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, X), Branch(2, 4, Leaf(2, A), Leaf(6, B))), Branch(1, 2, Leaf(1, C), Branch(3, 4, Leaf(3, Y), Leaf(7, Z))))
+    val mrg7 = merge(t0, t1)
+    println(mrg7)
+
+    //t5
+    val mrg8 = merge(t5, t6)
+    println(mrg8)
+
+    //t6
+    val mrg9 = merge(t6, t5)
+    println(mrg9)
+
+}
