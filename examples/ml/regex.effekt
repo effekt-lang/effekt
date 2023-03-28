@@ -10,6 +10,10 @@ def internalMatch(r: Regex, chars: Chars): Option[(String, Chars)] =
     m => (m.getMatch, m.getRemainder)
   }
 
+def testLines(str: String) = str.lines.foreach { l =>
+  println(l)
+}
+
 val r1 = regex("[a-zA-Z]+")
 val r2 = regex("[0-9]+")
 
@@ -36,4 +40,4 @@ def internalUsage() = {
   }
 }
 
-def main() = { publicUsage(); internalUsage() }
+def main() = { publicUsage(); internalUsage(); testLines("abc\ndef") }

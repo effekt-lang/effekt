@@ -1,7 +1,5 @@
 module triples
 
-type Nothing {}
-
 effect Flip(): Boolean
 effect Fail(): Nothing
 

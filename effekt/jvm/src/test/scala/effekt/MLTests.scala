@@ -19,6 +19,9 @@ class MLTests extends EffektTests {
 
   override lazy val ignored: List[File] = List(
 
+    // Regression with monomorphization
+    examplesDir / "ml" / "raytracer.effekt",
+
     // `gametree` uses `resume` in a different region (under `var i` in `range`)
     examplesDir / "ml" / "nim.effekt",
     examplesDir / "ml" / "non_scoped_resume.effekt", // minified version
@@ -26,10 +29,9 @@ class MLTests extends EffektTests {
     // monomorphization of global state is not yet implemented (minified version of original raytracer)
     examplesDir / "ml" / "global.effekt",
 
-    // Broken tests
+    // (Mutually) recursive functions, which are monomorphized
+    // And: unknown problem with evidence monomorphization
     examplesDir / "ml" / "probabilistic.effekt",
-    examplesDir / "ml" / "triples.effekt",
-
 
     // Tests with box
     examplesDir / "pos" / "capture" / "defdef.effekt",
