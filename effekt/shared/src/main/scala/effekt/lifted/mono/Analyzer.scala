@@ -71,8 +71,8 @@ class FlowAnalysis(
   def evidenceFor(param: Id): Ev =
     parameters.getOrElse(param, INTERNAL_ERROR(s"Cannot find evidence for ${param}"))
 
-  def freshVariable(arity: Int): Evidences.FlowVar =
-    val x = Evidences.fresh(arity)
+  def freshVariable(arity: Int, origin: Any): Evidences.FlowVar =
+    val x = Evidences.fresh(arity, origin)
     variables = variables + x
     x
 }
@@ -105,7 +105,7 @@ def analyze(e: Extern)(using C: ErrorReporter, F: FlowAnalysis): Unit = e match 
   // We have to assume that the evidence will flow directly into f.
   case Extern.Def(id, tparams, params, ret, body) =>
     // FOR NOW: we only add empty evidence
-    val x: Evidences.FlowVar = F.freshVariable(0)
+    val x: Evidences.FlowVar = F.freshVariable(0, e)
     val vparams = params.collect { case p : Param.ValueParam => p.tpe }
     val bfts = params.collect { case p : Param.BlockParam => freshFlowType(p.tpe) }
     val ftpe = FlowType.Function(x, tparams, vparams, bfts, ret)
@@ -156,7 +156,7 @@ def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b 
     // Step 1) Map unification variables to evidence parameters:
     //   ev142 -> α17._2
     val eps = params.collect { case Param.EvidenceParam(id) => id }
-    val x: Evidences.FlowVar = F.freshVariable(eps.size)
+    val x: Evidences.FlowVar = F.freshVariable(eps.size, b)
     eps.zipWithIndex.foreach { case (id, idx) =>
       F.bindEvidence(id, Ev(List(Lift.Var(x, idx))))
     }
@@ -341,7 +341,7 @@ def analyze(d: Declaration)(using C: ErrorReporter, F: FlowAnalysis): Unit =
 
 def freshFlowType(tpe: BlockType)(using C: ErrorReporter, F: FlowAnalysis): FlowType = tpe match {
   case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
-    val x = F.freshVariable(eparams.size)
+    val x = F.freshVariable(eparams.size, tpe)
     FlowType.Function(x, tparams, vparams, bparams.map(freshFlowType), result)
   case BlockType.Interface(name, targs) =>
     FlowType.Interface(name, targs)

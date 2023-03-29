@@ -43,7 +43,7 @@ class MonomorphizationTests extends munit.FunSuite {
 
   extension (ev: Evidences) {
     def assertVar: Evidences.FlowVar = ev match {
-      case v @ Evidences.FlowVar(id, arity) => v
+      case v @ Evidences.FlowVar(id, arity, ()) => v
       case _ => fail("should be a variable")
     }
   }

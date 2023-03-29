@@ -33,18 +33,18 @@ enum Evidences {
   // e.g. [<α17._2, Try, Try>, <>]
   case Concrete(evs: List[Ev])
   // e.g. α17
-  case FlowVar(id: Int, arity: Int)
+  case FlowVar(id: Int, arity: Int, origin: Any)
 
   def show: String = this match {
     case Evidences.Concrete(evs) => s"[${evs.map(_.show).mkString(", ")}]"
-    case Evidences.FlowVar(id, arity) => s"α${id}"
+    case Evidences.FlowVar(id, arity, origin) => s"α${id}"
   }
 }
 object Evidences {
   var last = -1
-  def fresh(arity: Int): Evidences.FlowVar =
+  def fresh(arity: Int, origin: Any): Evidences.FlowVar =
     last += 1
-    Evidences.FlowVar(last, arity)
+    Evidences.FlowVar(last, arity, origin)
 }
 
 enum FlowType {

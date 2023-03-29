@@ -33,33 +33,43 @@ object Monomorphize extends Phase[CoreLifted, CoreLifted] {
       c => c.show
     }.mkString("\n")
 
+    val binders = analysis.binders.collect { case (id: Id, ftpe: FlowType.Function) => s"${id.name}: ${ftpe.evidences.show}" }.toList.sorted.mkString("\n")
+
+    //    println(s"""|
+    //        |Constraints:
+    //        |-----------
+    //        |${constrs})
+    //        |""".stripMargin)
+    //
+    //    println(s"""|
+    //        |
+    //        |Binders:
+    //        |${binders}
+    //        |""".stripMargin)
+
     val (solved, cls) = solve(analysis.constraints)
 
     val allBounds = analysis.variables.toList.map {
       x => x -> solved.getOrElse(x, Bounds(Set.empty, Set(Ev.zero(x.arity))))
     }
 
-    val cleaned = cleanup(substitution(allBounds))
+    val subst = substitution(allBounds)
+    checkPolymorphicRecursion(subst)
+    val cleaned = cleanup(subst)
 
-    val subst = cleaned.toList.sortBy(_._1.id).map {
+    val prettySubst = substitution(allBounds).toList.sortBy(_._1.id).map {
       case (x, Bounds(lower, upper)) =>  lower.map(_.show).mkString(", ") + " <: " + x.show + " <: " + upper.map(_.show).mkString(", ")
     }.mkString("\n")
 
+    //    println(s"""|
+    //        |
+    //        |Substitution:
+    //        |${prettySubst}
+    //        |""".stripMargin)
+
     given t: TransformationContext(analysis, cleaned, functions = cls)
 
-    val binders = analysis.binders.collect { case (id: Id, ftpe: FlowType.Function) => s"${id.name}: ${ftpe.evidences.show}" }.toList.sorted.mkString("\n")
 
-    //    C.debug(s"""|Solved:
-    //        |-------
-    //        |${subst}
-    //        |
-    //        |Constraints:
-    //        |-----------
-    //        |${constrs}
-    //        |
-    //        |Binders:
-    //        |${binders}
-    //        |""".stripMargin)
 
     val elaborated = elaborate(mod)
 

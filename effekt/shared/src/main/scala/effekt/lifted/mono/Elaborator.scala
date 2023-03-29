@@ -333,11 +333,12 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
       case b: Block => Right(elaborate(b))
     }
 
+
     // find configurations
     val target = T.elaboratedType(ftpe) match {
       case ElaboratedType.Single() => elaborate(b)
       case ElaboratedType.Multi(id, tparams, variants, tpe) =>
-        // TODO here we need to choose the correct type instantation, not the abstracted one:
+        // TODO here we need to choose the correct type instantiation, not the abstracted one:
         val variant = variants.getOrElse(Evidences.Concrete(evidenceArgs),
           INTERNAL_ERROR(s"Cannot find ${id} variant for ${evidenceArgs.map(_.show)}, got variants: ${variants.keys.map(_.show).mkString(", ")}. \n\nCall: ${s}"))
         Block.Member(elaborate(b), variant, tpe)

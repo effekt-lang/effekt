@@ -3,6 +3,7 @@ package lifted
 package mono
 
 import scala.collection.mutable
+import effekt.context.Context
 
 // {} <: _ <: { [<>], [<Try>] }
 case class Bounds(lower: Set[Evidences], upper: Set[Evidences])
@@ -16,6 +17,7 @@ private[mono]
 class Node
 
 type Equivalences = Map[FlowType.Function, Node]
+
 
 case class Solver(
   constraints: List[Constraint],
@@ -33,6 +35,9 @@ case class Solver(
 
   def step(): Solver = constraints match {
     case head :: tail if seen contains head => Solver(tail, seen, subst, functions)
+
+    case Constraint.B(a, b) :: rest if a == b => Solver(rest, seen, subst, functions)
+    case Constraint.E(a, b) :: rest if a == b => Solver(rest, seen, subst, functions)
 
     case Constraint.B(i1: FlowType.Interface, i2: FlowType.Interface) :: rest =>
       assert(i1.id == i2.id, s"The two interfaces are not the same! ${i1} and ${i2}")
@@ -59,6 +64,35 @@ case class Solver(
 
     case Nil => this
   }
+}
+
+// by eta-reducing constraints, we can see that <α._0,α._1> = α (which is allowed in recursive functions;
+//   only stackshape-polymorphic recursion is forbidden)
+def etaReduce(ev: Evidences): Evidences = ev match {
+  case x: Evidences.FlowVar => x
+  case Evidences.Concrete(Ev(Lift.Var(x, 0) :: Nil) :: rest) if allEta(rest, x, 1) => x
+  case _ => ev
+}
+
+def allEta(evs: List[Ev], variable: Evidences.FlowVar, index: Int): Boolean =
+  evs match {
+    case Nil => index == variable.arity
+    case Ev(Lift.Var(`variable`, `index`) :: Nil) :: rest => allEta(rest, variable, index + 1)
+    case _ => false
+  }
+
+
+def freeVars(b: Bounds): Set[Evidences.FlowVar] = b.upper.flatMap(freeVars) ++ b.lower.flatMap(freeVars)
+
+def freeVars(l: Lift): Set[Evidences.FlowVar] = l match {
+  case Lift.Var(x, selector) => Set(x)
+  case _ => Set.empty
+}
+
+def freeVars(ev: Ev): Set[Evidences.FlowVar] = ev.lifts.toSet.flatMap(freeVars)
+def freeVars(evs: Evidences): Set[Evidences.FlowVar] = evs match {
+  case Evidences.Concrete(evs) => evs.toSet.flatMap(freeVars)
+  case x : Evidences.FlowVar => Set(x)
 }
 
 def solve(cs: List[Constraint]): (Map[Evidences.FlowVar, Bounds], Equivalences) =
@@ -109,18 +143,6 @@ def substituteSingleChoice(x: Evidences.FlowVar, ev: Evidences, into: Lift): Lis
   case other => List(other)
 }
 
-
-def freeVars(l: Lift): Set[Evidences.FlowVar] = l match {
-  case Lift.Var(x, selector) => Set(x)
-  case _ => Set.empty
-}
-
-def freeVars(ev: Ev): Set[Evidences.FlowVar] = ev.lifts.toSet.flatMap(freeVars)
-def freeVars(evs: Evidences): Set[Evidences.FlowVar] = evs match {
-  case Evidences.Concrete(evs) => evs.toSet.flatMap(freeVars)
-  case x : Evidences.FlowVar => Set(x)
-}
-
 // Parallel substitution
 // TODO we probably do not need to substitute into the lower bounds, since we never use them.
 class Substitution(subst: Bisubstitution) {
@@ -159,7 +181,7 @@ class Substitution(subst: Bisubstitution) {
 
 def isZero(evs: Evidences): Boolean = evs match {
   case Evidences.Concrete(evs) => evs.forall(ev => ev.lifts.isEmpty)
-  case Evidences.FlowVar(id, arity) => true
+  case Evidences.FlowVar(id, arity,origin) => true
 }
 
 // post processing step: drop all bounds that still mention unification variables
@@ -169,4 +191,40 @@ def cleanup(subst: Bisubstitution): Bisubstitution = subst.map {
     x -> Bounds(lower.filter(e => freeVars(e).isEmpty), upper.filter(e => freeVars(e).isEmpty))
 } filterNot {
   case (x, Bounds(lower, upper)) => lower.forall(isZero) && upper.forall(isZero)
+}
+
+def checkPolymorphicRecursion(subst: Bisubstitution)(using C: Context): Unit = subst foreach {
+  case (x, Bounds(lower, upper)) => (lower ++ upper).foreach { bound =>
+    import effekt.symbols.ErrorMessageInterpolator
+
+    if refersNonTriviallyTo(bound, x) then
+      C.abort(pp"Effect polymorphic recursion is not allowed. The following definition is effect polymorphic since unification variable ${x.show} occurs in instantiation ${bound.show}. All bounds: ${upper.map(_.show)}\n\n${x.origin}")
+  }
+}
+
+
+// it is only problematic if the recursive call occurs under a handler (so a direct recursion is ok)
+// we also need to allow something like ?a <: [<?a._0>, <>] (see test `features/adt.md`)
+// so probably the only thing we want to rule out is to have ?a show up in a non-empty composition!
+def refersNonTriviallyTo(bound: Evidences, variable: Evidences.FlowVar): Boolean = bound match {
+  case Evidences.Concrete(evs) => evs.exists {
+    case Ev(evs) =>
+      // only variables are fine, e.g. <?a._1, ?b._2>
+      // reasoning: all concrete bounds have already been propagated, dropping variables is thus fine.
+      val onlyVariables = evs.forall(isVariable)
+
+      // as soon as we have both variables and concrete bounds, this gives rise to infinite
+      // effect polymorphic recursion.
+      // e.g. <Try, ?a._1>
+      val isMentioned = evs.flatMap(freeVars) contains variable
+
+      isMentioned && !onlyVariables
+  }
+  case Evidences.FlowVar(id, arity, origin) => false
+}
+
+def isVariable(l: Lift): Boolean = l match {
+  case Lift.Try() => false
+  case Lift.Reg() => false
+  case Lift.Var(x, selector) => true
 }
