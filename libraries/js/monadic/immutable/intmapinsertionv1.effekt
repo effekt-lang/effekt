@@ -1,0 +1,175 @@
+module immutable/intmapinsertionv1
+
+import immutable/option
+import immutable/list
+
+// bitwise and
+extern pure def andbit(x: Int, y: Int): Int = 
+    "(x & y)" 
+// bitwise not
+extern pure def notbit(x: Int): Int =
+    "(~x)"
+// bitwise xor
+extern pure def xorbit(x: Int, y: Int): Int =
+    "(x ^ y)"
+
+//floor
+extern pure def floor(x: Int): Int =
+    "(x)"
+
+
+//Insertion und join auf basis vom Patricia-tree
+
+//prefix: Nodes die collapsed wurden enthalten den elimierten Pfad als prefix, depth: branching bit m, wie in v3
+type Dict[A] {
+    Empty();
+    Leaf(actualkey: Int, value: A);
+    Branch(prefix: Int, branchbit: Int, left: Dict[A], right: Dict[A])
+
+}
+
+def even(x: Int)={
+    mod(x,2)==0
+}
+
+def odd(x: Int)={
+    not(even(x))
+}
+
+def zerobit(x: Int, y: Int)={
+    andbit(x, y) == 0
+}
+
+def mask(x: Int, y: Int): Int={
+    andbit(x, y-1)
+}
+
+def matchprefix(x: Int, y: Int, z: Int)={
+    mask(x, z) == y
+}
+
+
+def lookup[A](key: Int, dict: Dict[A]): Option[A]={
+    dict match{
+        case Empty() => None()
+        case Leaf(actualkey, value) => if(actualkey == key){
+            Some(value)
+            } else {None()}
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(not (matchprefix(key, prefix, branchbit))){ 
+            None()                                                   
+        } else if(zerobit(key, branchbit)){
+            lookup(key, leftbranch)
+        } else {
+            lookup(key, rightbranch)
+        }
+    } 
+}
+
+// verbindet zwei nicht-leere Bäume miteinander, deren längste Prefixe nicht ineinander enthalten sein dürfen
+def join[A](xprefix: Int, xtree: Dict[A], yprefix: Int, ytree: Dict[A]): Dict[A]={ 
+    val m = branchingbit(xprefix, yprefix)
+    if(zerobit(xprefix, m)){
+        Branch(mask(xprefix, m), m, xtree, ytree)
+    } else{
+        Branch(mask(xprefix, m), m, ytree, xtree)
+    }
+}
+// einen Wert (insvalue) in einer key-stelle im Baum einfügen
+def insert[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
+    dict match{
+        case Empty() => Leaf(key, insvalue)
+        case Leaf(actualkey, actualvalue) => if(actualkey == key){
+            Leaf(key, insvalue) 
+        }else {
+            join(key, Leaf(key, insvalue), actualkey, dict)
+        }
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(matchprefix(key, prefix, branchbit)){
+            if(zerobit(key, branchbit)){
+                Branch(prefix, branchbit, insert(key, insvalue, leftbranch), rightbranch)
+            }else{
+                Branch(prefix, branchbit, leftbranch, insert(key, insvalue, rightbranch))
+            }
+        }else{
+            join(key, Leaf(key, insvalue), prefix, dict)
+        }
+        
+    }
+}
+
+// Hilfsfuktion
+// findet den ersten bit, in dem sich x und y unterscheiden
+def branchingbit(x: Int, y: Int): Int={
+    lowestbit(xorbit(x, y))
+}
+
+//Hilfsfunktion
+// das kleinste Bit einer Zahl
+def lowestbit(x: Int): Int={
+    if(odd(x)){
+        1
+    }else{
+        2*lowestbit(floor(x/2))
+    }
+}
+
+//Idee: der smart-constructor garantiert, dass es kein Empty-Knoten als child-knoten gibt.  
+// Der Pfad zu einem nicht-alleinstehenden Leaf wird collapsed und der gestrichene Pfad als Prefix im verbunden Knoten gespeichert.
+// so gibt es einen Baum, der immer zwei Childnodes und/oder Leafs hat -> keine Empty()-Teile.
+def branch[A](prefix: Int, branchbit: Int, dict1: Dict[A], dict2: Dict[A]): Dict[A]={
+    (dict1, dict2) match{
+        case (Empty(), Empty()) => Empty() 
+        case (Empty(), r) => r
+        case (l, Empty()) => l
+        case (l, r) => Branch(prefix, branchbit, l, r)
+    } 
+}
+
+def main() = {
+    val t0 = branch(0, 1, branch(2, 4, Leaf(2, "A"), Leaf(6, "B")), Leaf(1, "C"));
+    val t1 = branch(0, 1, Leaf(0, "X"), branch(3, 4, Leaf(3, "Y"), Leaf(7, "Z")));
+    val t2 = branch(0, 1, branch(0, 2, Leaf(0, "A"), Leaf(2, "B")), branch(1, 2, Leaf(1, "C"), Leaf(3, "D")));
+    val t3 = branch(0, 2, Leaf(0 ,"A"), branch(2, 4, Leaf(2, "B"), Leaf(6, "C")))
+    val t4 = branch(3, 4, Leaf(3, "D"), Leaf(7, "E"))
+
+    // val xj0 = join(2, t0, 3, t1) soll garnicht klappen, wegen den join bedingungen
+    
+    //Branch(0, 1, Branch(0, 2, Leaf(0, A), Branch(2, 4, Leaf(2, B), Leaf(6, C))), Branch(3, 4, Leaf(3, D), Leaf(7, E)))
+    val xj0 = join(2, t3, 3, t4)
+    println(xj0)
+
+    //Leaf(1, true)
+    val xi0 = insert(1, true, Empty())
+    println(xi0)
+
+    //Leaf(1, true)
+    val xi1 = insert(1, true, Leaf(1, false))
+    println(xi1)
+
+    //Branch(0, 1, Leaf(0, false), Leaf(1, true))
+    val xi12 = insert(1, true, Leaf(0, false))
+    println(xi12)
+
+    //Branch(0, 1, Branch(2, 4, Leaf(2, A), Leaf(6, B)), Branch(1, 2, Leaf(1, C), Leaf(3, D)))
+    val xi2 = insert(3, "D", t0)
+    println(xi2)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, X), Leaf(2, D)), Branch(3, 4, Leaf(3, Y), Leaf(7, Z)))
+    val xi3 = insert(2, "D", t1)
+    println(xi3)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, A), Leaf(2, B)), Branch(1, 2, Branch(1, 4, Leaf(1, C), Leaf(5, E)), Leaf(3, D)))
+    val xi4 = insert(5, "E", t2)
+    println(xi4)
+
+    
+    //test für nebenfunktionen
+    println(lowestbit(7))
+    println(lowestbit(3))
+    println(lowestbit(2))
+    println(lowestbit(4))
+    println(lowestbit(6))
+
+    println(xorbit(10,4))
+    println(branchingbit(10, 4))
+
+}

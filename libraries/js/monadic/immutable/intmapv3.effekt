@@ -1,0 +1,93 @@
+module immutable/intmapv3
+
+import immutable/option
+import immutable/list
+
+extern pure def andbit(x: Int, y: Int): Int = 
+  "(x & y)" 
+
+//floor
+extern pure def floor(x: Int): Int =
+    "(x)"
+
+//Alternative zur zweiten version, bei der der tatsächliche key gespeichert wird
+
+//leaf besitzt eine weitere Komponente actualkey, die dem eigentlichen key entspricht und im leaf gespeichert wird.
+//Branch besteht nun auch aus einem Tiefenwert branchbit, die als 2er Potenz gewählt wird -> 2^0=1, 2, 4, 8,....m=2^d.
+//Das branchbit entspricht der Node-Tiefe
+type Dict[A] {
+    Empty();
+    Leaf(actualkey: Int, value: A);
+    Branch(branchbit: Int, leftbranch: Dict[A], rightbranch: Dict[A])
+
+}
+// testet ob ein Bit 0 ist mit bitand 
+def zerobit(x: Int, y: Int)={
+    andbit(x, y) == 0
+}
+
+//
+def lookup[A](key: Int, dict: Dict[A]): Option[A]={
+    dict match{
+        case Empty() => None()
+        case Leaf(actualkey, value) => if(actualkey == key){
+            Some(value)
+            } else {None()}
+        case Branch(branchbit, leftbranch, rightbranch) => if(zerobit(key, branchbit)){
+            lookup(key, leftbranch)
+        } else {
+            lookup(key, rightbranch)
+        }
+    } 
+}
+
+//Idee: jeden leeren subtree zu einem leeren Knoten zusammenfassen um den trie zu verkleinern - collapse , smart-constructor
+//nur dass das Leaf den actual key beibehält
+def branch[A](branchbit: Int, dict1: Dict[A], dict2: Dict[A]): Dict[A]={
+    (dict1, dict2) match{ 
+        case (Empty(), Empty()) => Empty() 
+        case (Empty(), Leaf(actualkey, value)) => Leaf(actualkey, value)
+        case (Leaf(actualkey, value), Empty()) => Leaf(actualkey, value)
+        case (leftbranch, rightbranch) => Branch(branchbit, leftbranch, rightbranch)
+    } 
+}
+
+def main() = {
+    // soll None() ergeben
+    val te = Empty[Int]();
+    val xe = lookup(2, te);
+    println(xe)
+
+    // soll None() ergeben
+    val t0 = branch(1, Empty(), branch(2, Empty(),Leaf(3, 3)));
+    val x0 = lookup(2, t0);
+    println(x0)
+
+    // soll Some(true) ergeben
+    val t1 = branch(1, branch(2, Empty(),Leaf(2, true)), Empty());
+    val x1 = lookup(2, t1);
+    println(x1)
+
+    // soll None() ergeben
+    val t2 = branch(1, Leaf(0, 0), Empty());
+    val x2 = lookup(1, t2);
+    println(x2)
+
+    // soll Some(42) ergeben
+    val t3 = branch(1, branch(2, branch(4, Leaf(0, 17), Leaf(4, 42)), Empty()), Empty());
+    val x3 = lookup(4, t3);
+    println(x3)
+
+    // soll Some(D) ergeben
+    val t4 = branch(1, branch(2, Leaf(0, "A"), Leaf(2, "B")), branch(2, Leaf(1, "C"), Leaf(3, "D")));
+    val x4 = lookup(3, t4);
+    println(x4)
+
+    //Tests für Nebenfunktionen
+    println(andbit(1, 3))
+    println(andbit(0, 0))
+    println(andbit(2, 2))
+
+    println(floor(3.1))
+    println(floor(3.9))
+    }

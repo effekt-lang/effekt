@@ -1,0 +1,77 @@
+module immutable/intmapv1
+
+import immutable/option
+import immutable/list
+
+//binary trie - erste Ideen
+
+//einfache binary trie Struktur mit einem Wert im Leaf
+type Dict[A] {
+    Empty();
+    Leaf(value: A);
+    Branch(leftbranch: Dict[A], rightbranch: Dict[A])
+
+}
+
+
+def even(x: Int)={
+    mod(x,2)==0
+}
+
+// einfache lookup Funktion
+def lookup[A](key: Int, dict: Dict[A]): Option[A]={
+    dict match{
+        case Empty() => None()
+        case Leaf(v) => Some(v)
+        case Branch(l, r) => if(even(key)){
+            lookup(key/2, l)
+        } else {
+            lookup(key/2, r)
+        }
+    } 
+}
+
+
+def main() = {
+    // soll None() ergeben
+    val te = Empty[Int]();
+    val xe = lookup(2, te);
+    println(xe)
+
+    // soll None() ergeben
+    val t0 = Branch(Empty(), Branch(Empty(),Leaf(3)));
+    val x0 = lookup(2, t0);
+    println(x0)
+
+    // soll Some(42) ergeben
+    val t1 = Branch(Branch(Empty(),Leaf(42)), Empty());
+    val x1 = lookup(2, t1);
+    println(x1)
+
+    // soll None() ergeben
+    val t2 = Branch(Leaf(0), Empty());
+    val x2 = lookup(1, t2);
+    println(x2)
+
+    // soll Some(true) ergeben
+    val t3 = Branch(Branch(Branch(Leaf(false), Leaf(true)), Empty()), Empty());
+    val x3 = lookup(4, t3);
+    println(x3)
+
+    // soll Some("B") ergeben
+    val t4 = Branch(Branch(Leaf("A"), Leaf("B")), Branch(Leaf("C"), Leaf("D")));
+    val x4 = lookup(2, t4);
+    println(x4)
+
+    println(t4)
+
+    }
+
+
+//D:\UNI\Bthesis\effekt\libraries\js\monadic\immutable
+//D:\UNI\Bthesis\effekt\examples\pos  ---aber maps woanders speichern
+// tests 
+//cd..
+
+//todo verstehen + binary trie
+

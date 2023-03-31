@@ -1,0 +1,91 @@
+module immutable/intmapv2
+
+import immutable/option
+import immutable/list
+
+//andbit
+extern pure def andbit(x: Int, y: Int): Int = 
+  "(x & y)" 
+
+//floor
+extern pure def floor(x: Int): Int =
+    "(x)"
+
+//durch die neue lookup-Funktion musste die Definition von Dict[A] im Leaf angepasst werden.
+
+//Leaf besitzt eine weitere Komponente subkey.
+type Dict[A] {
+    Empty();
+    Leaf(subkey: Int, value: A);
+    Branch(left: Dict[A], right: Dict[A])
+
+}
+def even(x: Int)={
+    mod(x,2)==0
+}
+
+//
+def lookup[A](key: Int, dict: Dict[A]): Option[A]={
+    dict match{
+        case Empty() => None()
+        case Leaf(subkeykey, v) => if(subkeykey == key){
+            Some(v)
+            } else {None()}
+        case Branch(l, r) => if(even(key)){
+            lookup(floor(key/2), l) //durch floor erzeugen wir das div
+        } else { 
+            lookup(floor(key/2), r)
+        }
+    } 
+}
+
+//Idee: jeden leeren subtree zu einem leeren Knoten zusammenfassen um den trie zu verkleinern - collapse , smart constructor
+def branch[A](dict1: Dict[A], dict2: Dict[A]): Dict[A]={
+    (dict1, dict2) match{
+        case (Empty(), Empty()) => Empty()
+        case (Leaf(subkey, v), Empty()) => Leaf(2*subkey, v)
+        case (Empty(), Leaf(subkey, v)) => Leaf(2*subkey + 1, v)
+        case (leftbranch, rightbranch) => Branch(leftbranch, rightbranch)
+    } 
+}
+
+def main() = {
+    // soll None() ergeben
+    val te = Empty[Int]();
+    val xe = lookup(2, te);
+    println(xe)
+
+    // soll None() ergeben
+    val t0 = branch(Empty(), branch(Empty(),Leaf(0, 3)));
+    val x0 = lookup(2, t0);
+    println(x0)
+
+    // soll Some(42) ergeben
+    val t1 = branch(branch(Empty(),Leaf(0, 42)), Empty());
+    val x1 = lookup(2, t1);
+    println(x1)
+
+    // soll None() ergeben
+    val t2 = branch(Leaf(0, false), Empty());
+    val x2 = lookup(1, t2);
+    println(x2)
+
+    // soll Some(true) ergeben
+    val t3 = branch(branch(branch(Leaf(0, false), Leaf(0, true)), Empty()), Empty());
+    val x3 = lookup(4, t3);
+    println(x3)
+
+    // soll Some(D) ergeben
+    val t4 = branch(branch(Leaf(0, "A"), Leaf(0, "B")), branch(Leaf(0, "C"), Leaf(0, "D")));
+    val x4 = lookup(3, t4);
+    println(x4)
+
+
+    //Tests für Nebenfunktionen
+    println(andbit(1, 3))
+    println(andbit(0, 0))
+    println(andbit(2, 2))
+
+    println(floor(3.1))
+    println(floor(3.9))
+    }

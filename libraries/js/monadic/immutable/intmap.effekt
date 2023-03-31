@@ -21,7 +21,7 @@ extern pure def xorbit(x: Int, y: Int): Int =
 extern pure def floor(x: Int): Int =
     "(x)"
 
-//the type definition of the dictionary structure
+//the type definition of the dictionary 
 type Dict[A] {
     Empty();
     Leaf(actualkey: Int, value: A);
@@ -83,8 +83,7 @@ def lookup[A](key: Int, dict: Dict[A]): Option[A]={
     } 
 }
 
-// joins two non empty trees into one
-// verbindet zwei nicht-leere Bäume miteinander, deren längste Prefixe nicht ineinander enthalten sein dürfen
+// joins two non empty dicts into one
 def join[A](xprefix: Int, xdict: Dict[A], yprefix: Int, ydict: Dict[A]): Dict[A]={ 
     val m = branchingbit(xprefix, yprefix)
     if(zerobit(xprefix, m)){
@@ -94,7 +93,7 @@ def join[A](xprefix: Int, xdict: Dict[A], yprefix: Int, ydict: Dict[A]): Dict[A]
     }
 }
 
-// insert a value into a tree at a key position
+// insert a value into a dict at a key position
 def insert[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
     dict match{
         case Empty() => Leaf(key, insvalue)
@@ -116,7 +115,7 @@ def insert[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
     }
 }
 
-// basicly the same as insert, but if a key is already binded to a value we keep the binded value - important for merge
+// basicly the same as insert, but if a key is already bound to a value we keep the bound value - important for merge
 def insert2[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
     dict match{
         case Empty() => Leaf(key, insvalue)
@@ -138,7 +137,7 @@ def insert2[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
     }
 }
 
-// merges two trees into one
+// merges two dicts into one
 def merge[A](xdict: Dict[A], ydict: Dict[A]): Dict[A]={
     (xdict, ydict) match{
         case (Empty(), ydict) => ydict
@@ -146,27 +145,27 @@ def merge[A](xdict: Dict[A], ydict: Dict[A]): Dict[A]={
         case (Leaf(xkey, xvalue), ydict) => insert(xkey, xvalue, ydict)
         case (xdict, Leaf(ykey, yvalue)) => insert2(ykey, yvalue, xdict) 
         case (Branch(xprefix, xbranchbit, xleftbranch, xrightbranch), 
-              Branch(yprefix, ybranchbit, yleftbranch, yrightbranch)) => if(xbranchbit  == ybranchbit && xprefix == yprefix){// Bäume haben selben Prefix
+              Branch(yprefix, ybranchbit, yleftbranch, yrightbranch)) => if(xbranchbit  == ybranchbit && xprefix == yprefix){// The trees have the same prefix
                 branch(xprefix, xbranchbit, merge(xleftbranch, yleftbranch), merge(xrightbranch, yrightbranch))
-              } else if(xbranchbit < ybranchbit && matchprefix(yprefix, xprefix, xbranchbit)){  //xprefix ist in yprefix enthalten
+              } else if(xbranchbit < ybranchbit && matchprefix(yprefix, xprefix, xbranchbit)){  //xprefix is contained in yprefix 
                 if(zerobit(yprefix, xbranchbit)){
                     branch(xprefix, xbranchbit, merge(xleftbranch, ydict), xrightbranch)
                 } else {
                     branch(xprefix, xbranchbit, xleftbranch, merge(xrightbranch, ydict))
                 }
-              } else if(xbranchbit > ybranchbit && matchprefix(xprefix, yprefix, ybranchbit)){ //yprefix ist in xprefix enthalten
+              } else if(xbranchbit > ybranchbit && matchprefix(xprefix, yprefix, ybranchbit)){ //yprefix is contained in xprefix 
                 if(zerobit(xprefix, ybranchbit)){
                     branch(yprefix, ybranchbit, merge(xdict, yleftbranch), yrightbranch)
                 } else {
                     branch(yprefix, ybranchbit, yleftbranch, merge(xdict, yrightbranch))
                 }
-              } else { //xdict und ydict haben keinen gemeinsamen prefix
+              } else { //xdict und ydict have no common prefix
                 join(xprefix, xdict, yprefix, ydict)
               }
     }
 }
 
-//deletes the binding of a value on a key position in a tree
+//deletes the binding of a value on a key position in a dict
 def delete[A](delkey: Int, dict: Dict[A]): Dict[A] = {
     dict match{
         case Empty() => Empty()
@@ -192,9 +191,7 @@ def delete[A](delkey: Int, dict: Dict[A]): Dict[A] = {
         } else {
             branch(prefix, branchbit, Leaf(actualkey, value), delete(delkey, rightbranch))
         }
-        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(lookup(delkey, dict) == None()){
-            dict //noch wegmachen
-        } else if(zerobit(delkey, branchbit)){
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(zerobit(delkey, branchbit)){
             branch(prefix, branchbit, delete(delkey, leftbranch), rightbranch)
         } else {
             branch(prefix, branchbit, leftbranch, delete(delkey, rightbranch))

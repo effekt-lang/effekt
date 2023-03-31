@@ -1,0 +1,223 @@
+module immutable/intmapmergev1
+
+import immutable/option
+import immutable/list
+
+// bitwise and
+extern pure def andbit(x: Int, y: Int): Int = 
+    "(x & y)" 
+// bitwise not
+extern pure def notbit(x: Int): Int =
+    "(~x)"
+// bitwise xor
+extern pure def xorbit(x: Int, y: Int): Int =
+    "(x ^ y)"
+
+//floor
+extern pure def floor(x: Int): Int =
+    "(x)"
+
+
+//Insertion und Merge auf basis vom Patricia-tree
+
+//prefix: Nodes die collapsed wurden enthalten den elimierten Pfad als prefix, depth: branching bit m, wie in v3
+type Dict[A] {
+    Empty();
+    Leaf(actualkey: Int, value: A);
+    Branch(prefix: Int, branchbit: Int, left: Dict[A], right: Dict[A])
+
+}
+
+def even(x: Int)={
+    mod(x,2)==0
+}
+
+def odd(x: Int)={
+    not(even(x))
+}
+
+def zerobit(x: Int, y: Int)={
+    andbit(x, y) == 0
+}
+
+def mask(x: Int, y: Int): Int={
+    andbit(x, y-1)
+}
+
+def matchprefix(x: Int, y: Int, z: Int)={
+    mask(x, z) == y
+}
+
+
+def lookup[A](key: Int, dict: Dict[A]): Option[A]={
+    dict match{
+        case Empty() => None()
+        case Leaf(actualkey, value) => if(actualkey == key){
+            Some(value)
+            } else {None()}
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(not (matchprefix(key, prefix, branchbit))){ 
+            None()                                                   
+        } else if(zerobit(key, branchbit)){
+            lookup(key, leftbranch)
+        } else {
+            lookup(key, rightbranch)
+        }
+    } 
+}
+
+// verbindet zwei nicht-leere Bäume miteinander, deren längste Prefixe nicht ineinander enthalten sein dürfen
+def join[A](xprefix: Int, xtree: Dict[A], yprefix: Int, ytree: Dict[A]): Dict[A]={ 
+    val m = branchingbit(xprefix, yprefix)
+    if(zerobit(xprefix, m)){
+        branch(mask(xprefix, m), m, xtree, ytree)
+    } else{
+        branch(mask(xprefix, m), m, ytree, xtree)
+    }
+}
+// einen Wert (insvalue) in einer key-stelle im Baum einfügen
+def insert[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
+    dict match{
+        case Empty() => Leaf(key, insvalue)
+        case Leaf(actualkey, actualvalue) => if(actualkey == key){
+            Leaf(key, insvalue) 
+        }else {
+            join(key, Leaf(key, insvalue), actualkey, dict)
+        }
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(matchprefix(key, prefix, branchbit)){
+            if(zerobit(key, branchbit)){
+                branch(prefix, branchbit, insert(key, insvalue, leftbranch), rightbranch)
+            }else{
+                branch(prefix, branchbit, leftbranch, insert(key, insvalue, rightbranch))
+            }
+        }else{
+            join(key, Leaf(key, insvalue), prefix, dict)
+        }
+        
+    }
+}
+
+// einen Wert (insvalue) in einer key-stelle im Baum einfügen, aber behält alten Wert bei gleichem key
+def insert2[A](key: Int, insvalue: A, dict: Dict[A]): Dict[A]={
+    dict match{
+        case Empty() => Leaf(key, insvalue)
+        case Leaf(actualkey, actualvalue) => if(actualkey == key){
+            Leaf(actualkey, actualvalue) 
+        }else {
+            join(key, Leaf(key, insvalue), actualkey, dict)
+        }
+        case Branch(prefix, branchbit, leftbranch, rightbranch) => if(matchprefix(key, prefix, branchbit)){
+            if(zerobit(key, branchbit)){
+                branch(prefix, branchbit, insert2(key, insvalue, leftbranch), rightbranch)
+            }else{
+                branch(prefix, branchbit, leftbranch, insert2(key, insvalue, rightbranch))
+            }
+        }else{
+            join(key, Leaf(key, insvalue), prefix, dict)
+        }
+        
+    }
+}
+
+// Verbindet zwei Bäume zu einem
+def merge[A](xtree: Dict[A], ytree: Dict[A]): Dict[A]={
+    (xtree, ytree) match{
+        case (Empty(), ytree) => ytree
+        case (xtree, Empty()) => xtree
+        case (Leaf(xkey, xvalue), ytree) => insert(xkey, xvalue, ytree)
+        case (xtree, Leaf(ykey, yvalue)) => insert2(ykey, yvalue, xtree) 
+        case (Branch(xprefix, xbranchbit, xleftbranch, xrightbranch), 
+              Branch(yprefix, ybranchbit, yleftbranch, yrightbranch)) => if(xbranchbit  == ybranchbit && xprefix == yprefix){// Bäume haben selben Prefix
+                branch(xprefix, xbranchbit, merge(xleftbranch, yleftbranch), merge(xrightbranch, yrightbranch))
+              } else if(xbranchbit < ybranchbit && matchprefix(yprefix, xprefix, xbranchbit)){  //xprefix ist in yprefix enthalten
+                if(zerobit(yprefix, xbranchbit)){
+                    branch(xprefix, xbranchbit, merge(xleftbranch, ytree), xrightbranch)
+                } else {
+                    branch(xprefix, xbranchbit, xleftbranch, merge(xrightbranch, ytree))
+                }
+              } else if(xbranchbit > ybranchbit && matchprefix(xprefix, yprefix, ybranchbit)){ //yprefix ist in xprefix enthalten
+                if(zerobit(xprefix, ybranchbit)){
+                    branch(yprefix, ybranchbit, merge(xtree, yleftbranch), yrightbranch)
+                } else {
+                    branch(yprefix, ybranchbit, yleftbranch, merge(xtree, yrightbranch))
+                }
+              } else { //xtree und ytree haben keinen gemeinsamen prefix
+                join(xprefix, xtree, yprefix, ytree)
+              }
+    }
+}
+
+
+// Hilfsfuktion
+// findet den ersten bit, in dem sich x und y unterscheiden
+def branchingbit(x: Int, y: Int): Int={
+    lowestbit(xorbit(x, y))
+}
+
+//Hilfsfunktion
+// das kleinste Bit einer Zahl
+def lowestbit(x: Int): Int={
+    if(odd(x)){
+        1
+    }else{
+        2*lowestbit(floor(x/2))
+    }
+}
+
+//Idee: der smart-constructor garantiert, dass es kein Empty-Knoten als child-knoten gibt.  
+// Der Pfad zu einem nicht-alleinstehenden Leaf wird collapsed und der gestrichene Pfad als Prefix im verbunden Knoten gespeichert.
+// so gibt es einen Baum, der immer zwei Childnodes und/oder Leafs hat -> keine Empty()-Teile.
+def branch[A](prefix: Int, branchbit: Int, dict1: Dict[A], dict2: Dict[A]): Dict[A]={
+    (dict1, dict2) match{
+        case (Empty(), Empty()) => Empty() 
+        case (Empty(), r) => r
+        case (l, Empty()) => l
+        case (l, r) => Branch(prefix, branchbit, l, r)
+    } 
+}
+
+def main() = {
+    val t0 = branch(0, 1, branch(2, 4, Leaf(2, "A"), Leaf(6, "B")), Leaf(1, "C"));
+    val t1 = branch(0, 1, Leaf(0, "X"), branch(3, 4, Leaf(3, "Y"), Leaf(7, "Z")));
+    val t2 = branch(0, 1, branch(0, 2, Leaf(0, "A"), Leaf(2, "B")), branch(1, 2, Leaf(1, "C"), Leaf(3, "D")));
+    val t3 = branch(0, 2, Leaf(0 , 17), branch(2, 4, Leaf(2, 42), Leaf(6, 29)))
+    val t4 = branch(3, 4, Leaf(3, true), Leaf(7, false))
+    val t5 = branch(3, 4, Leaf(3, false), Leaf(7, true))
+
+    //Ergebnis: t0
+    val mrg1 = merge(Empty(), t0)
+    println(mrg1)
+
+    //Ergebnis: t0
+    val mrg2 = merge(t0, Empty())
+    println(mrg2)
+
+    //Branch(0, 1, Branch(2, 4, Leaf(2, A), Leaf(6, B)), Branch(1, 2, Leaf(1, C), Leaf(3, D)))
+    val mrg3 = merge(t0, Leaf(3, "D"))
+    println(mrg3)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, A), Leaf(2, X)), Branch(1, 2, Leaf(1, C), Leaf(3, D)))
+    val mrg4 = merge(Leaf(2, "X"), t2)
+    println(mrg4)
+
+    //t2
+    val mrg5 = merge(t2, Leaf(2, "X"))
+    println(mrg5)
+    
+    //Ergebnis: t3
+    val mrg6 = merge(t3, t3)
+    println(mrg6)
+
+    //Branch(0, 1, Branch(0, 2, Leaf(0, X), Branch(2, 4, Leaf(2, A), Leaf(6, B))), Branch(1, 2, Leaf(1, C), Branch(3, 4, Leaf(3, Y), Leaf(7, Z))))
+    val mrg7 = merge(t0, t1)
+    println(mrg7)
+
+    //t4
+    val mrg8 = merge(t4, t5)
+    println(mrg8)
+
+    //t5
+    val mrg9 = merge(t5, t4)
+    println(mrg9)
+
+
+}

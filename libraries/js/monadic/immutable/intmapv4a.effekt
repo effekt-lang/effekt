@@ -1,0 +1,135 @@
+module immutable/intmapv4a
+
+import immutable/option
+import immutable/list
+
+extern pure def andbit(x: Int, y: Int): Int = 
+  "(x & y)" 
+
+//floor
+extern pure def floor(x: Int): Int =
+    "(x)"
+//Patricia-Tree
+
+//prefix: depth: branching bit m, wie in v3
+type Dict[A] {
+    Empty();
+    Leaf(actkey: Int, value: A);
+    Branch(prefix: Int, depth: Int, left: Dict[A], right: Dict[A])
+
+}
+// testet ob ein Bit 0 ist mit bitand 
+def zerobit(x: Int, y: Int)={
+    andbit(x, y) == 0
+}
+
+def mask(x: Int, y: Int): Int={
+    andbit(x, y-1)
+}
+def matchprefix(x: Int, y: Int, z: Int)={
+    mask(x, z) == y
+}
+
+
+effect Keynotfound {          
+    def keynotfound[A](): A
+}
+// lookup soll, statt Option rauszugeben, A oder keynotfound rausgeben. (wollen testen ob das schneller ist)
+def lookup[A](key: Int, dict: Dict[A]): A /{Keynotfound}={ // soll immer A ausgeben, nicht option
+    dict match{
+        case Empty() => do keynotfound()
+        case Leaf(actualkey, value) => if(actualkey == key){
+            value
+            } else { do keynotfound() }
+        case Branch(p, m, l, r) => if(zerobit(key, m)){
+            lookup(key, l)
+        } else {
+            lookup(key, r)
+        }
+    } 
+}
+
+def handlekeynotfound[A] {prog: () => A/ Keynotfound}: Option[A] = {
+    try{
+        Some(prog())
+    } with Keynotfound {
+        def keynotfound[B]() = None()
+    }
+}
+
+
+//Idee: der smart-constructor garantiert, dass es kein Empty-Knoten als child-knoten gibt.  
+// Der Pfad zu einem nicht-alleinstehenden Leaf wird collapsed und der gestrichene Pfad als Prefix im verbunden Knoten gespeichert.
+// so gibt es einen Baum, der immer zwei Childnodes und/oder Leafs hat -> keine Empty()-Teile.
+def branch[A](prefix: Int, branchbit: Int, dict1: Dict[A], dict2: Dict[A]): Dict[A]={
+    (dict1, dict2) match{
+        case (Empty(), Empty()) => Empty() 
+        case (Empty(), r) => r
+        case (l, Empty()) => l
+        case (l, r) => Branch(prefix, branchbit, l, r)
+    } 
+}
+
+def main() = {
+    //Tests
+    // soll None() ergeben (man geht aber von bäumen aus, deren tiefe >= 2 ist.)
+    val te = Empty[Int]();
+    val xe = handlekeynotfound{lookup(2, te)}; //- so wie hier
+    println(xe)
+
+    // soll Some(A), None(), None(), Some(B), None(),None()
+    val t0 = branch(0, 1, Leaf(4, "A"), branch(1, 4, Leaf(1, "B"),Leaf(5, "C")));
+    val x0 = handlekeynotfound{lookup(4, t0)};
+    val x01 = handlekeynotfound{lookup(0, t0)};
+    val x02 = handlekeynotfound{lookup(8, t0)};
+    val x03 = handlekeynotfound{lookup(1, t0)};
+    val x04 = handlekeynotfound{lookup(9, t0)};
+    val x05 = handlekeynotfound{lookup(3, t0)}; //da durch prefix 01 nicht erreichbar 7=111
+    println(x0)
+    println(x01)
+    println(x02)
+    println(x03)
+    println(x04)
+    println(x05)
+
+    // soll Some(42), Some(17), None() ergeben //da branchbit=4 ist prefix 00
+    val t1 = branch(0, 4, Leaf(0, 17), Leaf(4, 42));
+    val x1 = handlekeynotfound{lookup(4, t1)};
+    val x11 = handlekeynotfound{lookup(0, t1)};
+    val x12 = handlekeynotfound{lookup(3, t1)};
+    println(x1)
+    println(x11)
+    println(x12)
+
+    // soll None() ergeben, weil prefix 0 ist
+    val t2 = branch(1, 4, Leaf(1, true), Leaf(5, false));
+    val x2 = handlekeynotfound{lookup(4, t2)};
+    println(x2)
+    
+
+    // soll some(false),some(true),None()
+    val t3 = branch(3, 4, Leaf(3, true), Leaf(7, false));
+    val x3 = handlekeynotfound{lookup(7, t3)};
+    val x31 = handlekeynotfound{lookup(3, t3)};
+    val x32 = handlekeynotfound{lookup(5, t3)};
+    println(x3)
+    println(x31)
+    println(x32)
+
+    // soll Some(D) ergeben // obwohl nicht collapsed wird, braucht man den aktuellen prefix von 1 im rechten teil
+    val t4 = branch(0, 1, branch(0, 2, Leaf(0, "A"), Leaf(2, "B")), branch(1, 2, Leaf(1, "C"), Leaf(3, "D")));
+    val x4 = handlekeynotfound{lookup(3, t4)};
+    println(x4)
+
+    // soll Some(9), None() ergeben -> baum soll mindestens größe zwei sein eigentlich??
+    val t5 = Leaf(3, 9);
+    val x5 = handlekeynotfound{lookup(3, t5)};
+    val x51 = handlekeynotfound{lookup(2, t5)};
+    println(x5)
+    println(x51)
+
+    //test für nebenfunktionen
+    println(mask(3,3))
+    println(matchprefix(3,3,3))
+    println(matchprefix(3,2,3))
+}
