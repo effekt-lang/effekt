@@ -252,12 +252,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val maybeValueArgs: P[List[Term]] =
-    many(valueArgSection) ^^ { _.flatten }
+    valueArgs.? ^^ { o => o.getOrElse(Nil) }
 
   lazy val valueArgs: P[List[Term]] =
-    some(valueArgSection) ^^ { _.flatten }
-
-  lazy val valueArgSection: P[List[Term]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | failure("Expected a value argument list")
 
   lazy val typeArgs: P[List[ValueType]] =
