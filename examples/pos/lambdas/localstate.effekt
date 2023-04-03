@@ -18,7 +18,7 @@ def main() = {
 
     incrementer()
     incrementer()
-    incrementer()
+    incrementer();
     ()
   }
   local()
