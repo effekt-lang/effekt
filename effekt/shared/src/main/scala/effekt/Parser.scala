@@ -370,22 +370,28 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | primExpr
     )
 
-  lazy val callTarget: P[CallTarget] =
-    ( idTarget
-    | `(` ~> expr <~ `)` ^^ ExprTarget.apply
-    )
-
-  lazy val idTarget: P[CallTarget] =
-    idRef ^^ IdTarget.apply
-
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
 
   lazy val newExpr: P[Term] = `new` ~/> implementation ^^ New.apply
 
   lazy val funCall: P[Term] =
-    ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply
-    | callTarget ~ maybeTypeArgs ~ valueArgs ~ success(List.empty[Term]) ^^ Call.apply
-    | callTarget ~ maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs ^^ Call.apply
+    callTarget ~ some(arguments) ^^ {
+      case target ~ ((targs ~ vargs ~ bargs) :: rest) =>
+        rest.foldLeft[Term](Call(target, targs, vargs, bargs)) {
+          case (expr, (targs ~ vargs ~ bargs)) => Call(ExprTarget(expr), targs, vargs, bargs)
+        }
+      case target ~ Nil => sys.error("should not happen since arguments cannot be nil.")
+    }
+
+  lazy val arguments: P[(List[ValueType] ~ List[Term] ~ List[Term])] =
+    ( maybeTypeArgs ~ valueArgs ~ blockArgs
+    | maybeTypeArgs ~ valueArgs ~ success(List.empty[Term])
+    | maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs
+    )
+
+  lazy val callTarget: P[CallTarget] =
+    ( `(` ~> expr <~ `)` ^^ ExprTarget.apply
+    | idRef ^^ IdTarget.apply
     )
 
   lazy val matchExpr: P[Term] =
