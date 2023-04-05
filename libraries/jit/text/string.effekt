@@ -100,3 +100,10 @@ def read(s: String): Option[Boolean] = unsafeToOption{ () => unsafeRead(s) }
 def toInt(s: String): Option[Int] = read(s)
 def toDouble(s: String): Option[Double] = read(s)
 def toBoolean(s: String): Option[Boolean] = read(s)
+
+// Byte arrays
+extern type Bytes
+extern pure def bytes(s: String): Bytes = "bytes(String): Bytes"
+extern pure def length(b: Bytes): Int = "length(Bytes): Int"
+// TODO make safe (using unsafe/internal or unsafeToOption)
+extern pure def index(b: Bytes, i: Int): Int = "unsafeIndex(Bytes, Int): Int"
