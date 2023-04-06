@@ -42,7 +42,7 @@ object Transformer {
   def transform(label: String, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val frameDescriptor = env.frameDescriptor;
 
-    implicit val BC: BlockContext = new BlockContext(frameDescriptor, env);
+    implicit val BC: BlockContext = new BlockContext(frameDescriptor, env, label);
 
     val terminator = transform(body);
     var instructions = BC.instructions.toList;
@@ -98,14 +98,14 @@ object Transformer {
 
         transform(typ) match {
         case Type.Datatype(adtType) =>
-          val (_, defParams, defBlock) = transformInline(defaultClause)
+          val (_, defParams, defBlock) = transformInline(defaultClause, label="/m*")
           val defLabel = emit(defBlock)
           val defaultClauseJit = Clause(defParams, defLabel)
 
           Match(adtType, transformArgument(v).id, (for (i <- 0 to clauseMap.keys.max) yield {
             if (clauseMap.contains(i)) {
               val clause = clauseMap(i)
-              val (closesOver, params, block) = transformInline(clause);
+              val (closesOver, params, block) = transformInline(clause, label=s"/m${i}");
               val label = emit(block);
               Clause(params, label)
             } else { defaultClauseJit }
@@ -113,8 +113,8 @@ object Transformer {
         case Type.Integer() => {
           val elseClause = clauseMap.getOrElse(machine.builtins.False, defaultClause)
           val thenClause = clauseMap.getOrElse(machine.builtins.True, defaultClause)
-          val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);
-          val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause)
+          val (_ign1, thenArgs, thenBlock) = transformInline(thenClause, label="/?t");
+          val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause, label="/?f")
           val elseLabel = emit(elseBlock);
           emit(IfZero(transformArgument(v).id, Clause(elseArgs, elseLabel)));
           emitInlined(thenBlock)
@@ -131,9 +131,9 @@ object Transformer {
       }
       case machine.New(name, clauses, rest) => {
         val frees = transformParameters(clauses.map{ clause => analysis.freeVariables(clause) }.reduce(_ ++ _).toList)
-        val transformedClauses = clauses.map({
-          case machine.Clause(parameters, body) => transformInEnv(machine.Clause(parameters, body), frees)
-        });
+        val transformedClauses = clauses.zipWithIndex.map {
+          case (machine.Clause(parameters, body), i) => transformInEnv(machine.Clause(parameters, body), frees, label=s"/c${i}")
+        };
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
         val out = outs(RegisterType.Ptr).head
         val targets = transformedClauses.map({case (_,_,block) => emit(block)})
@@ -146,7 +146,7 @@ object Transformer {
         Invoke(transformArgument(value).id, tag, transformArguments(environment))
       }
       case machine.PushFrame(frame, rest) => {
-        val (args, _, target) = transformClosure(frame);
+        val (args, _, target) = transformClosure(frame, label="/p");
         emit(Push(target, args));
         transform(rest)
       }
@@ -190,7 +190,7 @@ object Transformer {
         emitInlined(restBlock)
       }
       case machine.NewStack(name, region, frame, rest) => {
-        val (closesOver, _, target) = transformClosure(frame);
+        val (closesOver, _, target) = transformClosure(frame, "/r");
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name, region), rest));
         val List(out, regReg) = outs(RegisterType.Ptr) : @unchecked
         emit(NewStack(out, regReg, target, closesOver));
@@ -244,18 +244,18 @@ object Transformer {
       case machine.Type.Region() => Type.Region()
   }
 
-  def transformClosure(machineClause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
+  def transformClosure(machineClause: machine.Clause, label: String = "/")(using PC: ProgramContext, BC: BlockContext): (RegList, RegList, BlockLabel) = {
     val machine.Clause(machineParams, machineBody) = machineClause;
     val freeParams = transformParameters(machine.analysis.freeVariables(machineClause).toList);
     val freeArgs = transformArguments(freeParams);
     val jitParams = transformParameters(machineParams);
     val locals = jitParams ++ freeParams;
     val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val label = emit(transform("?generated", locals, machineBody));
-    (freeArgs, args, label)
+    val newlabel = emit(transform(s"${BC.label}${label}", locals, machineBody));
+    (freeArgs, args, newlabel)
   }
 
-  def transformInline(machineClause: machine.Clause, reuse: Boolean = true)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
+  def transformInline(machineClause: machine.Clause, reuse: Boolean = true, label: String = "")(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
     val machine.Clause(machineParams, machineBody) = machineClause;
     val jitParams = transformParameters(machineParams);
     val locals = if (reuse) then {
@@ -266,18 +266,18 @@ object Transformer {
       jitParams ++ BC.environment
     }
     val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val block = transform("?generated", locals, machineBody);
+    val block = transform(f"${BC.label}${label}", locals, machineBody);
     extendFrameDescriptorTo(block.frameDescriptor);
     (transformArguments(BC.environment), args, block)
   }
 
-  def transformInEnv(machineClause: machine.Clause, env: Environment)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
+  def transformInEnv(machineClause: machine.Clause, env: Environment, label: String = "/")(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
     val machine.Clause(machineParams, machineBody) = machineClause;
     val jitParams = transformParameters(machineParams);
     val envArgs = transformArguments(env)
     val locals = jitParams ++ env;
     val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val block = transform("?generated", locals, machineBody);
+    val block = transform(s"${BC.label}${label}", locals, machineBody);
     extendFrameDescriptorTo(block.frameDescriptor);
     (transformArguments(env), args, block)
   }
@@ -378,7 +378,8 @@ object Transformer {
   }
 
   class BlockContext(var frameDescriptor: FrameDescriptor,
-                     var environment: Environment) {
+                     var environment: Environment,
+                     val label: String) {
     val instructions: ListBuffer[Instruction] = ListBuffer();
   }
 
