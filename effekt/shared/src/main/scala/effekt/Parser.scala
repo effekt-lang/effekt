@@ -522,10 +522,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
     |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
     | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
+    | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
     | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
-    | failure("Expected either a function type (e.g., A => B / {E} or => B) or an interface type (e.g., State[T]).")
+    | failure("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
     )
 
   lazy val blockTypeParam: P[(Option[IdDef], BlockType)] =
@@ -744,6 +745,14 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
 
   def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
     rep1sep(p, sep) ^^ { _.toList }
+
+  extension [T] (p: Parser[T]) {
+    def !!(errorMessage: T => String): Parser[Nothing] =
+      p.flatMap(t => error(errorMessage(t)))
+
+    def !!!(errorMessage: String): Parser[Nothing] =
+      p.flatMap(_ => error(errorMessage))
+  }
 
   implicit class PositionOps[T](val self: T) {
     def withPositionOf(other: Any): self.type = { dupAll(other, self); self }
