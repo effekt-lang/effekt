@@ -204,7 +204,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe) : ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
+    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -513,7 +513,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
-    | failure("Expected a type")
+    | failure("Expected a value type")
     )
 
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
@@ -525,6 +525,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
     | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
+    | failure("Expected either a function type (e.g., A => B / {E} or => B) or an interface type (e.g., State[T]).")
     )
 
   lazy val blockTypeParam: P[(Option[IdDef], BlockType)] =
@@ -532,7 +533,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val interfaceType: P[BlockTypeRef] =
     ( idRef ~ maybeTypeArgs ^^ { case (id ~ targs) => BlockTypeRef(id, targs): BlockTypeRef }
-    | failure("Expected an interface / effect")
+    | failure("Expected an interface type")
     )
 
   lazy val maybeEffects: P[Effects] =
