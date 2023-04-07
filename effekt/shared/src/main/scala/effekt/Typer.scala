@@ -1357,7 +1357,12 @@ trait TyperOps extends ContextOps { self: Context =>
        case tpe => abort(pretty"Expected function type, but got ${tpe}.")
      }
      .orElse(functionTypeOption(s))
-     .getOrElse(abort(pretty"Cannot find type for ${s.name} -- (mutually) recursive functions need to have an annotated return type."))
+     .getOrElse {
+       if (s.name.name == "resume")
+        abort(pretty"Cannot find `resume`. Maybe you try to resume inside of an object literal and not as part of `try { ... } with ...`?")
+       else
+        abort(pretty"Cannot find type for ${s.name} -- (mutually) recursive functions need to have an annotated return type.")
+     }
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
     annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s)).getOrElse(abort(pretty"Cannot find type for ${s.name}."))
