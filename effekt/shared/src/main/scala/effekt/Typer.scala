@@ -204,53 +204,72 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case tree @ source.TryHandle(prog, handlers) =>
 
         // (1) extract all handled effects and capabilities
-        var providedCapabilities: List[symbols.BlockParam] = Nil
-        var handledEffects: List[InterfaceType] = Nil
-        val selfRegion = Context.getSelfRegion(tree)
-
-        handlers foreach Context.withFocus { h =>
+        val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
-          if (handledEffects contains effect) {
-            Context.error(pretty"Effect ${effect} is handled twice.")
-          } else {
-            handledEffects = handledEffects :+ effect
-            val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
-
-            Context.bind(capability, capability.tpe, CaptureSet(capability.capture))
-            providedCapabilities = providedCapabilities :+ capability
-          }
+          val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
+          Context.bind(capability, capability.tpe, CaptureSet(capability.capture))
+          capability
         }
+
+        val selfRegion = Context.getSelfRegion(tree)
 
         // Create a fresh capture variable for the continuations ?Ck
         val continuationCapt = Context.freshCaptVar(CaptUnificationVar.HandlerRegion(tree))
 
         // All used captures flow into the continuation capture, except the ones handled by this handler.
-        // TODO refactor and use flowIntoWithout
         val continuationCaptHandled = Context.without(continuationCapt, selfRegion :: providedCapabilities.map(_.capture))
 
-        // Check the handled program
+        // (2) Check the handled program
         val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
           given Captures = continuationCaptHandled
           Context.withRegion(selfRegion) { checkStmt(prog, expected) }
         }
 
+        // (3) Check the handlers
         // Also all capabilities used by the handler flow into the capture of the continuation
-        given Captures = continuationCaptHandled
 
         var handlerEffs: ConcreteEffects = Pure
 
         handlers foreach Context.withFocus { h =>
+          given Captures = continuationCaptHandled
           val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
           handlerEffs = handlerEffs ++ usedEffects
         }
 
-        val handled = asConcrete(Effects(providedCapabilities.map { cap => cap.tpe.asInterfaceType }))
+        // (4) Wellformedness checks
+        val handlerFor = providedCapabilities.map { cap =>
+          // all effects have to be concrete at this point in time
+          val concreteEffect = Context.unification(cap.tpe.asInterfaceType)
+          (concreteEffect, cap)
+        }
 
-        val unusedEffects = handled -- effs
+        // Helper definitions:
+        // - capabilities that are bound explicitly by the user
+        val explicitCapabilities = handlers.flatMap { _.capability.map(_.symbol) }.toSet
+        // - all effects that are handled
+        val handled = ConcreteEffects(handlerFor.map(_._1))
+        // - capabilities grouped by effect
+        val capabilityGroups = handlerFor.groupBy(_._1).view.mapValues(_.map(_._2)).toList
 
-        // TODO only issue warning if they are not bound to capabilities in source
-        if (unusedEffects.nonEmpty)
-          Context.warning(pp"Handling effects that are not used: ${unusedEffects}")
+        // Compute groups of capabilities that handle the same effects, then
+        //  1) check whether all are bound explicitly (which would be fine)
+        //  2) it is only a singleton set (which is fine)
+        capabilityGroups.foreach {
+          case (effect, capabilities) if capabilities.size > 1 =>
+            val allExplicit = capabilities.forall { c => explicitCapabilities contains c }
+
+            if (!allExplicit)
+              Context.warning(pp"There are multiple handlers for effect ${effect}; this might not be intended.\nMaybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?")
+          case _ => ()
+        }
+        capabilityGroups.foreach {
+          case (effect, capabilities) =>
+            val allImplicit = capabilities.forall { c => !(explicitCapabilities contains c) }
+            val used = effs.exists(e => e == effect)
+
+            if (allImplicit && !used)
+              Context.warning(pp"Handling effect ${effect}, which seems not to be used by the program.")
+        }
 
         // The captures of the handler continue flowing into the outer scope
         usingCapture(continuationCapt)
