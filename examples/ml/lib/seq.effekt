@@ -1,0 +1,41 @@
+import immutable/seq
+
+def main() = {
+
+  def generate(to: Int, acc: Seq[Int]): Seq[Int] =
+    if (to <= 0) acc
+    else generate(to - 1, cons(to, acc))
+
+  def printAll(s: Seq[Int]): Unit =
+    uncons(s) match {
+      case IsEmpty() => ()
+      case View(a, tail) =>
+        println(a);
+        printAll(tail)
+    }
+
+  def printN(s: Seq[Int], n: Int): Unit =
+    if (n == 0) () else
+      uncons(s) match {
+        case IsEmpty() => ()
+        case View(a, tail) =>
+          println(a);
+          printN(tail, n - 1)
+      }
+
+  def sumAll(s: Seq[Int], acc: Int): Int =
+    uncons(s) match {
+      case IsEmpty() => acc
+      case View(a, tail) =>
+        sumAll(tail, mod(acc + a, 1337))
+    }
+
+  def appendOften(l: Seq[Int], n: Int): Seq[Int] =
+    if (n == 0) l
+    else appendOften(l.concat(l), n - 1)
+
+
+  println(sumAll(generate(10000, Empty()), 0))
+
+  printN(appendOften(generate(10, Empty()), 12), 17)
+}

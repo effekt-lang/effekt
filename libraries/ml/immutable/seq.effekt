@@ -1,0 +1,238 @@
+module immutable/seq
+
+/**
+ * This file implements the [[Seq]] type as a general purpose functional sequence.
+ *
+ * Implemented as a 2-3 finger tree, it supports
+ * - prepend and append in amortized O(1),
+ * - concat(m, n) in O(log(min(m, n)))
+ * - first and last in amortized O(1)
+ */
+
+
+/**
+ * Internal grouping of 1-4 elements
+ *
+ * It is called digit since Okasaki (1998) calls finger trees "numerical operations".
+ */
+type Digit[A] {
+  One(value: A)
+  Two(first: A, second: A)
+  Three(first: A, second: A, third: A)
+  Four(first: A, second: A, third: A, fourth: A)
+}
+
+type Node[A] {
+  // These are necessary to avoid polymorphic recursion
+  Leaf2(first: A, second: A)
+  Leaf3(first: A, second: A, third: A)
+  Node2(first: Node[A], second: Node[A])
+  Node3(first: Node[A], second: Node[A], third: Node[A])
+}
+
+/**
+ * Internal duplicate of Seq
+ *
+ * splitting into two type parameters is necessary since our MLton backend does
+ * not support mutually recursive data type declarations.
+ */
+type Finger[A, N] {
+  NoFinger()
+  SingleFinger(value: Node[A])
+  DeepFinger(prefix: N, middle: Finger[A, N], suffix: N)
+}
+
+/**
+ * Internal
+ */
+type Tree[A] = Finger[A, Digit[Node[A]]]
+
+type TreeView[A] {
+  TreeIsEmpty()
+  TreeView(el: Node[A], rest: Tree[A])
+}
+
+
+/**
+ * Sequences are represented as 2-3 finger trees.
+ */
+type Seq[A] {
+  Empty()
+  Single(value: A)
+  Deep(prefix: Digit[A], middle: Tree[A], suffix: Digit[A])
+}
+
+/**
+ * Result of splitting a sequence at the front or back.
+ */
+type View[A] {
+  IsEmpty()
+  View(element: A, remainder: Seq[A])
+}
+
+def toTree[A](d: Digit[Node[A]]): Tree[A] =  d match {
+  case One(a) => SingleFinger(a)
+  case Two(a, b) => DeepFinger(One(a), NoFinger(), One(b))
+  case Three(a, b, c) => DeepFinger(Two(a, b), NoFinger(), One(c))
+  case Four(a, b, c, d) => DeepFinger(Three(a, b, c), NoFinger(), One(d))
+}
+
+def toSeq[A](d: Digit[A]): Seq[A] =  d match {
+  case One(a) => Single(a)
+  case Two(a, b) => Deep(One(a), NoFinger(), One(b))
+  case Three(a, b, c) => Deep(Two(a, b), NoFinger(), One(c))
+  case Four(a, b, c, d) => Deep(Three(a, b, c), NoFinger(), One(d))
+}
+
+def toDigitNode[A](n: Node[A]): Digit[Node[A]] = n match {
+  case Node2(a, b) => Two(a, b)
+  case Node3(a, b, c) => Three(a, b, c)
+  case _ => <{ "Should not happen" }>
+}
+
+def toDigit[A](n: Node[A]): Digit[A] = n match {
+  case Leaf2(a, b) => Two(a, b)
+  case Leaf3(a, b, c) => Three(a, b, c)
+  case _ => <{ "Should not happen" }>
+}
+
+def consFinger[A](head: Node[A], tail: Tree[A]): Tree[A] = tail match {
+  case NoFinger()                      => SingleFinger(head)
+  case SingleFinger(b)                 => DeepFinger(One(head), NoFinger(), One(b))
+  case DeepFinger(One(b), m, rest)    => DeepFinger(Two(head, b), m, rest)
+  case DeepFinger(Two(b, c), m, rest) => DeepFinger(Three(head, b, c), m, rest)
+  case DeepFinger(Three(b, c, d), m, rest) => DeepFinger(Four(head, b, c, d), m, rest)
+  case DeepFinger(Four(b, c, d, e), m, rest) =>
+    DeepFinger(Two(head, b), consFinger(Node3(c, d, e), m), rest)
+}
+
+def cons[A](head: A, tail: Seq[A]): Seq[A] = tail match {
+  case Empty()                       => Single(head)
+  case Single(b)                     => Deep(One(head), NoFinger(), One(b))
+  case Deep(One(b), m, rest)         => Deep(Two(head, b), m, rest)
+  case Deep(Two(b, c), m, rest)      => Deep(Three(head, b, c), m, rest)
+  case Deep(Three(b, c, d), m, rest) => Deep(Four(head, b, c, d), m, rest)
+  case Deep(Four(b, c, d, e), m, rest) =>
+    Deep(Two(head, b), consFinger(Leaf3(c, d, e), m), rest)
+}
+
+def consFingerRight[A](init: Tree[A], tail: Node[A]): Tree[A] = init match {
+  case NoFinger()                      => SingleFinger(tail)
+  case SingleFinger(b)                 => DeepFinger(One(b), NoFinger(), One(tail))
+  case DeepFinger(rest, m, One(b))    => DeepFinger(rest, m, Two(b, tail))
+  case DeepFinger(rest, m, Two(b, c)) => DeepFinger(rest, m, Three(b, c, tail))
+  case DeepFinger(rest, m, Three(b, c, d)) => DeepFinger(rest, m, Four(b, c, d, tail))
+  case DeepFinger(rest, m, Four(b, c, d, e)) =>
+    DeepFinger(rest, consFingerRight(m, Node3(b, c, d)), Two(e, tail))
+}
+
+def consRight[A](init: Seq[A], tail: A): Seq[A] = init match {
+  case Empty()                   => Single(tail)
+  case Single(b)                 => Deep(One(b), NoFinger(), One(tail))
+  case Deep(rest, m, One(b))    => Deep(rest, m, Two(b, tail))
+  case Deep(rest, m, Two(b, c)) => Deep(rest, m, Three(b, c, tail))
+  case Deep(rest, m, Three(b, c, d)) => Deep(rest, m, Four(b, c, d, tail))
+  case Deep(rest, m, Four(b, c, d, e)) =>
+    Deep(rest, consFingerRight(m, Leaf3(b, c, d)), Two(e, tail))
+}
+
+def unconsFinger[A](seq: Tree[A]): TreeView[A] = seq match {
+  case NoFinger()   => TreeIsEmpty()
+  case SingleFinger(x) => TreeView(x, NoFinger())
+  // TODO this is a tail-call-modulo-context
+  case DeepFinger(One(a), m, rest) => TreeView(a, unconsFinger(m) match {
+    case TreeIsEmpty() => rest.toTree
+    case TreeView(b, m2) => DeepFinger(b.toDigitNode, m2, rest)
+  })
+  case DeepFinger(Two(a, b), m, rest) => TreeView(a, DeepFinger(One(b), m, rest))
+  case DeepFinger(Three(a, b, c), m, rest) => TreeView(a, DeepFinger(Two(b, c), m, rest))
+  case DeepFinger(Four(a, b, c, d), m, rest) => TreeView(a, DeepFinger(Three(b, c, d), m, rest))
+}
+
+def uncons[A](seq: Seq[A]): View[A] = seq match {
+  case Empty()   => IsEmpty()
+  case Single(x) => View(x, Empty())
+  case Deep(One(a), m, rest) => View(a, unconsFinger(m) match {
+    case TreeIsEmpty() => rest.toSeq
+    case TreeView(b, m2) => Deep(b.toDigit, m2, rest)
+  })
+  case Deep(Two(a, b), m, rest) => View(a, Deep(One(b), m, rest))
+  case Deep(Three(a, b, c), m, rest) => View(a, Deep(Two(b, c), m, rest))
+  case Deep(Four(a, b, c, d), m, rest) => View(a, Deep(Three(b, c, d), m, rest))
+}
+
+def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[A] = {
+
+  // can we get rid of the list?
+
+  def prepend(digit: List[Node[A]], l: Tree[A]): Tree[A] = digit match {
+    case Nil() => l
+    case Cons(head, tail) => consFinger(head, prepend(tail, l))
+  }
+
+  def append(l: Tree[A], digit: List[Node[A]]): Tree[A] = digit match {
+    case Nil() => l
+    case Cons(head, tail) => append(consFingerRight(l, head), tail)
+  }
+
+  def consFinger(digit: Digit[Node[A]], l: Tree[A]): Tree[A] = digit match {
+    case One(a) => consFinger(a, l)
+    case Two(a, b) => consFinger(a, consFinger(b, l))
+    case Three(a, b, c) => consFinger(a, consFinger(b, consFinger(c, l)))
+    case Four(a, b, c, d) => consFinger(a, consFinger(b, consFinger(c, consFinger(d, l))))
+  }
+
+  def toList(digit: Digit[Node[A]]): List[Node[A]] = digit match {
+    case One(a) => Cons(a, Nil())
+    case Two(a, b) => Cons(a, Cons(b, Nil()))
+    case Three(a, b, c) => Cons(a, Cons(b, Cons(c, Nil())))
+    case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
+  }
+
+  // rebalance
+  def nodes(t: List[Node[A]]): List[Node[A]] = t match {
+    case Cons(a, Cons(b, Nil())) => Cons(Node2(a, b), Nil())
+    case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(Node3(a, b, c), Nil())
+    case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(Node2(a, b), Cons(Node2(c, d), Nil()))
+    case Cons(a, Cons(b, Cons(c, rest))) => Cons(Node3(a, b, c), nodes(rest))
+    case _ => <>
+  }
+
+  def go(prefix: Tree[A], middle: List[Node[A]], suffix: Tree[A]): Tree[A] =
+    (prefix, suffix) match {
+      case (NoFinger(), ys) => prepend(middle, ys)
+      case (xs, NoFinger()) => append(xs, middle)
+      case (SingleFinger(x), ys) => consFinger(x, prepend(middle, ys))
+      case (xs, SingleFinger(y)) => consFingerRight(append(xs, middle), y)
+      case (DeepFinger(p1, m1, s1), DeepFinger(p2, m2, s2)) =>
+        val list = s1.toList.append(middle).append(p2.toList)
+        DeepFinger(p1, go(m1, nodes(list), m2), s2)
+    }
+
+  go(first, middle, second)
+}
+
+def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
+  def nodes(t: List[A]): List[Node[A]] = t match {
+    case Cons(a, Cons(b, Nil())) => Cons(Leaf2(a, b), Nil())
+    case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(Leaf3(a, b, c), Nil())
+    case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(Leaf2(a, b), Cons(Leaf2(c, d), Nil()))
+    case Cons(a, Cons(b, Cons(c, rest))) => Cons(Leaf3(a, b, c), nodes(rest))
+    case _ => <>
+  }
+  def toList(digit: Digit[A]): List[A] = digit match {
+    case One(a) => Cons(a, Nil())
+    case Two(a, b) => Cons(a, Cons(b, Nil()))
+    case Three(a, b, c) => Cons(a, Cons(b, Cons(c, Nil())))
+    case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
+  }
+
+  (first, second) match {
+    case (Empty(), other) => other
+    case (other, Empty()) => other
+    case (Single(a), other) => cons(a, other)
+    case (other, Single(a)) => consRight(other, a)
+    case (Deep(p1, m1, s1), Deep(p2, m2, s2)) =>
+      Deep(p1, concatTree(m1, nodes(s1.toList.append(p2.toList)), m2), s2)
+  }
+}

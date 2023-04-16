@@ -23,7 +23,7 @@ class ML extends Compiler[String] {
        |
        |
        |  (* program files *)
-       |  ann "redundantMatch ignore" in
+       |  ann "redundantMatch ignore" "nonexhaustiveMatch ignore" in
        |    ${mainFile}
        |  end
        |in
