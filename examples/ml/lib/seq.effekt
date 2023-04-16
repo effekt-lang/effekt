@@ -34,8 +34,11 @@ def main() = {
     if (n == 0) l
     else appendOften(l.concat(l), n - 1)
 
+  val ex1 = generate(10000, Empty())
+  println(ex1.size)
+  println(sumAll(ex1, 0))
 
-  println(sumAll(generate(10000, Empty()), 0))
-
-  printN(appendOften(generate(10, Empty()), 12), 17)
+  val ex2 = appendOften(generate(10, Empty()), 12)
+  println(ex2.size)
+  printN(ex2, 17)
 }

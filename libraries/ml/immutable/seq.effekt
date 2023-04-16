@@ -7,6 +7,10 @@ module immutable/seq
  * - prepend and append in amortized O(1),
  * - concat(m, n) in O(log(min(m, n)))
  * - first and last in amortized O(1)
+ * - size in amortized O(1)
+ *
+ * More information on finger trees:
+ *   https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf
  */
 
 
@@ -26,8 +30,8 @@ type Node[A] {
   // These are necessary to avoid polymorphic recursion
   Leaf2(first: A, second: A)
   Leaf3(first: A, second: A, third: A)
-  Node2(first: Node[A], second: Node[A])
-  Node3(first: Node[A], second: Node[A], third: Node[A])
+  Node2(size: Int, first: Node[A], second: Node[A])
+  Node3(size: Int, first: Node[A], second: Node[A], third: Node[A])
 }
 
 /**
@@ -39,7 +43,7 @@ type Node[A] {
 type Finger[A, N] {
   NoFinger()
   SingleFinger(value: Node[A])
-  DeepFinger(prefix: N, middle: Finger[A, N], suffix: N)
+  DeepFinger(size: Int, prefix: N, middle: Finger[A, N], suffix: N)
 }
 
 /**
@@ -59,7 +63,7 @@ type TreeView[A] {
 type Seq[A] {
   Empty()
   Single(value: A)
-  Deep(prefix: Digit[A], middle: Tree[A], suffix: Digit[A])
+  Deep(size: Int, prefix: Digit[A], middle: Tree[A], suffix: Digit[A])
 }
 
 /**
@@ -72,21 +76,21 @@ type View[A] {
 
 def toTree[A](d: Digit[Node[A]]): Tree[A] =  d match {
   case One(a) => SingleFinger(a)
-  case Two(a, b) => DeepFinger(One(a), NoFinger(), One(b))
-  case Three(a, b, c) => DeepFinger(Two(a, b), NoFinger(), One(c))
-  case Four(a, b, c, d) => DeepFinger(Three(a, b, c), NoFinger(), One(d))
+  case Two(a, b) => DeepFinger(2, One(a), NoFinger(), One(b))
+  case Three(a, b, c) => DeepFinger(3, Two(a, b), NoFinger(), One(c))
+  case Four(a, b, c, d) => DeepFinger(4, Three(a, b, c), NoFinger(), One(d))
 }
 
 def toSeq[A](d: Digit[A]): Seq[A] =  d match {
   case One(a) => Single(a)
-  case Two(a, b) => Deep(One(a), NoFinger(), One(b))
-  case Three(a, b, c) => Deep(Two(a, b), NoFinger(), One(c))
-  case Four(a, b, c, d) => Deep(Three(a, b, c), NoFinger(), One(d))
+  case Two(a, b) => Deep(2, One(a), NoFinger(), One(b))
+  case Three(a, b, c) => Deep(3, Two(a, b), NoFinger(), One(c))
+  case Four(a, b, c, d) => Deep(4, Three(a, b, c), NoFinger(), One(d))
 }
 
 def toDigitNode[A](n: Node[A]): Digit[Node[A]] = n match {
-  case Node2(a, b) => Two(a, b)
-  case Node3(a, b, c) => Three(a, b, c)
+  case Node2(_, a, b) => Two(a, b)
+  case Node3(_, a, b, c) => Three(a, b, c)
   case _ => <{ "Should not happen" }>
 }
 
@@ -96,69 +100,123 @@ def toDigit[A](n: Node[A]): Digit[A] = n match {
   case _ => <{ "Should not happen" }>
 }
 
-def consFinger[A](head: Node[A], tail: Tree[A]): Tree[A] = tail match {
-  case NoFinger()                      => SingleFinger(head)
-  case SingleFinger(b)                 => DeepFinger(One(head), NoFinger(), One(b))
-  case DeepFinger(One(b), m, rest)    => DeepFinger(Two(head, b), m, rest)
-  case DeepFinger(Two(b, c), m, rest) => DeepFinger(Three(head, b, c), m, rest)
-  case DeepFinger(Three(b, c, d), m, rest) => DeepFinger(Four(head, b, c, d), m, rest)
-  case DeepFinger(Four(b, c, d, e), m, rest) =>
-    DeepFinger(Two(head, b), consFinger(Node3(c, d, e), m), rest)
+// Measure
+// -------
+
+def size[A](node: Digit[A]): Int = node match {
+  case One(_) => 1
+  case Two(_, _) => 2
+  case Three(_, _, _) => 3
+  case Four(_, _, _, _) => 4
 }
 
-def cons[A](head: A, tail: Seq[A]): Seq[A] = tail match {
-  case Empty()                       => Single(head)
-  case Single(b)                     => Deep(One(head), NoFinger(), One(b))
-  case Deep(One(b), m, rest)         => Deep(Two(head, b), m, rest)
-  case Deep(Two(b, c), m, rest)      => Deep(Three(head, b, c), m, rest)
-  case Deep(Three(b, c, d), m, rest) => Deep(Four(head, b, c, d), m, rest)
-  case Deep(Four(b, c, d, e), m, rest) =>
-    Deep(Two(head, b), consFinger(Leaf3(c, d, e), m), rest)
+def size[A](node: Node[A]): Int = node match {
+  case Leaf2(_, _) => 2
+  case Leaf3(_, _, _) => 3
+  case Node2(s, _, _) => s
+  case Node3(s, _, _, _) => s
+}
+
+def sizeDeep[A](node: Digit[Node[A]]): Int = node match {
+  case One(a) => a.size
+  case Two(a, b) => a.size + b.size
+  case Three(a, b, c) => a.size + b.size + c.size
+  case Four(a, b, c, d) => a.size + b.size + c.size + d.size
+}
+
+def size[A](tree: Tree[A]): Int = tree match {
+  case NoFinger() => 0
+  case SingleFinger(value) => value.size
+  case DeepFinger(size, _, _, _) => size
+}
+
+/**
+ * The size of the given sequence
+ */
+def size[A](seq: Seq[A]): Int = seq match {
+  case Empty() => 0
+  case Single(value) => 1
+  case Deep(size, _, _, _) => size
+}
+
+
+// smart constructors
+def deepFinger[A](prefix: Digit[Node[A]], middle: Tree[A], suffix: Digit[Node[A]]): Tree[A] =
+  DeepFinger(prefix.sizeDeep + middle.size + suffix.sizeDeep, prefix, middle, suffix)
+
+def deep[A](prefix: Digit[A], middle: Tree[A], suffix: Digit[A]): Seq[A] =
+  Deep(prefix.size + middle.size + suffix.size, prefix, middle, suffix)
+
+def node2[A](first: Node[A], second: Node[A]): Node[A] =
+  Node2(first.size + second.size, first, second)
+
+def node3[A](first: Node[A], second: Node[A], third: Node[A]): Node[A] =
+  Node3(first.size + second.size + third.size, first, second, third)
+
+def consFinger[A](head: Node[A], tail: Tree[A]): Tree[A] = tail match {
+  case NoFinger()                     => SingleFinger(head)
+  case SingleFinger(b)                => deepFinger(One(head), NoFinger(), One(b))
+  case DeepFinger(_, One(b), m, rest)    => deepFinger(Two(head, b), m, rest)
+  case DeepFinger(_, Two(b, c), m, rest) => deepFinger(Three(head, b, c), m, rest)
+  case DeepFinger(_, Three(b, c, d), m, rest) => deepFinger(Four(head, b, c, d), m, rest)
+  case DeepFinger(_, Four(b, c, d, e), m, rest) =>
+    deepFinger(Two(head, b), consFinger(node3(c, d, e), m), rest)
 }
 
 def consFingerRight[A](init: Tree[A], tail: Node[A]): Tree[A] = init match {
   case NoFinger()                      => SingleFinger(tail)
-  case SingleFinger(b)                 => DeepFinger(One(b), NoFinger(), One(tail))
-  case DeepFinger(rest, m, One(b))    => DeepFinger(rest, m, Two(b, tail))
-  case DeepFinger(rest, m, Two(b, c)) => DeepFinger(rest, m, Three(b, c, tail))
-  case DeepFinger(rest, m, Three(b, c, d)) => DeepFinger(rest, m, Four(b, c, d, tail))
-  case DeepFinger(rest, m, Four(b, c, d, e)) =>
-    DeepFinger(rest, consFingerRight(m, Node3(b, c, d)), Two(e, tail))
+  case SingleFinger(b)                 => deepFinger(One(b), NoFinger(), One(tail))
+  case DeepFinger(_, rest, m, One(b))    => deepFinger(rest, m, Two(b, tail))
+  case DeepFinger(_, rest, m, Two(b, c)) => deepFinger(rest, m, Three(b, c, tail))
+  case DeepFinger(_, rest, m, Three(b, c, d)) => deepFinger(rest, m, Four(b, c, d, tail))
+  case DeepFinger(_, rest, m, Four(b, c, d, e)) =>
+    deepFinger(rest, consFingerRight(m, node3(b, c, d)), Two(e, tail))
+}
+
+def cons[A](head: A, tail: Seq[A]): Seq[A] = tail match {
+  case Empty()                          => Single(head)
+  case Single(b)                        => Deep(2, One(head), NoFinger(), One(b))
+  case Deep(s, One(b), m, rest)         => Deep(s + 1, Two(head, b), m, rest)
+  case Deep(s, Two(b, c), m, rest)      => Deep(s + 1, Three(head, b, c), m, rest)
+  case Deep(s, Three(b, c, d), m, rest) => Deep(s + 1, Four(head, b, c, d), m, rest)
+  case Deep(s, Four(b, c, d, e), m, rest) =>
+    Deep(s + 1, Two(head, b), consFinger(Leaf3(c, d, e), m), rest)
 }
 
 def consRight[A](init: Seq[A], tail: A): Seq[A] = init match {
-  case Empty()                   => Single(tail)
-  case Single(b)                 => Deep(One(b), NoFinger(), One(tail))
-  case Deep(rest, m, One(b))    => Deep(rest, m, Two(b, tail))
-  case Deep(rest, m, Two(b, c)) => Deep(rest, m, Three(b, c, tail))
-  case Deep(rest, m, Three(b, c, d)) => Deep(rest, m, Four(b, c, d, tail))
-  case Deep(rest, m, Four(b, c, d, e)) =>
-    Deep(rest, consFingerRight(m, Leaf3(b, c, d)), Two(e, tail))
+  case Empty()                          => Single(tail)
+  case Single(b)                        => Deep(2, One(b), NoFinger(), One(tail))
+  case Deep(s, rest, m, One(b))         => Deep(s + 1, rest, m, Two(b, tail))
+  case Deep(s, rest, m, Two(b, c))      => Deep(s + 1, rest, m, Three(b, c, tail))
+  case Deep(s, rest, m, Three(b, c, d)) => Deep(s + 1, rest, m, Four(b, c, d, tail))
+  case Deep(s, rest, m, Four(b, c, d, e)) =>
+    Deep(s + 1, rest, consFingerRight(m, Leaf3(b, c, d)), Two(e, tail))
 }
 
 def unconsFinger[A](seq: Tree[A]): TreeView[A] = seq match {
   case NoFinger()   => TreeIsEmpty()
   case SingleFinger(x) => TreeView(x, NoFinger())
   // TODO this is a tail-call-modulo-context
-  case DeepFinger(One(a), m, rest) => TreeView(a, unconsFinger(m) match {
+  case DeepFinger(_, One(a), m, rest) => TreeView(a, unconsFinger(m) match {
     case TreeIsEmpty() => rest.toTree
-    case TreeView(b, m2) => DeepFinger(b.toDigitNode, m2, rest)
+    case TreeView(b, m2) => deepFinger(b.toDigitNode, m2, rest)
   })
-  case DeepFinger(Two(a, b), m, rest) => TreeView(a, DeepFinger(One(b), m, rest))
-  case DeepFinger(Three(a, b, c), m, rest) => TreeView(a, DeepFinger(Two(b, c), m, rest))
-  case DeepFinger(Four(a, b, c, d), m, rest) => TreeView(a, DeepFinger(Three(b, c, d), m, rest))
+  case DeepFinger(_, Two(a, b), m, rest) => TreeView(a, deepFinger(One(b), m, rest))
+  case DeepFinger(_, Three(a, b, c), m, rest) => TreeView(a, deepFinger(Two(b, c), m, rest))
+  case DeepFinger(_, Four(a, b, c, d), m, rest) => TreeView(a, deepFinger(Three(b, c, d), m, rest))
 }
 
+// this could be called "uncons", "first", "front", "head", "popFront", "start", "popStart"
 def uncons[A](seq: Seq[A]): View[A] = seq match {
   case Empty()   => IsEmpty()
   case Single(x) => View(x, Empty())
-  case Deep(One(a), m, rest) => View(a, unconsFinger(m) match {
+  case Deep(s, One(a), m, rest) => View(a, unconsFinger(m) match {
     case TreeIsEmpty() => rest.toSeq
-    case TreeView(b, m2) => Deep(b.toDigit, m2, rest)
+    case TreeView(b, m2) => Deep(s - 1, b.toDigit, m2, rest)
   })
-  case Deep(Two(a, b), m, rest) => View(a, Deep(One(b), m, rest))
-  case Deep(Three(a, b, c), m, rest) => View(a, Deep(Two(b, c), m, rest))
-  case Deep(Four(a, b, c, d), m, rest) => View(a, Deep(Three(b, c, d), m, rest))
+  case Deep(s, Two(a, b), m, rest) => View(a, Deep(s - 1, One(b), m, rest))
+  case Deep(s, Three(a, b, c), m, rest) => View(a, Deep(s - 1, Two(b, c), m, rest))
+  case Deep(s, Four(a, b, c, d), m, rest) => View(a, Deep(s - 1, Three(b, c, d), m, rest))
 }
 
 def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[A] = {
@@ -191,10 +249,10 @@ def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[
 
   // rebalance
   def nodes(t: List[Node[A]]): List[Node[A]] = t match {
-    case Cons(a, Cons(b, Nil())) => Cons(Node2(a, b), Nil())
-    case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(Node3(a, b, c), Nil())
-    case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(Node2(a, b), Cons(Node2(c, d), Nil()))
-    case Cons(a, Cons(b, Cons(c, rest))) => Cons(Node3(a, b, c), nodes(rest))
+    case Cons(a, Cons(b, Nil())) => Cons(node2(a, b), Nil())
+    case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(node3(a, b, c), Nil())
+    case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(node2(a, b), Cons(node2(c, d), Nil()))
+    case Cons(a, Cons(b, Cons(c, rest))) => Cons(node3(a, b, c), nodes(rest))
     case _ => <>
   }
 
@@ -204,9 +262,9 @@ def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[
       case (xs, NoFinger()) => append(xs, middle)
       case (SingleFinger(x), ys) => consFinger(x, prepend(middle, ys))
       case (xs, SingleFinger(y)) => consFingerRight(append(xs, middle), y)
-      case (DeepFinger(p1, m1, s1), DeepFinger(p2, m2, s2)) =>
+      case (DeepFinger(size1, p1, m1, s1), DeepFinger(size2, p2, m2, s2)) =>
         val list = s1.toList.append(middle).append(p2.toList)
-        DeepFinger(p1, go(m1, nodes(list), m2), s2)
+        DeepFinger(size1 + size2, p1, go(m1, nodes(list), m2), s2)
     }
 
   go(first, middle, second)
@@ -232,7 +290,7 @@ def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
     case (other, Empty()) => other
     case (Single(a), other) => cons(a, other)
     case (other, Single(a)) => consRight(other, a)
-    case (Deep(p1, m1, s1), Deep(p2, m2, s2)) =>
-      Deep(p1, concatTree(m1, nodes(s1.toList.append(p2.toList)), m2), s2)
+    case (Deep(size1, p1, m1, s1), Deep(size2, p2, m2, s2)) =>
+      Deep(size1 + size2, p1, concatTree(m1, nodes(s1.toList.append(p2.toList)), m2), s2)
   }
 }
