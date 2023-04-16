@@ -13,17 +13,19 @@ class ML extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".sml"
-
   def buildFile(mainFile: String): String =
     s"""local
        |  (* import libraries *)
        |  $$(SML_LIB)/basis/basis.mlb (* for string reader *)
        |  $$(SML_LIB)/basis/mlton.mlb
+       |  $$(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb (* random and more *)
        |  $$(SML_LIB)/smlnj-lib/RegExp/regexp-lib.mlb (* for regular expressions *)
        |
        |
        |  (* program files *)
-       |  ${mainFile}
+       |  ann "redundantMatch ignore" in
+       |    ${mainFile}
+       |  end
        |in
        |end
       |""".stripMargin
