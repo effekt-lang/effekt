@@ -197,13 +197,13 @@ def unconsFinger[A](seq: Tree[A]): TreeView[A] = seq match {
   case NoFinger()   => TreeIsEmpty()
   case SingleFinger(x) => TreeView(x, NoFinger())
   // TODO this is a tail-call-modulo-context
-  case DeepFinger(_, One(a), m, rest) => TreeView(a, unconsFinger(m) match {
+  case DeepFinger(s, One(a), m, rest) => TreeView(a, unconsFinger(m) match {
     case TreeIsEmpty() => rest.toTree
-    case TreeView(b, m2) => deepFinger(b.toDigitNode, m2, rest)
+    case TreeView(b, m2) => DeepFinger(s - a.size, b.toDigitNode, m2, rest)
   })
-  case DeepFinger(_, Two(a, b), m, rest) => TreeView(a, deepFinger(One(b), m, rest))
-  case DeepFinger(_, Three(a, b, c), m, rest) => TreeView(a, deepFinger(Two(b, c), m, rest))
-  case DeepFinger(_, Four(a, b, c, d), m, rest) => TreeView(a, deepFinger(Three(b, c, d), m, rest))
+  case DeepFinger(s, Two(a, b), m, rest) => TreeView(a, DeepFinger(s - a.size, One(b), m, rest))
+  case DeepFinger(s, Three(a, b, c), m, rest) => TreeView(a, DeepFinger(s - a.size, Two(b, c), m, rest))
+  case DeepFinger(s, Four(a, b, c, d), m, rest) => TreeView(a, DeepFinger(s - a.size, Three(b, c, d), m, rest))
 }
 
 // this could be called "uncons", "first", "front", "head", "popFront", "start", "popStart"
@@ -217,6 +217,32 @@ def uncons[A](seq: Seq[A]): View[A] = seq match {
   case Deep(s, Two(a, b), m, rest) => View(a, Deep(s - 1, One(b), m, rest))
   case Deep(s, Three(a, b, c), m, rest) => View(a, Deep(s - 1, Two(b, c), m, rest))
   case Deep(s, Four(a, b, c, d), m, rest) => View(a, Deep(s - 1, Three(b, c, d), m, rest))
+}
+
+def unconsRightFinger[A](seq: Tree[A]): TreeView[A] = seq match {
+  case NoFinger()   => TreeIsEmpty()
+  case SingleFinger(x) => TreeView(x, NoFinger())
+  // TODO this is a tail-call-modulo-context
+  case DeepFinger(s, init, m, One(a)) => TreeView(a, unconsRightFinger(m) match {
+    case TreeIsEmpty() => init.toTree
+    case TreeView(b, m2) => DeepFinger(s - a.size, init, m2, b.toDigitNode)
+  })
+  case DeepFinger(s, init, m, Two(b, a)) => TreeView(a, DeepFinger(s - a.size, init, m, One(b)))
+  case DeepFinger(s, init, m, Three(c, b, a)) => TreeView(a, DeepFinger(s - a.size, init, m, Two(c, b)))
+  case DeepFinger(s, init, m, Four(d, c, b, a)) => TreeView(a, DeepFinger(s - a.size, init, m, Three(d, c, b)))
+}
+
+// this could be called "uncons", "first", "front", "head", "popFront", "start", "popStart"
+def unconsRight[A](seq: Seq[A]): View[A] = seq match {
+  case Empty()   => IsEmpty()
+  case Single(x) => View(x, Empty())
+  case Deep(s, init, m, One(a)) => View(a, unconsFinger(m) match {
+    case TreeIsEmpty() => init.toSeq
+    case TreeView(b, m2) => Deep(s - 1, init, m2, b.toDigit)
+  })
+  case Deep(s, init, m, Two(a, b)) => View(a, Deep(s - 1, init, m, One(b)))
+  case Deep(s, init, m, Three(a, b, c)) => View(a, Deep(s - 1, init, m, Two(b, c)))
+  case Deep(s, init, m, Four(a, b, c, d)) => View(a, Deep(s - 1, init, m, Three(b, c, d)))
 }
 
 def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[A] = {
