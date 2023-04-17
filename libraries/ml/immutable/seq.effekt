@@ -15,6 +15,12 @@ module immutable/seq
 
 
 /**
+ * Exception[NoSuchElement] is raised when accessing non-existing elements
+ * or splitting empty collections.
+ */
+record NoSuchElement()
+
+/**
  * Internal grouping of 1-4 elements
  *
  * It is called digit since Okasaki (1998) calls finger trees "numerical operations".
@@ -319,4 +325,25 @@ def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
     case (Deep(size1, p1, m1, s1), Deep(size2, p2, m2, s2)) =>
       Deep(size1 + size2, p1, concatTree(m1, nodes(s1.toList.append(p2.toList)), m2), s2)
   }
+}
+
+
+def isEmpty[A](s: Seq[A]): Boolean = s match {
+  case Empty() => true
+  case _ => false
+}
+
+def nonEmpty[A](s: Seq[A]): Boolean = s match {
+  case Empty() => false
+  case _ => true
+}
+
+def head[A](s: Seq[A]): A / Exception[NoSuchElement] = s.uncons match {
+  case IsEmpty() => do raise(NoSuchElement(), "Calling `head` on empty sequence.") match {}
+  case View(element, _) => element
+}
+
+def tail[A](s: Seq[A]): Seq[A] / Exception[NoSuchElement] = s.uncons match {
+  case IsEmpty() => do raise(NoSuchElement(), "Calling `tail` on empty sequence.") match {}
+  case View(element, rest) => rest
 }
