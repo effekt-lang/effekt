@@ -20,6 +20,7 @@ module immutable/seq
  */
 record NoSuchElement()
 
+
 /**
  * Internal grouping of 1-4 elements
  *
@@ -302,6 +303,13 @@ def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[
   go(first, middle, second)
 }
 
+def toList[A](digit: Digit[A]): List[A] = digit match {
+  case One(a) => Cons(a, Nil())
+  case Two(a, b) => Cons(a, Cons(b, Nil()))
+  case Three(a, b, c) => Cons(a, Cons(b, Cons(c, Nil())))
+  case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
+}
+
 def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
   def nodes(t: List[A]): List[Node[A]] = t match {
     case Cons(a, Cons(b, Nil())) => Cons(Leaf2(a, b), Nil())
@@ -309,12 +317,6 @@ def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
     case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(Leaf2(a, b), Cons(Leaf2(c, d), Nil()))
     case Cons(a, Cons(b, Cons(c, rest))) => Cons(Leaf3(a, b, c), nodes(rest))
     case _ => <>
-  }
-  def toList(digit: Digit[A]): List[A] = digit match {
-    case One(a) => Cons(a, Nil())
-    case Two(a, b) => Cons(a, Cons(b, Nil()))
-    case Three(a, b, c) => Cons(a, Cons(b, Cons(c, Nil())))
-    case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
   }
 
   (first, second) match {
@@ -346,4 +348,32 @@ def head[A](s: Seq[A]): A / Exception[NoSuchElement] = s.uncons match {
 def tail[A](s: Seq[A]): Seq[A] / Exception[NoSuchElement] = s.uncons match {
   case IsEmpty() => do raise(NoSuchElement(), "Calling `tail` on empty sequence.") match {}
   case View(element, rest) => rest
+}
+
+// TODO reverse (but with commutative monoid)
+//    https://github.com/ocaml-batteries-team/batteries-included/blob/master/src/batFingerTree.ml#L624
+
+
+
+def splitAt[A](s: Seq[A]): (Seq[A], Seq[A]) = <>
+
+/**
+ * Random access
+ */
+def get[A](s: Seq[A], index: Int): A = <>
+
+def toList[A](s: Seq[A]): List[A] = <>
+
+def each[A](s: Seq[A]) { f: A => Unit / Control }: Unit = {
+
+  def go(digit: Digit[A]): Unit = <>
+
+  def go(n: Tree[A]): Unit = <>
+
+  s match {
+    case Empty() => ()
+    case Single(a) => go(One(a))
+    case Deep(_, prefix, m, suffix) =>
+      <>
+  }
 }
