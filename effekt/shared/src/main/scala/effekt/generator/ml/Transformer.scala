@@ -5,11 +5,11 @@ package ml
 import effekt.context.Context
 import effekt.lifted.*
 import effekt.core.Id
-import effekt.symbols.{ Symbol, TermSymbol, Module, Wildcard }
-
+import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
+import scala.annotation.tailrec
 import scala.language.implicitConversions
 
 object Transformer {
@@ -38,8 +38,33 @@ object Transformer {
   def toML(module: ModuleDecl)(using Context): List[ml.Binding] = {
     val decls = module.decls.flatMap(toML)
     val externs = module.externs.map(toML)
-    val rest = module.definitions.map(toML)
+    val rest = sortTopologically(module.definitions).map(toML)
     decls ++ externs ++ rest
+  }
+
+  /**
+   * Sorts the definitions topologically. Fails if functions are mutually recursive, since this
+   * is not supported by the ml backend, yet.
+   */
+  def sortTopologically(defs: List[Definition])(using C: Context): List[Definition] = {
+    val ids = defs.map { _.id }.toSet
+    val fvs = defs.map { d =>
+      d.id -> (freeVariables(d).vars.keySet intersect ids)
+    }.toMap
+
+    @tailrec
+    def go(todo: List[Definition], out: List[Definition], emitted: Set[Id]): List[Definition] =
+      if (todo.isEmpty) {
+        out
+      } else {
+        val (noDependencies, rest) = todo.partition { d => (fvs(d.id) -- emitted).isEmpty }
+        if (noDependencies.isEmpty) {
+          val mutuals = rest.map(_.id).mkString(", ")
+          Context.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
+        } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(_.id).toSet)
+    }
+
+    go(defs, Nil, Set.empty).reverse
   }
 
   def tpeToML(tpe: BlockType)(using C: Context): ml.Type = tpe match {
@@ -152,7 +177,7 @@ object Transformer {
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortTopologically(definitions).map(toML), toMLExpr(body)(k)) }
 
     case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
