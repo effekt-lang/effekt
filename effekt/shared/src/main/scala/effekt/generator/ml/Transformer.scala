@@ -45,10 +45,20 @@ object Transformer {
   /**
    * Sorts the definitions topologically. Fails if functions are mutually recursive, since this
    * is not supported by the ml backend, yet.
+   *
+   * Keep let-definitions in the order they are, since they might have observable side-effects
    */
-  def sortDefinitions(defs: List[Definition])(using C: Context): List[Definition] =
+  def sortDefinitions(defs: List[Definition])(using C: Context): List[Definition] = {
+    def sort(defs: List[Definition], toSort: List[Definition]): List[Definition] = defs match {
+      case (d: Definition.Let) :: rest  =>
+        val sorted = sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
+         sorted ++ (d :: sort(rest, Nil))
+      case (d: Definition.Def) :: rest => sort(rest, d :: toSort)
+      case Nil => sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
+    }
 
-    sortTopologically(defs, d => freeVariables(d).vars.keySet, d => d.id)
+    sort(defs, Nil)
+  }
 
   def sortDeclarations(defs: List[Declaration])(using C: Context): List[Declaration] =
     sortTopologically(defs, d => freeTypeVariables(d), d => d.id)
@@ -182,7 +192,7 @@ object Transformer {
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k)) }
 
     case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
