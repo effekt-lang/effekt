@@ -66,4 +66,10 @@ def main() = {
     if (el == 7 || el == 9) do continue() else if (el == 13) do break()
     println(el)
   }
+
+  println("\nTesting reverse iteration")
+  seq15.eachReverse { el =>
+    if (el == 7 || el == 9) do continue() else if (el == 3) do break()
+    println(el)
+  }
 }

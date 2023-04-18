@@ -532,8 +532,6 @@ def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchEleme
   }
 }
 
-def toList[A](seq: Seq[A]): List[A] = <>
-
 def each[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
 
   def consume(a: A): Unit =
@@ -577,6 +575,57 @@ def each[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
 } with outer: Control {
   def break() = ()
   def continue() = ()
+}
+
+def eachReverse[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
+
+  def consume(a: A): Unit =
+    try { f(a) } with Control {
+      def break() = outer.break()
+      def continue() = ()
+    }
+
+  def go(digit: Digit[A]): Unit = digit match {
+    case One(a) => consume(a)
+    case Two(a, b) => consume(b); consume(a)
+    case Three(a, b, c) => consume(c); consume(b); consume(a)
+    case Four(a, b, c, d) => consume(d); consume(c); consume(b); consume(a)
+  }
+
+  def go(node: Node[A]): Unit = node match {
+    case Leaf2(a, b) => consume(b); consume(a)
+    case Leaf3(a, b, c) => consume(c); consume(b); consume(a)
+    case Node2(_, a, b) => go(b); go(a)
+    case Node3(_, a, b, c) => go(c); go(b); go(a)
+  }
+
+  def go(digit: Digit[Node[A]]): Unit = digit match {
+    case One(a) => go(a)
+    case Two(a, b) => go(b); go(a)
+    case Three(a, b, c) => go(c); go(b); go(a)
+    case Four(a, b, c, d) => go(d); go(c); go(b); go(a)
+  }
+
+  def go(tree: Tree[A]): Unit = tree match {
+    case NoFinger() => ()
+    case SingleFinger(v) => go(v)
+    case DeepFinger(_, p, m, s) => go(s); go(m); go(p)
+  }
+
+  seq match {
+    case Empty() => ()
+    case Single(v) => consume(v)
+    case Deep(_, p, m, s) => go(s); go(m); go(p)
+  }
+} with outer: Control {
+  def break() = ()
+  def continue() = ()
+}
+
+def toList[A](seq: Seq[A]): List[A] = {
+  var list: List[A] = Nil()
+  seq.eachReverse { el => list = Cons(el, list) }
+  list
 }
 
 
