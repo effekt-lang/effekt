@@ -31,9 +31,11 @@ def main() = {
     }
 
   def indexAll(s: Seq[Int], n: Int): Unit / Exception[NoSuchElement] = {
-    println(get(s, n))
+    println(s.index(n))
     indexAll(s, n + 1)
   }
+
+  val seq15 = generate(15, Empty());
 
 
   def appendOften(l: Seq[Int], n: Int): Seq[Int] =
@@ -51,12 +53,17 @@ def main() = {
   printN(ex2, 17)
 
   println("\nTesting random access")
-  printN(generate(15, Empty()), 15)
-  ignoring[NoSuchElement] { indexAll(generate(15, Empty()), 0) }
+  printN(seq15, 15)
+  ignoring[NoSuchElement] { indexAll(seq15, 0) }
 
   println("\nTesting update")
   ignoring[NoSuchElement] {
-    val seq = generate(15, Empty());
-    indexAll(seq.update(7, 1337), 0)
+    indexAll(seq15.update(7, 1337), 0)
+  }
+
+  println("\nTesting iteration")
+  seq15.each { el =>
+    if (el == 7 || el == 9) do continue() else if (el == 13) do break()
+    println(el)
   }
 }

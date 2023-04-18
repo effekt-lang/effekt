@@ -380,7 +380,7 @@ def splitAt[A](seq: Seq[A]): (Seq[A], Seq[A]) = <>
 /**
  * Random access
  */
-def get[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
+def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
 
   // invariant for all internal functions: element is in the sequence
 
@@ -453,7 +453,6 @@ def get[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
       }
   }
 }
-
 
 /**
  * Random access
@@ -535,19 +534,50 @@ def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchEleme
 
 def toList[A](seq: Seq[A]): List[A] = <>
 
-// def each[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = {
+def each[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
 
-//   def go(digit: Digit[A]): Unit = <>
+  def consume(a: A): Unit =
+    try { f(a) } with Control {
+      def break() = outer.break()
+      def continue() = ()
+    }
 
-//   def go(n: Tree[A]): Unit = <>
+  def go(digit: Digit[A]): Unit = digit match {
+    case One(a) => consume(a)
+    case Two(a, b) => consume(a); consume(b)
+    case Three(a, b, c) => consume(a); consume(b); consume(c)
+    case Four(a, b, c, d) => consume(a); consume(b); consume(c); consume(d)
+  }
 
-//   seq match {
-//     case Empty() => ()
-//     case Single(v) => go(One(v))
-//     case Deep(_, p, m, s) =>
-//       <>
-//   }
-// }
+  def go(node: Node[A]): Unit = node match {
+    case Leaf2(a, b) => consume(a); consume(b)
+    case Leaf3(a, b, c) => consume(a); consume(b); consume(c)
+    case Node2(_, a, b) => go(a); go(b)
+    case Node3(_, a, b, c) => go(a); go(b); go(c)
+  }
+
+  def go(digit: Digit[Node[A]]): Unit = digit match {
+    case One(a) => go(a)
+    case Two(a, b) => go(a); go(b)
+    case Three(a, b, c) => go(a); go(b); go(c)
+    case Four(a, b, c, d) => go(a); go(b); go(c); go(d)
+  }
+
+  def go(tree: Tree[A]): Unit = tree match {
+    case NoFinger() => ()
+    case SingleFinger(v) => go(v)
+    case DeepFinger(_, p, m, s) => go(p); go(m); go(s)
+  }
+
+  seq match {
+    case Empty() => ()
+    case Single(v) => consume(v)
+    case Deep(_, p, m, s) => go(p); go(m); go(s)
+  }
+} with outer: Control {
+  def break() = ()
+  def continue() = ()
+}
 
 
 def insert[A](seq: Seq[A], value: A): Seq[A] = <>
