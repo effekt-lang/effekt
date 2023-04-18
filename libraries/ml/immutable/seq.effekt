@@ -369,9 +369,41 @@ def nonEmpty[A](seq: Seq[A]): Boolean = seq match {
   case _ => true
 }
 
-// TODO reverse (but with commutative monoid)
-//    https://github.com/ocaml-batteries-team/batteries-included/blob/master/src/batFingerTree.ml#L624
+def reverse[A](seq: Seq[A]): Seq[A] = {
 
+  // invariant for all internal functions: element is in the sequence
+
+  // this is tail-recursive-modulo-context
+  def go(node: Node[A]): Node[A] = node match {
+    case Leaf2(a, b) => Leaf2(b, a)
+    case Leaf3(a, b, c) => Leaf3(c, b, a)
+    case Node2(size, a, b) => Node2(size, go(b), go(a))
+    case Node3(size, a, b, c) => Node3(size, go(c), go(b), go(a))
+  }
+  def go(digit: Digit[A]): Digit[A] = digit match {
+    case One(a) => One(a)
+    case Two(a, b) => Two(b, a)
+    case Three(a, b, c) => Three(c, b, a)
+    case Four(a, b, c, d) => Four(d, c, b, a)
+  }
+  def go(digits: Digit[Node[A]]): Digit[Node[A]] = digits match {
+    case One(a) => One(go(a))
+    case Two(a, b) => Two(go(b), go(a))
+    case Three(a, b, c) => Three(go(c), go(b), go(a))
+    case Four(a, b, c, d) => Four(go(d), go(c), go(b), go(a))
+  }
+  def go(tree: Tree[A]): Tree[A] = tree match {
+    case NoFinger() => NoFinger()
+    case SingleFinger(value) => SingleFinger(go(value))
+    case DeepFinger(size, p, m, s) => DeepFinger(size, go(s), go(m), go(p))
+  }
+
+  seq match {
+    case Empty() => Empty()
+    case Single(value) => Single(value)
+    case Deep(size, p, m, s) => Deep(size, go(s), go(m), go(p))
+  }
+}
 
 
 def splitAt[A](seq: Seq[A]): (Seq[A], Seq[A]) = <>

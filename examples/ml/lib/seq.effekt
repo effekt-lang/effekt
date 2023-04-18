@@ -72,4 +72,8 @@ def main() = {
     if (el == 7 || el == 9) do continue() else if (el == 3) do break()
     println(el)
   }
+  seq15.reverse.each { el =>
+    if (el == 7 || el == 9) do continue() else if (el == 3) do break()
+    println(el)
+  }
 }
