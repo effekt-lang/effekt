@@ -454,9 +454,84 @@ def get[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
   }
 }
 
-def update[A](seq: Digit[A], index: Int, value: A): Digit[A] / Exception[NoSuchElement] = <>
 
-def update[A](seq: Seq[A], index: Int, value: A): A / Exception[NoSuchElement] = <>
+/**
+ * Random access
+ */
+def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchElement] = {
+
+  // invariant for all internal functions: element is in the sequence
+
+  // this is tail-recursive-modulo-context
+  def go(node: Node[A], index: Int): Node[A] = node match {
+    case Leaf2(a, b) => if (index == 0) Leaf2(value, b) else Leaf2(a, value)
+    case Leaf3(a, b, c) => if (index == 0) Leaf3(value, b, c) else if (index == 1) Leaf3(a, value, c) else Leaf3(a, b, value)
+    case Node2(size, a, b) =>
+      val asize = a.size
+      if (index < asize) Node2(size, go(a, index), b) else Node2(size, a, go(b, index - asize))
+    case Node3(size, a, b, c) =>
+      val asize = a.size
+      if (index < asize) Node3(size, go(a, index), b, c) else {
+        val bsize = asize + b.size
+        if (index < bsize) Node3(size, a, go(b, index - asize), c) else Node3(size, a, b, go(c, index - bsize))
+      }
+  }
+  def go(digit: Digit[A], index: Int): Digit[A] = digit match {
+    case One(a) => One(value)
+    case Two(a, b) => if (index == 0) Two(value, b) else Two(a, value)
+    case Three(a, b, c) => if (index == 0) Three(value, b, c) else if (index == 1) Three(a, value, c) else Three(a, b, value)
+    case Four(a, b, c, d) => if (index == 0) Four(value, b, c, d) else if (index == 1) Four(a, value, c, d) else if (index == 2) Four(a, b, value, d) else Four(a, b, c, value)
+  }
+  def go(digits: Digit[Node[A]], index: Int): Digit[Node[A]] = digits match {
+    case One(a) => One(go(a, index))
+    case Two(a, b) =>
+      val asize = a.size
+      if (index < asize) Two(go(a, index), b) else Two(a, go(b, index - asize))
+    case Three(a, b, c) =>
+      val asize = a.size
+      if (index < asize) Three(go(a, index), b, c) else {
+        val bsize = asize + b.size
+        if (index < bsize) Three(a, go(b, index - asize), c) else {
+          Three(a, b, go(c, index - bsize))
+        }
+      }
+    case Four(a, b, c, d) =>
+      val asize = a.size
+      if (index < asize) Four(go(a, index), b, c, d) else {
+        val bsize = asize + b.size
+        if (index < bsize) Four(a, go(b, index - asize), c, d) else {
+          val csize = bsize + c.size
+          if (index < csize) Four(a, b, go(c, index - bsize), d) else {
+            Four(a, b, c, go(d, index - csize))
+          }
+        }
+      }
+  }
+  def go(tree: Tree[A], index: Int): Tree[A] = tree match {
+    case NoFinger() => <{ "Cannot happen!" }>
+    case SingleFinger(value) => SingleFinger(go(value, index))
+    case DeepFinger(size, p, m, s) =>
+      val psize = p.sizeDeep
+      if (index < psize) { DeepFinger(size, go(p, index), m, s) } else {
+        val msize = psize + m.size
+        if (index < msize) { DeepFinger(size, p, go(m, index - psize), s) }
+        else { DeepFinger(size, p, m, go(s, index - msize)) }
+      }
+  }
+
+  if (index >= seq.size) raise(NoSuchElement(), "...")
+  else seq match {
+    case Empty() => <{ "Cannot happen!" }>
+    case Single(_) => Single(value) // has to be the right one due to the check above
+    case Deep(size, p, m, s) =>
+      val psize = p.size
+      if (index < psize) { Deep(size, go(p, index), m, s) } else {
+        val msize = psize + m.size
+        if (index < msize) { Deep(size, p, go(m, index - psize), s) }
+        else { Deep(size, p, m, go(s, index - msize)) }
+      }
+  }
+}
 
 def toList[A](seq: Seq[A]): List[A] = <>
 
