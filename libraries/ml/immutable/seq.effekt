@@ -98,31 +98,6 @@ type View[A] {
   View(element: A, remainder: Seq[A])
 }
 
-def toTree[A](digit: Digit[Node[A]]): Tree[A] = digit match {
-  case One(a) => SingleFinger(a)
-  case Two(a, b) => deepFinger(One(a), NoFinger(), One(b))
-  case Three(a, b, c) => deepFinger(Two(a, b), NoFinger(), One(c))
-  case Four(a, b, c, d) => deepFinger(Three(a, b, c), NoFinger(), One(d))
-}
-
-def toSeq[A](d: Digit[A]): Seq[A] =  d match {
-  case One(a) => Single(a)
-  case Two(a, b) => Deep(2, One(a), NoFinger(), One(b))
-  case Three(a, b, c) => Deep(3, Two(a, b), NoFinger(), One(c))
-  case Four(a, b, c, d) => Deep(4, Three(a, b, c), NoFinger(), One(d))
-}
-
-def toDigitNode[A](n: Node[A]): Digit[Node[A]] = n match {
-  case Node2(_, a, b) => Two(a, b)
-  case Node3(_, a, b, c) => Three(a, b, c)
-  case _ => <{ "Should not happen" }>
-}
-
-def toDigit[A](n: Node[A]): Digit[A] = n match {
-  case Leaf2(a, b) => Two(a, b)
-  case Leaf3(a, b, c) => Three(a, b, c)
-  case _ => <{ "Should not happen" }>
-}
 
 // Measure
 // -------
@@ -176,6 +151,32 @@ def node2[A](first: Node[A], second: Node[A]): Node[A] =
 
 def node3[A](first: Node[A], second: Node[A], third: Node[A]): Node[A] =
   Node3(first.size + second.size + third.size, first, second, third)
+
+def toTree[A](digit: Digit[Node[A]]): Tree[A] = digit match {
+  case One(a) => SingleFinger(a)
+  case Two(a, b) => deepFinger(One(a), NoFinger(), One(b))
+  case Three(a, b, c) => deepFinger(Two(a, b), NoFinger(), One(c))
+  case Four(a, b, c, d) => deepFinger(Three(a, b, c), NoFinger(), One(d))
+}
+
+def toSeq[A](d: Digit[A]): Seq[A] =  d match {
+  case One(a) => Single(a)
+  case Two(a, b) => Deep(2, One(a), NoFinger(), One(b))
+  case Three(a, b, c) => Deep(3, Two(a, b), NoFinger(), One(c))
+  case Four(a, b, c, d) => Deep(4, Three(a, b, c), NoFinger(), One(d))
+}
+
+def toDigitNode[A](n: Node[A]): Digit[Node[A]] = n match {
+  case Node2(_, a, b) => Two(a, b)
+  case Node3(_, a, b, c) => Three(a, b, c)
+  case _ => <{ "Should not happen" }>
+}
+
+def toDigit[A](n: Node[A]): Digit[A] = n match {
+  case Leaf2(a, b) => Two(a, b)
+  case Leaf3(a, b, c) => Three(a, b, c)
+  case _ => <{ "Should not happen" }>
+}
 
 def consFinger[A](head: Node[A], tail: Tree[A]): Tree[A] = tail match {
   case NoFinger()                          => SingleFinger(head)
