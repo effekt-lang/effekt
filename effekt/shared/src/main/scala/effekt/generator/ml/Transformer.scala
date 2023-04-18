@@ -47,6 +47,7 @@ object Transformer {
    * is not supported by the ml backend, yet.
    */
   def sortDefinitions(defs: List[Definition])(using C: Context): List[Definition] =
+
     sortTopologically(defs, d => freeVariables(d).vars.keySet, d => d.id)
 
   def sortDeclarations(defs: List[Declaration])(using C: Context): List[Declaration] =
@@ -181,7 +182,7 @@ object Transformer {
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
 
     case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
