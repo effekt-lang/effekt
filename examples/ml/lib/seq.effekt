@@ -40,14 +40,23 @@ def main() = {
     if (n == 0) l
     else appendOften(l.concat(l), n - 1)
 
+  println("\nTesting cons and uncons")
   val ex1 = generate(10000, Empty())
   println(ex1.size)
   println(sumAll(ex1, 0))
 
+  println("\nTesting concat")
   val ex2 = appendOften(generate(10, Empty()), 12)
   println(ex2.size)
   printN(ex2, 17)
 
+  println("\nTesting random access")
   printN(generate(15, Empty()), 15)
   ignoring[NoSuchElement] { indexAll(generate(15, Empty()), 0) }
+
+  println("\nTesting update")
+  ignoring[NoSuchElement] {
+    val seq = generate(15, Empty());
+    indexAll(seq.update(7, 1337), 0)
+  }
 }
