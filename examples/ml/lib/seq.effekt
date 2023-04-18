@@ -30,6 +30,12 @@ def main() = {
         sumAll(tail, mod(acc + a, 1337))
     }
 
+  def indexAll(s: Seq[Int], n: Int): Unit / Exception[NoSuchElement] = {
+    println(get(s, n))
+    indexAll(s, n + 1)
+  }
+
+
   def appendOften(l: Seq[Int], n: Int): Seq[Int] =
     if (n == 0) l
     else appendOften(l.concat(l), n - 1)
@@ -41,4 +47,7 @@ def main() = {
   val ex2 = appendOften(generate(10, Empty()), 12)
   println(ex2.size)
   printN(ex2, 17)
+
+  printN(generate(15, Empty()), 15)
+  ignoring[NoSuchElement] { indexAll(generate(15, Empty()), 0) }
 }
