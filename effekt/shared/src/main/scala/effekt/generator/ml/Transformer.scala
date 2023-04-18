@@ -36,9 +36,9 @@ object Transformer {
   }
 
   def toML(module: ModuleDecl)(using Context): List[ml.Binding] = {
-    val decls = module.decls.flatMap(toML)
+    val decls = sortDeclarations(module.decls).flatMap(toML)
     val externs = module.externs.map(toML)
-    val rest = sortTopologically(module.definitions).map(toML)
+    val rest = sortDefinitions(module.definitions).map(toML)
     decls ++ externs ++ rest
   }
 
@@ -46,22 +46,26 @@ object Transformer {
    * Sorts the definitions topologically. Fails if functions are mutually recursive, since this
    * is not supported by the ml backend, yet.
    */
-  def sortTopologically(defs: List[Definition])(using C: Context): List[Definition] = {
-    val ids = defs.map { _.id }.toSet
-    val fvs = defs.map { d =>
-      d.id -> (freeVariables(d).vars.keySet intersect ids)
-    }.toMap
+  def sortDefinitions(defs: List[Definition])(using C: Context): List[Definition] =
+    sortTopologically(defs, d => freeVariables(d).vars.keySet, d => d.id)
+
+  def sortDeclarations(defs: List[Declaration])(using C: Context): List[Declaration] =
+    sortTopologically(defs, d => freeTypeVariables(d), d => d.id)
+
+  def sortTopologically[T](defs: List[T], dependencies: T => Set[Id], id: T => Id)(using C: Context): List[T] = {
+    val ids = defs.map(id).toSet
+    val fvs = defs.map{ d => id(d) -> dependencies(d).intersect(ids) }.toMap
 
     @tailrec
-    def go(todo: List[Definition], out: List[Definition], emitted: Set[Id]): List[Definition] =
+    def go(todo: List[T], out: List[T], emitted: Set[Id]): List[T] =
       if (todo.isEmpty) {
         out
       } else {
-        val (noDependencies, rest) = todo.partition { d => (fvs(d.id) -- emitted).isEmpty }
+        val (noDependencies, rest) = todo.partition { d => (fvs(id(d)) -- emitted).isEmpty }
         if (noDependencies.isEmpty) {
-          val mutuals = rest.map(_.id).mkString(", ")
+          val mutuals = rest.map(id).mkString(", ")
           Context.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
-        } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(_.id).toSet)
+        } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(id).toSet)
     }
 
     go(defs, Nil, Set.empty).reverse
@@ -177,7 +181,7 @@ object Transformer {
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortTopologically(definitions).map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k)) }
 
     case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>

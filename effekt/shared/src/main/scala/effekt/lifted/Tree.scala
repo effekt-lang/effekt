@@ -270,3 +270,24 @@ def freeVariables(ev: Evidence): FreeVariables = ev.lifts.flatMap {
   case Lift.Try() => List()
   case Lift.Reg() => List()
 }.toFV
+
+
+def freeTypeVariables(d: Declaration): Set[Id] = d match {
+  case Declaration.Data(id, tparams, constructors) => constructors.flatMap(freeTypeVariables).toSet -- Set(id) -- tparams.toSet
+  case Declaration.Interface(id, tparams, properties) => properties.flatMap(freeTypeVariables).toSet -- Set(id) -- tparams.toSet
+}
+
+def freeTypeVariables(c: Constructor): Set[Id] = c.fields.flatMap(f => freeTypeVariables(f.tpe)).toSet
+def freeTypeVariables(p: Property): Set[Id] = freeTypeVariables(p.tpe)
+
+
+def freeTypeVariables(tpe: ValueType): Set[Id] = tpe match {
+  case ValueType.Var(name) => Set(name)
+  case ValueType.Data(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
+  case ValueType.Boxed(tpe) => freeTypeVariables(tpe)
+}
+def freeTypeVariables(tpe: BlockType): Set[Id] = tpe match {
+  case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+    (vparams.flatMap(freeTypeVariables).toSet ++ bparams.flatMap(freeTypeVariables).toSet ++ freeTypeVariables(result)) -- tparams.toSet
+  case BlockType.Interface(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
+}
