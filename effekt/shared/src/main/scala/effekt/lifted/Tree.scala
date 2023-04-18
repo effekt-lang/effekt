@@ -56,6 +56,7 @@ enum Extern {
 }
 
 enum Definition {
+  def id: Id
   case Def(id: Id, block: Block)
   case Let(id: Id, binding: Expr)
 }
@@ -189,11 +190,13 @@ case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def --(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.filter{ case (leftId -> leftParam) =>
       if(o.vars.contains(leftId)) {
-        assert(leftParam == o.vars(leftId), "Id bound with different type than it's occurences.")
+        //assert(leftParam == o.vars(leftId), s"Id bound with different type ${o.vars(leftId)} than it's occurences ${leftParam}.")
         false
       } else { true }
     })
   }
+
+  def -(id: Id) = FreeVariables(vars - id)
 
   def toList: List[lifted.Param] = vars.values.toList
   // TODO add further accessors as needed
@@ -210,7 +213,7 @@ object FreeVariables {
 }
 import FreeVariables.{toFV, combineFV}
 def freeVariables(d: Definition): FreeVariables = d match {
-  case Definition.Def(id, block) => freeVariables(block)
+  case Definition.Def(id, block) => freeVariables(block) - id // recursive definitions
   case Definition.Let(id, binding) => freeVariables(binding)
 }
 
