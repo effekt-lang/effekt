@@ -34,7 +34,7 @@ object builtins {
   val StringSymbol = ExternType(name("String"), Nil)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
-  val TopSymbol = ExternType(name("Top"), Nil)
+  val TopSymbol = ExternType(name("Any"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
   val BottomSymbol = ExternType(name("Nothing"), Nil)
