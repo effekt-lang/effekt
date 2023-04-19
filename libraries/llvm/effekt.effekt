@@ -45,16 +45,15 @@ def println(u: Unit): Unit = println("unit")
 
 // strings
 
+extern pure def infixEq(x: String, y: String): Boolean = """
+    %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
+    call void @c_buffer_refcount_decrement(%Pos %x)
+    call void @c_buffer_refcount_decrement(%Pos %y)
+    ret %Pos %res
+"""
+
 extern pure def infixConcat(s: String, z: String): String = """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s, %Pos %z)
-    call void @c_buffer_refcount_decrement(%Pos %s)
-    call void @c_buffer_refcount_decrement(%Pos %z)
-    ret %Pos %spz
-"""
-def infixAdd(s: String, z: String): String = s ++ z // for legacy test cases
-
-extern pure def infixEq(s: String, z: String): Boolean = """
-    %spz = call %Pos @c_buffer_eq(%Pos %s, %Pos %z)
     call void @c_buffer_refcount_decrement(%Pos %s)
     call void @c_buffer_refcount_decrement(%Pos %z)
     ret %Pos %spz

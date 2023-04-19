@@ -88,43 +88,42 @@ def show(l: List[String]): String = showList(l){e => show(e)}
 def show(o: Option[String]): String = showOption(o){ e => show(e) }
 
 def toInt(s: String): Option[Int] = {
-    // TODO maybe make primitive? Mosly implemented here for error handling...
-    def rec(i: Int, acc: Int): Int / Exception[RuntimeError] = {
-        if(i >= length(s)) { 
-            acc 
-        } else if(unsafeCharAt(s, i) == "0") {
-            rec(i+1, 10*acc)
-        } else if(unsafeCharAt(s, i) == "1") {
-            rec(i+1, 10*acc + 1)
-        } else if(unsafeCharAt(s, i) == "2") {
-            rec(i+1, 10*acc + 2)
-        } else if(unsafeCharAt(s, i) == "3") {
-            rec(i+1, 10*acc + 3)
-        } else if(unsafeCharAt(s, i) == "4") {
-            rec(i+1, 10*acc + 4)
-        } else if(unsafeCharAt(s, i) == "5") {
-            rec(i+1, 10*acc + 3)
-        } else if(unsafeCharAt(s, i) == "6") {
-            rec(i+1, 10*acc + 4)
-        } else if(unsafeCharAt(s, i) == "7") {
-            rec(i+1, 10*acc + 3)
-        } else if(unsafeCharAt(s, i) == "8") {
-            rec(i+1, 10*acc + 4)
-        } else if(unsafeCharAt(s, i) == "9") {
-            rec(i+1, 10*acc + 3)
-        } else {
-            raise("Not an integer")
-        }
+  def go(i: Int, acc: Int): Int / Exception[RuntimeError] = {
+    if(i >= length(s)) {
+      acc
+    } else if(unsafeCharAt(s, i) == "0") {
+      go(i + 1, 10 * acc + 0)
+    } else if(unsafeCharAt(s, i) == "1") {
+      go(i + 1, 10 * acc + 1)
+    } else if(unsafeCharAt(s, i) == "2") {
+      go(i + 1, 10 * acc + 2)
+    } else if(unsafeCharAt(s, i) == "3") {
+      go(i + 1, 10 * acc + 3)
+    } else if(unsafeCharAt(s, i) == "4") {
+      go(i + 1, 10 * acc + 4)
+    } else if(unsafeCharAt(s, i) == "5") {
+      go(i + 1, 10 * acc + 5)
+    } else if(unsafeCharAt(s, i) == "6") {
+      go(i + 1, 10 * acc + 6)
+    } else if(unsafeCharAt(s, i) == "7") {
+      go(i + 1, 10 * acc + 7)
+    } else if(unsafeCharAt(s, i) == "8") {
+      go(i + 1, 10 * acc + 8)
+    } else if(unsafeCharAt(s, i) == "9") {
+      go(i + 1, 10 * acc + 9)
+    } else {
+        raise("Not an integer")
     }
-    try {
-        if(s.startsWith("-")) {
-            Some(0 - rec(1, 0))
-        } else {
-            Some(rec(0, 0))
-        }
-    } with Exception[RuntimeError] {
-        def raise[A](e: RuntimeError, msg: String) = {
-            None()
-        }
+  }
+  try {
+    if(s.startsWith("-")) {
+        Some(0 - go(1, 0))
+    } else {
+        Some(go(0, 0))
     }
+  } with Exception[RuntimeError] {
+    def raise[A](e: RuntimeError, msg: String) = {
+      None()
+    }
+  }
 }
