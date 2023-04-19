@@ -14,6 +14,14 @@ def main() = {
         printAll(tail)
     }
 
+  def printAll(s: Seq[Boolean]): Unit =
+    uncons(s) match {
+      case IsEmpty() => ()
+      case View(a, tail) =>
+        println(a);
+        printAll(tail)
+    }
+
   def printN(s: Seq[Int], n: Int): Unit =
     if (n == 0) () else
       uncons(s) match {
@@ -33,6 +41,14 @@ def main() = {
   def indexAll(s: Seq[Int], n: Int): Unit / Exception[NoSuchElement] = {
     println(s.index(n))
     indexAll(s, n + 1)
+  }
+
+  def testSplit(size: Int, index: Int) = ignoring[IndexOutOfBounds] {
+    val seq = generate(size, Empty());
+    val (s1, s2) = seq.splitAt(index)
+    s1.printAll()
+    println("----")
+    s2.printAll()
   }
 
   val seq15 = generate(15, Empty());
@@ -76,4 +92,23 @@ def main() = {
     if (el == 7 || el == 9) do continue() else if (el == 3) do break()
     println(el)
   }
+
+  println("\nTesting splitting")
+  testSplit(0, 0)
+  println("-------")
+  testSplit(1, 0)
+  println("-------")
+  testSplit(1, 1)
+  println("-------")
+  testSplit(1, 2)
+  println("-------")
+  testSplit(27, 13)
+  println("-------")
+
+  println("\nTesting mapping")
+  val mapped = seq15.map { n =>
+    if (n == 7 || n == 9) do continue() else if (n == 11) do break()
+    n > 5
+  }
+  mapped.printAll
 }

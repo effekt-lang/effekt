@@ -39,6 +39,8 @@ type View[A] {
 record NoSuchElement()
 
 
+record IndexOutOfBounds()
+
 
 
 // Implementation
@@ -406,9 +408,6 @@ def reverse[A](seq: Seq[A]): Seq[A] = {
 }
 
 
-def splitAt[A](seq: Seq[A]): (Seq[A], Seq[A]) = <>
-
-
 /**
  * Random access
  */
@@ -660,9 +659,155 @@ def toList[A](seq: Seq[A]): List[A] = {
   list
 }
 
+def toSeq[A](l: List[A]): Seq[A] = {
+  def go(l: List[A], acc: Seq[A]): Seq[A] = l match {
+    case Nil() => acc
+    case Cons(head, tail) => go(tail, consRight(acc, head))
+  }
+  go(l, Empty())
+}
 
-def insert[A](seq: Seq[A], value: A): Seq[A] = <>
 
+
+
+record Split[A, R](prefix: R, element: A, suffix: R)
+
+def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOfBounds] = {
+
+  // invariant index is in digit
+  def go(digit: Digit[A], index: Int): Split[A, List[A]] = digit match {
+    case One(a) => Split([], a, [])
+    case Two(a, b) => if (index == 0) Split([], a, [b]) else Split([a], b, [])
+    case Three(a, b, c) =>
+      if (index == 0) Split([], a, [b, c])
+      else if (index == 1) Split([a], b, [c])
+      else Split([a, b], c, [])
+    case Four(a, b, c, d) =>
+      if (index == 0) Split([], a, [b, c, d])
+      else if (index == 1) Split([a], b, [c, d])
+      else if (index == 2) Split([a, b], c, [d])
+      else  Split([a, b, c], d, [])
+  }
+
+  def go(digit: Digit[Node[A]], index: Int): Split[Node[A], List[Node[A]]] = digit match {
+    case One(a) => Split([], a, [])
+    case Two(a, b) =>
+      val asize = a.size
+      if (index < asize) Split([], a, [b]) else Split([a], b, [])
+    case Three(a, b, c) =>
+      val asize = a.size
+      if (index < asize) Split([], a, [b, c])
+      else {
+        val bsize = asize + b.size
+        if (index < bsize) Split([a], b, [c])
+        else Split([a, b], c, [])
+      }
+    case Four(a, b, c, d) =>
+      val asize = a.size
+      if (index < asize) Split([], a, [b, c, d])
+      else {
+        val bsize = asize + b.size
+        if (index < bsize) Split([a], b, [c, d])
+        else {
+          val csize = bsize + c.size
+          if (index < csize) Split([a, b], c, [d])
+          else Split([a, b, c], d, [])
+        }
+      }
+  }
+
+  def left(p: List[Node[A]], m: Tree[A], s: Digit[Node[A]]): Tree[A] = p match {
+    case Nil() => m.unconsFinger match {
+      case TreeIsEmpty() => s.toTree
+      case TreeView(a, m2) => deepFinger(a.toDigitNode, m2, s)
+    }
+    case _ => deepFinger(p.toDigitNode, m, s)
+  }
+
+  def left(p: List[A], m: Tree[A], s: Digit[A]): Seq[A] = p match {
+    case Nil() => m.unconsFinger match {
+      case TreeIsEmpty() => s.toSeq
+      case TreeView(a, m2) => deep(a.toDigit, m2, s)
+    }
+    case _ => deep(p.toDigitNode, m, s)
+  }
+  def right(p: Digit[A], m: Tree[A], s: List[A]): Seq[A] = s match {
+    case Nil() => m.unconsRightFinger match {
+      case TreeIsEmpty() => p.toSeq
+      case TreeView(a, m2) => deep(p, m2, a.toDigit)
+    }
+    case _ => deep(p, m, s.toDigitNode)
+  }
+
+
+  def right(p: Digit[Node[A]], m: Tree[A], s: List[Node[A]]): Tree[A] = s match {
+    case Nil() => m.unconsRightFinger match {
+      case TreeIsEmpty() => p.toTree
+      case TreeView(a, m2) => deepFinger(p, m2, a.toDigitNode)
+    }
+    case _ => deepFinger(p, m, s.toDigitNode)
+  }
+
+  def go(tree: Tree[A], index: Int): Split[Node[A], Tree[A]] = tree match {
+    case NoFinger() => println("Cannot happen!"); <{ "Cannot happen!" }>
+    case SingleFinger(value) => Split(NoFinger(), value, NoFinger())
+    case DeepFinger(size, p, m, s) =>
+      val psize = p.sizeDeep;
+      // It is in the prefix
+      if (index < psize) {
+        val Split(pp, v, ps) = go(p, index);
+        Split(pp.toTree, v, left(ps, m, s))
+      } else {
+        val msize = psize + m.size
+        // It is somewhere in the spine
+        if (index < msize) {
+          val Split(mp, v, ms) = go(m, index - psize);
+          val mpsize = psize + mp.size;
+          val Split(vp, w, vs) = go(v.toDigitNode, index - mpsize);
+          Split(right(p, mp, vp), w, left(vs, ms, s))
+        // It is somewhere in the suffix
+        } else {
+          val Split(sp, v, ss) = go(s, index - msize)
+          Split(right(p, m, sp), v, ss.toTree)
+        }
+      }
+  }
+
+  if (index < 0) {
+    do raise(IndexOutOfBounds(), "...")
+  } else if (index >= seq.size) {
+    (seq, Empty())
+  } else seq match {
+    case Empty() => (Empty(), Empty())
+    case Single(v) => (Empty(), seq)
+    case Deep(size, p, m, s) =>
+      val psize = p.size;
+      // It is in the prefix
+      if (index < psize) {
+        val Split(pp, v, ps) = go(p, index);
+        (toSeq(pp), left(Cons(v, ps), m, s))
+      } else {
+        val msize = psize + m.size
+        // It is somewhere in the spine
+        if (index < msize) {
+          val Split(mp, v, ms) = go(m, index - psize);
+          val mpsize = psize + mp.size;
+          val Split(vp, w, vs) = go(v.toDigit, index - mpsize);
+          (right(p, mp, vp), left(Cons(w, vs), ms, s))
+        // It is somewhere in the suffix
+        } else {
+          val Split(sp, v, ss) = go(s, index - msize);
+          (right(p, m, sp), Cons(v, ss).toSeq)
+        }
+      }
+  }
+}
+
+
+def insert[A](seq: Seq[A], value: A, index: Int): Seq[A] / Exception[IndexOutOfBounds] =
+  splitAt(seq, index) match {
+    case (prefix, suffix) => prefix.concat(cons(value, suffix))
+  }
 
 
 
@@ -674,6 +819,15 @@ def toTree[A](digit: Digit[Node[A]]): Tree[A] = digit match {
   case Two(a, b) => deepFinger(One(a), NoFinger(), One(b))
   case Three(a, b, c) => deepFinger(Two(a, b), NoFinger(), One(c))
   case Four(a, b, c, d) => deepFinger(Three(a, b, c), NoFinger(), One(d))
+}
+
+def toTree[A](digit: List[Node[A]]): Tree[A] = digit match {
+  case Nil() => NoFinger()
+  case Cons(a, Nil()) => SingleFinger(a)
+  case Cons(a, Cons(b, Nil())) => deepFinger(One(a), NoFinger(), One(b))
+  case Cons(a, Cons(b, Cons(c, Nil()))) => deepFinger(Two(a, b), NoFinger(), One(c))
+  case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => deepFinger(Three(a, b, c), NoFinger(), One(d))
+  case _ => <>
 }
 
 def toSeq[A](d: Digit[A]): Seq[A] =  d match {
@@ -689,6 +843,14 @@ def toDigitNode[A](n: Node[A]): Digit[Node[A]] = n match {
   case _ => <{ "Should not happen" }>
 }
 
+def toDigitNode[A](n: List[A]): Digit[A] = n match {
+  case Cons(a, Nil()) => One(a)
+  case Cons(a, Cons(b, Nil())) => Two(a, b)
+  case Cons(a, Cons(b, Cons(c, Nil()))) => Three(a, b, c)
+  case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Four(a, b, c, d)
+  case _ => <{ "Should not happen" }>
+}
+
 def toDigit[A](n: Node[A]): Digit[A] = n match {
   case Leaf2(a, b) => Two(a, b)
   case Leaf3(a, b, c) => Three(a, b, c)
@@ -701,3 +863,41 @@ def toList[A](digit: Digit[A]): List[A] = digit match {
   case Three(a, b, c) => Cons(a, Cons(b, Cons(c, Nil())))
   case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
 }
+
+def map[A, B](seq: Seq[A]) { f: A => B / Control }: Seq[B] = {
+  var result: Seq[B] = Empty()
+  seq.each { a => result = result.consRight(f(a)) }
+  result
+}
+
+
+// TODO iterator interface
+//
+
+// interface Iterator[A] {
+//   def value(): Option[A]
+//   def next(): Unit
+// }
+
+// interface Generator[A] {
+//   def yield(value: A): Unit
+// }
+
+// def iterate[A, R](seq: Seq[A]) { prog: {Iterator[A]} => R }: R = {
+
+//   var k: Unit => Unit at {} = fun(unit: Unit) { () }
+//   var v: Option[A] = None()
+
+//   try { seq.each { el => do yield(el) } } with Generator[A] {
+//     def yield(value) = { v = Some(value); k = box resume }
+//   }
+
+//   new Iterator[A] {
+//     def value() = v
+//     def next() = (unbox k)(())
+//   }
+// }
+
+
+// TODO equality comparison
+//
