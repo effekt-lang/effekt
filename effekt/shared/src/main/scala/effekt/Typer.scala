@@ -1380,7 +1380,7 @@ trait TyperOps extends ContextOps { self: Context =>
        if (s.name.name == "resume")
         abort(pretty"Cannot find `resume`. Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?")
        else
-        abort(pretty"Cannot find type for ${s.name} -- (mutually) recursive functions need to have an annotated return type.")
+        abort(pretty"Cannot find type for ${s.name} -- forward uses and recursive functions need annotated return types.")
      }
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
