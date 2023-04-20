@@ -46,3 +46,8 @@ def toInt(str: String): Option[Int] = toOption(internalStringToInt(str))
 
 extern pure def unsafeCharAt(str: String, n: Int): String =
     "String.sub (str, n)"
+
+
+val ANSI_GREEN = "\u001b[32m"
+val ANSI_RED = "\u001b[31m"
+val ANSI_RESET = "\u001b[0m"
