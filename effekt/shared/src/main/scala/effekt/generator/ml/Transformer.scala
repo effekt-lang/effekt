@@ -256,6 +256,12 @@ object Transformer {
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
         ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+      case New(impl) =>
+        toML(impl) match {
+          case ml.Lambda(ps, body) =>
+            ml.FunBind(name(id), ps, body)
+          case other => ml.ValBind(name(id), other)
+        }
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
@@ -281,7 +287,7 @@ object Transformer {
       toML(b)
 
     case lifted.Member(b, field, annotatedType) =>
-      ml.Call(name(field))(toML(b))
+      ml.Call(name(field))(ml.Call(toML(b))())
 
     case lifted.Unbox(e) => toML(e) // not sound
 
@@ -290,7 +296,9 @@ object Transformer {
 
   def toML(impl: Implementation)(using Context): ml.Expr = impl match {
     case Implementation(interface, operations) =>
-      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+      ml.Lambda() {
+        ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+      }
   }
 
   def toML(op: Operation)(using Context): ml.Expr = toML(op.implementation)
