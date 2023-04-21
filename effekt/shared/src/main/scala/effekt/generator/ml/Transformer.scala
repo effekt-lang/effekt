@@ -148,6 +148,28 @@ object Transformer {
     dataDecl :: accessors
   }
 
+  /**
+   * This is a copy of [[recordRep]], which is used to translate recursive block definitions.
+   *
+   *   fun left self = (case (self ()) of
+   *    (l, r) => l
+   *   );
+   */
+  def thunkedSelector(typeName: Id, cases: List[Id])(using Context): List[ml.Binding] =
+    cases.zipWithIndex.map {
+      case (caseName, i) =>
+        val self = freshName("self")
+        val op = freshName("op")
+        // _, _, _, arg, _
+        val patterns = cases.indices.map {
+          j => if j == i then ml.Pattern.Named(op) else ml.Pattern.Wild()
+        }.toList
+        ml.Binding.FunBind(name(caseName), List(ml.Param.Named(self)),
+          ml.Expr.Match(ml.Call(self)(), List(MatchClause(
+            ml.Pattern.Datatype(name(typeName), patterns), ml.Expr.Variable(op)
+        )), None))
+    }
+
   def toML(ext: Extern)(using Context): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
       ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, RawExpr(body))
@@ -294,16 +316,31 @@ object Transformer {
   }
 
   def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
+
+    def isRecursive = freeVariables(binding).vars.keySet contains id
+
     binding match {
+
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
         ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
-      case New(impl) =>
-        toML(impl) match {
-          case ml.Lambda(ps, body) =>
-            ml.FunBind(name(id), ps, body)
-          case other => ml.ValBind(name(id), other)
-        }
+
+      // Here we use shadowing, but should rename instead.
+      //       val myFun = let
+      //         fun left self = (case (self ()) of
+      //           (l, r) => l
+      //         );
+      //         fun right self = (case (self ()) of
+      //           (l, r) => r
+      //         );
+      //         fun myFun () = (fn a => 1 + a, fn b => if b then (right myFun) b else false);
+      //       in myFun () end;
+      case New(impl) if isRecursive =>
+        val ops: List[ml.Binding] = thunkedSelector(impl.interface.name, impl.operations.map(_.name))
+
+        val fun: ml.Binding = ml.Binding.FunBind(name(id), Nil, toML(binding))
+
+        ml.ValBind(name(id), ml.Expr.Let(ops :+ fun, ml.Call(name(id))()))
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
@@ -329,7 +366,7 @@ object Transformer {
       toML(b)
 
     case lifted.Member(b, field, annotatedType) =>
-      ml.Call(name(field))(ml.Call(toML(b))())
+      ml.Call(name(field))(toML(b))
 
     case lifted.Unbox(e) => toML(e) // not sound
 
@@ -338,9 +375,7 @@ object Transformer {
 
   def toML(impl: Implementation)(using Context): ml.Expr = impl match {
     case Implementation(interface, operations) =>
-      ml.Lambda() {
-        ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
-      }
+      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
   }
 
   def toML(op: Operation)(using Context): ml.Expr = toML(op.implementation)
