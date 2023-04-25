@@ -1,4 +1,4 @@
 import text/string
 import immutable/option
 
-def main(): Option[Int] = "-123".toInt
+def main() = println(show("-123".toInt))
