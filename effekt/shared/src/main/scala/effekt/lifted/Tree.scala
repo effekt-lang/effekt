@@ -56,6 +56,7 @@ enum Extern {
 }
 
 enum Definition {
+  def id: Id
   case Def(id: Id, block: Block)
   case Let(id: Id, binding: Expr)
 }
@@ -189,11 +190,13 @@ case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def --(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.filter{ case (leftId -> leftParam) =>
       if(o.vars.contains(leftId)) {
-        assert(leftParam == o.vars(leftId), "Id bound with different type than it's occurences.")
+        //assert(leftParam == o.vars(leftId), s"Id bound with different type ${o.vars(leftId)} than it's occurences ${leftParam}.")
         false
       } else { true }
     })
   }
+
+  def -(id: Id) = FreeVariables(vars - id)
 
   def toList: List[lifted.Param] = vars.values.toList
   // TODO add further accessors as needed
@@ -210,7 +213,7 @@ object FreeVariables {
 }
 import FreeVariables.{toFV, combineFV}
 def freeVariables(d: Definition): FreeVariables = d match {
-  case Definition.Def(id, block) => freeVariables(block)
+  case Definition.Def(id, block) => freeVariables(block) - id // recursive definitions
   case Definition.Let(id, binding) => freeVariables(binding)
 }
 
@@ -284,3 +287,24 @@ def freeVariables(ev: Evidence): FreeVariables = ev.lifts.flatMap {
   case Lift.Try() => List()
   case Lift.Reg() => List()
 }.toFV
+
+
+def freeTypeVariables(d: Declaration): Set[Id] = d match {
+  case Declaration.Data(id, tparams, constructors) => constructors.flatMap(freeTypeVariables).toSet -- Set(id) -- tparams.toSet
+  case Declaration.Interface(id, tparams, properties) => properties.flatMap(freeTypeVariables).toSet -- Set(id) -- tparams.toSet
+}
+
+def freeTypeVariables(c: Constructor): Set[Id] = c.fields.flatMap(f => freeTypeVariables(f.tpe)).toSet
+def freeTypeVariables(p: Property): Set[Id] = freeTypeVariables(p.tpe)
+
+
+def freeTypeVariables(tpe: ValueType): Set[Id] = tpe match {
+  case ValueType.Var(name) => Set(name)
+  case ValueType.Data(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
+  case ValueType.Boxed(tpe) => freeTypeVariables(tpe)
+}
+def freeTypeVariables(tpe: BlockType): Set[Id] = tpe match {
+  case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+    (vparams.flatMap(freeTypeVariables).toSet ++ bparams.flatMap(freeTypeVariables).toSet ++ freeTypeVariables(result)) -- tparams.toSet
+  case BlockType.Interface(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
+}

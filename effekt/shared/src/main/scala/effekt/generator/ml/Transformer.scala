@@ -5,12 +5,14 @@ package ml
 import effekt.context.Context
 import effekt.lifted.*
 import effekt.core.Id
+
 import effekt.symbols.{ Symbol, TermSymbol, Module, Wildcard }
 import effekt.util.messages.{ INTERNAL_ERROR, FIXME }
 
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
+import scala.annotation.tailrec
 import scala.language.implicitConversions
 
 object Transformer {
@@ -37,10 +39,50 @@ object Transformer {
   }
 
   def toML(module: ModuleDecl)(using Context): List[ml.Binding] = {
-    val decls = module.decls.flatMap(toML)
+    val decls = sortDeclarations(module.decls).flatMap(toML)
     val externs = module.externs.map(toML)
-    val rest = module.definitions.map(toML)
+    val rest = sortDefinitions(module.definitions).map(toML)
     decls ++ externs ++ rest
+  }
+
+  /**
+   * Sorts the definitions topologically. Fails if functions are mutually recursive, since this
+   * is not supported by the ml backend, yet.
+   *
+   * Keep let-definitions in the order they are, since they might have observable side-effects
+   */
+  def sortDefinitions(defs: List[Definition])(using C: Context): List[Definition] = {
+    def sort(defs: List[Definition], toSort: List[Definition]): List[Definition] = defs match {
+      case (d: Definition.Let) :: rest  =>
+        val sorted = sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
+         sorted ++ (d :: sort(rest, Nil))
+      case (d: Definition.Def) :: rest => sort(rest, d :: toSort)
+      case Nil => sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
+    }
+
+    sort(defs, Nil)
+  }
+
+  def sortDeclarations(defs: List[Declaration])(using C: Context): List[Declaration] =
+    sortTopologically(defs, d => freeTypeVariables(d), d => d.id)
+
+  def sortTopologically[T](defs: List[T], dependencies: T => Set[Id], id: T => Id)(using C: Context): List[T] = {
+    val ids = defs.map(id).toSet
+    val fvs = defs.map{ d => id(d) -> dependencies(d).intersect(ids) }.toMap
+
+    @tailrec
+    def go(todo: List[T], out: List[T], emitted: Set[Id]): List[T] =
+      if (todo.isEmpty) {
+        out
+      } else {
+        val (noDependencies, rest) = todo.partition { d => (fvs(id(d)) -- emitted).isEmpty }
+        if (noDependencies.isEmpty) {
+          val mutuals = rest.map(id).mkString(", ")
+          Context.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
+        } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(id).toSet)
+    }
+
+    go(defs, Nil, Set.empty).reverse
   }
 
   def tpeToML(tpe: BlockType)(using C: Context): ml.Type = tpe match {
@@ -165,7 +207,7 @@ object Transformer {
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k)) }
 
     case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
@@ -256,6 +298,12 @@ object Transformer {
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
         ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+      case New(impl) =>
+        toML(impl) match {
+          case ml.Lambda(ps, body) =>
+            ml.FunBind(name(id), ps, body)
+          case other => ml.ValBind(name(id), other)
+        }
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
@@ -281,7 +329,7 @@ object Transformer {
       toML(b)
 
     case lifted.Member(b, field, annotatedType) =>
-      ml.Call(name(field))(toML(b))
+      ml.Call(name(field))(ml.Call(toML(b))())
 
     case lifted.Unbox(e) => toML(e) // not sound
 
@@ -290,7 +338,9 @@ object Transformer {
 
   def toML(impl: Implementation)(using Context): ml.Expr = impl match {
     case Implementation(interface, operations) =>
-      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+      ml.Lambda() {
+        ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+      }
   }
 
   def toML(op: Operation)(using Context): ml.Expr = toML(op.implementation)

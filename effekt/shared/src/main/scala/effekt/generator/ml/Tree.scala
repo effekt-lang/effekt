@@ -23,10 +23,10 @@ class MLName(n: String) {
 }
 
 enum Type {
-  case TApp(tpe: Type, arg: List[Type])
+  case TApp(tpe: Type, args: List[Type])
   case Builtin(n: MLName)
   case Var(n: MLName)
-  case Tuple(l: List[Type])
+  case Tuple(args: List[Type])
   case Unit
   case Integer
   case Real
@@ -104,7 +104,7 @@ case class MatchClause(pattern: Pattern, body: Expr)
 enum Pattern {
   case Wild()
   case Named(name: MLName)
-  case Datatype(tag: MLName, terms: List[Pattern])
+  case Datatype(tag: MLName, args: List[Pattern])
 }
 
 object Consts {
@@ -142,4 +142,172 @@ implicit def autoParam(n: MLName): Param = Param.Named(n)
 def mkLet(bindings: List[Binding], body: Expr): Expr = body match {
   case Let(bindings1, body1) => mkLet(bindings ++ bindings1, body1)
   case _ => ml.Expr.Let(bindings, body)
+}
+
+object utils extends util.Structural {
+
+  case class Substitution(terms: Map[MLName, Expr], types: Map[MLName, Type]) {
+    def --(vars: Vars): Substitution = Substitution(terms.removedAll(vars.terms), types.removedAll(vars.types))
+  }
+
+  def substituteTerms(in: Expr)(subst: (MLName, Expr)*): Expr =
+    substitute(in)(using Substitution(subst.toMap, Map.empty))
+
+  def substituteTypes(in: Expr)(subst: (MLName, Type)*): Expr =
+    substitute(in)(using Substitution(Map.empty, subst.toMap))
+
+  def substitute(exp: Expr)(using s: Substitution): Expr = exp match {
+    case Variable(n) => s.terms.getOrElse(n, exp)
+    case Lambda(params, body) => Lambda(params.map(substitute), substitute(body)(using s -- params.map(Vars.bound)))
+    case Let(bindings, body) => Let(bindings.map(substitute), substitute(body)(using s -- bindings.map(Vars.bound)))
+
+    case e : (RawExpr | RawValue | Tuple | Sequence | If | Make | Ref | Deref | Assign | Call | Match) =>
+      rewriteStructurally[Expr](e)
+  }
+
+  def substitute(p: Param)(using s: Substitution): Param = p match {
+    case Param.Named(name) => p
+    case Param.Patterned(pattern) => Param.Patterned(substitute(pattern))
+  }
+
+  def substitute(m: MatchClause)(using s: Substitution): MatchClause = m match {
+    case MatchClause(pattern, body) =>
+      MatchClause(substitute(pattern), substitute(body)(using s -- Vars.bound(pattern)))
+  }
+
+  def substitute(pattern: Pattern)(using s: Substitution): Pattern =
+    rewriteStructurally(pattern)
+
+  def substitute(b: Binding)(using s: Substitution): Binding = b match {
+    case Binding.FunBind(name, params, body) =>
+      val bound = Vars.term(name) ++ params.map(Vars.bound)
+      Binding.FunBind(name, params.map(substitute), substitute(body)(using s -- bound))
+
+    case Binding.DataBind(name, tparams, constructors) =>
+      val bound = Vars.tpe(name) ++ Vars.types(tparams.map(_.n))
+      Binding.DataBind(name, tparams, constructors map {
+        case (n, tpe) => (n, tpe.map(substitute(_)(using s -- bound)))
+      })
+
+    case Binding.TypeBind(name, tparams, tpe) =>
+      val bound = Vars.tpe(name) ++ Vars.types(tparams.map(_.n))
+      Binding.TypeBind(name, tparams, substitute(tpe)(using s -- bound))
+
+    // congruences
+    case Binding.RawBind(raw) => b
+    case Binding.AnonBind(body) => Binding.AnonBind(substitute(body))
+    case Binding.ValBind(name, body) => Binding.ValBind(name, substitute(body))
+  }
+
+  def substitute(tpe: Type)(using s: Substitution): Type = tpe match {
+    case Type.Builtin(n) => s.types.getOrElse(n, tpe)
+    case Type.Var(n) => s.types.getOrElse(n, tpe)
+
+    // congruence cases
+    case Type.TApp(tpe, args) => Type.TApp(substitute(tpe), args.map(substitute))
+    case Type.Tuple(args) => Type.Tuple(args.map(substitute))
+    case Type.Data(name) => tpe
+    case Type.Fun(args, res) => Type.Fun(args.map(substitute), substitute(res))
+    case Type.Unit | Type.Integer | Type.Real | Type.String | Type.Bool => tpe
+  }
+}
+
+
+case class Vars(terms: Set[MLName], types: Set[MLName]) {
+  def ++(other: Vars): Vars =
+    Vars(terms ++ other.terms, types ++ other.types)
+
+  def --(other: Vars): Vars =
+    Vars(terms -- other.terms, types -- other.types)
+}
+object Vars {
+  def empty = Vars(Set.empty, Set.empty)
+  def term(name: MLName) = Vars(Set(name), Set.empty)
+  def tpe(name: MLName) = Vars(Set.empty, Set(name))
+  def types(names: List[MLName]) = Vars(Set.empty, names.toSet)
+
+  implicit def flatten(vars: List[Vars]): Vars = vars.fold(Vars.empty)(_ ++ _)
+  implicit def flatten(vars: Option[Vars]): Vars = vars.getOrElse(Vars.empty)
+
+  def bound(b: Binding): Vars = b match {
+    case Binding.AnonBind(body) => Vars.empty
+    case Binding.ValBind(name, body) => Vars.term(name)
+    case Binding.FunBind(name, params, body) => Vars.term(name)
+    case Binding.RawBind(raw) => Vars.empty
+    case Binding.DataBind(name, tparams, constructors) =>
+      Vars.tpe(name) ++ constructors.foldLeft(Vars.empty) {
+        case (xs, (ctor, tpe)) => Vars.term(ctor) ++ xs
+      }
+    case Binding.TypeBind(name, tparams, tpe) => Vars.tpe(name)
+  }
+  def bound(p: List[Param]): Vars = p.map(bound)
+  def bound(p: Param): Vars = p match {
+    case Param.Named(name) => Vars.term(name)
+    case Param.Patterned(p) => bound(p)
+  }
+
+  def bound(p: Pattern): Vars = p match {
+    case Pattern.Wild() => Vars.empty
+    case Pattern.Named(name) => Vars.term(name)
+    case Pattern.Datatype(tag, args) => args.map(bound)
+  }
+
+  def free(p: Param): Vars = p match {
+    case Param.Named(name) => Vars.empty
+    case Param.Patterned(pattern) => free(pattern)
+  }
+
+  def free(p: Pattern): Vars = p match {
+    case Pattern.Wild() => Vars.empty
+    case Pattern.Named(name) => Vars.empty
+    case Pattern.Datatype(tag, args) => Vars.tpe(tag) ++ args.map(free)
+  }
+
+  def free(p: Binding): Vars = p match {
+    case Binding.FunBind(name, params, body) => free(body) -- params.map(bound) -- Vars.term(name)
+    case Binding.DataBind(name, tparams, ctors) => ctors.map {
+      case (ctor, tpe) => flatten(tpe.map(free))
+    } -- Vars.types(tparams.map(_.n)) -- Vars.tpe(name)
+    case Binding.TypeBind(name, tparams, tpe) => free(tpe) -- Vars.types(tparams.map(_.n)) -- Vars.tpe(name)
+
+    // congruence cases
+    case Binding.AnonBind(body) => free(body)
+    case Binding.ValBind(name, body) => free(body)
+    case Binding.RawBind(raw) => Vars.empty
+  }
+
+  def free(c: MatchClause): Vars = c match {
+    case MatchClause(pattern, body) => (free(body) -- bound(pattern)) ++ free(pattern)
+  }
+
+  def free(exp: Expr): Vars = exp match {
+    case Expr.Variable(name) => Vars.term(name)
+    case Expr.Lambda(params, body) => (free(body) -- params.map(bound)) ++ params.map(free)
+    case Expr.Let(bindings, body) => (free(body) -- bindings.map(bound)) ++ bindings.map(free)
+
+    // congruence cases
+    case Expr.Call(callee, args) => free(callee) ++ args.map(free)
+    case Expr.RawExpr(raw) => Vars.empty
+    case Expr.RawValue(raw) => Vars.empty // we don't know
+    case Expr.Tuple(terms) => terms.map(free)
+    case Expr.Sequence(exps, rest) => exps.map(free) ++ free(rest)
+    case Expr.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
+    case Expr.Make(tag, arg) => arg.map(free)
+    case Expr.Match(scrutinee, clauses, default) => free(scrutinee) ++ clauses.map(free) ++ default.map(free)
+    case Expr.Ref(exp) => free(exp)
+    case Expr.Deref(exp) => free(exp)
+    case Expr.Assign(assignee, value) => free(assignee) ++ free(value)
+  }
+
+  def free(tpe: Type): Vars = tpe match {
+    case Type.Builtin(n) => Vars.tpe(n)
+    case Type.Var(n) => Vars.tpe(n)
+
+    // congruence cases
+    case Type.Fun(args, res) => free(res) ++ args.map(free)
+    case Type.TApp(tpe, args) => free(tpe) ++ args.map(free)
+    case Type.Tuple(args) => args.map(free)
+    case Type.Data(n) => Vars.empty
+    case Type.Unit |  Type.Integer | Type.Real | Type.String | Type.Bool => Vars.empty
+  }
 }
