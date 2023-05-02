@@ -51,6 +51,7 @@ extern pure def infixEq(x: String, y: String): Boolean = """
     call void @c_buffer_refcount_decrement(%Pos %y)
     ret %Pos %res
 """
+def infixNeq(x: String, y: String): Boolean = not(x == y)
 
 extern pure def infixConcat(s: String, z: String): String = """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s, %Pos %z)

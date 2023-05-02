@@ -174,4 +174,8 @@ struct Pos c_buffer_show_Double(const Double x) {
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
+uint64_t c_buffer_index(const struct Pos str, const uint64_t index) {
+    return c_buffer_bytes(str)[index];
+}
+
 #endif
