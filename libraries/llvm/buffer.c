@@ -1,6 +1,8 @@
 #ifndef EFFEKT_BUFFER_C
 #define EFFEKT_BUFFER_C
 
+// NOTE: Buffers are NOT 0-terminated!
+
 #include "stdlib.h"
 #include <stdint.h>
 
@@ -124,7 +126,7 @@ char *c_buffer_as_null_terminated_string(const struct Pos buffer) {
 
 struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
     uint64_t n = 0;
-    while (data_nt[n++]);
+    while (data_nt[++n]);
 
     return c_buffer_construct(n, (uint8_t *) data_nt);
 }
