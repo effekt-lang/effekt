@@ -1,0 +1,4 @@
+import text/string
+import immutable/option
+
+def main() = println(show("-123".toInt))
