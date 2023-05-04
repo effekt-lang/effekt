@@ -342,7 +342,7 @@ class Constraints(
      * This helper function computes inactivity of nodes as the
      * transitive closure of x's bounds.
      */
-    def check(x: CNode): Unit =
+    def checkInactivity(x: CNode): Unit =
       if (cache contains x) { return }
 
       if (captSubstitution isDefinedAt x) { cache += (x -> true); return }
@@ -352,7 +352,7 @@ class Constraints(
         cache += (x -> true)
 
         val allBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n =>
-          check(n)
+          checkInactivity(n)
           cache(n)
         }
         cache += (x -> allBoundsInactive)
@@ -361,7 +361,7 @@ class Constraints(
       }
 
     // collect all nodes that can be solved
-    pendingInactive filter { n => check(n); cache(n) }
+    pendingInactive filter { n => checkInactivity(n); cache(n) }
   }
 
 
