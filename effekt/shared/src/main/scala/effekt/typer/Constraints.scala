@@ -215,12 +215,9 @@ class Constraints(
     // (0) only add those to pending that haven't been solved already
     pendingInactive = pendingInactive ++ (capts.toSet -- captSubstitution.keySet)
 
-    var toRemove: Set[CNode] = Set.empty
-
     // (1) collect all nodes that can be solved
-    pendingInactive foreach { n =>
-      if (isInactive(n)) toRemove = toRemove + n
-    }
+    val toRemove: Set[CNode] = removableNodes()
+
     // nothing to do
     if (toRemove.isEmpty) return;
 
@@ -330,28 +327,41 @@ class Constraints(
   }
 
   /**
-   * Computes whether a node and all of its transitive bounds are inactive.
+   * Computes the set of all nodes that are inactive (that is, we left its unification scope and it
+   * can be solved by unification)
+   *
+   * In order to do so, it checks whether the node itself is inactive and whether the transitive closure of
+   * its bounds is inactive.
    */
-  private def isInactive(x: CNode): Boolean = {
+  private def removableNodes(): Set[CNode] = {
 
-    def go(x: CNode, seen: Map[CNode, Boolean]): Map[CNode, Boolean] =
+    // The results of inactivity is cached to avoid expensive recomputation.
+    var cache: Map[CNode, Boolean] = Map.empty
 
-      if ((seen contains x) || (captSubstitution isDefinedAt x)) return seen + (x -> true);
+    /**
+     * This helper function computes inactivity of nodes as the
+     * transitive closure of x's bounds.
+     */
+    def check(x: CNode): Unit =
+      if (cache contains x) { return }
+
+      if (captSubstitution isDefinedAt x) { cache += (x -> true); return }
 
       // is the node itself inactive?
       if (pendingInactive contains x) {
-        var seenAfterBounds: Map[CNode, Boolean] = seen + (x -> true)
+        cache += (x -> true)
 
         val allBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n =>
-          seenAfterBounds = go(n, seenAfterBounds)
-          seenAfterBounds(n)
+          check(n)
+          cache(n)
         }
-        seenAfterBounds + (x -> allBoundsInactive)
+        cache += (x -> allBoundsInactive)
       } else {
-        seen + (x -> false)
+        cache += (x -> false)
       }
 
-    go(x, Map.empty)(x)
+    // collect all nodes that can be solved
+    pendingInactive filter { n => check(n); cache(n) }
   }
 
 
