@@ -717,7 +717,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
    */
   lazy val linebreak = """(\r\n|\n)""".r
   lazy val singleline = """//[^\n]*(\n|\z)""".r
-  override val whitespace = rep("""\s+""".r | singleline)
+  lazy val multiline = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
+  override val whitespace = rep("""\s+""".r | singleline | multiline)
 
   /**
    * Literals

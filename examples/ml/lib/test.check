@@ -1,0 +1,6 @@
+Running suite: Arithmetic
++ addition
+- (FAIL) faulty addition
+    2 + 2 should be 4!
++ multiplication
+Some tests failed (2 passed, 1 failed)
