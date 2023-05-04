@@ -332,15 +332,27 @@ class Constraints(
   /**
    * Computes whether a node and all of its transitive bounds are inactive.
    */
-  private def isInactive(x: CNode, seen: Set[CNode] = Set.empty): Boolean =
-    if ((seen contains x) || (captSubstitution isDefinedAt x)) return true;
+  private def isInactive(x: CNode): Boolean = {
 
-    val selfSeen = seen + x
+    def go(x: CNode, seen: Map[CNode, Boolean]): Map[CNode, Boolean] =
 
-    val isInactiveItself = pendingInactive contains x
-    val areBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n => isInactive(n, selfSeen) }
+      if ((seen contains x) || (captSubstitution isDefinedAt x)) return seen + (x -> true);
 
-    return isInactiveItself && areBoundsInactive
+      // is the node itself inactive?
+      if (pendingInactive contains x) {
+        var seenAfterBounds: Map[CNode, Boolean] = seen + (x -> true)
+
+        val allBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n =>
+          seenAfterBounds = go(n, seenAfterBounds)
+          seenAfterBounds(n)
+        }
+        seenAfterBounds + (x -> allBoundsInactive)
+      } else {
+        seen + (x -> false)
+      }
+
+    go(x, Map.empty)(x)
+  }
 
 
   private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =
