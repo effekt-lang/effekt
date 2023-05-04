@@ -7,20 +7,19 @@ def main() = {
     test("addition") {
       val x = 1;
       val y = 2;
-      do assert(1 + 2 == 3, "1 + 2 should be 3!")
+      do assert(x + y == 3, "1 + 2 should be 3!")
     }
 
     test("faulty addition") {
-      val x = 2;
+      val x = 1;
       val y = 2;
-      do assert(1 + 2 == 4, "2 + 2 should be 4!")
+      do assert(x + y == 4, "2 + 2 should be 4!")
     }
 
     test("multiplication") {
       val x = 2;
       val y = 2;
-      do assert(2 * 2 == 4, "2 * 2 should be 4!")
+      do assert(x * y == 4, "2 * 2 should be 4!")
     }
-
   }
 }
