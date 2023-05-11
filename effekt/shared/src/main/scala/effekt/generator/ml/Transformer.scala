@@ -161,8 +161,8 @@ object Transformer {
         val s = freshName("s")
         // ev (k => s => k s s)
         CPS.lift(ev.lifts,
-          // TODO iterate CPS
-          CPS.inline { k => ml.Lambda(s) { ml.Call(k(s))(s) } })
+          // TODO share the reified s
+          CPS.reflected { k => CPS.reflected { s => k(s.reify)(s) }})
       }
       get
 
@@ -171,7 +171,7 @@ object Transformer {
         val s2 = freshName("s2")
         // ev (k => s2 => k () value)
         CPS.lift(ev.lifts,
-          CPS.inline { k => ml.Lambda(s2) { ml.Call(k(ml.Consts.unitVal))(toML(value)) } })
+          CPS.reflected { k => CPS.reflected { s2 => k(ml.Consts.unitVal)(toML(value)) }})
       }
       set
 
@@ -181,13 +181,13 @@ object Transformer {
 
     case lifted.If(cond, thn, els) =>
       CPS.join { k =>
-        ml.If(toML(cond), toMLExpr(thn)(k), toMLExpr(els)(k))
+        ml.If(toML(cond), toMLExpr(thn)(k).reify(), toMLExpr(els)(k).reify())
       }
 
     case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
         CPS.inline { k =>
-          ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k))
+          ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k).reify())
         }
       }
 
@@ -196,28 +196,32 @@ object Transformer {
         val (id, b) = c
         val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
         val pattern = ml.Pattern.Datatype(name(id), binders)
-        val body = toMLExpr(b.body)(k)
+        val body = toMLExpr(b.body)(k).reify()
         ml.MatchClause(pattern, body)
       }
 
-      ml.Match(toML(scrutinee), clauses map clauseToML, default map { d => toMLExpr(d)(k) })
+      ml.Match(toML(scrutinee), clauses map clauseToML, default map { d => toMLExpr(d)(k).reify() })
     }
 
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k =>
+      // TODO couldn't it be that the definitions require the continuation?
+      //  Right now, the continuation is only passed to the body.
+      ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k).reify())
+    }
 
     case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
-        ml.mkLet(List(bind), toMLExpr(body)(k))
+        ml.mkLet(List(bind), toMLExpr(body)(k).reify())
       }
 
     case lifted.Alloc(id, init, region, ev, body) =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
-        ml.mkLet(List(bind), toMLExpr(body)(k))
+        ml.mkLet(List(bind), toMLExpr(body)(k).reify())
       }
 
     // Only used before monomorphization
@@ -246,27 +250,22 @@ object Transformer {
           ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init)))
       }
     // after monomorphization
-    case Var(init, Block.BlockLit(_, List(x), body)) => CPS.inline { k =>
-        // TODO refactor into CPS.resetState
+    case Var(init, Block.BlockLit(_, List(x), body)) => CPS.reflected { k =>
         // a => s => k a
-        // TODO iterate
-        val returnCont = Continuation.Static { a =>
-          val s = freshName("s")
-          ml.Lambda(s)(k(a))
-        }
-        ml.Call(toMLExpr(body)(returnCont))(toML(init))
+        val returnCont = Continuation.Static { a => CPS.reflected { s => k(a) } }
+        toMLExpr(body)(returnCont)(toML(init))
       }
     case v: Var => C.panic("The body of var is always a block lit with two arguments (evidence and block)")
 
     // Only used before monomorphization
     case lifted.Try(body, handler) =>
       val args = ml.Consts.lift :: handler.map(toML)
-      CPS.inline { k =>
-        ml.Call(CPS.reset(ml.Call(toML(body))(args: _*)), List(k.reify))
+      CPS.reflected { k =>
+        CPS.reset(ml.Call(toML(body))(args: _*))(k)
       }
 
     case Reset(body) =>
-      CPS.reflect(toMLExpr(body).apply(CPS.pure))
+      toMLExpr(body)(CPS.pure)
 
     // non-monomorphized version (without the scoped resumptions requirement)
     // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
@@ -282,7 +281,7 @@ object Transformer {
 
     // monomorphized version (with scoped resumptions requirement)
     case Shift(ev, body) =>
-      CPS.lift(ev.lifts, CPS.reflect(toML(body)))
+      CPS.lift(ev.lifts, CPS.reified(toML(body)))
 
     //    case Shift(_, _) => INTERNAL_ERROR("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
 
@@ -299,7 +298,7 @@ object Transformer {
     binding match {
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
-        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
       case New(impl) =>
         toML(impl) match {
           case ml.Lambda(ps, body) =>
@@ -320,7 +319,7 @@ object Transformer {
   def toML(block: BlockLit)(using Context): ml.Lambda = block match {
     case BlockLit(tparams, params, body) =>
       val k = freshName("k")
-      ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+      ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
   }
 
   def toML(block: Block)(using C: Context): ml.Expr = block match {
@@ -408,70 +407,88 @@ object Transformer {
 
   enum Continuation {
     case Dynamic(cont: ml.Expr)
-    case Static(cont: ml.Expr => ml.Expr)
+    case Static(cont: ml.Expr => CPS)
 
-    def apply(e: ml.Expr): ml.Expr = this match {
-      case Continuation.Dynamic(k) => ml.Call(k)(e)
+    // Apply this continuation to its argument
+    def apply(e: ml.Expr): CPS = this match {
+      case Continuation.Dynamic(k) => CPS.reified(ml.Call(k)(e))
       case Continuation.Static(k) => k(e)
     }
+
+    // Reify this continuation fully into an ML expression
     def reify: ml.Expr = this match {
       case Continuation.Dynamic(k) => k
       case Continuation.Static(k) =>
         val a = freshName("a")
-        ml.Lambda(ml.Param.Named(a))(k(ml.Variable(a)))
+        ml.Lambda(ml.Param.Named(a)) { k(ml.Variable(a)).reify() }
     }
-    def reflect: ml.Expr => ml.Expr = this match {
+
+    // Reflect one layer of this continuation
+    def reflect: ml.Expr => CPS = this match {
       case Continuation.Static(k) => k
       // here reflection could also be improved
-      case Continuation.Dynamic(k) => a => ml.Call(k)(a)
+      case Continuation.Dynamic(k) => a => CPS.reified(ml.Call(k)(a))
     }
   }
+  enum CPS {
 
-  class CPS(prog: Continuation => ml.Expr) {
-    def apply(k: Continuation): ml.Expr = prog(k)
-    def apply(k: ml.Expr): ml.Expr = prog(Continuation.Dynamic(k))
-    def apply(k: ml.Expr => ml.Expr): ml.Expr = prog(Continuation.Static(k))
+    case Reflected(prog: Continuation => CPS)
+    case Reified(prog: ml.Expr)
 
-    def flatMap(f: ml.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
+
+    // "reset" this CPS term with the given continuation
+    def apply(k: Continuation): CPS = this match {
+      case CPS.Reflected(prog) => prog(k)
+      case CPS.Reified(prog) => CPS.reflect(prog)(k)
+    }
+    def apply(k: ml.Expr): CPS = apply(Continuation.Dynamic(k))
+    def apply(k: ml.Expr => CPS): CPS = apply(Continuation.Static(k))
+
+    def flatMap(f: ml.Expr => CPS): CPS = this match {
+      case Reflected(prog) => Reflected(k => prog(Continuation.Static(a => f(a)(k))))
+      case Reified(prog) => Reflected(k => CPS.reflect(prog)(Continuation.Static(a => f(a)(k))) )
+    }
+
     def map(f: ml.Expr => ml.Expr): CPS = flatMap(a => CPS.pure(f(a)))
-    def run: ml.Expr = prog(Continuation.Static(a => a))
-    def reify(): ml.Expr =
-      val k = freshName("k")
-      ml.Lambda(ml.Param.Named(k))(this.apply(Continuation.Dynamic(ml.Expr.Variable(k))))
+    def run: ml.Expr = apply(Continuation.Static(a => CPS.reified(a))).reify()
+
+    // Recursively reify this CPS computation into an ML expression
+    def reify(): ml.Expr  = this match {
+      case Reflected(prog) =>
+        val k = freshName("k")
+        ml.Lambda(ml.Param.Named(k))(prog(Continuation.Dynamic(ml.Expr.Variable(k))).reify())
+      case Reified(prog) => prog
+    }
   }
 
   object CPS {
+    def reified(prog: ml.Expr): CPS = Reified(prog)
+    def reflected(prog: Continuation => CPS): CPS = Reflected(prog)
+    def inline(prog: Continuation => ml.Expr): CPS = Reflected(k => CPS.reified(prog(k)))
 
-    def inline(prog: Continuation => ml.Expr): CPS = CPS(prog)
-    def join(prog: Continuation => ml.Expr): CPS = CPS {
-      case k: Continuation.Dynamic => prog(k)
+    def join(prog: Continuation => ml.Expr): CPS = Reflected {
+      case k: Continuation.Dynamic => CPS.reified(prog(k))
       case k: Continuation.Static =>
         val kName = freshName("k")
-        mkLet(List(ValBind(kName, k.reify)), prog(Continuation.Dynamic(ml.Variable(kName))))
+        CPS.reified(mkLet(List(ValBind(kName, k.reify)), prog(Continuation.Dynamic(ml.Variable(kName)))))
     }
 
-    def reset(prog: ml.Expr): ml.Expr =
+    def reset(prog: ml.Expr): CPS =
       reflect(prog)(pure)
 
     // fn a => fn k2 => k2(a)
     def pure: Continuation =
-      Continuation.Static { a =>
-         // TODO iterate
-        val k2 = freshName("k2")
-        ml.Lambda(ml.Param.Named(k2)) { Continuation.Dynamic(k2).apply(a) }
-      }
+      Continuation.Static { a => CPS.reflected { k2 => k2(a) }}
 
-
-    def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
-
-    def reflect(e: ml.Expr): CPS = e match {
+    // reflect one layer of CPS
+    def reflect(e: ml.Expr): Continuation => CPS = e match {
       // (k => )
       case ml.Expr.Lambda(List(ml.Param.Named(k)), body) =>
-        CPS.inline { kValue => utils.substituteTerms(body)(k -> kValue.reify) }
+        kValue => CPS.reified(utils.substituteTerms(body)(k -> kValue.reify))
       case ml.Expr.Lambda(ml.Param.Named(k) :: ps, body) =>
-        CPS.inline { kValue => ml.Expr.Lambda(ps, utils.substituteTerms(body)(k -> kValue.reify)) }
+        kValue => CPS.reified(ml.Expr.Lambda(ps, utils.substituteTerms(body)(k -> kValue.reify)))
       case e =>
-        CPS.inline { k => ml.Call(e)(k.reify) }
+        k => CPS.reified(ml.Call(e)(k.reify))
     }
 
 
@@ -480,23 +497,19 @@ object Transformer {
 
       // [[ [Try :: evs](m) ]] = [[evs]](k1 => k2 => m(a => k1 a k2))
       case Lift.Try() :: lifts =>
-        val k2 = freshName("k2")
-        // TODO iterate!
-        lift(lifts, CPS.inline { k1 => ml.Lambda(ml.Param.Named(k2)) {
-          m.apply(a => CPS.reflect(k1(a))(k2))
+        lift(lifts, CPS.reflected { k1 => CPS.reflected { k2 =>
+          m.apply(a => k1(a)(k2))
         }})
 
       // [[ [Try :: evs](m) ]] = [[evs]](k => s => m(a => k a s))
       case Lift.Reg() :: lifts =>
-        val s = freshName("s")
-        // TODO iterate!
-        lift(lifts, CPS.inline { k => ml.Lambda(ml.Param.Named(s)) {
-          m.apply(a => CPS.reflect(k(a))(s))
+        lift(lifts, CPS.reflected { k => CPS.reflected { s =>
+          m.apply(a => k(a)(s))
         }})
 
       // [[ [ev :: evs](m) ]] = [[evs]]( [[ev]](m) )
       case Lift.Var(x) :: lifts =>
-        CPS.reflect(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
+        CPS.reified(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
 
       case Nil => m
     }
