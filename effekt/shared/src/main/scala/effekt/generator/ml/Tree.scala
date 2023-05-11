@@ -19,6 +19,8 @@ class MLName(n: String) {
     case _ => false
   }
 
+  override def toString: String = n
+
   override def hashCode(): Int = this.name.hashCode
 }
 

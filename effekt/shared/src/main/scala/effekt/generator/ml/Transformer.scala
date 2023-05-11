@@ -5,10 +5,8 @@ package ml
 import effekt.context.Context
 import effekt.lifted.*
 import effekt.core.Id
-
-import effekt.symbols.{ Symbol, TermSymbol, Module, Wildcard }
-import effekt.util.messages.{ INTERNAL_ERROR, FIXME }
-
+import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
+import effekt.util.messages.{ FIXME, INTERNAL_ERROR }
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -163,7 +161,9 @@ object Transformer {
         val k = freshName("k")
         val s = freshName("s")
         // ev (k => s => k s s)
-        CPS.lift(ev.lifts, CPS.reflect(ml.Lambda(k)(ml.Lambda(s)(ml.Call(ml.Call(k)(s))(s)))))
+        CPS.lift(ev.lifts,
+          // TODO iterate CPS
+          CPS.inline { k => ml.Lambda(s) { ml.Call(k(s))(s) } })
       }
       get
 
@@ -172,7 +172,8 @@ object Transformer {
         val k = freshName("k")
         val s2 = freshName("s2")
         // ev (k => s2 => k () value)
-        CPS.lift(ev.lifts, CPS.reflect(ml.Lambda(k)(ml.Lambda(s2)(ml.Call(ml.Call(k)(ml.Consts.unitVal))(toML(value))))))
+        CPS.lift(ev.lifts,
+          CPS.inline { k => ml.Lambda(s2) { ml.Call(k(ml.Consts.unitVal))(toML(value)) } })
       }
       set
 
@@ -221,9 +222,9 @@ object Transformer {
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
-    // before monomorphization
+    // Only used before monomorphization
     // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
-    case Var(init, Block.BlockLit(_, List(ev, x), body)) => CPS.join { k =>
+    case Var(init, Block.BlockLit(_, List(ev, x), body)) => CPS.inline { k =>
         // TODO refactor into CPS.resetState
         // a => s => k a
         val returnCont = {
@@ -247,25 +248,27 @@ object Transformer {
           ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init)))
       }
     // after monomorphization
-    case Var(init, Block.BlockLit(_, List(x), body)) => CPS.join { k =>
+    case Var(init, Block.BlockLit(_, List(x), body)) => CPS.inline { k =>
         // TODO refactor into CPS.resetState
         // a => s => k a
-        val returnCont = {
-          val a = freshName("a")
+        // TODO iterate
+        val returnCont = Continuation.Static { a =>
           val s = freshName("s")
-          ml.Lambda(a)(ml.Lambda(s)(ml.Call(k.reify)(a)))
+          ml.Lambda(s)(k(a))
         }
-        ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init))
+        ml.Call(toMLExpr(body)(returnCont))(toML(init))
       }
     case v: Var => C.panic("The body of var is always a block lit with two arguments (evidence and block)")
 
+    // Only used before monomorphization
     case lifted.Try(body, handler) =>
       val args = ml.Consts.lift :: handler.map(toML)
       CPS.inline { k =>
         ml.Call(CPS.reset(ml.Call(toML(body))(args: _*)), List(k.reify))
       }
 
-    case Reset(body) => CPS.join { k => ml.Call(toMLExpr(body).apply(CPS.pure), List(k.reify)) }
+    case Reset(body) =>
+      CPS.reflect(toMLExpr(body).apply(CPS.pure))
 
     // non-monomorphized version (without the scoped resumptions requirement)
     // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
@@ -285,6 +288,7 @@ object Transformer {
 
     //    case Shift(_, _) => INTERNAL_ERROR("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
 
+    // Only used before monomorphization
     case Region(body) =>
       CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
   }
@@ -420,6 +424,7 @@ object Transformer {
     }
     def reflect: ml.Expr => ml.Expr = this match {
       case Continuation.Static(k) => k
+      // here reflection could also be improved
       case Continuation.Dynamic(k) => a => ml.Call(k)(a)
     }
   }
@@ -448,18 +453,29 @@ object Transformer {
     }
 
     def reset(prog: ml.Expr): ml.Expr =
-      ml.Call(prog, List(pure))
+      reflect(prog)(pure)
 
     // fn a => fn k2 => k2(a)
-    def pure: ml.Expr =
-      val a = freshName("a")
-      val k2 = freshName("k2")
-      ml.Lambda(ml.Param.Named(a)) { ml.Lambda(ml.Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
+    def pure: Continuation =
+      Continuation.Static { a =>
+         // TODO iterate
+        val k2 = freshName("k2")
+        ml.Lambda(ml.Param.Named(k2)) { Continuation.Dynamic(k2).apply(a) }
+      }
+
 
     def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
 
-    def reflect(e: ml.Expr): CPS =
-      CPS.join { k => ml.Call(e)(k.reify) }
+    def reflect(e: ml.Expr): CPS = e match {
+      // (k => )
+      case ml.Expr.Lambda(List(ml.Param.Named(k)), body) =>
+        CPS.inline { kValue => utils.substituteTerms(body)(k -> kValue.reify) }
+      case ml.Expr.Lambda(ml.Param.Named(k) :: ps, body) =>
+        CPS.inline { kValue => ml.Expr.Lambda(ps, utils.substituteTerms(body)(k -> kValue.reify)) }
+      case e =>
+        CPS.inline { k => ml.Call(e)(k.reify) }
+    }
+
 
     // [[ Try() ]] = m k1 k2 => m (fn a => k1 a k2);
     def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
@@ -468,14 +484,14 @@ object Transformer {
       case Lift.Try() :: lifts =>
         val k2 = freshName("k2")
         lift(lifts, CPS.inline { k1 => ml.Lambda(ml.Param.Named(k2)) {
-          m.apply(a => ml.Call(k1.reify)(a, ml.Expr.Variable(k2)))
+          m.apply(a => CPS.reflect(k1(a))(k2))
         }})
 
       // [[ [Try :: evs](m) ]] = [[evs]](k => s => m(a => k a s))
       case Lift.Reg() :: lifts =>
         val s = freshName("s")
         lift(lifts, CPS.inline { k => ml.Lambda(ml.Param.Named(s)) {
-          m.apply(a => ml.Call(k.reify)(a, ml.Expr.Variable(s)))
+          m.apply(a => CPS.reflect(k(a))(s))
         }})
 
       // [[ [ev :: evs](m) ]] = [[evs]]( [[ev]](m) )
@@ -485,6 +501,7 @@ object Transformer {
       case Nil => m
     }
 
+    // TODO actually find main function and reflect body (passing static ID continuation)
     def runMain(main: MLName): ml.Expr =
       // when using monomorphization
       ml.Call(main)(id)
