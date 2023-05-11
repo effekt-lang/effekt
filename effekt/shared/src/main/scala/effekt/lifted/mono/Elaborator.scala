@@ -347,7 +347,7 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
     Stmt.App(target, targs, remainingArgs)
 
 
-  // [[ try { (EV, exc) => ...  } with Exc { ... } ]] = try { exc => [[ ... ]] } with [[ Exc { ... } ]]
+  // [[ try { (EV, exc) => ...  } with Exc { ... } ]] = def exc = reset { exc => [[ ... ]] } with [[ Exc { ... } ]]
   case Stmt.Try(Block.BlockLit(tparams, params, body), handler) =>
     val (evidenceIds, remainingParams) = params.partitionMap(elaborate)
     val elaboratedBody = {
@@ -356,8 +356,16 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
     }
     val capabilities = handler.map { h => Block.New(elaborate(h)) }
 
-    val newBody = FIXME(Stmt.App(Block.BlockLit(tparams, remainingParams, elaboratedBody), Nil, capabilities), "this could be a def")
-    Stmt.Reset(newBody)
+    // create def-bindings for capabilities
+    //   reset { def exc = new Exc { ... }; ... }
+    //
+    // it won't help immediately, since the block definition will be in the way of reflection
+    // but that can be addressed separately
+    val capabilityDefs = remainingParams.zip(capabilities).map {
+      case (param, cap) => Definition.Def(param.id, cap)
+    }
+
+    Stmt.Reset(Stmt.Scope(capabilityDefs, elaboratedBody))
 
   case Stmt.Try(_, _) => INTERNAL_ERROR("unreachable, body should always be a blocklit.")
 

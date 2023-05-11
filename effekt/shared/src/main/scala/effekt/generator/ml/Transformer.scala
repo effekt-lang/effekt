@@ -158,7 +158,6 @@ object Transformer {
 
     case lifted.Get(id, ev, tpe) =>
       def get = {
-        val k = freshName("k")
         val s = freshName("s")
         // ev (k => s => k s s)
         CPS.lift(ev.lifts,
@@ -169,7 +168,6 @@ object Transformer {
 
     case lifted.Put(id, ev, value) =>
       def set = {
-        val k = freshName("k")
         val s2 = freshName("s2")
         // ev (k => s2 => k () value)
         CPS.lift(ev.lifts,
@@ -483,6 +481,7 @@ object Transformer {
       // [[ [Try :: evs](m) ]] = [[evs]](k1 => k2 => m(a => k1 a k2))
       case Lift.Try() :: lifts =>
         val k2 = freshName("k2")
+        // TODO iterate!
         lift(lifts, CPS.inline { k1 => ml.Lambda(ml.Param.Named(k2)) {
           m.apply(a => CPS.reflect(k1(a))(k2))
         }})
@@ -490,6 +489,7 @@ object Transformer {
       // [[ [Try :: evs](m) ]] = [[evs]](k => s => m(a => k a s))
       case Lift.Reg() :: lifts =>
         val s = freshName("s")
+        // TODO iterate!
         lift(lifts, CPS.inline { k => ml.Lambda(ml.Param.Named(s)) {
           m.apply(a => CPS.reflect(k(a))(s))
         }})
