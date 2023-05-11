@@ -157,23 +157,16 @@ object Transformer {
     case lifted.Return(e) => CPS.pure(toML(e))
 
     case lifted.Get(id, ev, tpe) =>
-      def get = {
-        val s = freshName("s")
-        // ev (k => s => k s s)
-        CPS.lift(ev.lifts,
-          // TODO share the reified s
-          CPS.reflected { k => CPS.reflected { s => k(s.reify)(s) }})
-      }
-      get
+      // ev (k => s => k s s)
+      CPS.lift(ev.lifts,
+        // TODO share the reified s
+        CPS.reflected { k => CPS.reflected { s => k(s.reify)(s) }})
+
 
     case lifted.Put(id, ev, value) =>
-      def set = {
-        val s2 = freshName("s2")
-        // ev (k => s2 => k () value)
-        CPS.lift(ev.lifts,
-          CPS.reflected { k => CPS.reflected { s2 => k(ml.Consts.unitVal)(toML(value)) }})
-      }
-      set
+      // ev (k => s2 => k () value)
+      CPS.lift(ev.lifts,
+        CPS.reflected { k => CPS.reflected { s2 => k(ml.Consts.unitVal)(toML(value)) }})
 
     case lifted.App(b, targs, args) => CPS.inline { k =>
       ml.Expr.Call(toML(b), (args map toML) ++ List(k.reify))
@@ -186,9 +179,7 @@ object Transformer {
 
     case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
-        CPS.inline { k =>
-          ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k).reify())
-        }
+        toMLExpr(body).under { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
 
     case lifted.Match(scrutinee, clauses, default) => CPS.join { k =>
@@ -206,10 +197,10 @@ object Transformer {
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k =>
+    case lifted.Scope(definitions, body) => CPS.reflected { k =>
       // TODO couldn't it be that the definitions require the continuation?
       //  Right now, the continuation is only passed to the body.
-      ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k).reify())
+      toMLExpr(body)(k).under { b => ml.mkLet(sortDefinitions(definitions).map(toML), b) }
     }
 
     case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
@@ -226,16 +217,11 @@ object Transformer {
 
     // Only used before monomorphization
     // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
-    case Var(init, Block.BlockLit(_, List(ev, x), body)) => CPS.inline { k =>
-        // TODO refactor into CPS.resetState
+    case Var(init, Block.BlockLit(_, List(ev, x), body)) =>
+      CPS.inline { k =>
         // a => s => k a
-        val returnCont = {
-          val a = freshName("a")
-          val s = freshName("s")
-          ml.Lambda(a)(ml.Lambda(s)(ml.Call(k.reify)(a)))
-        }
+        val returnCont = Continuation.Static { a => CPS.reflected { s => k(a) } }
 
-        // NOTE this is alpha equivalent to CPS.lift
         // m => k => s => m (a => k a s)
         def lift = {
           val m = freshName("m")
@@ -247,10 +233,11 @@ object Transformer {
         }
 
         ml.mkLet(List(Binding.ValBind(name(ev.id), lift)),
-          ml.Call(ml.Call(toMLExpr(body).reify())(returnCont))(toML(init)))
+          toMLExpr(body)(returnCont)(toML(init)).reify())
       }
     // after monomorphization
-    case Var(init, Block.BlockLit(_, List(x), body)) => CPS.reflected { k =>
+    case Var(init, Block.BlockLit(_, List(x), body)) =>
+      CPS.reflected { k =>
         // a => s => k a
         val returnCont = Continuation.Static { a => CPS.reflected { s => k(a) } }
         toMLExpr(body)(returnCont)(toML(init))
@@ -281,7 +268,7 @@ object Transformer {
 
     // monomorphized version (with scoped resumptions requirement)
     case Shift(ev, body) =>
-      CPS.lift(ev.lifts, CPS.reified(toML(body)))
+      CPS.lift(ev.lifts, CPS.reflected(CPS.reflect(toML(body))))
 
     //    case Shift(_, _) => INTERNAL_ERROR("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
 
@@ -435,7 +422,6 @@ object Transformer {
     case Reflected(prog: Continuation => CPS)
     case Reified(prog: ml.Expr)
 
-
     // "reset" this CPS term with the given continuation
     def apply(k: Continuation): CPS = this match {
       case CPS.Reflected(prog) => prog(k)
@@ -458,6 +444,12 @@ object Transformer {
         val k = freshName("k")
         ml.Lambda(ml.Param.Named(k))(prog(Continuation.Dynamic(ml.Expr.Variable(k))).reify())
       case Reified(prog) => prog
+    }
+
+    // f(LAM k => BODY[k])   =  LAM k => f(BODY[k])
+    def under(f: ml.Expr => ml.Expr): CPS = this match {
+      case CPS.Reflected(prog) => CPS.reflected { k => prog(k).under(f) }
+      case CPS.Reified(prog) => CPS.Reified(f(prog))
     }
   }
 
