@@ -103,6 +103,8 @@ enum Extern extends Tree {
 
 
 enum Definition {
+  def id: Id
+
   case Def(id: Id, block: Block)
   case Let(id: Id, binding: Expr) // PURE on the toplevel?
 
