@@ -172,10 +172,15 @@ object Transformer {
       ml.Expr.Call(toML(b), (args map toML) ++ List(k.reify))
     }
 
+    // As long as one of the two branches is known to be in CPS we "pull out" the
+    // static continuation.
+    // Then, the continuation is reified in order to generate a join-point.
     case lifted.If(cond, thn, els) =>
-      CPS.join { k =>
-        ml.If(toML(cond), toMLExpr(thn)(k).reify(), toMLExpr(els)(k).reify())
-      }
+      CPS.reified(CPS.zip(toMLExpr(thn), toMLExpr(els)) { case (e1, e2) =>
+        CPS.reified {
+          ml.If(toML(cond), e1, e2)
+        }
+      }.reify())
 
     case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
@@ -459,6 +464,7 @@ object Transformer {
       case CPS.Reflected(prog) => CPS.reflected { k => prog(k).flatMapComputation(f) }
       case CPS.Reified(prog) => f(prog)
     }
+
   }
 
   object CPS {
@@ -471,6 +477,12 @@ object Transformer {
       case k: Continuation.Static =>
         val kName = freshName("k")
         CPS.reified(mkLet(List(ValBind(kName, k.reify)), prog(Continuation.Dynamic(ml.Variable(kName)))))
+    }
+
+    // used for join points to distribute continuations to the outside (see if)
+    def zip(c1: CPS, c2: CPS)(f: (ml.Expr, ml.Expr) => CPS): CPS = (c1, c2) match {
+      case (CPS.Reified(prog1), CPS.Reified(prog2)) => f(prog1, prog2)
+      case _ => CPS.reflected { k => zip(c1(k), c2(k))(f) }
     }
 
     def reset(prog: ml.Expr): CPS =
@@ -490,7 +502,6 @@ object Transformer {
       case e =>
         k => CPS.reified(ml.Call(e)(k.reify))
     }
-
 
     // [[ Try() ]] = m k1 k2 => m (fn a => k1 a k2);
     def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
