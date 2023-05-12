@@ -1,13 +1,13 @@
 package effekt
 
-import effekt.PhaseResult.CoreLifted
+import effekt.PhaseResult.{ CoreLifted, CoreTransformed }
 import effekt.context.Context
-import effekt.core.{ DirectStyleMutableState, Transformer }
+import effekt.core.{ DirectStyleMutableState, Transformer, Optimizer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.source.{ ExplicitRegions, ExplicitCapabilities, AnnotateCaptures, ModuleDecl }
+import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ExplicitRegions, ModuleDecl }
 import effekt.symbols.Module
-import effekt.typer.{ Wellformedness, BoxUnboxInference, Typer }
+import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import kiama.output.PrettyPrinterTypes.Document
@@ -238,7 +238,12 @@ trait Compiler[Executable] {
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
      */
-    Transformer
+    Transformer andThen
+    /**
+     * Performs simple optimizations on core
+     * [[CoreTransformed]] --> [[CoreTransformed]]
+     */
+    Optimizer
   }
 
   def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
