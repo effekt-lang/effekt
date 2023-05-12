@@ -2,13 +2,13 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
-import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Range, Source, StringSource }
+import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
+import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
-import scala.language.implicitConversions
+import scala.language.{implicitConversions, postfixOps}
 
 object Parser extends Phase[Source, Parsed] {
 
@@ -453,7 +453,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While.apply
 
   lazy val primExpr: P[Term] =
-    variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
+    variable | literals /*| tupleLiteral*/ | listLiteral | hole | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Term] =
     idRef ^^ Var.apply
@@ -481,8 +481,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
 
+/*
   lazy val tupleLiteral: P[Term] =
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
+*/
 
   private def NilTree: Term =
     Call(IdTarget(IdRef("Nil")), Nil, Nil, Nil)
