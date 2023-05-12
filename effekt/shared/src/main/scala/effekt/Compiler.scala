@@ -238,12 +238,7 @@ trait Compiler[Executable] {
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
      */
-    Transformer andThen
-    /**
-     * Performs simple optimizations on core
-     * [[CoreTransformed]] --> [[CoreTransformed]]
-     */
-    Optimizer
+    Transformer
   }
 
   def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
