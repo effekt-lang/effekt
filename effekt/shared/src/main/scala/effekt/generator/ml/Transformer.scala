@@ -187,17 +187,32 @@ object Transformer {
         toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
 
-    case lifted.Match(scrutinee, clauses, default) => CPS.join { k =>
-      def clauseToML(c: (Id, BlockLit)): ml.MatchClause = {
+    case lifted.Match(scrutinee, clauses, default) =>
+      def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {
         val (id, b) = c
         val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
         val pattern = ml.Pattern.Datatype(name(id), binders)
-        val body = toMLExpr(b.body)(k).reify()
-        ml.MatchClause(pattern, body)
+        (pattern, toMLExpr(b.body))
       }
 
-      ml.Match(toML(scrutinee), clauses map clauseToML, default map { d => toMLExpr(d)(k).reify() })
-    }
+      val (patterns, bodies) = clauses.map(clauseToML).unzip
+
+      // We eta-expand all computations (including the default clause).
+      val prog = CPS.zipAll(default.toList.map(toMLExpr) ++ bodies) {
+        // no default clause
+        case mlBodies if default.isEmpty =>
+          val mlClauses = (patterns zip mlBodies).map { ml.MatchClause.apply }
+          CPS.reified(ml.Match(toML(scrutinee), mlClauses, None))
+
+        case default :: mlBodies =>
+          val mlClauses = (patterns zip mlBodies).map { ml.MatchClause.apply }
+          CPS.reified(ml.Match(toML(scrutinee), mlClauses, Some(default)))
+
+        case _ => INTERNAL_ERROR("Cannot happen since default is non empty")
+      }
+
+      // create join points
+      CPS.reified(prog.reify())
 
     // TODO maybe don't drop the continuation here? Although, it is dead code.
     case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
@@ -472,18 +487,22 @@ object Transformer {
     def reflected(prog: Continuation => CPS): CPS = Reflected(prog)
     def inline(prog: Continuation => ml.Expr): CPS = Reflected(k => CPS.reified(prog(k)))
 
-    def join(prog: Continuation => ml.Expr): CPS = Reflected {
-      case k: Continuation.Dynamic => CPS.reified(prog(k))
-      case k: Continuation.Static =>
-        val kName = freshName("k")
-        CPS.reified(mkLet(List(ValBind(kName, k.reify)), prog(Continuation.Dynamic(ml.Variable(kName)))))
-    }
-
     // used for join points to distribute continuations to the outside (see if)
+    //  zip (LAM k => s) e f = LAM k => zip s[k] (e k.reify) f
+    //  zip e1 e2 f          = f e1 e2
     def zip(c1: CPS, c2: CPS)(f: (ml.Expr, ml.Expr) => CPS): CPS = (c1, c2) match {
       case (CPS.Reified(prog1), CPS.Reified(prog2)) => f(prog1, prog2)
       case _ => CPS.reflected { k => zip(c1(k), c2(k))(f) }
     }
+
+    // generalizing zip from two computations to many (used by match)
+    def zipAll(cs: List[CPS])(f: List[ml.Expr] => CPS): CPS =
+      if cs.forall {
+          case _: Reified => true
+          case _ => false
+        }
+      then f(cs.collect { case Reified(prog) => prog })
+      else CPS.reflected { k => zipAll(cs.map(_.apply(k)))(f) }
 
     def reset(prog: ml.Expr): CPS =
       reflect(prog)(pure)
