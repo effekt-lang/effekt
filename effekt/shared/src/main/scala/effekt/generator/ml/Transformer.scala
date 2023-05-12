@@ -179,7 +179,7 @@ object Transformer {
 
     case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
-        toMLExpr(body).under { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
+        toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
 
     case lifted.Match(scrutinee, clauses, default) => CPS.join { k =>
@@ -200,7 +200,7 @@ object Transformer {
     case lifted.Scope(definitions, body) => CPS.reflected { k =>
       // TODO couldn't it be that the definitions require the continuation?
       //  Right now, the continuation is only passed to the body.
-      toMLExpr(body)(k).under { b => ml.mkLet(sortDefinitions(definitions).map(toML), b) }
+      toMLExpr(body)(k).mapComputation { b => ml.mkLet(sortDefinitions(definitions).map(toML), b) }
     }
 
     case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
@@ -447,9 +447,11 @@ object Transformer {
     }
 
     // f(LAM k => BODY[k])   =  LAM k => f(BODY[k])
-    def under(f: ml.Expr => ml.Expr): CPS = this match {
-      case CPS.Reflected(prog) => CPS.reflected { k => prog(k).under(f) }
-      case CPS.Reified(prog) => CPS.Reified(f(prog))
+    def mapComputation(f: ml.Expr => ml.Expr): CPS = flatMapComputation { e => CPS.Reified(f(e)) }
+
+    def flatMapComputation(f: ml.Expr => CPS): CPS = this match {
+      case CPS.Reflected(prog) => CPS.reflected { k => prog(k).flatMapComputation(f) }
+      case CPS.Reified(prog) => f(prog)
     }
   }
 
