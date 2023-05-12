@@ -417,10 +417,16 @@ object Transformer {
       case Continuation.Dynamic(k) => a => CPS.reified(ml.Call(k)(a))
     }
   }
+
+
   enum CPS {
 
     case Reflected(prog: Continuation => CPS)
     case Reified(prog: ml.Expr)
+
+    // TODO maybe differentiate between reflected control and state?
+    //    case class State(expr: ml.Expr)
+    //    case ReflectState(prog: State => CPS)
 
     // "reset" this CPS term with the given continuation
     def apply(k: Continuation): CPS = this match {
