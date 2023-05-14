@@ -95,6 +95,7 @@ case class Clause(parameters: Environment, body: Statement)
  *     │─ [[ LiteralDouble ]]
  *     │─ [[ LiteralUTF8String ]]
  *     │─ [[ LiteralEvidence ]]
+ *     │─ [[ Hole ]]
  *
  * --------------------------------------------------
  */

@@ -1,0 +1,15 @@
+def main() = {
+
+  var x = 10000;
+  def recursive(): Unit = {
+    if (x > 0) {
+      x = x - 1;
+      recursive()
+    } else {
+      println("Done")
+    }
+  }
+
+  recursive()
+
+}
