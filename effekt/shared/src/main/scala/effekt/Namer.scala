@@ -535,7 +535,12 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns) =>
-      Context.resolveTerm(id)
+      Context.resolveTerm(id) match {
+        case symbol: Constructor => ()
+        case _ => Context.at(id) {
+          Context.error("Can only pattern match on constructors of data types.")
+        }
+      }
       patterns.flatMap { resolve }
   }
 

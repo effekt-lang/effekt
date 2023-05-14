@@ -67,11 +67,7 @@ object Monomorphize extends Phase[CoreLifted, CoreLifted] {
     //        |${prettySubst}
     //        |""".stripMargin)
 
-    given t: TransformationContext(analysis, cleaned, functions = cls)
-
-
-
-    val elaborated = elaborate(mod)
+    val elaborated = elaborate(mod)(using TransformationContext.from(analysis, cleaned, cls))
 
     //    val newDeclarations = mod.decls.map(elaborate).map {
     //      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout

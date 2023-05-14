@@ -39,6 +39,22 @@ enum Evidences {
     case Evidences.Concrete(evs) => s"[${evs.map(_.show).mkString(", ")}]"
     case Evidences.FlowVar(id, arity, origin) => s"α${id}"
   }
+
+  override def toString: String = this match {
+    case Concrete(evs) => s"Concrete(${evs.mkString(", ")})"
+    case FlowVar(id, arity, _) => s"FlowVar(${id}, ${arity})"
+  }
+
+  override def equals(other: Any): Boolean = (this, other) match {
+    case (Concrete(evs1), Concrete(evs2)) => evs1 == evs2
+    case (FlowVar(id1, _, _), FlowVar(id2, _, _)) => id1 == id2
+    case _ => false
+  }
+
+  override def hashCode(): Int = this match {
+    case Concrete(evs) => 13 * evs.hashCode
+    case FlowVar(id, _, _) => 17 * id.hashCode
+  }
 }
 object Evidences {
   var last = -1
@@ -57,6 +73,18 @@ enum FlowType {
   def show: String = this match {
     case FlowType.Function(evs, _, _, bparams, _) => s"${evs.show}(${bparams.map(_.show).mkString(", ")})"
     case FlowType.Interface(id, _) => id.toString
+  }
+  override def equals(other: Any): Boolean = (this, other) match {
+    case (f1: FlowType.Function, f2: FlowType.Function) =>
+      f1.evidences == f2.evidences && (f1.bparams zip f2.bparams).forall(_ == _)
+    case (i1: FlowType.Interface, i2: FlowType.Interface) =>
+      i1.id == i2.id
+    case _ => false
+  }
+
+  override def hashCode(): Int = this match {
+    case FlowType.Function(ev, tps, vps, bps, res) => ev.hashCode() + 1337 * bps.hashCode()
+    case FlowType.Interface(id, targs) => id.hashCode()
   }
 }
 

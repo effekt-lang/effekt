@@ -59,7 +59,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "emptymatch.effekt",
 
     // multi handlers
-    examplesDir / "pos" / "multihandler.effekt",
     examplesDir / "pos" / "multieffects.effekt",
 
     // multiple methods

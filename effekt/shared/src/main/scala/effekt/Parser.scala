@@ -204,7 +204,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe) : ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
+    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -252,12 +252,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val maybeValueArgs: P[List[Term]] =
-    many(valueArgSection) ^^ { _.flatten }
+    valueArgs.? ^^ { o => o.getOrElse(Nil) }
 
   lazy val valueArgs: P[List[Term]] =
-    some(valueArgSection) ^^ { _.flatten }
-
-  lazy val valueArgSection: P[List[Term]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | failure("Expected a value argument list")
 
   lazy val typeArgs: P[List[ValueType]] =
@@ -374,22 +371,28 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | primExpr
     )
 
-  lazy val callTarget: P[CallTarget] =
-    ( idTarget
-    | `(` ~> expr <~ `)` ^^ ExprTarget.apply
-    )
-
-  lazy val idTarget: P[CallTarget] =
-    idRef ^^ IdTarget.apply
-
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
 
   lazy val newExpr: P[Term] = `new` ~/> implementation ^^ New.apply
 
   lazy val funCall: P[Term] =
-    ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply
-    | callTarget ~ maybeTypeArgs ~ valueArgs ~ success(List.empty[Term]) ^^ Call.apply
-    | callTarget ~ maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs ^^ Call.apply
+    callTarget ~ some(arguments) ^^ {
+      case target ~ ((targs ~ vargs ~ bargs) :: rest) =>
+        rest.foldLeft[Term](Call(target, targs, vargs, bargs)) {
+          case (expr, (targs ~ vargs ~ bargs)) => Call(ExprTarget(expr), targs, vargs, bargs)
+        }
+      case target ~ Nil => sys.error("should not happen since arguments cannot be nil.")
+    }
+
+  lazy val arguments: P[(List[ValueType] ~ List[Term] ~ List[Term])] =
+    ( maybeTypeArgs ~ valueArgs ~ blockArgs
+    | maybeTypeArgs ~ valueArgs ~ success(List.empty[Term])
+    | maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs
+    )
+
+  lazy val callTarget: P[CallTarget] =
+    ( `(` ~> expr <~ `)` ^^ ExprTarget.apply
+    | idRef ^^ IdTarget.apply
     )
 
   lazy val matchExpr: P[Term] =
@@ -511,7 +514,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
-    | failure("Expected a type")
+    | failure("Expected a value type")
     )
 
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
@@ -520,9 +523,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
     |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
     | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
+    | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
     | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
+    | failure("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
     )
 
   lazy val blockTypeParam: P[(Option[IdDef], BlockType)] =
@@ -530,7 +535,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val interfaceType: P[BlockTypeRef] =
     ( idRef ~ maybeTypeArgs ^^ { case (id ~ targs) => BlockTypeRef(id, targs): BlockTypeRef }
-    | failure("Expected an interface / effect")
+    | failure("Expected an interface type")
     )
 
   lazy val maybeEffects: P[Effects] =
@@ -713,7 +718,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
    */
   lazy val linebreak = """(\r\n|\n)""".r
   lazy val singleline = """//[^\n]*(\n|\z)""".r
-  override val whitespace = rep("""\s+""".r | singleline)
+  lazy val multiline = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
+  override val whitespace = rep("""\s+""".r | singleline | multiline)
 
   /**
    * Literals
@@ -741,6 +747,14 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
 
   def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
     rep1sep(p, sep) ^^ { _.toList }
+
+  extension [T] (p: Parser[T]) {
+    def !!(errorMessage: T => String): Parser[Nothing] =
+      p.flatMap(t => error(errorMessage(t)))
+
+    def !!!(errorMessage: String): Parser[Nothing] =
+      p.flatMap(_ => error(errorMessage))
+  }
 
   implicit class PositionOps[T](val self: T) {
     def withPositionOf(other: Any): self.type = { dupAll(other, self); self }

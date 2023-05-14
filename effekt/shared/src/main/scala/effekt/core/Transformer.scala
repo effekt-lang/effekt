@@ -31,7 +31,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
-    val definitions = toplevelDeclarations.collect { case d: Definition => optimize(d) }
+    val definitions = toplevelDeclarations.collect { case d: Definition => d }
     val externals = toplevelDeclarations.collect { case d: Extern => d }
     val declarations = toplevelDeclarations.collect { case d: Declaration => d }
 
@@ -696,28 +696,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def BlockVar(id: BlockSymbol)(using Context): core.BlockVar =
     core.BlockVar(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
-
-  def optimize(s: Definition)(using Context): Definition = {
-    val opt = eliminateReturnRun.rewrite(s)
-    directStyleVal.rewrite(opt)
-  }
-
-
-  // a very small and easy post processing step...
-  // reduces run-return pairs
-  object eliminateReturnRun extends core.Tree.Rewrite {
-    override def expr = {
-      case core.Run(core.Return(p)) => rewrite(p)
-    }
-  }
-
-  // rewrite (Val (Return e) s) to (Let e s)
-  object directStyleVal extends core.Tree.Rewrite {
-    override def stmt = {
-      case core.Val(id, core.Return(expr), body) =>
-        Let(id, rewrite(expr), rewrite(body))
-    }
-  }
 
   def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
     case c: CaptureSet => c

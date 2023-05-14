@@ -6,7 +6,7 @@ import effekt.context.Context
 import effekt.lifted.*
 import effekt.core.Id
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
-import effekt.util.messages.{ FIXME, INTERNAL_ERROR }
+import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 

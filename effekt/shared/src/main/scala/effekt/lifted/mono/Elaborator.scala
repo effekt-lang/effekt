@@ -21,8 +21,10 @@ class TransformationContext(
   substitution: Bisubstitution,
   choices: Map[Id, Ev] = Map.empty,
 
-  // for every class of function type, we have one elaborated type that we use.
-  var functions: Equivalences,
+  // Maps flowtypes to the equivalence class, mutable since we might add mappings but don't
+  // want to backtrack (while `choices` need to be backtracked).
+  functions: mutable.Map[FlowType.Function, Node],
+  // For every class of function type, we have one elaborated type that we use.
   types: mutable.Map[Node, ElaboratedType] = mutable.Map.empty,
 
   // additionally generated interfaces
@@ -51,11 +53,12 @@ class TransformationContext(
     functionsOf(classOf(ftpe))
 
   private def classOf(ftpe: FlowType.Function): Node =
-    functions.getOrElse(ftpe, {
+    val res = functions.getOrElse(ftpe, {
       val n = new Node
-      functions = functions + (ftpe -> n)
+      functions += (ftpe -> n)
       n
     })
+    res
 
   // TODO cache
   private def functionsOf(cls: Node): Set[FlowType.Function] = functions.collect {
@@ -104,6 +107,7 @@ class TransformationContext(
       (e, variantName)
     }
 
+
     interfaces.update(interfaceName, Declaration.Interface(interfaceName, abtractedTParams, variants.map {
       case (_, name) => Property(name, abstractedType)
     }))
@@ -148,6 +152,11 @@ class TransformationContext(
       }
     // not found in solution: use zero everywhere
     } getOrElse { Set(Ev.zero(x.arity)) }
+}
+
+object TransformationContext {
+  def from(flow: FlowAnalysis, subst: Bisubstitution, equiv: Equivalences): TransformationContext =
+    new TransformationContext(flow, subst, functions = mutable.Map.from(equiv))
 }
 
 def elaborate(m: ModuleDecl)(using T: TransformationContext): ModuleDecl = {

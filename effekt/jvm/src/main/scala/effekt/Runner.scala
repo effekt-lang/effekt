@@ -196,6 +196,8 @@ object MLRunner extends Runner[String] {
     val out = C.config.outputPath()
     val buildFile = (out / "main.mlb").canonicalPath
     val executable = (out / "mlton-main").canonicalPath
-    exec("mlton", "-output", executable, buildFile)
+    exec("mlton",
+      "-default-type", "int64", // to avoid integer overflows
+      "-output", executable, buildFile)
     exec(executable)
 }

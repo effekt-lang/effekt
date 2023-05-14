@@ -215,12 +215,9 @@ class Constraints(
     // (0) only add those to pending that haven't been solved already
     pendingInactive = pendingInactive ++ (capts.toSet -- captSubstitution.keySet)
 
-    var toRemove: Set[CNode] = Set.empty
-
     // (1) collect all nodes that can be solved
-    pendingInactive foreach { n =>
-      if (isInactive(n)) toRemove = toRemove + n
-    }
+    val toRemove: Set[CNode] = removableNodes()
+
     // nothing to do
     if (toRemove.isEmpty) return;
 
@@ -330,17 +327,42 @@ class Constraints(
   }
 
   /**
-   * Computes whether a node and all of its transitive bounds are inactive.
+   * Computes the set of all nodes that are inactive (that is, we left its unification scope and it
+   * can be solved by unification)
+   *
+   * In order to do so, it checks whether the node itself is inactive and whether the transitive closure of
+   * its bounds is inactive.
    */
-  private def isInactive(x: CNode, seen: Set[CNode] = Set.empty): Boolean =
-    if ((seen contains x) || (captSubstitution isDefinedAt x)) return true;
+  private def removableNodes(): Set[CNode] = {
 
-    val selfSeen = seen + x
+    // The results of inactivity is cached to avoid expensive recomputation.
+    var cache: Map[CNode, Boolean] = Map.empty
 
-    val isInactiveItself = pendingInactive contains x
-    val areBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n => isInactive(n, selfSeen) }
+    /**
+     * This helper function computes inactivity of nodes as the
+     * transitive closure of x's bounds.
+     */
+    def checkInactivity(x: CNode): Unit =
+      if (cache contains x) { return }
 
-    return isInactiveItself && areBoundsInactive
+      if (captSubstitution isDefinedAt x) { cache += (x -> true); return }
+
+      // is the node itself inactive?
+      if (pendingInactive contains x) {
+        cache += (x -> true)
+
+        val allBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n =>
+          checkInactivity(n)
+          cache(n)
+        }
+        cache += (x -> allBoundsInactive)
+      } else {
+        cache += (x -> false)
+      }
+
+    // collect all nodes that can be solved
+    pendingInactive filter { n => checkInactivity(n); cache(n) }
+  }
 
 
   private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =

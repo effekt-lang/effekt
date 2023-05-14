@@ -1,7 +1,6 @@
 #ifndef EFFEKT_IO_C
 #define EFFEKT_IO_C
 
-
 // println
 
 void c_io_println_Int(const Int n) {
@@ -21,6 +20,5 @@ void c_io_println_String(String text) {
         putchar(c_buffer_bytes(text)[j]);
     putchar('\n');
 }
-
 
 #endif

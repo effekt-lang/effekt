@@ -1,3 +1,5 @@
 def main(): Unit = {
     println("left>" ++ ">right");
+    println("Hallo" == "Hallo");
+    println("Hallo" == "Ha");
 }
