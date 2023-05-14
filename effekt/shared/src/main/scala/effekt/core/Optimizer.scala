@@ -6,6 +6,8 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.Block.BlockLit
+import effekt.core.Pure.ValueVar
+import effekt.symbols.TmpValue
 import effekt.util.messages.INTERNAL_ERROR
 
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
@@ -19,41 +21,12 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         val mainSymbol = Context.checkMain(mod)
         val withoutUnused = RemoveUnusedDefinitions(Set(mainSymbol), module)
 
-        // (2) simple optimizations like return-run elimination
-        val simpleOpts = SimpleOptimizations(withoutUnused)
-
-        // (3) inline unique block definitions
-        val inlined = InlineUnique(Set(mainSymbol), simpleOpts)
+        // (2) inline unique block definitions
+        val inlined = InlineUnique(Set(mainSymbol), withoutUnused)
 
         Some(CoreTransformed(source, tree, mod, inlined))
     }
 }
-
-object SimpleOptimizations {
-  def apply(m: ModuleDecl)(using Context): ModuleDecl = {
-    m.copy(definitions = m.definitions.map { d =>
-      val opt = eliminateReturnRun.rewrite(d)
-      directStyleVal.rewrite(opt)
-    })
-  }
-
-  // a very small and easy post processing step...
-  // reduces run-return pairs
-  object eliminateReturnRun extends core.Tree.Rewrite {
-    override def expr = {
-      case core.Run(core.Return(p)) => rewrite(p)
-    }
-  }
-
-  // rewrite (Val (Return e) s) to (Let e s)
-  object directStyleVal extends core.Tree.Rewrite {
-    override def stmt = {
-      case core.Val(id, core.Return(expr), body) =>
-        Let(id, rewrite(expr), rewrite(body))
-    }
-  }
-}
-
 
 object RemoveUnusedDefinitions {
 
@@ -171,7 +144,7 @@ object InlineUnique {
 
     // Only introduce scope, if necessary
     if bindings.isEmpty then rewrite(body) else {
-      val result: Stmt.Scope = Stmt.Scope(bindings, body)
+      val result: Stmt.Scope = scope(bindings, body)
 
       // (3) inline unique block args again
       val newUsage = Reachable(result).filter { case (id, usage) => ids.contains(id) }
@@ -197,14 +170,14 @@ object InlineUnique {
   def rewrite(s: Stmt)(using InlineContext): Stmt = s match {
     case Stmt.Scope(definitions, body) =>
       val (filtered, ctx) = scope(definitions)
-      Scope(filtered, rewrite(body)(using ctx))
+      scope(filtered, rewrite(body)(using ctx))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
 
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))
-    case Stmt.Val(id, binding, body) => Val(id, rewrite(binding), rewrite(body))
+    case Stmt.Val(id, binding, body) => valDef(id, rewrite(binding), rewrite(body))
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
     case Stmt.Match(scrutinee, clauses, default) =>
       Match(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
@@ -256,8 +229,42 @@ object InlineUnique {
     case pure: Pure => rewrite(pure)
   }
 
+  case class Binding[A](run: (A => Stmt) => Stmt) {
+    def flatMap[B](rest: A => Binding[B]): Binding[B] = {
+      Binding(k => run(a => rest(a).run(k)))
+    }
+  }
+
+  def pure[A](a: A): Binding[A] = Binding(k => k(a))
+
 
   // smart constructors to establish a normal form
+  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+    binding match {
+      // This opt is too good for JS: it blows the stack on
+      // recursive functions that are used to encode while...
+      //
+      // The solution to this problem is implemented in core.MakeStackSafe:
+      //   all recursive functions that could blow the stack are trivially wrapped
+      //   again, after optimizing.
+      case Stmt.Return(expr) =>
+        scope(List(Definition.Let(id, expr)), body)
+
+      // here we are flattening scopes; be aware that this extends
+      // life-times of bindings!
+      //
+      // { val x = { def...; BODY }; REST } = { def ...; val x = BODY }
+      case Stmt.Scope(definitions, binding) =>
+        scope(definitions, valDef(id, binding, body))
+
+      case _ => Stmt.Val(id, binding, body)
+    }
+
+  // { def f=...; { def g=...; BODY } } = { def f=...; def g; BODY }
+  def scope(definitions: List[Definition], body: Stmt): Stmt.Scope = body match {
+    case Stmt.Scope(others, body) => scope(definitions ++ others, body)
+    case _ => Stmt.Scope(definitions, body)
+  }
 
   def app(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])(using InlineContext): Stmt =
     callee match {
@@ -267,7 +274,13 @@ object InlineUnique {
 
   def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
     callee match {
-      //case b : Block.BlockLit => reduce(b, targs, vargs)
+      case b : Block.BlockLit =>
+        INTERNAL_ERROR(
+          """|This should not happen!
+             |User defined functions always have to be called with App, not PureApp.
+             |If this error does occur, this means this changed.
+             |Check `core.Transformer.makeFunctionCall` for details.
+             |""".stripMargin)
       case other => Pure.PureApp(callee, targs, vargs)
     }
 
