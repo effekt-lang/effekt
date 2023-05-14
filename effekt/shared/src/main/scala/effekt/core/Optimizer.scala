@@ -6,7 +6,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.Block.BlockLit
-import effekt.core.Usage.{ Many, Once, Recursive }
+import effekt.util.messages.INTERNAL_ERROR
 
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
@@ -132,7 +132,7 @@ object InlineUnique {
   def blockDefFor(id: Id)(using ctx: InlineContext): Option[Block] =
     ctx.defs.get(id) map {
       case Definition.Def(id, block) => rewrite(block)
-      case Definition.Let(id, binding) => sys error "Should not happen"
+      case Definition.Let(id, binding) => INTERNAL_ERROR("Should not happen")
     }
 
   def dealias(b: Block.BlockVar)(using ctx: InlineContext): BlockVar =
@@ -161,7 +161,7 @@ object InlineUnique {
 
 
     // (2) substitute
-    val body = tooling.substitute(b, targs, vargs, bvars)
+    val body = substitutions.substitute(b, targs, vargs, bvars)
 
     //    println(s"IDS: ${ids}")
     //    println("BEFORE")
@@ -281,7 +281,7 @@ object InlineUnique {
     case Block.New(impl) =>
       val Operation(name, tps, cps, vps, bps, resume, body) =
         impl.operations.find(op => op.name == field).getOrElse {
-          sys error "Should not happen"
+          INTERNAL_ERROR("Should not happen")
         }
       assert(resume.isEmpty, "We do not inline effectful capabilities at that point")
       BlockLit(tps, cps, vps, bps, body)
@@ -431,10 +431,31 @@ enum Usage {
   case Recursive
 }
 
-// TODO CONTINUE: REWRITE
-object tooling {
+object substitutions {
 
-  //Starting point for inlining, creates Maps(params -> args) and passes to normal substitute
+  case class Substitution(
+    vtypes: Map[Id, ValueType],
+    captures: Map[Id, Captures],
+    values: Map[Id, Pure],
+    blocks: Map[Id, Block]
+  ) {
+    def shadowTypes(shadowed: IterableOnce[Id]): Substitution = copy(vtypes = vtypes -- shadowed)
+    def shadowCaptures(shadowed: IterableOnce[Id]): Substitution = copy(captures = captures -- shadowed)
+    def shadowValues(shadowed: IterableOnce[Id]): Substitution = copy(values = values -- shadowed)
+    def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
+
+    def shadowDefinitions(shadowed: Seq[Definition]): Substitution = copy(
+      values = values -- shadowed.collect { case d: Definition.Let => d.id },
+      blocks = blocks -- shadowed.collect { case d: Definition.Def => d.id }
+    )
+
+    def shadowParams(shadowed: Seq[Param]): Substitution = copy(
+      values = values -- shadowed.collect { case d: Param.ValueParam => d.id },
+      blocks = blocks -- shadowed.collect { case d: Param.BlockParam => d.id }
+    )
+  }
+
+  // Starting point for inlining, creates Maps(params -> args) and passes to normal substitute
   def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
     block match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -443,21 +464,20 @@ object tooling {
         val vSubst = (vparams.map(_.id) zip vargs).toMap
         val bSubst = (bparams.map(_.id) zip bargs).toMap
 
-        substitute(body)(using tSubst, cSubst, vSubst, bSubst)
+        substitute(body)(using Substitution(tSubst, cSubst, vSubst, bSubst))
     }
 
   //Replaces all variables contained in one of the Maps with their value
-  def substitute(definition: Definition)(using Map[Id, ValueType], Map[Id, Captures], Map[Id, Pure], Map[Id, Block]): Definition =
+  def substitute(definition: Definition)(using Substitution): Definition =
     definition match {
       case Definition.Def(id, block) => Definition.Def(id, substitute(block))
       case Definition.Let(id, binding) => Definition.Let(id, substitute(binding))
     }
 
-  def substitute(expression: Expr)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                                   vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Expr =
+  def substitute(expression: Expr)(using Substitution): Expr =
     expression match {
       case DirectApp(b, targs, vargs, bargs) =>
-        DirectApp(substitute(b), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
+        DirectApp(substitute(b), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
 
       case Run(s) =>
         Run(substitute(s))
@@ -466,44 +486,38 @@ object tooling {
         substitute(p)
     }
 
-  def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                                  vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Stmt =
+  def substitute(statement: Stmt)(using subst: Substitution): Stmt =
     statement match {
       case Scope(definitions, body) =>
-        Scope(definitions.map(substitute), substitute(body)(using tSubst, cSubst, vSubst, bSubst -- definitions.map { d => d.id }))
+        Scope(definitions.map(substitute),
+          substitute(body)(using subst shadowDefinitions definitions))
 
       case Return(expr) =>
         Return(substitute(expr))
 
       case Val(id, binding, body) =>
-        Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
+        Val(id, substitute(binding),
+          substitute(body)(using subst shadowValues List(id)))
 
       case App(callee, targs, vargs, bargs) =>
-        App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
+        App(substitute(callee), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
 
       case If(cond, thn, els) =>
         If(substitute(cond), substitute(thn), substitute(els))
 
       case Match(scrutinee, clauses, default) =>
-        Match(substitute(scrutinee), clauses.map {case (id, b) => (id, substitute(b).asInstanceOf[BlockLit]) }, default.map(substitute))
+        Match(substitute(scrutinee), clauses.map {
+          case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])
+        }, default.map(substitute))
 
-      // TODO WHAT IS THIS AGAIN?
       case State(id, init, region, body) =>
-        if (bSubst.contains(region))
-          bSubst(region) match
-            //case _: BlockLit => Context.panic("Should not happen since block lits never have type Region")
-            case BlockVar(x, _, _) => State(id, substitute(init), x, substitute(body)(using tSubst, cSubst, vSubst, bSubst - id))
-            case b => ???
-            //              val name = symbols.TmpBlock()
-            //              Scope(List(Definition.Def(name, b)),
-            //                State(id,
-            //                  substitute(init)(using tSubst, cSubst, vSubst, bSubst - name),
-            //                  name,
-            //                  substitute(body)(using tSubst, cSubst, vSubst, bSubst -- Set(name, id))))
+        val newRegion = subst.blocks.get(region) map {
+          case BlockVar(x, _, _) => x
+          case _ => INTERNAL_ERROR("Regions should always be variables")
+        } getOrElse region
 
-        else
-          State(id, substitute(init), region, substitute(body)(using tSubst, cSubst, vSubst, bSubst - id))
-
+        State(id, substitute(init), newRegion,
+          substitute(body)(using subst shadowBlocks List(id)))
 
       case Try(body, handlers) =>
         Try(substitute(body), handlers.map(substitute))
@@ -514,18 +528,20 @@ object tooling {
       case h : Hole => h
     }
 
-  def substitute(block: Block)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                               vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Block =
+  def substitute(block: Block)(using subst: Substitution): Block =
     block match {
-      case BlockVar(id, tpe, capt) if bSubst.isDefinedAt(id) => bSubst(id)
-      case BlockVar(id, tpe, capt) => BlockVar(id, Type.substitute(tpe, tSubst, cSubst), Type.substitute(capt, cSubst))
+      case BlockVar(id, tpe, capt) if subst.blocks.isDefinedAt(id) => subst.blocks(id)
+      case BlockVar(id, tpe, capt) => BlockVar(id, substitute(tpe), substitute(capt))
 
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        BlockLit(tparams, cparams, vparams, bparams,
-          substitute(body)(using tSubst -- tparams, cSubst -- cparams, vSubst -- vparams.map(_.id), bSubst -- bparams.map(_.id)))
+        val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
+        BlockLit(tparams, cparams,
+          vparams.map(p => substitute(p)(using shadowedTypelevel)),
+          bparams.map(p => substitute(p)(using shadowedTypelevel)),
+          substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
 
       case Member(block, field, annotatedTpe) =>
-        Member(substitute(block), field, Type.substitute(annotatedTpe, tSubst, cSubst))
+        Member(substitute(block), field, substitute(annotatedTpe))
 
       case Unbox(pure) =>
         Unbox(substitute(pure))
@@ -534,34 +550,57 @@ object tooling {
         New(substitute(impl))
     }
 
-  def substitute(pure: Pure)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures],
-                             vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Pure =
+  def substitute(pure: Pure)(using subst: Substitution): Pure =
     pure match {
-      case ValueVar(id, _) if vSubst.isDefinedAt(id) => vSubst(id)
-      case ValueVar(id, annotatedType) => ValueVar(id, Type.substitute(annotatedType, tSubst, cSubst))
+      case ValueVar(id, _) if subst.values.isDefinedAt(id) => subst.values(id)
+      case ValueVar(id, annotatedType) => ValueVar(id, substitute(annotatedType))
 
       case Literal(value, annotatedType) =>
-        Literal(value, Type.substitute(annotatedType, tSubst, cSubst))
+        Literal(value, substitute(annotatedType))
 
       case PureApp(b, targs, vargs) =>
-        PureApp(substitute(b), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute))
+        PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))
 
       case Select(target, field, annotatedType) =>
-        Select(substitute(target), field, Type.substitute(annotatedType, tSubst, cSubst))
+        Select(substitute(target), field, substitute(annotatedType))
 
       case Box(b, annotatedCapture) =>
-        Box(substitute(b), Type.substitute(annotatedCapture, cSubst))
+        Box(substitute(b), substitute(annotatedCapture))
     }
 
-  def substitute(impl: Implementation)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, Captures], vSubst: Map[Id, Pure], bSubst: Map[Id, Block]): Implementation =
+  def substitute(impl: Implementation)(using Substitution): Implementation =
     impl match {
       case Implementation(interface, operations) =>
-        Implementation(Type.substitute(interface, tSubst, cSubst).asInstanceOf, operations.map(substitute))
+        Implementation(substitute(interface).asInstanceOf, operations.map(substitute))
     }
 
-  def substitute(op: Operation)(using Map[Id, ValueType], Map[Id, Captures], Map[Id, Pure], Map[Id, Block]): Operation =
+  def substitute(op: Operation)(using subst: Substitution): Operation =
     op match {
       case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-        Operation(name, tparams, cparams, vparams, bparams, resume, substitute(body))
+        val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
+        Operation(name, tparams, cparams,
+          vparams.map(p => substitute(p)(using shadowedTypelevel)),
+          bparams.map(p => substitute(p)(using shadowedTypelevel)),
+          resume.map(p => substitute(p)(using shadowedTypelevel)),
+          substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
     }
+
+  def substitute(param: Param.ValueParam)(using Substitution): Param.ValueParam =
+    param match {
+      case Param.ValueParam(id, tpe) => Param.ValueParam(id, substitute(tpe))
+    }
+
+  def substitute(param: Param.BlockParam)(using Substitution): Param.BlockParam =
+    param match {
+      case Param.BlockParam(id, tpe) => Param.BlockParam(id, substitute(tpe))
+    }
+
+  def substitute(tpe: ValueType)(using subst: Substitution): ValueType =
+    Type.substitute(tpe, subst.vtypes, subst.captures)
+
+  def substitute(tpe: BlockType)(using subst: Substitution): BlockType =
+    Type.substitute(tpe, subst.vtypes, subst.captures)
+
+  def substitute(capt: Captures)(using subst: Substitution): Captures =
+    Type.substitute(capt, subst.captures)
 }
