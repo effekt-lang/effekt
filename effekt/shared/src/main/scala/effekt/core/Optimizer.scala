@@ -98,7 +98,8 @@ object InlineUnique {
 
     val filtered = definitions.collect {
       case Definition.Def(id, block) if shouldKeep(id) => Definition.Def(id, rewrite(block))
-      case Definition.Let(id, binding) => Definition.Let(id, rewrite(binding))
+      // we drop aliases
+      case Definition.Let(id, binding) if !binding.isInstanceOf[ValueVar] => Definition.Let(id, rewrite(binding))
     }
     (filtered, allDefs)
 
@@ -111,6 +112,12 @@ object InlineUnique {
   def dealias(b: Block.BlockVar)(using ctx: InlineContext): BlockVar =
     ctx.defs.get(b.id) match {
       case Some(Definition.Def(id, aliased : Block.BlockVar)) => dealias(aliased)
+      case _ => b
+    }
+
+  def dealias(b: Pure.ValueVar)(using ctx: InlineContext): ValueVar =
+    ctx.defs.get(b.id) match {
+      case Some(Definition.Let(id, aliased : Pure.ValueVar)) => dealias(aliased)
       case _ => b
     }
 
@@ -142,21 +149,22 @@ object InlineUnique {
     //    println("AFTER")
     //    debug(Stmt.Scope(bindings, body))
 
-    // Only introduce scope, if necessary
-    if bindings.isEmpty then rewrite(body) else {
-      val result: Stmt.Scope = scope(bindings, body)
+    scope(bindings, body) match {
+      case result : Stmt.Scope =>
 
-      // (3) inline unique block args again
-      val newUsage = Reachable(result).filter { case (id, usage) => ids.contains(id) }
-      // Record fresh usage in context. It is ok to just add the new usage information to the global
-      // usage database since we only inline unique bindings. We would need to reconsider everyting,
-      // as soon as we start inlining multiple occurrences.
-      ctx ++= newUsage
+        // (3) inline unique block args again
+        val newUsage = Reachable(result).filter { case (id, usage) => ids.contains(id) }
+        // Record fresh usage in context. It is ok to just add the new usage information to the global
+        // usage database since we only inline unique bindings. We would need to reconsider everyting,
+        // as soon as we start inlining multiple occurrences.
+        ctx ++= newUsage
 
-      val rewritten = rewrite(result)
-      //      println("REWRITTEN")
-      //      debug(rewritten)
-      rewritten
+        val rewritten = rewrite(result)
+        //      println("REWRITTEN")
+        //      debug(rewritten)
+        rewritten
+
+      case body => rewrite(body)
     }
   }
 
@@ -215,8 +223,8 @@ object InlineUnique {
 
   def rewrite(p: Pure)(using InlineContext): Pure = p match {
     case Pure.PureApp(b, targs, vargs) => pureApp(rewrite(b), targs, vargs.map(rewrite))
-    // currently, we don't inline values
-    case Pure.ValueVar(id, annotatedType) => p
+    // currently, we don't inline values, but we can dealias them
+    case x @ Pure.ValueVar(id, annotatedType) => dealias(x)
 
     // congruences
     case Pure.Literal(value, annotatedType) => p
@@ -264,9 +272,9 @@ object InlineUnique {
     }
 
   // { def f=...; { def g=...; BODY } } = { def f=...; def g; BODY }
-  def scope(definitions: List[Definition], body: Stmt): Stmt.Scope = body match {
+  def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
     case Stmt.Scope(others, body) => scope(definitions ++ others, body)
-    case _ => Stmt.Scope(definitions, body)
+    case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
   }
 
   def app(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])(using InlineContext): Stmt =
