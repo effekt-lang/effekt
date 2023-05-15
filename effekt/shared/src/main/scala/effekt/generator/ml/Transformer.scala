@@ -11,13 +11,14 @@ import kiama.output.PrettyPrinterTypes.Document
 
 import scala.annotation.tailrec
 import scala.language.implicitConversions
+import scala.collection.mutable
 
 object Transformer {
 
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
-  def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(implicit C: Context): ml.Toplevel = {
-    ml.Toplevel(toML(core), runMain(name(mainSymbol)))
+  def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(using C: Context): ml.Toplevel = {
+    ml.Toplevel(toML(core)(using TransformerContext(C)), runMain(name(mainSymbol)))
   }
 
   /**
@@ -27,15 +28,30 @@ object Transformer {
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".sml"
 
 
+  // interfaces are typed structurally: we only generate one datatype for
+  // each arity.
+  case class CoData(name: MLName, accessors: List[MLName])
+
+  case class TransformerContext(
+    // for error reporting
+    compilerContext: Context,
+
+    recordCache: mutable.Map[Int, CoData] = mutable.Map.empty,
+    accessorCache: mutable.Map[Id, MLName] = mutable.Map.empty
+  )
+  implicit def useAsContext(C: TransformerContext): Context = C.compilerContext
+
+
+
   def toML(p: Param): MLName = name(p.id)
 
-  def toML(e: Argument)(using Context): ml.Expr = e match {
+  def toML(e: Argument)(using TransformerContext): ml.Expr = e match {
     case e: lifted.Expr => toML(e)
     case b: lifted.Block => toML(b)
     case e: lifted.Evidence => toML(e)
   }
 
-  def toML(module: ModuleDecl)(using Context): List[ml.Binding] = {
+  def toML(module: ModuleDecl)(using TransformerContext): List[ml.Binding] = {
     val decls = sortDeclarations(module.decls).flatMap(toML)
     val externs = module.externs.map(toML)
     val rest = sortDefinitions(module.definitions).map(toML)
@@ -48,7 +64,7 @@ object Transformer {
    *
    * Keep let-definitions in the order they are, since they might have observable side-effects
    */
-  def sortDefinitions(defs: List[Definition])(using C: Context): List[Definition] = {
+  def sortDefinitions(defs: List[Definition])(using C: TransformerContext): List[Definition] = {
     def sort(defs: List[Definition], toSort: List[Definition]): List[Definition] = defs match {
       case (d: Definition.Let) :: rest  =>
         val sorted = sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
@@ -60,10 +76,10 @@ object Transformer {
     sort(defs, Nil)
   }
 
-  def sortDeclarations(defs: List[Declaration])(using C: Context): List[Declaration] =
+  def sortDeclarations(defs: List[Declaration])(using C: TransformerContext): List[Declaration] =
     sortTopologically(defs, d => freeTypeVariables(d), d => d.id)
 
-  def sortTopologically[T](defs: List[T], dependencies: T => Set[Id], id: T => Id)(using C: Context): List[T] = {
+  def sortTopologically[T](defs: List[T], dependencies: T => Set[Id], id: T => Id)(using C: TransformerContext): List[T] = {
     val ids = defs.map(id).toSet
     val fvs = defs.map{ d => id(d) -> dependencies(d).intersect(ids) }.toMap
 
@@ -75,14 +91,14 @@ object Transformer {
         val (noDependencies, rest) = todo.partition { d => (fvs(id(d)) -- emitted).isEmpty }
         if (noDependencies.isEmpty) {
           val mutuals = rest.map(id).mkString(", ")
-          Context.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
+          C.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
         } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(id).toSet)
     }
 
     go(defs, Nil, Set.empty).reverse
   }
 
-  def tpeToML(tpe: BlockType)(using C: Context): ml.Type = tpe match {
+  def tpeToML(tpe: BlockType)(using C: TransformerContext): ml.Type = tpe match {
     case BlockType.Function(tparams, eparams, vparams, bparams, ret) if tparams.nonEmpty =>
       C.abort("polymorphic functions not supported")
     case BlockType.Function(Nil, Nil, Nil, Nil, resType) =>
@@ -92,10 +108,10 @@ object Transformer {
     case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
       C.abort("higher order functions currently not supported")
     case BlockType.Interface(typeConstructor, args) =>
-      ml.Type.TApp(ml.Type.Data(name(typeConstructor)), args.map(tpeToML))
+      ml.Type.TApp(ml.Type.Data(interfaceNameFor(args.size)), args.map(tpeToML))
   }
 
-  def tpeToML(tpe: ValueType)(using Context): ml.Type = tpe match {
+  def tpeToML(tpe: ValueType)(using TransformerContext): ml.Type = tpe match {
     case lifted.Type.TUnit => ml.Type.Unit
     case lifted.Type.TInt => ml.Type.Integer
     case lifted.Type.TDouble => ml.Type.Real
@@ -107,12 +123,12 @@ object Transformer {
     case ValueType.Boxed(tpe) => tpeToML(tpe)
   }
 
-  def toML(decl: Declaration)(using C: Context): List[ml.Binding] = decl match {
-    // TODO
-    case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
-      recordRep(id, id.constructor, ctor.fields.map { f => f.id })
+  def toML(decl: Declaration)(using C: TransformerContext): List[ml.Binding] = decl match {
 
-    case Data(id, tparams, ctors) =>
+    case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
+      defineRecord(name(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
+
+    case Declaration.Data(id, tparams, ctors) =>
       def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
         case Constructor(id, fields) =>
           val tpeList = fields.map { f => tpeToML(f.tpe) }
@@ -124,35 +140,56 @@ object Transformer {
       List(ml.Binding.DataBind(name(id), tvars, ctors map constructorToML))
 
     case Declaration.Interface(id, tparams, operations) =>
-      recordRep(id, id, operations.map { op => op.id })
+      defineInterface(id, operations.map { op => op.id })
   }
 
-  def recordRep(typeName: Id, caseName: Id, props: List[Id])(using Context): List[ml.Binding] = {
+  def interfaceNameFor(arity: Int): MLName = MLName(s"Object${arity}")
+
+  def defineInterface(typeName: Id, props: List[Id])(using C: TransformerContext): List[ml.Binding] = {
+    val arity = props.size
+
+    val interfaceName = interfaceNameFor(arity)
+    val accessorNames = props.zipWithIndex.map { case (id, i) =>
+      val name = MLName(s"member${i + 1}of${arity}")
+      C.accessorCache.update(id, name)
+      name
+    }
+
+    if C.recordCache.isDefinedAt(arity) then return Nil
+
+    C.recordCache.update(arity, CoData(interfaceName, accessorNames))
+
+    defineRecord(interfaceName, interfaceName, accessorNames)
+  }
+
+  def defineRecord(typeName: MLName, constructorName: MLName, fields: List[MLName])(using TransformerContext): List[ml.Binding] = {
     // we introduce one type var for each property, in order to avoid having to translate types
-    val tvars: List[ml.Type.Var] = props.map(_ => ml.Type.Var(freshName("arg")))
-    val dataDecl = ml.Binding.DataBind(name(typeName), tvars, List((name(caseName), typesToTupleIsh(tvars))))
-    val accessors = props.zipWithIndex.map {
+    val tvars: List[ml.Type.Var] = fields.map(_ => ml.Type.Var(freshName("a")))
+    val dataDecl = ml.Binding.DataBind(typeName, tvars, List((constructorName, typesToTupleIsh(tvars))))
+
+    val accessors = fields.zipWithIndex.map {
       case (fieldName, i) =>
+        val arg = MLName("arg")
         // _, _, _, arg, _
-        val patterns = props.indices.map {
-          j => if j == i then ml.Pattern.Named(name(fieldName)) else ml.Pattern.Wild()
+        val patterns = fields.indices.map {
+          j => if j == i then ml.Pattern.Named(arg) else ml.Pattern.Wild()
         }.toList
-        val pattern = ml.Pattern.Datatype(name(caseName), patterns)
-        val args = List(ml.Param.Patterned(pattern))
-        val body = ml.Expr.Variable(name(fieldName))
-        ml.Binding.FunBind(name(fieldName), args, body)
+
+        ml.Binding.FunBind(fieldName,
+          List(ml.Param.Patterned(ml.Pattern.Datatype(constructorName, patterns))),
+          ml.Expr.Variable(arg))
     }
     dataDecl :: accessors
   }
 
-  def toML(ext: Extern)(using Context): ml.Binding = ext match {
+  def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
       ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, RawExpr(body))
     case Extern.Include(contents) =>
       RawBind(contents)
   }
 
-  def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
+  def toMLExpr(stmt: Stmt)(using C: TransformerContext): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
 
     case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), _, List(ev)) =>
@@ -229,11 +266,11 @@ object Transformer {
       CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
   }
 
-  def createBinder(id: Symbol, binding: Expr)(using Context): Binding = {
+  def createBinder(id: Symbol, binding: Expr)(using TransformerContext): Binding = {
     ml.ValBind(name(id), toML(binding))
   }
 
-  def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
+  def createBinder(id: Symbol, binding: Block)(using TransformerContext): Binding = {
     binding match {
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
@@ -243,19 +280,19 @@ object Transformer {
     }
   }
 
-  def toML(defn: Definition)(using C: Context): ml.Binding = defn match {
+  def toML(defn: Definition)(using C: TransformerContext): ml.Binding = defn match {
     case Definition.Def(id, block) => createBinder(id, block)
     case Definition.Let(Wildcard(), binding) => ml.Binding.AnonBind(toML(binding))
     case Definition.Let(id, binding) => createBinder(id, binding)
   }
 
-  def toML(block: BlockLit)(using Context): ml.Lambda = block match {
+  def toML(block: BlockLit)(using TransformerContext): ml.Lambda = block match {
     case BlockLit(tparams, params, body) =>
       val k = freshName("k")
       ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
   }
 
-  def toML(block: Block)(using C: Context): ml.Expr = block match {
+  def toML(block: Block)(using C: TransformerContext): ml.Expr = block match {
     case lifted.BlockVar(id, _) =>
       Variable(name(id))
 
@@ -263,19 +300,19 @@ object Transformer {
       toML(b)
 
     case lifted.Member(b, field, annotatedType) =>
-      ml.Call(name(field))(toML(b))
+      ml.Call(C.accessorCache(field))(toML(b))
 
     case lifted.Unbox(e) => toML(e) // not sound
 
     case lifted.New(impl) => toML(impl)
   }
 
-  def toML(impl: Implementation)(using Context): ml.Expr = impl match {
+  def toML(impl: Implementation)(using TransformerContext): ml.Expr = impl match {
     case Implementation(interface, operations) =>
-      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+      ml.Expr.Make(interfaceNameFor(operations.size), expsToTupleIsh(operations map toML))
   }
 
-  def toML(op: Operation)(using Context): ml.Expr = toML(op.implementation)
+  def toML(op: Operation)(using TransformerContext): ml.Expr = toML(op.implementation)
 
   def toML(scope: Evidence): ml.Expr = scope match {
     case Evidence(Nil) => Consts.here
@@ -290,7 +327,7 @@ object Transformer {
     case Lift.Reg() => effekt.util.messages.FIXME(Consts.lift, "Translate to proper lift on state")
   }
 
-  def toML(expr: Expr)(using C: Context): ml.Expr = expr match {
+  def toML(expr: Expr)(using C: TransformerContext): ml.Expr = expr match {
     case l: Literal =>
       def numberString(x: AnyVal): ml.Expr = {
         val s = x.toString
