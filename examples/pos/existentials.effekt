@@ -1,5 +1,5 @@
 effect Foo[A] {
-  def get[B](b: B): (A, B)
+  def get[B](b: B): Tuple2[A, B]
 }
 
 
@@ -8,7 +8,7 @@ def notEnoughTypeParams() = {
     do get[Int, String]("hello");
     println("Test")
   } with Foo[Int] {
-    def get(c: Boolean) = { resume((42, c)) }
+    def get(c: Boolean) = { resume(Tuple2(42, c)) }
   }
 }
 
@@ -18,6 +18,6 @@ def wrongTypes() = {
     do get[Int, String]("hello");
     println("Test")
   } with Foo[Int] {
-    def get[C](c: Boolean) = { resume((42, c)) }
+    def get[C](c: Boolean) = { resume(Tuple2(42, c)) }
   }
 }
