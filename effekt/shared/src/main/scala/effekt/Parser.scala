@@ -8,7 +8,7 @@ import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
 import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 
 object Parser extends Phase[Source, Parsed] {
 
@@ -276,7 +276,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
     | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply
+    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply  //TODO
     | matchDef
     | failure("Expected a statement")
     )
@@ -507,7 +507,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val primValueType: P[ValueType] =
     ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
-    | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
+    //| `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | failure("Expected a type")
     )
 
@@ -532,6 +532,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       case None => Effects.Pure
     }
 
+  // TODO
   lazy val effectful: P[Effectful] =
     valueType ~ maybeEffects ^^ Effectful.apply
 
