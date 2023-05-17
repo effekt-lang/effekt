@@ -76,7 +76,7 @@ Another handler would memoize keys once they are built to avoid duplication.
 ```
 effect KeyNotFound[A](key: Key): A
 
-type Store = List[(Key,Val)]
+type Store = List[Tuple2[Key,Val]]
 
 def find(store: Store, key: Key): Val / KeyNotFound = {
     store match {
@@ -100,7 +100,7 @@ def memo[R] { prog: => R / { Need } }: R / { Need } = {
             resume(find(store, key))
         } with KeyNotFound[A] { (k) =>
             val v = do Need(k);
-            store = Cons((k, v), store);
+            store = Cons(Tuple2(k, v), store);
             resume(v)
         }
     }
@@ -133,7 +133,7 @@ The `main` function runs all examples.
 
 ```
 def main() = {
-    val inputs = [("A1", 10), ("A2", 20)];
+    val inputs = [Tuple2("A1", 10), Tuple2("A2", 20)];
     try {
         val result1 = supplyInput(inputs) { build ("B2") { (key) => example1(key) } };
         println(result1);

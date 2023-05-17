@@ -2,14 +2,14 @@ type Box[A] { MkBox(a: A) }
 
 def make[A](): Box[A] = <>
 
-def foo[B, C] { f: () => Box[B] } { g: () => Box[C] }: (B, C) = <>
+def foo[B, C] { f: () => Box[B] } { g: () => Box[C] }: Tuple2[B, C] = <>
 
 def maker[D, E] { f: Box[D] => E }: E = <>
 
 def bar() = {
   val someBox = make()
   val x = foo { () => someBox } { () => someBox }
-  val y: (Int, Int) = x;
+  val y: Tuple2[Int, Int] = x;
   ()
 }
 

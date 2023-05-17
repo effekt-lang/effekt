@@ -13,7 +13,7 @@ def bar() =
  do get[Int]()
 
 def two[A, B]() =
-  (do get[A](), do get[B]())
+  Tuple2(do get[A](), do get[B]())
 
 def main() = {
   try {
