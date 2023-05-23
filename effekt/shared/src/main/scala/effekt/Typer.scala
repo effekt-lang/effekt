@@ -97,7 +97,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] = // TODO
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe)     => Result(tpe, Pure)
 
@@ -526,7 +526,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =  //TODO: List[ValueType]
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }

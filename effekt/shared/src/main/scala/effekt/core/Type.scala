@@ -157,7 +157,7 @@ object Type {
 
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
-    case Stmt.Return(expr) => expr.tpe
+    case Stmt.Return(expr) => expr.foldLeft(TBottom) { case (acc, e) => merge(acc, e.tpe, covariant = true) }          // TODO: flatmap
     case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result

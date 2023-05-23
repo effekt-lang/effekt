@@ -237,13 +237,13 @@ enum Stmt extends Tree {
   case Scope(definitions: List[Definition], body: Stmt)
 
   // Fine-grain CBV
-  case Return(expr: Pure)
-  case Val(id: Id, binding: Stmt, body: Stmt)
+  case Return(expr: List[Pure])
+  case Val(id: Id, binding: Stmt, body: Stmt) // TODO
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])  // TODO
 
   // Effects
   case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
@@ -316,6 +316,7 @@ object Tree {
     def id: PartialFunction[Id, Id] = PartialFunction.empty
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
+    def exprList: PartialFunction[List[Expr], List[Expr]] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
