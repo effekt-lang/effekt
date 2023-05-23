@@ -233,7 +233,7 @@ export Def.*
 enum Stmt extends Tree {
   case DefStmt(d: Def, rest: Stmt)
   case ExprStmt(d: Term, rest: Stmt)
-  case Return(d: Term)
+  case Return(d: List[Term])                  // TODO: List[Term]
   case BlockStmt(stmts: Stmt)
 }
 export Stmt.*
@@ -485,9 +485,9 @@ enum BlockType extends Type {
 }
 
 export BlockType.*
-
+// TODO: List of ValueType
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+case class Effectful(tpe: List[ValueType], eff: Effects) extends Tree
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
