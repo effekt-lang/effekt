@@ -191,7 +191,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Val(id, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
-      State(id, transform(init), region, env.evidenceFor(region), transform(body))
+      val environment = env.bind(id, env.evidenceFor(region).lifts)
+      State(id, transform(init), region, env.evidenceFor(region), transform(body)(using environment, ErrorReporter))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),

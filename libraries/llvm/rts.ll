@@ -226,11 +226,13 @@ here:
 
 loop:
     %stkp = phi ptr [@rest, %entry], [%nextp, %loop]
+    %i = phi i64 [%evidence, %entry], [%nexti, %loop]
     %stk = load %Stk, ptr %stkp
-    %dec = sub i64 %evidence, 1
     %regionp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %nextp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-    %cmp = icmp eq i64 %dec, 0
+    %nexti = sub i64 %i, 1
+    %cmp = icmp eq i64 %nexti, 0
+
     br i1 %cmp, label %done, label %loop
 
 done:
@@ -323,7 +325,7 @@ define %Stk @newStack() alwaysinline {
     %stk.0 = insertvalue %StkVal undef, %Rc 0, 0
     %stk.1 = insertvalue %StkVal %stk.0, %Mem %stackmem, 1
     %stk.2 = insertvalue %StkVal %stk.1, %Region zeroinitializer, 2
-    %stk.3 = insertvalue %StkVal %stk.2, %Stk null, 3
+    %stk.3 = insertvalue %StkVal %stk.2, %Stk %stk, 3
 
     store %StkVal %stk.3, %Stk %stk
 
@@ -331,8 +333,7 @@ define %Stk @newStack() alwaysinline {
 }
 
 define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
-    %newstk.0 = load %StkVal, %Stk %stk
-    %newstk = insertvalue %StkVal %newstk.0, %Stk %stk, 3
+    %newstk = load %StkVal, %Stk %stk
 
     %oldstk = call %StkVal @getStk(%Sp %oldsp)
 
@@ -344,19 +345,31 @@ define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
     ret %Sp %newsp
 }
 
-define {%Stk, %Sp} @popStack(%Sp %oldsp) alwaysinline {
-
+; pop n+1 stacks
+define {%Stk, %Sp} @popStacks(%Sp %oldsp, i64 %n) alwaysinline {
+entry:
     %oldstk = call %StkVal @getStk(%Sp %oldsp)
+    br label %loop
 
-    %rest = extractvalue %StkVal %oldstk, 3
-    %newstk = load %StkVal, %Stk %rest
+loop:
+    %stkval = phi %StkVal [%oldstk, %entry], [%newstk, %loop]
+    %i = phi i64 [%n, %entry], [%nexti, %loop]
 
+    %newstkp = extractvalue %StkVal %stkval, 3
+    %newstk = load %StkVal, %Stk %newstkp
+
+    %nexti = sub i64 %i, 1
+
+    %cmp = icmp eq i64 %i, 0
+    br i1 %cmp, label %done, label %loop
+
+done:
     call void @setStk(%StkVal %newstk)
 
-    store %StkVal %oldstk, %Stk %rest
+    store %StkVal %oldstk, %Stk %newstkp
 
     %newsp = extractvalue %StkVal %newstk, 1, 0
-    %ret.0 = insertvalue {%Stk, %Sp} undef, %Stk %rest, 0
+    %ret.0 = insertvalue {%Stk, %Sp} undef, %Stk %newstkp, 0
     %ret.1 = insertvalue {%Stk, %Sp} %ret.0, %Sp %newsp, 1
 
     ret {%Stk, %Sp} %ret.1
@@ -440,15 +453,24 @@ done:
     ret %Stk %stk
 
 copy:
-    %stkmem = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
-    %stkregion = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %newoldrc = sub %Rc %rc, 1
+    store %Rc %newoldrc, ptr %stkrc
+
+    %newhead = call ptr @malloc(i64 112)
+    br label %loop
+
+loop:
+    %old = phi %Stk [%stk, %copy], [%rest, %next]
+    %newstk = phi %Stk [%newhead, %copy], [%nextnew, %next]
+
+    %stkmem = getelementptr %StkVal, %Stk %old, i64 0, i32 1
+    %stkregion = getelementptr %StkVal, %Stk %old, i64 0, i32 2
+    %stkrest = getelementptr %StkVal, %Stk %old, i64 0, i32 3
 
     %mem = load %Mem, ptr %stkmem
     %region = load %Region, ptr %stkregion
     %rest = load %Stk, ptr %stkrest
 
-    %newstk = call ptr @malloc(i64 112)
     %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
     %newstkmem = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1
     %newstkregion = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2
@@ -464,12 +486,19 @@ copy:
     store %Rc 0, ptr %newstkrc
     store %Mem %newmem, ptr %newstkmem
     store %Region %newregion, ptr %newstkregion
-    store %Stk null, ptr %newstkrest
 
-    %newoldrc = sub %Rc %rc, 1
-    store %Rc %newoldrc, ptr %stkrc
+    %last = icmp eq %Stk %rest, %stk
+    br i1 %last, label %closecycle, label %next
 
-    ret %Stk %newstk
+next:
+    %nextnew = call ptr @malloc(i64 112)
+    store %Stk %nextnew, ptr %newstkrest
+    br label %loop
+
+closecycle:
+    store %Stk %newhead, ptr %newstkrest
+    ret %Stk %newhead
+
 }
 
 define void @shareStack(%Stk %stk) alwaysinline {

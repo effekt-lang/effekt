@@ -323,7 +323,7 @@ object Transformer {
         val newStackPointerName = freshName("sp");
         val tmpName = freshName("tmp");
         val tmpReference = LocalReference(StructureType(List(stkType, spType)), tmpName);
-        emit(Call(tmpName, StructureType(List(stkType, spType)), popStack, List(getStackPointer())));
+        emit(Call(tmpName, StructureType(List(stkType, spType)), popStacks, List(getStackPointer(), transform(n))));
         emit(ExtractValue(variable.name, tmpReference, 0));
         emit(ExtractValue(newStackPointerName, tmpReference, 1));
         setStackPointer(LocalReference(spType, newStackPointerName));
@@ -690,7 +690,7 @@ object Transformer {
 
   def newStack = ConstantGlobal(PointerType(), "newStack");
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
-  def popStack = ConstantGlobal(PointerType(), "popStack");
+  def popStacks = ConstantGlobal(PointerType(), "popStacks");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
 
