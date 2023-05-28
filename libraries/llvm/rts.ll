@@ -68,7 +68,7 @@
 %Stk = type ptr
 
 ; This is used for two purposes:
-;   - a refied first-class stack (then the last field is null)
+;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
 %StkVal = type { %Rc, %Mem, %Region, %Stk }
 
