@@ -422,9 +422,6 @@ object Transformer {
     tpe match {
           case machine.Type.Reference(machine.Type.Int()) => 0
           case machine.Type.Reference(machine.Type.Double()) => 0
-          case machine.Type.Reference(machine.Type.Positive("BoxedInt")) => 0
-          case machine.Type.Reference(machine.Type.Positive("BoxedDouble")) => 0
-          case machine.Type.Reference(machine.Type.Positive("BoxedString")) => 2
           case machine.Type.Reference(machine.Type.Positive(_)) => 1
           case machine.Type.Reference(machine.Type.Negative(_)) => 1
           case machine.Type.Reference(machine.Type.String()) => 2
