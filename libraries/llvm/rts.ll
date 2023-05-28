@@ -272,7 +272,9 @@ realloc:
     %intbase = ptrtoint %Base %base to i64
     %intlimit = ptrtoint %Limit %limit to i64
     %arenasize = sub i64 %intlimit, %intbase
-    %newarenasize = add i64 %arenasize, 1024
+    %empty = icmp eq i64 %arenasize, 0
+    %double = mul i64 %arenasize, 2
+    %newarenasize = select i1 %empty, i64 1024, i64 %double
 
     %newbase = call ptr @realloc(ptr %base, i64 %newarenasize)
     %newlimit = getelementptr i8, %Base %newbase, i64 %newarenasize
