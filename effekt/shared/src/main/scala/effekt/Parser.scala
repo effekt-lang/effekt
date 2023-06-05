@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.symbols.ValueTypeWildcard
 import effekt.context.Context
 import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
@@ -507,6 +508,12 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val valueType: P[ValueType] =
     ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
     | primValueType
+    | wildcardType
+    )
+
+  lazy val wildcardType : P[ValueType] =
+    (
+      literal("_") ^^^ source.ValueTypeWildcard
     )
 
   lazy val primValueType: P[ValueType] =

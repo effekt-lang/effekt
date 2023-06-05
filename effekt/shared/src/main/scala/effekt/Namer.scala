@@ -568,6 +568,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     // TODO reconsider reusing the same set for terms and types...
     case source.BoxedType(tpe, capt) =>
       BoxedType(resolve(tpe), resolve(capt))
+    case source.ValueTypeWildcard =>
+      symbols.ValueTypeRef(ValueTypeWildcard())
   }
 
   def resolve(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {

@@ -198,6 +198,9 @@ enum TypeVar(val name: Name) extends ValueTypeSymbol {
    * Should neither occur in source programs, nor in inferred types
    */
   case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name)
+
+
+  case ValueTypeWildcard() extends TypeVar(NoName)
 }
 export TypeVar.*
 

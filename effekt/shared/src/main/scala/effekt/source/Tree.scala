@@ -337,6 +337,7 @@ export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
+
 def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
 def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
 def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
@@ -468,6 +469,8 @@ enum ValueType extends Type {
 
   // Bound occurrences (args can be empty)
   case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
+
+  case ValueTypeWildcard
 }
 export ValueType.*
 
