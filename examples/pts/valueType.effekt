@@ -1,0 +1,6 @@
+module examples/pts/valueType
+
+def main() = {
+    val num : Int = 1;
+    println(num);
+}
