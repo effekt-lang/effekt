@@ -507,8 +507,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val valueType: P[ValueType] =
     ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
-    | primValueType
     | wildcardType
+    | primValueType
     )
 
   lazy val wildcardType : P[ValueType] =
