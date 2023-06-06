@@ -19,8 +19,9 @@ case object Invariant extends Polarity { def flip = Invariant }
  * See [[Unification.backup]] and [[Unification.restore]]
  */
 case class UnificationState(
-  scope: Scope,
-  constraints: Constraints
+   scope: Scope,
+   constraints: Constraints,
+   valueWildcardMap : Map[TypeVar, UnificationVar]
 )
 
 sealed trait Scope
@@ -45,7 +46,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // -------------------------------
   private var scope: Scope = GlobalScope
   protected var constraints = new Constraints
-
+  private var valueWildcardMap = Map.empty[TypeVar, UnificationVar]
 
   // Creating fresh unification variables
   // ------------------------------------
@@ -67,7 +68,12 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Substitution
   // ------------
-  def substitution = constraints.subst
+  def substitution =
+    val s: Substitutions = constraints.subst
+    val wildcardSubValue: Map[TypeVar, ValueType] = valueWildcardMap.filter((k, v) => s.values.contains(v))
+      .map((k, v) => (k, s.values.get(v).get))
+
+    s.updateWith(Substitutions(wildcardSubValue, s.captures))
 
   def apply(e: Effects): Effects =
     substitution.substitute(e)
@@ -86,14 +92,16 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone())
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap)
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
+    valueWildcardMap = state.valueWildcardMap
 
   def init() =
     scope = GlobalScope
     constraints = new Constraints
+    valueWildcardMap = Map.empty[TypeVar, UnificationVar]
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
@@ -181,6 +189,14 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
         constraints.connect(y, x, others.toSet)
         y
     }
+
+  def unificationVarFromWildcard(wildcard: TypeVar): UnificationVar =
+    valueWildcardMap.getOrElse(wildcard, {
+      val unificationVar: UnificationVar = UnificationVar(TypeParam(NoName), null)
+      valueWildcardMap = valueWildcardMap + (wildcard -> unificationVar)
+      unificationVar
+    })
+
 
   // Using collected information
   // ---------------------------

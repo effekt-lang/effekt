@@ -45,7 +45,7 @@ type CaptureConstraints = Map[CNode, CaptureNodeData]
  *
  * Whenever we learn something about a variable (such as the upper type bound), we immediately
  * solve the variable and all of the other variables in the same class and compute a
- * substitution ([[typeSubstitution]]).
+ * substitution ([[valueTypeSubstitution]]).
  *
  * To record that two variables are equal, we associate them with the same [[Node]]
  * and store them in an equivalence class [[classes]].
@@ -98,7 +98,7 @@ class Constraints(
    * Once one member of the equivalence class becomes concrete, all members are assigned the same type
    * in the substitution.
    */
-  private var typeSubstitution: Map[Node, ValueType] = Map.empty,
+  private var valueTypeSubstitution: Map[Node, ValueType] = Map.empty,
 
   /**
    * A map from a member in the equivalence class to the class' representative
@@ -128,7 +128,7 @@ class Constraints(
    * The currently known substitutions
    */
   def subst: Substitutions =
-    val types = classes.flatMap[TypeVar, ValueType] { case (k, v) => typeSubstitution.get(v).map { k -> _ } }
+    val types = classes.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
     val captures = captSubstitution.asInstanceOf[Map[CaptVar, Captures]]
     Substitutions(types, captures)
 
@@ -175,7 +175,7 @@ class Constraints(
     def learnType(x: Node, tpe: ValueType): Unit = {
       // tpe should not be a reference to a unification variable
       typeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
-      typeSubstitution = typeSubstitution.updated(x, tpe)
+      valueTypeSubstitution = valueTypeSubstitution.updated(x, tpe)
       updateSubstitution()
     }
 
@@ -207,7 +207,7 @@ class Constraints(
     // Check that we could infer all types of type variable instantiations.
     types.foreach {
       case x @ UnificationVar(underlying, callTree) =>
-        if (!typeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
+        if (!valueTypeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
           C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
         }
     }
@@ -252,13 +252,13 @@ class Constraints(
     })
 
 
-  override def clone(): Constraints = new Constraints(typeSubstitution, classes, captureConstraints, captSubstitution, pendingInactive)
+  override def clone(): Constraints = new Constraints(valueTypeSubstitution, classes, captureConstraints, captSubstitution, pendingInactive)
 
   def dumpTypeConstraints() =
     println("\n--- Type Constraints ---")
     val cl = classes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
     cl foreach {
-      case (n, vars) => typeSubstitution.get(n) match {
+      case (n, vars) => valueTypeSubstitution.get(n) match {
         case None => println(s"{${vars.mkString(", ")}}")
         case Some(tpe) => println(s"{${vars.mkString(", ")}} --> ${tpe}")
       }
@@ -461,13 +461,13 @@ class Constraints(
    */
   private def updateSubstitution(): Unit =
     val substitution = subst
-    typeSubstitution = typeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
+    valueTypeSubstitution = valueTypeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
 
   private def getNode(x: UnificationVar): Node =
     classes.getOrElse(x, { val rep = new Node; classes += (x -> rep); rep })
 
   private def typeOf(n: Node): Option[ValueType] =
-    typeSubstitution.get(n)
+    valueTypeSubstitution.get(n)
 
   //</editor-fold>
 }

@@ -2,7 +2,8 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TTop }
+import effekt.symbols.TypeVar.ValueTypeWildcard
+import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
 
 /**
@@ -21,6 +22,8 @@ trait TypeUnifier {
   def abort(msg: String, ctx: ErrorContext): Nothing
   def error(msg: String, ctx: ErrorContext): Unit
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
+
+  def unificationVarFromWildcard(w : TypeVar) : UnificationVar
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
     case Covariant     => requireSubregion(c1, c2, ctx)
@@ -46,6 +49,10 @@ trait TypeUnifier {
 
     case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
+
+    case (ValueTypeApp(t1, args1), ValueTypeRef(w: ValueTypeWildcard), _) =>
+      val unificationVar : UnificationVar = unificationVarFromWildcard(w)
+      requireEqual(unificationVar, tpe1, ctx)
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
