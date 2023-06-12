@@ -569,13 +569,14 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BoxedType(tpe, capt) =>
       BoxedType(resolve(tpe), resolve(capt))
     case source.ValueTypeWildcard =>
-      symbols.ValueTypeRef(ValueTypeWildcard())
+      ValueTypeRef(ValueTypeWildcard())
   }
 
   def resolve(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.BlockTypeRef => resolve(t)
+    case source.BlockTypeWildcard => BlockTypeRef(BlockTypeWildcard())
   }
 
   def resolve(funTpe: source.FunctionType)(using Context): FunctionType = resolvingType(funTpe) {

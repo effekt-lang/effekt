@@ -2,6 +2,7 @@ package effekt
 package typer
 
 import effekt.symbols.*
+import effekt.symbols.BlockTypeVar.BlockUnificationVar
 import effekt.symbols.TypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
@@ -14,8 +15,11 @@ import effekt.typer.ErrorContext.FunctionEffects
 trait TypeUnifier {
   // "unification effects"
   def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireLowerBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
   def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireUpperBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireEqual(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
 
   def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
@@ -24,6 +28,7 @@ trait TypeUnifier {
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
 
   def unificationVarFromWildcard(w : TypeVar) : UnificationVar
+  def unificationVarFromWildcard(w : BlockTypeVar) : BlockUnificationVar
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
     case Covariant     => requireSubregion(c1, c2, ctx)
@@ -74,6 +79,8 @@ trait TypeUnifier {
   }
 
   def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
+    case (t, BlockTypeRef(x : BlockTypeWildcard)) =>
+      requireEqual(unificationVarFromWildcard(x), t, ctx)
     case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s, ctx)
     case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s, ctx)
     case (t, s) => error(t, s, ctx)
@@ -108,7 +115,7 @@ trait TypeUnifier {
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
 
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c))) // Is List() the right choice?
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)
@@ -214,7 +221,7 @@ trait TypeMerger extends TypeUnifier {
       // TODO potentially share code with unifyFunctionTypes and instantiate
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c))) // Is List() the right choice?
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)

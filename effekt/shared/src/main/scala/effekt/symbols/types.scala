@@ -61,6 +61,8 @@ enum BlockType extends Type {
   )
 
   case InterfaceType(typeConstructor: BlockTypeConstructor, args: List[ValueType])
+
+  case BlockTypeRef(bvar: BlockTypeVar)
 }
 export BlockType.*
 

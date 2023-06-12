@@ -485,6 +485,7 @@ enum BlockType extends Type {
   case BlockTypeTree(eff: symbols.BlockType)
   case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
+  case BlockTypeWildcard
 }
 
 export BlockType.*

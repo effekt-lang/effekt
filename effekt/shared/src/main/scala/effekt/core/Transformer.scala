@@ -6,6 +6,7 @@ import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
+import effekt.source.BlockType.BlockTypeWildcard
 import effekt.source.{MatchPattern, Term}
 import effekt.typer.Substitutions
 
@@ -176,6 +177,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v: source.Var =>
       val sym = v.definition
       Context.blockTypeOf(sym) match {
+        case BlockTypeRef(x : BlockTypeWildcard) => Context.panic("Wildcard in unexpected place")
         case _: BlockType.FunctionType => transformAsControlBlock(tree)
         case _: BlockType.InterfaceType => transformAsObject(tree)
       }
@@ -216,6 +218,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = v.definition
       val tpe = Context.blockTypeOf(sym)
       tpe match {
+        case BlockTypeRef(x : BlockTypeWildcard) => Context.abort("Wildcard in unexpected place")
         case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
           // if this block argument expects to be called using PureApp or DirectApp, make sure it is
           // by wrapping it in a BlockLit
@@ -460,7 +463,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case InterfaceType(i: Interface, targs) => member match {
       // For operations, we substitute the first type parameters by concrete type args.
       case Operation(name, tparams, vparams, resultType, effects, _) =>
-        val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
+        val substitution = Substitutions((tparams zip targs).toMap, Map.empty, Map.empty)
         val remainingTypeParams = tparams.drop(targs.size)
         val bparams = Nil
         // TODO this is exactly like in [[Typer.toType]] -- TODO repeated here:
@@ -522,6 +525,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
+    case BlockTypeRef(x : BlockTypeWildcard) => Context.panic("Wildcard in unexpected place")
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
 
       val capabilityTypes = effects.canonical.map(transform)

@@ -2,9 +2,11 @@ package effekt
 package typer
 
 import effekt.context.Context
+import effekt.source.BlockType.BlockTypeRef
 import effekt.source.MatchPattern
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TTop }
+import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
+import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.util.messages.ErrorReporter
 
 
@@ -21,7 +23,8 @@ case object Invariant extends Polarity { def flip = Invariant }
 case class UnificationState(
    scope: Scope,
    constraints: Constraints,
-   valueWildcardMap : Map[TypeVar, UnificationVar]
+   valueWildcardMap : Map[TypeVar, UnificationVar],
+   blockWildcardMap : Map[BlockTypeVar, BlockUnificationVar]
 )
 
 sealed trait Scope
@@ -47,6 +50,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   private var scope: Scope = GlobalScope
   protected var constraints = new Constraints
   private var valueWildcardMap = Map.empty[TypeVar, UnificationVar]
+  private var blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
 
   // Creating fresh unification variables
   // ------------------------------------
@@ -70,10 +74,12 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ------------
   def substitution =
     val s: Substitutions = constraints.subst
-    val wildcardSubValue: Map[TypeVar, ValueType] = valueWildcardMap.filter((k, v) => s.values.contains(v))
+    val valueWildcardSubValue: Map[TypeVar, ValueType] = valueWildcardMap.filter((k, v) => s.values.contains(v))
       .map((k, v) => (k, s.values.get(v).get))
+    val blockWildcardSubValue: Map[BlockTypeVar, BlockType] = blockWildcardMap.filter((k, v) => s.blocks.contains(v))
+      .map((k, v) => (k, s.blocks.get(v).get))
 
-    s.updateWith(Substitutions(wildcardSubValue, s.captures))
+    s.updateWith(Substitutions(valueWildcardSubValue, blockWildcardSubValue, s.captures))
 
   def apply(e: Effects): Effects =
     substitution.substitute(e)
@@ -92,16 +98,18 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap)
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap)
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
     valueWildcardMap = state.valueWildcardMap
+    blockWildcardMap = state.blockWildcardMap
 
   def init() =
     scope = GlobalScope
     constraints = new Constraints
     valueWildcardMap = Map.empty[TypeVar, UnificationVar]
+    blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
@@ -197,6 +205,13 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       unificationVar
     })
 
+  def unificationVarFromWildcard(wildcard: BlockTypeVar): BlockUnificationVar =
+    blockWildcardMap.getOrElse(wildcard, {
+      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(NoName), null)
+      blockWildcardMap = blockWildcardMap + (wildcard -> unificationVar)
+      unificationVar
+    })
+
 
   // Using collected information
   // ---------------------------
@@ -226,7 +241,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       if (cargs.size == cparams.size) cargs
       else cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
 
-    given Instantiation = Instantiation((tparams zip typeRigids).toMap, (cparams zip captRigids).toMap)
+    given Instantiation = Instantiation((tparams zip typeRigids).toMap, Map.empty, (cparams zip captRigids).toMap) // Is Map.empty the right choice?
 
     val substitutedVparams = vparams map instantiate
     val substitutedBparams = bparams map instantiate
@@ -253,11 +268,21 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     requireLowerBound(x, tpe, ctx)
     requireUpperBound(x, tpe, ctx)
 
+  def requireEqual(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit =
+    requireLowerBound(x, tpe, ctx)
+    requireUpperBound(x, tpe, ctx)
+
   def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
+  def requireLowerBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext) =
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyBlockTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
+
   def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
+
+  def requireUpperBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext) =
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyBlockTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
   def mergeCaptures(oldBound: Captures, newBound: Captures, ctx: ErrorContext): Captures = (oldBound, newBound, ctx.polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
@@ -301,19 +326,22 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
 
 
-case class Instantiation(values: Map[TypeVar, ValueType], captures: Map[Capture, Captures])
+case class Instantiation(values: Map[TypeVar, ValueType], blocks : Map[BlockTypeVar, BlockType], captures: Map[Capture, Captures])
 
 trait TypeInstantiator { self: Unification =>
 
   private def valueInstantiations(using i: Instantiation): Map[TypeVar, ValueType] = i.values
+
+  private def blockInstatiations(using i : Instantiation) : Map[BlockTypeVar, BlockType] = i.blocks
   private def captureInstantiations(using i: Instantiation): Map[Capture, Captures] = i.captures
 
   private def captureParams(using Instantiation) = captureInstantiations.keys.toSet
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[Capture])(using Instantiation): Instantiation =
+  private def without(tps: List[TypeVar], bps : List[BlockTypeVar], cps: List[Capture])(using Instantiation): Instantiation =
     Instantiation(
       valueInstantiations.filterNot { case (t, _) => tps.contains(t) },
+      blockInstatiations.filterNot { case (t, _) =>  tps.contains(t) },
       captureInstantiations.filterNot { case (t, _) => cps.contains(t) }
     )
 
@@ -354,6 +382,7 @@ trait TypeInstantiator { self: Unification =>
   def instantiate(t: Effects)(using Instantiation): Effects = Effects(t.toList.map(instantiate))
 
   def instantiate(t: BlockType)(using Instantiation): BlockType = t match {
+    case BlockType.BlockTypeRef(x : BlockTypeVar) => blockInstatiations.getOrElse(x, t)
     case e: InterfaceType => instantiate(e)
     case b: FunctionType  => instantiate(b)
   }
@@ -365,7 +394,7 @@ trait TypeInstantiator { self: Unification =>
   def instantiate(t: FunctionType)(using i: Instantiation): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      given Instantiation = without(tps, cps)(using i)
+      given Instantiation = without(tps, List(), cps)(using i) // Is List() the right choice?
       FunctionType(
         tps,
         cps,

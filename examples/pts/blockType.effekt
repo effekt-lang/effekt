@@ -1,0 +1,7 @@
+module examples/pts/blockType
+
+def main() = {
+    var num : _ = 1
+    num = 2
+    println(num)
+}

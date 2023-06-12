@@ -2,7 +2,8 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.util.messages.{ ErrorReporter, ErrorMessageReifier }
+import effekt.symbols.BlockTypeVar.BlockUnificationVar
+import effekt.util.messages.{ErrorMessageReifier, ErrorReporter}
 import effekt.util.foreachAborting
 
 // Auxiliary Definitions
@@ -100,10 +101,14 @@ class Constraints(
    */
   private var valueTypeSubstitution: Map[Node, ValueType] = Map.empty,
 
+  private var blockTypeSubstitution: Map[Node, BlockType] = Map.empty,
+
   /**
    * A map from a member in the equivalence class to the class' representative
    */
   private var classes: Map[UnificationVar, Node] = Map.empty,
+
+  private var blockClasses : Map[BlockUnificationVar, Node] = Map.empty,
 
   /**
    * Concrete bounds for each unification variable
@@ -128,9 +133,10 @@ class Constraints(
    * The currently known substitutions
    */
   def subst: Substitutions =
-    val types = classes.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
+    val values = classes.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
+    val blocks = blockClasses.flatMap[BlockTypeVar, BlockType] { case (k, v) => blockTypeSubstitution.get(v).map { k -> _ } }
     val captures = captSubstitution.asInstanceOf[Map[CaptVar, Captures]]
-    Substitutions(types, captures)
+    Substitutions(values, blocks, captures)
 
   /**
    * Should only be called on unification variables where we do not know any types, yet
@@ -164,7 +170,7 @@ class Constraints(
    * Retreive the potentially known type of [[x]]
    */
   def typeOf(x: UnificationVar): Option[ValueType] =
-    typeOf(getNode(x))
+    valueTypeOf(getNode(x))
 
   /**
    * Learn that unification variable [[x]] needs to be compatible with [[y]]. If there already is
@@ -174,7 +180,7 @@ class Constraints(
 
     def learnType(x: Node, tpe: ValueType): Unit = {
       // tpe should not be a reference to a unification variable
-      typeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
+      valueTypeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
       valueTypeSubstitution = valueTypeSubstitution.updated(x, tpe)
       updateSubstitution()
     }
@@ -183,7 +189,7 @@ class Constraints(
       // Already connected
       if (x == y) return ()
 
-      (typeOf(x), typeOf(y)) match {
+      (valueTypeOf(x), valueTypeOf(y)) match {
         case (Some(typeOfX), Some(typeOfY)) => merge(typeOfX, typeOfY)
         case (Some(typeOfX), None) => learnType(y, typeOfX)
         case (None, Some(typeOfY)) => learnType(x, typeOfY)
@@ -196,6 +202,36 @@ class Constraints(
 
     y match {
       case ValueTypeRef(y: UnificationVar) => connectNodes(getNode(x), getNode(y))
+      case tpe => learnType(getNode(x), tpe)
+    }
+  }
+
+  def learn(x: BlockUnificationVar, y: BlockType)(merge: (BlockType, BlockType) => Unit): Unit = {
+
+    def learnType(x: Node, tpe: BlockType): Unit = {
+      // tpe should not be a reference to a unification variable
+      blockTypeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
+      blockTypeSubstitution = blockTypeSubstitution.updated(x, tpe)
+      updateSubstitution()
+    }
+
+    def connectNodes(x: Node, y: Node): Unit = {
+      // Already connected
+      if (x == y) return ()
+
+      (blockTypeOf(x), blockTypeOf(y)) match {
+        case (Some(typeOfX), Some(typeOfY)) => merge(typeOfX, typeOfY)
+        case (Some(typeOfX), None) => learnType(y, typeOfX)
+        case (None, Some(typeOfY)) => learnType(x, typeOfY)
+        case (None, None) => ()
+      }
+
+      // create mapping to representative
+      blockClasses = blockClasses.view.mapValues { node => if (node == x) y else node }.toMap
+    }
+
+    y match {
+      case BlockTypeRef(y: BlockUnificationVar) => connectNodes(getNode(x), getNode(y))
       case tpe => learnType(getNode(x), tpe)
     }
   }
@@ -252,7 +288,7 @@ class Constraints(
     })
 
 
-  override def clone(): Constraints = new Constraints(valueTypeSubstitution, classes, captureConstraints, captSubstitution, pendingInactive)
+  override def clone(): Constraints = new Constraints(valueTypeSubstitution, blockTypeSubstitution, classes, blockClasses, captureConstraints, captSubstitution, pendingInactive)
 
   def dumpTypeConstraints() =
     println("\n--- Type Constraints ---")
@@ -466,8 +502,15 @@ class Constraints(
   private def getNode(x: UnificationVar): Node =
     classes.getOrElse(x, { val rep = new Node; classes += (x -> rep); rep })
 
-  private def typeOf(n: Node): Option[ValueType] =
+  private def getNode(x: BlockUnificationVar): Node =
+    blockClasses.getOrElse(x, { val rep = new Node; blockClasses += (x -> rep); rep })
+
+  private def valueTypeOf(n: Node): Option[ValueType] =
     valueTypeSubstitution.get(n)
+
+  private def blockTypeOf(n: Node): Option[BlockType] =
+    blockTypeSubstitution.get(n)
+
 
   //</editor-fold>
 }

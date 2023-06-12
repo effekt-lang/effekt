@@ -14,6 +14,7 @@ case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Capt
  */
 case class Substitutions(
   values: Map[TypeVar, ValueType],
+  blocks : Map[BlockTypeVar, BlockType],
   // invariant: we alway only map
   //   - a single CaptureParam -> CaptureParam
   //   - a CaptUnificationVar -> Captures
@@ -35,15 +36,17 @@ case class Substitutions(
   def updateWith(other: Substitutions): Substitutions =
     Substitutions(
       values.view.mapValues { t => other.substitute(t) }.toMap,
+      blocks.view.mapValues {t => other.substitute(t) }.toMap,
       captures.view.mapValues { t => other.substitute(t) }.toMap) ++ other
 
   // amounts to parallel substitution
-  def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)
+  def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, blocks ++ other.blocks, captures ++ other.captures)
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[Capture]): Substitutions =
+  private def without(tps: List[TypeVar], bps: List[BlockType], cps: List[Capture]): Substitutions =
     Substitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
+      blocks.filterNot { case (t, _) => bps.contains(t) },
       captures.filterNot { case (t, _) => cps.contains(t) }
     )
 
@@ -72,6 +75,7 @@ case class Substitutions(
   }
 
   def substitute(t: BlockType): BlockType = t match {
+    case BlockTypeRef(x) => blocks.getOrElse(x, t)
     case e: InterfaceType => substitute(e)
     case b: FunctionType  => substitute(b)
   }
@@ -79,7 +83,7 @@ case class Substitutions(
   def substitute(t: FunctionType): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      val substWithout = without(tps, cps)
+      val substWithout = without(tps, bps, cps)
       FunctionType(
         tps,
         cps,
@@ -91,8 +95,9 @@ case class Substitutions(
 }
 
 object Substitutions {
-  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[CaptVar, Captures])
-  def apply(values: List[(TypeVar, ValueType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, captures.toMap)
-  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty)
-  def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap)
+  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar, Captures])
+  def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, blocks.toMap, captures.toMap)
+  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty)
+  def blocks(keys: List[BlockTypeVar], values: List[BlockType]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap, Map.empty)
+  def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, Map.empty, (keys zip values).toMap)
 }

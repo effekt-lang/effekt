@@ -93,6 +93,7 @@ private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
 }
 
 private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
+  case BlockTypeRef(x) => false // Is this right?
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
     vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)

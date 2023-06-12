@@ -4,10 +4,11 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotation, Annotations, Context, ContextOps }
+import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.{AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
+import effekt.symbols.BlockType.BlockTypeRef
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
@@ -72,7 +73,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // to allow mutually recursive defs
           tree.defs.foreach { d => precheckDef(d) }
           tree.defs.foreach { d =>
-            val Result(_, effs) = synthDef(d)
+            println("\n" + d + "\n")
+            val Result(_, effs) = synthDef(d) // This causes the problem for BlockTypeWildcards
             val unhandled = effs.toEffects
             if (unhandled.nonEmpty)
               Context.at(d) {
@@ -173,7 +175,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (3) add effect to used effects
         Result(tpe, effs ++ ConcreteEffects(List(effect)))
 
-      case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
+      case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) => // this path is taken
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolve }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
@@ -527,6 +529,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //<editor-fold desc="statements and definitions">
 
   def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+    println(expected)
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -617,12 +620,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case x: CaptUnificationVar => List(x)
           case _ => Nil
         }
-        val Result(funTpe, unhandledEffects) = Context.withUnificationScope(captVars) {
 
+        val Result(funTpe, unhandledEffects) = Context.withUnificationScope(captVars) {
           sym.vparams foreach Context.bind
           sym.bparams foreach Context.bind
 
           val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+
+
 
           Context.withRegion(selfRegion) {
             (sym.annotatedType: @unchecked) match {
@@ -653,8 +658,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 given Captures = inferredCapture
 
                 // all effects are handled by the function itself (since they are inferred)
-                val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
-                  Context in { checkStmt(body, None) }
+                val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) { // This causes the error
+                  Context in {
+                    checkStmt(body, None)
+                  }
                 }
 
                 // We do no longer use the order annotated on the function, but always the canonical ordering.
@@ -1231,7 +1238,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
         capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
-      } yield toType(ret, effects, capt)
+      }
+      yield toType(ret, effects, capt)
   }
   //</editor-fold>
 
@@ -1373,7 +1381,8 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.get(Annotations.BlockType, s)
      .map {
        case f: FunctionType => unification(f) // here we apply the substitutions known so far.
-       case tpe => abort(pretty"Expected function type, but got ${tpe}.")
+       case tpe =>
+         abort(pretty"Expected function type, but got ${tpe}.")
      }
      .orElse(functionTypeOption(s))
      .getOrElse {

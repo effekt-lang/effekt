@@ -204,6 +204,19 @@ enum TypeVar(val name: Name) extends ValueTypeSymbol {
 }
 export TypeVar.*
 
+enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
+  /**
+   * Introduced when instantiating type schemes
+   *
+   * Should neither occur in source programs, nor in inferred types
+   */
+  case BlockUnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends BlockTypeVar(underlying.name)
+
+
+  case BlockTypeWildcard() extends BlockTypeVar(NoName)
+}
+export BlockTypeVar.*
+
 case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) extends ValueTypeSymbol
 
 /**

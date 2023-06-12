@@ -39,6 +39,7 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
+    case BlockTypeRef(x) => toDoc(LocalName("Wildcard")) // Improve
     case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
       val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {
