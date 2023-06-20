@@ -104,13 +104,14 @@ trait TypeUnifier {
       val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
-      val substRet2 = subst.substitute(ret2)
+      val substRet2 = ret2 map subst.substitute
       val substEffs2 = subst.substitute(eff2)
 
       (vparams1 zip substVParams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
       (bparams1 zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
 
-      unifyValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
+      // TODO MRV compare lengths
+      (ret1 zip substRet2) map { case (r1, r2) => unifyValueTypes(r1, r2, ErrorContext.FunctionReturn(ctx)) }
 
       // We compare effects to be equal, since we do not have subtyping on effects
       // TODO verify that a different ordering doesn't interact badly with capture polymorphism
@@ -210,12 +211,12 @@ trait TypeMerger extends TypeUnifier {
       val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
-      val substRet2 = subst.substitute(ret2)
+      val substRet2 = ret2 map subst.substitute
       val substEffs2 = subst.substitute(eff2)
 
       val mergedVps = (vparams1 zip substVParams2) map { case (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
       val mergedBps = (bparams1 zip substBParams2) map { case (t1, t2) => mergeBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
-      val mergedRet = mergeValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
+      val mergedRet = (ret1 zip substRet2) map { case (r1, sr2) => mergeValueTypes(r1, sr2, ErrorContext.FunctionReturn(ctx)) }
 
       // We compare effects to be equal, since we do not have subtyping on effects
       unifyEffects(eff1, substEffs2, ErrorContext.FunctionEffects(ctx))

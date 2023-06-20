@@ -89,15 +89,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val cparams = capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
 
           // here we reconstruct the block type
-          val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
-          core.Property(op, btpe)
+          resultType match {
+            case List(resultType) => {
+              val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
+              core.Property(op, btpe)
+            }
+            case _ => ??? //TODO MRV
+          }
+
       }))
 
     case f @ source.ExternDef(pure, id, _, vps, bps, _, body) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), body))
+      ret match {
+        case List(ret) => List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), body))
+        case _ => ??? // TODO MRV
+      }
+
 
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
@@ -122,8 +132,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Val(Wildcard(), insertBindings { Return(transformAsPure(e)) }, transform(rest))
 
     // return e
-    case source.Return(e) =>
-      insertBindings { Return(transformAsPure(e)) }
+    case source.Return(e) => e match {
+      case List(e) => insertBindings {
+        Return(transformAsPure(e))
+      }
+      case _ => ??? // TODO MRV
+    }
 
     // simply drop superfluous {}s
     case source.BlockStmt(b) =>
@@ -242,7 +256,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             val result = TmpValue()
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
               core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs),
-                Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
+                restpe.map(transform) match {
+                  case List(restpe) => Stmt.Return(Pure.ValueVar(result, restpe))
+                  case _ => ??? // TODO MRV
+                }))
           }
 
           sym match {
@@ -468,7 +485,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
         val cparams = effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
 
-        FunctionType(remainingTypeParams, cparams, vparams.map(t => substitution.substitute(t.tpe.get)), bparams, substitution.substitute(resultType), substitution.substitute(effects))
+        FunctionType(remainingTypeParams, cparams, vparams.map(t => substitution.substitute(t.tpe.get)), bparams, resultType.map(substitution.substitute), substitution.substitute(effects))
     }
 
     case InterfaceType(i: ExternInterface, targs) =>
@@ -535,7 +552,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
            |  Captures: ${cparams}
            |""".stripMargin)
 
-      core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, transform(result))
+      result.map(transform) match {
+        case List(res) => core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, res)
+        case _ => ??? // TODO MRV
+      }
+
     case BlockType.InterfaceType(tc, args) => core.BlockType.Interface(tc, args.map(transform))
   }
 

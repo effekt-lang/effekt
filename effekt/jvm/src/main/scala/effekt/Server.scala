@@ -208,7 +208,10 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map { needsUpdate(_, (tpe, eff)) }.getOrElse(true)
+    if ann.map {
+      case (List(y), eff1) => needsUpdate((y, eff1), (tpe, eff))
+      case _ => ??? // TODO MRV
+    }.getOrElse(true)
     res <- CodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
   } yield res
 

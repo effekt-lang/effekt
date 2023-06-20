@@ -94,7 +94,7 @@ private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
 
 private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-    vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
+    vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && result.forall(isConcreteValueType) && isConcreteEffects(effects)
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
 private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]

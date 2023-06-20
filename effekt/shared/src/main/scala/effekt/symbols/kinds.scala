@@ -23,6 +23,8 @@ package object kinds {
     case _ => C.abort(s"Expected a value type but got ${tpe}")
   }
 
+  def wellformed(tpe: List[ValueType])(using C: Context): Unit = tpe foreach { wellformed }
+
   def wellformed(tpe: BlockType)(using Context): Unit = tpe match {
     case b: FunctionType  => wellformed(b)
     case c: InterfaceType => wellformed(c)

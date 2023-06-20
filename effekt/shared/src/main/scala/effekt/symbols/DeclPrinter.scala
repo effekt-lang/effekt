@@ -74,7 +74,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       pp"def ${ d.name }: ${ tpe }"
   }
 
-  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
+  def format(kw: String, f: Callable, result: Option[List[ValueType]], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
 
     val valueParams = f.vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")

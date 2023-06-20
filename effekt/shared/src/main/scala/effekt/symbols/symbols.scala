@@ -104,7 +104,7 @@ trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
-  def annotatedResult: Option[ValueType]
+  def annotatedResult: Option[List[ValueType]]
   def annotatedEffects: Option[Effects]
 }
 
@@ -113,7 +113,7 @@ case class UserFunction(
   tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
-  annotatedResult: Option[ValueType],
+  annotatedResult: Option[List[ValueType]],
   annotatedEffects: Option[Effects],
   decl: FunDef
 ) extends Callable
@@ -226,7 +226,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   val bparams: List[BlockParam] = Nil
 
   val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
-  def annotatedResult: Option[ValueType] = Some(returnType)
+  def annotatedResult: Option[List[ValueType]] = Some(List(returnType))
   def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
 
@@ -237,7 +237,7 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
-  def annotatedResult = Some(returnType)
+  def annotatedResult = Some(List(returnType))
   def annotatedEffects = Some(Effects.Pure)
 }
 
@@ -251,10 +251,10 @@ enum BlockTypeConstructor extends BlockTypeSymbol {
 export BlockTypeConstructor.*
 
 
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: List[ValueType], effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
-  def annotatedResult: Option[ValueType] = Some(resultType)
+  def annotatedResult: Option[List[ValueType]] = Some(resultType)
   def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
 }
@@ -350,7 +350,7 @@ case class ExternFunction(
   tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
-  result: ValueType,
+  result: List[ValueType],
   effects: Effects,
   capture: CaptureSet,
   body: String = ""

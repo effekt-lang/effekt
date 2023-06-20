@@ -117,6 +117,16 @@ object Annotations {
 
   /**
    * The type as inferred by typer at a given position in the tree
+   *
+   * Important for return values
+   */
+  val InferredValueTypeList = Annotation[source.Tree, List[symbols.ValueType]](
+    "InferredValueTypeList",
+    "the inferred list of types of"
+  )
+
+  /**
+   * The type as inferred by typer at a given position in the tree
    */
   val InferredBlockType = Annotation[source.Tree, symbols.BlockType](
     "InferredBlockType",

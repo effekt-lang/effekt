@@ -237,7 +237,7 @@ enum Stmt extends Tree {
   case Scope(definitions: List[Definition], body: Stmt)
 
   // Fine-grain CBV
-  case Return(expr: List[Pure])
+  case Return(expr: Pure)
   case Val(id: Id, binding: Stmt, body: Stmt) // TODO
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 

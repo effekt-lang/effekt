@@ -221,7 +221,7 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- FreeVariables(ValueParam(id, binding.tpe))
   case App(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
-  case Return(e) => e.foldLeft(Set.empty[Symbol]) { case (acc, e) => acc ++ freeVariables(e) } // <tODO>: flatmap
+  case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
   case State(id, init, region, ev, body) =>

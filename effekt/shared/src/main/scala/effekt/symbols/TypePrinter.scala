@@ -49,7 +49,7 @@ object TypePrinter extends ParenPrettyPrinter {
           val bps = if (bparams.isEmpty) emptyDoc else hcat(bparams.map(toDoc).map(braces))
           vps <> bps
       }
-      val ret = toDoc(result)
+      val ret = hsep(result.map(toDoc), comma)  // TODO MRV: ???
       val eff = if (effects.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
       tps <> ps <+> "=>" <+> ret <> eff
 

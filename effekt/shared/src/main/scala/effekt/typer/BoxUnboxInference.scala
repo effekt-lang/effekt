@@ -173,7 +173,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       ExprStmt(rewriteAsExpr(e), rewrite(rest))
 
     case Return(e) =>
-      Return(rewriteAsExpr(e))
+      Return(e.map(rewriteAsExpr))
 
     case BlockStmt(b) =>
       BlockStmt(rewrite(b))

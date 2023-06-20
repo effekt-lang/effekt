@@ -56,7 +56,7 @@ enum BlockType extends Type {
     cparams: List[Capture],
     vparams: List[ValueType],
     bparams: List[BlockType],
-    result: ValueType,
+    result: List[ValueType],
     effects: Effects
   )
 
