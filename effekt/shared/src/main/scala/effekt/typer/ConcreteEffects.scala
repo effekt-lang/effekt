@@ -2,7 +2,8 @@ package effekt
 package typer
 
 import effekt.context.Context
-import effekt.symbols._
+import effekt.symbols.*
+import effekt.symbols.BlockTypeVar.BlockUnificationVar
 import effekt.util.messages.ErrorMessageReifier
 
 
@@ -88,16 +89,22 @@ private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
 }
 
 private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
-  case x: UnificationVar => false
+  case x: UnificationVar => true
   case x: TypeVar => true
 }
 
 private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
-  case BlockTypeRef(x) => false // Is this right?
+  case BlockTypeRef(x) => isConcreteBlockType(x)
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
     vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
+
+private def isConcreteBlockType(tpe: BlockTypeVar): Boolean = tpe match {
+  case x : BlockUnificationVar => true
+  case x : BlockTypeVar => true
+}
+
 private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 
 private def isConcreteInterfaceType(eff: InterfaceType): Boolean = eff match {

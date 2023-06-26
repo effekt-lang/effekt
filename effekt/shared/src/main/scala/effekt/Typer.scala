@@ -6,9 +6,11 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
+import effekt.source.BlockType.BlockTypeWildcard
 import effekt.source.{AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
-import effekt.symbols.BlockType.BlockTypeRef
+import effekt.symbols.BlockType.{BlockTypeRef, FunctionType}
+import effekt.symbols.TypeVar.TypeParam
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
@@ -73,7 +75,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // to allow mutually recursive defs
           tree.defs.foreach { d => precheckDef(d) }
           tree.defs.foreach { d =>
-            println("\n" + d + "\n")
             val Result(_, effs) = synthDef(d) // This causes the problem for BlockTypeWildcards
             val unhandled = effs.toEffects
             if (unhandled.nonEmpty)
@@ -529,7 +530,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //<editor-fold desc="statements and definitions">
 
   def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
-    println(expected)
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -658,7 +658,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 given Captures = inferredCapture
 
                 // all effects are handled by the function itself (since they are inferred)
-                val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) { // This causes the error
+                val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
                   Context in {
                     checkStmt(body, None)
                   }
@@ -928,8 +928,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val candidates = methods.filter(op => op.interface == interface)
 
     val (successes, errors) = tryEach(candidates) { op =>
-      val (funTpe, capture) = findFunctionTypeFor(op)
-      checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
+      Context.lookupBlockType(op) match {
+        case r @ BlockTypeRef(x : BlockTypeWildcard) =>
+          checkCallTo(call, op.name.name, r, targs, vargs, bargs, expected)
+        case _ =>
+          val (funTpe, capture) = findFunctionTypeFor(op)
+          checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
+      }
     }
     resolveOverload(id, List(successes), errors)
   }
@@ -977,11 +982,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is none: proceed to outer scope
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope => tryEach(scope.toList) { receiver =>
-      val (funTpe, capture) = findFunctionTypeFor(receiver)
-      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
-      // This is different, compared to method calls:
-      usingCapture(capture)
-      Result(tpe, effs)
+      Context.lookupBlockType(receiver) match {
+        case r @ BlockTypeRef(x: BlockTypeWildcard) =>
+          val Result(tpe, effs) = checkCallTo(call, receiver.name.name, r, targs, vargs, bargs, expected)
+          // This is different, compared to method calls:
+          // usingCapture(capture)  // We need to figure out what to do here
+          Result(tpe, effs)
+        case _ =>
+          val (funTpe, capture) = findFunctionTypeFor(receiver)
+          val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
+          // This is different, compared to method calls:
+          usingCapture(capture)
+          Result(tpe, effs)
+      }
     }}
 
     val successes = results.map { scope => scope._1 }
@@ -1048,6 +1061,79 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     if (bargs.size != funTpe.bparams.size)
       Context.error(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
+
+    // (1) Instantiate blocktype
+    // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+    val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs, Nil)
+
+    // (2) check return type
+    expected.foreach { expected => matchExpected(ret, expected) }
+
+    var effs: ConcreteEffects = Pure
+
+    (vps zip vargs) foreach { case (tpe, expr) =>
+      val Result(t, eff) = checkExpr(expr, Some(tpe))
+      effs = effs ++ eff
+    }
+
+    (bps zip bargs zip captArgs) foreach { case ((tpe, expr), capt) =>
+      usingCapture(capt)
+      given Captures = capt
+      val Result(t, eff) = checkExprAsBlock(expr, Some(tpe))
+      effs = effs ++ eff
+    }
+
+    // We add return effects last to have more information at this point to
+    // concretize the effect.
+    effs = effs ++ retEffs
+
+    // annotate call node with inferred type arguments
+    Context.annotateTypeArgs(call, typeArgs)
+
+    // Annotate the call target tree with the additional capabilities
+    // We need to establish the canonical ordering of capabilities.
+    // 1) we have to use the capabilities, which are annotated on the original function type
+    // 2) we need to dealias
+    // 3) we need to compute distinct effects on the dealiased list
+    // 3) and only then substitute
+    //
+    // This is important since
+    //   [A, B](): Unit / { State[A], State[B] }
+    // with A := Int and B := Int requires us to pass two capabilities.
+    val capabilities = Context.provideCapabilities(call, retEffs.canonical.map(Context.unification.apply))
+
+    val captParams = captArgs.drop(bargs.size)
+    (captParams zip capabilities) foreach { case (param, cap) =>
+      flowsInto(CaptureSet(cap.capture), param)
+    }
+    usingCapture(CaptureSet(capabilities.map(_.capture)))
+
+    Result(ret, effs)
+  }
+
+  // checkCallTo using Wildcards
+  def checkCallTo(
+                   call: source.CallLike,
+                   name: String,
+                   ref: BlockTypeRef,
+                   targs: List[ValueType],
+                   vargs: List[source.Term],
+                   bargs: List[source.Term],
+                   expected: Option[ValueType]
+                 )(using Context, Captures): Result[ValueType] = {
+
+    val tparams : List[TypeParam] = List()
+    val cparams : List[Capture] = List()
+    val vparams : List[ValueType] = vargs map { checkExpr(_, None).tpe }
+    val bparams : List[BlockType] = bargs map { checkExprAsBlock(_, None).tpe }
+    val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(NoName), call))
+    val effects : Effects = Effects.Pure
+
+    expected.foreach { expected => matchExpected(result, expected) }
+    val funTpe : FunctionType = FunctionType(tparams, cparams, vparams, bparams, result, effects)
+
+    matchExpected(ref, funTpe)
+//    val test = Context.unification(ref)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
@@ -1296,7 +1382,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using this)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, without, requireSubregionWithout }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, fresh, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {

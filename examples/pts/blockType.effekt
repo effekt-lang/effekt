@@ -1,7 +1,7 @@
 module examples/pts/blockType
 
 def runFunc{func : _} = {
-    func("abc", 1)
+    func("abc", 1.1)
 }
 
 def main() = {
