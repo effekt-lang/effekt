@@ -59,10 +59,16 @@ trait TypeUnifier {
       val unificationVar : UnificationVar = unificationVarFromWildcard(w)
       requireEqual(unificationVar, tpe1, ctx)
 
+    case (ValueTypeRef(w: ValueTypeWildcard), ValueTypeApp(t2, args2), _) =>
+      val unificationVar : UnificationVar = unificationVarFromWildcard(w)
+      requireEqual(unificationVar, tpe2, ctx)
+
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
 
-      if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
+      if (t1 != t2) {
+        error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx))
+      }
 
       if (args1.size != args2.size)
         abort(pp"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
@@ -80,6 +86,8 @@ trait TypeUnifier {
 
   def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (t, BlockTypeRef(x : BlockTypeWildcard)) =>
+      requireEqual(unificationVarFromWildcard(x), t, ctx)
+    case (BlockTypeRef(x : BlockTypeWildcard), t) =>
       requireEqual(unificationVarFromWildcard(x), t, ctx)
     case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s, ctx)
     case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s, ctx)

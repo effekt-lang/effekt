@@ -231,8 +231,10 @@ class Constraints(
     }
 
     y match {
-      case BlockTypeRef(y: BlockUnificationVar) => connectNodes(getNode(x), getNode(y))
-      case tpe => learnType(getNode(x), tpe)
+      case BlockTypeRef(y: BlockUnificationVar) => 
+        connectNodes(getNode(x), getNode(y))
+      case tpe => 
+        learnType(getNode(x), tpe)
     }
   }
 

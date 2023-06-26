@@ -177,7 +177,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v: source.Var =>
       val sym = v.definition
       Context.blockTypeOf(sym) match {
-        case BlockTypeRef(x : BlockTypeWildcard) => Context.panic("Wildcard in unexpected place")
+        case BlockTypeRef(x) => Context.panic("Wildcard in unexpected place")
         case _: BlockType.FunctionType => transformAsControlBlock(tree)
         case _: BlockType.InterfaceType => transformAsObject(tree)
       }
@@ -218,7 +218,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = v.definition
       val tpe = Context.blockTypeOf(sym)
       tpe match {
-        case BlockTypeRef(x : BlockTypeWildcard) => Context.abort("Wildcard in unexpected place")
+        case BlockTypeRef(x) => Context.panic("Wildcard in unexpected place")
         case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
           // if this block argument expects to be called using PureApp or DirectApp, make sure it is
           // by wrapping it in a BlockLit
@@ -525,7 +525,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
-    case BlockTypeRef(x : BlockTypeWildcard) => Context.panic("Wildcard in unexpected place")
+    case BlockTypeRef(x) => Context.panic("Wildcard in unexpected place")
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
 
       val capabilityTypes = effects.canonical.map(transform)

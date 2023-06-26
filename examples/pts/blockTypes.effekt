@@ -1,0 +1,18 @@
+module examples/pts/blockTypes
+
+def main() = {
+    def test1(x : String, y : Int) : String = {
+        "a"
+    }
+
+    def test2(x : String, y : String) : String = {
+        "a turtle"
+    }
+
+    val res : Int = runFunc { test1 } { test2 }
+    println(res)
+}
+
+def runFunc{func1 : _}{func2 : _} = {
+    func2(func1("abc", 1), " turtle")
+}
