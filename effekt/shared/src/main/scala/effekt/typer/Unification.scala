@@ -200,14 +200,14 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def unificationVarFromWildcard(wildcard: TypeVar): UnificationVar =
     valueWildcardMap.getOrElse(wildcard, {
-      val unificationVar: UnificationVar = UnificationVar(TypeParam(NoName), null)
+      val unificationVar: UnificationVar = UnificationVar(TypeParam(LocalName("ValueWildcard")), null)
       valueWildcardMap = valueWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
   def unificationVarFromWildcard(wildcard: BlockTypeVar): BlockUnificationVar =
     blockWildcardMap.getOrElse(wildcard, {
-      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(NoName), null)
+      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(LocalName("BlockWildcard")), null)
       blockWildcardMap = blockWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })

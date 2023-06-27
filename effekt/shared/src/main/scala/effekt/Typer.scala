@@ -982,7 +982,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is none: proceed to outer scope
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope => tryEach(scope.toList) { receiver =>
-      Context.lookupBlockType(receiver) match {
+      val blockType = Context.lookupBlockType(receiver)
+      Context.unification(blockType) match {
         case r @ BlockTypeRef(x: BlockTypeWildcard) =>
           val Result(tpe, effs) = checkCallTo(call, receiver.name.name, r, targs, vargs, bargs, expected)
           // This is different, compared to method calls:
@@ -1126,14 +1127,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val cparams : List[Capture] = List()
     val vparams : List[ValueType] = vargs map { checkExpr(_, None).tpe }
     val bparams : List[BlockType] = bargs map { checkExprAsBlock(_, None).tpe }
-    val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(NoName), call))
+    val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(LocalName("ReturnType")), call))
     val effects : Effects = Effects.Pure
 
     expected.foreach { expected => matchExpected(result, expected) }
     val funTpe : FunctionType = FunctionType(tparams, cparams, vparams, bparams, result, effects)
 
     matchExpected(ref, funTpe)
-//    val test = Context.unification(ref)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`

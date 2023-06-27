@@ -2,8 +2,10 @@ package effekt
 package typer
 
 import effekt.context.Context
+import effekt.source.BlockType.BlockTypeWildcard
 import effekt.symbols.*
 import effekt.symbols.BlockTypeVar.BlockUnificationVar
+import effekt.symbols.TypeVar.ValueTypeWildcard
 import effekt.util.messages.ErrorMessageReifier
 
 

@@ -7,7 +7,7 @@ import sbt.io.syntax.*
 import scala.language.implicitConversions
 
 class PartialTypeSignatureTest extends EffektTests {
-  def backendName: String = "pts"
+  def backendName: String = "js"
 
   override lazy val included: List[File] = List(
     examplesDir / "pts"

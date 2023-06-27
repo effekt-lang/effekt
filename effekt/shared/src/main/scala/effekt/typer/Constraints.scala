@@ -167,12 +167,6 @@ class Constraints(
     }
 
   /**
-   * Retreive the potentially known type of [[x]]
-   */
-  def typeOf(x: UnificationVar): Option[ValueType] =
-    valueTypeOf(getNode(x))
-
-  /**
    * Learn that unification variable [[x]] needs to be compatible with [[y]]. If there already is
    * a type for [[x]], we will invoke [[merge]] to check compatibility (and potentially error out).
    */
