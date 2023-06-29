@@ -169,7 +169,7 @@ class Constraints(
   /**
    * Learn that unification variable [[x]] needs to be compatible with [[y]]. If there already is
    * a type for [[x]], we will invoke [[merge]] to check compatibility (and potentially error out).
-   */
+  */
   def learn(x: UnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit = {
 
     def learnType(x: Node, tpe: ValueType): Unit = {
@@ -238,10 +238,11 @@ class Constraints(
   def leave(types: List[UnificationVar], capts: List[CaptUnificationVar]): Unit =
     // Check that we could infer all types of type variable instantiations.
     types.foreach {
-      case x @ UnificationVar(underlying, callTree) =>
+      case x @ UnificationVar(underlying, callTree, false) =>
         if (!valueTypeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
           C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
         }
+      case _ => ()
     }
 
     // (0) only add those to pending that haven't been solved already

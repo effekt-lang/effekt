@@ -54,10 +54,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Creating fresh unification variables
   // ------------------------------------
-  def fresh(underlying: TypeVar.TypeParam, call: source.Tree): UnificationVar = scope match {
+  def fresh(underlying: TypeVar.TypeParam, call: source.Tree, isGlobal : Boolean = false): UnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
-      val x = new UnificationVar(underlying, call)
+      val x = new UnificationVar(underlying, call, isGlobal)
       scope = s.copy(types = x :: s.types)
       x
   }
@@ -200,14 +200,14 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def unificationVarFromWildcard(wildcard: TypeVar): UnificationVar =
     valueWildcardMap.getOrElse(wildcard, {
-      val unificationVar: UnificationVar = UnificationVar(TypeParam(LocalName("ValueWildcard")), null)
+      val unificationVar: UnificationVar = UnificationVar(TypeParam(LocalName("ValueWildcard")), null, false)
       valueWildcardMap = valueWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
   def unificationVarFromWildcard(wildcard: BlockTypeVar): BlockUnificationVar =
     blockWildcardMap.getOrElse(wildcard, {
-      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(LocalName("BlockWildcard")), null)
+      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(LocalName("BlockWildcard")), null, false)
       blockWildcardMap = blockWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })

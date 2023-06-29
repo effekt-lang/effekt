@@ -1127,7 +1127,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val cparams : List[Capture] = List()
     val vparams : List[ValueType] = vargs map { checkExpr(_, None).tpe }
     val bparams : List[BlockType] = bargs map { checkExprAsBlock(_, None).tpe }
-    val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(LocalName("ReturnType")), call))
+    val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(LocalName("ReturnType")), call, true))
     val effects : Effects = Effects.Pure
 
     expected.foreach { expected => matchExpected(result, expected) }

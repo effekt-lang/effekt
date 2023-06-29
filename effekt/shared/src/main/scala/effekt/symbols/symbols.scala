@@ -197,10 +197,10 @@ enum TypeVar(val name: Name) extends ValueTypeSymbol {
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name)
+  case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree, isGlobal : Boolean = false) extends TypeVar(underlying.name)
 
 
-  case ValueTypeWildcard() extends TypeVar(NoName)
+  case ValueTypeWildcard() extends TypeVar(LocalName("ValueTypeWildcard"))
 }
 export TypeVar.*
 
@@ -210,10 +210,9 @@ enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case BlockUnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends BlockTypeVar(underlying.name)
+  case BlockUnificationVar(underlying: TypeVar.TypeParam, call: source.Tree, isGlobal : Boolean = false) extends BlockTypeVar(underlying.name)
 
-
-  case BlockTypeWildcard() extends BlockTypeVar(NoName)
+  case BlockTypeWildcard() extends BlockTypeVar(LocalName("BlockTypeWildcard"))
 }
 export BlockTypeVar.*
 

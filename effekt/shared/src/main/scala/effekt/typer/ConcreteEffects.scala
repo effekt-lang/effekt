@@ -91,7 +91,8 @@ private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
 }
 
 private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
-  case x: UnificationVar => true
+  case x @ UnificationVar(underlying, call, isGlobal) =>
+    isGlobal
   case x: TypeVar => true
 }
 
@@ -103,7 +104,8 @@ private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
 }
 
 private def isConcreteBlockType(tpe: BlockTypeVar): Boolean = tpe match {
-  case x : BlockUnificationVar => true
+  case x @ BlockUnificationVar(underlying, call, isGlobal) =>
+    isGlobal
   case x : BlockTypeVar => true
 }
 
