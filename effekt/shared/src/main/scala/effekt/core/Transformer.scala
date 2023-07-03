@@ -546,6 +546,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(capt: Captures)(using Context): core.Captures = capt match {
     case CaptUnificationVar(role) => Context.panic(pp"$capt should be a concrete capture set in this phase.")
     case CaptureSet(captures) => captures.map(x => x: Symbol) // that is really a noop...
+    case x : CaptureSetWildcard => x
   }
 
 
@@ -706,15 +707,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def pureOrIO(t: BlockSymbol)(using Context): Boolean = pureOrIO(asConcreteCaptureSet(Context.captureOf(t)))
 
-  def isPure(r: CaptureSet): Boolean = r.captures.isEmpty
+  def isPure(r: Captures): Boolean = r match {
+    case CaptureSet(captures) =>
+      captures.isEmpty
+    case _ => false
+//    case x : CaptureSetWildcard =>
+//      Context.panic("Wildcard in unexpected place") // Is this right? Wildcard could stand for empty or non-empty captures
+  }
 
-  def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
-    c =>
-      def isIO = c == builtins.IOCapability.capture
-      def isMutableState = c.isInstanceOf[LexicalRegion]
-      def isResource = c.isInstanceOf[Resource]
-      def isControl = c == builtins.ControlCapability.capture
-      !isControl && (isIO || isMutableState || isResource)
+  def pureOrIO(r: Captures): Boolean = r match {
+    case CaptureSet(captures) =>
+      captures.forall { c =>
+        def isIO = c == builtins.IOCapability.capture
+        def isMutableState = c.isInstanceOf[LexicalRegion]
+        def isResource = c.isInstanceOf[Resource]
+        def isControl = c == builtins.ControlCapability.capture
+          !isControl && (isIO || isMutableState || isResource)
+      }
+    case _ => false
+//    case x : CaptureSetWildcard => Context.panic("Wildcard in unexpected place") // Is this right?
   }
 }
 

@@ -2,14 +2,13 @@ package effekt
 package core
 
 import effekt.symbols.TrackedParam.BlockParam
-import symbols.{ Symbol, TypeSymbol, builtins }
-import symbols.Name
+import symbols.{CaptureSetWildcard, Name, Symbol, TypeSymbol, builtins}
 
 /**
  * In core, all names, including those in capture sets are just symbols.
  */
 type Capture = symbols.Symbol
-type Captures = Set[Capture]
+type Captures = Set[Capture] | symbols.CaptureSetWildcard
 
 /**
  * Design Decisions:
@@ -105,9 +104,12 @@ object Type {
         substitute(result, vsubst, csubst))
   }
 
-  def substitute(capt: Captures, csubst: Map[Id, Captures]): Captures = capt.flatMap {
-    case id if csubst.isDefinedAt(id) => csubst(id)
-    case c => Set(c)
+  def substitute(capt: Captures, csubst: Map[Id, Captures]): Captures = capt match {
+    case x: CaptureSetWildcard => x
+    case x: Set[Capture] => x.flatMap {
+      case id if csubst.isDefinedAt (id) => csubst (id)
+      case c => Set (c)
+    }
   }
 
   def substitute(tpe: BlockType, vsubst: Map[Id, ValueType], csubst: Map[Id, Captures]): BlockType = tpe match {

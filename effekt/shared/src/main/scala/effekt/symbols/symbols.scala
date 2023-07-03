@@ -351,6 +351,9 @@ case class CaptureSet(captures: Set[Capture]) extends Captures {
   def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
 }
+
+case class CaptureSetWildcard() extends Captures
+
 object CaptureSet {
   def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
   def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
@@ -367,7 +370,7 @@ case class ExternFunction(
   bparams: List[BlockParam],
   result: ValueType,
   effects: Effects,
-  capture: CaptureSet,
+  capture: Captures,
   body: String = ""
 ) extends Callable {
   def annotatedResult = Some(result)

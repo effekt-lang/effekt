@@ -76,6 +76,7 @@ object TypePrinter extends ParenPrettyPrinter {
   def toDoc(c: Captures): Doc = c match {
     case CaptureSet(captures)  => braces { hsep(captures.toList.map(toDoc), comma) }
     case c: CaptUnificationVar => if (debug) c.name <> c.id.toString else c.name
+    case c: CaptureSetWildcard => text("Wildcard")
   }
 
   def toDoc(c: Capture): Doc = c.name

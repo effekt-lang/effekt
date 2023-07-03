@@ -646,10 +646,13 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))
 
-  def resolve(capt: source.CaptureSet)(using Context): CaptureSet = {
-    val captResolved = CaptureSet(capt.captures.map { Context.resolveCapture }.toSet)
-    Context.annotateResolvedCapture(capt)(captResolved)
-    captResolved
+  def resolve(capt: source.Captures)(using Context): Captures = capt match {
+    case captureSet @ source.CaptureSet(captures) =>
+      val captResolved = CaptureSet(captureSet.captures.map { Context.resolveCapture }.toSet)
+      Context.annotateResolvedCapture(captureSet)(captResolved)
+      captResolved
+    case x : source.CaptureSetWildcard =>
+      CaptureSetWildcard()
   }
 
   /**

@@ -58,6 +58,8 @@ case class Substitutions(
       case x: Capture =>
         get(x).getOrElse(x)
     })
+    case x: CaptureSetWildcard =>
+      x
   }
 
   def substitute(t: ValueType): ValueType = t match {

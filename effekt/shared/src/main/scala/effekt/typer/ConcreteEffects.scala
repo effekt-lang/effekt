@@ -109,7 +109,8 @@ private def isConcreteBlockType(tpe: BlockTypeVar): Boolean = tpe match {
   case x : BlockTypeVar => true
 }
 
-private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
+private def isConcreteCaptureSet(capt: Captures): Boolean =
+  capt.isInstanceOf[CaptureSet] || capt.isInstanceOf[CaptureSetWildcard]
 
 private def isConcreteInterfaceType(eff: InterfaceType): Boolean = eff match {
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)

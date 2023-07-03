@@ -164,6 +164,7 @@ class Constraints(
         // or the two are known to be related
         val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
         return boundsImply || areBounded
+      case _ => false // Is this right?
     }
 
   /**

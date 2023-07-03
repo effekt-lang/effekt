@@ -43,7 +43,8 @@ case class LocalScope(
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeInstantiator { self =>
+class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeInstantiator {
+  self =>
 
   // State of the unification engine
   // -------------------------------
@@ -54,9 +55,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Creating fresh unification variables
   // ------------------------------------
-  def fresh(underlying: TypeVar.TypeParam, call: source.Tree, isGlobal : Boolean = false): UnificationVar = scope match {
+  def fresh(underlying: TypeVar.TypeParam, call: source.Tree, isGlobal: Boolean = false): UnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
-    case s : LocalScope =>
+    case s: LocalScope =>
       val x = new UnificationVar(underlying, call, isGlobal)
       scope = s.copy(types = x :: s.types)
       x
@@ -64,7 +65,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def freshCaptVar(role: CaptUnificationVar.Role): CaptUnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
-    case s : LocalScope =>
+    case s: LocalScope =>
       val x = CaptUnificationVar(role)
       scope = s.copy(captures = x :: s.captures)
       x
@@ -99,6 +100,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // Lifecycle management
   // --------------------
   def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap)
+
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
@@ -122,7 +124,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def leaveScope(additional: List[CaptUnificationVar]) = {
     val LocalScope(types, captures, parent) = scope match {
       case GlobalScope => sys error "Cannot leave global scope"
-      case l : LocalScope => l
+      case l: LocalScope => l
     }
     scope = parent
 
@@ -188,6 +190,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
         constraints.requireUpper(cs ++ filter, x)
       case (CaptureSet(cs), x: CaptUnificationVar) =>
         constraints.requireLower(cs -- filter, x)
+      case _ => () // Is this right?
     }
 
   def without(caps: CaptUnificationVar, others: List[Capture]): Captures =
@@ -258,10 +261,13 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ----------------------
 
   def abort(msg: String) = C.abort(msg)
+
   def abort(msg: String, ctx: ErrorContext) = C.abort(ErrorContext.explainInContext(msg, ctx))
 
   def error(msg: String) = C.error(msg)
+
   def error(msg: String, ctx: ErrorContext) = C.error(ErrorContext.explainInContext(msg, ctx))
+
   def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = C.error(ErrorContext.explainMismatch(left, right, ctx))
 
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit =
@@ -293,16 +299,24 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), ctx)
     case (CaptureSet(xs), y: CaptUnificationVar, p) => mergeCaptures(xs.toList, List(y), ctx)
     case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), ctx)
+
+    case (x: CaptureSetWildcard, y: CaptureSetWildcard, p) => abort("Merging of two wildcards should not happen")
+    case (x: CaptureSetWildcard, CaptureSet(ys), p) => mergeCaptures(ys.toList, Nil, ctx)
+    case (CaptureSet(xs), y: CaptureSetWildcard, p) => mergeCaptures(xs.toList, Nil, ctx)
+
+    case (x: CaptureSetWildcard, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(y), ctx)
+    case (x: CaptUnificationVar, y: CaptureSetWildcard, p) => mergeCaptures(Nil, List(x), ctx)
   }
 
   def mergeCaptures(cs: List[Captures], ctx: ErrorContext): CaptUnificationVar =
     val (concrete, variables) = cs.partitionMap {
       case CaptureSet(xs) => Left(xs)
       case x: CaptUnificationVar => Right(x)
+      case x: CaptureSetWildcard => abort("Wildcard should not appear here")
     }
     mergeCaptures(concrete.flatten, variables, ctx)
 
-   /**
+  /**
    * Should create a fresh unification variable bounded by the given captures
    */
   def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], ctx: ErrorContext): CaptUnificationVar =
@@ -322,9 +336,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     }
 
     newVar
+
+
 }
-
-
 
 case class Instantiation(values: Map[TypeVar, ValueType], blocks : Map[BlockTypeVar, BlockType], captures: Map[Capture, Captures])
 
@@ -360,6 +374,7 @@ trait TypeInstantiator { self: Unification =>
         case x: CaptUnificationVar =>
           val capt = constraints.forceSolving(x)
           capt.captures
+        case x : CaptureSetWildcard => abort("Placeholder Unification")
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
     if (contained.isEmpty) return c;

@@ -161,8 +161,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
-  lazy val externCapture: P[CaptureSet] =
-    ( "pure" ^^^ CaptureSet(Nil)
+  lazy val externCapture: P[Captures] =
+    ( literal("_") ^^^ source.CaptureSetWildcard()
+    | "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
     | success(CaptureSet(List(IdRef("io"))))
@@ -506,14 +507,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    */
 
   lazy val valueType: P[ValueType] =
-    ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
-    | wildcardType
+    ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply // BoxedType is ValueType
+    | literal("_") ^^^ source.ValueTypeWildcard
     | primValueType
-    )
-
-  lazy val wildcardType : P[ValueType] =
-    (
-      literal("_") ^^^ source.ValueTypeWildcard
     )
 
   lazy val primValueType: P[ValueType] =
@@ -523,7 +519,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a value type")
     )
 
-  lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
+  lazy val captureSet: P[Captures] =
+    ( literal("_") ^^^ source.CaptureSetWildcard()
+    | `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply)
 
   lazy val blockType: P[BlockType] =
     ( literal("_") ^^^ source.BlockTypeWildcard

@@ -224,7 +224,7 @@ object Annotations {
     "the resolved type for"
   )
 
-  val Capture = Annotation[source.CaptureSet, symbols.CaptureSet](
+  val Capture = Annotation[source.Captures, symbols.Captures](
     "Capture",
     "the resolved capture set for"
   )
@@ -395,10 +395,10 @@ trait AnnotationsDB { self: Context =>
   def resolvedType(tree: source.Type): symbols.Type =
     annotation(Annotations.Type, tree)
 
-  def annotateResolvedCapture(tree: source.CaptureSet)(capt: symbols.CaptureSet): Unit =
+  def annotateResolvedCapture(tree: source.Captures)(capt: symbols.Captures): Unit =
     annotate(Annotations.Capture, tree, capt)
 
-  def resolvedCapture(tree: source.CaptureSet): symbols.CaptureSet =
+  def resolvedCapture(tree: source.Captures): symbols.Captures =
     annotation(Annotations.Capture, tree)
 
   def typeOf(s: Symbol): Type = s match {
