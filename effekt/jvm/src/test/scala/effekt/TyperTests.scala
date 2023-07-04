@@ -1,7 +1,7 @@
 package effekt
 import effekt.context.Annotations
 import effekt.context.Context
-import kiama.util.StringSource
+import kiama.util.{Source, StringSource, FileSource}
 import effekt.typer.{Typer,Wellformedness}
 import effekt.namer.Namer
 import effekt.lifted.ModuleDecl
@@ -10,10 +10,10 @@ import effekt.context.IOModuleDB
 
 abstract class AbstractTyperTests extends munit.FunSuite {
 
+
   /** A test that first runs the frontend on `input` and then `body`, where the [[Context]] is made available */
-  def testTyper(name: String)(input: String)(body: Context => Unit): Unit = {
+  def testTyper(name: String)(src: Source)(body: Context => Unit): Unit = {
     test(name) {
-      val src = StringSource(input, name)
       val compiler = new effekt.Driver {}
       val configs = compiler.createConfig(Seq(
         "--server"
@@ -34,6 +34,10 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       }
     }
   }
+  def testTyper(name: String)(input: String)(body: Context => Unit): Unit =
+    testTyper(name)(StringSource(input, name))(body)
+  def testTyperFile(name: String)(filename: String)(body: Context => Unit): Unit =
+    testTyper(name)(FileSource(filename))(body)
   extension(C: Context) {
     /** Assert that the unique symbol named `name` has the expected value type */
     def assertValueType(name: String, expected: String, clue: => Any = "value types don't match"): Unit = {
