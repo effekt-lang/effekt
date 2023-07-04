@@ -547,11 +547,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
     }
 
+
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val fun = d.symbol
+
+//      Context.annotateInferredType(d, fun.annotatedResult match
+//      {
+//        case Some(tpe) => tpe
+//        case None => ValueTypeRef(Context.fresh(TypeParam(LocalName("ReturnType2")), d))
+//      })
 
       // (1) make up a fresh capture unification variable and annotate on function symbol
       val cap = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
@@ -559,7 +566,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(d.symbol, tpe) }
-
+      
     case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body) =>
       val fun = d.symbol
 
