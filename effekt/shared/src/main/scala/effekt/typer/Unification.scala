@@ -24,7 +24,8 @@ case class UnificationState(
    scope: Scope,
    constraints: Constraints,
    valueWildcardMap : Map[TypeVar, UnificationVar],
-   blockWildcardMap : Map[BlockTypeVar, BlockUnificationVar]
+   blockWildcardMap : Map[BlockTypeVar, BlockUnificationVar],
+   captureWildcardMap : Map[CaptureSetWildcard, CaptUnificationVar]
 )
 
 sealed trait Scope
@@ -51,6 +52,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   protected var constraints = new Constraints
   private var valueWildcardMap = Map.empty[TypeVar, UnificationVar]
   private var blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
+  private var captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
 
   // Creating fresh unification variables
   // ------------------------------------
@@ -78,8 +80,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       .map((k, v) => (k, s.values.get(v).get))
     val blockWildcardSubValue: Map[BlockTypeVar, BlockType] = blockWildcardMap.filter((k, v) => s.blocks.contains(v))
       .map((k, v) => (k, s.blocks.get(v).get))
+    val captureWildcardSubValue : Map[CaptVar, Captures] = captureWildcardMap.filter((k, v) => s.captures.contains(v))
+      .map((k, v) => (k, s.captures.get(v).get))
 
-    s.updateWith(Substitutions(valueWildcardSubValue, blockWildcardSubValue, s.captures))
+    s.updateWith(Substitutions(valueWildcardSubValue, blockWildcardSubValue, captureWildcardSubValue))
 
   def apply(e: Effects): Effects =
     substitution.substitute(e)
@@ -98,18 +102,20 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap)
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap, captureWildcardMap)
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
     valueWildcardMap = state.valueWildcardMap
     blockWildcardMap = state.blockWildcardMap
+    captureWildcardMap = state.captureWildcardMap
 
   def init() =
     scope = GlobalScope
     constraints = new Constraints
     valueWildcardMap = Map.empty[TypeVar, UnificationVar]
     blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
+    captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
@@ -188,6 +194,23 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
         constraints.requireUpper(cs ++ filter, x)
       case (CaptureSet(cs), x: CaptUnificationVar) =>
         constraints.requireLower(cs -- filter, x)
+
+      case (x: CaptureSetWildcard, y: CaptureSetWildcard)  =>
+        val unificationVarX = unificationVarFromWildcard(x)
+        val unificationVarY = unificationVarFromWildcard(y)
+        requireSubregionWithout(unificationVarX, unificationVarY, filter, ctx)
+      case (x: CaptureSetWildcard, CaptureSet(ups)) =>
+        val unificationVar = unificationVarFromWildcard(x)
+        requireSubregionWithout(unificationVar, upper, filter, ctx)
+      case (CaptureSet(lows), y: CaptureSetWildcard) =>
+        val unificationVar = unificationVarFromWildcard(y)
+        requireSubregionWithout(lower, unificationVar, filter, ctx)
+      case (x: CaptureSetWildcard, y: CaptUnificationVar) =>
+        val unificationVar = unificationVarFromWildcard(x)
+        requireSubregionWithout(unificationVar, upper, filter, ctx)
+      case (x: CaptUnificationVar, y: CaptureSetWildcard) =>
+        val unificationVar = unificationVarFromWildcard(y)
+        requireSubregionWithout(lower, unificationVar, filter, ctx)
     }
 
   def without(caps: CaptUnificationVar, others: List[Capture]): Captures =
@@ -200,7 +223,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def unificationVarFromWildcard(wildcard: TypeVar): UnificationVar =
     valueWildcardMap.getOrElse(wildcard, {
-      val unificationVar: UnificationVar = UnificationVar(TypeParam(LocalName("ValueWildcard")), null)
+      val unificationVar: UnificationVar = fresh(TypeParam(LocalName("ValueWildcard")), null)
       valueWildcardMap = valueWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
@@ -209,6 +232,13 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     blockWildcardMap.getOrElse(wildcard, {
       val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(LocalName("BlockWildcard")), null)
       blockWildcardMap = blockWildcardMap + (wildcard -> unificationVar)
+      unificationVar
+    })
+
+  def unificationVarFromWildcard(wildcard : CaptureSetWildcard) : CaptUnificationVar =
+    captureWildcardMap.getOrElse(wildcard, {
+      val unificationVar : CaptUnificationVar = freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(LocalName("CaptureWildcard")), null))
+      captureWildcardMap = captureWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
@@ -293,12 +323,32 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), ctx)
     case (CaptureSet(xs), y: CaptUnificationVar, p) => mergeCaptures(xs.toList, List(y), ctx)
     case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), ctx)
+
+    case(CaptureSet(xs), y: CaptureSetWildcard, p) =>
+      val unificationVar = unificationVarFromWildcard(y)
+      mergeCaptures(oldBound, unificationVar, ctx)
+    case(x: CaptureSetWildcard, CaptureSet(ys), p) =>
+      val unificationVar = unificationVarFromWildcard(x)
+      mergeCaptures(unificationVar, newBound, ctx)
+    case(x: CaptUnificationVar, y: CaptureSetWildcard, p) =>
+      val unificationVar = unificationVarFromWildcard(y)
+      mergeCaptures(oldBound, unificationVar, ctx)
+    case(x: CaptureSetWildcard, y: CaptUnificationVar, p) =>
+      val unificationVar = unificationVarFromWildcard(x)
+      mergeCaptures(unificationVar, newBound, ctx)
+    case(x : CaptureSetWildcard, y: CaptureSetWildcard, p) =>
+      val unificationVarX = unificationVarFromWildcard(x)
+      val unificationVarY = unificationVarFromWildcard(y)
+      mergeCaptures(unificationVarX, unificationVarY, ctx)
   }
 
   def mergeCaptures(cs: List[Captures], ctx: ErrorContext): CaptUnificationVar =
     val (concrete, variables) = cs.partitionMap {
       case CaptureSet(xs) => Left(xs)
       case x: CaptUnificationVar => Right(x)
+      case x: CaptureSetWildcard =>
+        val unificationVar = unificationVarFromWildcard(x)
+        Right(unificationVar)
     }
     mergeCaptures(concrete.flatten, variables, ctx)
 
@@ -360,6 +410,8 @@ trait TypeInstantiator { self: Unification =>
         case x: CaptUnificationVar =>
           val capt = constraints.forceSolving(x)
           capt.captures
+
+        case x: CaptureSetWildcard => abort("Wildcard in unexpected place")
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
     if (contained.isEmpty) return c;

@@ -135,7 +135,7 @@ class Constraints(
   def subst: Substitutions =
     val values = classes.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
     val blocks = blockClasses.flatMap[BlockTypeVar, BlockType] { case (k, v) => blockTypeSubstitution.get(v).map { k -> _ } }
-    val captures = captSubstitution.asInstanceOf[Map[CaptVar, Captures]]
+    val captures = captSubstitution.asInstanceOf[Map[CaptVar | CaptureSetWildcard, Captures]]
     Substitutions(values, blocks, captures)
 
   /**
@@ -164,6 +164,21 @@ class Constraints(
         // or the two are known to be related
         val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
         return boundsImply || areBounded
+
+      case _ => false
+
+//      case (x: CaptureSetWildcard, y: CaptureSetWildcard) =>
+//        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
+//        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
+//        return boundsImply || areBounded
+//      case (x: CaptureSetWildcard, CaptureSet(ys)) => knownUpper(x).exists(_ subsetOf ys)
+//      case (CaptureSet(xs), y: CaptureSetWildcard) => knownLower(y).exists(xs subsetOf _)
+//      case (x : CaptureSetWildcard, y: CaptUnificationVar) =>
+//        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
+//        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
+//      case (x: CaptUnificationVar, y: CaptureSetWildcard) =>
+//        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
+//        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
     }
 
   /**

@@ -192,7 +192,7 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
+  case ExternDef(capture: Captures, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -276,7 +276,7 @@ enum Term extends Tree {
   case Hole(stmts: Stmt)
 
   // Boxing and unboxing to represent first-class values
-  case Box(capt: Option[CaptureSet], block: Term)
+  case Box(capt: Option[Captures], block: Term)
   case Unbox(term: Term)
 
   /**
@@ -465,7 +465,7 @@ enum ValueType extends Type {
   /**
    * Types of first-class functions
    */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
+  case BoxedType(tpe: BlockType, capt: Captures)
 
   // Bound occurrences (args can be empty)
   case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
@@ -504,8 +504,9 @@ object Effects {
   def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
 }
 
-case class CaptureSet(captures: List[IdRef]) extends Tree
-
+sealed trait Captures extends Tree
+case class CaptureSet(captures: List[IdRef]) extends Captures
+case class CaptureSetWildcard() extends Captures
 
 object Named {
 
@@ -607,8 +608,8 @@ object Resolvable {
 
   // Capture Sets
   // ------------
-  extension (capt: source.CaptureSet) {
-    def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
+  extension (capt: source.Captures) {
+    def resolve(using C: Context): symbols.Captures = C.resolvedCapture(capt)
   }
 }
 export Resolvable.resolve

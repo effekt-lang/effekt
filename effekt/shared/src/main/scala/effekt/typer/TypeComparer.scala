@@ -31,9 +31,12 @@ trait TypeUnifier {
   def unificationVarFromWildcard(w : BlockTypeVar) : BlockUnificationVar
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
-    case Covariant     => requireSubregion(c1, c2, ctx)
-    case Contravariant => requireSubregion(c2, c1, ctx)
-    case Invariant     => requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
+    case Covariant     => 
+      requireSubregion(c1, c2, ctx)
+    case Contravariant => 
+      requireSubregion(c2, c1, ctx)
+    case Invariant     => 
+      requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
   }
   def unify(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 

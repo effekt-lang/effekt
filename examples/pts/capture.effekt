@@ -1,0 +1,21 @@
+module examples/pts/capture
+
+effect Eff1 { def use(): Unit }
+effect Eff2 { def use(): Unit }
+
+def myModule1 { eff1 : Eff1 }{ eff2 : Eff2 } = {
+  val e1 = fun() { eff1.use(); () };
+  def x = unbox e1;
+  def test1b = x;
+
+  // val f: () => Unit at { _ } = test1b; // THIS IS WRONG: Wildcard is applied with annotating " _ ", not " { _ } "
+  val f: () => Unit at _ = test1b;
+
+  val g: () => Unit at { eff1 } = f
+  val h: () => Unit at { } = f
+  val i: () => Unit at { eff2 } = f
+
+  f
+}
+
+def main() = ()

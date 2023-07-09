@@ -358,6 +358,10 @@ object CaptureSet {
   def empty = CaptureSet()
 }
 
+case class CaptureSetWildcard() extends Captures, CaptVar {
+  val name = Name.local("CaptureSetWildcard")
+}
+
 /**
  * FFI
  */
@@ -368,7 +372,7 @@ case class ExternFunction(
   bparams: List[BlockParam],
   result: ValueType,
   effects: Effects,
-  capture: CaptureSet,
+  capture: Captures,
   body: String = ""
 ) extends Callable {
   def annotatedResult = Some(result)

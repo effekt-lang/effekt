@@ -53,6 +53,7 @@ case class Substitutions(
   // TODO we DO need to distinguish between substituting unification variables for unification variables
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
   def substitute(c: Captures): Captures = c match {
+    case x: CaptureSetWildcard => captures.getOrElse(x, x)
     case x: CaptUnificationVar => captures.getOrElse(x, x)
     case CaptureSet(cs) => CaptureSet(cs.map {
       case x: Capture =>
@@ -95,7 +96,7 @@ case class Substitutions(
 }
 
 object Substitutions {
-  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar, Captures])
+  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures])
   def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, blocks.toMap, captures.toMap)
   def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty)
   def blocks(keys: List[BlockTypeVar], values: List[BlockType]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap, Map.empty)

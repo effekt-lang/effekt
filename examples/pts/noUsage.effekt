@@ -1,0 +1,5 @@
+module examples/pts/noUsage
+
+def main() = {
+    println("Test")
+}
