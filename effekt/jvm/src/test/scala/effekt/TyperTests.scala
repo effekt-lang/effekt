@@ -24,7 +24,8 @@ abstract class AbstractTyperTests extends munit.FunSuite {
 
       given C: Context = compiler.context
 
-      val mod = Frontend(src).map(_.mod)
+      val frontend = Frontend(src)
+      val mod = frontend.map(_.mod)
       assert(mod.isDefined, "Running the frontend succeeds")
       compiler.compileSource(src, configs)
       val ctx = compiler.context
@@ -58,6 +59,15 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
     }
 
+    def assertCaptureType(name: String, expected: String, clue: => Any = "capture types don't match"): Unit = {
+      val syms = C.module.terms(name)
+      assert(syms.size == 1, s"There is a unique symbol named '${name}'.")
+      val sym = syms.head
+      assert(sym.isInstanceOf[symbols.Captures], s"${sym} is a capture symbol.")
+      val got = C.annotation(Annotations.Captures, sym.asInstanceOf[symbols.BlockSymbol])
+      assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
+    }
+
     // TODO further assertions (e.g. for captures etc) on the context
   }
 
@@ -65,11 +75,27 @@ abstract class AbstractTyperTests extends munit.FunSuite {
 class TyperTests extends AbstractTyperTests {
 
   testTyper("Simple example test")(
-    """type A{}
-      |def foo(x: A) = x
+    """val a : _ = 1
       |""".stripMargin
   ){ C =>
-    C.assertBlockType("foo", "A => A")
+    C.assertBlockType("a", "Int")
+  }
+
+  testTyperFile("File test")("examples/pts/typerTest.effekt"){
+    C => C.assertValueType("a", "Int")
+  }
+
+  testTyperFile("Value type test")("examples/pts/valueType.effekt"){
+    C => C.assertValueType("num1", "Int")
+  }
+
+//  // Expected an expression, but got a block. in line 12, 28
+//  testTyperFile("Simple capture test")("examples/pts/capture2.effekt"){
+//    C => C.assertCaptureType("result", "() => Unit at { eff1 }")
+//  }
+
+  testTyperFile("Nested types test")("examples/pts/nestedTypes.effekt"){
+    C => C.assertValueType("map1", "Map[Int, String]")
   }
 
 }

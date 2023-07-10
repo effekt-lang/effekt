@@ -1,7 +1,2 @@
-module examples/pts/valueType
 
-def main() = {
-    val num1 : _ = 1
-    val num2 : String = num1
-    println(num1)
-}
+val num1 : _ = 1
