@@ -166,7 +166,9 @@ object Transformer {
         val tpe = transform(stateType)
         val variable = Variable(freshName("x"), tpe)
         val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
-        Load(variable, stateVariable, Return(List(variable)))
+        transform(ev).run { evValue =>
+          Load(variable, stateVariable, evValue, Return(List(variable)))
+        }
 
       case lifted.App(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(ev, arg)) =>
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -175,8 +177,10 @@ object Transformer {
         val variable = Variable(freshName("x"), Positive("Unit"));
         val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
         transform(arg).run { value =>
-          Store(stateVariable, value,
-            Construct(variable, builtins.Unit, List(), Return(List(variable))))
+          transform(ev).run { evValue =>
+            Store(stateVariable, value, evValue,
+              Construct(variable, builtins.Unit, List(), Return(List(variable))))
+          }
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), targs, args) =>
@@ -212,10 +216,9 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
-        val regionVar = Variable(freshName("_"), Type.Region())
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, regionVar, returnClause,
+          NewStack(delimiter, returnClause,
             PushStack(delimiter,
               (ids zip handlers).foldRight(transform(body)){
                 case ((id, handler), body) =>
@@ -233,33 +236,33 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
-        val regionVar = Variable(transform(id.id), Type.Region())
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, regionVar, returnClause,
+          NewStack(delimiter, returnClause,
             PushStack(delimiter, transform(body))))
 
       case lifted.State(id, init, region, ev, body) =>
         transform(init).run { value =>
-          val tpe = value.tpe;
-          val name = transform(id)
-          val variable = Variable(name, tpe)
-          val stateVariable = Variable(name + "$State", Type.Reference(tpe))
-          val loadVariable = Variable(freshName(name), tpe)
-          val getter = Clause(List(),
-                        Load(loadVariable, stateVariable,
-                          Return(List(loadVariable))))
+          transform(ev).run { evValue =>
+            val tpe = value.tpe;
+            val name = transform(id)
+            val variable = Variable(name, tpe)
+            val stateVariable = Variable(name + "$State", Type.Reference(tpe))
+            val loadVariable = Variable(freshName(name), tpe)
+            val getter = Clause(List(),
+                          Load(loadVariable, stateVariable, evValue,
+                            Return(List(loadVariable))))
 
-          val setterVariable = Variable(freshName(name), tpe)
-          val setter = Clause(List(setterVariable),
-                                Store(stateVariable, setterVariable,
-                                  Return(List())))
-          val regionVar = Variable(transform(region), Type.Region())
+            val setterVariable = Variable(freshName(name), tpe)
+            val setter = Clause(List(setterVariable),
+                                  Store(stateVariable, setterVariable, evValue,
+                                    Return(List())))
 
-          // TODO use interface when it's implemented
-          Allocate(stateVariable, value, regionVar,
-            //New(variable, List(getter, setter),
-              transform(body))
+            // TODO use interface when it's implemented
+            Allocate(stateVariable, value, evValue,
+              //New(variable, List(getter, setter),
+                transform(body))
+          }
         }
 
       case lifted.Hole() => machine.Statement.Hole
