@@ -47,8 +47,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
-    descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",
-    default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "12")),
+    descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 15)",
+    default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "15")),
     noshort = true
   )
 

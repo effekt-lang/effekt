@@ -135,8 +135,8 @@ object LLVMRunner extends Runner[String] {
   def standardLibraryPath(root: File): File = root / "libraries" / "llvm"
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
-  lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-12"), List("--version"))
-  lazy val optCmd = discoverExecutable(List("opt", "opt-15", "opt-12"), List("--version"))
+  lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
+  lazy val optCmd = discoverExecutable(List("opt", "opt-15", "opt-16"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
     gccCmd.getOrElseAborting { return Left("Cannot find gcc. This is required to use the LLVM backend.") }
