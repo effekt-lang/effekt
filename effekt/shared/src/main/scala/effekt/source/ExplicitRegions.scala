@@ -43,7 +43,7 @@ object ExplicitRegions extends Phase[Typechecked, Typechecked], Rewrite {
       // Also copy the other annotations from transformed body to the synthesized region
       //   captures of the overall region should not include self
       val region = Region(regionId, transformedBody)
-      val result = Return(region)
+      val result = Return(List(region))
       Context.copyAnnotations(transformedBody, region)
       Context.copyAnnotations(transformedBody, result)
 

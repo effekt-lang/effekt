@@ -8,7 +8,6 @@ record Triple(a: Int, b: Int, c: Int)
 effect Flip {
   def flip(): Boolean
 }
-
 effect Fail {
   def fail(): Nothing
 }

@@ -8,6 +8,6 @@ def main() = {
     val Triple(x, y, z) = Triple(1, "2", true);
     println(x + y.length);
 
-    val (a, b) = (1, 2);
+    val (a, b) = Tuple2(1, 2);
     println(a + b)
 }

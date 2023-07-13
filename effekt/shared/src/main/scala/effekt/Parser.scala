@@ -2,10 +2,10 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
-import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Range, Source, StringSource }
+import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
+import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
 import scala.language.implicitConversions
@@ -237,7 +237,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
-        Return(Match(Var(IdRef(name)), cs)))
+        Return(List(Match(Var(IdRef(name)), cs))))
       res withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) : BlockLiteral }
@@ -264,7 +264,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     typeArgs.? ^^ { o => o.getOrElse(Nil) }
 
   lazy val stmt: P[Stmt] =
-    ( expr ^^ Return.apply
+    ( someSep(expr, `,`) ^^ Return.apply
     | `{` ~/> stmts <~ `}` ^^ BlockStmt.apply
     | failure("Expected a statement")
     )
@@ -277,7 +277,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
     | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply
+    | (`return`.? ~> someSep(expr, `,`) <~ `;`.?) ^^ Return.apply  //TODO
     | matchDef
     | failure("Expected a statement")
     )
@@ -287,12 +287,12 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
           (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
+          Return(List(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body))) withPositionOf params))
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
+          Return(List(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id)))
        }
     )
 
@@ -313,7 +313,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
        case p ~ sc ~ body =>
-        Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
+        Return(List(Match(sc, List(MatchClause(p, body))))) withPositionOf p
      }
 
   lazy val typeAliasDef: P[Def] =
@@ -454,19 +454,19 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idRef ~ (`=` ~> expr) ^^ Assign.apply
 
   lazy val ifExpr: P[Term] =
-    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If.apply
+    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(List(UnitLit())))) ^^ If.apply
 
   lazy val whileExpr: P[Term] =
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While.apply
 
   lazy val primExpr: P[Term] =
-    variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
+    variable | literals /*| tupleLiteral*/ | listLiteral | hole | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Term] =
     idRef ^^ Var.apply
 
   lazy val hole: P[Term] =
-    ( `<>` ^^^ Hole(Return(UnitLit()))
+    ( `<>` ^^^ Hole(Return(List(UnitLit())))
     | `<{` ~> stmts <~ `}>` ^^ Hole.apply
     )
 
@@ -488,8 +488,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
 
+/*
   lazy val tupleLiteral: P[Term] =
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
+*/
 
   private def NilTree: Term =
     Call(IdTarget(IdRef("Nil")), Nil, Nil, Nil)
@@ -512,7 +514,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val primValueType: P[ValueType] =
     ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
-    | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
+    //| `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | failure("Expected a value type")
     )
 
@@ -543,8 +545,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       case None => Effects.Pure
     }
 
+  // TODO
   lazy val effectful: P[Effectful] =
-    valueType ~ maybeEffects ^^ Effectful.apply
+    someSep(valueType, `,`) ~ maybeEffects ^^ Effectful.apply
 
   lazy val effects: P[Effects] =
     ( interfaceType ^^ { e => Effects(e) }

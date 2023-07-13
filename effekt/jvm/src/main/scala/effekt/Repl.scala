@@ -308,7 +308,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
      */
     def make(expr: Term): ModuleDecl = {
 
-      val body = Return(expr)
+      val body = Return(List(expr))
 
       ModuleDecl("interactive", imports,
         definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,

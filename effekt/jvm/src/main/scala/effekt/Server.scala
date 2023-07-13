@@ -1,16 +1,15 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.PrettyPrinter
+import effekt.core.{PrettyPrinter, Optimizer}
 import effekt.lifted.LiftInference
-import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging, getOrElseAborting }
+import effekt.source.{FunDef, Hole, ModuleDecl, Tree}
+import effekt.util.{PlainMessaging, getOrElseAborting}
 import effekt.util.messages.EffektError
 
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
-
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind}
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -209,7 +208,10 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map { needsUpdate(_, (tpe, eff)) }.getOrElse(true)
+    if ann.map {
+      case (List(y), eff1) => needsUpdate((y, eff1), (tpe, eff))
+      case _ => ??? // TODO MRV
+    }.getOrElse(true)
     res <- CodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
   } yield res
 

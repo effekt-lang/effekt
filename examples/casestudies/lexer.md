@@ -50,7 +50,7 @@ def example1() = {
   val t1 = do next();
   val t2 = do next();
   val t3 = do next();
-  (t1, t2, t3)
+  Tuple3(t1, t2, t3)
 }
 ```
 

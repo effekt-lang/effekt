@@ -97,31 +97,31 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkExpr(expr: Term, expected: Option[List[ValueType]])(using Context, Captures): Result[List[ValueType]] = // TODO
     checkAgainst(expr, expected) {
-      case source.Literal(_, tpe)     => Result(tpe, Pure)
+      case source.Literal(_, tpe)     => Result(List(tpe), Pure)
 
       case source.If(cond, thn, els) =>
-        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+        val Result(cndTpe, cndEffs) = cond checkAgainst List(TBoolean)
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)
+        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)  // TODO Elemente einzeln vergleichen, untersch. Länge
 
       case source.While(cond, body) =>
-        val Result(_, condEffs) = cond checkAgainst TBoolean
-        val Result(_, bodyEffs) = body checkAgainst TUnit
-        Result(TUnit, condEffs ++ bodyEffs)
+        val Result(_, condEffs) = cond checkAgainst List(TBoolean)
+        val Result(_, bodyEffs) = body checkAgainst List(TUnit)
+        Result(List(TUnit), condEffs ++ bodyEffs)
 
       case source.Var(id) => id.symbol match {
         case x: VarBinder => Context.lookup(x) match {
           case (btpe, capt) =>
             val vtpe = TState.extractType(btpe)
             usingCapture(capt)
-            Result(vtpe, Pure)
+            Result(List(vtpe), Pure)
         }
         case b: BlockSymbol => Context.abort("Expected an expression, but got a block.")
-        case x: ValueSymbol => Result(Context.lookup(x), Pure)
+        case x: ValueSymbol => Result(List(Context.lookup(x)), Pure)
       }
 
       case e @ source.Assign(id, expr) => e.definition match {
@@ -131,13 +131,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
               usingCapture(capt)
               TState.extractType(btpe)
           }
-          val Result(_, eff) = expr checkAgainst stTpe
-          Result(TUnit, eff)
+          val Result(_, eff) = expr checkAgainst List(stTpe)
+          Result(List(TUnit), eff)
       }
 
       case l @ source.Box(annotatedCapture, block) =>
 
-        val expectedTpe = expected.collect { case BoxedType(tpe, cap) => tpe }
+        val expectedTpe = expected.collect { case List(BoxedType(tpe, cap)) => tpe }
         val inferredCap: Captures = annotatedCapture.map { _.resolve }.getOrElse {
           Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
         }
@@ -145,8 +145,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         given Captures = inferredCap
         val Result(inferredTpe, inferredEff) = checkExprAsBlock(block, expectedTpe)
         val tpe = Context.unification(BoxedType(inferredTpe, inferredCap))
-        expected.map(Context.unification.apply) foreach { matchExpected(tpe, _) }
-        Result(tpe, inferredEff)
+        expected.map(Context.unification.apply) foreach { matchExpected(List(tpe), _) }
+        Result(List(tpe), inferredEff)
 
       case source.Unbox(_) =>
         Context.abort("Expected an expression, but got an unbox (which is a block).")
@@ -184,6 +184,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
+
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
       //   so the method calls here are actually methods calls on blocks as receivers.
@@ -232,8 +233,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         handlers foreach Context.withFocus { h =>
           given Captures = continuationCaptHandled
-          val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
-          handlerEffs = handlerEffs ++ usedEffects
+
+          ret match {
+            case List(ret) => {
+              val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+              handlerEffs = handlerEffs ++ usedEffects
+            }
+            case _ => ??? // TODO MRV
+          }
+
         }
 
         // (4) Wellformedness checks
@@ -287,7 +295,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val tpes = clauses.map {
           case source.MatchClause(p, body) =>
             // (3) infer types for all clauses
-            Context.bind(checkPattern(tpe, p))
+            tpe match {
+              case List(tpe) => Context.bind(checkPattern(tpe, p))
+              case _ => ??? // TODO MRV
+            }
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
             resEff = resEff ++ clEff
             clTpe
@@ -296,11 +307,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // Clauses could in general be empty if there are no constructors
         // In that case the scrutinee couldn't have been constructed and
         // we can unify with everything.
-        Result(Context.join(tpes: _*), resEff)
+        Result(Context.join(tpes: _*), resEff)  // TODO: wie oben
 
       case source.Hole(stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
-        Result(expected.getOrElse(TBottom), Pure)
+        Result(expected.getOrElse(List(TBottom)), Pure)
 
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
       case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
@@ -404,15 +415,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 // resume { e }
                 val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
-                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
+                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), List(ret), Effects.Pure)
               } else {
                 // resume(v)
-                FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
+                FunctionType(Nil, Nil, tpe, Nil, List(ret), Effects.Pure)
               }
 
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-              body checkAgainst ret
+              body checkAgainst List(ret)
           }
 
           handlerEffects = handlerEffects ++ effs
@@ -435,13 +446,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val expectedTpe = expected map {
           tpe =>
             val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
-            BoxedType(tpe, captVar)
+            List(BoxedType(tpe, captVar))
         }
-        val Result(vtpe, eff1) = checkExpr(expr, expectedTpe)
+        val Result(vtpe, eff1) = checkExpr(expr, expectedTpe)   // TODO MRV ???
         // TODO here we also need unification variables for block types!
         // C.unify(tpe, BoxedType())
         Context.unification(vtpe) match {
-          case BoxedType(btpe, capt2) =>
+          case List(BoxedType(btpe, capt2)) =>
             usingCapture(capt2)
             Result(btpe, eff1)
           case _ =>
@@ -499,7 +510,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil, Nil)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      matchPattern(sc, ret, p)
+      ret match {
+        case List(ret) => matchPattern(sc, ret, p)
+        case _ => ??? // TODO MRV
+      }
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors, so this is not necessary.
@@ -526,7 +540,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkStmt(stmt: Stmt, expected: Option[List[ValueType]])(using Context, Captures): Result[List[ValueType]] =  //TODO: List[ValueType]
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -539,7 +553,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(r, eff2) = checkStmt(rest, expected)
         Result(r, eff1 ++ eff2)
 
-      case source.Return(e)        => checkExpr(e, expected)
+        // TODO MRV: Verbieten? (return (1, return(2,3))
+      case source.Return(e)        => expected match {
+        case None => {
+          val check = e map { checkExpr(_, None) }
+          val tpes = check flatMap { _.tpe }
+          val effs = check map { _.effects } reduce { _ ++ _ }
+          Result(tpes, effs)
+        }
+        case Some(tpe) => {
+          val checked = (e zip tpe) map { case (e, tpe) => checkExpr(e, Some(List(tpe))) }
+          val tpes = checked flatMap { _.tpe }
+          val effs = checked map { _.effects } reduce { _ ++ _ }
+          Result(tpes, effs)
+        }
+      }
 
       case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
     }
@@ -688,13 +716,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case d @ source.ValDef(id, annot, binding) =>
         val Result(t, effBinding) = d.symbol.tpe match {
           case Some(t) =>
-            val Result(_, eff) = binding checkAgainst t
+            val Result(_, eff) = binding checkAgainst List(t)
             // use annotated, not inferred type
-            Result(t, eff)
+            Result(List(t), eff)
           case None => checkStmt(binding, None)
         }
 
-        Context.bind(d.symbol, t)
+        Context.bind(d.symbol, t.head) // TODO MRV: ???
 
         Result((), effBinding)
 
@@ -712,10 +740,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         } getOrElse { CaptureSet(Context.region) }
 
         val Result(tpeBind, effBind) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
+          case Some(t) => binding checkAgainst List(t)
           case None    => checkStmt(binding, None)
         }
-        val stTpe = TState(tpeBind)
+        val stTpe = tpeBind match {
+          case List(tpeBind) => TState(tpeBind)
+          case _ => ??? // TODO MRV
+        }
 
         // to allocate into the region, it needs to be live...
         usingCapture(stCapt)
@@ -810,7 +841,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (6) Substitute both types and captures into expected return type
       val subst = typeSubst ++ captSubst
 
-      val expectedReturn = subst substitute tpe1
+      val expectedReturn = tpe1 map { subst substitute _ } // TODO MRV
 
       // (7) Check function body
       val selfRegion = Context.getSelfRegion(arg)
@@ -864,6 +895,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
 
+
       // Like with functions, bound parameters and capabilities are not closed over
       usingCaptureWithout(inferredCapture) {
         (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion)
@@ -902,8 +934,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: List[source.Term],
     bargs: List[source.Term],
-    expected: Option[ValueType]
-  )(using Context, Captures): Result[ValueType] = {
+    expected: Option[List[ValueType]]
+  )(using Context, Captures): Result[List[ValueType]] = {
     val sym = id.symbol
 
     val methods = sym match {
@@ -940,8 +972,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: List[source.Term],
     bargs: List[source.Term],
-    expected: Option[ValueType]
-  )(using Context, Captures): Result[ValueType] = {
+    expected: Option[List[ValueType]]
+  )(using Context, Captures): Result[List[ValueType]] = {
 
     val scopes = id.symbol match {
       // an overloaded call target
@@ -985,9 +1017,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   private def resolveOverload(
     id: source.IdRef,
-    successes: List[List[(BlockSymbol, Result[ValueType], TyperState)]],
+    successes: List[List[(BlockSymbol, Result[List[ValueType]], TyperState)]],
     failures: List[(BlockSymbol, EffektMessages)]
-  )(using Context): Result[ValueType] = {
+  )(using Context): Result[List[ValueType]] = {
 
     successes foreachAborting {
       // continue in outer scope
@@ -1030,8 +1062,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: List[source.Term],
     bargs: List[source.Term],
-    expected: Option[ValueType]
-  )(using Context, Captures): Result[ValueType] = {
+    expected: Option[List[ValueType]]
+  )(using Context, Captures): Result[List[ValueType]] = {
 
     if (targs.nonEmpty && targs.size != funTpe.tparams.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -1052,7 +1084,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     var effs: ConcreteEffects = Pure
 
     (vps zip vargs) foreach { case (tpe, expr) =>
-      val Result(t, eff) = checkExpr(expr, Some(tpe))
+      val Result(t, eff) = checkExpr(expr, Some(List(tpe)))
       effs = effs ++ eff
     }
 
@@ -1165,28 +1197,36 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def matchPattern(scrutinee: ValueType, patternTpe: ValueType, pattern: source.MatchPattern)(using Context): Unit =
     Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(pattern))
 
+  // TODO MRV
   def matchExpected(got: ValueType, expected: ValueType)(using Context): Unit =
     Context.requireSubtype(got, expected,
       ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
+
+  def matchExpected(got: List[ValueType], expected: List[ValueType])(using Context): Unit = {
+    if (got.length != expected.length) Context.error("Expected " + expected.length + " arguments, but got " + got.length)
+
+    got zip expected foreach { (g, e) => Context.requireSubtype(g, e,
+      ErrorContext.Expected(Context.unification(g), Context.unification(e), Context.focus)) }
+  }
 
   def matchExpected(got: BlockType, expected: BlockType)(using Context): Unit =
     Context.requireSubtype(got, expected,
       ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
 
   extension (expr: Term) {
-    def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
+    def checkAgainst(tpe: List[ValueType])(using Context, Captures): Result[List[ValueType]] =
       checkExpr(expr, Some(tpe))
   }
 
   extension (stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
+    def checkAgainst(tpe: List[ValueType])(using Context, Captures): Result[List[ValueType]] =
       checkStmt(stmt, Some(tpe))
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[ValueType])(f: T => Result[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkAgainst[T <: Tree](t: T, expected: Option[List[ValueType]])(f: T => Result[List[ValueType]])(using Context, Captures): Result[List[ValueType]] =
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)
@@ -1216,12 +1256,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // invariant: only works if ret is defined!
     def toType: FunctionType =
       annotatedType.get
-    def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =
+    def toType(ret: List[ValueType], effects: Effects, capabilityParams: List[Capture]): FunctionType =
       val bcapt = fun.bparams.map { p => p.capture }
       val tps = fun.tparams
       val vps = fun.vparams.map { p => p.tpe.get }
       val bps = fun.bparams.map { p => p.tpe }
       FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
+
 
     def annotatedType: Option[FunctionType] =
       for {
@@ -1458,6 +1499,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def annotateInferredType(t: Tree, e: ValueType) =
     annotations.update(Annotations.InferredValueType, t, e)
+
+  private[typer] def annotateInferredType(t: Tree, e: List[ValueType]) =
+    annotations.update(Annotations.InferredValueTypeList, t, e)
 
   private[typer] def annotateInferredType(t: Tree, e: BlockType) =
     annotations.update(Annotations.InferredBlockType, t, e)

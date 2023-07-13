@@ -606,7 +606,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
       val res = resolve(ret)
 
-      FunctionType(tps, cps, vps, bps, res, effs)
+      FunctionType(tps, cps, vps, bps, List(res), effs) // TODO MRV remove List(res)
     }
   }
 
@@ -640,8 +640,8 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(tpe: source.Effects)(using Context): Effects =
     Effects(tpe.effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
-  def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
-    (resolve(e.tpe), resolve(e.eff))
+  def resolve(e: source.Effectful)(using Context): (List[ValueType], Effects) =
+    (e.tpe map resolve, resolve(e.eff))
 
   def resolve(capt: source.CaptureSet)(using Context): CaptureSet = {
     val captResolved = CaptureSet(capt.captures.map { Context.resolveCapture }.toSet)

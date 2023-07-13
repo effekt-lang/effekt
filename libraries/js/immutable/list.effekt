@@ -94,7 +94,7 @@ def headOption[A](l: List[A]): Option[A] = l match {
 }
 
 // elements that satisfy the predicate go into the left list
-def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
+def partition[A](l: List[A]) { pred: A => Boolean }: Tuple2[List[A], List[A]] = {
   var lefts: List[A] = Nil()
   var rights: List[A] = Nil()
   l.foreach { el =>
@@ -102,7 +102,7 @@ def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
     else { rights = Cons(el, rights) }
   };
 
-  (lefts.reverse, rights.reverse)
+  Tuple2(lefts.reverse, rights.reverse)
 }
 
 // this implementation is not stacksafe!
