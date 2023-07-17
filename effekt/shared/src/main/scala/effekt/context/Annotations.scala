@@ -109,11 +109,11 @@ object Annotations {
    *
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
-   */
+   *
   val InferredValueType = Annotation[source.Tree, symbols.ValueType](
     "InferredValueType",
     "the inferred type of"
-  )
+  )*/
 
   /**
    * The type as inferred by typer at a given position in the tree
@@ -358,10 +358,10 @@ trait AnnotationsDB { self: Context =>
   def typeArguments(c: source.CallLike): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
-  def inferredTypeOption(t: source.Tree): Option[ValueType] =
-    annotationOption(Annotations.InferredValueType, t)
+  def inferredTypeOption(t: source.Tree): Option[List[ValueType]] =
+    annotationOption(Annotations.InferredValueTypeList, t)
 
-  def inferredTypeOf(t: source.Tree): ValueType =
+  def inferredTypeOf(t: source.Tree): List[ValueType] =
     inferredTypeOption(t).getOrElse {
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
@@ -382,15 +382,15 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing effect of source expression: '${t}'")
     }
 
-  def inferredTypeAndEffectOption(t: source.Tree): Option[(ValueType, Effects)] =
+  def inferredTypeAndEffectOption(t: source.Tree): Option[(List[ValueType], Effects)] =
     for {
       tpe <- inferredTypeOption(t)
       eff <- inferredEffectOption(t)
     } yield (tpe, eff)
 
-  def inferredTypeAndEffectOf(t: source.Tree): (ValueType, Effects) =
+  def inferredTypeAndEffectOf(t: source.Tree): (List[ValueType], Effects) =
     inferredTypeAndEffectOption(t).getOrElse {
-      panic(s"Internal Error: Missing type of source expression: '${t}'")
+      panic(s"Internal Error: Missing type and effect of source expression: '${t}'")
     }
 
   def inferredCapture(t: source.Tree): symbols.CaptureSet =

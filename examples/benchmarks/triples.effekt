@@ -50,7 +50,7 @@ def sumTriples(n: Int, s: Int): Int = {
 
 def main() = commandLineArgs() match {
   case Nil() => println(sumTriples(100, 100))
-  case Cons(x, Cons(y, Nil())) => (toInt(x), toInt(y)) match {
+  case Cons(x, Cons(y, Nil())) => Tuple2(toInt(x), toInt(y)) match {
     case (Some(s), Some(n)) => println(sumTriples(s, n))
     case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "', '" ++ show(y) ++ "'")
   }

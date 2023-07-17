@@ -103,8 +103,10 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       scoped { query(body) }
 
     case tree @ source.Match(scrutinee, clauses) => Context.at(tree) {
-      val tpe = Context.inferredTypeOf(scrutinee)
-      checkExhaustive(tpe, clauses)
+      Context.inferredTypeOf(scrutinee) match {
+        case List(tpe) => checkExhaustive(tpe, clauses)
+        case _ => ??? // TODO MRV match
+      }
 
       query(scrutinee)
       clauses foreach { cl => scoped { query(cl) }}

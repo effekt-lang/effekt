@@ -109,7 +109,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // ----------
   lazy val stmt: P[Stmt] =
     ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
-    | `return` ~> pure ^^ Stmt.Return.apply
+    | `return` ~> someSep(pure, `,`) ^^ Stmt.Return.apply
     | `val` ~> id ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply
     | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
@@ -260,10 +260,10 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     )
 
   lazy val blockType: P[BlockType] =
-    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ^^ {
-      case tparams ~ vparams ~ bcparams ~ result =>
+    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> someSep(primValueType, `,`)) ^^ {
+      case tparams ~ vparams ~ bcparams ~ results =>
         val (cparams, bparams) = bcparams.unzip
-        BlockType.Function(tparams, cparams, vparams, bparams, result)
+        BlockType.Function(tparams, cparams, vparams, bparams, results)
       }
     | interfaceType
     )

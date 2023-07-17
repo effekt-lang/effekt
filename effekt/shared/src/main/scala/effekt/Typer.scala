@@ -234,13 +234,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         handlers foreach Context.withFocus { h =>
           given Captures = continuationCaptHandled
 
-          ret match {
-            case List(ret) => {
-              val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
-              handlerEffs = handlerEffs ++ usedEffects
-            }
-            case _ => ??? // TODO MRV
-          }
+          val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+          handlerEffs = handlerEffs ++ usedEffects
 
         }
 
@@ -307,7 +302,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // Clauses could in general be empty if there are no constructors
         // In that case the scrutinee couldn't have been constructed and
         // we can unify with everything.
-        Result(Context.join(tpes: _*), resEff)  // TODO: wie oben
+
+        Result(Context.join(tpes: _*), resEff)
 
       case source.Hole(stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
@@ -320,7 +316,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
-  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
+  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(List[ValueType], CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
     case source.Implementation(sig, clauses) =>
 
       var handlerEffects: ConcreteEffects = Pure
@@ -415,15 +411,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 // resume { e }
                 val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
-                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), List(ret), Effects.Pure)
+                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
               } else {
                 // resume(v)
-                FunctionType(Nil, Nil, tpe, Nil, List(ret), Effects.Pure)
+                FunctionType(Nil, Nil, tpe, Nil, ret, Effects.Pure)
               }
 
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-              body checkAgainst List(ret)
+              body checkAgainst ret
           }
 
           handlerEffects = handlerEffects ++ effs
@@ -534,7 +530,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       bindings
-  } match { case res => Context.annotateInferredType(pattern, sc); res }
+  } match { case res => Context.annotateInferredType(pattern, List(sc)); res } // TODO MRV: List(sc)
 
   //</editor-fold>
 
@@ -554,20 +550,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result(r, eff1 ++ eff2)
 
         // TODO MRV: Verbieten? (return (1, return(2,3))
-      case source.Return(e)        => expected match {
-        case None => {
-          val check = e map { checkExpr(_, None) }
-          val tpes = check flatMap { _.tpe }
-          val effs = check map { _.effects } reduce { _ ++ _ }
-          Result(tpes, effs)
+      case source.Return(e)        =>
+        val checked = expected match {
+          case None => e map { checkExpr(_, None) }
+          case Some(tpe) => (e zip tpe) map { case (e, tpe) => checkExpr(e, Some(List(tpe))) }
         }
-        case Some(tpe) => {
-          val checked = (e zip tpe) map { case (e, tpe) => checkExpr(e, Some(List(tpe))) }
-          val tpes = checked flatMap { _.tpe }
-          val effs = checked map { _.effects } reduce { _ ++ _ }
-          Result(tpes, effs)
-        }
-      }
+        val tpes = checked flatMap { _.tpe }
+        val effs = checked map { _.effects } reduce { _ ++ _ }
+        Result(tpes, effs)
 
       case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
     }
@@ -743,10 +733,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(t) => binding checkAgainst List(t)
           case None    => checkStmt(binding, None)
         }
-        val stTpe = tpeBind match {
-          case List(tpeBind) => TState(tpeBind)
-          case _ => ??? // TODO MRV
-        }
+        val stTpe = TState(tpeBind)
 
         // to allocate into the region, it needs to be live...
         usingCapture(stCapt)
@@ -1197,13 +1184,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def matchPattern(scrutinee: ValueType, patternTpe: ValueType, pattern: source.MatchPattern)(using Context): Unit =
     Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(pattern))
 
-  // TODO MRV
+  // TODO MRV: remove?
   def matchExpected(got: ValueType, expected: ValueType)(using Context): Unit =
     Context.requireSubtype(got, expected,
       ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
 
   def matchExpected(got: List[ValueType], expected: List[ValueType])(using Context): Unit = {
-    if (got.length != expected.length) Context.error("Expected " + expected.length + " arguments, but got " + got.length)
+    if (got.length != expected.length) Context.error("Expected " + expected.length + " results, but got " + got.length)
 
     got zip expected foreach { (g, e) => Context.requireSubtype(g, e,
       ErrorContext.Expected(Context.unification(g), Context.unification(e), Context.focus)) }
@@ -1497,8 +1484,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //<editor-fold desc="(5) Inferred Information for LSP">
 
-  private[typer] def annotateInferredType(t: Tree, e: ValueType) =
-    annotations.update(Annotations.InferredValueType, t, e)
+  /*private[typer] def annotateInferredType(t: Tree, e: ValueType) =
+    annotations.update(Annotations.InferredValueType, t, e)*/ // TODO MRV: remove?
 
   private[typer] def annotateInferredType(t: Tree, e: List[ValueType]) =
     annotations.update(Annotations.InferredValueTypeList, t, e)
@@ -1552,7 +1539,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!
-    annotations.updateAndCommit(Annotations.InferredValueType) { case (t, tpe) => subst.substitute(tpe) }
+    //annotations.updateAndCommit(Annotations.InferredValueType) { case (t, tpe) => subst.substitute(tpe) } // TODO MRV: remove?
+    annotations.updateAndCommit(Annotations.InferredValueTypeList) { case (t, tpe) => tpe.map(subst.substitute) }
     annotations.updateAndCommit(Annotations.InferredBlockType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
 

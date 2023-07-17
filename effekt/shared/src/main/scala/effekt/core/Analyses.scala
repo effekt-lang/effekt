@@ -93,7 +93,7 @@ def collectAliases(statement: Stmt): Map[Id, Id] =
       definitions.map(collectAliases).fold(Map[Id, Id]())(_ ++ _) ++ collectAliases(body)
 
     case Return(p) =>
-      collectAliases(p)
+      p.map(collectAliases).fold(Map[Id, Id]())(_ ++ _)
 
     case Val(_, binding, body) =>
       collectAliases(binding) ++ collectAliases(body)
@@ -202,7 +202,7 @@ def collectFunctionDefinitions(statement: Stmt): Map[Id, Block] =
         collectFunctionDefinitions(body)
 
     case Return(p) =>
-      collectFunctionDefinitions(p)
+      p.map(collectFunctionDefinitions).fold(Map[Id, Block]())(_ ++ _)
 
     case Val(_, binding, body) =>
       collectFunctionDefinitions(binding) ++ collectFunctionDefinitions(body)
@@ -342,7 +342,7 @@ def countFunctionOccurencesWorker(statement: Stmt)(using count: mutable.Map[Id, 
       countFunctionOccurencesWorker(body)
 
     case Return(p) =>
-      countFunctionOccurencesWorker(p)
+      p.foreach(countFunctionOccurencesWorker)
 
     case Val(_, binding, body) =>
       countFunctionOccurencesWorker(binding)
@@ -456,8 +456,8 @@ def findRecursiveFunctions(statement: Stmt): Set[Id] =
     case Scope(definitions, body) =>
       definitions.map(findRecursiveFunctions).fold(Set[Id]())(_ ++ _) ++ findRecursiveFunctions(body)
 
-    case Return(expr) =>
-      findRecursiveFunctions(expr)
+    case Return(exprs) =>
+      exprs.map(findRecursiveFunctions).fold(Set[Id]())(_ ++ _)
 
     case Val(_, binding, body) =>
       findRecursiveFunctions(binding) ++ findRecursiveFunctions(body)
@@ -589,8 +589,8 @@ def findStaticArgumentsWorker(statement: Stmt)(using params: StaticParamsUnfinis
       definitions.foreach(findStaticArgumentsWorker)
       findStaticArgumentsWorker(body)
 
-    case Return(expr) =>
-      findStaticArgumentsWorker(expr)
+    case Return(exprs) =>
+      exprs.foreach(findStaticArgumentsWorker)
 
     case Val(_, binding, body) =>
       findStaticArgumentsWorker(binding)
@@ -719,8 +719,8 @@ def size(statement: Stmt): Int =
     case Scope(definitions, body) =>
       1 + definitions.map(size).sum + size(body)
 
-    case Return(expr) =>
-      1 + size(expr)
+    case Return(exprs) =>
+      1 + exprs.map(size).sum
 
     case Val(_, binding, body) =>
       1 + size(binding) + size(body)

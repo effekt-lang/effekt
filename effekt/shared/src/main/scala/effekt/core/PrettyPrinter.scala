@@ -4,7 +4,9 @@ package core
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, Wildcard, builtins }
+import effekt.symbols.{Name, Wildcard, builtins}
+
+import scala.annotation.targetName
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -22,6 +24,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     pretty(toDoc(s), 60).layout
 
   def format(t: ValueType): String =
+    pretty(toDoc(t), 60).layout
+
+  @targetName("formatValueTypeList")
+  def format(t: List[ValueType]): String =
     pretty(toDoc(t), 60).layout
 
   def format(t: BlockType): String =
@@ -139,7 +145,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(definitions) <> emptyline <> toDoc(rest)
 
     case Return(e) =>
-      toDoc(e)
+      hsep(e.map(toDoc), ", ")
 
     case Val(Wildcard(), binding, body) =>
       toDoc(binding) <> ";" <> line <>
@@ -174,11 +180,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {
-    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+    case core.BlockType.Function(tparams, cparams, vparams, bparams, results) =>
       val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
       val vps = parens(vparams.map(toDoc))
       val bps = hcat((cparams zip bparams).map { case (id, tpe) => braces(toDoc(id) <> ":" <+> toDoc(tpe)) })
-      val res = toDoc(result)
+      val res = hsep(results.map(toDoc), comma)
       tps <> vps <> bps <+> "=>" <+> res
     case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
@@ -189,6 +195,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ValueType.Data(symbol, targs) => toDoc(symbol, targs)
     case ValueType.Boxed(tpe, capt) => toDoc(tpe) <+> "at" <+> toDoc(capt)
   }
+
+  @targetName("toDocValueTypeList")
+  def toDoc(tpes: List[core.ValueType]): Doc = hsep(tpes.map(toDoc), comma)
 
   def toDoc(tpeConstructor: symbols.Symbol, targs: List[core.ValueType]): Doc =
     if (targs.isEmpty) then toDoc(tpeConstructor)

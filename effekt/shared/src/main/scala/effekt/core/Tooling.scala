@@ -54,8 +54,8 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
           case Definition.Def(id, _) => id
           case Definition.Let(id, _) => id}))
 
-    case Return(expr) =>
-      Return(substitute(expr))
+    case Return(exprs) =>
+      Return(exprs.map(substitute))
 
     case Val(id, binding, body) =>
       Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
@@ -192,8 +192,8 @@ def renameBoundIds(statement: Stmt)(using newNames: Map[Id, Id]): Stmt =
         case Definition.Let(id, _) => Map[Id, Id](id -> symbols.TmpValue())}.fold(Map[Id, Id]())(_ ++ _)
       Scope(definitions.map(renameBoundIds(_)(using newNames ++ scopeNames)), renameBoundIds(body)(using newNames ++ scopeNames))
 
-    case Return(expr) =>
-      Return(renameBoundIds(expr))
+    case Return(exprs) =>
+      Return(exprs.map(renameBoundIds))
 
     case Val(id, binding, body) =>
       if (newNames.contains(id)) Val(newNames(id), renameBoundIds(binding), renameBoundIds(body))

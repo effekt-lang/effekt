@@ -110,7 +110,9 @@ trait TypeUnifier {
       (vparams1 zip substVParams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
       (bparams1 zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
 
-      // TODO MRV compare lengths
+      if (ret1.size != substRet2.size)
+        abort(pp"Return type count does not match $f1 vs. $f2", ctx)
+
       (ret1 zip substRet2) map { case (r1, r2) => unifyValueTypes(r1, r2, ErrorContext.FunctionReturn(ctx)) }
 
       // We compare effects to be equal, since we do not have subtyping on effects

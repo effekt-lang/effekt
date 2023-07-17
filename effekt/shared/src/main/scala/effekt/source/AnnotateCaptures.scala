@@ -45,7 +45,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
     case source.Unbox(term) =>
       val capt = Context.inferredTypeOption(term) match {
-        case Some(BoxedType(_, capture: CaptureSet)) => capture
+        case Some(List(BoxedType(_, capture: CaptureSet))) => capture
         case _ => Context.panic(pp"Should have an inferred a concrete capture set for ${term}")
       }
       query(term) ++ capt

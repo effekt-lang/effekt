@@ -209,8 +209,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
     if ann.map {
-      case (List(y), eff1) => needsUpdate((y, eff1), (tpe, eff))
-      case _ => ??? // TODO MRV
+      (y, eff1) => needsUpdate((y, eff1), (tpe, eff))
     }.getOrElse(true)
     res <- CodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
   } yield res
@@ -233,10 +232,11 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     }
   } yield res
 
-  def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(using Context): Boolean = {
+  def needsUpdate(annotated: (List[ValueType], Effects), inferred: (List[ValueType], Effects))(using Context): Boolean = {
     val (tpe1, effs1) = annotated
     val (tpe2, effs2) = inferred
-    tpe1 != tpe2 || effs1 != effs2
+
+    tpe1.size != tpe2.size || tpe1.zip(tpe2).forall { case (t1, t2) => t1 != t2 } || effs1 != effs2
   }
 
   case class CaptureInfo(location: Location, captureText: String)

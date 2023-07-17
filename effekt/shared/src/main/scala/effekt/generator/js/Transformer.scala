@@ -147,8 +147,10 @@ object Transformer {
     case If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
 
-    case Return(e) =>
-      monadic.Pure(toJS(e))
+    case Return(e) => e match {
+      case List(e) => monadic.Pure(toJS(e))
+      case _ => ??? // TODO MRV
+    }
 
     case Try(body, hs) =>
       monadic.Handle(hs map toJS, toJS(body))

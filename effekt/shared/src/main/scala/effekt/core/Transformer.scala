@@ -89,13 +89,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val cparams = capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
 
           // here we reconstruct the block type
-          resultType match {
-            case List(resultType) => {
-              val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
-              core.Property(op, btpe)
-            }
-            case _ => ??? //TODO MRV
-          }
+          val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, resultType map transform)
+          core.Property(op, btpe)
 
       }))
 
@@ -129,14 +124,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
-      Val(Wildcard(), insertBindings { Return(transformAsPure(e)) }, transform(rest))
+      Val(Wildcard(), insertBindings { Return(List(transformAsPure(e))) }, transform(rest))
 
     // return e
-    case source.Return(e) => e match {
-      case List(e) => insertBindings {
-        Return(transformAsPure(e))
-      }
-      case _ => ??? // TODO MRV
+    case source.Return(e) => insertBindings {
+      Return(e.map(transformAsPure))
     }
 
     // simply drop superfluous {}s
@@ -243,7 +235,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
+              Stmt.Return(List(PureApp(BlockVar(b), targs, vargs))))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
@@ -254,12 +246,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               case Param.BlockParam(id, tpe) => Block.BlockVar(id, tpe, Set(id))
             }
             val result = TmpValue()
+
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs),
-                restpe.map(transform) match {
-                  case List(restpe) => Stmt.Return(Pure.ValueVar(result, restpe))
-                  case _ => ??? // TODO MRV
-                }))
+              core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs), Stmt.Return(List(Pure.ValueVar(result, restpe.map(transform) match {
+                case List(tpe) => tpe
+                case _ => ??? // TODO MRV
+              })))))
           }
 
           sym match {
@@ -304,7 +296,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Literal(value, transform(tpe))
 
     case s @ source.Select(receiver, selector) =>
-      Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
+      Context.inferredTypeOf(s) match {
+        case List(tpe) => Select (transformAsPure (receiver), s.definition, transform(tpe))
+        case _ => ??? // TODO MRV
+      }
 
     case source.Box(capt, block) =>
       transformBox(block)
@@ -327,7 +322,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     //   loop$13()
     case source.While(cond, body) =>
       val loopName = TmpBlock()
-      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
+      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, List(core.Type.TUnit))
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
@@ -335,7 +330,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         insertBindings {
           Stmt.If(transformAsPure(cond),
             Stmt.Val(TmpValue(), transform(body), loopCall),
-            Return(Literal((), core.Type.TUnit)))
+            Return(List(Literal((), core.Type.TUnit))))
         }
       )
 
@@ -406,7 +401,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
 
       val (funTpe, capture) = Context.inferredTypeOf(expr) match {
-        case BoxedType(s: FunctionType, c: CaptureSet) => (s, c)
+        case List(BoxedType(s: FunctionType, c: CaptureSet)) => (s, c)
         case _ => Context.panic("Should be a boxed function type with a known capture set.")
       }
       val e = transformAsPure(expr)
@@ -539,7 +534,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
-    case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+    case BlockType.FunctionType(tparams, cparams, vparams, bparams, results, effects) =>
 
       val capabilityTypes = effects.canonical.map(transform)
       val allBlockParams = bparams.map(transform) ++ capabilityTypes
@@ -552,10 +547,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
            |  Captures: ${cparams}
            |""".stripMargin)
 
-      result.map(transform) match {
-        case List(res) => core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, res)
-        case _ => ??? // TODO MRV
-      }
+      core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, results.map(transform))
 
     case BlockType.InterfaceType(tc, args) => core.BlockType.Interface(tc, args.map(transform))
   }
@@ -591,7 +583,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val blockLit = BlockLit(Nil, Nil, params.map(core.ValueParam.apply), Nil, body)
 
     val joinpoint = Context.bind(TmpBlock(), blockLit)
-    Clause(Map(sc -> clause.pattern), joinpoint, params.map(core.ValueVar.apply))
+    Clause(Map(sc -> clause.pattern), joinpoint, params.map{case (p, tpe) => core.ValueVar(p, tpe)})
   }
 
   /**
@@ -640,8 +632,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     var varsFor: Map[Constructor, List[core.ValueVar]] = Map.empty
     def fieldVarsFor(c: Constructor, pats: List[MatchPattern]): List[core.ValueVar] =
       varsFor.getOrElse(c, {
-        val newVars: List[core.ValueVar] = pats.map { pat =>
-          core.ValueVar(TmpValue(), transform(Context.inferredTypeOf(pat)))
+        val newVars: List[core.ValueVar] = pats.map { pat => Context.inferredTypeOf(pat) match {
+          case List(tpe) => core.ValueVar(TmpValue(), transform(tpe))
+          case _ => ??? // TODO MRV
+        }
         }
         varsFor = varsFor.updated(c, newVars)
         newVars
@@ -765,7 +759,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val binding = Binding.Val(x, s)
     bindings += binding
 
-    ValueVar(x, s.tpe)
+    s.tpe match {
+      case List(tpe) => ValueVar(x, tpe)
+      case _ => ??? // TODO MRV
+    }
   }
 
   private[core] def bind(e: Expr): ValueVar = {
@@ -800,10 +797,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def reifyBindings(body: Stmt, bindings: ListBuffer[Binding]): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
-      case (Binding.Val(x, b), Return(ValueVar(y, _))) if x == y => b
+      case (Binding.Val(x, b), Return(List(ValueVar(y, _)))) if x == y => b
       case (Binding.Val(x, b), body) => Val(x, b, body)
-      case (Binding.Let(x, Run(s)), Return(ValueVar(y, _))) if x == y => s
-      case (Binding.Let(x, b: Pure), Return(ValueVar(y, _))) if x == y => Return(b)
+      case (Binding.Let(x, Run(s)), Return(List(ValueVar(y, _)))) if x == y => s
+      case (Binding.Let(x, b: Pure), Return(List(ValueVar(y, _)))) if x == y => Return(List(b)) // TODO MRV
       case (Binding.Let(x, b), body) => Let(x, b, body)
       case (Binding.Def(x, b), body) => Def(x, b, body)
     }

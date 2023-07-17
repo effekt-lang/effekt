@@ -53,7 +53,7 @@ object builtins {
     val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), List(TUnit), Effects.Pure, interface)
     interface.operations = List(get, put)
 
-    def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))
+    def apply(stateType: List[ValueType]) = InterfaceType(interface, stateType)
 
     def extractType(state: BlockType)(using C: Context): ValueType =
       state match {

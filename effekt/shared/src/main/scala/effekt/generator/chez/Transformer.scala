@@ -67,7 +67,10 @@ trait Transformer {
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Return(e) => pure(toChez(e))
+    case Return(e) => e match {
+      case List(e) => pure(toChez(e))
+      case _ => ??? // TODO MRV
+    }
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))

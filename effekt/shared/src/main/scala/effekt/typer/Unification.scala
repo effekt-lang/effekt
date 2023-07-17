@@ -156,11 +156,17 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     }
 
   def join(tpes: List[ValueType]*): List[ValueType] =
-    if (!tpes.forall(tpe => tpe.length == tpes.head.length)) abort("Cannot join lists of different length") // TODO MRV: correct error context
+    tpes match {
+      case Nil => List(TBottom)
+      case _ => if (!tpes.forall(tpe => tpe.length == tpes.head.length)) abort("Cannot join lists of different length") // TODO MRV: correct error context
 
-    tpes.toList.transpose map { _.foldLeft[ValueType](TBottom) { (t1, t2) =>
-      mergeValueTypes(t1, t2, ErrorContext.MergeTypes(apply(t1), apply(t2)))
-    } }
+        tpes.toList.transpose map {
+          _.foldLeft[ValueType](TBottom) { (t1, t2) =>
+            mergeValueTypes(t1, t2, ErrorContext.MergeTypes(apply(t1), apply(t2)))
+          }
+        }
+    }
+
 
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture])(using C: Context): Unit =
     requireSubregionWithout(lower, upper, filter.toSet, ErrorContext.CaptureFlow(lower, upper, C.focus))

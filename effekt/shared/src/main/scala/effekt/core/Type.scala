@@ -44,7 +44,7 @@ enum BlockType extends Type {
   // [A, B, C] (X, Y, Z)   {  f  :   S }    =>    T
   //  ^^^^^^^   ^^^^^^^     ^^^^^^^^^^^          ^^^
   //  tparams   vparams   cparams zip bparams   result
-  case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
+  case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: List[ValueType])
   case Interface(name: Id, targs: List[ValueType])
 }
 
@@ -81,11 +81,12 @@ object Type {
   }
 
   def merge(tpe1: BlockType, tpe2: BlockType, covariant: Boolean): BlockType = (tpe1, tpe2) match {
-    case (BlockType.Function(tparams1, cparams1, vparams1, bparams1, result1), tpe2: BlockType.Function) =>
-      val BlockType.Function(_, _, vparams2, bparams2, result2) = instantiate(tpe2, tparams1.map(ValueType.Var.apply), cparams1.map(c => Set(c)))
+    case (BlockType.Function(tparams1, cparams1, vparams1, bparams1, results1), tpe2: BlockType.Function) =>
+      val BlockType.Function(_, _, vparams2, bparams2, results2) = instantiate(tpe2, tparams1.map(ValueType.Var.apply), cparams1.map(c => Set(c)))
       val vparams = (vparams1 zip vparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
       val bparams = (bparams1 zip bparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
-      BlockType.Function(tparams1, cparams1, vparams, bparams, merge(result1, result2, covariant))
+      val results = (results1 zip results2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant) }
+      BlockType.Function(tparams1, cparams1, vparams, bparams, results)
     case (tpe1, tpe2) => tpe1
   }
 
@@ -93,7 +94,7 @@ object Type {
     if covariant then capt1 union capt2 else capt1 intersect capt2
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
-    case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+    case BlockType.Function(tparams, cparams, vparams, bparams, results) =>
       assert(targs.size == tparams.size, "Wrong number of type arguments")
       assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
@@ -102,7 +103,7 @@ object Type {
       BlockType.Function(Nil, Nil,
         vparams.map { tpe => substitute(tpe, vsubst, Map.empty) },
         bparams.map { tpe => substitute(tpe, vsubst, Map.empty) },
-        substitute(result, vsubst, csubst))
+        results.map { tpe => substitute(tpe, vsubst, csubst) } )
   }
 
   def substitute(capt: Captures, csubst: Map[Id, Captures]): Captures = capt.flatMap {
@@ -111,7 +112,7 @@ object Type {
   }
 
   def substitute(tpe: BlockType, vsubst: Map[Id, ValueType], csubst: Map[Id, Captures]): BlockType = tpe match {
-    case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+    case BlockType.Function(tparams, cparams, vparams, bparams, results) =>
       // names are unique symbols so shadowing should NOT take place; we still subtract to be safe.
       val vsubstLocal = vsubst -- tparams
       val csubstLocal = csubst -- cparams
@@ -119,7 +120,7 @@ object Type {
       BlockType.Function(tparams, cparams,
         vparams.map { tpe => substitute(tpe, vsubstLocal, csubst) }, // technically in source, cparams are not bound in value arguments
         bparams.map { tpe => substitute(tpe, vsubstLocal, csubstLocal) },
-        substitute(result, vsubstLocal, csubstLocal))
+        results.map { tpe => substitute(tpe, vsubstLocal, csubstLocal) })
 
     case BlockType.Interface(sym, targs) =>
       BlockType.Interface(sym, targs map { tpe => substitute(tpe, vsubst, csubst) })
@@ -155,23 +156,23 @@ object Type {
     case Block.New(impl) => impl.capt
   }
 
-  def inferType(stmt: Stmt): ValueType = stmt match {
+  def inferType(stmt: Stmt): List[ValueType] = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
-    case Stmt.Return(expr) => expr.tpe
+    case Stmt.Return(exprs) => exprs.map(_.tpe)  // TODO MRV: return (return 1, 2), (return 3, 4) = return 1, 2, 3, 4?
     case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
 
-    case Stmt.If(cond, thn, els) => merge(thn.tpe, els.tpe, covariant = true)
+    case Stmt.If(cond, thn, els) => (thn.tpe zip els.tpe) map { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
     case Stmt.Match(scrutinee, clauses, default) =>
-      val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
-      allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
+      val allTypes = clauses.flatMap { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList.flatten
+      List(allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) })
 
     case Stmt.State(id, init, region, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
 
-    case Stmt.Hole() => TBottom
+    case Stmt.Hole() => List(TBottom)
   }
 
   def inferCapt(defn: Definition): Captures = defn match {
@@ -194,11 +195,20 @@ object Type {
 
   def inferType(expr: Expr): ValueType = expr match {
     case DirectApp(callee, targs, vargs, bargs) =>
-      instantiate(callee.functionType, targs, bargs.map(_.capt)).result
-    case Run(s) => s.tpe
+      instantiate(callee.functionType, targs, bargs.map(_.capt)).result match {
+        case List(tpe) => tpe
+        case _ => ??? // TODO MRV: can multiple values be returned?
+      }
+    case Run(s) => s.tpe match {
+      case List(tpe) => tpe
+      case _ => ??? // TODO MRV: can multiple values be returned?
+    }
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
-    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
+    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result match {
+      case List(tpe) => tpe
+      case _ => ??? // TODO MRV: can multiple values be returned?
+    }
     case Pure.Select(target, field, annotatedType) => annotatedType
     case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
@@ -214,7 +224,7 @@ object Type {
   }
 
   extension (block: Block) {
-    def returnType: ValueType = block.functionType.result
+    def returnType: List[ValueType] = block.functionType.result
     def functionType: BlockType.Function = block.tpe.asInstanceOf
   }
 }

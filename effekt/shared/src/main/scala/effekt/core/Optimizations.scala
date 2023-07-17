@@ -70,7 +70,7 @@ def dealiasing(statement: Stmt)(using aliases: Map[Id, Id]): Stmt =
       }.map(dealiasing), dealiasing(body))
 
     case Return(p) =>
-      Return(dealiasing(p))
+      Return(p.map(dealiasing))
 
     case Val(id, binding, body) =>
       Val(id, dealiasing(binding), dealiasing(body))
@@ -214,7 +214,7 @@ def removeUnusedFunctionsWorker(statement: Stmt)(using count: Map[Id, Int], recu
       else Scope(defs, removeUnusedFunctionsWorker(body))
 
     case Return(p) =>
-      Return(removeUnusedFunctionsWorker(p))
+      Return(p.map(removeUnusedFunctionsWorker))
 
     case Val(id, binding, body) =>
       Val(id, removeUnusedFunctionsWorker(binding), removeUnusedFunctionsWorker(body))
@@ -331,7 +331,7 @@ def staticArgumentTransformationWorker(statement: Stmt)(using recursiveFunctions
       Scope(definitions.map(staticArgumentTransformationWorker), staticArgumentTransformationWorker(body))
 
     case Return(expr) =>
-      Return(staticArgumentTransformationWorker(expr))
+      Return(expr.map(staticArgumentTransformationWorker))
 
     case Val(id, binding, body) =>
       Val(id, staticArgumentTransformationWorker(binding), staticArgumentTransformationWorker(body))
@@ -437,8 +437,8 @@ def replaceCalls(statement: Stmt)(using newName: Id, params: StaticParams): Stmt
     case Scope(definitions, body) =>
       Scope(definitions.map(replaceCalls), replaceCalls(body))
 
-    case Return(expr) =>
-      Return(replaceCalls(expr))
+    case Return(exprs) =>
+      Return(exprs.map(replaceCalls))
 
     case Val(id, binding, body) =>
       Val(id, replaceCalls(binding), replaceCalls(body))
@@ -589,8 +589,8 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, Block]): Stmt =
         case d@Definition.Def(id, _) => inliningWorker(d)(using inlines - id)
         case l@Definition.Let(id,_) => inliningWorker(l)(using inlines - id)}, inliningWorker(body))
 
-    case Return(expr) =>
-      Return(inliningWorker(expr))
+    case Return(exprs) =>
+      Return(exprs.map(inliningWorker))
 
     case Val(id, binding, body) =>
       Val(id, inliningWorker(binding), inliningWorker(body))
@@ -726,8 +726,8 @@ def constantPropagation(statement: Stmt)(using constants: Map[Id, Literal]): Stm
       val newConstants = extraConstants ++ constants
       Scope(defsNoConstants.map(constantPropagation(_)(using newConstants)), constantPropagation(body)(using newConstants))
 
-    case Return(expr) =>
-      Return(constantPropagation(expr))
+    case Return(exprs) =>
+      Return(exprs.map(constantPropagation))
 
     case Val(id, binding, body) =>
       Val(id, constantPropagation(binding), constantPropagation(body))
@@ -831,8 +831,8 @@ def betaReduction(statement: Stmt): Stmt =
     case Scope(definitions, body) =>
       Scope(definitions.map(betaReduction), betaReduction(body))
 
-    case Return(expr) =>
-      Return(betaReduction(expr))
+    case Return(exprs) =>
+      Return(exprs.map(betaReduction))
 
     case Val(id, binding, body) =>
       Val(id, betaReduction(binding), betaReduction(body))

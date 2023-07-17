@@ -237,13 +237,13 @@ enum Stmt extends Tree {
   case Scope(definitions: List[Definition], body: Stmt)
 
   // Fine-grain CBV
-  case Return(expr: Pure)
+  case Return(expr: List[Pure])
   case Val(id: Id, binding: Stmt, body: Stmt) // TODO
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])  // TODO
+  case Match(scrutinee: Pure, clauses: List[(Id, Block.BlockLit)], default: Option[Stmt])  // TODO
 
   // Effects
   case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
@@ -253,7 +253,7 @@ enum Stmt extends Tree {
   // Others
   case Hole()
 
-  val tpe: ValueType = Type.inferType(this)
+  val tpe: List[ValueType] = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
 export Stmt.*
@@ -410,8 +410,8 @@ object substitutions {
         Scope(definitions.map(substitute),
           substitute(body)(using subst shadowDefinitions definitions))
 
-      case Return(expr) =>
-        Return(substitute(expr))
+      case Return(exprs) =>
+        Return(exprs.map(substitute))
 
       case Val(id, binding, body) =>
         Val(id, substitute(binding),

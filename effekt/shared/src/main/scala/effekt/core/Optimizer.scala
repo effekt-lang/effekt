@@ -184,7 +184,7 @@ object InlineUnique {
       app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
 
     // congruences
-    case Stmt.Return(expr) => Return(rewrite(expr))
+    case Stmt.Return(exprs) => Return(exprs.map(rewrite))
     case Stmt.Val(id, binding, body) => valDef(id, rewrite(binding), rewrite(body))
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
     case Stmt.Match(scrutinee, clauses, default) =>
@@ -255,8 +255,10 @@ object InlineUnique {
       // The solution to this problem is implemented in core.MakeStackSafe:
       //   all recursive functions that could blow the stack are trivially wrapped
       //   again, after optimizing.
-      case Stmt.Return(expr) =>
-        scope(List(Definition.Let(id, expr)), body)
+      case Stmt.Return(exprs) => exprs match {
+        case List(expr) => scope(List(Definition.Let(id, expr)), body)
+        case _ => ??? // TODO MRV: ask forbid   val z = swap(x, y) ?
+      }
 
       // here we are flattening scopes; be aware that this extends
       // life-times of bindings!
@@ -310,7 +312,10 @@ object InlineUnique {
   }
 
   def run(s: Stmt): Expr = s match {
-    case Stmt.Return(expr) => expr
+    case Stmt.Return(expr) => expr match {
+      case List(e) => e
+      case _ => Run(s) // TODO MRV: what to do?
+    }
     case _ => Run(s)
   }
 
@@ -386,7 +391,7 @@ class Reachable(
       val allDefs = defs ++ definitions.map(d => d.id -> d).toMap
       definitions.foreach(process)
       process(body)(using allDefs)
-    case Stmt.Return(expr) => process(expr)
+    case Stmt.Return(exprs) => exprs.foreach(process)
     case Stmt.Val(id, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
