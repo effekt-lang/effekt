@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{PrettyPrinter, Optimizer}
+import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
 import effekt.source.{FunDef, Hole, ModuleDecl, Tree}
 import effekt.util.{PlainMessaging, getOrElseAborting}
