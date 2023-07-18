@@ -124,47 +124,46 @@ object Transformer {
 
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
-      case machine.New(variable, List(clause), rest) =>
-        // TODO multiple methods (see case below)
+      case machine.New(variable, clauses, rest) =>
+        val closureEnvironment = freeVariables(clauses).toList;
 
-        val closureEnvironment = freeVariables(clause).toList;
-
-        val clauseName = freshName(variable.name);
-
-        defineFunction(clauseName, List(Parameter(objType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
-          consumeObject(LocalReference(objType, "obj"), closureEnvironment, freeVariables(clause));
-          loadEnvironment(initialEnvironmentPointer, clause.parameters);
-          eraseValues(clause.parameters, freeVariables(clause.body));
-          transform(clause.body);
+        val clauseNames = clauses.map { clause =>
+          val clauseName = freshName(variable.name);
+          defineFunction(clauseName, List(Parameter(objType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
+            consumeObject(LocalReference(objType, "obj"), closureEnvironment, freeVariables(clause));
+            loadEnvironment(initialEnvironmentPointer, clause.parameters);
+            eraseValues(clause.parameters, freeVariables(clause.body));
+            transform(clause.body);
+          }
+          ConstantGlobal(methodType, clauseName)
         }
+
+        val arrayName = freshName(variable.name)
+        emit(GlobalConstant(arrayName, ConstantArray(methodType, clauseNames)))
 
         val obj = produceObject(closureEnvironment, freeVariables(rest));
         val tmpName = freshName("tmp");
-        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(methodType, clauseName), 0));
+        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
-      // TODO multiple methods (for one method see case above)
-      case machine.New(variable, clauses, rest) =>
-        ???
-
-      case machine.Invoke(value, 0, values) =>
+      case machine.Invoke(value, tag, values) =>
         shareValues(value :: values, Set());
         storeEnvironment(initialEnvironmentPointer, values);
 
-        val functionName = freshName("fp");
+        val arrayName = freshName("arrayp");
         val objName = freshName("obj");
+        val pointerName = freshName("fpp");
+        val functionName = freshName("fp");
 
-        emit(ExtractValue(functionName, transform(value), 0));
+        emit(ExtractValue(arrayName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
+        emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
+        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
         emit(TailCall(LocalReference(methodType, functionName), List(LocalReference(objType, objName), initialEnvironmentPointer, getStackPointer())));
         RetVoid()
-
-      // TODO What is `tag`'s meaning?
-      case machine.Invoke(value, tag, values) =>
-        ???
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
         val idx = regionIndex(ref.tpe)
@@ -344,7 +343,7 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
-        emit(GlobalVariableArray(s"$bind.lit", IntegerType8(), ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+        emit(GlobalConstant(s"$bind.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
         val res = positiveType
         val args = List(ConstantInt(utf8.size), ConstantGlobal(PointerType(), s"$bind.lit"))
