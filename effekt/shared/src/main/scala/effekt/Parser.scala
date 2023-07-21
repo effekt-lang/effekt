@@ -547,7 +547,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected an interface type")
     )
 
-  lazy val maybeEffects: P[Effects] =
+  lazy val maybeEffects: P[EffectsOrVar] =
     (`/` ~/> effects).? ^^ {
       case Some(es) => es
       case None => Effects.Pure
@@ -556,8 +556,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val effectful: P[Effectful] =
     valueType ~ maybeEffects ^^ Effectful.apply
 
-  lazy val effects: P[Effects] =
-    ( interfaceType ^^ { e => Effects(e) }
+  lazy val effects: P[EffectsOrVar] =
+    ( literal("_") ^^^ EffectWildcard()
+    | interfaceType ^^ { e => Effects(e) }
     | `{` ~/> manySep(interfaceType, `,`) <~  `}` ^^ Effects.apply
     | failure("Expected an effect set")
     )

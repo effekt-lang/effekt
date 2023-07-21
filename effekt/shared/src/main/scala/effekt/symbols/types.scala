@@ -57,7 +57,7 @@ enum BlockType extends Type {
     vparams: List[ValueType],
     bparams: List[BlockType],
     result: ValueType,
-    effects: Effects
+    effects: EffectsOrVar
   )
 
   case InterfaceType(typeConstructor: BlockTypeConstructor, args: List[ValueType])
@@ -85,22 +85,38 @@ extension (i: BlockType.InterfaceType) {
  * Member [[canonical]] computes the canonical ordering of capabilities for this set of effects.
  * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
  */
-case class Effects(effects: List[BlockType.InterfaceType]) {
+sealed trait EffectsOrVar {
+  lazy val toList: List[InterfaceType]
 
-  lazy val toList: List[InterfaceType] = effects.distinct
+  def isEmpty: Boolean
+  def nonEmpty: Boolean
 
-  def isEmpty: Boolean = effects.isEmpty
-  def nonEmpty: Boolean = effects.nonEmpty
+  def filterNot(p: InterfaceType => Boolean): Effects
 
-  def filterNot(p: InterfaceType => Boolean): Effects =
+  def forall(p: InterfaceType => Boolean): Boolean
+  def exists(p: InterfaceType => Boolean): Boolean
+
+  lazy val canonical: List[InterfaceType]
+
+  def distinct: EffectsOrVar
+}
+
+case class Effects(effects: List[BlockType.InterfaceType]) extends EffectsOrVar {
+
+  override lazy val toList: List[InterfaceType] = effects.distinct
+
+  override def isEmpty: Boolean = effects.isEmpty
+  override def nonEmpty: Boolean = effects.nonEmpty
+
+  override def filterNot(p: InterfaceType => Boolean): Effects =
     Effects(effects.filterNot(p))
 
-  def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
-  def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
+  override def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
+  override def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
-  lazy val canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
+  override lazy val canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
 
-  def distinct: Effects = Effects(effects.distinct)
+  override def distinct: Effects = Effects(effects.distinct)
 }
 object Effects {
 
@@ -113,6 +129,25 @@ object Effects {
   def empty: Effects = new Effects(Nil)
   val Pure = empty
 }
+
+case class EffectWildcard() extends EffectsOrVar {
+  override lazy val toList: List[InterfaceType] = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+
+  override def isEmpty: Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+
+  override def nonEmpty: Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+
+  override def filterNot(p: InterfaceType => Boolean): Effects = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+
+  override def forall(p: InterfaceType => Boolean): Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+
+  override def exists(p: InterfaceType => Boolean): Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+
+//  override lazy val canonical: List[InterfaceType] = throw new Exception("Wildcard in unexpected place")
+  override lazy val canonical: List[InterfaceType] = List()
+  override def distinct: EffectWildcard = this
+}
+
 
 /**
  * The canonical ordering needs to be stable, but should also distinguish two types,

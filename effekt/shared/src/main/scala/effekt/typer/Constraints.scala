@@ -136,7 +136,7 @@ class Constraints(
     val values = classes.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
     val blocks = blockClasses.flatMap[BlockTypeVar, BlockType] { case (k, v) => blockTypeSubstitution.get(v).map { k -> _ } }
     val captures = captSubstitution.asInstanceOf[Map[CaptVar | CaptureSetWildcard, Captures]]
-    Substitutions(values, blocks, captures)
+    Substitutions(values, blocks, captures, Map.empty)
 
   /**
    * Should only be called on unification variables where we do not know any types, yet

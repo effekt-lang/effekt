@@ -18,7 +18,8 @@ case class Substitutions(
   // invariant: we alway only map
   //   - a single CaptureParam -> CaptureParam
   //   - a CaptUnificationVar -> Captures
-  captures: Map[CaptVar, Captures]
+  captures: Map[CaptVar, Captures],
+  effects: Map[EffectWildcard, EffectsOrVar]
 ) {
 
   def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
@@ -37,17 +38,19 @@ case class Substitutions(
     Substitutions(
       values.view.mapValues { t => other.substitute(t) }.toMap,
       blocks.view.mapValues {t => other.substitute(t) }.toMap,
-      captures.view.mapValues { t => other.substitute(t) }.toMap) ++ other
+      captures.view.mapValues { t => other.substitute(t) }.toMap,
+      effects.view.mapValues { t => other.substitute(t) }.toMap) ++ other
 
   // amounts to parallel substitution
-  def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, blocks ++ other.blocks, captures ++ other.captures)
+  def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, blocks ++ other.blocks, captures ++ other.captures, effects ++ other.effects)
 
   // shadowing
-  private def without(tps: List[TypeVar], bps: List[BlockType], cps: List[Capture]): Substitutions =
+  private def without(tps: List[TypeVar], bps: List[BlockType], cps: List[Capture], effs: List[EffectsOrVar]): Substitutions =
     Substitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       blocks.filterNot { case (t, _) => bps.contains(t) },
-      captures.filterNot { case (t, _) => cps.contains(t) }
+      captures.filterNot { case (t, _) => cps.contains(t) },
+      effects.filterNot { case (t, _) => effs.contains(t) }
     )
 
   // TODO we DO need to distinguish between substituting unification variables for unification variables
@@ -70,7 +73,10 @@ case class Substitutions(
       BoxedType(substitute(tpe), substitute(capt))
   }
 
-  def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
+  def substitute(t: EffectsOrVar): EffectsOrVar = t match {
+    case x: Effects => Effects(x.toList.map(substitute))
+    case x: EffectWildcard => effects.getOrElse(x, x) // TODO: Replace if unifictation for effects is needed
+  }
   def substitute(t: InterfaceType): InterfaceType = t match {
     case InterfaceType(cons, args) => InterfaceType(cons, args.map(substitute))
   }
@@ -84,7 +90,7 @@ case class Substitutions(
   def substitute(t: FunctionType): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      val substWithout = without(tps, bps, cps)
+      val substWithout = without(tps, bps, cps, List())
       FunctionType(
         tps,
         cps,
@@ -96,9 +102,11 @@ case class Substitutions(
 }
 
 object Substitutions {
-  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures])
-  def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, blocks.toMap, captures.toMap)
-  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty)
-  def blocks(keys: List[BlockTypeVar], values: List[BlockType]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap, Map.empty)
-  def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, Map.empty, (keys zip values).toMap)
+  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures], Map.empty[EffectWildcard, Effects])
+  def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)], effects: List[(EffectWildcard, Effects)]): Substitutions =
+    Substitutions(values.toMap, blocks.toMap, captures.toMap, effects.toMap)
+  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty, Map.empty)
+  def blocks(keys: List[BlockTypeVar], values: List[BlockType]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap, Map.empty, Map.empty)
+  def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, Map.empty, (keys zip values).toMap, Map.empty)
+  def effects(keys: List[EffectWildcard], values: List[Effects]): Substitutions = Substitutions(Map.empty, Map.empty, Map.empty, (keys zip values).toMap)
 }

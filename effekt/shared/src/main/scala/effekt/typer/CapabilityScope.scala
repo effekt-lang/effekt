@@ -2,7 +2,8 @@ package effekt
 package typer
 
 import effekt.context.Context
-import effekt.{ source, symbols }
+import effekt.symbols.EffectWildcard
+import effekt.{source, symbols}
 import effekt.util.messages.ErrorMessageReifier
 
 /**
@@ -36,4 +37,17 @@ class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, 
       freshCapability
     })
   override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
+}
+
+class BindAllToWildcard(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope, wildcard: EffectWildcard) extends CapabilityScope {
+  def copy: CapabilityScope = BindAllToWildcard(binder, capabilities, parent.copy, wildcard)
+  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
+    capabilities.getOrElse(tpe, {
+      Context.unification.substitution.updateWith(Substitutions.effects(List(wildcard), List()))
+
+      val freshCapability = C.freshCapabilityFor(tpe)
+      capabilities = capabilities.updated(tpe, freshCapability)
+      freshCapability
+    })
+  override def toString: String = s"BindAllToWildcard(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }

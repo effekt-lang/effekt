@@ -25,7 +25,8 @@ case class UnificationState(
    constraints: Constraints,
    valueWildcardMap : Map[TypeVar, UnificationVar],
    blockWildcardMap : Map[BlockTypeVar, BlockUnificationVar],
-   captureWildcardMap : Map[CaptureSetWildcard, CaptUnificationVar]
+   captureWildcardMap : Map[CaptureSetWildcard, CaptUnificationVar],
+   effectWildcardMap : Map[EffectWildcard, Effects]
 )
 
 sealed trait Scope
@@ -53,6 +54,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   private var valueWildcardMap = Map.empty[TypeVar, UnificationVar]
   private var blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
   private var captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
+  private var effectWildcardMap = Map.empty[EffectWildcard, Effects]
 
   // Creating fresh unification variables
   // ------------------------------------
@@ -83,9 +85,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     val captureWildcardSubValue : Map[CaptVar, Captures] = captureWildcardMap.filter((k, v) => s.captures.contains(v))
       .map((k, v) => (k, s.captures.get(v).get))
 
-    s.updateWith(Substitutions(valueWildcardSubValue, blockWildcardSubValue, captureWildcardSubValue))
+    s.updateWith(Substitutions(valueWildcardSubValue, blockWildcardSubValue, captureWildcardSubValue, effectWildcardMap))
 
-  def apply(e: Effects): Effects =
+  def apply(e: EffectsOrVar): EffectsOrVar =
     substitution.substitute(e)
 
   def apply(e: InterfaceType): InterfaceType =
@@ -102,13 +104,14 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap, captureWildcardMap)
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap, captureWildcardMap, effectWildcardMap)
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
     valueWildcardMap = state.valueWildcardMap
     blockWildcardMap = state.blockWildcardMap
     captureWildcardMap = state.captureWildcardMap
+    effectWildcardMap = state.effectWildcardMap
 
   def init() =
     scope = GlobalScope
@@ -116,6 +119,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     valueWildcardMap = Map.empty[TypeVar, UnificationVar]
     blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
     captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
+    effectWildcardMap = Map.empty[EffectWildcard, Effects]
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
@@ -302,6 +306,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     requireLowerBound(x, tpe, ctx)
     requireUpperBound(x, tpe, ctx)
 
+  def requireEqual(x: EffectWildcard, effs: Effects) : Unit =
+    effectWildcardMap = effectWildcardMap + (x -> effs)
+
   def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
@@ -411,7 +418,7 @@ trait TypeInstantiator { self: Unification =>
           val capt = constraints.forceSolving(x)
           capt.captures
 
-        case x: CaptureSetWildcard => abort("Wildcard in unexpected place")
+        case x: CaptureSetWildcard => abort("EffectWildcard in unexpected place: instantiate")
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
     if (contained.isEmpty) return c;
@@ -434,9 +441,14 @@ trait TypeInstantiator { self: Unification =>
   def instantiate(t: Effects)(using Instantiation): Effects = Effects(t.toList.map(instantiate))
 
   def instantiate(t: BlockType)(using Instantiation): BlockType = t match {
-    case BlockType.BlockTypeRef(x : BlockTypeVar) => blockInstatiations.getOrElse(x, t)
+    case BlockType.BlockTypeRef(x : BlockTypeVar) => blockInstatiations.getOrElse(x, t) // TODO: blockInstantiations may be removed
     case e: InterfaceType => instantiate(e)
     case b: FunctionType  => instantiate(b)
+  }
+
+  def instantiate(t: EffectsOrVar)(using Instantiation): EffectsOrVar = t match {
+    case x: Effects => instantiate(x)
+    case x: EffectWildcard => x
   }
 
   def instantiate(t: InterfaceType)(using Instantiation): InterfaceType = t match {

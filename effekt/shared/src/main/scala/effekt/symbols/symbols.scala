@@ -105,7 +105,7 @@ trait Callable extends BlockSymbol {
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
   def annotatedResult: Option[ValueType]
-  def annotatedEffects: Option[Effects]
+  def annotatedEffects: Option[EffectsOrVar]
 }
 
 case class UserFunction(
@@ -114,7 +114,7 @@ case class UserFunction(
   vparams: List[ValueParam],
   bparams: List[BlockParam],
   annotatedResult: Option[ValueType],
-  annotatedEffects: Option[Effects],
+  annotatedEffects: Option[EffectsOrVar],
   decl: FunDef
 ) extends Callable
 
@@ -243,7 +243,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
 
   val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
   def annotatedResult: Option[ValueType] = Some(returnType)
-  def annotatedEffects: Option[Effects] = Some(Effects.Pure)
+  def annotatedEffects: Option[EffectsOrVar] = Some(Effects.Pure)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
@@ -267,11 +267,11 @@ enum BlockTypeConstructor extends BlockTypeSymbol {
 export BlockTypeConstructor.*
 
 
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, effects: EffectsOrVar, interface: BlockTypeConstructor.Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
   def annotatedResult: Option[ValueType] = Some(resultType)
-  def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
+  def annotatedEffects: Option[EffectsOrVar] = Some(Effects(effects.toList))
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
 }
 
@@ -279,7 +279,7 @@ case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValuePa
  * Effect aliases are *not* block types, or block type constructors. They have to be dealiased by [[Namer]]
  * before usage.
  */
-case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects) extends BlockTypeSymbol
+case class EffectAlias(name: Name, tparams: List[TypeParam], effs: EffectsOrVar) extends BlockTypeSymbol
 
 
 /**
@@ -371,7 +371,7 @@ case class ExternFunction(
   vparams: List[ValueParam],
   bparams: List[BlockParam],
   result: ValueType,
-  effects: Effects,
+  effects: EffectsOrVar,
   capture: Captures,
   body: String = ""
 ) extends Callable {

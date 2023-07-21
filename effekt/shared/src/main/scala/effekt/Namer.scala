@@ -640,10 +640,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
+  def resolve(tpe: source.EffectsOrVar)(using Context): EffectsOrVar = tpe match {
+    case x: source.EffectWildcard => EffectWildcard()
+    case source.Effects(effs) => Effects(effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
+  }
 
-  def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
+  def resolve(e: source.Effectful)(using Context): (ValueType, EffectsOrVar) =
     (resolve(e.tpe), resolve(e.eff))
 
   def resolve(capt: source.Captures)(using Context): Captures = capt match {

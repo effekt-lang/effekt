@@ -58,7 +58,10 @@ object ConcreteEffects {
 val Pure = ConcreteEffects.empty
 
 implicit def asConcrete(effs: Effects)(using C: Context): ConcreteEffects =
-  ConcreteEffects(C.unification(effs))
+  ConcreteEffects(C.unification(effs) match {
+    case x: Effects => x
+    case x: EffectWildcard => Context.abort("EffectWildcard in unexpected place: asConcrete")
+  })
 
 
 /**
@@ -112,4 +115,9 @@ private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[Ca
 private def isConcreteInterfaceType(eff: InterfaceType): Boolean = eff match {
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
-private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteInterfaceType)
+private def isConcreteEffects(effs: EffectsOrVar): Boolean = effs match {
+  case x: Effects => x.toList.forall(isConcreteInterfaceType)
+  case x: EffectWildcard => false
+}
+
+

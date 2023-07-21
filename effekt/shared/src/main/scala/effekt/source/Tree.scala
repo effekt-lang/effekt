@@ -185,7 +185,7 @@ enum Def extends Definition {
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: EffectsOrVar)
 
   /**
    * Only valid on the toplevel!
@@ -483,7 +483,7 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
+  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: EffectsOrVar)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
   case BlockTypeWildcard
 }
@@ -491,18 +491,22 @@ enum BlockType extends Type {
 export BlockType.*
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+case class Effectful(tpe: ValueType, eff: EffectsOrVar) extends Tree
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
  */
-case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
+sealed trait EffectsOrVar extends Tree
+
+case class Effects(effs: List[BlockType.BlockTypeRef]) extends EffectsOrVar
 object Effects {
   val Pure: Effects = Effects()
   def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
   def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
 }
+
+case class EffectWildcard() extends EffectsOrVar
 
 sealed trait Captures extends Tree
 case class CaptureSet(captures: List[IdRef]) extends Captures

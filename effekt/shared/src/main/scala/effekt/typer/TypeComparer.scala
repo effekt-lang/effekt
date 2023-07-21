@@ -104,8 +104,11 @@ trait TypeUnifier {
       (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
   }
 
-  def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =
-    if (eff1.toList.toSet != eff2.toList.toSet) error(pp"${eff2} is not equal to ${eff1}", ctx)
+  def unifyEffects(eff1: EffectsOrVar, eff2: EffectsOrVar, ctx: ErrorContext): Unit = (eff1, eff2) match {
+    case (x: Effects, y: Effects) =>
+      if (x.toList.toSet != y.toList.toSet) error(pp"${y} is not equal to ${x}", ctx)
+    case _ => throw new Exception("EffectWildcard in unexpected location: UnifyEffects")
+  }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (
@@ -126,7 +129,7 @@ trait TypeUnifier {
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
 
-      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c))) // Is List() the right choice?
+      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c)), List()) // Is List() the right choice?
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)
@@ -232,7 +235,7 @@ trait TypeMerger extends TypeUnifier {
       // TODO potentially share code with unifyFunctionTypes and instantiate
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
-      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c))) // Is List() the right choice?
+      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c)), List()) // Is List() the right choice?
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)

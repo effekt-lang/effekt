@@ -29,6 +29,11 @@ package object kinds {
     case c: InterfaceType => wellformed(c)
   }
 
+  def wellformed(eff: EffectsOrVar)(using C: Context): Unit = eff match {
+    case x: Effects => wellformed(x)
+    case x: EffectWildcard => ()
+  }
+
   def wellformed(eff: InterfaceType)(using C: Context): Unit = wellformedInterfaceType(eff) match {
     case Kind.BType => ()
     case Kind.Fun(args, Kind.BType) => C.abort(s"${eff} needs to be applied to ${args.size} type arguments")
