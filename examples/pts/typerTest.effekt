@@ -1,4 +1,0 @@
-def test() = {
-    val a : _ = 1
-    a
-}

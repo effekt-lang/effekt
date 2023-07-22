@@ -24,8 +24,7 @@ abstract class AbstractTyperTests extends munit.FunSuite {
 
       given C: Context = compiler.context
 
-      val frontend = Frontend(src)
-      val mod = frontend.map(_.mod)
+      val mod = Frontend(src).map(_.mod)
       assert(mod.isDefined, "Running the frontend succeeds")
       compiler.compileSource(src, configs)
       val ctx = compiler.context
@@ -68,34 +67,41 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
     }
 
+//    def assertEffect(name: String, expected: String, clue: => Any = "effect types don't match"): Unit = {
+//      val syms = C.module.terms(name)
+//      assert(syms.size == 1, s"There is a unique symbol named '${name}'.")
+//      val sym = syms.head
+//      assert(sym.isInstanceOf[symbols.Tree], s"${sym} is a effect symbol.")
+//      val got = C.annotation(Annotations.InferredEffect, sym.asInstanceOf[symbols.Tree])
+//      assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
+//    }
+
     // TODO further assertions (e.g. for captures etc) on the context
   }
 
 }
 class TyperTests extends AbstractTyperTests {
 
-  testTyper("Simple example test")(
-    """val a : _ = 1
-      |""".stripMargin
-  ){ C =>
-    C.assertBlockType("a", "Int")
+  testTyperFile("Value type tests")("examples/pts/valueTypes.effekt"){
+    C => {
+      C.assertValueType("x", "Int")
+      C.assertBlockType("func1", "Int => Int")
+      C.assertBlockType("func2", "() => String")
+    }
   }
 
-  testTyperFile("File test")("examples/pts/typerTest.effekt"){
-    C => C.assertValueType("a", "Int")
-  }
-
-  testTyperFile("Value type test")("examples/pts/valueType.effekt"){
-    C => C.assertValueType("num1", "Int")
-  }
-
-//  // Expected an expression, but got a block. in line 12, 28
-//  testTyperFile("Simple capture test")("examples/pts/capture2.effekt"){
-//    C => C.assertCaptureType("result", "() => Unit at { eff1 }")
+//  testTyperFile("Block type tests")("examples/pts/blockTypes.effekt"){
+//    C => {
+//      C.assertBlockType("func")
+//    }
 //  }
 
-  testTyperFile("Nested types test")("examples/pts/nestedTypes.effekt"){
-    C => C.assertValueType("map1", "Map[Int, String]")
+  testTyperFile("Nested type tests")("examples/pts/nestedTypes.effekt"){
+    C => {
+      C.assertValueType("l", "List[Int]")
+    }
   }
+
+
 
 }
