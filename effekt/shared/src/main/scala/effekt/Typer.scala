@@ -688,7 +688,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     }
                     val captures = capabilities.map(_.capture)
 
-                    Context.requireEqual(x, effs.toEffects)
+//                    Context.requireEqual(x, effs.toEffects)
 
                     Context.bindCapabilities(d, capabilities)
                     Context.annotateInferredType(d, tpe)
@@ -699,7 +699,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                       (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
                     }
 
-                    Result(annotated, Pure)
+                    val funType = sym.toType(tpe, effs.toEffects, captures)
+                    Result(funType, Pure)
                 }
 
 
@@ -862,8 +863,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // (4) Bind capabilities for all effects "handled" by this function
           val effects: ConcreteEffects = (typeSubst substitute x) match {
             case x: Effects => x
-            case x: EffectWildcard => Context.abort("EffectWildcard in unexpected place: checkFunctionArgument")
+            case x: EffectWildcard => Context.panic("Cant handle wildcard")
           }
+
           val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
 
           // (5) Substitute capture params
@@ -895,40 +897,33 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           Result(tpe, bodyEffs -- effects)
 
-        // TODO: Maybe change this code
         case x: EffectWildcard =>
-//          given Captures = inferredCapture
-//
-//          val subst = typeSubst ++ captSubst
-//          val expectedReturn = subst substitute tpe1
-//
-//          // all effects are handled by the function itself (since they are inferred)
-//          val (Result(bodyType, bodyEffs), bodyCaps) = Context.bindingAllCapabilities(decl) {
-//            Context in {
-//              body checkAgainst expectedReturn
-//            }
-//          }
-//
-//          // We do no longer use the order annotated on the function, but always the canonical ordering.
-//          val capabilities = bodyEffs.canonical.map {
-//            bodyCaps.apply
-//          }
-//          val captures = capabilities.map(_.capture)
-//
-//          Context.bindCapabilities(d, capabilities)
-//          Context.annotateInferredType(d, bodyType)
-//          Context.annotateInferredEffects(d, bodyEffs.toEffects)
-//
-//          // we subtract all capabilities introduced by this function to compute its capture
-//          flowsIntoWithout(inferredCapture, functionCapture) {
-//            (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
-//          }
-//
-//          val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, x)
-//
-//          Result(tpe, Pure)
+          val subst = typeSubst
+          val expectedReturn = subst substitute tpe1
 
-          Context.abort("Wildcard found in checkFunctionArgument")
+          val selfRegion = Context.getSelfRegion(arg)
+          val bodyRegion = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
+
+          val (Result(bodyTpe, bodyEffs), caps) = Context.bindingAllCapabilities(decl) {
+            given Captures = bodyRegion
+
+            Context.withRegion(selfRegion) {
+              body checkAgainst expectedReturn
+            }
+          }
+
+          val capabilities = bodyEffs.canonical.map {
+            caps.apply
+          }
+
+          val captures = capabilities.map(_.capture)
+//          val funType = decl.symbol.toType(bodyTpe, bodyEffs.toEffects, captures)
+//          Result(funType, Pure)
+
+          val captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
+          val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyTpe, bodyEffs.toEffects)
+
+          Result(tpe, Pure)
       }
   }
 
