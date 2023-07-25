@@ -200,7 +200,7 @@ enum TypeVar(val name: Name) extends ValueTypeSymbol {
   case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name)
 
 
-  case ValueTypeWildcard() extends TypeVar(NoName)
+  case ValueTypeWildcard() extends TypeVar(LocalName("ValueTypeWildcard"))
 }
 export TypeVar.*
 
@@ -213,7 +213,7 @@ enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
   case BlockUnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends BlockTypeVar(underlying.name)
 
 
-  case BlockTypeWildcard() extends BlockTypeVar(NoName)
+  case BlockTypeWildcard() extends BlockTypeVar(LocalName("BlockTypeWildcard"))
 }
 export BlockTypeVar.*
 

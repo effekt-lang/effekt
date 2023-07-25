@@ -511,7 +511,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | primValueType
     )
 
-  lazy val wildcardType : P[ValueType] =
+  lazy val wildcardType: P[ValueType] =
     (
       literal("_") ^^^ source.ValueTypeWildcard
     )

@@ -709,8 +709,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def isPure(r: Captures): Boolean = r match {
     case CaptureSet(captures) => captures.isEmpty
-//    case x: CaptureSetWildcard => Context.panic("Wildcard in unexpected place")
-    case _ => false
+    case _ => sys error("CaptureWildcard occurs in unexpected position")
   }
 
   def pureOrIO(r: Captures): Boolean = r match {
@@ -723,8 +722,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           def isControl = c == builtins.ControlCapability.capture
           !isControl && (isIO || isMutableState || isResource)
       }
-//    case x: CaptureSetWildcard => Context.panic("Wildcard in unexpected place")
-    case _ => false
+    case _ => sys error("CaptureWildcard occurs in unexpected position")
   }
 
 }

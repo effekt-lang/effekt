@@ -21,6 +21,8 @@ trait TypeUnifier {
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
   def requireEqual(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
 
+  def requireEqual(x: EffectWildcard, effs: Effects) : Unit
+
   def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
   def abort(msg: String, ctx: ErrorContext): Nothing
@@ -31,12 +33,9 @@ trait TypeUnifier {
   def unificationVarFromWildcard(w : BlockTypeVar) : BlockUnificationVar
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
-    case Covariant     => 
-      requireSubregion(c1, c2, ctx)
-    case Contravariant => 
-      requireSubregion(c2, c1, ctx)
-    case Invariant     => 
-      requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
+    case Covariant     => requireSubregion(c1, c2, ctx)
+    case Contravariant => requireSubregion(c2, c1, ctx)
+    case Invariant     => requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
   }
   def unify(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 
@@ -69,9 +68,7 @@ trait TypeUnifier {
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
 
-      if (t1 != t2) {
-        error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx))
-      }
+      if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
 
       if (args1.size != args2.size)
         abort(pp"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
@@ -107,7 +104,9 @@ trait TypeUnifier {
   def unifyEffects(eff1: EffectsOrVar, eff2: EffectsOrVar, ctx: ErrorContext): Unit = (eff1, eff2) match {
     case (x: Effects, y: Effects) =>
       if (x.toList.toSet != y.toList.toSet) error(pp"${y} is not equal to ${x}", ctx)
-    case _ => throw new Exception("EffectWildcard in unexpected location: UnifyEffects")
+    case (x: EffectWildcard, y: Effects) => requireEqual(x, y)
+    case (x: Effects, y: EffectWildcard) => requireEqual(y, x)
+    case _ => throw new Exception("Two wildcards found")
   }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {

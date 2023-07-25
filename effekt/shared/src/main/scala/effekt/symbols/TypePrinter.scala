@@ -1,6 +1,7 @@
 package effekt
 package symbols
 
+import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
 import effekt.symbols.builtins.*
 import effekt.typer.ConcreteEffects
 import kiama.output.ParenPrettyPrinter
@@ -39,7 +40,8 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
-    case BlockTypeRef(x) => toDoc(LocalName("Wildcard")) // Improve
+    case BlockTypeRef(x: BlockTypeWildcard) => text("_")
+    case BlockTypeRef(x: BlockUnificationVar) => text("_")
     case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
       val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {
@@ -51,10 +53,11 @@ object TypePrinter extends ParenPrettyPrinter {
           vps <> bps
       }
       val ret = toDoc(result)
-      val eff = if (effects match {
-        case x: Effects => x.isEmpty
-        case x: EffectWildcard => false
-      }) emptyDoc else space <> "/" <+> toDoc(effects)
+      val eff = (effects match {
+        case x: Effects =>
+          if (x.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
+        case x: EffectWildcard => text("_")
+      })
       tps <> ps <+> "=>" <+> ret <> eff
 
     case InterfaceType(tpe, Nil)  => toDoc(tpe)
@@ -76,14 +79,14 @@ object TypePrinter extends ParenPrettyPrinter {
     case x: Effects =>
       if (x.isEmpty) "{}" else
         braces(space <> hsep(x.effects.map(toDoc), comma) <> space)
-    case x: EffectWildcard => "EffectWildcard"
+    case x: EffectWildcard => text("_")
   }
 
 
   def toDoc(c: Captures): Doc = c match {
     case CaptureSet(captures)  => braces { hsep(captures.toList.map(toDoc), comma) }
     case c: CaptUnificationVar => if (debug) c.name <> c.id.toString else c.name
-    case w: CaptureSetWildcard => text("Wildcard")
+    case w: CaptureSetWildcard => "_"
   }
 
   def toDoc(c: Capture): Doc = c.name

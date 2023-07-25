@@ -1,0 +1,13 @@
+module examples/pts/effects
+
+effect Eff1(): Unit
+effect Eff2(): Unit
+
+def func(): Int / Eff1 = {
+    do Eff1()
+    1
+}
+
+def main() = {
+    ()
+}

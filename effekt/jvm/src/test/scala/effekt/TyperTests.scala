@@ -67,15 +67,6 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
     }
 
-//    def assertEffect(name: String, expected: String, clue: => Any = "effect types don't match"): Unit = {
-//      val syms = C.module.terms(name)
-//      assert(syms.size == 1, s"There is a unique symbol named '${name}'.")
-//      val sym = syms.head
-//      assert(sym.isInstanceOf[symbols.Tree], s"${sym} is a effect symbol.")
-//      val got = C.annotation(Annotations.InferredEffect, sym.asInstanceOf[symbols.Tree])
-//      assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
-//    }
-
     // TODO further assertions (e.g. for captures etc) on the context
   }
 
@@ -102,6 +93,8 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
-
+  testTyperFile("Effect test")("examples/pts/effects.effekt"){
+    C => { C.assertBlockType("func", "() => Int / { Eff1 }") }
+  }
 
 }

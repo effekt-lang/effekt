@@ -75,7 +75,7 @@ case class Substitutions(
 
   def substitute(t: EffectsOrVar): EffectsOrVar = t match {
     case x: Effects => Effects(x.toList.map(substitute))
-    case x: EffectWildcard => effects.getOrElse(x, x) // TODO: Replace if unifictation for effects is needed
+    case x: EffectWildcard => effects.getOrElse(x, x)
   }
   def substitute(t: InterfaceType): InterfaceType = t match {
     case InterfaceType(cons, args) => InterfaceType(cons, args.map(substitute))
@@ -90,7 +90,7 @@ case class Substitutions(
   def substitute(t: FunctionType): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      val substWithout = without(tps, bps, cps, List())
+      val substWithout = without(tps, List(), cps, List())
       FunctionType(
         tps,
         cps,

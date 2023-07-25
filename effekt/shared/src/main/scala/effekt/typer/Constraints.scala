@@ -165,20 +165,7 @@ class Constraints(
         val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
         return boundsImply || areBounded
 
-      case _ => false
-
-//      case (x: CaptureSetWildcard, y: CaptureSetWildcard) =>
-//        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
-//        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
-//        return boundsImply || areBounded
-//      case (x: CaptureSetWildcard, CaptureSet(ys)) => knownUpper(x).exists(_ subsetOf ys)
-//      case (CaptureSet(xs), y: CaptureSetWildcard) => knownLower(y).exists(xs subsetOf _)
-//      case (x : CaptureSetWildcard, y: CaptUnificationVar) =>
-//        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
-//        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
-//      case (x: CaptUnificationVar, y: CaptureSetWildcard) =>
-//        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
-//        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
+      case _ => sys error("CaptureWildcard has occurred in an unexpected place")
     }
 
   /**
