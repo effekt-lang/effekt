@@ -83,7 +83,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.ValDef(id, annot, binding) =>
       ()
 
-    case d @ source.VarDef(id, annot, region, binding) =>
+    case d @ source.VarDef(id, annot, binding) =>
+      ()
+
+    case d @ source.RegDef(id, annot, region, binding) =>
       ()
 
     case d @ source.DefDef(id, annot, block) =>
@@ -230,17 +233,25 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
-    case d @ source.VarDef(id, annot, region, binding) =>
+
+    // Local mutable state
+    case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
-      val reg = region.map(Context.resolveTerm).getOrElse {
-        Context.getSelfRegion()
-      } match {
+
+      resolveGeneric(binding)
+      val sym = VarBinder(Context.nameFor(id), tpe, d)
+      Context.define(id, sym)
+
+    // allocation into a region
+    case d @ source.RegDef(id, annot, region, binding) =>
+      val tpe = annot.map(resolve)
+      val reg = Context.resolveTerm(region) match {
         case t: BlockSymbol => t
         case _ => Context.abort("Region needs to be a block.")
       }
 
       resolveGeneric(binding)
-      val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
+      val sym = RegBinder(Context.nameFor(id), tpe, reg, d)
 
       Context.define(id, sym)
 
@@ -256,7 +267,6 @@ object Namer extends Phase[Parsed, NameResolved] {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        Context.bindSelfRegion(f)
 
         resolveGeneric(body)
       }
@@ -340,8 +350,6 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
         }
 
-        Context.bindSelfRegion(tree)
-
         resolveGeneric(body)
       }
 
@@ -349,7 +357,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       val reg = BlockParam(Name.local(name.name), builtins.TRegion)
       Context.define(name, reg)
       Context scoped {
-        Context.bindSelfRegion(tree, reg)
         Context.bindBlock(reg)
         resolveGeneric(body)
       }
@@ -408,7 +415,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         Context.bindValues(vps)
         Context.bindBlocks(bps)
-        Context.bindSelfRegion(f)
 
         resolveGeneric(stmt)
       }
@@ -447,7 +453,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Var(id) => Context.resolveVar(id)
 
     case source.Assign(id, expr) => Context.resolveVar(id) match {
-      case x: VarBinder => resolveGeneric(expr)
+      case _: VarBinder | _: RegBinder => resolveGeneric(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")
@@ -737,18 +743,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     // bind the block parameter as a term
     params.foreach { bindBlock }
 
-  private[namer] def bindSelfRegion(tree: Tree): Unit = {
-    bindSelfRegion(tree, SelfParam(tree))
-  }
-
-  private[namer] def bindSelfRegion(tree: Tree, sym: TrackedParam): Unit = {
-    Context.bindBlock("this", sym)
-    Context.annotate(Annotations.SelfRegion, tree, sym)
-  }
-
-  private[namer] def getSelfRegion(): TermSymbol =
-    scope.lookupFirstTerm("this")
-
   private[namer] def bindBlock(p: TrackedParam) = {
     // bind the block parameter as a term
     bind(p)
@@ -833,8 +827,8 @@ trait NamerOps extends ContextOps { Context: Context =>
   private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
-    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[VarBinder]
-    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[VarBinder]
+    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[RefBinder]
+    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[RefBinder]
 
     candidates match {
       case Nil => Right(Nil)

@@ -101,16 +101,17 @@ def headOption[A](l: List[A]): Option[A] = l match {
 }
 
 // elements that satisfy the predicate go into the left list
-def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
-  var lefts: List[A] = Nil()
-  var rights: List[A] = Nil()
-  l.foreach { el =>
-    if (pred(el)) { lefts = Cons(el, lefts) }
-    else { rights = Cons(el, rights) }
-  };
+// TODO requires monomorphization to typecheck in MLton (rank-2 issue)
+// def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
+//   var lefts: List[A] = Nil()
+//   var rights: List[A] = Nil()
+//   l.foreach { el =>
+//     if (pred(el)) { lefts = Cons(el, lefts) }
+//     else { rights = Cons(el, rights) }
+//   };
 
-  (lefts.reverse, rights.reverse)
-}
+//   (lefts.reverse, rights.reverse)
+// }
 
 def show[A](l: List[A]) { showA: A => String }: String = l match {
   case Nil() => "Nil()"

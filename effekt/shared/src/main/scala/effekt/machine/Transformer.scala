@@ -49,10 +49,11 @@ object Transformer {
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case lifted.Extern.Def(name, tps, params, ret, body) =>
-      val transformedParams = params.map {
-        case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
+      val transformedParams = params.flatMap {
+        case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
-        case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
+        // for now, in machine we do not pass evidence to externs
+        case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       noteBlockParams(name, params map transform, List.empty)
       Extern(transform(name), transformedParams, transform(ret), body)
@@ -241,7 +242,7 @@ object Transformer {
           NewStack(delimiter, returnClause,
             PushStack(delimiter, transform(body))))
 
-      case lifted.State(id, init, region, ev, body) =>
+      case lifted.Alloc(id, init, region, ev, body) =>
         transform(init).run { value =>
           transform(ev).run { evValue =>
             val tpe = value.tpe;
@@ -262,6 +263,43 @@ object Transformer {
             Allocate(stateVariable, value, evValue,
               //New(variable, List(getter, setter),
                 transform(body))
+          }
+        }
+
+      case lifted.Var(init, lifted.BlockLit(List(), List(ev, id), body)) =>
+        val name = transform(id).name
+        val tpe = lifted.Type.inferType(init)
+        val stateType = transform(tpe)
+        val reference = Variable(name, Type.Reference(stateType))
+        val evidence = transform(ev)
+
+        transform(init).run { value =>
+          LiteralEvidence(evidence, 0,
+            Allocate(reference, value, evidence,
+                transform(body)))
+        }
+
+      case lifted.Get(id, ev, tpe) =>
+        val stateType = transform(tpe)
+        val reference = Variable(transform(id), Type.Reference(stateType))
+        val variable = Variable(freshName("x"), stateType)
+
+        transform(ev).run { evidence =>
+          Load(variable, reference, evidence,
+            Return(List(variable)))
+        }
+
+      case lifted.Put(id, ev, arg) =>
+        val tpe = lifted.Type.inferType(arg);
+        val stateType = transform(tpe);
+        val variable = Variable(freshName("x"), Positive("Unit"));
+        val reference = Variable(transform(id), Type.Reference(stateType));
+
+        transform(arg).run { value =>
+          transform(ev).run { evidence =>
+            Store(reference, value, evidence,
+              Construct(variable, builtins.Unit, List(),
+                Return(List(variable))))
           }
         }
 

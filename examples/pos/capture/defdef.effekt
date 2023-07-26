@@ -1,5 +1,5 @@
 effect Eff { def use(): Unit }
-def myModule { eff : Eff } = {
+def myModule { eff : Eff } = region this {
 
   def outer = this;
 

@@ -199,7 +199,6 @@ enum Block extends Tree {
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
-
   val tpe: BlockType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
@@ -245,10 +244,19 @@ enum Stmt extends Tree {
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
-  // Effects
-  case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
-  case Try(body: Block, handlers: List[Implementation])
+  // (Type-monomorphic?) Regions
   case Region(body: Block)
+  case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // [[capture]] is a binding occurence.
+  // e.g. state(init) { [x]{x: Ref} => ... }
+  case Var(id: Id, init: Expr, capture: Id, body: Stmt)
+  case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
+  case Put(id: Id, annotatedCapt: Captures, value: Pure)
+
+  case Try(body: Block, handlers: List[Implementation])
+
 
   // Others
   case Hole()
@@ -427,14 +435,18 @@ object substitutions {
           case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])
         }, default.map(substitute))
 
-      case State(id, init, region, body) =>
-        val newRegion = subst.blocks.get(region) map {
-          case BlockVar(x, _, _) => x
-          case _ => INTERNAL_ERROR("Regions should always be variables")
-        } getOrElse region
-
-        State(id, substitute(init), newRegion,
+      case Alloc(id, init, region, body) =>
+        Alloc(id, substitute(init), substituteAsVar(region),
           substitute(body)(using subst shadowBlocks List(id)))
+
+      case Var(id, init, capture, body) =>
+        Var(id, substitute(init), capture, substitute(body)(using subst shadowBlocks List(id)))
+
+      case Get(id, capt, tpe) =>
+        Get(substituteAsVar(id), substitute(capt), substitute(tpe))
+
+      case Put(id, capt, value) =>
+        Put(substituteAsVar(id), substitute(capt), substitute(value))
 
       case Try(body, handlers) =>
         Try(substitute(body), handlers.map(substitute))
@@ -444,6 +456,12 @@ object substitutions {
 
       case h : Hole => h
     }
+
+  def substituteAsVar(id: Id)(using subst: Substitution): Id =
+    subst.blocks.get(id) map {
+      case BlockVar(x, _, _) => x
+      case _ => INTERNAL_ERROR("Regions should always be variables")
+    } getOrElse id
 
   def substitute(block: Block)(using subst: Substitution): Block =
     block match {

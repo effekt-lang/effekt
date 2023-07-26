@@ -76,10 +76,6 @@ trait Intelligence {
     case u: Binder       => Some(u.decl)
     case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
-    case s: SelfParam => s.tree match {
-      case d: source.Def => Some(d.id)
-      case _             => Some(s.tree)
-    }
     case u => C.definitionTreeOption(u)
   }
 
@@ -204,18 +200,25 @@ trait Intelligence {
 
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
-    case s: SelfParam =>
+    case s: VarBinder =>
 
       val ex =
-        s"""|Each function definition and handler implicitly introduces a
-            |a local region to allocate mutable variables into.
+        s"""|Each variable declaration introduces a new scope.
             |
-            |The region a variable is allocated into not only affects its lifetime, but
-            |also its backtracking behavior in combination with continuation capture and
-            |resumption.
+            |Variables must only be accessed while they are still live.
             |""".stripMargin
 
-      SymbolInfo(s, "Self region", None, Some(ex))
+      SymbolInfo(s, "Local variable", None, Some(ex))
+
+    case s: RegBinder =>
+
+      val ex =
+        pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
+             |also its backtracking behavior in combination with continuation capture and
+             |resumption.
+             |""".stripMargin
+
+      SymbolInfo(s, "Variable in region", None, Some(ex))
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }

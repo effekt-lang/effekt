@@ -141,8 +141,15 @@ object Transformer {
     case Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
+    case Var(id, init, cap, body) =>
+      val (stmts, ret) = toJSStmt(body)
+      monadic.State(nameDef(id), toJS(init), stmts, ret)
+
     case App(b, targs, vargs, bargs) =>
       monadic.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
+
+    case Get(id, capt, tpe) => Context.panic("Should have been translated to direct style")
+    case Put(id, capt, value) =>  Context.panic("Should have been translated to direct style")
 
     case If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
@@ -199,11 +206,11 @@ object Transformer {
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)
       (js.Const(nameDef(id), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
 
-    case State(id, init, region, body) =>
+    case Alloc(id, init, region, body) =>
       val (stmts, ret) = toJSStmt(body)
       (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
 

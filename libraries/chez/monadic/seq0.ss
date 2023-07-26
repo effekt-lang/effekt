@@ -23,6 +23,13 @@
     (set-box! arena (cons cell cells))
     cell))
 
+; with-region { arena => ... }
+(define (with-region body)
+  (lambda (mk)
+    (let* ([stack (car mk)]
+           [arena (Stack-arena stack)])
+      ((body arena) mk))))
+
 ; Backup = List<(Cell, Value)>
 
 ; Arena -> Backup

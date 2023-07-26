@@ -189,9 +189,12 @@ object InlineUnique {
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
     case Stmt.Match(scrutinee, clauses, default) =>
       Match(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
-    case Stmt.State(id, init, region, body) => State(id, rewrite(init), region, rewrite(body))
+    case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
     case Stmt.Try(body, handlers) => Try(rewrite(body), handlers.map(rewrite))
     case Stmt.Region(body) => Region(rewrite(body))
+    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, rewrite(init), capture, rewrite(body))
+    case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)
+    case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, rewrite(value))
     case Stmt.Hole() => s
   }
   def rewrite(b: BlockLit)(using InlineContext): BlockLit =
@@ -397,10 +400,15 @@ class Reachable(
       process(scrutinee)
       clauses.foreach { case (id, value) => process(value) }
       default.foreach(process)
-    case Stmt.State(id, init, region, body) =>
+    case Stmt.Alloc(id, init, region, body) =>
       process(init)
       process(region)
       process(body)
+    case Stmt.Var(id, init, capture, body) =>
+      process(init)
+      process(body)
+    case Stmt.Get(id, capt, tpe) => process(id)
+    case Stmt.Put(id, tpe, value) => process(id); process(value)
     case Stmt.Try(body, handlers) => process(body); handlers.foreach(process)
     case Stmt.Region(body) => process(body)
     case Stmt.Hole() => ()

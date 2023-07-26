@@ -1,8 +1,16 @@
 module text/regex
 
-extern type Char // TODO move to text/string
 extern type MLList[Elem] // = 'elem list
+extern pure def isEmpty[A](l: MLList[A]): Boolean = "null l"
+extern pure def head[A](l: MLList[A]): A = "hd l"
+extern pure def tail[A](l: MLList[A]): MLList[A] = "tl l"
+
+def toList[A](l: MLList[A]): List[A] =
+  if (l.isEmpty) Nil() else Cons(l.head, toList(l.tail))
+
+extern type Char // TODO move to text/string
 type Chars = MLList[Char]
+
 
 extern pure def chars(str: String): Chars = "String.explode str"
 extern pure def toString(chars: Chars): String = "String.implode chars"
@@ -53,14 +61,35 @@ fun matchedString (match : regex_match * char list) =
 fun remainderChars (match : regex_match * char list) =
   let val res = MatchTree.root (#1 match)
   in List.drop (#pos res, #len res) end;
+
+(** The remainder is just a draft and doesn't work yet...) *)
+
+(** MatchTree -> string list **)
+fun allMatched (matchtree: regex_match) =
+  MatchTree.foldl (fn (m, b) => (String.implode (List.take (#pos m, #len m))) :: b) nil matchtree
+fun allBut str = RegExp.compileString ("[^" ^ str ^ "]+");
+
+fun unsafeSplit str sep =
+  case (RegExp.find (allBut str) List.getItem (String.explode str)) of
+      NONE => nil
+    | SOME v => allMatched (#1 v);
 """
 
 extern pure def getMatch(result: MLMatchResult): String = "matchedString result"
 extern pure def getRemainder(result: MLMatchResult): Chars = "remainderChars result"
 
+extern pure def unsafeSplit(str: String, ch: Char): MLList[String] = "String.fields (fn c => c = ch) str"
 
 extern pure def unsafeMatchPrefix(r: Regex, str: Chars): MLOption[MLMatchResult] =
   "RegExp.prefix r List.getItem str"
+
+extern pure def unsafeSplit(str: String, sep: String): MLList[String] = "unsafeSplit str sep"
+
+extern pure def unsafeLines(str: String): MLList[String] = """String.fields (fn c => c = #"\n") str"""
+
+def lines(str: String): List[String] = unsafeLines(str).toList
+
+def split(str: String, sep: String): List[String] = unsafeSplit(str, sep).toList
 
 def exec(reg: Regex, str: String): Option[Match] = {
   val matched = reg.unsafeMatchPrefix(str.chars)

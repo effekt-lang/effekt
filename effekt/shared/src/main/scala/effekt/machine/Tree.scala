@@ -137,17 +137,17 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. Int x in r = 42; s
+  *  e.g. let x = allocate(42, ev); s
   */
   case Allocate(name: Variable, init: Variable, ev: Variable, rest: Statement)
 
   /**
-  * e.g. y = *x; s
+  * e.g. let y = load(x, ev); s
   */
   case Load(name: Variable, ref: Variable, ev: Variable, rest: Statement)
 
   /**
-  * e.g. *x = 42; s
+  * e.g. store(x, 42, ev); s
   */
   case Store(ref: Variable, value: Variable, ev: Variable, rest: Statement)
 

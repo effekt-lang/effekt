@@ -81,8 +81,8 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
       case core.Val(id, binding, body) => withBinding(id){
         core.Val(rewrite(id), rewrite(binding), rewrite(body))
       }
-      case core.State(id, init, reg, body) => withBinding(id){
-        core.State(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
+      case core.Alloc(id, init, reg, body) => withBinding(id){
+        core.Alloc(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
       }
     }
     override def block: PartialFunction[Block, Block] = {

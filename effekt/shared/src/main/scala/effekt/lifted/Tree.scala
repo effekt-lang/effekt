@@ -119,12 +119,25 @@ enum Stmt extends Tree  {
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
-  case Try(body: Block, handler: List[Implementation])
+
+  // allocates into a (type-monomorphic?) region.
+  // e.g. var x in r = init; body
   case Region(body: Block)
+  case Alloc(id: Id, init: Expr, region: Id, ev: Evidence, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // e.g. state(init) { (ev){x: Ref} => ... }
+  case Var(init: Expr, body: Block.BlockLit)
+  case Get(id: Id, ev: Evidence, annotatedTpe: ValueType)
+  case Put(id: Id, ev: Evidence, value: Expr)
+
+  case Try(body: Block, handler: List[Implementation])
+
+  // after evidence monomorphization -- does not pass evidence to body
+  case Reset(body: Stmt)
 
   // e.g. shift(ev) { {resume} => ... }
   case Shift(ev: Evidence, body: Block.BlockLit)
@@ -155,7 +168,7 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 enum Lift {
   case Var(ev: EvidenceSymbol)
   case Try()
-  case Reg()
+  case Reg() // used for local mutable state AND region based state
 }
 
 /**
@@ -224,11 +237,15 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
-  case State(id, init, region, ev, body) =>
+  case Alloc(id, init, region, ev, body) =>
     freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
+  case Var(init, body) => freeVariables(init) ++ freeVariables(body)
+  case Get(id, ev, tpe) => freeVariables(ev)
+  case Put(id, ev, value) => freeVariables(ev) ++ freeVariables(value)
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
+  case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }

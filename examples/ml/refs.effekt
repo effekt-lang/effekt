@@ -1,5 +1,5 @@
 def main() = {
-    var x in global = 2;
+    var x = 2;
     x = x + 1;
     println(x);
 

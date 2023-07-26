@@ -47,7 +47,8 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
     case r: symbols.Record => r.constructor
     // right now, we also use core.Records to represent capabilities
     case i: symbols.Interface => i
-    case other => sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
+    case other => other
+      // sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
   }
 
   val names = RecordNames(did)

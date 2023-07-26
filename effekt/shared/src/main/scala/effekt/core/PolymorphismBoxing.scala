@@ -166,6 +166,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
       instantiate(calleeT, targs).call(calleeT, vargs map transform, bargs map transform)
+    case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, transform(tpe))
+    case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, transform(value))
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, clauses, default) =>
@@ -182,8 +184,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           }, default map transform)
         case t => Context.abort(s"Match on value of type ${PrettyPrinter.format(t)}")
       }
-    case Stmt.State(id, init, region, body) =>
-      Stmt.State(id, transform(init), region, transform(body))
+    case Stmt.Alloc(id, init, region, body) =>
+      Stmt.Alloc(id, transform(init), region, transform(body))
+    case Stmt.Var(id, init, cap, body) =>
+      Stmt.Var(id, transform(init), cap, transform(body))
     case Stmt.Try(body, handlers) =>
       Stmt.Try(transform(body), handlers map transform)
     case Stmt.Region(body) => Stmt.Region(transform(body))

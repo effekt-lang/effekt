@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer, Optimizer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ExplicitRegions, ModuleDecl }
+import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
 import effekt.util.messages.FatalPhaseError
@@ -229,11 +229,6 @@ trait Compiler[Executable] {
      * [[Typechecked]] --> [[Typechecked]]
      */
     AnnotateCaptures andThen
-    /**
-     * Introduces explicit regions for functions and mutable state
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    ExplicitRegions andThen
     /**
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
