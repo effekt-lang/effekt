@@ -125,6 +125,7 @@ enum Stmt extends Tree  {
 
   // allocates into a (type-monomorphic?) region.
   // e.g. var x in r = init; body
+  case Region(body: Block)
   case Alloc(id: Id, init: Expr, region: Id, ev: Evidence, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
@@ -135,9 +136,8 @@ enum Stmt extends Tree  {
 
   case Try(body: Block, handler: List[Implementation])
 
-  // after lift inference -- does not pass evidence to body
+  // after evidence monomorphization -- does not pass evidence to body
   case Reset(body: Stmt)
-  case Region(body: Block)
 
   // e.g. shift(ev) { {resume} => ... }
   case Shift(ev: Evidence, body: Block.BlockLit)
