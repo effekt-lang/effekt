@@ -266,8 +266,42 @@ object Transformer {
           }
         }
 
-      case _: lifted.Var | _: lifted.Get | _: lifted.Put =>
-        ErrorReporter.abort("Local mutable state not supported in machine, yet.")
+      case lifted.Var(init, lifted.BlockLit(List(), List(ev, id), body)) =>
+        val name = transform(id).name
+        val tpe = lifted.Type.inferType(init)
+        val stateType = transform(tpe)
+        val reference = Variable(name, Type.Reference(stateType))
+        val evidence = transform(ev)
+
+        transform(init).run { value =>
+          LiteralEvidence(evidence, 0,
+            Allocate(reference, value, evidence,
+                transform(body)))
+        }
+
+      case lifted.Get(id, ev, tpe) =>
+        val stateType = transform(tpe)
+        val reference = Variable(transform(id), Type.Reference(stateType))
+        val variable = Variable(freshName("x"), stateType)
+
+        transform(ev).run { evidence =>
+          Load(variable, reference, evidence,
+            Return(List(variable)))
+        }
+
+      case lifted.Put(id, ev, arg) =>
+        val tpe = lifted.Type.inferType(arg);
+        val stateType = transform(tpe);
+        val variable = Variable(freshName("x"), Positive("Unit"));
+        val reference = Variable(transform(id), Type.Reference(stateType));
+
+        transform(arg).run { value =>
+          transform(ev).run { evidence =>
+            Store(reference, value, evidence,
+              Construct(variable, builtins.Unit, List(),
+                Return(List(variable))))
+          }
+        }
 
       case lifted.Hole() => machine.Statement.Hole
 
