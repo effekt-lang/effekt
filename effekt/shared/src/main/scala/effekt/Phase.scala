@@ -41,6 +41,7 @@ trait Phase[-In, +Out] { curr =>
     run(input)
   } catch {
     case FatalPhaseError(msg) =>
+      println(msg)
       C.report(msg)
       None
   }

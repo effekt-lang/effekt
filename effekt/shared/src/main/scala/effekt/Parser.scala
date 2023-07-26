@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.symbols.ValueTypeWildcard
 import effekt.context.Context
 import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
@@ -160,7 +161,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
-  lazy val externCapture: P[CaptureSet] =
+  lazy val externCapture: P[Captures] =
     ( "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
@@ -506,7 +507,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val valueType: P[ValueType] =
     ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
+    | wildcardType
     | primValueType
+    )
+
+  lazy val wildcardType : P[ValueType] =
+    (
+      literal("_") ^^^ source.ValueTypeWildcard
     )
 
   lazy val primValueType: P[ValueType] =
@@ -516,10 +523,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a value type")
     )
 
-  lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
+  lazy val captureSet: P[Captures] =
+    ( literal("_") ^^^ CaptureSetWildcard()
+    | `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply)
 
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
+    ( literal("_") ^^^ source.BlockTypeWildcard
+    |  (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
     |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
     | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
     | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
@@ -537,7 +547,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected an interface type")
     )
 
-  lazy val maybeEffects: P[Effects] =
+  lazy val maybeEffects: P[EffectsOrVar] =
     (`/` ~/> effects).? ^^ {
       case Some(es) => es
       case None => Effects.Pure
@@ -546,8 +556,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val effectful: P[Effectful] =
     valueType ~ maybeEffects ^^ Effectful.apply
 
-  lazy val effects: P[Effects] =
-    ( interfaceType ^^ { e => Effects(e) }
+  lazy val effects: P[EffectsOrVar] =
+    ( literal("_") ^^^ EffectWildcard()
+    | interfaceType ^^ { e => Effects(e) }
     | `{` ~/> manySep(interfaceType, `,`) <~  `}` ^^ Effects.apply
     | failure("Expected an effect set")
     )

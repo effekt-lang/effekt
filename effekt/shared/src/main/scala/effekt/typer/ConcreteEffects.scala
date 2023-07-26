@@ -2,7 +2,10 @@ package effekt
 package typer
 
 import effekt.context.Context
-import effekt.symbols._
+import effekt.source.BlockType.BlockTypeWildcard
+import effekt.symbols.*
+import effekt.symbols.BlockTypeVar.BlockUnificationVar
+import effekt.symbols.TypeVar.ValueTypeWildcard
 import effekt.util.messages.ErrorMessageReifier
 
 
@@ -55,7 +58,10 @@ object ConcreteEffects {
 val Pure = ConcreteEffects.empty
 
 implicit def asConcrete(effs: Effects)(using C: Context): ConcreteEffects =
-  ConcreteEffects(C.unification(effs))
+  ConcreteEffects(C.unification(effs) match {
+    case x: Effects => x
+    case x: EffectWildcard => Context.abort("EffectWildcard in unexpected place: asConcrete")
+  })
 
 
 /**
@@ -93,13 +99,25 @@ private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
 }
 
 private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
+  case BlockTypeRef(x) => isConcreteBlockType(x)
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
     vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
+
+private def isConcreteBlockType(tpe: BlockTypeVar): Boolean = tpe match {
+  case x : BlockUnificationVar => false
+  case x : BlockTypeVar => true
+}
+
 private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 
 private def isConcreteInterfaceType(eff: InterfaceType): Boolean = eff match {
   case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
-private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteInterfaceType)
+private def isConcreteEffects(effs: EffectsOrVar): Boolean = effs match {
+  case x: Effects => x.toList.forall(isConcreteInterfaceType)
+  case x: EffectWildcard => false
+}
+
+

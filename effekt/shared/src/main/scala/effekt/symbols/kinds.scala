@@ -24,8 +24,14 @@ package object kinds {
   }
 
   def wellformed(tpe: BlockType)(using Context): Unit = tpe match {
+    case BlockTypeRef(x) =>  // Is this right?
     case b: FunctionType  => wellformed(b)
     case c: InterfaceType => wellformed(c)
+  }
+
+  def wellformed(eff: EffectsOrVar)(using C: Context): Unit = eff match {
+    case x: Effects => wellformed(x)
+    case x: EffectWildcard => ()
   }
 
   def wellformed(eff: InterfaceType)(using C: Context): Unit = wellformedInterfaceType(eff) match {

@@ -1,0 +1,12 @@
+module examples/pts/functionParameterTypes
+
+def constant(num : _) = {
+    val a : Test = num
+    return 5
+}
+
+def main() = {
+    val input : Int = 2
+    val res : Int = constant(input)
+    println(res)
+}

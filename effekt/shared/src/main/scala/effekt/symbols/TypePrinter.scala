@@ -39,6 +39,7 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
+    case BlockTypeRef(x) => toDoc(LocalName("Wildcard")) // Improve
     case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
       val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {
@@ -50,7 +51,10 @@ object TypePrinter extends ParenPrettyPrinter {
           vps <> bps
       }
       val ret = toDoc(result)
-      val eff = if (effects.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
+      val eff = if (effects match {
+        case x: Effects => x.isEmpty
+        case x: EffectWildcard => false
+      }) emptyDoc else space <> "/" <+> toDoc(effects)
       tps <> ps <+> "=>" <+> ret <> eff
 
     case InterfaceType(tpe, Nil)  => toDoc(tpe)
@@ -68,13 +72,18 @@ object TypePrinter extends ParenPrettyPrinter {
     case ExternType(name, tparams) => name
   }
 
-  def toDoc(eff: Effects): Doc =
-    if (eff.isEmpty) "{}" else
-    braces(space <> hsep(eff.effects.map(toDoc), comma) <> space)
+  def toDoc(eff: EffectsOrVar): Doc = eff match {
+    case x: Effects =>
+      if (x.isEmpty) "{}" else
+        braces(space <> hsep(x.effects.map(toDoc), comma) <> space)
+    case x: EffectWildcard => "EffectWildcard"
+  }
+
 
   def toDoc(c: Captures): Doc = c match {
     case CaptureSet(captures)  => braces { hsep(captures.toList.map(toDoc), comma) }
     case c: CaptUnificationVar => if (debug) c.name <> c.id.toString else c.name
+    case w: CaptureSetWildcard => text("Wildcard")
   }
 
   def toDoc(c: Capture): Doc = c.name

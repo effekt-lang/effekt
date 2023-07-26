@@ -2,7 +2,9 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TTop }
+import effekt.symbols.BlockTypeVar.BlockUnificationVar
+import effekt.symbols.TypeVar.ValueTypeWildcard
+import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
 
 /**
@@ -13,8 +15,11 @@ import effekt.typer.ErrorContext.FunctionEffects
 trait TypeUnifier {
   // "unification effects"
   def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireLowerBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
   def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireUpperBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireEqual(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
 
   def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
@@ -22,10 +27,16 @@ trait TypeUnifier {
   def error(msg: String, ctx: ErrorContext): Unit
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
 
+  def unificationVarFromWildcard(w : TypeVar) : UnificationVar
+  def unificationVarFromWildcard(w : BlockTypeVar) : BlockUnificationVar
+
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
-    case Covariant     => requireSubregion(c1, c2, ctx)
-    case Contravariant => requireSubregion(c2, c1, ctx)
-    case Invariant     => requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
+    case Covariant     => 
+      requireSubregion(c1, c2, ctx)
+    case Contravariant => 
+      requireSubregion(c2, c1, ctx)
+    case Invariant     => 
+      requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
   }
   def unify(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 
@@ -47,10 +58,20 @@ trait TypeUnifier {
     case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
 
+    case (ValueTypeApp(t1, args1), ValueTypeRef(w: ValueTypeWildcard), _) =>
+      val unificationVar : UnificationVar = unificationVarFromWildcard(w)
+      requireEqual(unificationVar, tpe1, ctx)
+
+    case (ValueTypeRef(w: ValueTypeWildcard), ValueTypeApp(t2, args2), _) =>
+      val unificationVar : UnificationVar = unificationVarFromWildcard(w)
+      requireEqual(unificationVar, tpe2, ctx)
+
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
 
-      if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
+      if (t1 != t2) {
+        error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx))
+      }
 
       if (args1.size != args2.size)
         abort(pp"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
@@ -67,6 +88,10 @@ trait TypeUnifier {
   }
 
   def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
+    case (t, BlockTypeRef(x : BlockTypeWildcard)) =>
+      requireEqual(unificationVarFromWildcard(x), t, ctx)
+    case (BlockTypeRef(x : BlockTypeWildcard), t) =>
+      requireEqual(unificationVarFromWildcard(x), t, ctx)
     case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s, ctx)
     case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s, ctx)
     case (t, s) => error(t, s, ctx)
@@ -79,8 +104,11 @@ trait TypeUnifier {
       (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
   }
 
-  def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =
-    if (eff1.toList.toSet != eff2.toList.toSet) error(pp"${eff2} is not equal to ${eff1}", ctx)
+  def unifyEffects(eff1: EffectsOrVar, eff2: EffectsOrVar, ctx: ErrorContext): Unit = (eff1, eff2) match {
+    case (x: Effects, y: Effects) =>
+      if (x.toList.toSet != y.toList.toSet) error(pp"${y} is not equal to ${x}", ctx)
+    case _ => throw new Exception("EffectWildcard in unexpected location: UnifyEffects")
+  }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (
@@ -101,7 +129,7 @@ trait TypeUnifier {
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
 
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c)), List()) // Is List() the right choice?
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)
@@ -207,7 +235,7 @@ trait TypeMerger extends TypeUnifier {
       // TODO potentially share code with unifyFunctionTypes and instantiate
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2 zip targs1, List(), cparams2 zip cparams1.map(c => CaptureSet(c)), List()) // Is List() the right choice?
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)

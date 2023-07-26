@@ -1,0 +1,16 @@
+module examples/pts/nestedTypes
+
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+
+type Map[A, B] {
+    Map(keys : List[A], values : List[B])
+}
+
+
+val listA : List[_] = Cons(1, Cons(2, Cons(3, Nil())))
+val listB : List[_] = Cons("a", Cons("b", Cons("c", Nil())))
+
+val map1 : Map[_, _] = Map(listA, listB)

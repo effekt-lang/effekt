@@ -185,14 +185,14 @@ enum Def extends Definition {
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: EffectsOrVar)
 
   /**
    * Only valid on the toplevel!
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
+  case ExternDef(capture: Captures, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -276,7 +276,7 @@ enum Term extends Tree {
   case Hole(stmts: Stmt)
 
   // Boxing and unboxing to represent first-class values
-  case Box(capt: Option[CaptureSet], block: Term)
+  case Box(capt: Option[Captures], block: Term)
   case Unbox(term: Term)
 
   /**
@@ -337,6 +337,7 @@ export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
+
 def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
 def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
 def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
@@ -464,10 +465,12 @@ enum ValueType extends Type {
   /**
    * Types of first-class functions
    */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
+  case BoxedType(tpe: BlockType, capt: Captures)
 
   // Bound occurrences (args can be empty)
   case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
+
+  case ValueTypeWildcard
 }
 export ValueType.*
 
@@ -480,28 +483,34 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
+  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: EffectsOrVar)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
+  case BlockTypeWildcard
 }
 
 export BlockType.*
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+case class Effectful(tpe: ValueType, eff: EffectsOrVar) extends Tree
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
  */
-case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
+sealed trait EffectsOrVar extends Tree
+
+case class Effects(effs: List[BlockType.BlockTypeRef]) extends EffectsOrVar
 object Effects {
   val Pure: Effects = Effects()
   def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
   def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
 }
 
-case class CaptureSet(captures: List[IdRef]) extends Tree
+case class EffectWildcard() extends EffectsOrVar
 
+sealed trait Captures extends Tree
+case class CaptureSet(captures: List[IdRef]) extends Captures
+case class CaptureSetWildcard() extends Captures
 
 object Named {
 
@@ -603,8 +612,8 @@ object Resolvable {
 
   // Capture Sets
   // ------------
-  extension (capt: source.CaptureSet) {
-    def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
+  extension (capt: source.Captures) {
+    def resolve(using C: Context): symbols.Captures = C.resolvedCapture(capt)
   }
 }
 export Resolvable.resolve
