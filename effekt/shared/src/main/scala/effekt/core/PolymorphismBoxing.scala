@@ -5,6 +5,7 @@ import effekt.context.Context
 import effekt.symbols
 import effekt.symbols.{TmpBlock, TmpValue}
 import effekt.{CoreTransformed, Phase}
+import effekt.symbols.builtins.TState
 
 import scala.annotation.targetName
 
@@ -232,6 +233,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(blockType: BlockType)(using PContext): BlockType = blockType match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       BlockType.Function(tparams, cparams, vparams map transform, bparams map transform, transform(result))
+    case i @ BlockType.Interface(TState.interface, _) => i
     case BlockType.Interface(symbol, targs) => BlockType.Interface(symbol, targs map transformArg)
   }
 

@@ -196,7 +196,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
 
-    case core.Var(id, init, cap, body) =>
+    case core.Var(id, init, capture, body) =>
       val stateEvidence = EvidenceSymbol()
       val environment = env.adapt(Lift.Var(stateEvidence)).bind(id)
       val stateCapability = lifted.Param.BlockParam(id, lifted.Type.TState(transform(init.tpe)))
