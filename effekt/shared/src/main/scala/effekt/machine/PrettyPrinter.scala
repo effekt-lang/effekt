@@ -65,13 +65,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
     case Allocate(name, init, ev, rest) =>
-      toDoc(name.tpe) <+> name <> "<" <> ev <> ">" <+> "=" <+> init <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "=" <+> "allocate" <> parens(List(init, ev) map toDoc) <> ";" <> line <> toDoc(rest)
 
     case Load(name, ref, ev, rest) =>
-      name <+> "=" <+> "*" <> ref <> "<" <> ev <> ">" <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "=" <+> "load" <> parens(List(ref, ev) map toDoc) <> ";" <> line <> toDoc(rest)
 
     case Store(ref, value, ev, rest) =>
-      "*" <> ref <> "<" <> ev <> ">" <+> "=" <+> value <> ";" <> line <> toDoc(rest)
+      "store" <> parens(List(ref, ev, value) map toDoc) <> ";" <> line <> toDoc(rest)
 
     case PushFrame(frame, rest) =>
       "push" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
