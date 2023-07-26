@@ -206,7 +206,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         transformedBody))
 
     case core.Alloc(id, init, region, body) =>
-      Alloc(id, transform(init), region, env.evidenceFor(region), transform(body))
+      // here the fresh cell uses the same evidence as the region it is allocated into
+      val environment = env.bind(id, env.evidenceFor(region).lifts)
+
+      Alloc(id, transform(init), region, env.evidenceFor(region),
+        transform(body)(using environment, ErrorReporter))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),

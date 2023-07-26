@@ -722,6 +722,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.at(reg) { Context.abort("Expected a region.") }
         }
 
+        // bind region as capture for the variable
+        Context.bind(sym, stCapt)
+
         val Result(tpeBind, effBind) = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding, None)

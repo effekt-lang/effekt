@@ -92,7 +92,10 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
     // regions
     case tree @ RegDef(id, annot, region, binding) =>
-      query(binding) ++ captureOf(tree.symbol.region)
+      val regSymbol = region.symbol.asBlockSymbol
+      val regCapture = captureOf(regSymbol)
+      Context.annotate(Annotations.Captures, tree.symbol, regCapture)
+      query(binding) ++ regCapture
   }
 
   def boundCapabilities(t: Tree)(using Context): CaptureSet =

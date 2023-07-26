@@ -378,7 +378,6 @@ object TransformerLift {
       val k2 = freshName("k2")
       chez.Lambda(List(a), chez.Lambda(List(k2), chez.Call(k2, a)))
 
-    // TODO generate
     def lift: chez.Expr = chez.Variable(ChezName("lift"))
 
     def pure(expr: chez.Expr): CPS = CPS.inline(k => k(expr))
