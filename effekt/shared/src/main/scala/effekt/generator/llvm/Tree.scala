@@ -10,7 +10,7 @@ enum Definition {
   case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
   case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
-  case GlobalVariableArray(name: String, typ: Type, initializer: Operand) // initializer should be constant
+  case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
 }
 export Definition.*
 

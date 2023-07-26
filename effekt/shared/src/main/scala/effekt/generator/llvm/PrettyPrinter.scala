@@ -27,7 +27,7 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
 """
     case Verbatim(content) => content
 
-    case GlobalVariableArray(name, IntegerType8(), ConstantArray(IntegerType8(), members)) =>
+    case GlobalConstant(name, ConstantArray(IntegerType8(), members)) =>
       val bytes = members.map { ini => ini match {
         case ConstantInteger8(b) => b
         case _ => ???
@@ -35,8 +35,8 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
       val escaped = bytes.map(b => "\\" + f"$b%02x").mkString;
       s"@$name = private constant [${bytes.length} x i8] c\"$escaped\""
 
-    case GlobalVariableArray(name, typ, initializer) =>
-        C.abort(s"cannot compile non-i8 constant array: $name = [ x ${typ}] ${initializer}")
+    case GlobalConstant(name, initializer) =>
+      s"@$name = private constant ${show(initializer)}"
   }
 
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
@@ -119,7 +119,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ConstantDouble(n)                  => s"double $n"
     case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
     case ConstantNull(tpe)                  => s"${show(tpe)} null"
-    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}]"
+    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}] [${commaSeparated(members.map(show))}]"
     case ConstantInteger8(b)                => s"i8 $b"
   }
 
