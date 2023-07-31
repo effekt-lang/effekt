@@ -6,6 +6,8 @@ import effekt.source.BlockType.BlockTypeRef
 import effekt.source.MatchPattern
 import effekt.symbols.*
 import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
+import effekt.symbols.EffectVar.{EffectUnificationVar, EffectWildcard}
+import effekt.symbols.TypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.util.messages.ErrorReporter
 
@@ -23,10 +25,10 @@ case object Invariant extends Polarity { def flip = Invariant }
 case class UnificationState(
    scope: Scope,
    constraints: Constraints,
-   valueWildcardMap : Map[TypeVar, UnificationVar],
-   blockWildcardMap : Map[BlockTypeVar, BlockUnificationVar],
+   valueTypeWildcardMap : Map[TypeVar, UnificationVar],
+   blockTypeWildcardMap : Map[BlockTypeVar, BlockUnificationVar],
    captureWildcardMap : Map[CaptureSetWildcard, CaptUnificationVar],
-   effectWildcardMap : Map[EffectWildcard, Effects]
+   effectWildcardMap : Map[EffectVar, EffectUnificationVar]
 )
 
 sealed trait Scope
@@ -51,10 +53,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // -------------------------------
   private var scope: Scope = GlobalScope
   protected var constraints = new Constraints
-  private var valueWildcardMap = Map.empty[TypeVar, UnificationVar]
-  private var blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
+  private var valueTypeWildcardMap = Map.empty[TypeVar, UnificationVar]
+  private var blockTypeWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
   private var captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
-  private var effectWildcardMap = Map.empty[EffectWildcard, Effects]
+  private var effectWildcardMap = Map.empty[EffectVar, EffectUnificationVar]
 
   // Creating fresh unification variables
   // ------------------------------------
@@ -78,16 +80,21 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ------------
   def substitution =
     val s: Substitutions = constraints.subst
-    val valueWildcardSubValue: Map[TypeVar, ValueType] = valueWildcardMap.filter((k, v) => s.values.contains(v))
+    val valueTypeWildcardSubValue: Map[TypeVar, ValueType] = valueTypeWildcardMap.filter((k, v) => s.values.contains(v))
       .map((k, v) => (k, s.values.get(v).get))
-    val blockWildcardSubValue: Map[BlockTypeVar, BlockType] = blockWildcardMap.filter((k, v) => s.blocks.contains(v))
+
+    val blockTypeWildcardSubValue: Map[BlockTypeVar, BlockType] = blockTypeWildcardMap.filter((k, v) => s.blocks.contains(v))
       .map((k, v) => (k, s.blocks.get(v).get))
-    val captureWildcardSubValue : Map[CaptVar, Captures] = captureWildcardMap.filter((k, v) => s.captures.contains(v))
+
+    val captureWildcardSubValue: Map[CaptVar, Captures] = captureWildcardMap.filter((k, v) => s.captures.contains(v))
       .map((k, v) => (k, s.captures.get(v).get))
 
-    s.updateWith(Substitutions(valueWildcardSubValue, blockWildcardSubValue, captureWildcardSubValue, effectWildcardMap))
+    val effectWildcardSubValue: Map[EffectVar, EffectsOrRef] = effectWildcardMap.filter((k, v) => s.effects.contains(v))
+      .map((k, v) => (k, s.effects.get(v).get))
 
-  def apply(e: EffectsOrVar): EffectsOrVar =
+    s.updateWith(Substitutions(valueTypeWildcardSubValue, blockTypeWildcardSubValue, captureWildcardSubValue, effectWildcardSubValue))
+
+  def apply(e: EffectsOrRef): EffectsOrRef =
     substitution.substitute(e)
 
   def apply(e: InterfaceType): InterfaceType =
@@ -104,22 +111,22 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueWildcardMap, blockWildcardMap, captureWildcardMap, effectWildcardMap)
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueTypeWildcardMap, blockTypeWildcardMap, captureWildcardMap, effectWildcardMap)
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
-    valueWildcardMap = state.valueWildcardMap
-    blockWildcardMap = state.blockWildcardMap
+    valueTypeWildcardMap = state.valueTypeWildcardMap
+    blockTypeWildcardMap = state.blockTypeWildcardMap
     captureWildcardMap = state.captureWildcardMap
     effectWildcardMap = state.effectWildcardMap
 
   def init() =
     scope = GlobalScope
     constraints = new Constraints
-    valueWildcardMap = Map.empty[TypeVar, UnificationVar]
-    blockWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
+    valueTypeWildcardMap = Map.empty[TypeVar, UnificationVar]
+    blockTypeWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
     captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
-    effectWildcardMap = Map.empty[EffectWildcard, Effects]
+    effectWildcardMap = Map.empty[EffectVar, EffectUnificationVar]
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
@@ -225,17 +232,17 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
         y
     }
 
-  def unificationVarFromWildcard(wildcard: TypeVar): UnificationVar =
-    valueWildcardMap.getOrElse(wildcard, {
-      val unificationVar: UnificationVar = fresh(TypeParam(LocalName("ValueWildcard")), null)
-      valueWildcardMap = valueWildcardMap + (wildcard -> unificationVar)
+  def unificationVarFromWildcard(wildcard: ValueTypeWildcard): UnificationVar =
+    valueTypeWildcardMap.getOrElse(wildcard, {
+      val unificationVar: UnificationVar = fresh(TypeParam(LocalName("ValueTypeWildcard")), null)
+      valueTypeWildcardMap = valueTypeWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
-  def unificationVarFromWildcard(wildcard: BlockTypeVar): BlockUnificationVar =
-    blockWildcardMap.getOrElse(wildcard, {
-      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(LocalName("BlockWildcard")), null)
-      blockWildcardMap = blockWildcardMap + (wildcard -> unificationVar)
+  def unificationVarFromWildcard(wildcard: BlockTypeWildcard): BlockUnificationVar =
+    blockTypeWildcardMap.getOrElse(wildcard, {
+      val unificationVar: BlockUnificationVar = BlockUnificationVar(TypeParam(LocalName("BlockTypeWildcard")), null)
+      blockTypeWildcardMap = blockTypeWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
@@ -243,6 +250,13 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     captureWildcardMap.getOrElse(wildcard, {
       val unificationVar : CaptUnificationVar = freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(LocalName("CaptureWildcard")), null))
       captureWildcardMap = captureWildcardMap + (wildcard -> unificationVar)
+      unificationVar
+    })
+
+  def unificationVarFromWildcard(wildcard : EffectWildcard) : EffectUnificationVar =
+    effectWildcardMap.getOrElse(wildcard, {
+      val unificationVar : EffectUnificationVar = EffectUnificationVar(TypeParam(LocalName("EffectWildcard")), null)
+      effectWildcardMap = effectWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
@@ -306,8 +320,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     requireLowerBound(x, tpe, ctx)
     requireUpperBound(x, tpe, ctx)
 
-  def requireEqual(x: EffectWildcard, effs: Effects) : Unit =
-    effectWildcardMap = effectWildcardMap + (x -> effs)
+  def requireEqual(x: EffectUnificationVar, tpe: EffectsOrRef, ctx: ErrorContext): Unit =
+    requireLowerBound(x, tpe, ctx)
+    requireUpperBound(x, tpe, ctx)
 
   def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
@@ -315,11 +330,17 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def requireLowerBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyBlockTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
+  def requireLowerBound(x: EffectUnificationVar, tpe: EffectsOrRef, ctx: ErrorContext) =
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyEffects(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
+
   def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
   def requireUpperBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext) =
     constraints.learn(x, tpe)((tpe1, tpe2) => unifyBlockTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
+
+  def requireUpperBound(x: EffectUnificationVar, tpe: EffectsOrRef, ctx: ErrorContext) =
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyEffects(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
   def mergeCaptures(oldBound: Captures, newBound: Captures, ctx: ErrorContext): Captures = (oldBound, newBound, ctx.polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
@@ -418,7 +439,7 @@ trait TypeInstantiator { self: Unification =>
           val capt = constraints.forceSolving(x)
           capt.captures
 
-        case x: CaptureSetWildcard => abort("EffectWildcard in unexpected place: instantiate")
+        case x: CaptureSetWildcard => abort("EffectRef in unexpected place: instantiate")
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
     if (contained.isEmpty) return c;
@@ -446,9 +467,9 @@ trait TypeInstantiator { self: Unification =>
     case b: FunctionType  => instantiate(b)
   }
 
-  def instantiate(t: EffectsOrVar)(using Instantiation): EffectsOrVar = t match {
+  def instantiate(t: EffectsOrRef)(using Instantiation): EffectsOrRef = t match {
     case x: Effects => instantiate(x)
-    case x: EffectWildcard => x
+    case x: EffectRef => x
   }
 
   def instantiate(t: InterfaceType)(using Instantiation): InterfaceType = t match {

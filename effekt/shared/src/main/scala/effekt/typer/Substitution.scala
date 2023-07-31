@@ -1,7 +1,8 @@
 package effekt
 package typer
 
-import effekt.symbols._
+import effekt.symbols.*
+import effekt.symbols.EffectVar.EffectWildcard
 
 
 case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception
@@ -19,7 +20,7 @@ case class Substitutions(
   //   - a single CaptureParam -> CaptureParam
   //   - a CaptUnificationVar -> Captures
   captures: Map[CaptVar, Captures],
-  effects: Map[EffectWildcard, EffectsOrVar]
+  effects: Map[EffectVar, EffectsOrRef]
 ) {
 
   def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
@@ -45,7 +46,7 @@ case class Substitutions(
   def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, blocks ++ other.blocks, captures ++ other.captures, effects ++ other.effects)
 
   // shadowing
-  private def without(tps: List[TypeVar], bps: List[BlockType], cps: List[Capture], effs: List[EffectsOrVar]): Substitutions =
+  private def without(tps: List[TypeVar], bps: List[BlockType], cps: List[Capture], effs: List[EffectsOrRef]): Substitutions =
     Substitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       blocks.filterNot { case (t, _) => bps.contains(t) },
@@ -73,9 +74,9 @@ case class Substitutions(
       BoxedType(substitute(tpe), substitute(capt))
   }
 
-  def substitute(t: EffectsOrVar): EffectsOrVar = t match {
+  def substitute(t: EffectsOrRef): EffectsOrRef = t match {
     case x: Effects => Effects(x.toList.map(substitute))
-    case x: EffectWildcard => effects.getOrElse(x, x)
+    case EffectRef(x) => effects.getOrElse(x, t)
   }
   def substitute(t: InterfaceType): InterfaceType = t match {
     case InterfaceType(cons, args) => InterfaceType(cons, args.map(substitute))
@@ -102,11 +103,11 @@ case class Substitutions(
 }
 
 object Substitutions {
-  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures], Map.empty[EffectWildcard, Effects])
-  def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)], effects: List[(EffectWildcard, Effects)]): Substitutions =
+  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures], Map.empty[EffectVar, EffectsOrRef])
+  def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)], effects: List[(EffectVar, EffectsOrRef)]): Substitutions =
     Substitutions(values.toMap, blocks.toMap, captures.toMap, effects.toMap)
   def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty, Map.empty)
   def blocks(keys: List[BlockTypeVar], values: List[BlockType]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap, Map.empty, Map.empty)
   def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, Map.empty, (keys zip values).toMap, Map.empty)
-  def effects(keys: List[EffectWildcard], values: List[Effects]): Substitutions = Substitutions(Map.empty, Map.empty, Map.empty, (keys zip values).toMap)
+  def effects(keys: List[EffectVar], values: List[EffectsOrRef]): Substitutions = Substitutions(Map.empty, Map.empty, Map.empty, (keys zip values).toMap)
 }

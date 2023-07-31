@@ -257,15 +257,15 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
   // TODO extend check to also check in value types
   //   (now that we have first class functions, they could mention effects).
-  def wellscoped(effects: EffectsOrVar)(using C: Context, WF: WFContext): Unit = {
+  def wellscoped(effects: EffectsOrRef)(using C: Context, WF: WFContext): Unit = {
     def checkEffect(eff: InterfaceType): Unit =
       if (!(WF.effectsInScope contains eff.typeConstructor))
         Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
 
     effects match {
       case x: Effects => x.toList foreach checkEffect
-      case x: EffectWildcard =>
-        Context.abort("EffectWildcard in unexpected place: wellscoped")
+      case x: EffectRef =>
+        Context.abort("EffectRef in unexpected place: wellscoped")
     }
 
   }

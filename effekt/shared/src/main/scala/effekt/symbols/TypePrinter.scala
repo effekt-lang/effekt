@@ -56,7 +56,7 @@ object TypePrinter extends ParenPrettyPrinter {
       val eff = (effects match {
         case x: Effects =>
           if (x.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
-        case x: EffectWildcard => text("_")
+        case x: EffectRef => text("_")
       })
       tps <> ps <+> "=>" <+> ret <> eff
 
@@ -75,11 +75,11 @@ object TypePrinter extends ParenPrettyPrinter {
     case ExternType(name, tparams) => name
   }
 
-  def toDoc(eff: EffectsOrVar): Doc = eff match {
+  def toDoc(eff: EffectsOrRef): Doc = eff match {
     case x: Effects =>
       if (x.isEmpty) "{}" else
         braces(space <> hsep(x.effects.map(toDoc), comma) <> space)
-    case x: EffectWildcard => text("_")
+    case x: EffectRef => text("_")
   }
 
 

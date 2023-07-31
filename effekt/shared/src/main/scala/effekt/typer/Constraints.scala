@@ -3,6 +3,7 @@ package typer
 
 import effekt.symbols.*
 import effekt.symbols.BlockTypeVar.BlockUnificationVar
+import effekt.symbols.EffectVar.EffectUnificationVar
 import effekt.util.messages.{ErrorMessageReifier, ErrorReporter}
 import effekt.util.foreachAborting
 
@@ -49,7 +50,7 @@ type CaptureConstraints = Map[CNode, CaptureNodeData]
  * substitution ([[valueTypeSubstitution]]).
  *
  * To record that two variables are equal, we associate them with the same [[Node]]
- * and store them in an equivalence class [[classes]].
+ * and store them in an equivalence class [[valueClasses]].
  *
  * Invariants:
  * - substitutions should never refer to variables that we already solved.
@@ -87,10 +88,10 @@ type CaptureConstraints = Map[CNode, CaptureNodeData]
  *
  * - Transitivity: The bounds are always fully propagated to all connected nodes.
  *
- * However, for now, we do not compute equivalence classes -- we also do not establish transitive connections.
+ * However, for now, we do not compute equivalence valueClasses -- we also do not establish transitive connections.
  */
 class Constraints(
-  /**
+                   /**
    * Everything we know so far -- right hand sides of substitutions are *always* concrete types.
    * They can, however, mention unification variables. e.g. `?U !-> List[?S]` is allowed.
    * The mentioned unification variables (`?S` in the example) must not have a substitution.
@@ -99,33 +100,37 @@ class Constraints(
    * Once one member of the equivalence class becomes concrete, all members are assigned the same type
    * in the substitution.
    */
-  private var valueTypeSubstitution: Map[Node, ValueType] = Map.empty,
+                   private var valueTypeSubstitution: Map[Node, ValueType] = Map.empty,
 
-  private var blockTypeSubstitution: Map[Node, BlockType] = Map.empty,
+                   private var blockTypeSubstitution: Map[Node, BlockType] = Map.empty,
 
-  /**
+                   /**
    * A map from a member in the equivalence class to the class' representative
    */
-  private var classes: Map[UnificationVar, Node] = Map.empty,
+                   private var valueClasses: Map[UnificationVar, Node] = Map.empty,
 
-  private var blockClasses : Map[BlockUnificationVar, Node] = Map.empty,
+                   private var blockClasses: Map[BlockUnificationVar, Node] = Map.empty,
 
-  /**
+                   /**
    * Concrete bounds for each unification variable
    */
-  private var captureConstraints: CaptureConstraints = Map.empty,
+                   private var captureConstraints: CaptureConstraints = Map.empty,
 
-  /**
+                   /**
    * Everything we know so far -- right hand sides of substitutions are *always* concrete capture sets.
    * Once solved and part of the substitution, we cannot learn something about a unification variable anymore;
    * only check consistency.
    */
-  private var captSubstitution: Map[CNode, CaptureSet] = Map.empty,
+                   private var captSubstitution: Map[CNode, CaptureSet] = Map.empty,
 
-  /**
+                   private var effectSubstitution: Map[Node, EffectsOrRef] = Map.empty,
+
+                   private var effectClasses: Map[EffectUnificationVar, Node] = Map.empty,
+
+                   /**
    * Unification variables which are not in scope anymore, but also haven't been solved, yet.
    */
-  private var pendingInactive: Set[CNode] = Set.empty
+                   private var pendingInactive: Set[CNode] = Set.empty
 
 )(using C: ErrorReporter) {
 
@@ -133,10 +138,11 @@ class Constraints(
    * The currently known substitutions
    */
   def subst: Substitutions =
-    val values = classes.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
+    val values = valueClasses.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
     val blocks = blockClasses.flatMap[BlockTypeVar, BlockType] { case (k, v) => blockTypeSubstitution.get(v).map { k -> _ } }
     val captures = captSubstitution.asInstanceOf[Map[CaptVar | CaptureSetWildcard, Captures]]
-    Substitutions(values, blocks, captures, Map.empty)
+    val effects = effectClasses.flatMap[EffectVar, EffectsOrRef] { case (k, v) => effectSubstitution.get(v).map { k -> _ } }
+    Substitutions(values, blocks, captures, effects)
 
   /**
    * Should only be called on unification variables where we do not know any types, yet
@@ -165,7 +171,7 @@ class Constraints(
         val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
         return boundsImply || areBounded
 
-      case _ => sys error("CaptureWildcard has occurred in an unexpected place")
+      case _ => sys error("CaptureWildcard occurred in an unexpected place")
     }
 
   /**
@@ -193,7 +199,7 @@ class Constraints(
       }
 
       // create mapping to representative
-      classes = classes.view.mapValues { node => if (node == x) y else node }.toMap
+      valueClasses = valueClasses.view.mapValues { node => if (node == x) y else node }.toMap
     }
 
     y match {
@@ -231,6 +237,36 @@ class Constraints(
         connectNodes(getNode(x), getNode(y))
       case tpe => 
         learnType(getNode(x), tpe)
+    }
+  }
+
+  def learn(x: EffectUnificationVar, y: EffectsOrRef)(merge: (EffectsOrRef, EffectsOrRef) => Unit): Unit = {
+
+    def learnType(x: Node, tpe: EffectsOrRef): Unit = {
+      // tpe should not be a reference to a unification variable
+      effectOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
+      effectSubstitution = effectSubstitution.updated(x, tpe)
+      updateSubstitution()
+    }
+
+    def connectNodes(x: Node, y: Node): Unit = {
+      // Already connected
+      if (x == y) return ()
+
+      (effectOf(x), effectOf(y)) match {
+        case (Some(effOfX), Some(effOfY)) => merge(effOfX, effOfY)
+        case (Some(effOfX), None) => learnType(y, effOfX)
+        case (None, Some(effOfY)) => learnType(x, effOfY)
+        case (None, None) => ()
+      }
+
+      // create mapping to representative
+      valueClasses = valueClasses.view.mapValues { node => if (node == x) y else node }.toMap
+    }
+
+    y match {
+      case EffectRef(y: EffectUnificationVar) => connectNodes(getNode(x), getNode(y))
+      case tpe => learnType(getNode(x), tpe)
     }
   }
 
@@ -286,11 +322,11 @@ class Constraints(
     })
 
 
-  override def clone(): Constraints = new Constraints(valueTypeSubstitution, blockTypeSubstitution, classes, blockClasses, captureConstraints, captSubstitution, pendingInactive)
+  override def clone(): Constraints = new Constraints(valueTypeSubstitution, blockTypeSubstitution, valueClasses, blockClasses, captureConstraints, captSubstitution, effectSubstitution, effectClasses, pendingInactive)
 
   def dumpTypeConstraints() =
     println("\n--- Type Constraints ---")
-    val cl = classes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
+    val cl = valueClasses.groupMap { case (el, repr) => repr } { case (el, repr) => el }
     cl foreach {
       case (n, vars) => valueTypeSubstitution.get(n) match {
         case None => println(s"{${vars.mkString(", ")}}")
@@ -496,12 +532,17 @@ class Constraints(
   private def updateSubstitution(): Unit =
     val substitution = subst
     valueTypeSubstitution = valueTypeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
+    blockTypeSubstitution = blockTypeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
+    effectSubstitution = effectSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
 
   private def getNode(x: UnificationVar): Node =
-    classes.getOrElse(x, { val rep = new Node; classes += (x -> rep); rep })
+    valueClasses.getOrElse(x, { val rep = new Node; valueClasses += (x -> rep); rep })
 
   private def getNode(x: BlockUnificationVar): Node =
     blockClasses.getOrElse(x, { val rep = new Node; blockClasses += (x -> rep); rep })
+
+  private def getNode(x: EffectUnificationVar): Node =
+    effectClasses.getOrElse(x, { val rep = new Node; effectClasses += (x -> rep); rep })
 
   private def valueTypeOf(n: Node): Option[ValueType] =
     valueTypeSubstitution.get(n)
@@ -509,6 +550,8 @@ class Constraints(
   private def blockTypeOf(n: Node): Option[BlockType] =
     blockTypeSubstitution.get(n)
 
+  private def effectOf(n: Node): Option[EffectsOrRef] =
+    effectSubstitution.get(n)
 
   //</editor-fold>
 }

@@ -10,6 +10,7 @@ import effekt.source.BlockType.BlockTypeWildcard
 import effekt.source.{AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
 import effekt.symbols.BlockType.{BlockTypeRef, FunctionType}
+import effekt.symbols.EffectVar.EffectUnificationVar
 import effekt.symbols.TypeVar.TypeParam
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -604,7 +605,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     case d: source.TypeDef => wellformed(d.symbol.tpe)
     case d: source.EffectDef => d.symbol.effs match {
-      case x: EffectWildcard => ()
+      case x: EffectRef => ()
       case x: Effects => wellformed(x)
     }
 
@@ -633,8 +634,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
 
           Context.withRegion(selfRegion) {
+            println("AnnotatedType: " + sym.annotatedType)
             (sym.annotatedType: @unchecked) match {
               case Some(annotated) =>
+
+                println(annotated.effects)
 
                 annotated.effects match {
                   case x: Effects =>
@@ -663,7 +667,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                     Result(annotated, effs -- bound)
 
-                  case x: EffectWildcard =>
+                  case EffectRef(x) =>
                     // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
                     given Captures = inferredCapture
 
@@ -680,7 +684,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     }
                     val captures = capabilities.map(_.capture)
 
-//                    Context.requireEqual(x, effs.toEffects)
+//                    val unificationVar : EffectUnificationVar = Context.
+//                    Context.
 
                     Context.bindCapabilities(d, capabilities)
                     Context.annotateInferredType(d, tpe)
@@ -691,7 +696,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
                       (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
                     }
 
+                    println(effs.toEffects)
+
                     val funType = sym.toType(tpe, effs.toEffects, captures)
+                    val funType2 = sym.toType(tpe, annotated.effects, captures)
+
+                    matchExpected(funType, funType2)
                     Result(funType, Pure)
                 }
 
@@ -718,6 +728,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 flowsIntoWithout(inferredCapture, functionCapture) {
                   (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
                 }
+
+                println(sym.name.name + ", " + effs.toEffects)
 
                 // TODO also add capture parameters for inferred capabilities
                 val funType = sym.toType(tpe, effs.toEffects, captures)
@@ -853,7 +865,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // (4) Bind capabilities for all effects "handled" by this function
           val effects: ConcreteEffects = (typeSubst substitute x) match {
             case x: Effects => x
-            case x: EffectWildcard => Context.panic("Cant handle wildcard")
+            case x: EffectRef => Context.panic("Cant handle wildcard")
           }
 
           val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
@@ -887,7 +899,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           Result(tpe, bodyEffs -- effects)
 
-        case x: EffectWildcard =>
+        case x: EffectRef =>
           Context.panic("Cannot find type for ${s.name} -- forward uses and recursive functions need annotated return types.")
       }
   }
@@ -1145,7 +1157,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // concretize the effect.
     effs = effs ++ (retEffs match {
       case x: Effects => x
-      case x: EffectWildcard => sys error ("EffectWildcard in unexpected place: checkCallTo")
+      case x: EffectRef => sys error ("EffectRef in unexpected place: checkCallTo")
     })
 
     // annotate call node with inferred type arguments
@@ -1187,7 +1199,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val vparams : List[ValueType] = vargs map { checkExpr(_, None).tpe }
     val bparams : List[BlockType] = bargs map { checkExprAsBlock(_, None).tpe }
     val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(LocalName("ReturnType")), call))
-    val effects : EffectsOrVar = Effects.Pure
+    val effects : EffectsOrRef = Effects.Pure
 
     expected.foreach { expected => matchExpected(result, expected) }
     val funTpe : FunctionType = FunctionType(tparams, cparams, vparams, bparams, result, effects)
@@ -1219,7 +1231,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // concretize the effect.
     effs = effs ++ (retEffs match {
       case x: Effects => x
-      case x: EffectWildcard => sys error ("EffectWildcard in unexpected place: checkCallTo")
+      case x: EffectRef => sys error ("EffectRef in unexpected place: checkCallTo")
     })
 
     // annotate call node with inferred type arguments
@@ -1370,7 +1382,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // invariant: only works if ret is defined!
     def toType: FunctionType =
       annotatedType.get
-    def toType(ret: ValueType, effects: EffectsOrVar, capabilityParams: List[Capture]): FunctionType =
+    def toType(ret: ValueType, effects: EffectsOrRef, capabilityParams: List[Capture]): FunctionType =
       val bcapt = fun.bparams.map { p => p.capture }
       val tps = fun.tparams
       val vps = fun.vparams.map { p => p.tpe.get }
@@ -1381,6 +1393,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
       for {
         ret <- fun.annotatedResult;
         effs <- fun.annotatedEffects
+        if (effs match {
+          case x: Effects => true
+          case x: EffectRef => false
+        })
+
         effects = effs.distinct
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.

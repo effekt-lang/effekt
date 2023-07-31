@@ -2,8 +2,9 @@ module examples/pts/blockTypesWithEffects
 
 effect Eff() : Unit
 
+
+
 def testFunction(x: Int, y: Int): Int / Eff = {
-    do Eff()
     x + y
 }
 
@@ -13,5 +14,5 @@ def testFunction(x: Int, y: Int): Int / Eff = {
 def run{functionParam: _}: Int / Eff = functionParam(1, 2)
 
 def main() = {
-    run { testFunction }
+    ()
 }

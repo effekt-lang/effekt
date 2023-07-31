@@ -3,7 +3,7 @@ module examples/pts/effects
 effect Eff1(): Unit
 effect Eff2(): Unit
 
-def func(): Int / Eff1 = {
+def testFunction(): Int / _ = {
     do Eff1()
     1
 }

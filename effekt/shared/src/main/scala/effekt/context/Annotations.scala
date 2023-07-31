@@ -4,7 +4,7 @@ package context
 import effekt.symbols.ResumeParam
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
-import symbols.EffectsOrVar
+import symbols.EffectsOrRef
 
 case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
@@ -100,7 +100,7 @@ object Annotations {
    *
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val InferredEffect = Annotation[source.Tree, symbols.EffectsOrVar](
+  val InferredEffect = Annotation[source.Tree, symbols.EffectsOrRef](
     "InferredEffect",
     "the inferred effect of"
   )
@@ -365,21 +365,21 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source block: '${ t }'")
     }
 
-  def inferredEffectOption(t: source.Tree): Option[EffectsOrVar] =
+  def inferredEffectOption(t: source.Tree): Option[EffectsOrRef] =
     annotationOption(Annotations.InferredEffect, t)
 
-  def inferredEffectOf(t: source.Tree): EffectsOrVar =
+  def inferredEffectOf(t: source.Tree): EffectsOrRef =
     inferredEffectOption(t).getOrElse {
       panic(s"Internal Error: Missing effect of source expression: '${t}'")
     }
 
-  def inferredTypeAndEffectOption(t: source.Tree): Option[(ValueType, EffectsOrVar)] =
+  def inferredTypeAndEffectOption(t: source.Tree): Option[(ValueType, EffectsOrRef)] =
     for {
       tpe <- inferredTypeOption(t)
       eff <- inferredEffectOption(t)
     } yield (tpe, eff)
 
-  def inferredTypeAndEffectOf(t: source.Tree): (ValueType, EffectsOrVar) =
+  def inferredTypeAndEffectOf(t: source.Tree): (ValueType, EffectsOrRef) =
     inferredTypeAndEffectOption(t).getOrElse {
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }

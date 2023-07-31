@@ -94,7 +94,7 @@ class TyperTests extends AbstractTyperTests {
   }
 
   testTyperFile("Effect test")("examples/pts/effects.effekt"){
-    C => { C.assertBlockType("func", "() => Int / { Eff1 }") }
+    C => { C.assertBlockType("testFunction", "() => Int / { Eff1 }") }
   }
 
 }

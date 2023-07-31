@@ -2,6 +2,7 @@ package effekt
 package symbols
 
 import TypeVar.*
+import effekt.symbols.EffectVar.EffectUnificationVar
 
 /**
  * Types
@@ -57,7 +58,7 @@ enum BlockType extends Type {
     vparams: List[ValueType],
     bparams: List[BlockType],
     result: ValueType,
-    effects: EffectsOrVar
+    effects: EffectsOrRef
   )
 
   case InterfaceType(typeConstructor: BlockTypeConstructor, args: List[ValueType])
@@ -85,7 +86,7 @@ extension (i: BlockType.InterfaceType) {
  * Member [[canonical]] computes the canonical ordering of capabilities for this set of effects.
  * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
  */
-sealed trait EffectsOrVar {
+sealed trait EffectsOrRef {
   lazy val toList: List[InterfaceType]
 
   def isEmpty: Boolean
@@ -98,10 +99,10 @@ sealed trait EffectsOrVar {
 
   lazy val canonical: List[InterfaceType]
 
-  def distinct: EffectsOrVar
+  def distinct: EffectsOrRef
 }
 
-case class Effects(effects: List[BlockType.InterfaceType]) extends EffectsOrVar {
+case class Effects(effects: List[BlockType.InterfaceType]) extends EffectsOrRef {
 
   override lazy val toList: List[InterfaceType] = effects.distinct
 
@@ -130,22 +131,23 @@ object Effects {
   val Pure = empty
 }
 
-case class EffectWildcard() extends EffectsOrVar {
-  override lazy val toList: List[InterfaceType] = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+case class EffectRef(evar: EffectVar) extends EffectsOrRef {
 
-  override def isEmpty: Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+  override lazy val toList: List[InterfaceType] = sys error(evar.name.toString + "occurred in an unexpected place")
 
-  override def nonEmpty: Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+  override def isEmpty: Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
 
-  override def filterNot(p: InterfaceType => Boolean): Effects = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+  override def nonEmpty: Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
 
-  override def forall(p: InterfaceType => Boolean): Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+  override def filterNot(p: InterfaceType => Boolean): Effects = sys error(evar.name.toString + "occurred in an unexpected place")
 
-  override def exists(p: InterfaceType => Boolean): Boolean = throw new Exception("EffectWildcard in unexpected place: EffectsOrVar")
+  override def forall(p: InterfaceType => Boolean): Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
+
+  override def exists(p: InterfaceType => Boolean): Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
 
 //  override lazy val canonical: List[InterfaceType] = throw new Exception("Wildcard in unexpected place")
-  override lazy val canonical: List[InterfaceType] = List()
-  override def distinct: EffectWildcard = this
+  override lazy val canonical: List[InterfaceType] = sys error(evar.name.toString + "occurred in an unexpected place")
+  override def distinct: EffectRef = this
 }
 
 

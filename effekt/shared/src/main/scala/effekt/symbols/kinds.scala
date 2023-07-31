@@ -29,9 +29,9 @@ package object kinds {
     case c: InterfaceType => wellformed(c)
   }
 
-  def wellformed(eff: EffectsOrVar)(using C: Context): Unit = eff match {
+  def wellformed(eff: EffectsOrRef)(using C: Context): Unit = eff match {
     case x: Effects => wellformed(x)
-    case x: EffectWildcard => ()
+    case x: EffectRef => ()
   }
 
   def wellformed(eff: InterfaceType)(using C: Context): Unit = wellformedInterfaceType(eff) match {

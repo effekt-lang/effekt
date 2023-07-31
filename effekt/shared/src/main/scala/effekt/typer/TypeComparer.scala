@@ -2,7 +2,8 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.BlockTypeVar.BlockUnificationVar
+import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
+import effekt.symbols.EffectVar.{EffectUnificationVar, EffectWildcard}
 import effekt.symbols.TypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
@@ -16,12 +17,13 @@ trait TypeUnifier {
   // "unification effects"
   def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
   def requireLowerBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
+  def requireLowerBound(x: EffectUnificationVar, tpe: EffectsOrRef, ctx: ErrorContext): Unit
   def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
   def requireUpperBound(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
+  def requireUpperBound(x: EffectUnificationVar, tpe: EffectsOrRef, ctx: ErrorContext): Unit
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
   def requireEqual(x: BlockUnificationVar, tpe: BlockType, ctx: ErrorContext): Unit
-
-  def requireEqual(x: EffectWildcard, effs: Effects) : Unit
+  def requireEqual(x: EffectUnificationVar, effs: EffectsOrRef, ctx: ErrorContext) : Unit
 
   def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
@@ -29,8 +31,9 @@ trait TypeUnifier {
   def error(msg: String, ctx: ErrorContext): Unit
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
 
-  def unificationVarFromWildcard(w : TypeVar) : UnificationVar
-  def unificationVarFromWildcard(w : BlockTypeVar) : BlockUnificationVar
+  def unificationVarFromWildcard(w : ValueTypeWildcard) : UnificationVar
+  def unificationVarFromWildcard(w : BlockTypeWildcard) : BlockUnificationVar
+  def unificationVarFromWildcard(w : EffectWildcard) : EffectUnificationVar
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
     case Covariant     => requireSubregion(c1, c2, ctx)
@@ -58,11 +61,11 @@ trait TypeUnifier {
     case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
 
     case (ValueTypeApp(t1, args1), ValueTypeRef(w: ValueTypeWildcard), _) =>
-      val unificationVar : UnificationVar = unificationVarFromWildcard(w)
+      val unificationVar: UnificationVar = unificationVarFromWildcard(w)
       requireEqual(unificationVar, tpe1, ctx)
 
     case (ValueTypeRef(w: ValueTypeWildcard), ValueTypeApp(t2, args2), _) =>
-      val unificationVar : UnificationVar = unificationVarFromWildcard(w)
+      val unificationVar: UnificationVar = unificationVarFromWildcard(w)
       requireEqual(unificationVar, tpe2, ctx)
 
     // For now, we treat all type constructors as invariant.
@@ -101,12 +104,23 @@ trait TypeUnifier {
       (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
   }
 
-  def unifyEffects(eff1: EffectsOrVar, eff2: EffectsOrVar, ctx: ErrorContext): Unit = (eff1, eff2) match {
+  def unifyEffects(eff1: EffectsOrRef, eff2: EffectsOrRef, ctx: ErrorContext): Unit = (eff1, eff2) match {
     case (x: Effects, y: Effects) =>
       if (x.toList.toSet != y.toList.toSet) error(pp"${y} is not equal to ${x}", ctx)
-    case (x: EffectWildcard, y: Effects) => requireEqual(x, y)
-    case (x: Effects, y: EffectWildcard) => requireEqual(y, x)
-    case _ => throw new Exception("Two wildcards found")
+
+    case (EffectRef(x: EffectUnificationVar), EffectRef(y: EffectUnificationVar)) => requireEqual(x, eff2, ctx)
+
+    case (EffectRef(x: EffectUnificationVar), y: Effects) => requireEqual(x, y, ctx)
+    case (x: Effects, EffectRef(y: EffectUnificationVar)) => requireEqual(y, x, ctx)
+
+    case (EffectRef(x: EffectWildcard), y) =>
+      val unificationVar: EffectUnificationVar = unificationVarFromWildcard(x)
+      requireEqual(unificationVar, eff2, ctx)
+
+    case (x, EffectRef(y: EffectWildcard)) =>
+      val unificationVar: EffectUnificationVar = unificationVarFromWildcard(y)
+      requireEqual(unificationVar, eff1, ctx)
+
   }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
