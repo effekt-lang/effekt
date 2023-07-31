@@ -72,7 +72,7 @@ object Transformer {
             val freeParams = lifted.freeVariables(block).toList.toSet.flatMap {
               case lifted.ValueParam(id, tpe) => Set(Variable(transform(id), transform(tpe)))
               case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
-                Set(Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe))))
+                Set(Variable(transform(pid), Type.Reference(transform(stTpe))))
               case lifted.BlockParam(resume: symbols.TrackedParam.ResumeParam, _) =>
                 // resume parameters are represented as Stacks in machine
                 // TODO How can we not match on the symbol here?
@@ -166,9 +166,9 @@ object Transformer {
 
         val tpe = transform(stateType)
         val variable = Variable(freshName("x"), tpe)
-        val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+        val reference = Variable(transform(x), Type.Reference(tpe))
         transform(ev).run { evValue =>
-          Load(variable, stateVariable, evValue, Return(List(variable)))
+          Load(variable, reference, evValue, Return(List(variable)))
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(ev, arg)) =>
@@ -176,10 +176,10 @@ object Transformer {
 
         val tpe = transform(stateType)
         val variable = Variable(freshName("x"), Positive("Unit"));
-        val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+        val reference = Variable(transform(x), Type.Reference(tpe))
         transform(arg).run { value =>
           transform(ev).run { evValue =>
-            Store(stateVariable, value, evValue,
+            Store(reference, value, evValue,
               Construct(variable, builtins.Unit, List(), Return(List(variable))))
           }
         }
@@ -248,29 +248,27 @@ object Transformer {
             val tpe = value.tpe;
             val name = transform(id)
             val variable = Variable(name, tpe)
-            val stateVariable = Variable(name + "$State", Type.Reference(tpe))
+            val reference = Variable(transform(id), Type.Reference(tpe))
             val loadVariable = Variable(freshName(name), tpe)
             val getter = Clause(List(),
-                          Load(loadVariable, stateVariable, evValue,
+                          Load(loadVariable, reference, evValue,
                             Return(List(loadVariable))))
 
             val setterVariable = Variable(freshName(name), tpe)
             val setter = Clause(List(setterVariable),
-                                  Store(stateVariable, setterVariable, evValue,
+                                  Store(reference, setterVariable, evValue,
                                     Return(List())))
 
             // TODO use interface when it's implemented
-            Allocate(stateVariable, value, evValue,
+            Allocate(reference, value, evValue,
               //New(variable, List(getter, setter),
                 transform(body))
           }
         }
 
       case lifted.Var(init, lifted.BlockLit(List(), List(ev, id), body)) =>
-        val name = transform(id).name
-        val tpe = lifted.Type.inferType(init)
-        val stateType = transform(tpe)
-        val reference = Variable(name, Type.Reference(stateType))
+        val stateType = transform(init.tpe)
+        val reference = Variable(transform(id).name, Type.Reference(stateType))
         val evidence = transform(ev)
 
         transform(init).run { value =>
@@ -290,10 +288,9 @@ object Transformer {
         }
 
       case lifted.Put(id, ev, arg) =>
-        val tpe = lifted.Type.inferType(arg);
-        val stateType = transform(tpe);
-        val variable = Variable(freshName("x"), Positive("Unit"));
-        val reference = Variable(transform(id), Type.Reference(stateType));
+        val stateType = transform(arg.tpe)
+        val reference = Variable(transform(id), Type.Reference(stateType))
+        val variable = Variable(freshName("x"), Positive("Unit"))
 
         transform(arg).run { value =>
           transform(ev).run { evidence =>

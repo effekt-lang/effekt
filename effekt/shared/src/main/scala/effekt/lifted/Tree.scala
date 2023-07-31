@@ -242,8 +242,8 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Var(init, body) => freeVariables(init) ++ freeVariables(body)
-  case Get(id, ev, tpe) => freeVariables(ev)
-  case Put(id, ev, value) => freeVariables(ev) ++ freeVariables(value)
+  case Get(id, ev, tpe) => FreeVariables(BlockParam(id, lifted.Type.TState(tpe))) ++ freeVariables(ev)
+  case Put(id, ev, value) => FreeVariables(BlockParam(id, lifted.Type.TState(value.tpe))) ++ freeVariables(ev) ++ freeVariables(value)
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
   case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
