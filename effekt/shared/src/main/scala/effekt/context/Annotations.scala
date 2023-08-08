@@ -432,7 +432,9 @@ trait AnnotationsDB { self: Context =>
 
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
+      case b: BlockSymbol =>
+        val a = annotationOption(Annotations.BlockType, b)
+        a flatMap {
         case b: BlockType => Some(b)
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")

@@ -634,12 +634,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
 
           Context.withRegion(selfRegion) {
-            println("AnnotatedType: " + sym.annotatedType)
             (sym.annotatedType: @unchecked) match {
               case Some(annotated) =>
-
-                println(annotated.effects)
-
                 annotated.effects match {
                   case x: Effects =>
                     // the declared effects are considered as bound
@@ -667,25 +663,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                     Result(annotated, effs -- bound)
 
-                  case EffectRef(x) =>
+                  case _ => sys error "Annotation exists but effect is not concrete"
+                }
+
+              case None =>
+
+                (sym.annotatedResult, sym.annotatedEffects) match {
+                  case (None, None) =>
                     // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
                     given Captures = inferredCapture
 
                     // all effects are handled by the function itself (since they are inferred)
                     val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
-                      Context in {
-                        body checkAgainst annotated.result
-                      }
+                      Context in { checkStmt(body, None) }
                     }
 
                     // We do no longer use the order annotated on the function, but always the canonical ordering.
-                    val capabilities = effs.canonical.map {
-                      caps.apply
-                    }
+                    val capabilities = effs.canonical.map { caps.apply }
                     val captures = capabilities.map(_.capture)
-
-//                    val unificationVar : EffectUnificationVar = Context.
-//                    Context.
 
                     Context.bindCapabilities(d, capabilities)
                     Context.annotateInferredType(d, tpe)
@@ -696,44 +691,48 @@ object Typer extends Phase[NameResolved, Typechecked] {
                       (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
                     }
 
-                    println(effs.toEffects)
-
+                    // TODO also add capture parameters for inferred capabilities
                     val funType = sym.toType(tpe, effs.toEffects, captures)
-                    val funType2 = sym.toType(tpe, annotated.effects, captures)
-
-                    matchExpected(funType, funType2)
                     Result(funType, Pure)
+
+                  case (Some(x), Some(y)) => (x, y) match {
+                    case (res, EffectRef(ref)) =>
+                      // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
+                      given Captures = inferredCapture
+
+                      // all effects are handled by the function itself (since they are inferred)
+                      val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
+                        Context in {
+                          body checkAgainst res
+                        }
+                      }
+
+                      // We do no longer use the order annotated on the function, but always the canonical ordering.
+                      val capabilities = effs.canonical.map {
+                        caps.apply
+                      }
+                      val captures = capabilities.map(_.capture)
+
+                      Context.bindCapabilities(d, capabilities)
+                      Context.annotateInferredType(d, tpe)
+                      Context.annotateInferredEffects(d, effs.toEffects)
+
+                      // we subtract all capabilities introduced by this function to compute its capture
+                      flowsIntoWithout(inferredCapture, functionCapture) {
+                        (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
+                      }
+
+                      val funType = sym.toType(tpe, effs.toEffects, captures)
+                      val funType2 = sym.toType(tpe, y, captures)
+
+                      matchExpected(funType, funType2)
+                      Result(funType, Pure)
+
+                    case _ => sys error ("No annotation found but effect exists")
+                  }
+
+                  case _ => sys error ("Found illegal combination")
                 }
-
-
-              case None =>
-
-                // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
-                given Captures = inferredCapture
-
-                // all effects are handled by the function itself (since they are inferred)
-                val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
-                  Context in { checkStmt(body, None) }
-                }
-
-                // We do no longer use the order annotated on the function, but always the canonical ordering.
-                val capabilities = effs.canonical.map { caps.apply }
-                val captures = capabilities.map(_.capture)
-
-                Context.bindCapabilities(d, capabilities)
-                Context.annotateInferredType(d, tpe)
-                Context.annotateInferredEffects(d, effs.toEffects)
-
-                // we subtract all capabilities introduced by this function to compute its capture
-                flowsIntoWithout(inferredCapture, functionCapture) {
-                  (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
-                }
-
-                println(sym.name.name + ", " + effs.toEffects)
-
-                // TODO also add capture parameters for inferred capabilities
-                val funType = sym.toType(tpe, effs.toEffects, captures)
-                Result(funType, Pure)
             }
           }
         }

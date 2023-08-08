@@ -177,7 +177,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v: source.Var =>
       val sym = v.definition
       Context.blockTypeOf(sym) match {
-        case BlockTypeRef(x) => Context.panic("BlockTypeWildcard in unexpected place")
+        case BlockTypeRef(x) => Context.panic("BlockTypeWildcard in unexpected place1")
         case _: BlockType.FunctionType => transformAsControlBlock(tree)
         case _: BlockType.InterfaceType => transformAsObject(tree)
       }
@@ -218,7 +218,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = v.definition
       val tpe = Context.blockTypeOf(sym)
       tpe match {
-        case BlockTypeRef(x) => Context.panic("BlockTypeWildcard in unexpected place")
+        case BlockTypeRef(x) => Context.panic("BlockTypeWildcard in unexpected place2")
         case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
           // if this block argument expects to be called using PureApp or DirectApp, make sure it is
           // by wrapping it in a BlockLit
@@ -525,7 +525,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
-    case BlockTypeRef(x) => Context.panic("BlockTypeWildcard in unexpected place")
+    case BlockTypeRef(x) => 
+      Context.panic("BlockTypeWildcard in unexpected place3")
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
 
       val capabilityTypes = effects.canonical.map(transform)
@@ -680,7 +681,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
   def BlockParam(id: BlockSymbol)(using Context): core.BlockParam =
-    core.BlockParam(id, transform(Context.blockTypeOf(id)))
+    val blockType = Context.blockTypeOf(id)
+    core.BlockParam(id, transform(blockType))
 
   def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
     core.ValueVar(id, transform(Context.valueTypeOf(id)))

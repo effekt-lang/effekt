@@ -5,4 +5,6 @@ type List[A] {
   Cons(head: A, tail: List[A])
 }
 
-val l: List[_] = Cons(1, Cons(2, Cons(3, Nil())))
+val list: List[_] = Cons(1, Cons(2, Cons(3, Nil())))
+
+val tuple: (_, String) = (1, "1")

@@ -73,28 +73,39 @@ abstract class AbstractTyperTests extends munit.FunSuite {
 }
 class TyperTests extends AbstractTyperTests {
 
-  testTyperFile("Value type tests")("examples/pts/valueTypes.effekt"){
+  testTyperFile("Value type tests")("examples/pts/pos/valueTypes.effekt"){
     C => {
-      C.assertValueType("x", "Int")
-      C.assertBlockType("func1", "Int => Int")
+      C.assertValueType("value", "Int")
+      C.assertBlockType("func1", "(Int, Int) => Int")
       C.assertBlockType("func2", "() => String")
+      C.assertBlockType("func3", "ValueTypeWildcard => String")
     }
   }
 
-//  testTyperFile("Block type tests")("examples/pts/blockTypes.effekt"){
+  testTyperFile("Block type tests")("examples/pts/pos/blockTypes.effekt"){
+    C => {
+      C.assertBlockType("func1", "{(Int, Int) => Int} => Boolean")
+    }
+  }
+
+  testTyperFile("Nested type tests")("examples/pts/pos/nestedTypes.effekt"){
+    C => {
+      C.assertValueType("list", "List[Int]")
+      C.assertValueType("tuple", "Tuple2[Int, String]")
+    }
+  }
+
+  testTyperFile("Effect test")("examples/pts/pos/effects.effekt"){
+    C => {
+      C.assertBlockType("func1", "() => Int / { Eff1 }")
+      C.assertBlockType("func2", "() => Int / { Eff1, Eff2 }")
+    }
+  }
+
+//  testTyperFile("Capture test")("examples/pts/pos/captures.effekt"){
 //    C => {
-//      C.assertBlockType("func")
+//      C.assertCaptureType("myModule", "")
 //    }
 //  }
-
-  testTyperFile("Nested type tests")("examples/pts/nestedTypes.effekt"){
-    C => {
-      C.assertValueType("l", "List[Int]")
-    }
-  }
-
-  testTyperFile("Effect test")("examples/pts/effects.effekt"){
-    C => { C.assertBlockType("testFunction", "() => Int / { Eff1 }") }
-  }
 
 }

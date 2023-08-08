@@ -12,7 +12,3 @@ def testFunction(x: Int, y: Int): Int / Eff = {
 // To prevent error, we need to annotate return type of "run"
 
 def run{functionParam: _}: Int / Eff = functionParam(1, 2)
-
-def main() = {
-    ()
-}

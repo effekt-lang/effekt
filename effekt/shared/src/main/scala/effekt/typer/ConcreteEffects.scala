@@ -94,6 +94,7 @@ private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
 }
 
 private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
+  case x: ValueTypeWildcard => true
   case x: UnificationVar => false
   case x: TypeVar => true
 }
@@ -106,8 +107,8 @@ private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
 }
 
 private def isConcreteBlockType(tpe: BlockTypeVar): Boolean = tpe match {
-  case x : BlockUnificationVar => false
-  case x : BlockTypeVar => true
+  case x: BlockTypeWildcard => false // Should be true but causes error in transformer
+  case x: BlockUnificationVar => false
 }
 
 private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]

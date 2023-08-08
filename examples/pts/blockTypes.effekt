@@ -1,9 +1,0 @@
-module examples/pts/blockTypes
-
-def func(x: Int, y: Int): Int = x + y
-
-def run{f: _} = f(1, 2)
-
-def main() = {
-    run(func)
-}
