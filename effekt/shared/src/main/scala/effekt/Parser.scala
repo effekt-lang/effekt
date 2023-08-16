@@ -476,8 +476,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val int    = integerLiteral.flatMap { n =>
     try { val number = n.toInt;
-      success(IntLit(number))
-    } catch { case e => error("Not a 32bit integer literal.") }
+      success(IntLit(number).withPositionOf(n))
+    } catch { case e => failure("Not a 32bit integer literal.") }
   }
   lazy val bool   = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit   = literal("()") ^^^ UnitLit()
