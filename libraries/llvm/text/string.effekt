@@ -97,7 +97,9 @@ def toInt(s: String): Option[Int] = {
     }
   }
   try {
-    if(s.startsWith("-")) {
+    if(s.length == 0) {
+        None()
+    } else if(s.startsWith("-")) {
         Some(0 - go(1, 0))
     } else {
         Some(go(0, 0))
