@@ -369,7 +369,7 @@ object Transformer {
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
-    case lifted.Literal(value: Int, _) =>
+    case lifted.Literal(value: Long, _) =>
       val variable = Variable(freshName("x"), Type.Int());
       Binding { k =>
         LiteralInt(variable, value, k(variable))

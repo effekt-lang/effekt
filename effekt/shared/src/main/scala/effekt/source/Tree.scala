@@ -339,7 +339,7 @@ export Term.*
 // Smart Constructors for literals
 // -------------------------------
 def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
+def IntLit(value: Long): Literal = Literal(value, symbols.builtins.TInt)
 def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
 def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
 def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)

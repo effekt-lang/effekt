@@ -48,7 +48,7 @@ case class Parameter(typ: Type, name: String)
 sealed trait Operand
 object Operand {
   case class LocalReference(tpe: Type, name: String) extends Operand
-  case class ConstantInt(n: Int) extends Operand
+  case class ConstantInt(n: Long) extends Operand
   case class ConstantDouble(x: Double) extends Operand
   case class ConstantAggregateZero(typ: Type) extends Operand
   case class ConstantGlobal(tpe: Type, name: String) extends Operand

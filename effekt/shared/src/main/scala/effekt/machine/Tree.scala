@@ -191,7 +191,7 @@ enum Statement {
   /**
    * let x = 42; s
    */
-  case LiteralInt(name: Variable, value: Int, rest: Statement)
+  case LiteralInt(name: Variable, value: Long, rest: Statement)
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
