@@ -174,7 +174,8 @@ def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b 
         F.interfaceDeclarationFor(id).operations(field)
     }
 
-  case Block.New(impl) => analyze(impl)
+  case Block.New(Implementation(BlockType.Interface(name, targs), operations)) =>
+    FlowType.Interface(name, targs)
 
   case Block.Unbox(e) =>
     analyze(e)
@@ -200,7 +201,7 @@ def traverse(b: Block)(using C: ErrorReporter, F: FlowAnalysis): Unit =
     case Block.BlockLit(tparams, params, body) => analyze(body)
     case Block.Member(b, field, annotatedTpe) => traverse(b)
     case Block.Unbox(e) => analyze(e)
-    case Block.New(impl) => ()  // TODO
+    case Block.New(impl) => analyze(impl)
   }
 
 def analyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = {

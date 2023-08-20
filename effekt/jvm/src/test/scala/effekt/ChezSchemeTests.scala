@@ -73,6 +73,6 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
 
     // known issues:
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
-    examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidecen, which it does not need
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidence, which it does not need
   )
 }

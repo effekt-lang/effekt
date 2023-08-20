@@ -53,25 +53,26 @@ object TransformerLift {
   def toChezExpr(stmt: Stmt): CPS = stmt match {
     case Return(e) => CPS.pure(toChez(e))
 
-    // Region based state
-    // TODO maybe add as node to lifted.Tree
-    case App(lifted.Block.Member(x, builtins.TState.get, _), _, List(ev)) =>
-      def get = {
-        val k = freshName("k")
-        val s = freshName("s")
-        // ev (k => s => k s s)
-        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s), chez.Call(chez.Call(k, s), s))))
-      }
-      CPS.reflect(get)
-
-    case App(lifted.Block.Member(x, builtins.TState.put, _), _, List(ev, value)) =>
-      def set = {
-        val k = freshName("k")
-        val s2 = freshName("s2")
-        // ev (k => s2 => k () value)
-        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s2), chez.Call(chez.Call(k, chez.unit), toChez(value)))))
-      }
-      CPS.reflect(set)
+    //    // Region based state
+    //    // This returns the region itself, not the cell. So for now we just use the accessors generated below.
+    //    // TODO maybe add as node to lifted.Tree
+    //    case App(lifted.Block.Member(x, builtins.TState.get, _), _, List(ev)) =>
+    //      def get = {
+    //        val k = freshName("k")
+    //        val s = freshName("r")
+    //        // ev (k => r => k r r)
+    //        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s), chez.Call(chez.Call(k, s), s))))
+    //      }
+    //      CPS.reflect(get)
+    //
+    //    case App(lifted.Block.Member(x, builtins.TState.put, _), _, List(ev, value)) =>
+    //      def set = {
+    //        val k = freshName("k")
+    //        val s2 = freshName("s2")
+    //        // ev (k => s2 => k () value)
+    //        chez.Call(toChez(ev), chez.Lambda(List(k), chez.Lambda(List(s2), chez.Call(chez.Call(k, chez.unit), toChez(value)))))
+    //      }
+    //      CPS.reflect(set)
 
     case App(b, targs, args) => CPS.inline { k => chez.Call(chez.Call(toChez(b), args map toChez), List(k.reify)) }
 
