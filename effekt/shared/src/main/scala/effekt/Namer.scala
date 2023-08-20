@@ -89,6 +89,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RegDef(id, annot, region, binding) =>
       ()
 
+    // allow recursive definitions of objects
+    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses))) =>
+      val tpe = Context.at(interface) { resolve(interface) }
+      val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
+      Context.define(id, sym)
+
     case d @ source.DefDef(id, annot, block) =>
       ()
 
@@ -255,6 +261,10 @@ object Namer extends Phase[Parsed, NameResolved] {
 
       Context.define(id, sym)
 
+    // already has been preresolved (to enable recursive definitions)
+    case d @ source.DefDef(id, annot, source.New(impl)) =>
+      resolveGeneric(impl)
+
     case d @ source.DefDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
@@ -362,8 +372,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case source.Implementation(interface, clauses) =>
-
-
       val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
