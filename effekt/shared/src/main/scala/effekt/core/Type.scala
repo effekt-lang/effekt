@@ -158,7 +158,7 @@ object Type {
 
   def inferType(stmt: Stmt): List[ValueType] = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
-    case Stmt.Return(exprs) => exprs.map(_.tpe)  // TODO MRV: return (return 1, 2), (return 3, 4) = return 1, 2, 3, 4?
+    case Stmt.Return(exprs) => exprs.flatMap(_.tpe)  // TODO MRV: return (return 1, 2), (return 3, 4) = return 1, 2, 3, 4?
     case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
@@ -193,24 +193,15 @@ object Type {
     case Stmt.Hole() => Set.empty
   }
 
-  def inferType(expr: Expr): ValueType = expr match {
+  def inferType(expr: Expr): List[ValueType] = expr match {
     case DirectApp(callee, targs, vargs, bargs) =>
-      instantiate(callee.functionType, targs, bargs.map(_.capt)).result match {
-        case List(tpe) => tpe
-        case _ => ??? // TODO MRV: can multiple values be returned?
-      }
-    case Run(s) => s.tpe match {
-      case List(tpe) => tpe
-      case _ => ??? // TODO MRV: can multiple values be returned?
-    }
-    case Pure.ValueVar(id, tpe) => tpe
-    case Pure.Literal(value, tpe) => tpe
-    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result match {
-      case List(tpe) => tpe
-      case _ => ??? // TODO MRV: can multiple values be returned?
-    }
-    case Pure.Select(target, field, annotatedType) => annotatedType
-    case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
+      instantiate(callee.functionType, targs, bargs.map(_.capt)).result
+    case Run(s) => s.tpe
+    case Pure.ValueVar(id, tpe) => List(tpe)
+    case Pure.Literal(value, tpe) => List(tpe)
+    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
+    case Pure.Select(target, field, annotatedType) => List(annotatedType)
+    case Pure.Box(block, capt) => List(ValueType.Boxed(block.tpe, capt))
   }
 
   /**
