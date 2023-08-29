@@ -604,9 +604,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
       cps foreach Context.bind
 
-      val res = resolve(ret)
+      val res = ret map resolve
 
-      FunctionType(tps, cps, vps, bps, List(res), effs) // TODO MRV remove List(res)
+      FunctionType(tps, cps, vps, bps, res, effs)
     }
   }
 

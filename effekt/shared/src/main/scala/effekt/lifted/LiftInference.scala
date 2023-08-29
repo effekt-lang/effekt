@@ -68,10 +68,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.BlockType.Function(tparams, cparams, vparams, bparams, results) =>
       // here we turn cparams into evidence parameters (not necessary, only for debugging)
       val eparams = EvidenceType() :: cparams.map(p => EvidenceType())
-      results match {
-        case List(result) => lifted.BlockType.Function(tparams, eparams, vparams.map(transform), bparams.map(transform), transform(result))
-        case _ => ??? // TODO MRV
-      }
+      lifted.BlockType.Function(tparams, eparams, vparams.map(transform), bparams.map(transform), results.map(transform))
 
     // [[ State[Int] ]] = State[ [[Int]] ]
     case core.BlockType.Interface(name, targs) =>
@@ -206,7 +203,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       If(transform(cond), transform(thn), transform(els))
 
     case core.Return(e) =>
-      Return(e.map(transform).head) // TODO MRV: remove .head
+      Return(e map transform)
 
     case core.Hole() => Hole()
   }

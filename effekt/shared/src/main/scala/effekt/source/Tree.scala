@@ -170,7 +170,7 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) // TODO MRV: val x, y = ...
   case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
@@ -233,7 +233,7 @@ export Def.*
 enum Stmt extends Tree {
   case DefStmt(d: Def, rest: Stmt)
   case ExprStmt(d: Term, rest: Stmt)
-  case Return(d: List[Term])                  // TODO: List[Term]
+  case Return(d: List[Term])
   case BlockStmt(stmts: Stmt)
 }
 export Stmt.*
@@ -480,7 +480,7 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
+  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: List[ValueType], effects: Effects)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
 }
 

@@ -277,7 +277,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
     | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (`return`.? ~> someSep(expr, `,`) <~ `;`.?) ^^ Return.apply  //TODO
+    | (`return`.? ~> someSep(expr, `,`) <~ `;`.?) ^^ Return.apply
     | matchDef
     | failure("Expected a statement")
     )
@@ -521,13 +521,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
-    |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
-    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> someSep(primValueType, `,`)) ~ maybeEffects ^^ FunctionType.apply
+    |  some(blockTypeParam) ~ (`=>` ~/> someSep(primValueType, `,`)) ~ maybeEffects ^^ { case tpes ~ rets ~ eff => FunctionType(Nil, tpes, rets, eff) }
+    | primValueType ~ (`=>` ~/> someSep(primValueType, `,`)) ~ maybeEffects ^^ { case t ~ rets ~ eff => FunctionType(List(t), Nil, rets, eff) }
     | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
-    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
+    | `=>` ~/> someSep(primValueType, `,`) ~ maybeEffects ^^ { case rets ~ eff => FunctionType(Nil, Nil, rets, eff) }
     | failure("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
     )
 
