@@ -116,20 +116,23 @@ object Transformer {
             ErrorReporter.abort(s"block definition: $d")
         }
 
-      case lifted.Return(lifted.Run(stmt)) =>
+      case lifted.Return(List(lifted.Run(stmt))) => // TODO MRV: remove case?
         transform(stmt)
 
       case lifted.Return(expr) =>
-        transform(expr).run { value => Return(List(value)) }
+        transform(expr).run { values => Return(values) }
 
-      case lifted.Val(id, binding, lifted.Return(lifted.ValueVar(id2, tpe))) if id == id2 =>
+      case lifted.Val(id, binding, lifted.Return(List(lifted.ValueVar(id2, tpe)))) if id == id2 =>
         transform(binding)
 
-      case lifted.Val(id, binding, rest) =>
-        PushFrame(
-          Clause(List(transform(lifted.ValueParam(id, binding.tpe))), transform(rest)),
+      case lifted.Val(id, binding, rest) => binding.tpe match {
+        case List(tpe) => PushFrame(
+            Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
             transform(binding)
-        )
+          )
+        case _ => ErrorReporter.abort(s"Multiple return types not yet supported: ${binding.tpe}") // TODO MRV: val x, y = ...
+      }
+
       case lifted.App(lifted.BlockVar(id, tpe), targs, args) =>
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
         // TODO deal with BlockLit
@@ -209,8 +212,9 @@ object Transformer {
         }
 
       case lifted.Try(lifted.BlockLit(tparams, ev :: ids, body), handlers) =>
-        val variable = Variable(freshName("a"), transform(body.tpe))
-        val returnClause = Clause(List(variable), Return(List(variable)))
+        // TODO MRV: map correct?
+        val variables = body.tpe.map { tpe => Variable(freshName("a"), transform(tpe)) }
+        val returnClause = Clause(variables, Return(variables))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
         val regionVar = Variable(freshName("_"), Type.Region())
 
@@ -230,8 +234,9 @@ object Transformer {
         }
 
       case lifted.Region(lifted.BlockLit(tparams, List(ev, id), body)) =>
-        val variable = Variable(freshName("a"), transform(body.tpe))
-        val returnClause = Clause(List(variable), Return(List(variable)))
+        // TODO MRV: map correct?
+        val variables = body.tpe.map { tpe => Variable(freshName("a"), transform(tpe)) }
+        val returnClause = Clause(variables, Return(variables))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
         val regionVar = Variable(transform(id.id), Type.Region())
 
@@ -321,7 +326,7 @@ object Transformer {
     case lifted.New(impl) => ???
   }
 
-  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match { // TODO MRV: Binding[List[Variable]]
     case lifted.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -358,7 +363,11 @@ object Transformer {
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>
       if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-      val variable = Variable(freshName("x"), transform(tpe.result))
+      val variable = tpe.result match {
+        case List(tpe) => Variable(freshName("x"), transform(tpe))
+        case _ => ??? // TODO MRV: should not happen, error message?
+      }
+
       transform(args).flatMap { values =>
         Binding { k =>
           ForeignCall(variable, transform(blockName), values, k(variable))
@@ -369,7 +378,11 @@ object Transformer {
     if DeclarationContext.findConstructor(blockName).isDefined =>
       if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-      val variable = Variable(freshName("x"), transform(tpe.result));
+      val variable = tpe.result match {
+        case List(tpe) => Variable(freshName("x"), transform(tpe))
+        case _ => ??? // TODO MRV: should not happen, error message?
+      }
+
       val tag = DeclarationContext.getConstructorTag(blockName)
 
       transform(args).flatMap { values =>
@@ -392,9 +405,14 @@ object Transformer {
 
     case lifted.Run(stmt) =>
       // NOTE: `stmt` is guaranteed to be of type `tpe`.
-      val variable = Variable(freshName("x"), transform(stmt.tpe))
-      Binding { k =>
-        PushFrame(Clause(List(variable), k(variable)), transform(stmt))
+      val variables = stmt.tpe.map { tpe => Variable(freshName("x"), transform(tpe)) }
+
+      variables match {
+        case List(variable) =>
+          Binding { k =>
+            PushFrame(Clause(List(variable), k(variable)), transform(stmt))
+          }
+        case _ => ??? // TODO MRV
       }
 
     case _ =>
