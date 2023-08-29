@@ -123,6 +123,8 @@ object Transformer {
     case ValueType.Boxed(tpe) => tpeToML(tpe)
   }
 
+  def tpeToML(tpes: List[ValueType])(using TransformerContext): List[ml.Type] = tpes map { tpeToML }
+
   def toML(decl: Declaration)(using C: TransformerContext): List[ml.Binding] = decl match {
 
     case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
@@ -190,7 +192,10 @@ object Transformer {
   }
 
   def toMLExpr(stmt: Stmt)(using C: TransformerContext): CPS = stmt match {
-    case lifted.Return(e) => CPS.pure(toML(e))
+    case lifted.Return(e) => e match {
+      case List(e) => CPS.pure(toML(e))
+      case _ => ??? // TODO MRV
+    }
 
     case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), _, List(ev)) =>
       CPS.pure(ml.Expr.Deref(ml.Variable(name(x))))

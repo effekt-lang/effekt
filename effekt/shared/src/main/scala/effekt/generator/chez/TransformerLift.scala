@@ -47,7 +47,10 @@ object TransformerLift {
   }
 
   def toChezExpr(stmt: Stmt): CPS = stmt match {
-    case Return(e) => CPS.pure(toChez(e))
+    case Return(e) => e match {
+      case List(e) => CPS.pure(toChez(e))
+      case _ => ??? // TODO MRV
+    }
     case App(b, targs, args) => CPS.inline { k => chez.Call(chez.Call(toChez(b), args map toChez), List(k.reify)) }
 
     case If(cond, thn, els) =>
