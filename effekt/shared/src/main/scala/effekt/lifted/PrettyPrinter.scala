@@ -30,10 +30,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       emptyline <> toDoc(m.definitions)
   }
 
-  def signature(tparams: List[Id], params: List[Param], ret: ValueType): Doc =
+  def signature(tparams: List[Id], params: List[Param], ret: List[ValueType]): Doc =
     val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
     val ps = parens(params.map(toDoc))
-    tps <> ps <> ":" <+> toDoc(ret)
+    tps <> ps <> ":" <+> hsep(ret.map(toDoc), ", ")
 
   def toDoc(p: Param): Doc = p match {
     case Param.ValueParam(id, tpe) => id.name.toString <> ":" <+> toDoc(tpe)
@@ -43,7 +43,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> body <> "\""
+      "extern def" <+> toDoc(id.name) <> signature(tparams, params, List(ret)) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
 
@@ -156,7 +156,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
     case Return(e) =>
-      toDoc(e)
+      hsep(e.map(toDoc), ", ")
 
     case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
@@ -186,8 +186,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val eps = eparams.map { _ => string("EV") }
       val vps = vparams.map(toDoc)
       val bps = bparams.map(toDoc)
-      val res = toDoc(result)
-      tps <> parens(eps ++ vps ++ bps) <+> "=>" <+> res
+      val res = result.map(toDoc)
+      tps <> parens(eps ++ vps ++ bps) <+> "=>" <+> hsep(res, ", ")
     case lifted.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case lifted.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
   }

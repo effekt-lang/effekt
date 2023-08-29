@@ -123,7 +123,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
             // TODO this is a bit ad-hoc
             val mainSym = mod.terms("main").head
             val mainTpe = context.functionTypeOf(mainSym)
-            output.emitln(pp"${mainTpe.result}")
+            output.emitln(pp"${mainTpe.result.map{ t => pp"$t"}.mkString(", ")}")
           }
 
         case Success(other, _) =>

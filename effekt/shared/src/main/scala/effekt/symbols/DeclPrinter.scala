@@ -84,9 +84,9 @@ object DeclPrinter extends ParenPrettyPrinter {
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
 
     val returnType = for {
-      tpe <- result
+      tpes <- result
       eff <- effects
-    } yield pp": $tpe / $eff"
+    } yield pp": ${tpes.map { t => pp"$t"}.mkString(", ")} / $eff"
 
     s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
   }

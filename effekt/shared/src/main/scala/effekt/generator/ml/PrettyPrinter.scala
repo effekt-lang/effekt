@@ -82,7 +82,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Builtin(t) => toDoc(t)
     case Type.Fun(Nil, res) => ???
     case Type.Fun(args, res) =>
-      val fn = folddoc(args.map(a => toDoc(a) <+> "-> "), _ <> _) <+> toDoc(res)
+      val fn = folddoc(args.map(a => toDoc(a) <+> "-> "), _ <> _) <+> hsep(res map toDoc, ",")
       parens(fn)
   }
 
