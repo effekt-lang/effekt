@@ -33,7 +33,7 @@ enum Type {
   case String
   case Bool
   case Data(name: MLName)
-  case Fun(args: List[Type], res: Type)
+  case Fun(args: List[Type], res: List[Type])
 }
 
 enum Param {
