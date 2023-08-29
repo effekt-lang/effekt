@@ -113,8 +113,8 @@ enum Stmt extends Tree  {
   case Scope(definitions: List[Definition], body: Stmt)
 
   // Fine-grain CBV
-  case Return(e: Expr)
-  case Val(id: Id, binding: Stmt, body: Stmt)
+  case Return(e: List[Expr])
+  case Val(id: Id, binding: Stmt, body: Stmt) // TODO MRV: val x, y = swap(x, y)
   case App(b: Block, targs: List[ValueType], args: List[Argument])
 
   // Local Control Flow
@@ -132,7 +132,7 @@ enum Stmt extends Tree  {
   // Others
   case Hole()
 
-  val tpe: ValueType = Type.inferType(this)
+  val tpe: List[ValueType] = Type.inferType(this)
 }
 export Stmt.*
 
@@ -218,10 +218,10 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
         bound ++= FreeVariables(ValueParam(id, binding.tpe))
     }
     freeVariables(body) -- bound ++ free
-  case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- FreeVariables(ValueParam(id, binding.tpe))
+  case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- FreeVariables(ValueParam(id, binding.tpe.head)) // TODO MRV: val x, y = ...
   case App(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
-  case Return(e) => freeVariables(e)
+  case Return(e) => e.map(freeVariables).combineFV
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
   case State(id, init, region, ev, body) =>
@@ -287,7 +287,7 @@ def freeTypeVariables(tpe: ValueType): Set[Id] = tpe match {
   case ValueType.Boxed(tpe) => freeTypeVariables(tpe)
 }
 def freeTypeVariables(tpe: BlockType): Set[Id] = tpe match {
-  case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
-    (vparams.flatMap(freeTypeVariables).toSet ++ bparams.flatMap(freeTypeVariables).toSet ++ freeTypeVariables(result)) -- tparams.toSet
+  case BlockType.Function(tparams, eparams, vparams, bparams, results) =>
+    (vparams.flatMap(freeTypeVariables).toSet ++ bparams.flatMap(freeTypeVariables).toSet ++ results.flatMap(freeTypeVariables).toSet) -- tparams.toSet
   case BlockType.Interface(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
 }
