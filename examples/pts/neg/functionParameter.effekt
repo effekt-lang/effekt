@@ -1,0 +1,3 @@
+module examples/pts/neg/functionParameter
+
+def func1(x: _) = "test"

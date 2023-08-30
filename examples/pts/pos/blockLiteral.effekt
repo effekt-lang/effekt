@@ -1,0 +1,13 @@
+module examples/pts/pos/blockLiteral
+
+effect Eff(): Unit
+effect InterfaceEff { def run(): Unit }
+
+def outer{interfaceEff: InterfaceEff} = {
+    val func: () => Unit / _ at _ = fun() {
+        do Eff();
+        interfaceEff.run()
+        ()
+    }
+    func
+}

@@ -183,26 +183,26 @@ sealed trait BlockTypeSymbol extends TypeSymbol
 /**
  * Type variables are symbols that can be substituted for.
  * - [[TypeParam]] type variables in user programs
- * - [[UnificationVar]] type variables inserted by the type checker.
+ * - [[ValueUnificationVar]] type variables inserted by the type checker.
  */
-enum TypeVar(val name: Name) extends ValueTypeSymbol {
+enum ValueTypeVar(val name: Name) extends ValueTypeSymbol {
 
   /**
    * Type parameters that show up in user programs
    */
-  case TypeParam(n: Name) extends TypeVar(n)
+  case TypeParam(n: Name) extends ValueTypeVar(n)
 
   /**
    * Introduced when instantiating type schemes
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name)
+  case ValueUnificationVar(underlying: ValueTypeVar.TypeParam, call: source.Tree) extends ValueTypeVar(underlying.name)
 
 
-  case ValueTypeWildcard() extends TypeVar(LocalName("ValueTypeWildcard"))
+  case ValueTypeWildcard() extends ValueTypeVar(LocalName("ValueTypeWildcard"))
 }
-export TypeVar.*
+export ValueTypeVar.*
 
 enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
   /**
@@ -210,7 +210,7 @@ enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case BlockUnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends BlockTypeVar(underlying.name)
+  case BlockUnificationVar(underlying: ValueTypeVar.TypeParam, call: source.Tree) extends BlockTypeVar(underlying.name)
 
 
   case BlockTypeWildcard() extends BlockTypeVar(LocalName("BlockTypeWildcard"))
@@ -218,7 +218,7 @@ enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
 export BlockTypeVar.*
 
 enum EffectVar(val name: Name) extends Symbol {
-  case EffectUnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends EffectVar(underlying.name)
+  case EffectUnificationVar(underlying: ValueTypeVar.TypeParam, call: source.Tree) extends EffectVar(underlying.name)
 
   case EffectWildcard() extends EffectVar(LocalName("EffectWildcard"))
 }
@@ -341,7 +341,7 @@ object CaptUnificationVar {
   case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role
   case class InferredBox(box: source.Box) extends Role
   case class InferredUnbox(unbox: source.Unbox) extends Role
-  // underlying should be a UnificationVar
+  // underlying should be a ValueUnificationVar
   case class Subtraction(handled: List[Capture], underlying: CaptUnificationVar) extends Role
   case class Substitution() extends Role
 }

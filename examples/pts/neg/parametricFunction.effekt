@@ -1,0 +1,9 @@
+module examples/pts/neg/parametricFunction
+
+def parametricFunc[A](x: A): A = x
+
+def run{func: _}: Int = func[Int](1)
+
+def main() = {
+    run{parametricFunc}
+}

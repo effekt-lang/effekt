@@ -1,0 +1,1 @@
+def id[A](x: A): A = x

@@ -1,13 +1,15 @@
-module examples/pts/captures
+module examples/pts/pos/captures
 
 effect Eff { def use(): Unit }
 
 def myModule { eff : Eff } = {
   val e = fun() { eff.use(); () };
   def x = unbox e;
-  def test1b = x;
 
-  val f: () => Unit at _ = test1b;
+  val f: () => Unit at _ = x;
+  val g: _ at _ = x
+  val h: _ = x
+  val i: () => Unit at {eff} = box _ x
 
   f
 }

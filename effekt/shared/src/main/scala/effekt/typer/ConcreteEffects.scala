@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.source.BlockType.BlockTypeWildcard
 import effekt.symbols.*
 import effekt.symbols.BlockTypeVar.BlockUnificationVar
-import effekt.symbols.TypeVar.ValueTypeWildcard
+import effekt.symbols.ValueTypeVar.ValueTypeWildcard
 import effekt.util.messages.ErrorMessageReifier
 
 
@@ -93,10 +93,10 @@ private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
   case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
 }
 
-private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
-  case x: ValueTypeWildcard => true
-  case x: UnificationVar => false
-  case x: TypeVar => true
+private def isConcreteValueType(tpe: ValueTypeVar): Boolean = tpe match {
+  case x: ValueTypeWildcard => false
+  case x: ValueUnificationVar => false
+  case x: ValueTypeVar => true
 }
 
 private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
@@ -107,7 +107,7 @@ private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
 }
 
 private def isConcreteBlockType(tpe: BlockTypeVar): Boolean = tpe match {
-  case x: BlockTypeWildcard => false // Should be true but causes error in transformer
+  case x: BlockTypeWildcard => false
   case x: BlockUnificationVar => false
 }
 

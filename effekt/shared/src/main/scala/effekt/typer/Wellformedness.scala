@@ -278,7 +278,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) ++ freeCapture(eff) -- cparams.toSet
     case CaptureSet(cs) => cs
     case x: CaptUnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
-    case x: UnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
+    case x: ValueUnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
     case _: Symbol | _: String => Set.empty // don't follow symbols
     case t: Iterable[t] =>
       t.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
@@ -288,16 +288,16 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       Set.empty
   }
 
-  def freeTypeVars(o: Any): Set[TypeVar] = o match {
-    case t: symbols.TypeVar => Set(t)
+  def freeTypeVars(o: Any): Set[ValueTypeVar] = o match {
+    case t: symbols.ValueTypeVar => Set(t)
     case FunctionType(tps, cps, vps, bps, ret, effs) =>
       freeTypeVars(vps) ++ freeTypeVars(bps) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tps.toSet
     case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
     case t: Iterable[t] =>
-      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+      t.foldLeft(Set.empty[ValueTypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
     case p: Product =>
-      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+      p.productIterator.foldLeft(Set.empty[ValueTypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
     case _ =>
       Set.empty
   }

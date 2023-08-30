@@ -1,0 +1,25 @@
+module examples/pts/pos/boxInference
+
+import immutable/list
+
+def f(x: Int): Int = x + 1
+def g(x: Int): Int = x * 2
+
+def func1(boxedParam: _): Int = {
+     (unbox boxedParam)(1)
+}
+
+def func2(boxedParams: List[_]): Int = {
+    var sum = 0
+    foreach(boxedParams) {
+        func => sum = sum + (unbox func)(1)
+    }
+
+    sum
+}
+
+def main() = {
+    val a = func1(box f)
+    val b = func2(Cons(box f, Cons(box g, Nil())))
+    1
+}

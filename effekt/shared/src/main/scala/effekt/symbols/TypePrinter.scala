@@ -20,7 +20,7 @@ object TypePrinter extends ParenPrettyPrinter {
   def show(t: Capture): String = pretty(toDoc(t), 80).layout
   def show(t: Captures): String = pretty(toDoc(t), 80).layout
   def show(t: Effects): String = pretty(toDoc(t), 80).layout
-  def show(t: List[ValueType | TypeVar]): String = pretty(maybeTypeParams(t), 80).layout
+  def show(t: List[ValueType | ValueTypeVar]): String = pretty(maybeTypeParams(t), 80).layout
 
   def toDoc(m: Type): Doc = m match {
     case tpe: ValueType => toDoc(tpe)
@@ -34,9 +34,9 @@ object TypePrinter extends ParenPrettyPrinter {
     case ValueTypeRef(x)            => toDoc(x)
   }
 
-  def toDoc(tpe: TypeVar): Doc = tpe match {
-    case typeVar: UnificationVar => typeVar.toString
-    case typeVar: TypeVar => typeVar.name
+  def toDoc(tpe: ValueTypeVar): Doc = tpe match {
+    case typeVar: ValueUnificationVar => typeVar.toString
+    case typeVar: ValueTypeVar => typeVar.name
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
@@ -93,12 +93,12 @@ object TypePrinter extends ParenPrettyPrinter {
 
   implicit def toDoc(name: Name): Doc = name.name
 
-  def typeParams(tparams: List[ValueType | TypeVar]): Doc = brackets(hsep(tparams.map {
+  def typeParams(tparams: List[ValueType | ValueTypeVar]): Doc = brackets(hsep(tparams.map {
     case tpe: ValueType => toDoc(tpe)
-    case tpe: TypeVar => toDoc(tpe)
+    case tpe: ValueTypeVar => toDoc(tpe)
   }, comma))
 
-  def maybeTypeParams(tparams: List[ValueType | TypeVar]): Doc =
+  def maybeTypeParams(tparams: List[ValueType | ValueTypeVar]): Doc =
     if (tparams.isEmpty) "" else typeParams(tparams)
 }
 

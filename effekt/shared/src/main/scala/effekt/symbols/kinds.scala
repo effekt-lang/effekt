@@ -43,7 +43,11 @@ package object kinds {
   def wellformed(b: FunctionType)(using C: Context): Unit = b match {
     case FunctionType(tps, cps, vps, bps, res, effs) =>
       // TODO we could also check whether the same type variable shows up twice
-      if (cps.size != (bps.size + effs.canonical.size)) {
+      //if (cps.size != (bps.size + effs.canonical.size)) {
+      if (cps.size != (bps.size + (effs match {
+        case x: EffectRef => 1
+        case x => x.canonical.size
+      }))) {
         C.panic(s"Compiler invariant violated: different size of capture parameters and block parameters: ${b}")
       }
       vps.foreach { tpe => wellformed(tpe) }

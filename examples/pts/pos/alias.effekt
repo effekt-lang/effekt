@@ -1,0 +1,14 @@
+module examples/pts/pos/alias
+
+effect Eff(): Unit
+
+def f(x: Int, y: String): Int / Eff = {
+    do Eff()
+    x
+}
+
+def g: _ = f
+
+def main() = {
+    ()
+}

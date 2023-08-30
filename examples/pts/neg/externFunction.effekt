@@ -1,0 +1,7 @@
+extern pure def test(x: _): Unit = "test"
+
+val a = test(1)
+
+def main() = {
+    ()
+}

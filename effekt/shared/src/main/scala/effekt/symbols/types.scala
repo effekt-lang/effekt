@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import TypeVar.*
+import ValueTypeVar.*
 import effekt.symbols.EffectVar.EffectUnificationVar
 
 /**
@@ -29,7 +29,7 @@ enum ValueType extends Type {
   /**
    * Reference to a type variable (we don't have type constructor polymorphism, so variables do not take arguments)
    */
-  case ValueTypeRef(tvar: TypeVar)
+  case ValueTypeRef(tvar: ValueTypeVar)
 
   /**
    * Reference to a type constructor with optional type arguments
@@ -133,21 +133,22 @@ object Effects {
 
 case class EffectRef(evar: EffectVar) extends EffectsOrRef {
 
-  override lazy val toList: List[InterfaceType] = sys error(evar.name.toString + "occurred in an unexpected place")
+  override lazy val toList: List[InterfaceType] = sys error(evar.name.toString + " occurred in an unexpected place")
 
-  override def isEmpty: Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
+  override def isEmpty: Boolean = sys error(evar.name.toString + " occurred in an unexpected place")
 
-  override def nonEmpty: Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
+  override def nonEmpty: Boolean = sys error(evar.name.toString + " occurred in an unexpected place")
 
-  override def filterNot(p: InterfaceType => Boolean): Effects = sys error(evar.name.toString + "occurred in an unexpected place")
+  override def filterNot(p: InterfaceType => Boolean): Effects = sys error(evar.name.toString + " occurred in an unexpected place")
 
-  override def forall(p: InterfaceType => Boolean): Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
+  override def forall(p: InterfaceType => Boolean): Boolean = sys error(evar.name.toString + " occurred in an unexpected place")
 
-  override def exists(p: InterfaceType => Boolean): Boolean = sys error(evar.name.toString + "occurred in an unexpected place")
+  override def exists(p: InterfaceType => Boolean): Boolean = sys error(evar.name.toString + " occurred in an unexpected place")
 
-//  override lazy val canonical: List[InterfaceType] = throw new Exception("Wildcard in unexpected place")
-  override lazy val canonical: List[InterfaceType] = sys error(evar.name.toString + "occurred in an unexpected place")
+  override lazy val canonical: List[InterfaceType] = sys error(evar.name.toString + " occurred in an unexpected place")
   override def distinct: EffectRef = this
+
+  def name: Name = LocalName("EffectWildcard")
 }
 
 

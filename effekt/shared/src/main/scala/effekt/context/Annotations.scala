@@ -334,7 +334,9 @@ trait AnnotationsDB { self: Context =>
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
   def annotation[K, V](ann: Annotation[K, V], key: K): V =
-    annotationOption(ann, key).getOrElse { panic(s"Cannot find ${ann.description} for '${key}'") }
+    annotationOption(ann, key).getOrElse {
+      panic(s"Cannot find ${ann.description} for '${key}'")
+    }
 
   def hasAnnotation[K, V](ann: Annotation[K, V], key: K): Boolean =
     annotationsAt(key).isDefinedAt(ann)

@@ -1,7 +1,0 @@
-module examples/pts/blockTypes
-
-def param(x: Int, y: Int): Int = x + y
-
-def func1{f: _}: Boolean = f(1, 2) == 2
-
-// def noUsage{g: _}: Boolean = true

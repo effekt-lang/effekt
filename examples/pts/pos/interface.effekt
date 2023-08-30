@@ -1,0 +1,16 @@
+module examples/pts/pos/interface
+
+interface Constant[E] {
+    def output(): E
+}
+
+def withConstantInt[R]{ body: { Constant[Int] } => R }: R = {
+    def c = new Constant[Int] {
+        def output() = 37
+    }
+    body{c}
+}
+
+def foo() = withConstantInt { {interfaceParam: _} =>
+   interfaceParam.output() + 1
+}

@@ -1,10 +1,25 @@
-module examples/pts/nestedTypes
+module examples/pts/pos/nestedTypes
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
+import immutable/list
 
 val list: List[_] = Cons(1, Cons(2, Cons(3, Nil())))
 
 val tuple: (_, String) = (1, "1")
+
+
+def listForeach[A](xs: List[A]){f: A => Unit} = foreach(xs){f}
+
+def func(listParam: _): Int =
+{
+    var sum = 0
+    listForeach(listParam) {
+        x => sum = sum + x
+    }
+
+    sum
+}
+
+
+record Constant[A](value: A)
+
+val constant: Constant[_] = Constant(1)

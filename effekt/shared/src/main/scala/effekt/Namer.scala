@@ -550,7 +550,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(tpe: source.ValueType)(using Context): ValueType = resolvingType(tpe) {
     case source.ValueTypeRef(id, args) => Context.resolveType(id) match {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolve))
-      case id: TypeVar =>
+      case id: ValueTypeVar =>
         if (args.nonEmpty) {
           Context.abort(pretty"Type variables cannot be applied, but receieved ${args.size} arguments.")
         }
@@ -600,9 +600,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
       val effs = resolve(effects).distinct
-      effs.canonical.foreach { eff =>
-        val cap = CaptureParam(eff.name)
-        cps = cps :+ cap
+      effs match {
+        case x: EffectRef =>
+          cps = cps :+ CaptureParam(x.name)
+        case x =>
+          x.canonical.foreach { eff =>
+            val cap = CaptureParam(eff.name)
+            cps = cps :+ cap
+          }
       }
 
       cps foreach Context.bind

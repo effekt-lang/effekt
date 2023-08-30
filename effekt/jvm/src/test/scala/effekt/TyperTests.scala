@@ -1,13 +1,14 @@
 package effekt
 import effekt.context.Annotations
 import effekt.context.Context
-import kiama.util.{Source, StringSource, FileSource}
-import effekt.typer.{Typer,Wellformedness}
+import kiama.util.{FileSource, Source, StringSource}
+import effekt.typer.{BoxUnboxInference, Typer, Wellformedness}
 import effekt.namer.Namer
 import effekt.lifted.ModuleDecl
 import effekt.util.messages
 import effekt.context.IOModuleDB
 import effekt.PhaseResult.Typechecked
+
 import scala.collection.mutable
 
 abstract class AbstractTyperTests extends munit.FunSuite {
@@ -26,7 +27,7 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       ))
       configs.verify()
       compiler.context.setup(configs)
-      val Frontend = Parser andThen Namer andThen Typer andThen Wellformedness
+      val Frontend = Parser andThen Namer andThen BoxUnboxInference andThen Typer andThen Wellformedness
 
       given C: Context = compiler.context
 
@@ -63,7 +64,8 @@ abstract class AbstractTyperTests extends munit.FunSuite {
     given Context = R.context
     t match {
       case Term.Var(id) => findSymbolIn(name, id, acc)
-      case Term.Assign(id, expr) => acc.addOne(id.symbol); findSymbolIn(name, expr, acc)
+      case Term.Assign(id, expr) => //acc.addOne(id.symbol);
+        findSymbolIn(name, expr, acc)
       case Term.Select(receiver, id) => findSymbolIn(name, receiver, acc); findSymbolIn(name, id, acc)
       case Term.Do(effect, id, targs, vargs) =>
         findSymbolIn(name, id, acc);
@@ -217,14 +219,14 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
     }
 
-    def assertCaptureType(name: String, expected: String, clue: => Any = "capture types don't match"): Unit = {
-      val syms = C.module.terms(name)
-      assert(syms.size == 1, s"There is a unique symbol named '${name}'.")
-      val sym = syms.head
-      assert(sym.isInstanceOf[symbols.Captures], s"${sym} is a capture symbol.")
-      val got = C.annotation(Annotations.Captures, sym.asInstanceOf[symbols.BlockSymbol])
-      assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
-    }
+//    def assertCaptureType(name: String, expected: String, clue: => Any = "capture types don't match"): Unit = {
+//      val syms = R.module.terms(name)
+//      assert(syms.size == 1, s"There is a unique symbol named '${name}'.")
+//      val sym = syms.head
+//      assert(sym.isInstanceOf[symbols.Captures], s"${sym} is a capture symbol.")
+//      val got = C.annotation(Annotations.Captures, sym.asInstanceOf[symbols.BlockSymbol])
+//      assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
+//    }
 
     // TODO further assertions (e.g. for captures etc) on the context
   }
@@ -232,18 +234,64 @@ abstract class AbstractTyperTests extends munit.FunSuite {
 }
 class TyperTests extends AbstractTyperTests {
 
-  testTyperFile("Value type tests")("examples/pts/pos/valueTypes.effekt"){
+  testTyperFile("Alias tests")("examples/pts/pos/alias.effekt"){
     C => {
-      C.assertValueType("value", "Int")
-      C.assertBlockType("func1", "(Int, Int) => Int")
-      C.assertBlockType("func2", "() => String")
-      C.assertBlockType("func3", "ValueTypeWildcard => String")
+      C.assertBlockType("g", "(Int, String) => Int / { Eff }")
     }
   }
 
-  testTyperFile("Block type tests")("examples/pts/pos/blockTypes.effekt"){
+  testTyperFile("Block literal tests")("examples/pts/pos/blockLiteral.effekt"){
+    C => {
+      C.assertValueType("func", "() => Unit / { Eff } at {interfaceEff}")
+    }
+  }
+
+  testTyperFile("Block parameter tests")("examples/pts/pos/blockParameter.effekt"){
     C => {
       C.assertBlockType("func1", "{(Int, Int) => Int} => Boolean")
+    }
+  }
+
+  testTyperFile("Boxed function type tests")("examples/pts/pos/boxedFunction.effekt"){
+    C => {
+      C.assertValueType("boxedFunc", "(Int, Int) => Double / { Eff } at {}")
+      C.assertBlockType("unboxedFunc", "(Int, Int) => Double / { Eff }")
+    }
+  }
+
+  testTyperFile("Boxed interface type tests")("examples/pts/pos/boxedInterface.effekt"){
+    C => {
+      C.assertValueType("boxed", "SomeInterface at {eff}")
+      C.assertBlockType("unboxed", "SomeInterface")
+    }
+  }
+
+  testTyperFile("Box inference tests")("examples/pts/pos/boxInference.effekt"){
+    C => {
+      C.assertBlockType("func1", "Int => Int at {} => Int")
+      C.assertBlockType("func2", "List[Int => Int at {}] => Int")
+    }
+  }
+
+  testTyperFile("Capture tests")("examples/pts/pos/captures.effekt") {
+    C => {
+      C.assertValueType("f", "() => Unit at {eff}")
+      C.assertValueType("g", "() => Unit at {eff}")
+      C.assertValueType("h", "() => Unit at {eff}")
+      C.assertValueType("i", "() => Unit at {eff}")
+    }
+  }
+
+  testTyperFile("Effect tests")("examples/pts/pos/effects.effekt"){
+    C => {
+      C.assertBlockType("func1", "() => Int / { Eff1 }")
+      C.assertBlockType("func2", "() => Int / { Eff1, Eff2 }")
+    }
+  }
+
+  testTyperFile("Interface tests")("examples/pts/pos/interface.effekt"){
+    C => {
+      C.assertBlockType("interfaceParam", "Constant[Int]")
     }
   }
 
@@ -251,20 +299,16 @@ class TyperTests extends AbstractTyperTests {
     C => {
       C.assertValueType("list", "List[Int]")
       C.assertValueType("tuple", "Tuple2[Int, String]")
+      C.assertBlockType("func", "List[Int] => Int")
+      C.assertValueType("constant", "Constant[Int]")
     }
   }
 
-  testTyperFile("Effect test")("examples/pts/pos/effects.effekt"){
+  testTyperFile("Value type tests")("examples/pts/pos/valueTypes.effekt"){
     C => {
-      C.assertBlockType("func1", "() => Int / { Eff1 }")
-      C.assertBlockType("func2", "() => Int / { Eff1, Eff2 }")
+      C.assertValueType("value1", "Int")
+      C.assertBlockType("func1", "(Int, Int) => Int")
+      C.assertBlockType("func2", "() => String")
     }
   }
-
-//  testTyperFile("Capture test")("examples/pts/pos/captures.effekt"){
-//    C => {
-//      C.assertCaptureType("myModule", "")
-//    }
-//  }
-
 }

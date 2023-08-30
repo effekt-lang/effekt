@@ -1,0 +1,7 @@
+module examples/pts/neg/variable
+
+def main() = {
+    var value: _ = 1
+
+    value = "t"
+}

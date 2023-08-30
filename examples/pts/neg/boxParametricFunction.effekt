@@ -1,0 +1,14 @@
+module examples/pts/neg/boxParametricFunction
+
+effect Eff(): Unit
+
+def f[A](x: A): A = x
+
+def func(boxedParam: _): Int ={
+     (unbox boxedParam)(1)
+}
+
+def main() = {
+    val res = func(box f)
+    res
+}

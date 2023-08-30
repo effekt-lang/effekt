@@ -10,7 +10,7 @@ class PartialTypeSignatureTest extends EffektTests {
   def backendName: String = "js"
 
   override lazy val included: List[File] = List(
-    examplesDir / "pts"
+    examplesDir / "pts/neg"
   )
 
   override lazy val ignored: List[File] = List(

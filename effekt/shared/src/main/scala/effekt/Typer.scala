@@ -9,9 +9,9 @@ import effekt.context.assertions.*
 import effekt.source.BlockType.BlockTypeWildcard
 import effekt.source.{AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
-import effekt.symbols.BlockType.{BlockTypeRef, FunctionType}
+import effekt.symbols.BlockType.{BlockTypeRef, FunctionType, InterfaceType}
 import effekt.symbols.EffectVar.EffectUnificationVar
-import effekt.symbols.TypeVar.TypeParam
+import effekt.symbols.ValueTypeVar.TypeParam
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
@@ -140,10 +140,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       case l @ source.Box(annotatedCapture, block) =>
-
         val expectedTpe = expected.collect { case BoxedType(tpe, cap) => tpe }
-        val inferredCap: Captures = annotatedCapture.map { _.resolve }.getOrElse {
-          Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
+        val inferredCap: Captures = annotatedCapture match {
+          case Some(r: source.CaptureSetWildcard) =>
+            Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
+          case _ =>
+            annotatedCapture.map { _.resolve }.getOrElse {
+            Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
+          }
         }
 
         given Captures = inferredCap
@@ -183,10 +187,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
         val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
           case Result(b: FunctionType, capt) => Result(b, capt)
+          case Result(b: BlockTypeRef, capt) => Result(b, capt)
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
+        val Result(t, eff) = tpe match {
+          case b: FunctionType => checkCallTo(c, "function", b, targs map { _.resolve }, vargs, bargs, expected)
+          case b: BlockTypeRef =>
+            checkCallTo(c, "blockTypeWildcard", b, targs map { _.resolve }, vargs, bargs, expected)
+          case _ => Context.abort("Cannot infer function type for callee.")
+        }
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
@@ -448,6 +458,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case BoxedType(btpe, capt2) =>
             usingCapture(capt2)
             Result(btpe, eff1)
+
+          case ref @ ValueTypeRef(x: ValueTypeWildcard) =>
+            // This case represents a value of type ValueTypeWildcard
+            // As unboxing is tried, we assume that the value is a BoxedType and a dummy type is instantiated
+            // However, since the usage of the value and the binding of the value are not in the same definition,
+            // the capture is not inferable and therefore annotated as empty
+            val btpe = BlockTypeRef(Context.freshBlockVar(TypeParam(LocalName("BlockTypeWildcard")), null))
+            val boxedType = BoxedType(btpe, CaptureSet.empty)
+            matchExpected(boxedType, ref)
+            Result(btpe, eff1)
+
           case _ =>
             Context.annotationOption(Annotations.UnboxParentDef, u) match {
               case Some(source.DefDef(id, annot, block)) =>
@@ -852,9 +873,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, expTpe) =>
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
-          val got = sym.tpe
+          var got = sym.tpe
           matchDeclared(got, adjusted, param)
           // bind types to check body
+          got = Context.unification(got)
           Context.bind(param.symbol, got, CaptureSet(sym.capture))
           got
       }
@@ -899,7 +921,44 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(tpe, bodyEffs -- effects)
 
         case x: EffectRef =>
-          Context.panic("Cannot find type for ${s.name} -- forward uses and recursive functions need annotated return types.")
+          // The following should be removed as effect set wildcards are not allowend in the signature here
+
+          // (5) Substitute capture params
+          var captParams = bparams.map(_.symbol).map { p => p.capture }
+          val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
+
+          // (6) Substitute both types and captures into expected return type
+          val subst = typeSubst ++ captSubst
+          val expectedReturn = subst substitute tpe1
+
+          // (7) Check function body
+          val selfRegion = Context.getSelfRegion(arg)
+          val bodyRegion = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
+
+          val (Result(bodyType, bodyEffs), caps) = Context.bindingAllCapabilities(decl) {
+            given Captures = bodyRegion
+
+            Context.withRegion(selfRegion) {
+              body checkAgainst expectedReturn
+            }
+          }
+
+          val capabilities = bodyEffs.canonical.map {
+            caps.apply
+          }
+          captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
+
+          Context.bindCapabilities(decl, capabilities)
+          Context.annotateInferredType(decl, bodyType)
+          Context.annotateInferredEffects(decl, bodyEffs.toEffects)
+
+          usingCaptureWithout(bodyRegion) {
+            captParams ++ List(selfRegion)
+          }
+
+          val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, bodyEffs.toEffects)
+
+          Result(tpe, Pure)
       }
   }
 
@@ -990,15 +1049,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
 
     val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
-
-    val interface = recvTpe.asInterfaceType.typeConstructor
+    val interface = Context.unification(recvTpe).asInterfaceType.typeConstructor
     // filter out operations that do not fit the receiver
     val candidates = methods.filter(op => op.interface == interface)
 
     val (successes, errors) = tryEach(candidates) { op =>
       Context.lookupBlockType(op) match {
         case r @ BlockTypeRef(x: BlockTypeWildcard) =>
-         checkCallTo(call, op.name.name, r, targs, vargs, bargs, expected)
+          checkCallTo(call, op.name.name, r, targs, vargs, bargs, expected)
         case _ =>
           val (funTpe, capture) = findFunctionTypeFor(op)
           checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
@@ -1112,6 +1170,56 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  private def resolveOverloadWithWildcard(
+   id: source.IdRef,
+   successes: List[List[(BlockSymbol, Result[ValueType], TyperState)]],
+   failures: List[(BlockSymbol, EffektMessages)],
+   wildcard: BlockTypeRef
+  )(using Context): Result[ValueType] = {
+
+    successes. foreachAborting {
+      // continue in outer scope
+      case Nil => ()
+
+      // Exactly one successful result in the current scope
+      case List((sym, tpe, st)) =>
+        // use the typer state after this checking pass
+        Context.restoreTyperstate(st)
+        // reassign symbol of fun to resolved calltarget symbol
+        Context.assignSymbol(id, sym)
+
+
+        sym match {
+          case x: Operation =>
+            println(x)
+            val interface = InterfaceType(x.interface, List())
+            matchExpected(wildcard, interface)
+          case _ => sys error "No operation"
+        }
+
+        return tpe
+
+      // Ambiguous reference
+      case results =>
+        val successfulOverloads = results.map { (sym, res, st) => (sym, findFunctionTypeFor(sym)._1) }
+        Context.abort(AmbiguousOverloadError(successfulOverloads, Context.rangeOf(id)))
+    }
+
+    failures match {
+      case Nil =>
+        Context.abort("Cannot typecheck call.")
+
+      // exactly one error
+      case List((sym, errs)) =>
+        Context.abortWith(errs)
+
+      case failed =>
+        // reraise all and abort
+        val failures = failed.map { case (block, msgs) => (block, findFunctionTypeFor(block)._1, msgs) }
+        Context.abort(FailedOverloadError(failures, Context.currentRange))
+    }
+  }
+
   def checkCallTo(
     call: source.CallLike,
     name: String,
@@ -1156,7 +1264,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // concretize the effect.
     effs = effs ++ (retEffs match {
       case x: Effects => x
-      case x: EffectRef => sys error ("EffectRef in unexpected place: checkCallTo")
+      case x: EffectRef => Context.abort("EffectWildcard is not allowed in block parameter")
     })
 
     // annotate call node with inferred type arguments
@@ -1193,12 +1301,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
                    expected: Option[ValueType]
                  )(using Context, Captures): Result[ValueType] = {
 
-    val tparams : List[TypeParam] = List()
-    val cparams : List[Capture] = List()
-    val vparams : List[ValueType] = vargs map { checkExpr(_, None).tpe }
-    val bparams : List[BlockType] = bargs map { checkExprAsBlock(_, None).tpe }
-    val result : ValueType = ValueTypeRef(Context.fresh(TypeParam(LocalName("ReturnType")), call))
-    val effects : EffectsOrRef = Effects.Pure
+    val tparams: List[TypeParam] = List()
+    val cparams: List[Capture] = List()
+    val vparams: List[ValueType] = vargs map { checkExpr(_, None).tpe }
+    val bparams: List[BlockType] = bargs map { checkExprAsBlock(_, None).tpe }
+    val result: ValueType = ValueTypeRef(Context.freshValueVar(TypeParam(LocalName("ReturnType")), call))
+    val effects: EffectsOrRef = Effects.Pure
 
     expected.foreach { expected => matchExpected(result, expected) }
     val funTpe : FunctionType = FunctionType(tparams, cparams, vparams, bparams, result, effects)
@@ -1225,13 +1333,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(t, eff) = checkExprAsBlock(expr, Some(tpe))
       effs = effs ++ eff
     }
-
-    // We add return effects last to have more information at this point to
-    // concretize the effect.
-    effs = effs ++ (retEffs match {
-      case x: Effects => x
-      case x: EffectRef => sys error ("EffectRef in unexpected place: checkCallTo")
-    })
 
     // annotate call node with inferred type arguments
     Context.annotateTypeArgs(call, typeArgs)
@@ -1458,7 +1559,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using this)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, fresh, freshCaptVar, without, requireSubregionWithout, requireEqual }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, freshValueVar, freshBlockVar, freshCaptVar, without, requireSubregionWithout, requireEqual }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {

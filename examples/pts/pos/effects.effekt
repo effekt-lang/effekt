@@ -1,4 +1,4 @@
-module examples/pts/effects
+module examples/pts/pos/effects
 
 effect Eff1(): Unit
 effect Eff2(): Unit

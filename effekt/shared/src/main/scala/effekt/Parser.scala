@@ -163,6 +163,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val externCapture: P[Captures] =
     ( "pure" ^^^ CaptureSet(Nil)
+//    | literal("_") ^^^ failure(s"Capture wildcards are not allowed in extern functions")
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
     | success(CaptureSet(List(IdRef("io"))))

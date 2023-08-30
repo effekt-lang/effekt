@@ -1,0 +1,16 @@
+module examples/pts/pos/boxedFunction
+
+effect Eff(): Unit
+
+def func(x: Int, y: Int): Double / Eff = {
+    do Eff()
+    1.5
+}
+
+val boxedFunc: _ = box func
+
+def unboxedFunc = unbox boxedFunc
+
+def main() = {
+    ()
+}

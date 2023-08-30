@@ -1,0 +1,11 @@
+module examples/pts/neg/blockParameterWithEffects
+
+effect Eff() : Unit
+
+def testFunction(x: Int, y: Int): Int / Eff = x + y
+
+def run{functionParam: _}: Int / Eff = functionParam(1, 2)
+
+def main() = {
+    run {testFunction}
+}

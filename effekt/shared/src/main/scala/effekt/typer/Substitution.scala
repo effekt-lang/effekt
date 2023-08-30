@@ -14,19 +14,19 @@ case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Capt
  * We should **not** use these Substitutions for instantiation anymore, since this introduces fresh Unification variables.
  */
 case class Substitutions(
-  values: Map[TypeVar, ValueType],
-  blocks : Map[BlockTypeVar, BlockType],
-  // invariant: we alway only map
-  //   - a single CaptureParam -> CaptureParam
-  //   - a CaptUnificationVar -> Captures
-  captures: Map[CaptVar, Captures],
-  effects: Map[EffectVar, EffectsOrRef]
+                          values: Map[ValueTypeVar, ValueType],
+                          blocks : Map[BlockTypeVar, BlockType],
+                          // invariant: we alway only map
+                          //   - a single CaptureParam -> CaptureParam
+                          //   - a CaptUnificationVar -> Captures
+                          captures: Map[CaptVar, Captures],
+                          effects: Map[EffectVar, EffectsOrRef]
 ) {
 
-  def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
+  def isDefinedAt(t: ValueTypeVar) = values.isDefinedAt(t)
   def isDefinedAt(c: CaptVar) = captures.isDefinedAt(c)
 
-  def get(t: TypeVar) = values.get(t)
+  def get(t: ValueTypeVar) = values.get(t)
 
   def get(c: Capture): Option[Capture] = captures.get(c) map {
     case CaptureSet(cs) if cs.size == 1 => cs.head
@@ -46,7 +46,7 @@ case class Substitutions(
   def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, blocks ++ other.blocks, captures ++ other.captures, effects ++ other.effects)
 
   // shadowing
-  private def without(tps: List[TypeVar], bps: List[BlockType], cps: List[Capture], effs: List[EffectsOrRef]): Substitutions =
+  private def without(tps: List[ValueTypeVar], bps: List[BlockType], cps: List[Capture], effs: List[EffectsOrRef]): Substitutions =
     Substitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       blocks.filterNot { case (t, _) => bps.contains(t) },
@@ -103,10 +103,10 @@ case class Substitutions(
 }
 
 object Substitutions {
-  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures], Map.empty[EffectVar, EffectsOrRef])
-  def apply(values: List[(TypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)], effects: List[(EffectVar, EffectsOrRef)]): Substitutions =
+  val empty: Substitutions = Substitutions(Map.empty[ValueTypeVar, ValueType], Map.empty[BlockTypeVar, BlockType], Map.empty[CaptVar | CaptureSetWildcard, Captures], Map.empty[EffectVar, EffectsOrRef])
+  def apply(values: List[(ValueTypeVar, ValueType)], blocks : List[(BlockTypeVar, BlockType)], captures: List[(CaptVar, Captures)], effects: List[(EffectVar, EffectsOrRef)]): Substitutions =
     Substitutions(values.toMap, blocks.toMap, captures.toMap, effects.toMap)
-  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty, Map.empty)
+  def types(keys: List[ValueTypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty, Map.empty, Map.empty)
   def blocks(keys: List[BlockTypeVar], values: List[BlockType]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap, Map.empty, Map.empty)
   def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, Map.empty, (keys zip values).toMap, Map.empty)
   def effects(keys: List[EffectVar], values: List[EffectsOrRef]): Substitutions = Substitutions(Map.empty, Map.empty, Map.empty, (keys zip values).toMap)

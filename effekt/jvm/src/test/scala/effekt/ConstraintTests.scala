@@ -33,7 +33,7 @@ abstract class ConstraintTests extends munit.FunSuite {
 
 
   def freshTypeVar(name: String) =
-    scope.fresh(TypeParam(Name.local(name)), NoSource)
+    scope.freshValueVar(TypeParam(Name.local(name)), NoSource)
 
   def freshCaptVar(name: String) =
     scope.freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(Name.local(name)), NoSource))
@@ -139,7 +139,7 @@ class TestSubstitutions extends ConstraintTests {
       import graph.*
 
       requireLower(Set(x), A)
-      leave(Nil, List(A))
+      leave(Nil, Nil, List(A), Nil)
 
       assert(subst.isDefinedAt(A))
       assert(subst.get(A) == Some(CaptureSet(x)))
@@ -150,7 +150,7 @@ class TestSubstitutions extends ConstraintTests {
       import graph.*
 
       requireLower(Set(x), A)
-      leave(Nil, List(A))
+      leave(Nil, Nil, List(A), Nil)
 
       connect(A, B)
       assert(B.lower == Some(Set(x)))
@@ -198,7 +198,7 @@ class TestSubtracting extends ConstraintTests {
       import graph.*
 
       requireLower(Set(x), A)
-      leave(Nil, List(A))
+      leave(Nil, Nil, List(A), Nil)
 
       connect(A, B, Set(x))
 

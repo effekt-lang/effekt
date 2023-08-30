@@ -1,0 +1,14 @@
+module examples/pts/neg/boxInference
+
+effect Eff(): Unit
+
+def f(x: Int): Int / Eff = x + 1
+
+def func(boxedParam: _): Int ={
+     (unbox boxedParam)(1)
+}
+
+def main() = {
+    val res = func(box f)
+    println(res)
+}

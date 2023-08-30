@@ -107,7 +107,7 @@ class Constraints(
                    /**
    * A map from a member in the equivalence class to the class' representative
    */
-                   private var valueClasses: Map[UnificationVar, Node] = Map.empty,
+                   private var valueClasses: Map[ValueUnificationVar, Node] = Map.empty,
 
                    private var blockClasses: Map[BlockUnificationVar, Node] = Map.empty,
 
@@ -138,7 +138,7 @@ class Constraints(
    * The currently known substitutions
    */
   def subst: Substitutions =
-    val values = valueClasses.flatMap[TypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
+    val values = valueClasses.flatMap[ValueTypeVar, ValueType] { case (k, v) => valueTypeSubstitution.get(v).map { k -> _ } }
     val blocks = blockClasses.flatMap[BlockTypeVar, BlockType] { case (k, v) => blockTypeSubstitution.get(v).map { k -> _ } }
     val captures = captSubstitution.asInstanceOf[Map[CaptVar | CaptureSetWildcard, Captures]]
     val effects = effectClasses.flatMap[EffectVar, EffectsOrRef] { case (k, v) => effectSubstitution.get(v).map { k -> _ } }
@@ -149,7 +149,7 @@ class Constraints(
    *
    * It will *not* compare the types, but only equality imposed by constraints.
    */
-  def isEqual(x: UnificationVar, y: UnificationVar): Boolean =
+  def isEqual(x: ValueUnificationVar, y: ValueUnificationVar): Boolean =
     getNode(x) == getNode(y)
 
   def isSubset(lower: Captures, upper: Captures): Boolean =
@@ -178,7 +178,7 @@ class Constraints(
    * Learn that unification variable [[x]] needs to be compatible with [[y]]. If there already is
    * a type for [[x]], we will invoke [[merge]] to check compatibility (and potentially error out).
    */
-  def learn(x: UnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit = {
+  def learn(x: ValueUnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit = {
 
     def learnType(x: Node, tpe: ValueType): Unit = {
       // tpe should not be a reference to a unification variable
@@ -203,7 +203,7 @@ class Constraints(
     }
 
     y match {
-      case ValueTypeRef(y: UnificationVar) => connectNodes(getNode(x), getNode(y))
+      case ValueTypeRef(y: ValueUnificationVar) => connectNodes(getNode(x), getNode(y))
       case tpe => learnType(getNode(x), tpe)
     }
   }
@@ -273,11 +273,25 @@ class Constraints(
   /**
    * Marks [[xs]] as pending inactive and solves them, if they do not have active bounds.
    */
-  def leave(types: List[UnificationVar], capts: List[CaptUnificationVar]): Unit =
+  def leave(types: List[ValueUnificationVar], blocks: List[BlockUnificationVar], capts: List[CaptUnificationVar], effects: List[EffectUnificationVar]): Unit =
     // Check that we could infer all types of type variable instantiations.
     types.foreach {
-      case x @ UnificationVar(underlying, callTree) =>
+      case x @ ValueUnificationVar(underlying, callTree) =>
         if (!valueTypeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
+          C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+        }
+    }
+
+    blocks.foreach {
+      case x @ BlockUnificationVar(underlying, callTree) =>
+        if (!blockTypeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
+          C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+        }
+    }
+
+    effects.foreach {
+      case x @ EffectUnificationVar(underlying, callTree) =>
+        if (!effectSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
           C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
         }
     }
@@ -437,7 +451,9 @@ class Constraints(
 
   private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =
     val diff = lower -- upper
-    if (diff.nonEmpty) { C.abort(pretty"Not allowed ${CaptureSet(diff)}") }
+    if (diff.nonEmpty) {
+      C.abort(pretty"Not allowed ${CaptureSet(diff)}")
+    }
 
   private def checkEquality(xs: Set[Capture], ys: Set[Capture]): Unit =
     if (xs != ys) { C.abort(pretty"Capture set ${xs} is not equal to ${ys}") }
@@ -535,7 +551,7 @@ class Constraints(
     blockTypeSubstitution = blockTypeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
     effectSubstitution = effectSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
 
-  private def getNode(x: UnificationVar): Node =
+  private def getNode(x: ValueUnificationVar): Node =
     valueClasses.getOrElse(x, { val rep = new Node; valueClasses += (x -> rep); rep })
 
   private def getNode(x: BlockUnificationVar): Node =

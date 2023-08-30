@@ -1,12 +1,10 @@
-module examples/pts/valueTypes
+module examples/pts/pos/valueTypes
 
-val value: _ = 1
+val value1: _ = 1
 
-def func1(x: _, y: _): Int = 3
+def func1(x: _, y: _): Int = x + y
 
 def func2(): _ = "test"
-
-def func3(x: _) = "test"
 
 def main() = {
     func1(1, 2)

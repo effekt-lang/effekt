@@ -1,0 +1,5 @@
+module examples/pts/neg/blockParameters
+
+def inner(x: Int): Int = x + 1
+
+def func{param: _} = "test"

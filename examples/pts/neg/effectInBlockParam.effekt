@@ -1,0 +1,14 @@
+module examples/pts/neg/effectInBlockParam
+
+effect Eff(): Unit
+
+def run{func: () => Unit / _}: Int / Eff = {
+    func()
+    1
+}
+
+def main() = {
+    try {
+        run{() => do Eff()}
+    } with Eff { 1 }
+}

@@ -1,0 +1,21 @@
+module examples/pts/pos/boxedInterface
+
+effect Eff { def use(): Unit }
+
+interface SomeInterface {
+    def test(): Int
+}
+
+def func{ eff: Eff } = {
+    def interfaceInstance = new SomeInterface {
+        def test() = {
+            eff.use();
+            1
+        }
+    }
+
+    val boxed: _ at _ = interfaceInstance
+    def unboxed: _ = boxed
+
+    boxed
+}
