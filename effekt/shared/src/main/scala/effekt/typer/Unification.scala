@@ -6,7 +6,7 @@ import effekt.source.BlockType.BlockTypeRef
 import effekt.source.MatchPattern
 import effekt.symbols.*
 import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
-import effekt.symbols.EffectVar.{EffectUnificationVar, EffectWildcard}
+import effekt.symbols.EffectVar.{EffectUnificationVar, EffectSetWildcard}
 import effekt.symbols.ValueTypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.util.messages.ErrorReporter
@@ -27,8 +27,8 @@ case class UnificationState(
                              constraints: Constraints,
                              valueTypeWildcardMap : Map[ValueTypeVar, ValueUnificationVar],
                              blockTypeWildcardMap : Map[BlockTypeVar, BlockUnificationVar],
-                             captureWildcardMap : Map[CaptureSetWildcard, CaptUnificationVar],
-                             effectWildcardMap : Map[EffectVar, EffectUnificationVar]
+                             captureWildcardMap : Map[CaptVar, CaptUnificationVar],
+                             effectSetWildcardMap : Map[EffectVar, EffectUnificationVar]
 )
 
 sealed trait Scope
@@ -57,12 +57,12 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   protected var constraints = new Constraints
   private var valueTypeWildcardMap = Map.empty[ValueTypeVar, ValueUnificationVar]
   private var blockTypeWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
-  private var captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
-  private var effectWildcardMap = Map.empty[EffectVar, EffectUnificationVar]
+  private var captureWildcardMap = Map.empty[CaptVar, CaptUnificationVar]
+  private var effectSetWildcardMap = Map.empty[EffectVar, EffectUnificationVar]
 
   // Creating fresh unification variables
   // ------------------------------------
-  def freshValueVar(underlying: ValueTypeVar.TypeParam, call: source.Tree): ValueUnificationVar = scope match {
+  def freshValueVar(underlying: Option[ValueTypeVar], call: source.Tree): ValueUnificationVar = scope match {
     case GlobalScope => sys error "Cannot add value unification variables to global scope"
     case s : LocalScope =>
       val x = new ValueUnificationVar(underlying, call)
@@ -70,7 +70,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       x
   }
 
-  def freshBlockVar(underlying: ValueTypeVar.TypeParam, call: source.Tree): BlockUnificationVar = scope match {
+  def freshBlockVar(underlying: Option[BlockTypeVar], call: source.Tree): BlockUnificationVar = scope match {
     case GlobalScope => sys error "Cannot add block unification variables to global scope"
     case s : LocalScope =>
       val x = new BlockUnificationVar(underlying, call)
@@ -86,7 +86,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       x
   }
 
-  def freshEffectVar(underlying: ValueTypeVar.TypeParam, call: source.Tree): EffectUnificationVar = scope match {
+  def freshEffectVar(underlying: Option[EffectVar], call: source.Tree): EffectUnificationVar = scope match {
     case GlobalScope => sys error "Cannot add effect unification variables to global scope"
     case s : LocalScope =>
       val x = new EffectUnificationVar(underlying, call)
@@ -98,19 +98,27 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ------------
   def substitution =
     val s: Substitutions = constraints.subst
-    val valueTypeWildcardSubValue: Map[ValueTypeVar, ValueType] = valueTypeWildcardMap.filter((k, v) => s.values.contains(v))
-      .map((k, v) => (k, s.values.get(v).get))
 
-    val blockTypeWildcardSubValue: Map[BlockTypeVar, BlockType] = blockTypeWildcardMap.filter((k, v) => s.blocks.contains(v))
-      .map((k, v) => (k, s.blocks.get(v).get))
+    // Substitutions that have a unification variable as key that represents a wildcard are filtered
+    val (shareValueVar, remainingValues) = s.values.partition( (k, v) => valueTypeWildcardMap.exists(_._2 == k) )
+    val (shareBlockVar, remainingBlocks) = s.blocks.partition( (k, v) => blockTypeWildcardMap.exists(_._2 == k) )
+    val (shareCaptureVar, remainingCaptures) = s.captures.partition( (k, v) => captureWildcardMap.exists(_._2 == k) )
+    val (shareEffectVar, remainingEffects) = s.effects.partition( (k, v) => effectSetWildcardMap.exists(_._2 == k) )
 
-    val captureWildcardSubValue: Map[CaptVar, Captures] = captureWildcardMap.filter((k, v) => s.captures.contains(v))
-      .map((k, v) => (k, s.captures.get(v).get))
+    // and unification variable as key is replaced by wildcard
+    val values = valueTypeWildcardMap.filter((k, v) => shareValueVar.contains(v)).map((k, v) => (k, shareValueVar.get(v).get))
+    val blocks = blockTypeWildcardMap.filter((k, v) => shareBlockVar.contains(v)).map((k, v) => (k, shareBlockVar.get(v).get))
+    val captures = captureWildcardMap.filter((k, v) => shareCaptureVar.contains(v)).map((k, v) => (k, shareCaptureVar.get(v).get))
+    val effects = effectSetWildcardMap.filter((k, v) => shareEffectVar.contains(v)).map((k, v) => (k, shareEffectVar.get(v).get))
 
-    val effectWildcardSubValue: Map[EffectVar, EffectsOrRef] = effectWildcardMap.filter((k, v) => s.effects.contains(v))
-      .map((k, v) => (k, s.effects.get(v).get))
+    val combined = Substitutions(values, blocks, captures, effects) ++ Substitutions(remainingValues, remainingBlocks, remainingCaptures, remainingEffects)
 
-    s.updateWith(Substitutions(valueTypeWildcardSubValue, blockTypeWildcardSubValue, captureWildcardSubValue, effectWildcardSubValue))
+    // finally, replace all replacable wildcard occurrences in the substitution values
+    Substitutions(
+      combined.values.view.mapValues { t => combined.substitute(t) }.toMap,
+      combined.blocks.view.mapValues { t => combined.substitute(t) }.toMap,
+      combined.captures.view.mapValues { t => combined.substitute(t) }.toMap,
+      combined.effects.view.mapValues { t => combined.substitute(t) }.toMap)
 
   def apply(e: EffectsOrRef): EffectsOrRef =
     substitution.substitute(e)
@@ -122,29 +130,30 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     substitution.substitute(tpe)
 
   def apply(tpe: FunctionType): FunctionType =
-    substitution.substitute(tpe)
+    val a = substitution
+    a.substitute(tpe)
 
   def apply(tpe: ValueType): ValueType =
     substitution.substitute(tpe)
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueTypeWildcardMap, blockTypeWildcardMap, captureWildcardMap, effectWildcardMap)
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), valueTypeWildcardMap, blockTypeWildcardMap, captureWildcardMap, effectSetWildcardMap)
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
     valueTypeWildcardMap = state.valueTypeWildcardMap
     blockTypeWildcardMap = state.blockTypeWildcardMap
     captureWildcardMap = state.captureWildcardMap
-    effectWildcardMap = state.effectWildcardMap
+    effectSetWildcardMap = state.effectSetWildcardMap
 
   def init() =
     scope = GlobalScope
     constraints = new Constraints
     valueTypeWildcardMap = Map.empty[ValueTypeVar, ValueUnificationVar]
     blockTypeWildcardMap = Map.empty[BlockTypeVar, BlockUnificationVar]
-    captureWildcardMap = Map.empty[CaptureSetWildcard, CaptUnificationVar]
-    effectWildcardMap = Map.empty[EffectVar, EffectUnificationVar]
+    captureWildcardMap = Map.empty[CaptVar, CaptUnificationVar]
+    effectSetWildcardMap = Map.empty[EffectVar, EffectUnificationVar]
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, Nil, Nil, scope)
@@ -252,29 +261,29 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def unificationVarFromWildcard(wildcard: ValueTypeWildcard): ValueUnificationVar =
     valueTypeWildcardMap.getOrElse(wildcard, {
-      val unificationVar: ValueUnificationVar = freshValueVar(TypeParam(LocalName("ValueTypeWildcard")), null)
+      val unificationVar: ValueUnificationVar = freshValueVar(Some(wildcard), wildcard.call)
       valueTypeWildcardMap = valueTypeWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
   def unificationVarFromWildcard(wildcard: BlockTypeWildcard): BlockUnificationVar =
     blockTypeWildcardMap.getOrElse(wildcard, {
-      val unificationVar: BlockUnificationVar = freshBlockVar(TypeParam(LocalName("BlockTypeWildcard")), null)
+      val unificationVar: BlockUnificationVar = freshBlockVar(Some(wildcard), wildcard.call)
       blockTypeWildcardMap = blockTypeWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
   def unificationVarFromWildcard(wildcard : CaptureSetWildcard) : CaptUnificationVar =
     captureWildcardMap.getOrElse(wildcard, {
-      val unificationVar : CaptUnificationVar = freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(LocalName("CaptureSetWildcard")), null))
+      val unificationVar : CaptUnificationVar = freshCaptVar(CaptUnificationVar.VariableInstantiation(wildcard, wildcard.call))
       captureWildcardMap = captureWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
-  def unificationVarFromWildcard(wildcard : EffectWildcard) : EffectUnificationVar =
-    effectWildcardMap.getOrElse(wildcard, {
-      val unificationVar : EffectUnificationVar = freshEffectVar(TypeParam(LocalName("EffecSetWildcard")), null)
-      effectWildcardMap = effectWildcardMap + (wildcard -> unificationVar)
+  def unificationVarFromWildcard(wildcard : EffectSetWildcard) : EffectUnificationVar =
+    effectSetWildcardMap.getOrElse(wildcard, {
+      val unificationVar : EffectUnificationVar = freshEffectVar(Some(wildcard), wildcard.call)
+      effectSetWildcardMap = effectSetWildcardMap + (wildcard -> unificationVar)
       unificationVar
     })
 
@@ -293,19 +302,19 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[Captures], FunctionType) = {
     val position = C.focus
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+    val a = substitution
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = a.substitute(tpe)
 
     val typeRigids =
       if (targs.size == tparams.size) targs
-      else tparams map { t => ValueTypeRef(freshValueVar(t, position)) }
+      else tparams map { t => ValueTypeRef(freshValueVar(Some(t), position)) }
 
     val effSize = eff match {
-      case x: EffectRef => 1
-      case x => x.canonical.size
-    }
-
-    if (cparams.size != (bparams.size + effSize)) {
-      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
+      case x: Effects =>
+        if (cparams.size != (bparams.size + x.canonical.size)) {
+          sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
+        }
+      case x: EffectRef => ()
     }
 
     val captRigids =

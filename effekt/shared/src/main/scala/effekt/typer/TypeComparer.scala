@@ -3,7 +3,7 @@ package typer
 
 import effekt.symbols.*
 import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
-import effekt.symbols.EffectVar.{EffectUnificationVar, EffectWildcard}
+import effekt.symbols.EffectVar.{EffectUnificationVar, EffectSetWildcard}
 import effekt.symbols.ValueTypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
@@ -33,7 +33,7 @@ trait TypeUnifier {
 
   def unificationVarFromWildcard(w : ValueTypeWildcard) : ValueUnificationVar
   def unificationVarFromWildcard(w : BlockTypeWildcard) : BlockUnificationVar
-  def unificationVarFromWildcard(w : EffectWildcard) : EffectUnificationVar
+  def unificationVarFromWildcard(w : EffectSetWildcard) : EffectUnificationVar
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
     case Covariant     => requireSubregion(c1, c2, ctx)
@@ -51,6 +51,14 @@ trait TypeUnifier {
     case (TTop, _, Contravariant) => ()
     case (_, TBottom, Contravariant) => ()
 
+    case (t: ValueType, ValueTypeRef(w: ValueTypeWildcard), _) =>
+      val unificationVar: ValueUnificationVar = unificationVarFromWildcard(w)
+      unifyValueTypes(t, ValueTypeRef(unificationVar), ctx)
+
+    case (ValueTypeRef(w: ValueTypeWildcard), t: ValueType, _) =>
+      val unificationVar: ValueUnificationVar = unificationVarFromWildcard(w)
+      unifyValueTypes(ValueTypeRef(unificationVar), t, ctx)
+
     case (ValueTypeRef(s: ValueUnificationVar), t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: ValueUnificationVar), Covariant) => requireLowerBound(t, s, ctx)
 
@@ -59,14 +67,6 @@ trait TypeUnifier {
 
     case (ValueTypeRef(s: ValueUnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
     case (s: ValueType, ValueTypeRef(t: ValueUnificationVar), Invariant) => requireEqual(t, s, ctx)
-
-    case (t: ValueType, ValueTypeRef(w: ValueTypeWildcard), _) =>
-      val unificationVar: ValueUnificationVar = unificationVarFromWildcard(w)
-      requireEqual(unificationVar, tpe1, ctx)
-
-    case (ValueTypeRef(w: ValueTypeWildcard), t: ValueType, _) =>
-      val unificationVar: ValueUnificationVar = unificationVarFromWildcard(w)
-      requireEqual(unificationVar, tpe2, ctx)
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
@@ -117,11 +117,11 @@ trait TypeUnifier {
     case (EffectRef(x: EffectUnificationVar), y: Effects) => requireEqual(x, y, ctx)
     case (x: Effects, EffectRef(y: EffectUnificationVar)) => requireEqual(y, x, ctx)
 
-    case (EffectRef(x: EffectWildcard), y) =>
+    case (EffectRef(x: EffectSetWildcard), y) =>
       val unificationVar: EffectUnificationVar = unificationVarFromWildcard(x)
       requireEqual(unificationVar, eff2, ctx)
 
-    case (x, EffectRef(y: EffectWildcard)) =>
+    case (x, EffectRef(y: EffectSetWildcard)) =>
       val unificationVar: EffectUnificationVar = unificationVarFromWildcard(y)
       requireEqual(unificationVar, eff1, ctx)
 

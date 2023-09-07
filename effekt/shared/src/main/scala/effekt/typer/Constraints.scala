@@ -292,7 +292,7 @@ class Constraints(
     effects.foreach {
       case x @ EffectUnificationVar(underlying, callTree) =>
         if (!effectSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
-          C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+          learn(x, Effects.Pure)((tpe1, tpe2) => ())
         }
     }
 
@@ -491,7 +491,7 @@ class Constraints(
 
         x.lower foreach { bounds => requireLower(bounds -- lowerFilter, y) }
         y.upper foreach { bounds => requireUpper(bounds ++ upperFilter, x) }
-    }
+   }
 
   def requireLower(bounds: Set[Capture], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
   def requireUpper(bounds: Set[Capture], x: CNode): Unit = propagateUpper(bounds, x)(using Set.empty)

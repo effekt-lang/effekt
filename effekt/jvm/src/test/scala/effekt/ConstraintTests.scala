@@ -33,7 +33,7 @@ abstract class ConstraintTests extends munit.FunSuite {
 
 
   def freshTypeVar(name: String) =
-    scope.freshValueVar(TypeParam(Name.local(name)), NoSource)
+    scope.freshValueVar(Some(TypeParam(Name.local(name))), NoSource)
 
   def freshCaptVar(name: String) =
     scope.freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(Name.local(name)), NoSource))

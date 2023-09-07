@@ -569,14 +569,14 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BoxedType(tpe, capt) =>
       BoxedType(resolve(tpe), resolve(capt))
     case source.ValueTypeWildcard =>
-      ValueTypeRef(ValueTypeWildcard())
+      ValueTypeRef(ValueTypeWildcard(tpe))
   }
 
   def resolve(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.BlockTypeRef => resolve(t)
-    case source.BlockTypeWildcard => BlockTypeRef(BlockTypeWildcard())
+    case source.BlockTypeWildcard => BlockTypeRef(BlockTypeWildcard(tpe))
   }
 
   def resolve(funTpe: source.FunctionType)(using Context): FunctionType = resolvingType(funTpe) {
@@ -646,8 +646,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.EffectsOrVar)(using Context): EffectsOrRef = tpe match {
-    case x: source.EffectWildcard =>
-      EffectRef(EffectWildcard())
+    case x: source.EffectSetWildcard => EffectRef(EffectSetWildcard(tpe))
     case source.Effects(effs) => Effects(effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
   }
 
@@ -659,7 +658,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val captResolved = CaptureSet(captures.map { Context.resolveCapture }.toSet)
       Context.annotateResolvedCapture(x)(captResolved)
       captResolved
-    case x: source.CaptureSetWildcard => CaptureSetWildcard()
+    case x: source.CaptureSetWildcard => CaptureSetWildcard(capt)
   }
 
   /**

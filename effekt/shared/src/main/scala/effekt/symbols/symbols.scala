@@ -1,10 +1,11 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{Def, DefDef, FunDef, ModuleDecl, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
+import effekt.symbols.ValueTypeVar.TypeParam
 import effekt.util.messages.ErrorReporter
 
 /**
@@ -197,10 +198,11 @@ enum ValueTypeVar(val name: Name) extends ValueTypeSymbol {
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case ValueUnificationVar(underlying: ValueTypeVar.TypeParam, call: source.Tree) extends ValueTypeVar(underlying.name)
+  case ValueUnificationVar(underlying: Option[ValueTypeVar], call: source.Tree)
+    extends ValueTypeVar(if(underlying.isEmpty) LocalName("wildcard") else underlying.get.name)
 
 
-  case ValueTypeWildcard() extends ValueTypeVar(LocalName("ValueTypeWildcard"))
+  case ValueTypeWildcard(call: source.Tree) extends ValueTypeVar(LocalName("ValueTypeWildcard"))
 }
 export ValueTypeVar.*
 
@@ -210,17 +212,18 @@ enum BlockTypeVar(val name: Name) extends BlockTypeSymbol {
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case BlockUnificationVar(underlying: ValueTypeVar.TypeParam, call: source.Tree) extends BlockTypeVar(underlying.name)
+  case BlockUnificationVar(underlying: Option[BlockTypeVar], call: source.Tree)
+    extends BlockTypeVar(if(underlying.isEmpty) LocalName("wildcard") else underlying.get.name)
 
-
-  case BlockTypeWildcard() extends BlockTypeVar(LocalName("BlockTypeWildcard"))
+  case BlockTypeWildcard(call: source.Tree) extends BlockTypeVar(LocalName("BlockTypeWildcard"))
 }
 export BlockTypeVar.*
 
 enum EffectVar(val name: Name) extends Symbol {
-  case EffectUnificationVar(underlying: ValueTypeVar.TypeParam, call: source.Tree) extends EffectVar(underlying.name)
+  case EffectUnificationVar(underlying: Option[EffectVar], call: source.Tree)
+    extends EffectVar(if(underlying.isEmpty) LocalName("wildcard") else underlying.get.name)
 
-  case EffectWildcard() extends EffectVar(LocalName("EffectWildcard"))
+  case EffectSetWildcard(call: source.Tree) extends EffectVar(LocalName("EffectSetWildcard"))
 }
 export EffectVar.*
 
@@ -333,7 +336,7 @@ case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, C
 }
 object CaptUnificationVar {
   sealed trait Role
-  case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
+  case class VariableInstantiation(underlying: Capture | CaptureSetWildcard, call: source.Tree) extends Role
   case class HandlerRegion(handler: source.TryHandle) extends Role
   case class RegionRegion(handler: source.Region) extends Role
   case class FunctionRegion(fun: source.FunDef) extends Role
@@ -365,7 +368,7 @@ object CaptureSet {
   def empty = CaptureSet()
 }
 
-case class CaptureSetWildcard() extends Captures, CaptVar {
+case class CaptureSetWildcard(call: source.Tree) extends Captures, CaptVar {
   val name = Name.local("CaptureSetWildcard")
 }
 

@@ -1,6 +1,5 @@
 package effekt
 
-import effekt.symbols.ValueTypeWildcard
 import effekt.context.Context
 import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
@@ -162,8 +161,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val externCapture: P[Captures] =
-    ( "pure" ^^^ CaptureSet(Nil)
-//    | literal("_") ^^^ failure(s"Capture wildcards are not allowed in extern functions")
+    ( literal("_") !!! "Capture set wildcards are not allowed here!"
+    | "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
     | success(CaptureSet(List(IdRef("io"))))
@@ -507,14 +506,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    */
 
   lazy val valueType: P[ValueType] =
-    ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
-    | wildcardType
+    (nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
+    | literal("_") ^^^ source.ValueTypeWildcard
     | primValueType
-    )
-
-  lazy val wildcardType: P[ValueType] =
-    (
-      literal("_") ^^^ source.ValueTypeWildcard
     )
 
   lazy val primValueType: P[ValueType] =
@@ -558,7 +552,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     valueType ~ maybeEffects ^^ Effectful.apply
 
   lazy val effects: P[EffectsOrVar] =
-    ( literal("_") ^^^ EffectWildcard()
+    ( literal("_") ^^^ EffectSetWildcard()
     | interfaceType ^^ { e => Effects(e) }
     | `{` ~/> manySep(interfaceType, `,`) <~  `}` ^^ Effects.apply
     | failure("Expected an effect set")

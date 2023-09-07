@@ -148,7 +148,7 @@ case class EffectRef(evar: EffectVar) extends EffectsOrRef {
   override lazy val canonical: List[InterfaceType] = sys error(evar.name.toString + " occurred in an unexpected place")
   override def distinct: EffectRef = this
 
-  def name: Name = LocalName("EffectWildcard")
+  def name: Name = LocalName("EffectSetWildcard")
 }
 
 

@@ -506,7 +506,7 @@ object Effects {
   def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
 }
 
-case class EffectWildcard() extends EffectsOrVar
+case class EffectSetWildcard() extends EffectsOrVar
 
 sealed trait Captures extends Tree
 case class CaptureSet(captures: List[IdRef]) extends Captures

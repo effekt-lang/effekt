@@ -311,4 +311,9 @@ class TyperTests extends AbstractTyperTests {
       C.assertBlockType("func2", "() => String")
     }
   }
+
+
+  testTyperFile("Debug")("examples/pts/test24.effekt"){
+    C => C.assertBlockType("func", "")
+  }
 }
