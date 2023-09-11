@@ -15,7 +15,7 @@ object PrettyPrinter {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
 define fastcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
-    ${indentedLines(basicBlocks.map(show).mkString("\n\n"))}
+    ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
     case VerbatimFunction(returnType, name, parameters, body) =>
@@ -142,8 +142,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   def localName(name: String): LLVMString = "%" + name
   def globalName(name: String): LLVMString = "@" + name
 
-  // indent all but the first line with four spaces
-  def indentedLines(text: String): String = text.split("\n").map("    " + _).mkString("\n").drop(4)
+  // indent all lines with four spaces
+  def indentedLines(text: String): String = text.split("\n").map("    " + _).mkString("\n")
 
   def commaSeparated(args: List[String]): String = args.mkString(", ")
 
