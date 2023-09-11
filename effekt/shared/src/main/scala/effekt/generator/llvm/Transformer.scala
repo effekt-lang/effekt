@@ -194,6 +194,10 @@ object Transformer {
         val ptrRef = LocalReference(PointerType(), ptr)
         emit(Call(ptr, PointerType(), getPtr, List(transform(ref), ConstantInt(idx), transform(ev))))
 
+        val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        shareValue(oldVal)
+
         emit(Load(name.name, transform(name.tpe), ptrRef))
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
@@ -205,7 +209,7 @@ object Transformer {
         val ptrRef = LocalReference(PointerType(), ptr)
         emit(Call(ptr, PointerType(), getPtr, List(transform(ref), ConstantInt(idx), transform(ev))))
 
-        val oldVal = machine.Variable(freshName(ref.name + ".old"), value.tpe)
+        val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
         emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
         eraseValue(oldVal)
 
@@ -708,7 +712,7 @@ object Transformer {
 
   def freshName(name: String)(using C: ModuleContext): String = {
     C.counter = C.counter + 1;
-    name + "." + C.counter
+    name + "_" + C.counter
   }
 
   class FunctionContext() {
