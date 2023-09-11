@@ -306,28 +306,31 @@ object Transformer {
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
-  def transform(l: lifted.Lift): Variable = l match {
-    case Lift.Var(ev) => Variable(transform(ev), builtins.Evidence)
-    case Lift.Try() => ???
-    case Lift.Reg() => ???
-  }
-
   def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
-    case lifted.Evidence(scopes) => {
-      scopes.map(transform).foldRight {
-        val res = Variable(freshName("ev_zero"), builtins.Evidence)
-        Binding { k =>
-          LiteralEvidence(res, builtins.Here, k(res))
-        }: Binding[Variable]
-      } { (evi, acc) =>
-        val res = Variable(freshName("ev_acc"), builtins.Evidence)
-        acc.flatMap({accV => Binding { k =>
-          ComposeEvidence(res, evi, accV, k(res))
-        }})
+    case lifted.Evidence(scopes) => transform(scopes)
+  }
+
+  def transform(scopes: List[lifted.Lift])(using ErrorReporter): Binding[Variable] = scopes match {
+    case Nil =>
+      val name = Variable(freshName("evidence_zero"), builtins.Evidence)
+      Binding { k => LiteralEvidence(name, builtins.Here, k(name)) }
+    case lift :: Nil =>
+      pure(transform(lift))
+    case lift :: rest =>
+      val name = Variable(freshName("evidence_composed"), builtins.Evidence)
+      Binding { k =>
+        transform(rest).run { value =>
+          ComposeEvidence(name, transform(lift), value, k(name))
+        }
       }
-    }
+  }
+
+  def transform(lift: lifted.Lift)(using ErrorReporter): Variable = lift match {
+    case Lift.Var(name) => Variable(transform(name), builtins.Evidence)
+    case Lift.Try() => ErrorReporter.abort(s"Unsupported lift: $lift")
+    case Lift.Reg() => ErrorReporter.abort(s"Unsupported lift: $lift")
   }
 
   def transform(block: lifted.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
