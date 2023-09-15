@@ -1,0 +1,16 @@
+def f(x: Int): Int = x + 1
+
+def runAndBox{func: _}: (Int, _) = {
+    val a = func(1)
+    val b = box Func
+    (a, b)
+}
+
+def main() = {
+    val a: Int = runAndBox{f}
+    1
+}
+
+
+
+

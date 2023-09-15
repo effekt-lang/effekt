@@ -1,0 +1,5 @@
+extern resource test: Int => Int
+
+def main() = {
+    ()
+}

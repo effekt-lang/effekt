@@ -1,0 +1,9 @@
+// opClause wildcard
+
+effect Test {
+    def output(x: Int): Int / _
+}
+
+def main() = {
+    ()
+}

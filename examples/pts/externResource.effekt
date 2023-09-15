@@ -1,0 +1,5 @@
+extern resource test: _
+
+def main() = {
+    ()
+}

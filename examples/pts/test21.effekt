@@ -1,0 +1,9 @@
+def id(x: Int): Int = x
+
+def id(x: String): String = x
+
+def main() = {
+    val a = id(1)
+    val b = id("a")
+    println(a)
+}

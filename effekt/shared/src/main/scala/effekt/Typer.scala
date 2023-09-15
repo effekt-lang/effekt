@@ -184,7 +184,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val a = checkExprAsBlock(e, None)
         val Result(tpe, funEffs) = a match {
           case Result(b: FunctionType, capt) => Result(b, capt)
-          case Result(b @ BlockTypeRef(BlockTypeWildcard(_)), capt) => Result(b, capt)
+          case Result(b: BlockTypeRef, capt) => Result(b, capt)
           case _ =>
             Context.abort("Cannot infer function type for callee.")
         }
@@ -192,7 +192,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(t, eff) = tpe match {
           case b: FunctionType =>
             checkCallTo(c, "function", b, targs map { _.resolve }, vargs, bargs, expected)
-          case b @ BlockTypeRef(BlockTypeWildcard(_)) =>
+          case b: BlockTypeRef =>
             val sym = e match {
               case source.Var(id: source.IdRef) => Some(id.symbol)
               case source.Assign(id: source.IdRef, expr) => Some(id.symbol)
@@ -788,6 +788,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     matchExpected(funType, funTypeWithWildcard)
 
                     funType
+
+                  case _ => sys error "Shouldn't happen"
                 }
 
                 Result(funType, Pure)

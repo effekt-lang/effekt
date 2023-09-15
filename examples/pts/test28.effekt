@@ -1,0 +1,10 @@
+def f(x: Int): _ = {
+    if(x == 0)
+        "a"
+    else
+        f(x - 1) + 1
+}
+
+def main() = {
+    ()
+}

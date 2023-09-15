@@ -1,0 +1,9 @@
+def run{func: _ } = {
+    val a: Int = func(1)
+    val b = func(2)
+    func(3)
+}
+
+def main() = {
+    ()
+}

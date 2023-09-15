@@ -1,0 +1,5 @@
+extern def func(x: _): _ / _ = "Test"
+
+def main() = {
+    ()
+}

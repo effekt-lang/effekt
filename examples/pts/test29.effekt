@@ -1,0 +1,7 @@
+type A = _
+
+def main() = {
+    val x: A = 5
+    val y: A = "a"
+    1
+}

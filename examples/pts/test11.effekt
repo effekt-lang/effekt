@@ -1,0 +1,13 @@
+// Parametric Captures
+
+effect Eff[A]{ def output(): Int }
+
+def f{ eff: Eff[Int] } = {
+    val a = fun() { eff.output() }
+    val b: _ = a
+    1
+}
+
+def main() = {
+    ()
+}

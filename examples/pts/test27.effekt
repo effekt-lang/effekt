@@ -1,0 +1,8 @@
+type A = _
+
+val b: A = 1
+val c: A = "a"
+
+def main() = {
+    ()
+}

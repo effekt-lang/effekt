@@ -1,0 +1,11 @@
+def run{func: _} = {
+    val a: Int = func(1)
+    def b: A => Int = func
+    1
+}
+
+def main() = {
+    ()
+}
+
+// Should NOT work

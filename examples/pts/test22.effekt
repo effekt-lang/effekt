@@ -1,0 +1,9 @@
+def func(x: Int): _ =
+    if(x == 0)
+        1
+    else
+        func(x - 1) + 1
+
+def main() = {
+    println(func(1))
+}

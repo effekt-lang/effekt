@@ -1,0 +1,5 @@
+def f(x: _, y: Int): Int =
+    if(y > 0)
+        f(x, y - 1)
+    else
+        0
