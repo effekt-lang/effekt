@@ -152,6 +152,7 @@ export Param.*
  *   ─ [[ Def ]]
  *     │─ [[ FunDef ]]
  *     │─ [[ ValDef ]]
+ *     │─ [[ RegDef ]]
  *     │─ [[ VarDef ]]
  *     │─ [[ DefDef ]]
  *     │─ [[ InterfaceDef ]]
