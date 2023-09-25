@@ -147,10 +147,7 @@ object Transformer {
     case If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
 
-    case Return(e) => e match {
-      case List(e) => monadic.Pure(toJS(e))
-      case _ => ??? // TODO MRV
-    }
+    case Return(e) => monadic.Pure(e.map(toJS))
 
     case Try(body, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
@@ -222,7 +219,7 @@ object Transformer {
           (tagFor(c), js.Return(List(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`)))))
       }, None)
 
-      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, List(monadic.Pure(js.RawExpr("null")))))
+      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, List(monadic.Pure(List(js.RawExpr("null"))))))
       (sw :: stmts, ret)
 
 

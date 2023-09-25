@@ -171,7 +171,7 @@ const $runtime = (function() {
     return self
   }
 
-  const pure = a => Control(k => apply(k, a)) // TODO MRV: mehrere Parameter
+  const pure = (...a) => Control(k => apply(k, a)) // TODO MRV: mehrere Parameter
 
   const delayed = a => Control(k => apply(k, a()))
 
