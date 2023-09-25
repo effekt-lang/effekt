@@ -379,8 +379,8 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
       }
 
-    case source.MatchClause(pattern, body) =>
-      val ps = resolve(pattern)
+    case source.MatchClause(patterns, body) =>
+      val ps = patterns.flatMap(resolve)
 
       // wellformedness: only linear patterns
       var names: Set[Name] = Set.empty

@@ -319,9 +319,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
-     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
-       case p ~ sc ~ body =>
-        Return(List(Match(sc, List(MatchClause(p, body))))) withPositionOf p
+     `val` ~> someSep(pattern, `,`) ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ { // TODO MRV 26
+       case ps ~ sc ~ body =>
+        Return(List(Match(sc, List(MatchClause(ps, body))))) withPositionOf ps
      }
 
   lazy val typeAliasDef: P[Def] =
@@ -443,7 +443,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     }
 
   lazy val clause: P[MatchClause] =
-    `case` ~/> pattern ~ (`=>` ~/> stmts) ^^ MatchClause.apply
+    `case` ~/> someSep(pattern, `,`) ~ (`=>` ~/> stmts) ^^ MatchClause.apply
 
   lazy val pattern: P[MatchPattern] =
     ( "_" ^^^ IgnorePattern()

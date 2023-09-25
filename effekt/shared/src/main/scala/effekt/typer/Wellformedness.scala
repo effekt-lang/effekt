@@ -164,11 +164,14 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       case Child(c: Constructor, field: Symbol, outer: Trace)
     }
 
-    val initialClauses: List[Clause] = cls.map { c => c.pattern match {
-      case _: AnyPattern | _: IgnorePattern => Clause(Map.empty, c)
-      case t: TagPattern => Clause(Map(Trace.Root -> t), c)
+    val initialClauses: List[Clause] = cls.map { c =>
+      val patterns = c.patterns map { p => p match {
+      case _: AnyPattern | _: IgnorePattern => Map.empty
+      case t: TagPattern => Map(Trace.Root -> t)
       case _: LiteralPattern => Context.abort("Literal patterns not supported at the moment.")
     }}
+      Clause(patterns.flatten.toMap, c)
+    }
 
 
     object redundant {

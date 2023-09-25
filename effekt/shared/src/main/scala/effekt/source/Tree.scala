@@ -416,7 +416,7 @@ case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], re
 // Pattern Matching
 // ----------------
 
-case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
+case class MatchClause(patterns: List[MatchPattern], body: Stmt) extends Tree // TODO MRV 26
 
 enum MatchPattern extends Tree {
 

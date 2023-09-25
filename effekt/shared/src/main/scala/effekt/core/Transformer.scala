@@ -637,15 +637,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)
       case _ => Nil
     }
-    val params = boundVars(clause.pattern).map { p => (p, transform(Context.valueTypeOf(p))) }
+    val params = clause.patterns.flatMap(boundVars).map { p => (p, transform(Context.valueTypeOf(p))) }
     val body = transform(clause.body)
     val blockLit = BlockLit(Nil, Nil, params.map(core.ValueParam.apply), Nil, body)
 
     val joinpoint = Context.bind(TmpBlock(), blockLit)
-    sc match {
-      case List(v) => Clause(Map(v -> clause.pattern), joinpoint, params.map{case (p, tpe) => core.ValueVar(p, tpe)})
-      case _ => ??? // TODO MRV
-    }
+    val patterns = (sc zip clause.patterns).toMap
+    Clause(patterns, joinpoint, params.map{case (p, tpe) => core.ValueVar(p, tpe)})
   }
 
   /**

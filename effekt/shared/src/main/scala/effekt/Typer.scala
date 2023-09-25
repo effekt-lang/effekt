@@ -288,12 +288,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var resEff = effs
 
         val tpes = clauses.map {
-          case source.MatchClause(p, body) =>
+          case source.MatchClause(ps, body) =>
+            if (tpe.size != ps.size) Context.abort("Wrong number of pattern arguments.")
             // (3) infer types for all clauses
-            tpe match {
-              case List(tpe) => Context.bind(checkPattern(tpe, p))
-              case _ => ??? // TODO MRV
-            }
+            (tpe zip ps).foreach((t, p) => Context.bind(checkPattern(t, p)))
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
             resEff = resEff ++ clEff
             clTpe
