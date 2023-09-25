@@ -509,7 +509,8 @@ trait AnnotationsDB { self: Context =>
    *
    * These lookups should not fail (except there is a bug in the compiler)
    */
-  def symbolOf(tree: source.Definition): List[Symbol] =
+
+  def symbolsOf(tree: source.Definition): List[Symbol] =
     tree.ids.map(symbolOf)
 
   /**

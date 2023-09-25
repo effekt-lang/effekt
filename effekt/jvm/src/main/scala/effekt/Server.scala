@@ -200,13 +200,15 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
    * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
    * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
    */
-  def inferEffectsAction(fun: FunDef)(using C: Context): Option[TreeAction] = for {
+  def inferEffectsAction(fun: FunDef)(using C: Context): Option[TreeAction] =
+    val symbol = fun.symbol.head
+    for {
     // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
     // the annotated type
     ann = for {
-      result <- fun.symbol.annotatedResult
-      effects <- fun.symbol.annotatedEffects
+      result <- symbol.annotatedResult
+      effects <- symbol.annotatedEffects
     } yield (result, effects)
     if ann.map {
       (y, eff1) => needsUpdate((y, eff1), (tpe, eff))

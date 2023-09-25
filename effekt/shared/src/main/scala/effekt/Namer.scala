@@ -253,7 +253,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
-      val sym = f.symbol
+      val sym = f.symbol.head
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
@@ -292,7 +292,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
-      val data = d.symbol
+      val data = d.symbol.head
       data.constructors = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshNameFor(id)
@@ -304,7 +304,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // The record has been resolved as part of the preresolution step
     case d @ source.RecordDef(id, tparams, fs) =>
-      val record = d.symbol
+      val record = d.symbol.head
       val name = Context.freshNameFor(id)
       val constructor = Constructor(name, record.tparams, null, record)
       // we define the constructor on a copy to avoid confusion with symbols

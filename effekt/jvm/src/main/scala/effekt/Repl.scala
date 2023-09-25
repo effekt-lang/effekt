@@ -108,7 +108,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
         module.definitions.foreach {
           case u: Def =>
-            outputCode(DeclPrinter(context.symbolOf(u)), config)
+            outputCode(DeclPrinter(context.symbolsOf(u)), config)
         }
       }
     }

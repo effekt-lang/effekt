@@ -588,7 +588,7 @@ object Named {
   }
 
   extension [T <: Definitions](t: T & Definition) {
-    def symbol(using C: Context): ResolvedDefinitions[T] = C.symbolOf(t).asInstanceOf
+    def symbol(using C: Context): List[ResolvedDefinitions[T]] = C.symbolsOf(t).map(asInstanceOf) // TODO MRV 26: ok?
   }
   extension [T <: References](t: T & Reference) {
     def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf

@@ -89,7 +89,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       }
 
     case tree @ source.Region(id, body) =>
-      val reg = tree.symbol
+      val reg = tree.symbol.head
       val tpe = Context.inferredTypeOf(body)
 
       val free = freeCapture(tpe)
@@ -145,7 +145,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
      * Interface definitions bring an effect in scope that can be handled
      */
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      WF.addEffect(d.symbol)
+      WF.addEffect(d.symbol.head)
   }
 
   /**
