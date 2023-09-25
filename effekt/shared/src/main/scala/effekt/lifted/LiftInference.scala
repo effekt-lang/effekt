@@ -105,7 +105,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
     case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       // TODO what to do with cps?
-      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), body)
+      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), ret.map(transform), body)
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
   }

@@ -55,7 +55,7 @@ object Transformer {
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
       noteBlockParams(name, params map transform, List.empty)
-      Extern(transform(name), transformedParams, transform(ret), body)
+      Extern(transform(name), transformedParams, ret.map(transform), body)
 
     case lifted.Extern.Include(contents) =>
       Include(contents)

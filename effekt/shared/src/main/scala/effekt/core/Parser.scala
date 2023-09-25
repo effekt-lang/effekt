@@ -69,8 +69,8 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   lazy val externDecl: P[Extern] =
     ( `extern` ~> externBody ^^ Extern.Include.apply
     | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> externBody) ^^ {
-      case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body)
+      case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body => // TODO MRV: return list
+        Extern.Def(id, tparams, cparams, vparams, bparams, List(result), captures, body)
     })
 
   lazy val externBody = stringLiteral | multilineString
@@ -95,7 +95,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Definitions
   // -----------
   lazy val definition: P[Definition] =
-  ( `let` ~> someSep(id, `,`) ~ (`=` ~/> expr) ^^ Definition.Let.apply // TODO MRV 5
+  ( `let` ~> someSep(id, `,`) ~ (`=` ~/> expr) ^^ Definition.Let.apply
   | `def` ~> id ~ (`=` ~/> block) ^^ Definition.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
@@ -110,7 +110,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   lazy val stmt: P[Stmt] =
     ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
     | `return` ~> someSep(pure, `,`) ^^ Stmt.Return.apply
-    | `val` ~> someSep(id, `,`) ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply // TODO MRV 5
+    | `val` ~> someSep(id, `,`) ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply
     | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply

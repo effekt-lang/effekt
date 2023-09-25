@@ -41,7 +41,7 @@ object Transformer {
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
       case machine.Extern(functionName, parameters, returnType, body) =>
-        VerbatimFunction(transform(returnType), functionName, parameters.map {
+        VerbatimFunction(transform(returnType.head), functionName, parameters.map { // TODO MRV
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
         }, body)
       case machine.Include(content) =>

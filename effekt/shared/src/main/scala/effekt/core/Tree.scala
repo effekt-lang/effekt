@@ -99,8 +99,8 @@ case class Property(id: Id, tpe: BlockType) extends Tree
 /**
  * FFI external definitions
  */
-enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
+enum Extern extends Tree { // TODO MRV 26
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: List[ValueType], annotatedCapture: Captures, body: String)
   case Include(contents: String)
 }
 

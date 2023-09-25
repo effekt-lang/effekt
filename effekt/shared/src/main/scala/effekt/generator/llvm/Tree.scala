@@ -6,7 +6,7 @@ package llvm
 /**
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Definition
  */
-enum Definition {
+enum Definition { // TODO MRV
   case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
   case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)

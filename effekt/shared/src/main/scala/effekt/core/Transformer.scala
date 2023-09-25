@@ -98,10 +98,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol.head
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.head.capture)
-      ret match {
-        case List(ret) => List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), body))
-        case _ => ??? // TODO MRV
-      }
+      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, ret.map(transform), transform(capt), body))
 
 
     case e @ source.ExternInclude(path, contents, _) =>
