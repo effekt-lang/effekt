@@ -5,7 +5,7 @@ package chez
 // TODO choose appropriate representation and apply conversions
 case class ChezName(name: String)
 
-case class Binding(names: List[ChezName], expr: Expr) // TODO MRV 5
+case class Binding(names: List[ChezName], expr: Expr)
 
 case class Block(definitions: List[Def], expressions: List[Expr], result: Expr)
 
@@ -33,7 +33,7 @@ enum Expr {
   case Let_*(bindings: List[Binding], body: Block)
 
   // e.g. (let-values ([([x y] (values 1 2))]) (+ x y))
-  case LetValues(bindings: List[Binding], body: Block) // TODO MRV 5
+  case LetValues(bindings: List[Binding], body: Block)
 
   // e.g. (lambda (x y) body)
   case Lambda(params: List[ChezName], body: Block)
@@ -48,7 +48,7 @@ enum Expr {
   case Variable(name: ChezName)
 
   // e.g. (values x y)
-  case Values(exprs: List[Expr]) // TODO MRV 5
+  case Values(exprs: List[Expr])
 
   // handle is a macro, stable across Chez variants, so we add it to the language.
   case Handle(handlers: List[Handler], body: Expr)

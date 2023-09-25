@@ -167,7 +167,7 @@ def renameBoundIds(definition: Definition)(using newNames: Map[Id, Id]): Definit
           val newName = symbols.TmpBlock()
           Definition.Def(newName, renameBoundIds(block)(using newNames ++ Map[Id, Id](id -> newName)))
 
-    case Definition.Let(ids, binding) => { // TODO MRV 5
+    case Definition.Let(ids, binding) => {
       val newNamesInDefinition = Map[Id, Id]()
       val newIDs = ids map {
         id =>

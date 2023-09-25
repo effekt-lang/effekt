@@ -88,7 +88,7 @@ object Transformer {
           case _ => ()
         }
 
-        definitions.foldRight(transform(rest)) { // TODO MRV 5
+        definitions.foldRight(transform(rest)) {
           case (lifted.Definition.Let(ids, binding), rest) =>
             transform(binding).run { values =>
               if (ids.length != binding.tpe.length || ids.length != values.length)
@@ -130,7 +130,7 @@ object Transformer {
       case lifted.Val(id, binding, lifted.Return(List(lifted.ValueVar(id2, tpe)))) if id == id2 =>
         transform(binding)
 
-      case lifted.Val(ids, binding, rest) => // TODO MRV 5
+      case lifted.Val(ids, binding, rest) =>
         if (ids.length != binding.tpe.length)
           ErrorReporter.abort(s"Arity of variables and values does not match: $ids, ${binding.tpe}") // TODO MRV: better error message
 

@@ -191,8 +191,8 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: List[IdDef], annot: List[Option[ValueType]], binding: Stmt) // TODO MRV 5: val x, y = ...
-  case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
+  case ValDef(id: List[IdDef], annot: List[Option[ValueType]], binding: Stmt)
+  case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) // TODO MRV 26: List?
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])

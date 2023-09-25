@@ -794,7 +794,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 }
 
-private[core] enum Binding {  // TODO MRV 5
+private[core] enum Binding {
   case Val(names: List[TmpValue], binding: Stmt)
   case Let(names: List[TmpValue], binding: Expr)
   case Def(name: BlockSymbol, binding: Block)
@@ -816,7 +816,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * @param tpe the type of the bound statement
    * @param s the statement to be bound
    */
-  private[core] def bind(s: Stmt): List[ValueVar] = { // TODO MRV 5
+  private[core] def bind(s: Stmt): List[ValueVar] = {
 
     // create a fresh symbol and assign the type
     val names = List.tabulate(s.tpe.size)(_ => TmpValue())
@@ -827,7 +827,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     names zip s.tpe map { (x, v) => ValueVar(x, v) }
   }
 
-  private[core] def bind(e: Expr): List[ValueVar] = { // TODO MRV 5
+  private[core] def bind(e: Expr): List[ValueVar] = {
 
     // create a fresh symbol and assign the type
     val names = List.tabulate(e.tpe.size)(_ => TmpValue())

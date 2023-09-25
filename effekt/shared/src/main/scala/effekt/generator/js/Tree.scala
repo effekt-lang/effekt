@@ -113,13 +113,13 @@ enum Stmt {
   case Block(stmts: List[Stmt])
 
   // e.g. return [<EXPR>*]
-  case Return(exprs: List[Expr]) // TODO MRV 5
+  case Return(exprs: List[Expr])
 
   // A raw JS String
   case RawStmt(raw: String)
 
   // e.g. const [x, y] = <EXPR>
-  case Const(names: List[JSName], binding: Expr) // TODO MRV 5
+  case Const(names: List[JSName], binding: Expr)
 
   // e.g. <EXPR> = <EXPR>
   case Assign(target: Expr, value: Expr)
@@ -155,11 +155,11 @@ object monadic {
   private val `then` = JSName("then")
   private val `run` = JSName("run")
 
-  def Pure(expr: Expr): Control = Builtin("pure", expr) // TODO MRV: List[Expr]
+  def Pure(exprs: List[Expr]): Control = Builtin("pure", exprs:_*)
   def Run(m: Control): Expr = MethodCall(m, `run`)
 
   def Bind(m: Control, body: Control): Control = MethodCall(m, `then`, js.Lambda(Nil, body))
-  def Bind(m: Control, params: List[JSName], body: Control): Control = MethodCall(m, `then`, js.Lambda(params, body)) // TODO MRV 5
+  def Bind(m: Control, params: List[JSName], body: Control): Control = MethodCall(m, `then`, js.Lambda(params, body))
 
   def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
   def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)

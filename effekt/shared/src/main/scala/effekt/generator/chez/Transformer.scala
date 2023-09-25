@@ -50,7 +50,7 @@ trait Transformer {
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
-  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr // TODO MRV 5
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr
 
   def runMain(main: ChezName): chez.Expr
 
@@ -74,7 +74,7 @@ trait Transformer {
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Return(es) => chez.Values(es.map(e => pure(toChez(e)))) // TODO MRV 5
+    case Return(es) => chez.Values(es.map(e => pure(toChez(e)))) // TODO MRV: match list
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(ids, binding, body) => bind(toChezExpr(binding), ids.map(nameDef), toChez(body))
@@ -144,7 +144,7 @@ trait Transformer {
       }
 
     // we could also generate a let here...
-    case Definition.Let(ids, binding) => ids match { // TODO MRV 5
+    case Definition.Let(ids, binding) => ids match {
       case List(id) => Left(chez.Constant(nameDef(id), toChez(binding)))
       case _ => Right(Some(chez.LetValues(List(Binding(ids.map(nameDef), toChez(binding))), chez.Block(Nil, Nil, chez.RawValue("#f")))))
     }

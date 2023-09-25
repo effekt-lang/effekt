@@ -296,7 +296,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
        }
     )
 
-  lazy val valDefs: P[Def] = // TODO MRV 5
+  lazy val valDefs: P[Def] =
      `val` ~> someSep(valDef, `,`) ~ (`=` ~/> stmt) ^^ {
         case defs ~ binding =>
           val ids = defs.map(_._1)

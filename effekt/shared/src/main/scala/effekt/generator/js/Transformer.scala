@@ -134,7 +134,7 @@ object Transformer {
    *
    * Not all statement types can be printed in this context!
    */
-  def toJSMonadic(s: core.Stmt)(using DeclarationContext, Context): monadic.Control = s match { // TODO MRV 5
+  def toJSMonadic(s: core.Stmt)(using DeclarationContext, Context): monadic.Control = s match {
     case Val(List(Wildcard()), binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
