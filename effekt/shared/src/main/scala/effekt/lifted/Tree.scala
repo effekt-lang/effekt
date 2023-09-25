@@ -51,14 +51,17 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: String) // TODO MRV 5: ret: List[ValueType]?
   case Include(contents: String)
 }
 
 enum Definition {
-  def id: Id
+  def ids: List[Id] = this match {
+    case Definition.Def(id, _) => List(id)
+    case Definition.Let(ids, _) => ids
+  }
   case Def(id: Id, block: Block)
-  case Let(id: Id, binding: Expr)
+  case Let(id: List[Id], binding: Expr)
 }
 
 /**
@@ -80,7 +83,7 @@ enum Expr extends Argument {
 
   case Run(s: Stmt)
 
-  val tpe: ValueType = Type.inferType(this)
+  val tpe: List[ValueType] = Type.inferType(this)
 }
 export Expr.*
 
@@ -114,7 +117,7 @@ enum Stmt extends Tree  {
 
   // Fine-grain CBV
   case Return(e: List[Expr])
-  case Val(id: Id, binding: Stmt, body: Stmt) // TODO MRV: val x, y = swap(x, y)
+  case Val(ids: List[Id], binding: Stmt, body: Stmt) // TODO MRV: val x, y = swap(x, y)
   case App(b: Block, targs: List[ValueType], args: List[Argument])
 
   // Local Control Flow
@@ -201,7 +204,7 @@ object FreeVariables {
 import FreeVariables.{toFV, combineFV}
 def freeVariables(d: Definition): FreeVariables = d match {
   case Definition.Def(id, block) => freeVariables(block) - id // recursive definitions
-  case Definition.Let(id, binding) => freeVariables(binding)
+  case Definition.Let(ids, binding) => freeVariables(binding)
 }
 
 def freeVariables(stmt: Stmt): FreeVariables = stmt match {
@@ -213,12 +216,15 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
     definitions.foreach {
       case Definition.Def(id, block) =>
         free ++= freeVariables(block) -- bound
-      case Definition.Let(id, binding) =>
+      case Definition.Let(ids, binding) =>
         free ++= freeVariables(binding) -- bound
-        bound ++= FreeVariables(ValueParam(id, binding.tpe))
+        (ids zip binding.tpe) foreach { (id, tpe) => bound ++= FreeVariables(ValueParam(id, tpe)) }
     }
     freeVariables(body) -- bound ++ free
-  case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- FreeVariables(ValueParam(id, binding.tpe.head)) // TODO MRV: val x, y = ...
+  case Val(ids, binding, body) =>
+    var bound: FreeVariables = FreeVariables.empty
+    (ids zip binding.tpe) foreach { (id, tpe) => bound ++= FreeVariables(ValueParam(id, tpe)) }
+    freeVariables(binding) ++ freeVariables(body) -- bound
   case App(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => e.map(freeVariables).combineFV
@@ -226,7 +232,7 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Hole() => FreeVariables.empty
   case State(id, init, region, ev, body) =>
     freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
-      FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
+      FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, init.tpe)),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)

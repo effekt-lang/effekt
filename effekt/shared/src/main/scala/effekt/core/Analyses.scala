@@ -69,7 +69,7 @@ def collectAliases(definition: Definition): Map[Id, Id] =
       collectAliases(block)
 
     case Definition.Let(id, ValueVar(id2, _)) =>
-      Map[Id, Id](id -> id2)
+      Map[Id, Id](id.head -> id2) // TODO MRV: id should contain exactly 1 element
 
     case Definition.Let(_, binding) =>
       collectAliases(binding)

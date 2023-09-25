@@ -587,7 +587,7 @@ def inliningWorker(statement: Stmt)(using inlines: Map[Id, Block]): Stmt =
     case Scope(definitions, body) =>
       Scope(definitions.map{
         case d@Definition.Def(id, _) => inliningWorker(d)(using inlines - id)
-        case l@Definition.Let(id,_) => inliningWorker(l)(using inlines - id)}, inliningWorker(body))
+        case l@Definition.Let(ids,_) => inliningWorker(l)(using inlines -- ids)}, inliningWorker(body))
 
     case Return(exprs) =>
       Return(exprs.map(inliningWorker))
@@ -684,11 +684,11 @@ def inlineGeneral(module: ModuleDecl, bodies: Map[Id, Block], inlineThreshhold: 
 // Returns input list without constants and Map of constants
 def extractConstants(definitions: List[Definition]): (List[Definition], Map[Id, Literal]) =
   val constants = definitions.map{
-    case Definition.Let(id, binding: Literal) => Map[Id, Literal](id -> binding)
+    case Definition.Let(id, binding: Literal) => Map[Id, Literal](id.head -> binding) // TODO MRV
     case _ => Map[Id, Literal]()}.fold(Map[Id, Literal]())(_ ++ _)
 
   val newDefinitions = definitions.filter{
-    case Definition.Let(id, _) => !constants.contains(id)
+    case Definition.Let(id, _) => !constants.contains(id.head) // TODO MRV
     case _ => true
   }
   (newDefinitions, constants)

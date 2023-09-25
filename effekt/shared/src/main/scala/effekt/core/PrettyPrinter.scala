@@ -136,8 +136,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id.name) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, binding) =>
-      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
+    case Definition.Let(ids, binding) =>
+      "let" <+> hsep(ids.map(id => toDoc(id.name)), ", ") <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(s: Stmt): Doc = s match {
@@ -147,12 +147,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       hsep(e.map(toDoc), ", ")
 
-    case Val(Wildcard(), binding, body) =>
+    case Val(List(Wildcard()), binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, binding, body) =>
-      "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+    case Val(ids, binding, body) =>
+      "val" <+> hsep(ids.map(id => toDoc(id.name)), ", ") <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, vargs, bargs) =>

@@ -7,7 +7,7 @@ import kiama.util.Counter
  * A symbol uniquely represents a code entity
  *
  * We use the unique id of a symbol to represent it. That is, symbols
- * are considert equal, if and only if their id is the same.
+ * are considered equal, if and only if their id is the same.
  *
  * This code is taken from the Kiama Named implementation and moved to the toplevel.
  * This way ALL symbols are Named and the dependencies are reduced

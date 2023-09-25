@@ -129,8 +129,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id.name) <> signature(tparams, params, body.tpe) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, binding) =>
-      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
+    case Definition.Let(ids, binding) => "let" <+> hsep(ids.map(id => toDoc(id.name)), ", ") <+> "=" <+> toDoc(binding)
+
   }
 
   def toDoc(definitions: List[Definition]): Doc =
@@ -140,12 +140,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Scope(definitions, rest) =>
       toDoc(definitions) <> emptyline <> toDoc(rest)
 
-    case Val(Wildcard(), binding, body) =>
+    case Val(List(Wildcard()), binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, binding, body) =>
-      "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+    case Val(ids, binding, body) =>
+      "val" <+> hsep(ids.map(id => toDoc(id.name)), ", ") <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, args) =>

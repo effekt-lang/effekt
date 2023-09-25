@@ -36,15 +36,12 @@ object DirectStyleMutableState extends Phase[CoreTransformed, CoreTransformed] {
       case Stmt.Val(y, Put(x, tpe, v), s) => Let(y, Put(x, tpe, rewrite(v)), rewrite(s))
 
       case Get(x, tpe) =>
-        val id = Id("tmp")
-        Let(id, Get(x, tpe), Stmt.Return(List(Pure.ValueVar(id, tpe.result match {
-          case List(tpe) => tpe
-          case _ => ??? // TODO MRV
-        }))))
+        val ids = List.tabulate(tpe.result.size)(i => Id("tmp" + i))
+        Let(ids, Get(x, tpe), Stmt.Return(ids zip tpe.result map {(id, tpe) => Pure.ValueVar(id, tpe)}))
 
       case Put(x, tpe, v) =>
-        val id = Id("tmp")
-        Let(id, Put(x, tpe, v), Stmt.Return(List(Pure.ValueVar(id, Type.TUnit))))
+        val ids = List(Id("tmp"))
+        Let(ids, Put(x, tpe, v), Stmt.Return(ids map {Pure.ValueVar(_, Type.TUnit)}))
     }
   }
 

@@ -50,15 +50,15 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
   statement match
     case Scope(definitions, body) =>
       Scope(definitions.map(substitute), substitute(body)(using tSubst, cSubst, vSubst, bSubst --
-        definitions.map{
-          case Definition.Def(id, _) => id
+        definitions.flatMap{
+          case Definition.Def(id, _) => List(id)
           case Definition.Let(id, _) => id}))
 
     case Return(exprs) =>
       Return(exprs.map(substitute))
 
-    case Val(id, binding, body) =>
-      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
+    case Val(ids, binding, body) =>
+      Val(ids, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst -- ids, bSubst))
 
     case App(callee, targs, vargs, bargs) =>
       App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
@@ -152,9 +152,9 @@ def substitute(op: Operation)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, 
 def renameBoundIds(module: ModuleDecl)(using newNames: Map[Id, Id]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-      val initialNames = rmIdKey[Id](definitions.map{
-        case Definition.Def(id, _) => Map[Id, Id](id -> symbols.TmpBlock())
-        case Definition.Let(id, _) => Map[Id, Id](id -> symbols.TmpValue())}.fold(Map[Id, Id]())(_ ++ _), Set("main"))
+      val initialNames = rmIdKey[Id](definitions.flatMap{
+        case Definition.Def(id, _) => List(Map[Id, Id](id -> symbols.TmpBlock()))
+        case Definition.Let(ids, _) => ids.map(id => Map[Id, Id](id -> symbols.TmpValue()))}.fold(Map[Id, Id]())(_ ++ _), Set("main"))
       ModuleDecl(path, imports, declarations, externs, definitions.map(renameBoundIds(_)(using initialNames)), exports)
 
 def renameBoundIds(definition: Definition)(using newNames: Map[Id, Id]): Definition =
@@ -167,11 +167,19 @@ def renameBoundIds(definition: Definition)(using newNames: Map[Id, Id]): Definit
           val newName = symbols.TmpBlock()
           Definition.Def(newName, renameBoundIds(block)(using newNames ++ Map[Id, Id](id -> newName)))
 
-    case Definition.Let(id, binding) =>
-      if (newNames.contains(id)) Definition.Let(newNames(id), renameBoundIds(binding))
-      else
-        val newName = symbols.TmpValue()
-        Definition.Let(newName, renameBoundIds(binding)(using newNames ++ Map[Id, Id](id -> newName)))
+    case Definition.Let(ids, binding) => { // TODO MRV 5
+      val newNamesInDefinition = Map[Id, Id]()
+      val newIDs = ids map {
+        id =>
+          if (newNames.contains(id)) newNames(id)
+          else {
+            val newId = symbols.TmpValue()
+            newNamesInDefinition ++ Map[Id, Id](id -> newId)
+            newId
+          }
+      }
+      Definition.Let(newIDs, renameBoundIds(binding)(using newNames ++ newNamesInDefinition))
+    }
 
 def renameBoundIds(expr: Expr)(using newNames: Map[Id, Id]): Expr =
   expr match
@@ -187,19 +195,27 @@ def renameBoundIds(expr: Expr)(using newNames: Map[Id, Id]): Expr =
 def renameBoundIds(statement: Stmt)(using newNames: Map[Id, Id]): Stmt =
   statement match
     case Scope(definitions, body) =>
-      val scopeNames = definitions.map{
-        case Definition.Def(id, _) => Map[Id, Id](id -> symbols.TmpBlock())
-        case Definition.Let(id, _) => Map[Id, Id](id -> symbols.TmpValue())}.fold(Map[Id, Id]())(_ ++ _)
+      val scopeNames = definitions.flatMap{
+        case Definition.Def(id, _) => List(Map[Id, Id](id -> symbols.TmpBlock()))
+        case Definition.Let(ids, _) => ids map { id => Map[Id, Id](id -> symbols.TmpValue())}}.fold(Map[Id, Id]())(_ ++ _)
       Scope(definitions.map(renameBoundIds(_)(using newNames ++ scopeNames)), renameBoundIds(body)(using newNames ++ scopeNames))
 
     case Return(exprs) =>
       Return(exprs.map(renameBoundIds))
 
-    case Val(id, binding, body) =>
-      if (newNames.contains(id)) Val(newNames(id), renameBoundIds(binding), renameBoundIds(body))
-      else
-        val newName = symbols.TmpValue()
-        Val(newName, renameBoundIds(binding)(using newNames ++ Map[Id, Id](id -> newName)), renameBoundIds(body)(using newNames ++ Map[Id, Id](id -> newName)))
+    case Val(ids, binding, body) => {
+      val newNamesInDefinition = Map[Id, Id]()
+      val newIDs = ids map {
+        id =>
+          if (newNames.contains(id)) newNames(id)
+          else {
+            val newId = symbols.TmpValue()
+            newNamesInDefinition ++ Map[Id, Id](id -> newId)
+            newId
+          }
+      }
+      Val(newIDs, renameBoundIds(binding)(using newNames ++ newNamesInDefinition), renameBoundIds(body)(using newNames ++ newNamesInDefinition))
+    }
 
     case App(callee, targs, vargs, bargs) =>
       App(renameBoundIds(callee), targs, vargs.map(renameBoundIds), bargs.map(renameBoundIds))

@@ -82,7 +82,7 @@ object Transformer {
 
   def toJS(e: core.Extern)(using Context): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
+      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(List(js.RawExpr(body)))))
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
@@ -134,12 +134,12 @@ object Transformer {
    *
    * Not all statement types can be printed in this context!
    */
-  def toJSMonadic(s: core.Stmt)(using DeclarationContext, Context): monadic.Control = s match {
-    case Val(Wildcard(), binding, body) =>
+  def toJSMonadic(s: core.Stmt)(using DeclarationContext, Context): monadic.Control = s match { // TODO MRV 5
+    case Val(List(Wildcard()), binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
-    case Val(id, binding, body) =>
-      monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
+    case Val(ids, binding, body) =>
+      monadic.Bind(toJSMonadic(binding), ids.map(nameDef), toJSMonadic(body))
 
     case App(b, targs, vargs, bargs) =>
       monadic.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
@@ -162,7 +162,10 @@ object Transformer {
       monadic.Builtin("hole")
 
     case other => toJSStmt(other) match {
-      case (Nil, ret) => ret
+      case (Nil, ret) => ret match {
+        case List(ret) => ret
+        case _ => ??? // TODO MRV
+      }
       case (stmts, ret) => monadic.Call(monadic.Lambda(Nil, stmts, ret), Nil)
     }
   }
@@ -182,13 +185,13 @@ object Transformer {
       monadic.Function(nameDef(id), (vps++ bps) map toJS, stmts, jsBody)
 
     case Definition.Def(id, block) =>
-      js.Const(nameDef(id), toJS(block))
+      js.Const(List(nameDef(id)), toJS(block))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(List(Wildcard()), binding) =>
       js.ExprStmt(toJS(binding))
 
-    case Definition.Let(id, binding) =>
-      js.Const(nameDef(id), toJS(binding))
+    case Definition.Let(ids, binding) =>
+      js.Const(ids.map(nameDef), toJS(binding))
   }
 
   /**
@@ -196,18 +199,18 @@ object Transformer {
    *
    * That is, multiple statements that end in one monadic return
    */
-  def toJSStmt(s: core.Stmt)(using DeclarationContext, Context): (List[js.Stmt], monadic.Control) = s match {
+  def toJSStmt(s: core.Stmt)(using DeclarationContext, Context): (List[js.Stmt], List[monadic.Control]) = s match {
     case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)
-      (js.Const(nameDef(id), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
+      (js.Const(List(nameDef(id)), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
 
     case State(id, init, region, body) =>
       val (stmts, ret) = toJSStmt(body)
-      (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
+      (js.Const(List(nameDef(id)), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
 
     // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
     case Match(sc, clauses, default) =>
@@ -216,15 +219,15 @@ object Transformer {
       val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
         // f17.apply(null, sc.__data)
         case (c, block) =>
-          (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
+          (tagFor(c), js.Return(List(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`)))))
       }, None)
 
-      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))
+      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, List(monadic.Pure(js.RawExpr("null")))))
       (sw :: stmts, ret)
 
 
     case other =>
-      (Nil, toJSMonadic(other))
+      (Nil, List(toJSMonadic(other)))
   }
 
   def tagFor(constructor: Id)(using D: DeclarationContext, C: Context): js.Expr = {
@@ -236,19 +239,19 @@ object Transformer {
     js.Function(
       nameDef(constructor.id),
       fields.map { f => nameDef(f.id) },
-      List(js.Return(js.Object(List(
+      List(js.Return(List(js.Object(List(
         `tag`  -> js.RawExpr(tagValue.toString),
         `name` -> JsString(constructor.id.name.name),
         `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f.id)) })
-      ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) })))
+      ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) }))))
     )
   }
 
   // const $getOp = "get$1234"
   // const $putOp = "put$7554"
   def generateStateAccessors: List[js.Stmt] = {
-    val getter = Const(JSName("$getOp"), JsString(nameDef(symbols.builtins.TState.get).name))
-    val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
+    val getter = Const(List(JSName("$getOp")), JsString(nameDef(symbols.builtins.TState.get).name))
+    val setter = Const(List(JSName("$putOp")), JsString(nameDef(symbols.builtins.TState.put).name))
 
     List(getter, setter)
   }

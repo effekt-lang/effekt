@@ -106,10 +106,9 @@ enum Extern extends Tree {
 
 
 enum Definition {
-  def id: Id
 
   case Def(id: Id, block: Block)
-  case Let(id: Id, binding: Expr) // PURE on the toplevel?
+  case Let(ids: List[Id], binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -128,8 +127,8 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
 def Def(id: Id, block: Block, rest: Stmt) =
   addToScope(Definition.Def(id, block), rest)
 
-def Let(id: Id, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id,  binding), rest)
+def Let(ids: List[Id], binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(ids,  binding), rest)
 
 
 /**
@@ -140,7 +139,7 @@ def Let(id: Id, binding: Expr, rest: Stmt) =
  * - [[Pure]]
  */
 sealed trait Expr extends Tree {
-  val tpe: ValueType = Type.inferType(this)
+  val tpe: List[ValueType] = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
 
@@ -238,7 +237,7 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: List[Pure])
-  case Val(id: Id, binding: Stmt, body: Stmt) // TODO
+  case Val(ids: List[Id], binding: Stmt, body: Stmt) // TODO MRV: val x, y = swap(x, y)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
@@ -363,9 +362,14 @@ object substitutions {
     def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
 
     def shadowDefinitions(shadowed: Seq[Definition]): Substitution = copy(
-      values = values -- shadowed.collect { case d: Definition.Let => d.id },
-      blocks = blocks -- shadowed.collect { case d: Definition.Def => d.id }
+      values = values -- shadowed.collect { case d: Definition.Let => extractIds(d) }.flatten,
+      blocks = blocks -- shadowed.collect { case d: Definition.Def => extractIds(d) }.flatten
     )
+
+    def extractIds(definition: Definition): List[Id] = definition match {
+      case Definition.Def(id, _) => List(id)
+      case Definition.Let(ids, _) => ids
+    }
 
     def shadowParams(shadowed: Seq[Param]): Substitution = copy(
       values = values -- shadowed.collect { case d: Param.ValueParam => d.id },
@@ -413,9 +417,9 @@ object substitutions {
       case Return(exprs) =>
         Return(exprs.map(substitute))
 
-      case Val(id, binding, body) =>
-        Val(id, substitute(binding),
-          substitute(body)(using subst shadowValues List(id)))
+      case Val(ids, binding, body) =>
+        Val(ids, substitute(binding),
+          substitute(body)(using subst shadowValues ids))
 
       case App(callee, targs, vargs, bargs) =>
         App(substitute(callee), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))

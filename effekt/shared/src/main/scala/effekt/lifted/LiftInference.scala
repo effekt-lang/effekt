@@ -120,8 +120,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
     case core.Definition.Def(id, block) =>
       Definition.Def(id, transform(block))
-    case core.Definition.Let(id, binding) =>
-      Definition.Let(id, transform(binding))
+    case core.Definition.Let(ids, binding) =>
+      Definition.Let(ids, transform(binding))
   }
 
   def transform(tree: core.Stmt)(using Environment, ErrorReporter): Stmt = tree match {
@@ -188,8 +188,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       Scope(definitions.map(d => transform(d)(using env, ErrorReporter)), body)
 
-    case core.Val(id, binding, body) =>
-      Val(id, transform(binding), transform(body))
+    case core.Val(ids, binding, body) =>
+      Val(ids, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
       State(id, transform(init), region, env.evidenceFor(region), transform(body))

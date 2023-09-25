@@ -77,7 +77,7 @@ trait Intelligence {
     case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
     case s: SelfParam => s.tree match {
-      case d: source.Def => Some(d.id)
+      case d: source.Def => Some(d.ids.head) // TODO MRV 14
       case _             => Some(s.tree)
     }
     case u => C.definitionTreeOption(u)
@@ -122,10 +122,10 @@ trait Intelligence {
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
     case b: ExternFunction =>
-      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None)
+      SymbolInfo(b, "External function definition", Some(DeclPrinter(List(b))), None)
 
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
-      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
+      SymbolInfo(f, "Function", Some(DeclPrinter(List(f))), None)
 
     case f: Operation =>
       val ex =
@@ -147,22 +147,22 @@ trait Intelligence {
              |handled by the handler. This is important when considering higher-order functions.
              |""".stripMargin
 
-      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
+      SymbolInfo(f, "Effect operation", Some(DeclPrinter(List(f))), Some(ex))
 
     case f: EffectAlias =>
-      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None)
+      SymbolInfo(f, "Effect alias", Some(DeclPrinter(List(f))), None)
 
     case t: TypeAlias =>
-      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
+      SymbolInfo(t, "Type alias", Some(DeclPrinter(List(t))), None)
 
     case t: ExternType =>
-      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None)
+      SymbolInfo(t, "External type definition", Some(DeclPrinter(List(t))), None)
 
     case t: ExternInterface =>
-      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None)
+      SymbolInfo(t, "External interface definition", Some(DeclPrinter(List(t))), None)
 
     case t: ExternResource =>
-      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None)
+      SymbolInfo(t, "External resource definition", Some(DeclPrinter(List(t))), None)
 
     case c: Constructor =>
       val ex = pp"""|Instances of data types like `${c.tpe}` can only store
@@ -170,7 +170,7 @@ trait Intelligence {
                     |value parameter lists, not block parameters.
                     |""".stripMargin
 
-      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
+      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(List(c))), Some(ex))
 
     case c: BlockParam =>
       val signature = C.functionTypeOption(c).map { tpe => pp"{ ${c.name}: ${tpe} }" }

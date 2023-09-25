@@ -18,7 +18,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(defs: List[Def]): Document =
     pretty(vsep(defs map toDoc, line <> line))
 
-  def toDoc(binding: Binding): Doc = brackets(toDoc(binding.name) <+> toDoc(binding.expr))
+  def toDoc(binding: Binding): Doc = binding.names match {
+    case List(name) => brackets(toDoc(name) <+> toDoc(binding.expr))
+    case _ => brackets(parens(hsep(binding.names map toDoc, space)) <+> toDoc(binding.expr))
+  }
 
   def toDoc(expr: Expr): Doc = expr match {
     case Call(callee, Nil)       => parens(toDoc(callee))
@@ -27,9 +30,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case RawValue(raw)           => string(raw)
     case Let(bindings, body)     => parens("let" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
     case Let_*(bindings, body)   => parens("let*" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
+    case LetValues(bindings, body) =>
+      parens("let-values" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
     case Lambda(params, body)    => parens("lambda" <+> parens(params.map(toDoc)) <> toDoc(body))
     case If(cond, thn, els)      => parens("if" <+> toDoc(cond) <> nest(line <> toDoc(thn)) <> nest(line <> toDoc(els)))
     case Variable(name)          => toDoc(name)
+    case Values(exprs)           => parens("values" <+> hsep(exprs map toDoc))
     case Cond(clauses, default)  =>
       val els = default.toList.map(d => brackets("else" <+> toDoc(d)))
       parens("cond" <+> nest(line <> align(vcat(clauses.map {

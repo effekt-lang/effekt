@@ -5,7 +5,7 @@ package chez
 // TODO choose appropriate representation and apply conversions
 case class ChezName(name: String)
 
-case class Binding(name: ChezName, expr: Expr)
+case class Binding(names: List[ChezName], expr: Expr) // TODO MRV 5
 
 case class Block(definitions: List[Def], expressions: List[Expr], result: Expr)
 
@@ -32,6 +32,9 @@ enum Expr {
   // e.g. (let* ([x 42] [y x]) (+ x y))
   case Let_*(bindings: List[Binding], body: Block)
 
+  // e.g. (let-values ([([x y] (values 1 2))]) (+ x y))
+  case LetValues(bindings: List[Binding], body: Block) // TODO MRV 5
+
   // e.g. (lambda (x y) body)
   case Lambda(params: List[ChezName], body: Block)
 
@@ -43,6 +46,9 @@ enum Expr {
 
   // e.g x
   case Variable(name: ChezName)
+
+  // e.g. (values x y)
+  case Values(exprs: List[Expr]) // TODO MRV 5
 
   // handle is a macro, stable across Chez variants, so we add it to the language.
   case Handle(handlers: List[Handler], body: Expr)
@@ -102,7 +108,7 @@ object DeadCodeElimination extends Tree.Rewrite[Unit] {
       val transformedBody = rewrite(body)
       val fv = FreeVariables.query(transformedBody)
       val bs = bindings.collect {
-        case b @ Binding(name, binding) if (fv contains name) || !isInlinable(binding) => rewrite(b)
+        case b @ Binding(names, binding) if (names.forall(name => fv contains name)) || !isInlinable(binding) => rewrite(b)
       }
       Let(bs, transformedBody)
   }
@@ -140,7 +146,7 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
   def empty = Set.empty
   def combine = _ ++ _
 
-  def bound(bindings: List[Binding]): Set[ChezName] = bindings.map { b => b.name }.toSet
+  def bound(bindings: List[Binding]): Set[ChezName] = bindings.flatMap { b => b.names }.toSet
   def free(bindings: List[Binding]): Set[ChezName] = bindings.flatMap { b => query(b.expr) }.toSet
 
   override def expr(using Unit) = {
@@ -151,7 +157,7 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
 
     case Let_*(bindings, body) =>
       val freeInBindings = bindings.foldRight(Set.empty[ChezName]) {
-        case (Binding(name, b), free) => (free - name) ++ query(b)
+        case (Binding(names, b), free) => (free -- names) ++ query(b)
       }
       freeInBindings ++ (query(body) -- bound(bindings))
 

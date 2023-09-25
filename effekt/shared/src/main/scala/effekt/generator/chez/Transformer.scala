@@ -22,6 +22,9 @@ object TransformerMonadic extends Transformer {
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
     Builtin("then", binding, chez.Lambda(List(param), body))
 
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr =
+    Builtin("then", binding, chez.Lambda(params, body))
+
   def runMain(main: ChezName): chez.Expr =
     chez.Builtin("run", chez.Call(main))
 }
@@ -33,7 +36,10 @@ object TransformerCallCC extends Transformer {
   def pure(expr: chez.Expr): chez.Expr = expr
 
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    chez.Let(List(Binding(param, binding)), body)
+    chez.Let(List(Binding(List(param), binding)), body)
+
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr =
+    chez.LetValues(List(Binding(params, binding)), body)
 
   def runMain(main: ChezName): chez.Expr =
     chez.Builtin("run", Variable(main))
@@ -44,6 +50,7 @@ trait Transformer {
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr // TODO MRV 5
 
   def runMain(main: ChezName): chez.Expr
 
@@ -67,13 +74,10 @@ trait Transformer {
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Return(e) => e match {
-      case List(e) => pure(toChez(e))
-      case _ => ??? // TODO MRV
-    }
+    case Return(es) => chez.Values(es.map(e => pure(toChez(e)))) // TODO MRV 5
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(ids, binding, body) => bind(toChezExpr(binding), ids.map(nameDef), toChez(body))
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -87,10 +91,10 @@ trait Transformer {
     case Hole() => chez.Builtin("hole")
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
+      chez.Let(List(Binding(List(nameDef(id)), chez.Builtin("box", toChez(init)))), toChez(body))
 
     case State(id, init, region, body) =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
+      chez.Let(List(Binding(List(nameDef(id)), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
@@ -130,7 +134,7 @@ trait Transformer {
     case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(List(Wildcard()), binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -140,8 +144,11 @@ trait Transformer {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, binding) =>
-      Left(chez.Constant(nameDef(id), toChez(binding)))
+    case Definition.Let(ids, binding) => ids match { // TODO MRV 5
+      case List(id) => Left(chez.Constant(nameDef(id), toChez(binding)))
+      case _ => Right(Some(chez.LetValues(List(Binding(ids.map(nameDef), toChez(binding))), chez.Block(Nil, Nil, chez.RawValue("#f")))))
+    }
+
   }
 
   def toChez(stmt: Stmt): chez.Block = stmt match {
@@ -149,6 +156,8 @@ trait Transformer {
     case Scope(definitions, body) =>
       definitions.map(toChez).foldRight(toChez(body)) {
         case (Left(defn), chez.Block(defns, exprs, result)) => chez.Block(defn :: defns, exprs, result)
+        case (Right(Some(chez.LetValues(List(Binding(ids, binding)), _))), rest) =>
+          chez.Block(Nil, Nil, chez.LetValues(List(Binding(ids, binding)), rest))
         case (Right(Some(expr)), chez.Block(Nil, exprs, result)) => chez.Block(Nil, expr :: exprs, result)
         case (Right(Some(expr)), rest) => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
         case (Right(None), rest) => rest

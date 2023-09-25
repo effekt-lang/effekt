@@ -57,10 +57,10 @@ object TransformerLift {
       CPS.join { k =>
         chez.If(toChez(cond), toChezExpr(thn)(k), toChezExpr(els)(k))
       }
-    case Val(id, binding, body) =>
+    case Val(ids, binding, body) =>
       toChezExpr(binding).flatMap { value =>
         CPS.inline { k =>
-          chez.Let(List(Binding(nameDef(id), value)), toChez(body, k))
+          chez.Let(List(Binding(ids.map(nameDef), value)), toChez(body, k))
         }
       }
     case Match(scrutinee, clauses, default) => CPS.join { k =>
@@ -78,23 +78,23 @@ object TransformerLift {
 
     case State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
-        chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body, k))
+        chez.Let(List(Binding(List(nameDef(id)), chez.Builtin("box", toChez(init)))), toChez(body, k))
       }
 
     case State(id, init, region, ev, body) =>
       CPS.inline { k =>
-       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
+       chez.Let(List(Binding(List(nameDef(id)), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }
 
     case Try(body, handler) =>
       val handlers = handler.map { h =>
         val names = RecordNames(h.interface.name)
         val cap = freshName(names.name)
-        Binding(cap, toChez(h))
+        Binding(List(cap), toChez(h))
       }
       CPS.inline { k =>
         chez.Let(handlers,
-          chez.Call(CPS.reset(chez.Call(toChez(body), CPS.lift :: handlers.map(h => Variable(h.name)))), List(k.reify)))
+          chez.Call(CPS.reset(chez.Call(toChez(body), CPS.lift :: handlers.flatMap(h => h.names.map(i => Variable(i))))), List(k.reify)))
       }
 
     // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
@@ -103,7 +103,7 @@ object TransformerLift {
         val a = freshName("a")
         val ev = freshName("ev")
         chez.Let(List(
-            chez.Binding(toChez(kparam), chez.Lambda(List(ev, a),
+            chez.Binding(List(toChez(kparam)), chez.Lambda(List(ev, a),
               chez.Call(ev, chez.Call(k1.reify, List(chez.Expr.Variable(a))))))),
           toChezExpr(body).reify())
       })
@@ -137,7 +137,7 @@ object TransformerLift {
     case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(List(Wildcard()), binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -147,8 +147,10 @@ object TransformerLift {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, binding) =>
-      Left(chez.Constant(nameDef(id), toChez(binding)))
+    case Definition.Let(ids, binding) => ids match {
+      case List(id) => Left(chez.Constant(nameDef(id), toChez(binding)))
+      case _ => Right(Some(chez.LetValues(List(Binding(ids.map(nameDef), toChez(binding))), chez.Block(Nil, Nil, chez.RawValue("#f")))))
+    }
   }
 
 
@@ -273,7 +275,7 @@ object TransformerLift {
       case k: Continuation.Dynamic => prog(k)
       case k: Continuation.Static =>
         val kName = freshName("k")
-        chez.Let(List(Binding(kName, k.reify)),
+        chez.Let(List(Binding(List(kName), k.reify)),
           prog(Continuation.Dynamic(chez.Variable(kName))))
     }
 

@@ -7,6 +7,7 @@ import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.Block.BlockLit
 import effekt.core.Pure.ValueVar
+import effekt.core.Definition.*
 import effekt.symbols.TmpValue
 import effekt.util.messages.INTERNAL_ERROR
 
@@ -31,10 +32,13 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 object RemoveUnusedDefinitions {
 
   def apply(entrypoints: Set[Id], m: ModuleDecl)(using Context): ModuleDecl = {
-    val reachable = Reachable(entrypoints, m.definitions.map(d => d.id -> d).toMap)
+    val reachable = Reachable(entrypoints, extractDefinitionsMap(m.definitions))
 
     m.copy(
-      definitions = m.definitions.filter { d => reachable.isDefinedAt(d.id) },
+      definitions = m.definitions.filter {
+        case Def(id, _) => reachable.isDefinedAt(id)
+        case Let(ids, _) => ids forall { id => reachable.isDefinedAt(id) }
+      },
       externs = m.externs.collect {
         case e: Extern.Def if reachable.isDefinedAt(e.id) => e
         case e: Extern.Include => e
@@ -71,7 +75,7 @@ object InlineUnique {
 
   def apply(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl = {
     val usage = Reachable(m) ++ entrypoints.map(id => id -> Usage.Many).toMap
-    val defs = m.definitions.map(d => d.id -> d).toMap
+    val defs = extractDefinitionsMap(m.definitions)
 
     val (updatedDefs, _) = scope(m.definitions)(using InlineContext(usage, defs))
     m.copy(definitions = updatedDefs)
@@ -94,7 +98,7 @@ object InlineUnique {
     }
 
   def scope(definitions: List[Definition])(using ctx: InlineContext): (List[Definition], InlineContext) =
-    given allDefs: InlineContext = ctx ++ definitions.map(d => d.id -> d).toMap
+    given allDefs: InlineContext = ctx ++ extractDefinitionsMap(definitions)
 
     val filtered = definitions.collect {
       case Definition.Def(id, block) if shouldKeep(id) => Definition.Def(id, rewrite(block))
@@ -247,7 +251,7 @@ object InlineUnique {
 
 
   // smart constructors to establish a normal form
-  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+  def valDef(ids: List[Id], binding: Stmt, body: Stmt): Stmt =
     binding match {
       // This opt is too good for JS: it blows the stack on
       // recursive functions that are used to encode while...
@@ -255,19 +259,16 @@ object InlineUnique {
       // The solution to this problem is implemented in core.MakeStackSafe:
       //   all recursive functions that could blow the stack are trivially wrapped
       //   again, after optimizing.
-      case Stmt.Return(exprs) => exprs match {
-        case List(expr) => scope(List(Definition.Let(id, expr)), body)
-        case _ => ??? // TODO MRV: ask forbid   val z = swap(x, y) ?
-      }
+      case Stmt.Return(exprs) => scope(ids zip exprs map { (id, e) => Definition.Let(List(id), e) }, body) // TODO MRV: check length
 
       // here we are flattening scopes; be aware that this extends
       // life-times of bindings!
       //
       // { val x = { def...; BODY }; REST } = { def ...; val x = BODY }
       case Stmt.Scope(definitions, binding) =>
-        scope(definitions, valDef(id, binding, body))
+        scope(definitions, valDef(ids, binding, body))
 
-      case _ => Stmt.Val(id, binding, body)
+      case _ => Stmt.Val(ids, binding, body)
     }
 
   // { def f=...; { def g=...; BODY } } = { def f=...; def g; BODY }
@@ -348,16 +349,20 @@ class Reachable(
   }
 
   def process(d: Definition)(using defs: Map[Id, Definition]): Unit =
-    if stack.contains(d.id) then
-      reachable = reachable.updated(d.id, Usage.Recursive)
-    else d match {
+    d match {
       case Definition.Def(id, block) =>
-        seen = seen + id
-        within(id) { process(block) }
+        if (stack.contains(id)) then
+          reachable = reachable.updated(id, Usage.Recursive)
+        else
+          seen = seen + id
+          within(id) { process(block) }
 
-      case Definition.Let(id, binding) =>
-        seen = seen + id
-        process(binding)
+      case Definition.Let(ids, binding) =>
+        if (ids.forall(id => stack.contains(id))) then
+          ids.foreach(id => reachable = reachable.updated(id, Usage.Recursive))
+        else
+          seen = seen ++ ids
+          process(binding)
     }
 
   def process(id: Id)(using defs: Map[Id, Definition]): Unit =
@@ -388,7 +393,7 @@ class Reachable(
 
   def process(s: Stmt)(using defs: Map[Id, Definition]): Unit = s match {
     case Stmt.Scope(definitions, body) =>
-      val allDefs = defs ++ definitions.map(d => d.id -> d).toMap
+      val allDefs = defs ++ extractDefinitionsMap(definitions)
       definitions.foreach(process)
       process(body)(using allDefs)
     case Stmt.Return(exprs) => exprs.foreach(process)
@@ -438,7 +443,7 @@ object Reachable {
 
   def apply(m: ModuleDecl): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
-    val defs = m.definitions.map(d => d.id -> d).toMap
+    val defs = extractDefinitionsMap(m.definitions)
     m.definitions.foreach(d => analysis.process(d)(using defs))
     analysis.reachable
   }
@@ -457,3 +462,8 @@ enum Usage {
   case Recursive
 }
 
+def extractDefinitionsMap(defs: List[Definition]): Map[Id, Definition] =
+  defs.flatMap { d => d match {
+    case Definition.Def(id, _) => List(id -> d)
+    case Definition.Let(ids, _) => ids.map(id => id -> d)
+  }}.toMap

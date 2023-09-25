@@ -1,1 +1,8 @@
-def swap(x: Int, y: Int): Int, Int / {} = y, x
+def swap(x: Int, y: Int): Int, Int => String at {} = 5, fun(x: Int){""}
+
+def main() = test2(test(), "Hallo")
+
+def test(): Boolean, Boolean = true, false
+
+def test2(x: Boolean, y: Boolean, z: String): Int, String = 5, z
+

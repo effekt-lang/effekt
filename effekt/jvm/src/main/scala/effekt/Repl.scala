@@ -199,14 +199,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         output.emitln(s"Imported Types\n==============")
         cu.types.toList.sortBy { case (n, _) => n }.collect {
           case (name, sym) if !sym.isSynthetic =>
-            outputCode(DeclPrinter(sym), config)
+            outputCode(DeclPrinter(List(sym)), config)
         }
         output.emitln(s"\nImported Functions\n==================")
         cu.terms.toList.sortBy { case (n, _) => n }.foreach {
           case (name, syms) =>
             syms.collect {
               case sym if !sym.isSynthetic =>
-                outputCode(DeclPrinter(sym), config)
+                outputCode(DeclPrinter(List(sym)), config)
             }
         }
         module = extendedImports
@@ -215,12 +215,13 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     case d: Def =>
       val extendedDefs = module + d
       val decl = extendedDefs.make(UnitLit())
+      val output = config.output()
 
       runFrontend(source, decl, config) { cu =>
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        (context.symbolOption(d.id) match {
+        d.ids.foreach(id => (context.symbolOption(id) match {
           case Some(v: ValueSymbol) =>
             Some(context.valueTypeOf(v))
           case Some(b: BlockSymbol) =>
@@ -228,8 +229,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
           case t =>
             None
         }) map { tpe =>
-          outputCode(pp"${d.id}: ${tpe}", config)
-        }
+          outputCode(pp"${id}: ${tpe}", config)
+        })
       }
 
     case _ => ()
@@ -296,7 +297,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
-      val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
+      val otherDefs = definitions.filterNot { other => d.ids.map{_.name}.forall(other.ids.map{_.name}.contains) }
       copy(definitions = otherDefs :+ d)
     }
     def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)

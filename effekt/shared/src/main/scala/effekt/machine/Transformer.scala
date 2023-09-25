@@ -88,11 +88,16 @@ object Transformer {
           case _ => ()
         }
 
-        definitions.foldRight(transform(rest)) {
-          case (lifted.Definition.Let(id, binding), rest) =>
-            transform(binding).run { value =>
-              // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-              Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), rest)
+        definitions.foldRight(transform(rest)) { // TODO MRV 5
+          case (lifted.Definition.Let(ids, binding), rest) =>
+            transform(binding).run { values =>
+              if (ids.length != binding.tpe.length || ids.length != values.length)
+                ErrorReporter.abort(s"Arity of variables and values does not match: $ids, $values") // TODO MRV: better error message
+
+              val substitutions = ids.lazyZip(binding.tpe).lazyZip(values).map({ (id, tpe, value) =>
+                Variable(transform(id), transform(tpe)) -> value
+              })
+              Substitute(substitutions, rest)
             }
 
           case (lifted.Definition.Def(id, block @ lifted.BlockLit(tparams, params, body)), rest) =>
@@ -125,13 +130,17 @@ object Transformer {
       case lifted.Val(id, binding, lifted.Return(List(lifted.ValueVar(id2, tpe)))) if id == id2 =>
         transform(binding)
 
-      case lifted.Val(id, binding, rest) => binding.tpe match {
-        case List(tpe) => PushFrame(
-            Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
+      case lifted.Val(ids, binding, rest) => // TODO MRV 5
+        if (ids.length != binding.tpe.length)
+          ErrorReporter.abort(s"Arity of variables and values does not match: $ids, ${binding.tpe}") // TODO MRV: better error message
+
+        val variables = (ids zip binding.tpe).map { case (id, tpe) =>
+          transform(lifted.ValueParam(id, tpe))
+        }
+        PushFrame(
+            Clause(variables, transform(rest)),
             transform(binding)
-          )
-        case _ => ErrorReporter.abort(s"Multiple return types not yet supported: ${binding.tpe}") // TODO MRV: val x, y = ...
-      }
+        )
 
       case lifted.App(lifted.BlockVar(id, tpe), targs, args) =>
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -195,8 +204,12 @@ object Transformer {
         }
 
       case lifted.If(cond, thenStmt, elseStmt) =>
-        transform(cond).run { value =>
-          Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
+        transform(cond).run { value => value match {
+          case List(value) =>
+            Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
+          case _ => ??? // TODO MRV
+        }
+
         }
 
       case lifted.Match(scrutinee, clauses, default) =>
@@ -207,8 +220,11 @@ object Transformer {
           Clause(List(), transform(clause))
         }
 
-        transform(scrutinee).run { value =>
-          Switch(value, transformedClauses, transformedDefault)
+        transform(scrutinee).run { value => value match {
+          case List(value) =>
+            Switch(value, transformedClauses, transformedDefault)
+          case _ => ??? // TODO MRV
+        }
         }
 
       case lifted.Try(lifted.BlockLit(tparams, ev :: ids, body), handlers) =>
@@ -245,26 +261,31 @@ object Transformer {
             PushStack(delimiter, transform(body))))
 
       case lifted.State(id, init, region, ev, body) =>
-        transform(init).run { value =>
-          val tpe = value.tpe;
-          val name = transform(id)
-          val variable = Variable(name, tpe)
-          val stateVariable = Variable(name + "$State", Type.Reference(tpe))
-          val loadVariable = Variable(freshName(name), tpe)
-          val getter = Clause(List(),
-                        Load(loadVariable, stateVariable,
-                          Return(List(loadVariable))))
+        transform(init).run { value => value match {
+          case List(value) =>
+            val tpe = value.tpe
+            val name = transform(id)
+            val variable = Variable(name, tpe)
+            val stateVariable = Variable(name + "$State", Type.Reference(tpe))
+            val loadVariable = Variable(freshName(name), tpe)
+            val getter = Clause(List(),
+              Load(loadVariable, stateVariable,
+                Return(List(loadVariable))))
 
-          val setterVariable = Variable(freshName(name), tpe)
-          val setter = Clause(List(setterVariable),
-                                Store(stateVariable, setterVariable,
-                                  Return(List())))
-          val regionVar = Variable(transform(region), Type.Region())
+            val setterVariable = Variable(freshName(name), tpe)
+            val setter = Clause(List(setterVariable),
+              Store(stateVariable, setterVariable,
+                Return(List())))
+            val regionVar = Variable(transform(region), Type.Region())
 
-          // TODO use interface when it's implemented
-          Allocate(stateVariable, value, regionVar,
-            //New(variable, List(getter, setter),
-              transform(body))
+            // TODO use interface when it's implemented
+            Allocate(stateVariable, value, regionVar,
+              //New(variable, List(getter, setter),
+                  transform(body))
+
+          case _ => ??? // TODO MRV
+        }
+
         }
 
       case lifted.Hole() => machine.Statement.Hole
@@ -326,38 +347,38 @@ object Transformer {
     case lifted.New(impl) => ???
   }
 
-  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match { // TODO MRV: Binding[List[Variable]]
+  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[List[Variable]] = expr match { // TODO MRV: Binding[List[Variable]]
     case lifted.ValueVar(id, tpe) =>
-      pure(Variable(transform(id), transform(tpe)))
+      pure(List(Variable(transform(id), transform(tpe))))
 
     case lifted.Literal((), _) =>
       val variable = Variable(freshName("x"), Positive("Unit"));
       Binding { k =>
-        Construct(variable, builtins.Unit, List(), k(variable))
+        Construct(variable, builtins.Unit, List(), k(List(variable)))
       }
 
     case lifted.Literal(value: Int, _) =>
       val variable = Variable(freshName("x"), Type.Int());
       Binding { k =>
-        LiteralInt(variable, value, k(variable))
+        LiteralInt(variable, value, k(List(variable)))
       }
 
     case lifted.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("x"), Positive("Boolean"))
       Binding { k =>
-        Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
+        Construct(variable, if (value) builtins.True else builtins.False, List(), k(List(variable)))
       }
 
     case lifted.Literal(v: Double, _) =>
       val literal_binding = Variable(freshName("x"), Type.Double());
       Binding { k =>
-        LiteralDouble(literal_binding, v, k(literal_binding))
+        LiteralDouble(literal_binding, v, k(List(literal_binding)))
       }
 
     case lifted.Literal(javastring: String, _) =>
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
-        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(List(literal_binding)))
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>
@@ -370,7 +391,7 @@ object Transformer {
 
       transform(args).flatMap { values =>
         Binding { k =>
-          ForeignCall(variable, transform(blockName), values, k(variable))
+          ForeignCall(variable, transform(blockName), values, k(List(variable)))
         }
       }
 
@@ -387,7 +408,7 @@ object Transformer {
 
       transform(args).flatMap { values =>
         Binding { k =>
-          Construct(variable, tag, values, k(variable))
+          Construct(variable, tag, values, k(List(variable)))
         }
       }
 
@@ -399,7 +420,10 @@ object Transformer {
       val variables = fields.map { f => Variable(freshName("n"), transform(tpe)) }
       transform(target).flatMap { value =>
         Binding { k =>
-          Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)
+          value match {
+            case List(value) => Switch(value, List(0 -> Clause(variables, k(List(variables(fieldIndex))))), None)
+            case _ => ??? // TODO MRV
+          }
         }
       }
 
@@ -407,13 +431,8 @@ object Transformer {
       // NOTE: `stmt` is guaranteed to be of type `tpe`.
       val variables = stmt.tpe.map { tpe => Variable(freshName("x"), transform(tpe)) }
 
-      variables match {
-        case List(variable) =>
-          Binding { k =>
-            PushFrame(Clause(List(variable), k(variable)), transform(stmt))
-          }
-        case _ => ??? // TODO MRV
-      }
+      Binding { k =>
+            PushFrame(Clause(variables, k(variables)), transform(stmt)) }
 
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")

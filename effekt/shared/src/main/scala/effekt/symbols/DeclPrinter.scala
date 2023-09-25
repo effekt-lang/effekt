@@ -11,8 +11,11 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  def apply(t: Symbol)(implicit context: Context): String =
-    pretty(toDoc(t, context)).layout
+  def apply(ts: List[Symbol])(implicit context: Context): String = ts match {
+    case List(t) => pretty(toDoc(t, context)).layout
+    case _ => pretty(hsep(ts.map(toDoc(_, context)), comma)).layout
+  }
+
 
   def toDoc(t: Symbol, context: Context): Doc = t match {
 

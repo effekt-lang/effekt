@@ -25,7 +25,7 @@ enum BlockType extends Type {
   //   [A, B, C] (EV, EV, X, Y, Z, (EV, T) => T)    =>    T
   //    ^^^^^^^   ^^^^^^  ^^^^^^^  ^^^^^^^^^^^^^         ^^^
   //    tparams   evid.   vparams    bparams            result
-  case Function(tparams: List[Id], eparams: List[EvidenceType], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
+  case Function(tparams: List[Id], eparams: List[EvidenceType], vparams: List[ValueType], bparams: List[BlockType], result: List[ValueType])
   case Interface(name: Id, targs: List[ValueType])
 }
 
@@ -64,34 +64,35 @@ object Type {
   }
 
   def merge(tpe1: BlockType, tpe2: BlockType, covariant: Boolean): BlockType = (tpe1, tpe2) match {
-    case (BlockType.Function(tparams1, eparams1, vparams1, bparams1, result1), tpe2: BlockType.Function) =>
-      val BlockType.Function(_, eparams2, vparams2, bparams2, result2) = instantiate(tpe2, tparams1.map(ValueType.Var.apply))
+    case (BlockType.Function(tparams1, eparams1, vparams1, bparams1, results1), tpe2: BlockType.Function) =>
+      val BlockType.Function(_, eparams2, vparams2, bparams2, results2) = instantiate(tpe2, tparams1.map(ValueType.Var.apply))
       val vparams = (vparams1 zip vparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
       val bparams = (bparams1 zip bparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
-      BlockType.Function(tparams1, eparams1, vparams, bparams, merge(result1, result2, covariant))
+      val results = (results1 zip results2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant) }
+      BlockType.Function(tparams1, eparams1, vparams, bparams, results)
     case (tpe1, tpe2) => tpe1
   }
 
   def instantiate(f: BlockType.Function, targs: List[ValueType]): BlockType.Function = f match {
-    case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+    case BlockType.Function(tparams, eparams, vparams, bparams, results) =>
       assert(targs.size == tparams.size, "Wrong number of type arguments")
 
       val vsubst = (tparams zip targs).toMap
       BlockType.Function(Nil, eparams,
         vparams.map { tpe => substitute(tpe, vsubst) },
         bparams.map { tpe => substitute(tpe, vsubst) },
-        substitute(result, vsubst))
+        results.map { tpe => substitute(tpe, vsubst) })
   }
 
   def substitute(tpe: BlockType, vsubst: Map[Id, ValueType]): BlockType = tpe match {
-    case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+    case BlockType.Function(tparams, eparams, vparams, bparams, results) =>
       // names are unique symbols so shadowing should NOT take place; we still subtract to be safe.
       val vsubstLocal = vsubst -- tparams
 
       BlockType.Function(tparams, eparams,
         vparams.map { tpe => substitute(tpe, vsubstLocal) },
         bparams.map { tpe => substitute(tpe, vsubstLocal) },
-        substitute(result, vsubstLocal))
+        results.map { tpe => substitute(tpe, vsubstLocal) })
 
     case BlockType.Interface(sym, targs) =>
       BlockType.Interface(sym, targs map { tpe => substitute(tpe, vsubst) })
@@ -118,16 +119,18 @@ object Type {
     case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].tpe
     case Block.New(impl) => impl.tpe
   }
-  def inferType(stmt: Stmt): ValueType = stmt match {
+  def inferType(stmt: Stmt): List[ValueType] = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
-    case Stmt.Return(expr) => expr.tpe
+    case Stmt.Return(exprs) => exprs.flatMap {_.tpe}
     case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, args) => instantiate(callee.functionType, targs).result
 
-    case Stmt.If(cond, thn, els) => merge(thn.tpe, els.tpe, covariant = true)
+    case Stmt.If(cond, thn, els) =>
+      (thn.tpe zip els.tpe).map { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
+
     case Stmt.Match(scrutinee, clauses, default) =>
-      val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
-      allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
+      val allTypes = clauses.flatMap { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList.flatten
+      List(allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) })
 
     case Stmt.State(id, init, region, ev, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
@@ -136,23 +139,26 @@ object Type {
     case Stmt.Shift(ev, body) =>
       // the annotated argument type on resume is our return type here
       val Some(tpe: BlockType.Function) = body.params.collectFirst { case b: Param.BlockParam => b.tpe }: @unchecked
-      tpe.vparams.head
+      tpe.vparams
 
-    case Stmt.Hole() => TBottom
+    case Stmt.Hole() => List(TBottom)
   }
 
-  def inferType(expr: Expr): ValueType = expr match {
+  def inferType(expr: Expr): List[ValueType] = expr match {
     // case DirectApp(callee, targs, vargs, bargs) => instantiate(callee.functionType, targs).result
-    case Expr.Run(s) => s.tpe
-    case Expr.ValueVar(id, tpe) => tpe
-    case Expr.Literal(value, tpe) => tpe
+    case Expr.Run(s) => s.tpe match {
+      case List(tpe) => List(tpe)
+      case _ => throw new Exception("Run should have exactly one return type") // TODO MRV: correct exception?
+    }
+    case Expr.ValueVar(id, tpe) => List(tpe)
+    case Expr.Literal(value, tpe) => List(tpe)
     case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs).result
-    case Expr.Select(target, field, annotatedType) => annotatedType
-    case Expr.Box(block) => ValueType.Boxed(block.tpe)
+    case Expr.Select(target, field, annotatedType) => List(annotatedType)
+    case Expr.Box(block) => List(ValueType.Boxed(block.tpe))
   }
 
   extension (block: Block) {
-    def returnType: ValueType = block.functionType.result
+    def returnType: List[ValueType] = block.functionType.result
     def functionType: BlockType.Function = block.tpe.asInstanceOf
   }
 }

@@ -115,7 +115,28 @@ sealed trait Named extends Tree
 
 // Something that later will be stored in the symbol table
 sealed trait Definition extends Named {
-  def id: IdDef
+  def ids: List[IdDef] = this match {
+    case FunDef(id, _, _, _, _, _) => List(id)
+    case ValDef(ids, _, _) => ids
+    case VarDef(id, _, _, _) => List(id)
+    case DefDef(id, _, _) => List(id)
+    case InterfaceDef(id, _, _, _) => List(id)
+    case DataDef(id, _, _) => List(id)
+    case RecordDef(id, _, _) => List(id)
+    case TypeDef(id, _, _) => List(id)
+    case EffectDef(id, _, _) => List(id)
+    case ExternType(id, _) => List(id)
+    case ExternDef(_, id, _, _, _, _, _) => List(id)
+    case ExternResource(id, _) => List(id)
+    case ExternInterface(id, _) => List(id)
+    case ExternInclude(_, _, id) => List(id)
+    case ValueParam(id, _) => List(id)
+    case BlockParam(id, _) => List(id)
+    case Constructor(id, _) => List(id)
+    case Operation(id, _, _, _) => List(id)
+    case AnyPattern(id) => List(id)
+    case Region(id, body) => List(id)
+  }
 }
 
 // Something that later can be looked up in the symbol table
@@ -170,7 +191,7 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) // TODO MRV: val x, y = ...
+  case ValDef(id: List[IdDef], annot: List[Option[ValueType]], binding: Stmt) // TODO MRV 5: val x, y = ...
   case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
@@ -205,6 +226,8 @@ enum Def extends Definition {
    *   have case specific refinements.
    */
   case ExternInclude(path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+
+
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -214,8 +237,6 @@ object Def {
   type Local = FunDef | ValDef | DefDef | Alias | VarDef
 }
 export Def.*
-
-
 
 
 /**

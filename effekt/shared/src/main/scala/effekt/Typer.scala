@@ -97,7 +97,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Term, expected: Option[List[ValueType]])(using Context, Captures): Result[List[ValueType]] = // TODO
+  def checkExpr(expr: Term, expected: Option[List[ValueType]])(using Context, Captures): Result[List[ValueType]] =
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe)     => Result(List(tpe), Pure)
 
@@ -106,7 +106,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)  // TODO Elemente einzeln vergleichen, untersch. Länge
+        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, body) =>
         val Result(_, condEffs) = cond checkAgainst List(TBoolean)
@@ -536,7 +536,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[List[ValueType]])(using Context, Captures): Result[List[ValueType]] =  //TODO: List[ValueType]
+  def checkStmt(stmt: Stmt, expected: Option[List[ValueType]])(using Context, Captures): Result[List[ValueType]] =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -828,7 +828,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (6) Substitute both types and captures into expected return type
       val subst = typeSubst ++ captSubst
 
-      val expectedReturn = tpe1 map { subst substitute _ } // TODO MRV
+      val expectedReturn = tpe1 map { subst substitute _ }
 
       // (7) Check function body
       val selfRegion = Context.getSelfRegion(arg)

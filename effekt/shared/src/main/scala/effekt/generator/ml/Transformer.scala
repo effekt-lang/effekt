@@ -67,32 +67,32 @@ object Transformer {
   def sortDefinitions(defs: List[Definition])(using C: TransformerContext): List[Definition] = {
     def sort(defs: List[Definition], toSort: List[Definition]): List[Definition] = defs match {
       case (d: Definition.Let) :: rest  =>
-        val sorted = sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
+        val sorted = sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.ids)
          sorted ++ (d :: sort(rest, Nil))
       case (d: Definition.Def) :: rest => sort(rest, d :: toSort)
-      case Nil => sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.id)
+      case Nil => sortTopologically(toSort, d => freeVariables(d).vars.keySet, d => d.ids)
     }
 
     sort(defs, Nil)
   }
 
   def sortDeclarations(defs: List[Declaration])(using C: TransformerContext): List[Declaration] =
-    sortTopologically(defs, d => freeTypeVariables(d), d => d.id)
+    sortTopologically(defs, d => freeTypeVariables(d), d => List(d.id))
 
-  def sortTopologically[T](defs: List[T], dependencies: T => Set[Id], id: T => Id)(using C: TransformerContext): List[T] = {
-    val ids = defs.map(id).toSet
-    val fvs = defs.map{ d => id(d) -> dependencies(d).intersect(ids) }.toMap
+  def sortTopologically[T](defs: List[T], dependencies: T => Set[Id], getIds: T => List[Id])(using C: TransformerContext): List[T] = {
+    val ids = defs.flatMap(getIds).toSet
+    val fvs = defs.flatMap{ d => getIds(d).map{ id => id -> dependencies(d).intersect(ids) }}.toMap
 
     @tailrec
     def go(todo: List[T], out: List[T], emitted: Set[Id]): List[T] =
       if (todo.isEmpty) {
         out
       } else {
-        val (noDependencies, rest) = todo.partition { d => (fvs(id(d)) -- emitted).isEmpty }
+        val (noDependencies, rest) = todo.partition { d => (getIds(d).map(fvs(_)).fold(Set.empty)(_ ++ _) -- emitted).isEmpty }
         if (noDependencies.isEmpty) {
-          val mutuals = rest.map(id).mkString(", ")
+          val mutuals = rest.flatMap(getIds).mkString(", ")
           C.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
-        } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(id).toSet)
+        } else go(rest, noDependencies ++ out, emitted ++ noDependencies.flatMap(getIds).toSet)
     }
 
     go(defs, Nil, Set.empty).reverse
@@ -212,10 +212,13 @@ object Transformer {
         ml.If(toML(cond), toMLExpr(thn)(k), toMLExpr(els)(k))
       }
 
-    case lifted.Val(id, binding, body) =>
+    case lifted.Val(ids, binding, body) =>
       toMLExpr(binding).flatMap { value =>
         CPS.inline { k =>
-          ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k))
+          ids match {
+            case List(id) => ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k))
+            case _ => ??? // TODO MRV
+          }
         }
       }
 
@@ -287,8 +290,11 @@ object Transformer {
 
   def toML(defn: Definition)(using C: TransformerContext): ml.Binding = defn match {
     case Definition.Def(id, block) => createBinder(id, block)
-    case Definition.Let(Wildcard(), binding) => ml.Binding.AnonBind(toML(binding))
-    case Definition.Let(id, binding) => createBinder(id, binding)
+    case Definition.Let(List(Wildcard()), binding) => ml.Binding.AnonBind(toML(binding))
+    case Definition.Let(ids, binding) => ids match {
+      case List(id) => createBinder(id, binding)
+      case _ => ??? // TODO MRV
+    }
   }
 
   def toML(block: BlockLit)(using TransformerContext): ml.Lambda = block match {

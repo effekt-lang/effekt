@@ -72,14 +72,14 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
     }
 
     override def stmt: PartialFunction[Stmt, Stmt] = {
-      case core.Scope(definitions, rest) => withBindings(definitions.map{
-          case core.Definition.Def(id, _) => id
-          case core.Definition.Let(id, _) => id
+      case core.Scope(definitions, rest) => withBindings(definitions.flatMap{
+          case core.Definition.Def(id, _) => List(id)
+          case core.Definition.Let(ids, _) => ids
         }){
         core.Scope(definitions map rewrite, rewrite(rest))
       }
-      case core.Val(id, binding, body) => withBinding(id){
-        core.Val(rewrite(id), rewrite(binding), rewrite(body))
+      case core.Val(ids, binding, body) => withBindings(ids){
+        core.Val(ids.map(rewrite), rewrite(binding), rewrite(body))
       }
       case core.State(id, init, reg, body) => withBinding(id){
         core.State(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))

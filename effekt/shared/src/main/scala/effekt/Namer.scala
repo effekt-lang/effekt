@@ -225,10 +225,12 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, p)
       Context.bind(p.capture)
 
-    case d @ source.ValDef(id, annot, binding) =>
-      val tpe = annot.map(resolve)
+    case d @ source.ValDef(ids, annots, binding) =>
+      val tpes = annots.map(a => a.map(resolve)) // TODO MRV: remove Option[]
       resolveGeneric(binding)
-      Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
+      (ids zip tpes) foreach { (id, tpe) =>
+        Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
+      }
 
     case d @ source.VarDef(id, annot, region, binding) =>
       val tpe = annot.map(resolve)
@@ -552,7 +554,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolve))
       case id: TypeVar =>
         if (args.nonEmpty) {
-          Context.abort(pretty"Type variables cannot be applied, but receieved ${args.size} arguments.")
+          Context.abort(pretty"Type variables cannot be applied, but received ${args.size} arguments.")
         }
         ValueTypeRef(id)
       case TypeAlias(name, tparams, tpe) =>

@@ -95,7 +95,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Definitions
   // -----------
   lazy val definition: P[Definition] =
-  ( `let` ~> id ~ (`=` ~/> expr) ^^ Definition.Let.apply
+  ( `let` ~> someSep(id, `,`) ~ (`=` ~/> expr) ^^ Definition.Let.apply // TODO MRV 5
   | `def` ~> id ~ (`=` ~/> block) ^^ Definition.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
@@ -110,7 +110,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   lazy val stmt: P[Stmt] =
     ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
     | `return` ~> someSep(pure, `,`) ^^ Stmt.Return.apply
-    | `val` ~> id ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply
+    | `val` ~> someSep(id, `,`) ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply // TODO MRV 5
     | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
