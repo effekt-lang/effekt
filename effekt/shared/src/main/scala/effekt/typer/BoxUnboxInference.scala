@@ -193,8 +193,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(h: OpClause)(using Context): OpClause = visit(h) {
-    case OpClause(id, tparams, params, ret, body, resume) =>
-      OpClause(id, tparams, params, ret, rewrite(body), resume)
+    case OpClause(id, tparams, vparams, bparams, ret, body, resume) =>
+      OpClause(id, tparams, vparams, bparams, ret, rewrite(body), resume)
   }
 
   def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {

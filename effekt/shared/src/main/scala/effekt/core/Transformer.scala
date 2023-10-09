@@ -81,13 +81,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
       val interface = d.symbol
       List(core.Interface(interface, interface.tparams, interface.operations.map {
-        case op @ symbols.Operation(name, tps, vps, resultType, effects, interface) =>
+        case op @ symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>
           // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
           val capabilities = effects.canonical
           val tparams = tps.drop(tparamsInterface.size)
-          val bparams = capabilities.map(transform)
+          val bparams = bps.map(p => transform(p.tpe)) ++ capabilities.map(transform)
           val vparams = vps.map(p => transform(p.tpe.get))
-          val cparams = capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
+          val cparams = bps.map(_.capture) ++ capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
 
           // here we reconstruct the block type
           val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
@@ -444,8 +444,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
 
     Implementation(coreType, sig.operations.map(clauses.apply).map {
-      case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
+      case op @ source.OpClause(id, tparams, vparams, bparams, ret, body, resume) =>
         val vps = vparams.map(transform)
+        val bps = bparams.map(transform)
         val tps = tparams.map { p => p.symbol }
 
         // We cannot annotate the transparent capture of resume here somewhere since all
@@ -456,8 +457,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           Some(BlockParam(resumeSymbol))
         } else { None }
         // TODO the operation could be effectful, so needs to take a block param here.
-        val bps = Nil
-        val cps = Nil
+        val cps = bparams.map(_.symbol.capture)
         core.Operation(op.definition, tps, cps, vps, bps, resumeParam, transform(body))
     })
   }
@@ -473,16 +473,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def operationType(receiver: symbols.BlockType, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
     case InterfaceType(i: Interface, targs) => member match {
       // For operations, we substitute the first type parameters by concrete type args.
-      case Operation(name, tparams, vparams, resultType, effects, _) =>
+      case Operation(name, tparams, vparams, bparams, resultType, effects, _) =>
         val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
         val remainingTypeParams = tparams.drop(targs.size)
-        val bparams = Nil
         // TODO this is exactly like in [[Typer.toType]] -- TODO repeated here:
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        val cparams = effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
+        val cparams = bparams.map(_.capture) ++ effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
 
-        FunctionType(remainingTypeParams, cparams, vparams.map(t => substitution.substitute(t.tpe.get)), bparams, substitution.substitute(resultType), substitution.substitute(effects))
+        FunctionType(remainingTypeParams, cparams, vparams.map(t => substitution.substitute(t.tpe.get)), bparams.map(t => substitution.substitute(t.tpe)), substitution.substitute(resultType), substitution.substitute(effects))
     }
 
     case InterfaceType(i: ExternInterface, targs) =>

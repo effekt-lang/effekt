@@ -326,7 +326,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.error("Duplicate definitions of operations")
 
       clauses foreach Context.withFocus {
-        case d @ source.OpClause(op, tparams, params, retAnnotation, body, resume) =>
+        case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
           val declaration = d.definition
 
           val declaredType = Context.lookupFunctionType(declaration)
@@ -345,7 +345,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
           // of bidirectional effects and capture polymorphism (still has to be tested).
-          val cparams = declaredType.effects.canonical.map { tpe => CaptureParam(tpe.name) }
+          //
+          // TODO why do we compute this here and not in `declaredType`?
+          val cparams = bparams.map(_.symbol.capture) ++ declaredType.effects.canonical.map { tpe => CaptureParam(tpe.name) }
 
           // (1) Instantiate block type of effect operation
           // Bidirectional example:
@@ -356,19 +358,30 @@ object Typer extends Phase[NameResolved, Typechecked] {
           //
           // TODO we need to do something with bidirectional effects and region checking here.
           //  probably change instantiation to also take capture args.
-          val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
+          val (rigids, crigids, FunctionType(tps, cps, vps, bps, tpe, otherEffs)) =
             Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
           // (3) check parameters
-          if (vps.size != params.size)
-            Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${vps.size}.")
+          if (vps.size != vparams.size)
+            Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but ${op.name} expects ${vps.size}.")
 
-          (params zip vps).foreach {
+          if (bps.size != bparams.size)
+            Context.abort(s"Wrong number of block arguments, given ${bparams.size}, but ${op.name} expects ${bps.size}.")
+
+          (vparams zip vps).foreach {
             case (param, decl) =>
               val sym = param.symbol
               val annotType = sym.tpe
               annotType.foreach { t => matchDeclared(t, decl, param) }
               Context.bind(sym, annotType.getOrElse(decl))
+          }
+
+          (bparams zip bps).foreach {
+            case (param, decl) =>
+              val sym = param.symbol
+              val annotType = sym.tpe
+              matchDeclared(annotType, decl, param)
+              Context.bind(sym, annotType)
           }
 
           val Result(_, effs) = continuationDetails match {

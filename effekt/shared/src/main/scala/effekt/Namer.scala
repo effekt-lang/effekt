@@ -298,9 +298,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val bps = bparams map { p => resolve(p) }
-
-            val op = Operation(name, effectSym.tparams ++ tps, vparams map { p => resolve(p) }, result, effects, effectSym)
+            val op = Operation(name, effectSym.tparams ++ tps, vparams map { p => resolve(p) }, bparams map { p => resolve(p) }, result, effects, effectSym)
             Context.define(id, op)
             op
           }
@@ -377,7 +375,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
-        case source.OpClause(op, tparams, params, ret, body, resumeId) =>
+        case source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) =>
 
           // try to find the operation in the handled effect:
           eff.operations.find { o => o.name.toString == op.name } map { opSym =>
@@ -386,9 +384,11 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
           }
           val tps = tparams.map(resolve)
-          val vps = params.map(resolve)
+          val vps = vparams.map(resolve)
+          val bps = bparams.map(resolve)
           Context scoped {
             Context.bindValues(vps)
+            Context.bindBlocks(bps)
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
           }
