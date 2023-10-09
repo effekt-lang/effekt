@@ -117,17 +117,19 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val interfaceDef: P[Def] =
-    ( `effect` ~> effectOp ^^ {
+    ( `effect` ~> operationDef ^^ {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
+    | `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> operationDef)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
 
-  lazy val effectOp: P[Operation] =
-    idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> effectful) ^^ Operation.apply
+  lazy val operationDef: P[Operation] =
+    idDef ~ maybeTypeParams ~ params ~/ (`:` ~/> effectful) ^^ {
+      case id ~ tps ~ (vparams ~ bparams) ~ ret => Operation(id, tps, vparams, bparams, ret)
+    }
 
 
   lazy val externDef: P[Def] =

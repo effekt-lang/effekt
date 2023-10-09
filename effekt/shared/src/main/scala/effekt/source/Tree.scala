@@ -362,7 +362,7 @@ export CallTarget.*
 // Declarations
 // ------------
 case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition
+case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
 
 
 // Implementations
