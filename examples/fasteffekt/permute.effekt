@@ -1,0 +1,19 @@
+import mutable/array
+
+def permute(n: Int) = {
+    println(n)
+}
+
+def run() = {
+    val count = 0;
+    val arr = emptyArray[Int](6);
+
+    var i = 0;
+    //bug: no "array index out of bounds error" is
+    while (i <= arr.size()) {
+        arr.put(i, 1);  //arr.fill 
+        i=i+1;      //why no i++, i+=1, also comment highlighting
+    }
+
+    println(arr)
+}
