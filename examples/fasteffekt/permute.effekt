@@ -9,11 +9,15 @@ def run() = {
     val arr = emptyArray[Int](6);
 
     var i = 0;
-    //bug: no "array index out of bounds error" is
-    while (i <= arr.size()) {
+    while (i < arr.size()) {
         arr.put(i, 1);  //arr.fill 
         i=i+1;      //why no i++, i+=1, also comment highlighting
     }
+
+    //wtf: is out of bounds, extends array to 9?? that shouldnt happen.
+    println(arr.size())
+    arr.put(9,1)
+    println(arr.size())
 
     println(arr)
 }
