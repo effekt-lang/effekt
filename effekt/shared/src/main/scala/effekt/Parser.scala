@@ -730,7 +730,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
    */
   lazy val integerLiteral = "([-+])?(0|[1-9][0-9]*)".r
   lazy val doubleLiteral = "([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r
-  lazy val stringLiteral = """\"([^\"]*)\"""".r
+  lazy val stringLiteral = """\"(\\.|[^\"])*\"""".r
 
   // Delimiter for multiline strings
   val multi = "\"\"\""
