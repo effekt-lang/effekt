@@ -1,0 +1,25 @@
+import mutable/array
+// executes f n times, with i being the index, starting at n-1 .. zero
+def forN(n: Int) { f: Int => Unit / {}} : Unit = {
+    if (n > 0) {
+        f(n-1);
+        forN(n-1) { a => f(a) }
+    }
+}
+
+def main() = {
+    forN(5) { i => println(i)}
+    forN(1+1) { i => println(i)}
+    val v = 12;
+    forN(v){ 
+        n => println(2*n)
+    }
+    var arr = emptyArray[Int](5)
+    forN(5){ i => 
+        val x = 5;
+    //"expected a block argument"    arr[i] = 5;
+        println(i)
+        println(arr)
+        
+    }
+}
