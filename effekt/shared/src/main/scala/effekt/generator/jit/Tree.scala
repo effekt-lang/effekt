@@ -29,7 +29,7 @@ object RegList {
 case class Clause(params: RegList, target: BlockLabel)
 
 sealed trait Instruction extends Tree
-case class Const(out: Register, value: Int) extends Instruction
+case class Const(out: Register, value: Long) extends Instruction
 case class ConstDouble(out: Register, value: scala.Double) extends Instruction
 case class ConstString(out: Register, value: String) extends Instruction
 case class PrimOp(name: String, out: RegList, in: RegList) extends Instruction

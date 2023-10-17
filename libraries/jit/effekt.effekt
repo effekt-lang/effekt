@@ -115,8 +115,8 @@ extern io def currentTimeNanos(): Int = "currentTimeNanos(): Int"
 
 // System
 // ======
-extern io def exit(code: Int): Bottom = "exit(Int): Void" // should probably be control, but this is unsupported as of now
-def panic(msg: String): Bottom = {
+extern io def exit(code: Int): Nothing = "exit(Int): Void" // should probably be control, but this is unsupported as of now
+def panic(msg: String): Nothing = {
   printlnErr("Panic: " ++ msg);
   exit(1)
 }

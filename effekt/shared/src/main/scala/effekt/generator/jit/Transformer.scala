@@ -241,7 +241,6 @@ object Transformer {
       case machine.Type.String() => Type.String()
       case machine.Type.Stack() => Type.Continuation()
       case machine.Type.Reference(tpe) => Type.Reference(transform(tpe))
-      case machine.Type.Region() => Type.Region()
   }
 
   def transformClosure(machineClause: machine.Clause, label: String = "/")(using PC: ProgramContext, BC: BlockContext): (RegList, RegList, BlockLabel) = {
