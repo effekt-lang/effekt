@@ -115,9 +115,9 @@ def intersectSphere(pos: Point, dir: Vector, sphere: SceneObject): Option[Double
 def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] = {
 
   // TODO this is still way to Javascripty
-  var bestDist in global = 0.0;
-  var bestObj in global = DUMMY;
-  var found in global = false;
+  var bestDist = 0.0;
+  var bestObj = DUMMY;
+  var found = false;
 
   scene.objects.foreach { sphere =>
     intersectSphere(pos, dir, sphere).foreach { dist =>
@@ -136,6 +136,21 @@ def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] 
   } else { None() }
 }
 
+def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
+    intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
+
+def lambert(scene: Scene, normal: Vector, pointAtTime: Point): Double = {
+  var lambertAmount = 0.0;
+  scene.lights.foreach { light =>
+    if (isLightVisible(pointAtTime, scene, light)) {
+      lambertAmount = lambertAmount + dot((light - pointAtTime).unit, normal)
+      ()
+    } else { () }
+  };
+
+  // normalize lambert
+  min(1.0, lambertAmount)
+}
 
 def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
 
@@ -144,29 +159,13 @@ def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
     val pointAtTime = intersection.pointAtTime;
     val normal = intersection.normal;
 
-
-    def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
-      intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
-
-    def lambert(): Double = {
-      var lambertAmount in global = 0.0;
-      scene.lights.foreach { light =>
-        if (isLightVisible(pointAtTime, scene, light)) {
-          lambertAmount = lambertAmount + dot((light - pointAtTime).unit, normal)
-        } else { () }
-      };
-
-      // normalize lambert
-      min(1.0, lambertAmount)
-    }
-
     def reflect(): ColorV = trace(pointAtTime, reflectThrough(dir, normal), scene, depth + 1);
 
     val baseColor = material.color.toVector;
 
     // we could omit the following computation if material.lambert == 0.0
     val lambertColor = if (material.lambert > 0.0)
-      baseColor.scale(lambert() * material.lambert)
+      baseColor.scale(lambert(scene, normal, pointAtTime) * material.lambert)
     else BLACK;
 
     // we could omit the following computation if material.specular == 0.0
@@ -231,9 +230,9 @@ def render(scene: Scene, image: Buffer) = {
     put(image, index + 3, opaque)
   }
 
-  var x: Int in global = 0;
+  var x: Int = 0;
   while (x < width) {
-    var y: Int in global = 0;
+    var y: Int = 0;
     while (y < height) {
       castRay(x.toDouble, y.toDouble).storeAt(x, y);
       y = y + 1
@@ -259,7 +258,7 @@ def renderExample(width: Int, height: Int): Unit = {
   val buffer: Buffer = array(width * height * 4, 0);
   render(scene, buffer);
 
-  var i in global = 0;
+  var i = 0;
   while (i < buffer.size) {
     println(buffer.unsafeGet(i).show ++ ", " ++ buffer.unsafeGet(i + 1).show ++ ", " ++ buffer.unsafeGet(i + 2).show);
     i = i + 4

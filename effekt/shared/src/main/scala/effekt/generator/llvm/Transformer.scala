@@ -19,7 +19,6 @@ object Transformer {
       emit(Call("env", envType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Call("sp", spType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(), "base"), LocalReference(spType, "sp")));
-      emit(Call("_", VoidType(), initRegion, List()));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
       val terminator = transform(statement);
@@ -125,64 +124,93 @@ object Transformer {
 
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
-      case machine.New(variable, List(clause), rest) =>
-        // TODO multiple methods (see case below)
+      case machine.New(variable, clauses, rest) =>
+        val closureEnvironment = freeVariables(clauses).toList;
 
-        val closureEnvironment = freeVariables(clause).toList;
-
-        val clauseName = freshName(variable.name);
-
-        defineFunction(clauseName, List(Parameter(objType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
-          consumeObject(LocalReference(objType, "obj"), closureEnvironment, freeVariables(clause));
-          loadEnvironment(initialEnvironmentPointer, clause.parameters);
-          eraseValues(clause.parameters, freeVariables(clause.body));
-          transform(clause.body);
+        val clauseNames = clauses.map { clause =>
+          val clauseName = freshName(variable.name);
+          defineFunction(clauseName, List(Parameter(objType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
+            consumeObject(LocalReference(objType, "obj"), closureEnvironment, freeVariables(clause));
+            loadEnvironment(initialEnvironmentPointer, clause.parameters);
+            eraseValues(clause.parameters, freeVariables(clause.body));
+            transform(clause.body);
+          }
+          ConstantGlobal(methodType, clauseName)
         }
+
+        val arrayName = freshName(variable.name)
+        emit(GlobalConstant(arrayName, ConstantArray(methodType, clauseNames)))
 
         val obj = produceObject(closureEnvironment, freeVariables(rest));
         val tmpName = freshName("tmp");
-        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(methodType, clauseName), 0));
+        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
-      // TODO multiple methods (for one method see case above)
-      case machine.New(variable, clauses, rest) =>
-        ???
-
-      case machine.Invoke(value, 0, values) =>
+      case machine.Invoke(value, tag, values) =>
         shareValues(value :: values, Set());
         storeEnvironment(initialEnvironmentPointer, values);
 
-        val functionName = freshName("fp");
+        val arrayName = freshName("arrayp");
         val objName = freshName("obj");
+        val pointerName = freshName("fpp");
+        val functionName = freshName("fp");
 
-        emit(ExtractValue(functionName, transform(value), 0));
+        emit(ExtractValue(arrayName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
+        emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
+        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
         emit(TailCall(LocalReference(methodType, functionName), List(LocalReference(objType, objName), initialEnvironmentPointer, getStackPointer())));
         RetVoid()
 
-      // TODO What is `tag`'s meaning?
-      case machine.Invoke(value, tag, values) =>
-        ???
+      case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
+        val idx = regionIndex(ref.tpe)
 
-      case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, region, rest) =>
+        val tmp = freshName("tmp")
+        val tmpRef = LocalReference(StructureType(List(PointerType(), refType)), tmp)
+        emit(Call(tmp, tmpRef.tpe, alloc, List(ConstantInt(idx), transform(evidence))));
+
         val ptr = freshName("ptr");
-        emit(Call(name, PointerType(), alloc, List(ConstantInt(typeSize(tpe)), transform(region))));
+        val ptrRef = LocalReference(PointerType(), ptr)
+        emit(ExtractValue(ptr, tmpRef, 0))
 
-        emit(Store(transform(ref), transform(init)))
+        emit(ExtractValue(name, tmpRef, 1))
+
+
+        emit(Store(ptrRef, transform(init)))
+
+        shareValues(List(init), freeVariables(rest))
         transform(rest);
 
       case machine.Allocate(_, _, _, _) =>
         ???
 
-      case machine.Load(name, ref, rest) =>
-        emit(Load(name.name, transform(name.tpe), transform(ref)))
+      case machine.Load(name, ref, ev, rest) =>
+        val idx = regionIndex(ref.tpe)
+
+        val ptr = freshName("ptr");
+        val ptrRef = LocalReference(PointerType(), ptr)
+        emit(Call(ptr, PointerType(), getPtr, List(transform(ref), ConstantInt(idx), transform(ev))))
+
+        emit(Load(name.name, transform(name.tpe), ptrRef))
+        eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
-      case machine.Store(ref, value, rest) =>
-        emit(Store(transform(ref), transform(value)))
+      case machine.Store(ref, value, ev, rest) =>
+        val idx = regionIndex(ref.tpe)
+
+        val ptr = freshName("ptr");
+        val ptrRef = LocalReference(PointerType(), ptr)
+        emit(Call(ptr, PointerType(), getPtr, List(transform(ref), ConstantInt(idx), transform(ev))))
+
+        val oldVal = machine.Variable(freshName(ref.name + ".old"), value.tpe)
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        eraseValue(oldVal)
+
+        emit(Store(ptrRef, transform(value)))
+        shareValues(List(value), freeVariables(rest))
         transform(rest)
 
       case machine.PushFrame(frame, rest) =>
@@ -231,7 +259,7 @@ object Transformer {
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentPointer, getStackPointer())));
         RetVoid()
 
-      case machine.NewStack(variable, region, frame, rest) =>
+      case machine.NewStack(variable, frame, rest) =>
         emit(Call(variable.name, transform(variable.tpe), newStack, List()));
 
         val frameEnvironment = freeVariables(frame).toList;
@@ -276,9 +304,6 @@ object Transformer {
         val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, returnAddressName, sharerName, eraserName);
         emit(Store(stackPointerPointer, newStackPointer));
-        var regionPtrVar = freshName(region.name)
-        emit(GetElementPtr(regionPtrVar, NamedType("StkVal"), LocalReference(PointerType(), variable.name), List(0, 2)))
-        emit(Load(region.name, NamedType("Region"), LocalReference(PointerType(), regionPtrVar)))
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -297,7 +322,7 @@ object Transformer {
         val newStackPointerName = freshName("sp");
         val tmpName = freshName("tmp");
         val tmpReference = LocalReference(StructureType(List(stkType, spType)), tmpName);
-        emit(Call(tmpName, StructureType(List(stkType, spType)), popStack, List(getStackPointer())));
+        emit(Call(tmpName, StructureType(List(stkType, spType)), popStacks, List(getStackPointer(), transform(n))));
         emit(ExtractValue(variable.name, tmpReference, 0));
         emit(ExtractValue(newStackPointerName, tmpReference, 1));
         setStackPointer(LocalReference(spType, newStackPointerName));
@@ -318,7 +343,7 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
-        emit(GlobalVariableArray(s"$bind.lit", IntegerType8(), ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+        emit(GlobalConstant(s"$bind.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
         val res = positiveType
         val args = List(ConstantInt(utf8.size), ConstantGlobal(PointerType(), s"$bind.lit"))
@@ -366,7 +391,7 @@ object Transformer {
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
   def stkType = NamedType("Stk");
-  def regionType = NamedType("Region");
+  def refType = NamedType("Ref");
 
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive(_)         => positiveType
@@ -375,8 +400,7 @@ object Transformer {
     case machine.Type.Double()       => NamedType("Double")
     case machine.Type.String()       => positiveType
     case machine.Type.Stack()        => stkType
-    case machine.Type.Reference(tpe) => PointerType()
-    case machine.Type.Region()       => regionType
+    case machine.Type.Reference(tpe) => refType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -391,7 +415,16 @@ object Transformer {
       case machine.Type.String()     => 16
       case machine.Type.Stack()      => 8 // TODO Make fat?
       case machine.Type.Reference(_) => 8
-      case machine.Type.Region()     => 8
+    }
+
+  def regionIndex(tpe: machine.Type): Int =
+    tpe match {
+          case machine.Type.Reference(machine.Type.Int()) => 0
+          case machine.Type.Reference(machine.Type.Double()) => 0
+          case machine.Type.Reference(machine.Type.Positive(_)) => 1
+          case machine.Type.Reference(machine.Type.Negative(_)) => 1
+          case machine.Type.Reference(machine.Type.String()) => 2
+          case _ => ???
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -572,7 +605,6 @@ object Transformer {
       case machine.Type.Double()     => ()
       case machine.Type.String()     => emit(Call("_", VoidType(), shareString, List(transform(value))))
       case machine.Type.Reference(_) => ()
-      case machine.Type.Region()     => ()
     }
   }
 
@@ -585,7 +617,6 @@ object Transformer {
       case machine.Type.Double()     => ()
       case machine.Type.String()     => emit(Call("_", VoidType(), eraseString, List(transform(value))))
       case machine.Type.Reference(_) => ()
-      case machine.Type.Region()     => ()
     }
   }
 
@@ -633,8 +664,6 @@ object Transformer {
     newStackPointer
   }
 
-  def initRegion = ConstantGlobal(PointerType(), "initRegion");
-
   def malloc = ConstantGlobal(PointerType(), "malloc");
   def free = ConstantGlobal(PointerType(), "free");
 
@@ -656,10 +685,11 @@ object Transformer {
   def eraseString = ConstantGlobal(PointerType(), "c_buffer_refcount_decrement");
 
   def alloc = ConstantGlobal(PointerType(), "alloc")
+  def getPtr = ConstantGlobal(PointerType(), "getPtr")
 
   def newStack = ConstantGlobal(PointerType(), "newStack");
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
-  def popStack = ConstantGlobal(PointerType(), "popStack");
+  def popStacks = ConstantGlobal(PointerType(), "popStacks");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
 

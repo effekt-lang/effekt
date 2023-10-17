@@ -93,6 +93,7 @@ abstract class Context(val positions: Positions)
     val bufferBefore = messaging.buffer
 
     messaging.clear()
+
     val res = block
     val msgs = messaging.buffer
     messaging.buffer = bufferBefore

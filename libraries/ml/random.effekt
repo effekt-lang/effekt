@@ -1,0 +1,81 @@
+module random
+
+/**
+ * Imperative Random Numbers
+ * -------------------------
+ * The following are simple bindings for the following SML/NJ module:
+ *   https://www.smlnj.org/doc/smlnj-lib/Util/str-Random.html
+ *
+ * They are not supposed to be used directly, but only via the
+ * effect [[Random]], below.
+ */
+extern type RNG // = int * int
+extern io def seed(n: Int, m: Int): RNG = "Random.rand (n, m)"
+extern pure def toString(s: RNG): String = "Random.toString s"
+
+extern io def int(s: RNG): Int = "Random.randInt s"
+extern io def int(s: RNG, from: Int, to: Int): Int = "Random.randRange (from, to) s"
+extern io def double(s: RNG): Double = "Random.randReal s"
+
+
+/**
+ * Functional Random Numbers
+ * -------------------------
+ * The following are simple bindings for the following SML/NJ module:
+ *   https://www.smlnj.org/doc/smlnj-lib/Util/str-Rand.html
+ *
+ * They are not supposed to be used directly, but only via the
+ * effect [[Random]], below.
+ */
+extern type PseudoRNG
+extern pure def random(s: PseudoRNG): PseudoRNG = "Rand.random s"
+extern pure def range(s: PseudoRNG, n: Int, m: Int): Int = "Rand.range (n, m) s"
+extern pure def norm(s: PseudoRNG): Double = "Rand.norm s"
+
+// converting two integers into a word that is between randMin and randMax is completely made up
+extern pure def pseudo(n: Int, m: Int): PseudoRNG = "Word.fromInt ((Word.toInt Rand.randMin) + ((abs (n * m)) mod (Word.toInt Rand.randMax)))"
+
+
+
+// "Public" API
+// ------------
+
+/**
+ * A random number generator.
+ *
+ * Supposed to be used as an effect: `do randomInt(0, 10)`.
+ * There are two canonical implementations as effect handlers (see below).
+ */
+interface Random {
+  // returns a random integer between `from` and `to`
+  def randomInt(from: Int, to: Int): Int
+  // returns a random double between 0.0 and 1.0
+  def randomDouble(): Double
+}
+
+/**
+ * Imperative random numbers. Does not perform backtracking.
+ */
+def withRandom[R](n: Int, m: Int) { prog: => R / Random } = {
+  // should be second class, is mutated...
+  val rng = seed(n, m)
+  try { prog() }
+  with Random {
+    def randomInt(from, to) = resume(rng.int(from, to))
+    def randomDouble() = resume(rng.double())
+  }
+}
+
+/**
+ * Functional, pseudo random numbers. According to SMLNJ docs it is faster than the imperative version
+ */
+def withPseudoRandom[R](n: Int, m: Int) { prog: => R / Random } = {
+  // should be second class, is mutated...
+  var rng = pseudo(n, m)
+  def next() = rng = random(rng);
+  try { prog() }
+  with Random {
+    def randomInt(from, to) = { next(); resume(rng.range(from, to)) }
+    def randomDouble() = { next(); resume(rng.norm()) }
+  }
+}

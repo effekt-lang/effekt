@@ -47,6 +47,25 @@
 ; ;         (Cons_73  tmp86_121  (Nil_74))))
 
 
+; capabilities first take evidence than require selection!
+(define-syntax handle
+  (syntax-rules ()
+    [(_ (cap1 ...) body)
+     (reset (body lift cap1 ...))]))
+
+
+(define-syntax shift
+  (syntax-rules ()
+    [(_ ev body)
+     (ev body)]))
+
+; capabilities first take evidence than require selection!
+(define-syntax handle-old
+  (syntax-rules ()
+    [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
+     (reset (body lift
+       (cap1 (define-effect-op ev (arg1 ...) kid exp) ...) ...))]))
+
 (define-syntax define-effect-op
   (syntax-rules ()
     [(_ ev1 (arg1 ...) kid exp ...)
@@ -57,23 +76,7 @@
           (let ([kid (lambda (ev v) (ev (resume v)))])
             exp ...))))]))
 
-
-; capabilities first take evidence than require selection!
-(define-syntax handle
-  (syntax-rules ()
-    [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
-     (reset (body lift
-       (cap1 (define-effect-op ev (arg1 ...) kid exp) ...) ...))]))
-
-
-(define-syntax shift
-  (syntax-rules ()
-    [(_ ev body)
-     (ev body)]))
-
-;; REGIONS
-
-(define (with-region body)
+(define (with-region-non-mono body)
   (define arena (make-arena))
 
   (define (lift m) (lambda (k)
@@ -85,6 +88,11 @@
       (k a)))))
 
   (body lift arena))
+
+(define (with-region body)
+  (define arena (make-arena))
+
+  (body arena))
 
 
 ; An Arena is a pointer to a list of cells

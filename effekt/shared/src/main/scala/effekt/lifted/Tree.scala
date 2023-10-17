@@ -56,6 +56,7 @@ enum Extern {
 }
 
 enum Definition {
+  def id: Id
   case Def(id: Id, block: Block)
   case Let(id: Id, binding: Expr)
 }
@@ -118,12 +119,25 @@ enum Stmt extends Tree  {
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
-  case Try(body: Block, handler: List[Implementation])
+
+  // allocates into a (type-monomorphic?) region.
+  // e.g. var x in r = init; body
   case Region(body: Block)
+  case Alloc(id: Id, init: Expr, region: Id, ev: Evidence, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // e.g. state(init) { (ev){x: Ref} => ... }
+  case Var(init: Expr, body: Block.BlockLit)
+  case Get(id: Id, ev: Evidence, annotatedTpe: ValueType)
+  case Put(id: Id, ev: Evidence, value: Expr)
+
+  case Try(body: Block, handler: List[Implementation])
+
+  // after evidence monomorphization -- does not pass evidence to body
+  case Reset(body: Stmt)
 
   // e.g. shift(ev) { {resume} => ... }
   case Shift(ev: Evidence, body: Block.BlockLit)
@@ -154,7 +168,7 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 enum Lift {
   case Var(ev: EvidenceSymbol)
   case Try()
-  case Reg()
+  case Reg() // used for local mutable state AND region based state
 }
 
 /**
@@ -176,11 +190,13 @@ case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def --(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.filter{ case (leftId -> leftParam) =>
       if(o.vars.contains(leftId)) {
-        assert(leftParam == o.vars(leftId), "Id bound with different type than it's occurences.")
+        //assert(leftParam == o.vars(leftId), s"Id bound with different type ${o.vars(leftId)} than it's occurences ${leftParam}.")
         false
       } else { true }
     })
   }
+
+  def -(id: Id) = FreeVariables(vars - id)
 
   def toList: List[lifted.Param] = vars.values.toList
   // TODO add further accessors as needed
@@ -197,7 +213,7 @@ object FreeVariables {
 }
 import FreeVariables.{toFV, combineFV}
 def freeVariables(d: Definition): FreeVariables = d match {
-  case Definition.Def(id, block) => freeVariables(block)
+  case Definition.Def(id, block) => freeVariables(block) - id // recursive definitions
   case Definition.Let(id, binding) => freeVariables(binding)
 }
 
@@ -221,11 +237,15 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
-  case State(id, init, region, ev, body) =>
+  case Alloc(id, init, region, ev, body) =>
     freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
+  case Var(init, body) => freeVariables(init) ++ freeVariables(body)
+  case Get(id, ev, tpe) => FreeVariables(BlockParam(id, lifted.Type.TState(tpe))) ++ freeVariables(ev)
+  case Put(id, ev, value) => FreeVariables(BlockParam(id, lifted.Type.TState(value.tpe))) ++ freeVariables(ev) ++ freeVariables(value)
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
+  case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }
@@ -267,3 +287,24 @@ def freeVariables(ev: Evidence): FreeVariables = ev.lifts.flatMap {
   case Lift.Try() => List()
   case Lift.Reg() => List()
 }.toFV
+
+
+def freeTypeVariables(d: Declaration): Set[Id] = d match {
+  case Declaration.Data(id, tparams, constructors) => constructors.flatMap(freeTypeVariables).toSet -- Set(id) -- tparams.toSet
+  case Declaration.Interface(id, tparams, properties) => properties.flatMap(freeTypeVariables).toSet -- Set(id) -- tparams.toSet
+}
+
+def freeTypeVariables(c: Constructor): Set[Id] = c.fields.flatMap(f => freeTypeVariables(f.tpe)).toSet
+def freeTypeVariables(p: Property): Set[Id] = freeTypeVariables(p.tpe)
+
+
+def freeTypeVariables(tpe: ValueType): Set[Id] = tpe match {
+  case ValueType.Var(name) => Set(name)
+  case ValueType.Data(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
+  case ValueType.Boxed(tpe) => freeTypeVariables(tpe)
+}
+def freeTypeVariables(tpe: BlockType): Set[Id] = tpe match {
+  case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+    (vparams.flatMap(freeTypeVariables).toSet ++ bparams.flatMap(freeTypeVariables).toSet ++ freeTypeVariables(result)) -- tparams.toSet
+  case BlockType.Interface(name, targs) => Set(name) ++ targs.toSet.flatMap(freeTypeVariables)
+}
