@@ -12,7 +12,7 @@ lazy val downloadJITBinary = taskKey[Unit]("Downloads the current JIT binaries t
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 
 
-lazy val effektVersion = "0.2.0"
+lazy val effektVersion = "0.2.1"
 
 lazy val noPublishSettings = Seq(
   publish := {},
