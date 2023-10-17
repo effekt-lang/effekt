@@ -130,6 +130,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "init" -> toDoc(init),
       "region" -> toDoc(region)
     ))
+    case AllocateAt(out, tpe, init, evidence) => jsonObjectSmall(ListMap("op" -> "\"AllocateAt\"",
+      "out" -> toDoc(out),
+      "type" -> toDoc(tpe),
+      "init" -> toDoc(init),
+      "evidence" -> toDoc(evidence)
+    ))
     case Load(out, tpe, ref) => jsonObjectSmall(ListMap("op" -> "\"Load\"",
       "out" -> toDoc(out),
       "type" -> toDoc(tpe),

@@ -42,6 +42,7 @@ case class Copy(tpe: RegisterType, from: Register, to: Register) extends Instruc
 case class Drop(tpe: RegisterType, reg: Register) extends Instruction
 case class Swap(tpe: RegisterType, a: Register, b: Register) extends Instruction
 case class Allocate(out: Register, tpe: RegisterType, init: Register, region: Register) extends Instruction
+case class AllocateAt(out: Register, tpe: RegisterType, init: Register, evidence: Register) extends Instruction
 case class Load(out: Register, tpe: RegisterType, ref: Register) extends Instruction
 case class Store(ref: Register, tpe: RegisterType, value: Register) extends Instruction
 

@@ -189,9 +189,10 @@ object Transformer {
         emit(Add(out, transformArgument(l).id, transformArgument(r).id))
         emitInlined(restBlock)
       }
-      case machine.NewStack(name, region, frame, rest) => {
+      case machine.NewStack(name, frame, rest) => {
         val (closesOver, _, target) = transformClosure(frame, "/r");
-        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name, region), rest));
+        val region_ignored = machine.Variable("__ignored__", machine.Type.Negative("__Region__"))
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name, region_ignored), rest));
         val List(out, regReg) = outs(RegisterType.Ptr) : @unchecked
         emit(NewStack(out, regReg, target, closesOver));
         emitInlined(restBlock)
@@ -206,21 +207,21 @@ object Transformer {
         emit(ShiftDyn(out, transformArgument(n).id));
         emitInlined(block)
       }
-      case machine.Allocate(name, init, mRegion, rest) =>
-        val (_, RegList(outs), block) = transformInline(machine.Clause(List(name, mRegion), rest));
+      case machine.Allocate(name, init, mEvidence, rest) =>
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
         val tpe = transform(init.tpe)
         val out = outs(RegisterType.Ptr).head
-        val region = transformArgument(mRegion).id // outs(RegisterType.Ptr).last
-        emit(Allocate(out, tpe.registerType, transformArgument(init).id, region))
+        val evidence = transformArgument(mEvidence).id // outs(RegisterType.Ptr).last
+        emit(AllocateAt(out, tpe.registerType, transformArgument(init).id, evidence))
         emitInlined(block)
-      case machine.Load(name, ref, rest) =>
+      case machine.Load(name, ref, _, rest) =>
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
         val Type.Reference(tpe) = transform(ref.tpe) : @unchecked
         assert(tpe == transform(name.tpe))
         val out = outs(tpe.registerType).head
         emit(Load(out, tpe.registerType, transformArgument(ref).id))
         emitInlined(block)
-      case machine.Store(ref, value, rest) =>
+      case machine.Store(ref, value, _, rest) =>
         val Type.Reference(tpe) = transform(ref.tpe) : @unchecked
         assert(tpe == transform(value.tpe))
         emit(Store(transformArgument(ref).id, tpe.registerType, transformArgument(value).id))
