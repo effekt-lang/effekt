@@ -15,7 +15,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     descrYes = "Compile the Effekt program to the backend specific representation",
     default = Some(false)
   )
-  
+
   val build: ScallopOption[Boolean] = toggle(
     "build",
     descrYes = "Compile the Effekt program and build a backend specific executable",
@@ -119,7 +119,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   def requiresCompilation(): Boolean = !server()
 
-  def interpret(): Boolean = !server() && !compile()
+  def interpret(): Boolean = !server() && !compile() && !build()
 
   validateFilesIsDirectory(includePath)
 

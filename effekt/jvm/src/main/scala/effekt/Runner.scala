@@ -4,9 +4,8 @@ import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
 import effekt.util.getOrElseAborting
-import kiama.util.IO
 
-import java.lang.reflect.Executable
+import kiama.util.IO
 
 /**
  * Interface used by [[Driver]] and [[EffektTests]] to run a compiled program.
@@ -103,8 +102,13 @@ object JSRunner extends Runner[String] {
 
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
-    val jsFile = (out / path).unixPath
-    s"require('${jsFile}').main().run()"
+    val jsFilePath = (out / path).unixPath
+    // create "executable" using shebang besides the .js file
+    val jsScriptFilePath = (out / path.stripSuffix(s".$extension")).unixPath
+    val jsScript = s"require('${jsFilePath}').main().run()"
+    val shebang = "#!/usr/bin/env node"
+    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript")
+    jsScript
 
   def eval(path: String)(using C: Context): Unit =
     val jsScript = build(path)
