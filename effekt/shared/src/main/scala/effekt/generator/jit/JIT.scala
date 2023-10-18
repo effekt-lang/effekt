@@ -42,7 +42,7 @@ class JIT() extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Lifted => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen LiftInference andThen Machine map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen LiftInference andThen Machine map {
     case (mod, main, prog) => (mod, jit.Transformer.transform(prog))
   }
 
