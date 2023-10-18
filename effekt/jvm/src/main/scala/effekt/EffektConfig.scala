@@ -12,8 +12,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val compile: ScallopOption[Boolean] = toggle(
     "compile",
-    descrYes = "Only compile the Effekt program to a backend specific executable",
-    descrNo = "Compile and run the effekt program in the interpreter",
+    descrYes = "Compile the Effekt program to the backend specific representation",
+    default = Some(false)
+  )
+  
+  val build: ScallopOption[Boolean] = toggle(
+    "build",
+    descrYes = "Compile the Effekt program and build a backend specific executable",
     default = Some(false)
   )
 
