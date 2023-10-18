@@ -12,8 +12,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val compile: ScallopOption[Boolean] = toggle(
     "compile",
-    descrYes = "Compile the Effekt program",
-    descrNo = "Run the effekt program in the interpreter",
+    descrYes = "Only compile the Effekt program to a backend specific executable",
+    descrNo = "Compile and run the effekt program in the interpreter",
     default = Some(false)
   )
 
@@ -118,6 +118,6 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   validateFilesIsDirectory(includePath)
 
-  // force some other configs manually to intialize them when compiling with native-image
+  // force some other configs manually to initialize them when compiling with native-image
   server; output; filenames
 }
