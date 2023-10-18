@@ -1,6 +1,0 @@
-def f(x: Int): _ = g(x)
-def g(x: Int): _ = f(x)
-
-def main() = {
-    ()
-}

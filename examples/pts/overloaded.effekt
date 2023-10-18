@@ -1,8 +1,0 @@
-def f(x: Int): Int = 1
-
-def f(x: Int): String = "2"
-
-def main() = {
-    val a: _ = f(1)
-    1
-}
