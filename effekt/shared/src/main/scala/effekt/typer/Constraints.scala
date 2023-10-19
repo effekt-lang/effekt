@@ -2,8 +2,6 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.BlockTypeVar.BlockUnificationVar
-import effekt.symbols.EffectVar.EffectUnificationVar
 import effekt.util.messages.{ErrorMessageReifier, ErrorReporter}
 import effekt.util.foreachAborting
 

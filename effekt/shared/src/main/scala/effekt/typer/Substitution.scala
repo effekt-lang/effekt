@@ -2,8 +2,6 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.EffectVar.EffectSetWildcard
-
 
 case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception
 

@@ -1,7 +1,6 @@
 package effekt
 package symbols
 
-import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
 import effekt.symbols.builtins.*
 import effekt.typer.ConcreteEffects
 import kiama.output.ParenPrettyPrinter
@@ -40,8 +39,8 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
-    case BlockTypeRef(x: BlockTypeWildcard) => text("_")
-    case BlockTypeRef(x: BlockUnificationVar) => text("_")
+    case BlockTypeRef(x: symbols.BlockTypeWildcard) => text("_")
+    case BlockTypeRef(x: symbols.BlockUnificationVar) => text("_")
     case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
       val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {

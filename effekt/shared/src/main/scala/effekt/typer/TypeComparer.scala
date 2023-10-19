@@ -2,9 +2,6 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
-import effekt.symbols.EffectVar.{EffectUnificationVar, EffectSetWildcard}
-import effekt.symbols.ValueTypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
 

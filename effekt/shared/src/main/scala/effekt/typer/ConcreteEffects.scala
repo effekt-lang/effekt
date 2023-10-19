@@ -2,10 +2,7 @@ package effekt
 package typer
 
 import effekt.context.Context
-import effekt.source.BlockType.BlockTypeWildcard
 import effekt.symbols.*
-import effekt.symbols.BlockTypeVar.BlockUnificationVar
-import effekt.symbols.ValueTypeVar.ValueTypeWildcard
 import effekt.util.messages.ErrorMessageReifier
 
 
@@ -60,7 +57,7 @@ val Pure = ConcreteEffects.empty
 implicit def asConcrete(effs: Effects)(using C: Context): ConcreteEffects =
   ConcreteEffects(C.unification(effs) match {
     case x: Effects => x
-    case x: EffectRef => Context.abort("EffectRef in unexpected place: asConcrete")
+    case x: EffectRef => Context.abort("EffectRef in unexpected place")
   })
 
 

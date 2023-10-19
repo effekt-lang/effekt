@@ -5,9 +5,6 @@ import effekt.context.Context
 import effekt.source.BlockType.BlockTypeRef
 import effekt.source.MatchPattern
 import effekt.symbols.*
-import effekt.symbols.BlockTypeVar.{BlockTypeWildcard, BlockUnificationVar}
-import effekt.symbols.EffectVar.{EffectUnificationVar, EffectSetWildcard}
-import effekt.symbols.ValueTypeVar.ValueTypeWildcard
 import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.util.messages.ErrorReporter
 
@@ -130,8 +127,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     substitution.substitute(tpe)
 
   def apply(tpe: FunctionType): FunctionType =
-    val a = substitution
-    a.substitute(tpe)
+    substitution.substitute(tpe)
 
   def apply(tpe: ValueType): ValueType =
     substitution.substitute(tpe)
@@ -302,8 +298,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[Captures], FunctionType) = {
     val position = C.focus
-    val a = substitution
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = a.substitute(tpe)
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
     val typeRigids =
       if (targs.size == tparams.size) targs
@@ -471,7 +466,7 @@ trait TypeInstantiator { self: Unification =>
           val capt = constraints.forceSolving(x)
           capt.captures
 
-        case x: CaptureSetWildcard => abort("EffectRef in unexpected place: instantiate")
+        case x: CaptureSetWildcard => abort("EffectRef in unexpected place")
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
     if (contained.isEmpty) return c;

@@ -2,7 +2,6 @@ package effekt
 package symbols
 
 import ValueTypeVar.*
-import effekt.symbols.EffectVar.EffectUnificationVar
 
 /**
  * Types

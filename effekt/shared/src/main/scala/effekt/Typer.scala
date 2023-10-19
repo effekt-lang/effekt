@@ -181,8 +181,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolve }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
-        val a = checkExprAsBlock(e, None)
-        val Result(tpe, funEffs) = a match {
+        val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
           case Result(b: FunctionType, capt) => Result(b, capt)
           case Result(b: BlockTypeRef, capt) => Result(b, capt)
           case _ =>
@@ -1185,57 +1184,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget symbol
         Context.assignSymbol(id, sym)
-
-        return tpe
-
-      // Ambiguous reference
-      case results =>
-        val successfulOverloads = results.map { (sym, res, st) => (sym, findFunctionTypeFor(sym)._1) }
-        Context.abort(AmbiguousOverloadError(successfulOverloads, Context.rangeOf(id)))
-    }
-
-    failures match {
-      case Nil =>
-        Context.abort("Cannot typecheck call.")
-
-      // exactly one error
-      case List((sym, errs)) =>
-        Context.abortWith(errs)
-
-      case failed =>
-        // reraise all and abort
-        val failures = failed.map { case (block, msgs) => (block, findFunctionTypeFor(block)._1, msgs) }
-        Context.abort(FailedOverloadError(failures, Context.currentRange))
-    }
-  }
-
-  private def resolveOverloadWithWildcard(
-   id: source.IdRef,
-   successes: List[List[(BlockSymbol, Result[ValueType], TyperState)]],
-   failures: List[(BlockSymbol, EffektMessages)],
-   wildcard: BlockTypeRef
-  )(using Context): Result[ValueType] = {
-
-    successes. foreachAborting {
-      // continue in outer scope
-      case Nil => ()
-
-      // Exactly one successful result in the current scope
-      case List((sym, tpe, st)) =>
-        // use the typer state after this checking pass
-        Context.restoreTyperstate(st)
-        // reassign symbol of fun to resolved
-        // target symbol
-        Context.assignSymbol(id, sym)
-
-
-        sym match {
-          case x: Operation =>
-            println(x)
-            val interface = InterfaceType(x.interface, List())
-            matchExpected(wildcard, interface)
-          case _ => sys error "No operation"
-        }
 
         return tpe
 

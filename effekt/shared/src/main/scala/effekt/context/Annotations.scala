@@ -4,7 +4,6 @@ package context
 import effekt.symbols.ResumeParam
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
-import symbols.EffectsOrRef
 
 case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
@@ -367,21 +366,21 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source block: '${ t }'")
     }
 
-  def inferredEffectOption(t: source.Tree): Option[EffectsOrRef] =
+  def inferredEffectOption(t: source.Tree): Option[symbols.EffectsOrRef] =
     annotationOption(Annotations.InferredEffect, t)
 
-  def inferredEffectOf(t: source.Tree): EffectsOrRef =
+  def inferredEffectOf(t: source.Tree): symbols.EffectsOrRef =
     inferredEffectOption(t).getOrElse {
       panic(s"Internal Error: Missing effect of source expression: '${t}'")
     }
 
-  def inferredTypeAndEffectOption(t: source.Tree): Option[(ValueType, EffectsOrRef)] =
+  def inferredTypeAndEffectOption(t: source.Tree): Option[(ValueType, symbols.EffectsOrRef)] =
     for {
       tpe <- inferredTypeOption(t)
       eff <- inferredEffectOption(t)
     } yield (tpe, eff)
 
-  def inferredTypeAndEffectOf(t: source.Tree): (ValueType, EffectsOrRef) =
+  def inferredTypeAndEffectOf(t: source.Tree): (ValueType, symbols.EffectsOrRef) =
     inferredTypeAndEffectOption(t).getOrElse {
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }

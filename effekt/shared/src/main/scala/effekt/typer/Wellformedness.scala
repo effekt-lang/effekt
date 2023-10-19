@@ -265,7 +265,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     effects match {
       case x: Effects => x.toList foreach checkEffect
       case x: EffectRef =>
-        Context.abort("EffectRef in unexpected place: wellscoped")
+        Context.abort("EffectRef in unexpected place")
     }
 
   }

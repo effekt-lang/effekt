@@ -5,7 +5,6 @@ import effekt.source.{Def, DefDef, FunDef, ModuleDecl, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
-import effekt.symbols.ValueTypeVar.TypeParam
 import effekt.util.messages.ErrorReporter
 
 /**
