@@ -50,7 +50,7 @@ extern pure def unsafeSubstring(str: String, from: Int): String =
     "String.extract (str, from, NONE)"
 
 extern pure def unsafeSubstring(str: String, from: Int, endp: Int): String =
-    "String.extract (str, from, endp)"
+    "String.extract (str, from, SOME(endp))"
 
 // extern pure def split(str: String, sep: String): Array[String] =
 //     "Array.fromList (map (String.str) (String.explode str))"
@@ -65,7 +65,7 @@ extern pure def internalStringToInt(str: String): MLOption[Int] =
 def toInt(str: String): Option[Int] = toOption(internalStringToInt(str))
 
 extern pure def unsafeCharAt(str: String, n: Int): String =
-    "String.sub (str, n)"
+    "String.str (String.sub (str, n))"
 
 def map[A](str: String){ f: String => A }: List[A] = {
     def rec(i: Int): List[A] = {
