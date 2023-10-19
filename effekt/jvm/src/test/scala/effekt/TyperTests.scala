@@ -231,6 +231,10 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
+  testTyperFile("Block inference enhancement test")("examples/pts/pos/blockInferenceEnhancement.effekt") {
+    C => C.assertBlockType("run", "{ Int => Int / Eff } => Int / Eff")
+  }
+
   testTyperFile("Block literal tests")("examples/pts/pos/blockLiteral.effekt"){
     C => {
       C.assertValueType("func", "() => Unit / { Eff } at {interfaceEff}")
@@ -337,6 +341,4 @@ class TyperTests extends AbstractTyperTests {
       C.assertBlockType("func2", "() => String")
     }
   }
-
-  
 }
