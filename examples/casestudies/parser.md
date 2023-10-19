@@ -86,6 +86,12 @@ type Tree {
   Let(name: String, binding: Tree, body: Tree)
   App(name: String, arg: Tree)
 }
+def show(t: Tree): String = t match {
+  case Lit(v) => "Lit(" ++ show(v) ++ ")"
+  case Var(name) => "Var(" ++ show(name) ++ ")"
+  case Let(n,b,body) => "Let(" ++ show(n) ++ ", " ++ show(b) ++ ", " ++ show(body) ++ ")"
+  case App(n,a) => "App(" ++ show(n) ++ ", " ++ show(a) ++ ")"
+}
 ```
 
 Let us start by defining the parser for numeric literals.
@@ -196,6 +202,10 @@ type ParseResult[R] {
   Success(t: R);
   Failure(msg: String)
 }
+def showPR[A](p: ParseResult[A]){f: A => String}: String = p match {
+  case Success(t) => "Success(" ++ f(t) ++ ")"
+  case Failure(msg) => "Failure(" ++ msg ++ ")"
+}
 ```
 
 The parsing algorithm is simply implemented as a handler for `Parser`.
@@ -225,6 +235,8 @@ the lexer positions will be restored when calling the continuation a second time
 Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
 
 ```
+def println(p: ParseResult[Int]): Unit = println(showPR(p){ x => show(x) })
+def println(p: ParseResult[Tree]): Unit = println(showPR(p){ x => show(x) })
 def main() = {
   println(parse("42") { parseCalls() })
   println(parse("foo(1)") { parseCalls() })

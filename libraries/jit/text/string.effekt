@@ -51,6 +51,17 @@ def map[A](str: String){ f: String => A }: List[A] = {
     }
     rec(0)
 }
+def takeWhile(str: String){ f: String => Boolean }: String = {
+    def rec(i: Int, acc: String): String = {
+        if (i < length(str)) {
+            val c = unsafeCharAt(str, i)
+            if (f(c)) {
+                rec(i+1, acc ++ c)
+            } else acc
+        } else acc
+    }
+    rec(0, "")
+}
 def indexOf(str: String, start: Int, substr: String): Option[Int] = {
     if(length(str) - start < length(substr)) {
         None()

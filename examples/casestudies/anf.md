@@ -18,12 +18,13 @@ module examples/casestudies/anf
 
 import examples/casestudies/parser // for the Tree datatype
 import examples/casestudies/prettyprinter // for the combined example
+import text/string // for show
 ```
 
 To recall the Tree datatype, here is an example tree:
 ```
 // let x = f(g(42)) in x
-val exampleTree: Tree =
+def exampleTree(): Tree =
   Let("x", App("f", App("g", Lit(42))), Var("x"))
 ```
 
@@ -37,11 +38,21 @@ type Expr {
   CLit(value: Int);
   CVar(name: String)
 }
+def show(e: Expr): String = e match {
+  case CLit(v) => "CLit(" ++ show(v) ++ ")"
+  case CVar(n) => "CVar(" ++ show(n) ++ ")"
+}
 type Stmt {
   CLet(name: String, binding: Stmt, body: Stmt);
   CApp(name: String, arg: Expr);
   CRet(expr: Expr)
 }
+def show(s: Stmt): String = s match {
+  case CLet(n,bi,bo) => "CLet(" ++ show(n) ++ ", " ++ show(bi) ++ ", " ++ show(bo) ++ ")"
+  case CApp(n,a) => "CApp(" ++ show(n) ++ ", " ++ show(a) ++ ")"
+  case CRet(e) => "CRet(" ++ show(e) ++ ")"
+}
+def println(s: Stmt) = println(show(s))
 ```
 We prefix all constructors with `C...` to distinguish them from the source language ("C" for "Core").
 
@@ -99,7 +110,7 @@ def translate(e: Tree): Stmt =
 
 For our example, calling `translate` results in:
 ```
-val exampleResult = translate(exampleTree)
+def exampleResult() = translate(exampleTree())
 //> CLet(x, CLet(x1, CRet(CLit(42)),
 //    CLet(x2, CApp(g, CVar(x1)), CApp(f, CVar(x2)))),
 //    CRet(CVar(x)))
@@ -148,7 +159,7 @@ def pretty(s: Stmt) = pretty(40) { toDocStmt(s) }
 
 Using the pretty printer, we can print our example result from above:
 ```
-val examplePretty = pretty(exampleResult)
+def examplePretty() = pretty(exampleResult())
 // let x = let x1 = return 42 in let x2 =
 //      g(x1)
 //    in f(x2) in return x
@@ -167,8 +178,8 @@ def pipeline(input: String): String =
 Here we use `pipeline` to translate some examples:
 ```
 def main() = {
-  println(exampleResult)
-  println(examplePretty)
+  println(exampleResult())
+  println(examplePretty())
 
   println("----")
   println(pipeline("42"))
