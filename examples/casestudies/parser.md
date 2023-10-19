@@ -68,11 +68,11 @@ def or[R] { p: => R } { q: => R } =
 def opt[R] { p: => R }: Option[R] / Parser =
   or { Some(p()) } { None() }
 
-def many { p: => Unit }: Unit / Parser =
-  or { some { p() } } { () }
+def many[R] { p: => R }: List[R] / Parser =
+  or { some[R] { p() } } { Nil() }
 
-def some { p: => Unit }: Unit / Parser =
-  { p(); many { p() } }
+def some[R] { p: => R }: List[R] / Parser =
+  { Cons(p(), many { p() }) }
 ```
 
 ## Example: A Simple Expression Language
@@ -171,19 +171,19 @@ The following example implements an example
 ```
 It uses local (mutable) variables to count the number of leafs as semantic action.
 ```
-def parseCalls(): Int / Parser =
+def parseCalls(): Int / Parser = {
   or { number(); 1 } {
-    var count = 1;
     ident();
     punct("(");
-    count = count + parseCalls();
-    many {
+    val count = parseCalls() +
+    sum(many {
         punct(",");
-        count = count + parseCalls()
-    };
+        parseCalls()
+    });
     punct(")");
     count
   }
+}
 ```
 Notice how the user defined combinator `many` feels like a built-in control operator
 `while`.

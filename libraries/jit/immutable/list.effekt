@@ -93,6 +93,11 @@ def any(l: List[Boolean]): Boolean = l match {
   case Nil() => false
   case Cons(v,rest) => if (v) { true } else { any(rest) }
 }
+def sum(l: List[Int]): Int = {
+  var res = 0
+  l.foreach { i => res = res + i }
+  res
+}
 
 // elements that satisfy the predicate go into the left list
 def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
