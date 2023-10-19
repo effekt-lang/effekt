@@ -1,7 +1,0 @@
-type AA = _
-
-def f(x: AA) = 1
-
-def main() = {
-    1
-}

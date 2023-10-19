@@ -1,3 +1,5 @@
+module examples/pts/neg/externResource
+
 extern resource test: _
 
 def main() = {

@@ -19,3 +19,7 @@ def func{ eff: Eff } = {
 
     boxed
 }
+
+def main() = {
+    ()
+}

@@ -11,3 +11,7 @@ def outer{interfaceEff: InterfaceEff} = {
     }
     func
 }
+
+def main() = {
+    ()
+}

@@ -1,0 +1,12 @@
+effect Eff(): Unit
+
+def f(): Int / Eff = {
+    do Eff()
+    1
+}
+
+val boxed: _ at {} = box f
+
+def main() = {
+    ()
+}

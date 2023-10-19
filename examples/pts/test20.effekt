@@ -1,5 +1,0 @@
-def identity[A](x: A): A = x
-
-def runFunc{block: _}: Int = block(1)
-
-def main() = { runFunc{identity} }

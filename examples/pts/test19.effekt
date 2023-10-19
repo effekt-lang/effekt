@@ -1,7 +1,0 @@
-def run{ f: Int => Int / _ }: Int = f(1)
-
-val res = run{ (x: Int) => x + 1 }
-
-def main() = {
-    println(res)
-}

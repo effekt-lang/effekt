@@ -23,3 +23,7 @@ def func(listParam: _): Int =
 record Constant[A](value: A)
 
 val constant: Constant[_] = Constant(1)
+
+def main() = {
+    ()
+}

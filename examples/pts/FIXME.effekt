@@ -2,7 +2,7 @@ effect Eff(): Unit
 
 def run{x: _}: Int = {
     val a: Int = x(1)
-    //def y: Int => Int / Eff = x
+    def y: Int => Int / Eff = x
     1
 }
 

@@ -2,8 +2,6 @@ def f[A](x: A): Int = 2
 
 val boxed: _ at {} = box f
 
-val d: Int = boxed
-
 def main() = {
     ()
 }

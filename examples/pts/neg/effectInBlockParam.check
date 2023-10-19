@@ -1,0 +1,3 @@
+[error] examples/pts/neg/effectInBlockParam.effekt:6:5: EffectSetWildcard is not allowed in block parameter
+    func()
+    ^

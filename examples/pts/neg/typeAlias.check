@@ -1,0 +1,3 @@
+[error] examples/pts/neg/typeAlias.effekt:5:1: Cannot fully infer type for f: ValueTypeWildcard => Int
+def f(x: A) = 1
+^

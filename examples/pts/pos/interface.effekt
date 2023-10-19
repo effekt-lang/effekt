@@ -14,3 +14,7 @@ def withConstantInt[R]{ body: { Constant[Int] } => R }: R = {
 def foo() = withConstantInt { {interfaceParam: _} =>
    interfaceParam.output() + 1
 }
+
+def main() = {
+    ()
+}

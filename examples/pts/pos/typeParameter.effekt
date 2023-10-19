@@ -1,1 +1,8 @@
-def id[A](x: A): A = x
+def id[A](x: _): A = {
+    val y: A = x
+    x
+}
+
+def main() = {
+    ()
+}

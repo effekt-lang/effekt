@@ -1,5 +1,0 @@
-extern def test(x: Int): Int / _  = "test"
-
-def main() = {
-    ()
-}

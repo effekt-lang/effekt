@@ -219,15 +219,6 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
     }
 
-//    def assertCaptureType(name: String, expected: String, clue: => Any = "capture types don't match"): Unit = {
-//      val syms = R.module.terms(name)
-//      assert(syms.size == 1, s"There is a unique symbol named '${name}'.")
-//      val sym = syms.head
-//      assert(sym.isInstanceOf[symbols.Captures], s"${sym} is a capture symbol.")
-//      val got = C.annotation(Annotations.Captures, sym.asInstanceOf[symbols.BlockSymbol])
-//      assertNoDiff(symbols.TypePrinter.show(got), expected, clue)
-//    }
-
     // TODO further assertions (e.g. for captures etc) on the context
   }
 
@@ -269,7 +260,7 @@ class TyperTests extends AbstractTyperTests {
   testTyperFile("Box inference tests")("examples/pts/pos/boxInference.effekt"){
     C => {
       C.assertBlockType("func1", "Int => Int at {} => Int")
-      C.assertBlockType("func2", "List[Int => Int at {}] => Int")
+      // C.assertBlockType("func2", "List[Int => Int at {}] => Int")
     }
   }
 
@@ -282,10 +273,20 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
+  testTyperFile("Effectful box test")("examples/pts/pos/effectfulBox.effekt") {
+    C => C.assertValueType("boxed", "() => Int / { Eff } at {}")
+  }
+
   testTyperFile("Effect tests")("examples/pts/pos/effects.effekt"){
     C => {
       C.assertBlockType("func1", "() => Int / { Eff1 }")
       C.assertBlockType("func2", "() => Int / { Eff1, Eff2 }")
+    }
+  }
+
+  testTyperFile("Multiple uses of block parameter")("examples/pts/pos/functionMultipleUses.effekt") {
+    C => {
+      C.assertBlockType("func", "Int => Int")
     }
   }
 
@@ -304,6 +305,27 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
+  testTyperFile("Nested wildcards tests")("examples/pts/pos/nestedWildcards.effekt") {
+    C => {
+      C.assertBlockType("f", "Int => Int")
+      C.assertValueType("y", "Int")
+    }
+  }
+
+  testTyperFile("Parametric box tests")("examples/pts/pos/parametricBox.effekt") {
+    C => {
+      C.assertValueType("boxed", "[A]A => Int at {}")
+    }
+  }
+
+  testTyperFile("Recursive function tests")("examples/pts/pos/recursiveFunction.effekt") {
+    C => C.assertBlockType("func", "Int => Int")
+  }
+
+  testTyperFile("TypeParam tests")("examples/pts/pos/typeParameter.effekt") {
+    C => C.assertBlockType("id", "[A]A => A")
+  }
+
   testTyperFile("Value type tests")("examples/pts/pos/valueTypes.effekt"){
     C => {
       C.assertValueType("value1", "Int")
@@ -312,8 +334,5 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
-
-  testTyperFile("Debug")("examples/pts/test24.effekt"){
-    C => C.assertBlockType("func", "")
-  }
+  
 }

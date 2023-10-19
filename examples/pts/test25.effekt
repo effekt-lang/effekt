@@ -1,5 +1,0 @@
-def f[_](x: Int): Int = x + 1
-
-def main() = {
-    f(1)
-}

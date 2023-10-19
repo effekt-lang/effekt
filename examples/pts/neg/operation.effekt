@@ -1,4 +1,4 @@
-// opClause wildcard
+module examples/pts/neg/operation
 
 effect Test {
     def output(x: Int): Int / _

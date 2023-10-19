@@ -1,5 +1,0 @@
-val res = fun(x: _) { 1 }
-
-def main() = {
-    println(res(1))
-}

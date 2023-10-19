@@ -1,0 +1,3 @@
+[error] examples/pts/neg/externDefCaptures.effekt:3:10: Capture set wildcards are not allowed here!
+extern _ def func(x: Int): Int = "test"
+         ^

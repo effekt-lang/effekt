@@ -1,3 +1,5 @@
+module examples/pts/neg/externDefParameter
+
 extern pure def test(x: _): Unit = "test"
 
 val a = test(1)

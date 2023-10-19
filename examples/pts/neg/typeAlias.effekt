@@ -1,0 +1,9 @@
+module examples/pts/neg/typeAlias
+
+type A = _
+
+def f(x: A) = 1
+
+def main() = {
+    1
+}
