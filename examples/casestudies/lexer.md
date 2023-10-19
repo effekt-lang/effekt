@@ -27,7 +27,7 @@ def infixEq(l: Position, r: Position): Boolean = (l.line == r.line) && (l.col ==
 def show(p: Position): String = "Position(" ++ show(p.line) ++ ", " ++ show(p.col) ++ ", " ++ show(p.index) ++ ")"
 
 type TokenKind { Number(); Ident(); Punct(); Space() }
-def infixEq(l: TokenKind, r: TokenKind): Boolean = (l,r) match {
+def eq(l: TokenKind, r: TokenKind): Boolean = (l,r) match {
   case (Number(),Number()) => true
   case (Ident(),Ident()) => true
   case (Punct(),Punct()) => true
@@ -223,7 +223,7 @@ Interestingly, a whitespace skipping lexer can be implemented as a _effect trans
 ```
 def skipSpaces(): Unit / Lexer = do peek() match {
   case None() => ()
-  case Some(t) => if (t.kind == Space()) { do next(); skipSpaces() } else ()
+  case Some(t) => if (eq(t.kind, Space())) { do next(); skipSpaces() } else ()
 }
 
 def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
