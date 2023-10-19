@@ -17,4 +17,7 @@ def main() = {
     println(show(get(arr, 4)));
     put(arr, 4, "foo");
     println(show(get(arr, 4)))
+
+    val arrWithVals = initArray(4,"Hello World");
+    println(arrWithVals)
 }
