@@ -15,20 +15,37 @@ Before we get started, we require a few imports to deal with strings and regular
 module examples/casestudies/lexer
 
 import text/string
-import text/regex
 import immutable/option
 import immutable/list
-import mutable/array
 ```
 
 ## Tokens and Positions
 First we define the datatypes to represent lexemes (tokens) and positions in the input stream:
 ```
 record Position(line: Int, col: Int, index: Int)
+def infixEq(l: Position, r: Position): Boolean = (l.line == r.line) && (l.col == r.col) && (l.index == r.index)
+def show(p: Position): String = "Position(" ++ show(p.line) ++ ", " ++ show(p.col) ++ ", " ++ show(p.index) ++ ")"
 
 type TokenKind { Number(); Ident(); Punct(); Space() }
+def infixEq(l: TokenKind, r: TokenKind): Boolean = (l,r) match {
+  case (Number(),Number()) => true
+  case (Ident(),Ident()) => true
+  case (Punct(),Punct()) => true
+  case (Space(),Space()) => true
+  case _ => false
+}
+def show(t: TokenKind): String = t match {
+  case Number() => "Number()"
+  case Ident() => "Ident()"
+  case Punct() => "Punct()"
+  case Space() => "Space()"
+}
 
 record Token(kind: TokenKind, text: String, position: Position)
+def show(t: Token): String = "Token(" ++ show(t.kind) ++ ", " ++ show(t.text) ++ ", " ++ show(t.position) ++ ")"
+def println(arg: Tuple3[Token, Token, Token]): Unit = arg match {
+  case (x,y,z) => println("(" ++ show(x) ++ "," ++ show(y) ++ "," ++ show(z) ++ ")")
+}
 ```
 Tokens simply are tagged with a token type (distinguishing numbers, identifiers, and punctuation),
 the original text of the token and its position.
@@ -58,7 +75,7 @@ def example1() = {
 A dummy lexer reading lexemes from a given list can be implemented as a handler for the `Lexer` effect. The definition uses the effect `LexerError` to signal the end of the input stream:
 ```
 effect LexerError[A](msg: String, pos: Position): A
-val dummyPosition = Position(0, 0, 0)
+def dummyPosition() = Position(0, 0, 0)
 
 def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError = {
   var in = l;
@@ -68,7 +85,7 @@ def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError =
       case Cons(tok, _) => resume(Some(tok))
     }
     def next() = in match {
-      case Nil() => do LexerError("Unexpected end of input", dummyPosition)
+      case Nil() => do LexerError("Unexpected end of input", dummyPosition())
       case Cons(tok, _) => resume(tok)
     }
   }
@@ -83,17 +100,17 @@ def report { prog: => Unit / LexerError }: Unit =
 ```
 Given a list of example tokens
 ```
-val exampleTokens = [
-  Token(Ident(), "foo", dummyPosition),
-  Token(Punct(), "(", dummyPosition),
-  Token(Punct(), ")", dummyPosition)
+def exampleTokens() = [
+  Token(Ident(), "foo", dummyPosition()),
+  Token(Punct(), "(", dummyPosition()),
+  Token(Punct(), ")", dummyPosition())
 ]
 ```
 we can compose the two handlers to run our example consumer:
 ```
 def runExample1() =
   report {
-    exampleTokens.lexerFromList {
+    exampleTokens().lexerFromList {
       println(example1())
     }
   }
@@ -106,13 +123,28 @@ processes an input and computes the tokens contained therein.
 This time, we use a number of different regular expressions to recognize lexemes.
 First, we define the different token types as a list of pairs of regular expressions and token types.
 ```
+type Regex {
+  SeqOf(options: String)
+  OneOf(options: String)
+}
+def exec(r: Regex, input: String): Option[String] = r match {
+  case SeqOf(chars) =>
+    val r = takeWhile(input){ c => oneOf(c, chars) }
+    if (r == "") { None() } else { Some(r) }
+  case OneOf(chars) =>
+    input.charAt(0) match {
+      case Some(c) => if (oneOf(c, chars)) { Some(c) } else { None() }
+      case None() => None()
+    }
+}
 record TokenRx(kind: TokenKind, rx: Regex)
 
-val tokenDesriptors = [
-  TokenRx(Number(), "^[0-9]+".regex),
-  TokenRx(Ident(),  "^[a-zA-Z]+".regex),
-  TokenRx(Punct(),  "^[=,.()\\[\\]{}:]".regex),
-  TokenRx(Space(),  "^[ \t\n]+".regex)
+def oneOf(char: String, chars: String): Boolean = any(chars.map{ c => c == char })
+def tokenDesriptors() = [
+  TokenRx(Number(), SeqOf("0123456789")),
+  TokenRx(Ident(), SeqOf("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")),
+  TokenRx(Punct(), OneOf("=,.()\\[\\]{}:")),
+  TokenRx(Space(), SeqOf(" \t\n"))
 ]
 ```
 
@@ -130,10 +162,10 @@ A few local helper functions ease the handling of the input stream.
 At the same time, we need to keep track of the line information.
 ```
   def position() = Position(line, col, index)
-  def input() = in.substring(index)
+  def input() = in.substring(index, in.length)
   def consume(text: String): Unit = {
     val lines = text.split("\n")
-    val len = lines.unsafeGet(lines.size - 1).length
+    val len = last(lines).getOrElse{ panic("empty") }.length
     // compute new positions
     index = index + text.length
     line = line + lines.size - 1
@@ -146,7 +178,7 @@ the input stream, without advancing it. Its companion `tryMatchAll` returns the 
 matched by any of the matches in the given description list.
 ```
   def tryMatch(desc: TokenRx): Option[Token] =
-      desc.rx.exec(input()).map { m => Token(desc.kind, m.matched, position()) }
+      desc.rx.exec(input()).map { m => Token(desc.kind, m, position()) }
 
   def tryMatchAll(descs: List[TokenRx]): Option[Token] = descs match {
     case Nil() => None()
@@ -157,12 +189,12 @@ Now defining the lexer is trivial. We just need to use `tryMatchAll` and either 
 the input, or not.
 ```
   try { prog() } with Lexer {
-    def peek() = resume(tryMatchAll(tokenDesriptors))
+    def peek() = resume(tryMatchAll(tokenDesriptors()))
     def next() =
       if (eos())
         do LexerError("Unexpected EOS", position())
       else {
-        val tok = tryMatchAll(tokenDesriptors).getOrElse {
+        val tok = tryMatchAll(tokenDesriptors()).getOrElse {
           do LexerError("Cannot tokenize input", position())
         }
         consume(tok.text)
