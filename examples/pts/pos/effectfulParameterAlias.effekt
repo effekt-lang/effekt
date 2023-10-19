@@ -1,0 +1,10 @@
+effect Eff(): Unit
+
+def run{x: _}: Int / Eff = {
+    def y: Int => Int / Eff = x
+    x(1)
+}
+
+def main() = {
+    ()
+}

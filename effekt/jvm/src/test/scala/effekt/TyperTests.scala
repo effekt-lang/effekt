@@ -277,6 +277,10 @@ class TyperTests extends AbstractTyperTests {
     C => C.assertValueType("boxed", "() => Int / { Eff } at {}")
   }
 
+  testTyperFile("Effectful parameter alias test")("examples/pts/pos/effectfulParameterAlias.effekt") {
+    C => C.assertBlockType("run", "{Int => Int / { Eff }} => Int / { Eff }")
+  }
+
   testTyperFile("Effect tests")("examples/pts/pos/effects.effekt"){
     C => {
       C.assertBlockType("func1", "() => Int / { Eff1 }")
