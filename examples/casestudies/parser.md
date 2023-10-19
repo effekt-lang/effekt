@@ -16,6 +16,7 @@ module examples/casestudies/parser
 
 import examples/casestudies/lexer
 import immutable/option
+import immutable/list
 import text/string
 ```
 
@@ -245,12 +246,12 @@ def main() = {
   println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
   println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-  println(parse("}42") { parseExpr() })
-  println(parse("42") { parseExpr() })
-  println(parse("let x = 4 in 42") { parseExpr() })
-  println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-  println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-  println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-  println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+//   println(parse("}42") { parseExpr() })
+//   println(parse("42") { parseExpr() })
+//   println(parse("let x = 4 in 42") { parseExpr() })
+//   println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+//   println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+//   println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+//   println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 }
 ```
