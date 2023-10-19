@@ -46,7 +46,7 @@ def accept { p: Token => Boolean } : Token / Parser = {
 Using `accept`, we can define parsers for the different token types.
 ```
 def any() = accept { t => true }
-def accept(exp: TokenKind) = accept { t => t.kind == exp }
+def accept(exp: TokenKind) = accept { t => eq(t.kind, exp) }
 def ident() = accept(Ident()).text
 def number() = accept(Number()).text
 def punct(p: String) = {

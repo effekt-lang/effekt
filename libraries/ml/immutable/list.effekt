@@ -80,6 +80,11 @@ def drop[A](l: List[A], n: Int): List[A] =
     case Cons(a, rest) => rest.drop(n - 1)
   }
 
+def any(l: List[Boolean]): Boolean = l match {
+  case Nil() => false
+  case Cons(v,rest) => if (v) { true } else { any(rest) }
+}
+
 def nonEmpty[A](l: List[A]): Boolean = l match {
   case Nil() => false
   case Cons(a, rest) => true
@@ -93,6 +98,12 @@ def head[A](l: List[A]): A / Exception[EmptyList] = l match {
 def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
   case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
   case Cons(a, rest) => rest
+}
+
+def last[A](l: List[A]): Option[A] = {
+  var res = None()
+  l.foreach { e => res = Some(e) }
+  res
 }
 
 def headOption[A](l: List[A]): Option[A] = l match {
