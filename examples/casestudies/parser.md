@@ -40,7 +40,7 @@ input stream and fails, if it does not match.
 def accept { p: Token => Boolean } : Token / Parser = {
   val got = do next();
   if (p(got)) got
-  else do fail("Unexpected token " ++ show(got)).absurd
+  else do fail("Unexpected token " ++ showT(got)).absurd
 }
 ```
 
