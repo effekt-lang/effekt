@@ -81,7 +81,23 @@ def tail[A](l: List[A]): List[A] = l match {
   case Cons(a, rest) => rest
 }
 
+def last[A](l: List[A]): Option[A] = {
+  var res = None()
+  l.foreach { e => res = Some(e) }
+  res
+}
+
 def headOption[A](l: List[A]): Option[A] = l match {
   case Nil() => None()
   case Cons(a, rest) => Some(a)
+}
+
+def any(l: List[Boolean]): Boolean = l match {
+  case Nil() => false
+  case Cons(v,rest) => if (v) { true } else { any(rest) }
+}
+def sum(l: List[Int]): Int = {
+  var res = 0
+  l.foreach { i => res = res + i }
+  res
 }
