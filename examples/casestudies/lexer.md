@@ -24,7 +24,7 @@ First we define the datatypes to represent lexemes (tokens) and positions in the
 ```
 record Position(line: Int, col: Int, index: Int)
 def infixEq(l: Position, r: Position): Boolean = (l.line == r.line) && (l.col == r.col) && (l.index == r.index)
-def show(p: Position): String = "Position(" ++ show(p.line) ++ ", " ++ show(p.col) ++ ", " ++ show(p.index) ++ ")"
+def showPos(p: Position): String = "Position(" ++ show(p.line) ++ ", " ++ show(p.col) ++ ", " ++ show(p.index) ++ ")"
 
 type TokenKind { Number(); Ident(); Punct(); Space() }
 def eq(l: TokenKind, r: TokenKind): Boolean = (l,r) match {
@@ -34,7 +34,7 @@ def eq(l: TokenKind, r: TokenKind): Boolean = (l,r) match {
   case (Space(),Space()) => true
   case _ => false
 }
-def show(t: TokenKind): String = t match {
+def showTK(t: TokenKind): String = t match {
   case Number() => "Number()"
   case Ident() => "Ident()"
   case Punct() => "Punct()"
@@ -42,9 +42,9 @@ def show(t: TokenKind): String = t match {
 }
 
 record Token(kind: TokenKind, text: String, position: Position)
-def show(t: Token): String = "Token(" ++ show(t.kind) ++ ", " ++ show(t.text) ++ ", " ++ show(t.position) ++ ")"
+def showT(t: Token): String = "Token(" ++ showTK(t.kind) ++ ", " ++ show(t.text) ++ ", " ++ showPos(t.position) ++ ")"
 def println(arg: Tuple3[Token, Token, Token]): Unit = arg match {
-  case (x,y,z) => println("(" ++ show(x) ++ "," ++ show(y) ++ "," ++ show(z) ++ ")")
+  case (x,y,z) => println("(" ++ showT(x) ++ "," ++ showT(y) ++ "," ++ showT(z) ++ ")")
 }
 ```
 Tokens simply are tagged with a token type (distinguishing numbers, identifiers, and punctuation),
@@ -165,7 +165,7 @@ At the same time, we need to keep track of the line information.
   def position() = Position(line, col, index)
   def input() = in.substring(index, in.length)
   def consume(text: String): Unit = {
-    val lines = text.split("\n")
+    val lines: List[String] = text.split("\n")
     val len = last(lines).getOrElse{ panic("empty") }.length
     // compute new positions
     index = index + text.length

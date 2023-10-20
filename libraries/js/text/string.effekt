@@ -15,8 +15,12 @@ extern pure def repeat(str: String, n: Int): String =
 extern pure def substring(str: String, from: Int): String =
   "str.substring(from)"
 
+extern pure def substring(str: String, from: Int, to: Int): String =
+  "str.substring(from, to)"
+
 extern pure def split(str: String, sep: String): Array[String] =
   "str.split(sep)"
+def split(str: String, sep: String): List[String] = { split(str, sep).toList }
 
 extern pure def trim(str: String): String =
   "str.trim()"
@@ -29,3 +33,23 @@ extern pure def unsafeCharAt(str: String, n: Int): String =
 
 extern pure def unsafeToInt(str: String): Int =
   "Number.isNaN(parseInt(str)) ? undefined : parseInt(str)"
+
+def takeWhile(str: String){ f: String => Boolean }: String = {
+    def rec(i: Int, acc: String): String = {
+        if (i < length(str)) {
+            val c = unsafeCharAt(str, i)
+            if (f(c)) {
+                rec(i+1, acc ++ c)
+            } else acc
+        } else acc
+    }
+    rec(0, "")
+}
+def map[A](str: String){ f: String => A }: List[A] = {
+    def rec(i: Int): List[A] = {
+        if (i < length(str)) {
+            Cons(f(unsafeCharAt(str, i)), rec(i+1))
+        } else Nil()
+    }
+    rec(0)
+}
