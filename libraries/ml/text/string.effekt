@@ -36,6 +36,11 @@ extern pure def endsWith(str: String, prefix: String): Boolean =
 
 // extern pure def repeat(str: String, n: Int): String =
 //     "???"
+def repeat(str: String, n: Int): String = {
+    def go(n: Int, acc: String): String =
+        if(n == 0) acc else go(n-1, acc ++ str)
+    go(n, "")
+}
 
 def substring(str: String, from: Int): String =
     if (from < 0 || length(str) <= from)

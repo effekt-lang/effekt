@@ -84,10 +84,9 @@ def any(l: List[Boolean]): Boolean = l match {
   case Nil() => false
   case Cons(v,rest) => if (v) { true } else { any(rest) }
 }
-def sum(l: List[Int]): Int = {
-  var res = 0
-  l.foreach { i => res = res + i }
-  res
+def sum(l: List[Int]): Int = l match {
+  case Nil() => 0
+  case Cons(n, xs) => n + sum(xs)
 }
 
 def nonEmpty[A](l: List[A]): Boolean = l match {
