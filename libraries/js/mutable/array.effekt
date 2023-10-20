@@ -15,6 +15,12 @@ def initArray[T](size: Int, default: T) : Array[T] = {
     return arr;
 }
 
+def initArray[T](size: Int) { index: Int => T}: Array[T] = {
+    val arr = emptyArray[T](size)
+    each(0,arr.size()){ i=> put(arr, i, index(i))}
+    return arr
+}
+
 extern pure def emptyArray[T](initialSize: Int): Array[T] =
   "(new Array(initialSize))"
 
