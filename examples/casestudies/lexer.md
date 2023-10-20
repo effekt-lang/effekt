@@ -74,7 +74,8 @@ def example1() = {
 ## Handling the Lexer Effect with a given List
 A dummy lexer reading lexemes from a given list can be implemented as a handler for the `Lexer` effect. The definition uses the effect `LexerError` to signal the end of the input stream:
 ```
-effect LexerError(msg: String, pos: Position): Nothing
+effect LexerError(msg: String, pos: Position): Unit
+def absurd[A](unit: Unit): A = panic("should not happen")
 def dummyPosition() = Position(0, 0, 0)
 
 def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError = {
@@ -85,7 +86,7 @@ def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError =
       case Cons(tok, _) => resume(Some(tok))
     }
     def next() = in match {
-      case Nil() => do LexerError("Unexpected end of input", dummyPosition())
+      case Nil() => do LexerError("Unexpected end of input", dummyPosition()).absurd
       case Cons(tok, _) => resume(tok)
     }
   }
@@ -192,10 +193,10 @@ the input, or not.
     def peek() = resume(tryMatchAll(tokenDesriptors()))
     def next() =
       if (eos())
-        do LexerError("Unexpected EOS", position())
+        do LexerError("Unexpected EOS", position()).absurd
       else {
         val tok = tryMatchAll(tokenDesriptors()).getOrElse {
-          do LexerError("Cannot tokenize input", position())
+          do LexerError("Cannot tokenize input", position()).absurd
         }
         consume(tok.text)
         resume(tok)

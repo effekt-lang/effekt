@@ -10,8 +10,8 @@ import internal/option
 
 def charAt(str: String, index: Int): Option[String] =
     if (index < 0 || length(str) <= index)
-        Some(unsafeCharAt(str, index))
-    else None()
+        None()
+    else Some(unsafeCharAt(str, index))
 
 def takeWhile(str: String){ f: String => Boolean }: String = {
     def rec(i: Int, acc: String): String = {
@@ -47,9 +47,11 @@ def substring(str: String, from: Int): String =
         str
     else unsafeSubstring(str, from)
 def substring(str: String, from: Int, endp: Int): String =
-    if (from < 0 || length(str) <= from || length(str) <= endp)
+    if (from < 0 || length(str) <= from)
         str
-    else unsafeSubstring(str, from, endp)
+    else if (length(str) <= endp) 
+        unsafeSubstring(str, from) 
+    else unsafeSubstring(str, from, endp-from)
 
 extern pure def unsafeSubstring(str: String, from: Int): String =
     "String.extract (str, from, NONE)"
