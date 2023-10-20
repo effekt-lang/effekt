@@ -19,6 +19,7 @@ Furthermore, the library presented here is neither linear
 ```
 module examples/casestudies/prettyprinter
 
+import examples/casestudies/parser
 import immutable/option
 import immutable/list
 import text/string
