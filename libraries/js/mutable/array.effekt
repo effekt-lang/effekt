@@ -15,11 +15,21 @@ def initArray[T](size: Int, default: T) : Array[T] = {
     return arr;
 }
 
-def initArray[T](size: Int) { index: Int => T}: Array[T] = {
+def arrayFromLoop[T](size: Int) { index: Int => T}: Array[T] = {
     val arr = emptyArray[T](size)
     each(0,arr.size()){ i=> put(arr, i, index(i))}
     return arr
 }
+
+def arrayFromList[T](list: List[T]): Array[T] = {
+  val listSize = list.size();
+  val arr = emptyArray(listSize);
+
+  foreachIndex(list, 0){(i, head) => put(arr, i, head)}
+  return arr;
+}
+
+
 
 extern pure def emptyArray[T](initialSize: Int): Array[T] =
   "(new Array(initialSize))"
