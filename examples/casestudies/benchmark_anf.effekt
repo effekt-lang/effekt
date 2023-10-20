@@ -1,0 +1,16 @@
+import examples/casestudies/anf
+import examples/casestudies/parser
+import examples/casestudies/prettyprinter
+import text/string
+
+def prettyish(s: Stmt) = pretty(250) { toDocStmt(s) }
+def pipelineB(input: String) = 
+  parse(input) { parseExpr() } match {
+    case Success(tree) => prettyish(translate(tree))
+    case Failure(msg) => msg
+  }
+
+def main() = {
+    val input = "foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(foo(42))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))";
+    println(length(pipelineB(input)))
+}

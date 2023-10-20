@@ -279,7 +279,6 @@ for a particular choice-point, we resume a second time with `Vertical`.
 
 Handling the output emitter is straightforward. Here, we simply store all emitted elements in a string:
 ```
-effect Foo(): Unit
 def writer { p: => Unit / Emit } = {
   var out = "";
   try { p(); out } with Emit {
