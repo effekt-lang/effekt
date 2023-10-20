@@ -74,7 +74,7 @@ def example1() = {
 ## Handling the Lexer Effect with a given List
 A dummy lexer reading lexemes from a given list can be implemented as a handler for the `Lexer` effect. The definition uses the effect `LexerError` to signal the end of the input stream:
 ```
-effect LexerError[A](msg: String, pos: Position): A
+effect LexerError(msg: String, pos: Position): Nothing
 def dummyPosition() = Position(0, 0, 0)
 
 def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError = {
@@ -94,7 +94,7 @@ def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError =
 We define a separate handler to report lexer errors to the console:
 ```
 def report { prog: => Unit / LexerError }: Unit =
-  try { prog() } with LexerError[A] { (msg, pos) =>
+  try { prog() } with LexerError { (msg, pos) =>
     println(pos.line.show ++ ":" ++ pos.col.show ++ " " ++ msg)
   }
 ```
