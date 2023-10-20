@@ -216,7 +216,7 @@ The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
 def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
-  lexer(input) { skipWhitespace { Success(p()) } }
+  lexer(input) { Success(p()) }
 } with Nondet {
   def alt() = resume(true) match {
     case Failure(msg) => resume(false)
@@ -242,12 +242,11 @@ Having implemented a handler for the `Parser` effect, we can run our example "gr
 def println(p: ParseResult[Int]): Unit = println(showPR(p){ x => show(x) })
 def println(p: ParseResult[Tree]): Unit = println(showPR(p){ x => show(x) })
 def main() = {
-//  println(parse("42") { parseCalls() })
-//  println(parse("foo(1)") { parseCalls() })
-//  println(parse("foo(1, 2)") { parseCalls() })
-//  println(parse("foo(1, 2, 3, 4)") { parseCalls() })
-//  println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-//  println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+  println(parse("42") { parseCalls() })
+  println(parse("foo(1)") { parseCalls() })
+  println(parse("foo(1,2)") { parseCalls() })
+  println(parse("foo(1,2,3,4)") { parseCalls() })
+  println(parse("foo(1,2,bar(4,5))") { parseCalls() })
 
    println(parse("}42") { parseExpr() })
    println(parse("42") { parseExpr() })
