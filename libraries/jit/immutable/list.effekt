@@ -10,14 +10,9 @@ type List[A] {
   Cons(head: A, tail: List[A])
 }
 
-def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
-  var remainder = l
-  while(not(remainder.isEmpty)) {
-    remainder match {
-      case Nil() => ()
-      case Cons(a, as) => f(a); remainder = as
-    }
-  }
+def foreach[A](l: List[A]) { f: A => Unit } : Unit = l match {
+  case Nil() => ()
+  case Cons(x, xs) => f(x); xs.foreach{f}
 }
 
 def map[A, B](l: List[A]) { f: A => B } : List[B] = {
@@ -32,11 +27,7 @@ def size[A](l: List[A]): Int = {
   n
 }
 
-def reverse[A](l: List[A]): List[A] = {
-  var res = Nil[A]()
-  l.foreach { el => res = Cons(el, res) }
-  res
-}
+def reverse[A](l: List[A]): List[A] = l.reverseOnto(Nil[A]())
 
 // [1,2,3].reverseOnto([4,5,6])
 // [3,2,1,4,5,6]
