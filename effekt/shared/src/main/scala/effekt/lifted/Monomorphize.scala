@@ -35,17 +35,17 @@ object Monomorphize extends Phase[CoreLifted, CoreLifted] {
 
     val binders = analysis.binders.collect { case (id: Id, ftpe: FlowType.Function) => s"${id.name}: ${ftpe.evidences.show}" }.toList.sorted.mkString("\n")
 
-    //    println(s"""|
-    //        |Constraints:
-    //        |-----------
-    //        |${constrs})
-    //        |""".stripMargin)
-    //
-    //    println(s"""|
-    //        |
-    //        |Binders:
-    //        |${binders}
-    //        |""".stripMargin)
+        println(s"""|
+            |Constraints:
+            |-----------
+            |${constrs})
+            |""".stripMargin)
+
+        println(s"""|
+            |
+            |Binders:
+            |${binders}
+            |""".stripMargin)
 
     val (solved, cls) = solve(analysis.constraints)
 

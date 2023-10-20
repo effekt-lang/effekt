@@ -68,13 +68,21 @@ type Direction { Horizontal(); Vertical() }
 effect Indent(): Int
 effect DefaultIndent(): Int
 effect Flow(): Direction
+interface Indentation {
+  def setIndentation(n: Int): Unit
+  def getIndentation(): Int
+}
+interface GlobalDirection {
+  def setDirection(d: Direction): Unit
+  def getDirection(): Direction
+}
 ```
 The effect `Flow` represents the current layouting direction. Also the indentation of the
 document depends on the context and is therefore modeled as an effect.
 
 Computing the layout of a document to be pretty printed uses the above three effects:
 ```
-effect Layout = { Indent, DefaultIndent, Flow }
+effect Layout = { Indent, DefaultIndent, Flow, Indentation, GlobalDirection }
 ```
 
 ## Output: A Stream of Layout Elements
@@ -129,9 +137,13 @@ Indentation can be configured by locally handling `Layout` and thereby changing 
 
 ```
 // Uses `n` as the indentation in the given document
-def in[R](n: Int) { doc: => R / Layout }: R / Layout =
-  try { doc() }
-  with Indent { () => resume(n) }
+def in[R](n: Int) { doc: => R / Layout }: R / Layout = {
+  val before = do getIndentation();
+  do setIndentation(n)
+  val result = doc()
+  do setIndentation(before)
+  result
+}
 
 // Adds `j` to the indentation in the current document
 def nest[R](j: Int) { doc: => R / Layout }: R / Layout =
@@ -148,9 +160,13 @@ are _all_ layouted horizontally or vertically. Similarly, we can implement handl
 fix the direction:
 
 ```
-def in[R](dir: Direction) { doc: => R / Layout }: R / Layout =
-  try { doc() }
-  with Flow { () => resume(dir) }
+def in[R](dir: Direction) { doc: => R / Layout }: R / Layout = {
+  val before = do getDirection();
+  do setDirection(dir)
+  val result = doc()
+  do setDirection(before)
+  result
+}
 
 def horizontal { p: => Unit / Layout }: Unit / Layout =
   Horizontal().in { p() }
@@ -179,8 +195,8 @@ effect Pretty = { Emit, Layout, LayoutChoice }
 
 Using layout choices, we can express the maybe most important pretty printing combinator:
 ```
-def group { p: => Unit / Layout } =
-  do choice().in { p() }
+def group { p: => Unit / Layout }: Unit / Layout =
+  p()
 ```
 The `group` combinator expresses that depending on the result of `choice` we either layout all children
 horizontally or vertically.
@@ -294,14 +310,27 @@ column position.
 def printer(width: Int, defaultIndent: Int) { prog: => Unit / { Emit, Layout } } : Unit / { Emit, LayoutChoice } = {
   // the position in the current line
   var pos: Int = 0;
+  var indentation: Int = 0;
 
-  try { prog() }
-  // we allow flow to be flexible on the top-level
-  with Flow { () => resume(do choice()) }
-  // indentation starts at 0
-  with Indent { () => resume(0) }
-  // simply handle the default indentation with a constant
-  with DefaultIndent { () => resume(defaultIndent) }
+  try {
+    var direction: Direction = do Flow()
+
+    try { prog() }
+    // indentation starts at 0
+    with Indent { () => resume(0) }
+    // simply handle the default indentation with a constant
+    with DefaultIndent { () => resume(defaultIndent) }
+    with Indentation {
+      def setIndentation(n) = { indentation = n; resume(()) }
+      def getIndentation() = resume(indentation)
+    }
+    with GlobalDirection {
+      def setDirection(n) = { direction = n; resume(()) }
+      def getDirection() = resume(direction)
+    }
+
+    // we allow flow to be flexible on the top-level
+  } with Flow { () => resume(do choice()) }
 ```
 Maybe most interestingly, here we update the current position and invoke the effect operation `fail`, if
 the document exceeds the width. This will potentially cause backtracking and revision of a preceeding layout decision.
@@ -352,19 +381,9 @@ def toDoc(t: Tree): Unit / Pretty = t match {
   case Var(name) => text(name)
   case Let(name, binding, body) =>
     text("let"); space(); text(name); space(); text("=");
-    group {
-      nested { line(); toDoc(binding) };
-      line();
-      text("in")
-    };
-    group { nested { line(); toDoc(body) } }
-
   case App(name, arg) =>
     text(name); parens {
-      group { nested {
-        linebreak();
-        toDoc(arg)
-      }; linebreak() }
+      group { nested { toDoc(arg) } }
     }
 }
 ```
@@ -373,11 +392,7 @@ We can first use the parser from the [parser case study](parser) to obtain
 a parse tree, which we then pretty print:
 
 ```
-def parseAndPrint(text: String, width: Int): String =
-  parse(text) { parseExpr() } match {
-    case Success(tree) => pretty(width) { toDoc(tree) }
-    case Failure(text) => text
-  }
+def parseAndPrint(text: String, width: Int): String = pretty(width) { toDoc(Lit(1)) }
 ```
 
 For example, we obtain
@@ -396,94 +411,92 @@ def example4() = parseAndPrint("let x = (let y = 2 in 1) in 42", 10)
 ```
 def main() = {
 
-  println("-----");
+  // println("-----");
   println(pretty(5) { example1([1,2,3,4]) });
 
-  println("----------");
+  // println("----------");
   println(pretty(10) { example1([1,2,3,4,5,6,7,8,9,1,2,3,4]) });
 
-  println("----------")
+  // println("----------")
   println(example4())
 
-  def example4b() = {
-    text("def"); space(); text("foo"); parens {
-      group {
-        nest(2) {
-          linebreak();
-          group { text("x"); text(":"); space(); text("Int"); text(",") };
-          line();
-          group { text("y"); text(":"); space(); text("String") }
-        };
-        linebreak()
-      }
-    }
-  }
-  def example3b() = {
-    example4b();
-    space();
-    braces {
-      group {
-        nest(2) {
-          line();
-          text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
-        };
+  def example4b() =
+    parens {
+      nest(2) {
+        linebreak();
+        group { space(); };
         line()
-      }
-    }
-  }
-
-  def example6() = {
-    group {
-      text("this");
-      nest(9) {
-        line();
-        group { text("takes"); line(); text("many"); line(); text("f") }
       };
-      line();
-      text("l")
+      linebreak()
     }
-  }
+  // def example3b() = {
+  //   example4b();
+  //   space();
+  //   braces {
+  //     group {
+  //       nest(2) {
+  //         line();
+  //         text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
+  //       };
+  //       line()
+  //     }
+  //   }
+  // }
 
-  def example7() = {
-    group {
-      text("this");
-      line();
-      text("will");
-      nest(9) {
-        line();
-        group { text("take"); line(); text("many") }
-      };
-      line();
-      text("lines")
-    }
-  }
+  // def example6() = {
+  //   group {
+  //     text("this");
+  //     nest(9) {
+  //       line();
+  //       group { text("takes"); line(); text("many"); line(); text("f") }
+  //     };
+  //     line();
+  //     text("l")
+  //   }
+  // }
 
-  def helloWorld() = {
-    text("hello")
-    line()
-    text("world")
-  }
+  // def example7() = {
+  //   group {
+  //     text("this");
+  //     line();
+  //     text("will");
+  //     nest(9) {
+  //       line();
+  //       group { text("take"); line(); text("many") }
+  //     };
+  //     line();
+  //     text("lines")
+  //   }
+  // }
+
+  // def helloWorld() = {
+  //   text("hello")
+  //   line()
+  //   text("world")
+  // }
 
   println("------------------------------");
   println(pretty(30) { example4b() });
   println("--------------------");
   println(pretty(20) { example4b() });
 
-  println("----------");
-  println(pretty(50) { example3b() });
-  println(pretty(15) { example3b() });
+  // println("----------");
+  // println(pretty(50) { example3b() });
+  // println(pretty(15) { example3b() });
 
-  println("------");
-  println(pretty(6) { example2() });
+  // println("------");
+  // println(pretty(6) { example2() });
 
-  println("---------------");
-  println(pretty(15) { example3() });
+  // println("---------------");
+  // println(pretty(15) { example3() });
 
-  println("--------------");
-  println(pretty(14) { example6() });
+  // println("--------------");
+  // println(pretty(14) { example6() });
 
-  println("--------------");
-  println(pretty(14) { example7() })
+  // println("--------------");
+  // println(pretty(14) { example7() })
+
+  ()
 }
 
 ```

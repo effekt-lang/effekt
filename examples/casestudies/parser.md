@@ -25,7 +25,7 @@ Parsers can be expressed by using the lexer effect and process the token stream.
 ```
 effect Nondet {
   def alt(): Boolean
-  def fail[A](msg: String): A
+  def fail(msg: String): Unit
 }
 
 effect Parser = { Nondet, Lexer }
@@ -40,7 +40,7 @@ input stream and fails, if it does not match.
 def accept { p: Token => Boolean } : Token / Parser = {
   val got = do next();
   if (p(got)) got
-  else do fail("Unexpected token " ++ show(got))
+  else do fail("Unexpected token " ++ show(got)).absurd
 }
 ```
 
@@ -53,12 +53,12 @@ def number() = accept(Number()).text
 def punct(p: String) = {
   val tok = accept(Punct())
   if (tok.text == p) ()
-  else do fail("Expected " ++ p ++ " but got " ++ tok.text)
+  else do fail("Expected " ++ p ++ " but got " ++ tok.text).absurd
 }
 def kw(exp: String): Unit / Parser = {
   val got = ident();
   if (got == exp) ()
-  else do fail("Expected keyword " ++ exp ++ " but got " ++ got)
+  else do fail("Expected keyword " ++ exp ++ " but got " ++ got).absurd
 }
 ```
 Using the effect for non-deterministic choice `alt`, we can model alternatives, optional matches and various repetitions:
@@ -100,7 +100,7 @@ Let us start by defining the parser for numeric literals.
 def parseNum(): Tree / Parser = {
   val numText = number()
   val num = toInt(numText).getOrElse {
-    do fail("Expected number, but cannot convert input to integer: " ++ numText)
+    do fail("Expected number, but cannot convert input to integer: " ++ numText).absurd
   }
   Lit(num)
 }
@@ -122,17 +122,8 @@ semantics of effects.
 
 Similarly, we can write parsers for let bindings, by sequentially composing
 our existing parsers:
-```
-def parseLet(): Tree / Parser = {
-  kw("let");
-  val name = ident();
-  punct("=");
-  val binding = parseExpr();
-  kw("in");
-  val body = parseExpr();
-  Let(name, binding, body)
-}
-```
+
+
 Again, note how naturally the result can be composed from the individual results, much like
 manually writing a recursive descent parser. Compared to handcrafted parsers, the imperative
 parser combinators presented here offer a similar flexibility. At the same time, the semantics
@@ -140,23 +131,35 @@ of `alt` and `fail` is still left open, offering flexibility in the implementati
 
 We proceed to implement the remaining parsers for our expression language:
 ```
-def parseGroup() = or { parseAtom() } {
-  punct("(");
-  val res = parseExpr();
-  punct(")");
-  res
-}
+def parseExpr(): Tree / Parser = {
 
-def parseApp(): Tree / Parser = {
-  val funName = ident();
-  punct("(");
-  val arg = parseExpr();
-  punct(")");
-  App(funName, arg)
-}
+  def parseLet(): Tree / {} = {
+    kw("let");
+    val name = ident();
+    punct("=");
+    val binding = parseExpr();
+    kw("in");
+    val body = parseExpr();
+    Let(name, binding, body)
+  }
 
-def parseExpr(): Tree / Parser =
+  def parseGroup(): Tree / {} = or { parseAtom() } {
+    punct("(");
+    val res = parseExpr();
+    punct(")");
+    res
+  }
+
+  def parseApp(): Tree / {} = {
+    val funName = ident();
+    punct("(");
+    val arg = parseExpr();
+    punct(")");
+    App(funName, arg)
+  }
+
   or { parseLet() } { or { parseApp() } { parseGroup() } }
+}
 ```
 
 ## Example: Combining Parsers and Local Mutable State
@@ -176,11 +179,7 @@ def parseCalls(): Int / Parser = {
   or { number(); 1 } {
     ident();
     punct("(");
-    val count = parseCalls() +
-    sum(many {
-        punct(",");
-        parseCalls()
-    });
+    val count = parseCalls() + sum(Nil());
     punct(")");
     count
   }
@@ -213,14 +212,14 @@ The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
 def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
-  lexer(input) { skipWhitespace { Success(p()) } }
+  lexer(input) { Success(p()) }
 } with Nondet {
   def alt() = resume(true) match {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
   }
-  def fail[A](msg) = Failure(msg)
-} with LexerError[A] { (msg, pos) =>
+  def fail(msg) = Failure(msg)
+} with LexerError { (msg, pos) =>
   Failure(msg)
 }
 ```
@@ -246,12 +245,12 @@ def main() = {
   println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
   println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-//   println(parse("}42") { parseExpr() })
-//   println(parse("42") { parseExpr() })
-//   println(parse("let x = 4 in 42") { parseExpr() })
-//   println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-//   println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-//   println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-//   println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+  println(parse("}42") { parseExpr() })
+  println(parse("42") { parseExpr() })
+  println(parse("let x = 4 in 42") { parseExpr() })
+  println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+  println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+  println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+  println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 }
 ```

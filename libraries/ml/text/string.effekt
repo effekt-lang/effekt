@@ -34,8 +34,11 @@ extern pure def startsWith(str: String, prefix: String): Boolean =
 extern pure def endsWith(str: String, prefix: String): Boolean =
     "String.isSuffix prefix str"
 
-// extern pure def repeat(str: String, n: Int): String =
-//     "???"
+def repeat(str: String, n: Int): String = {
+  def go(n: Int, acc: String): String =
+    if (n == 0) acc else go(n - 1, acc ++ str)
+  go(n, "")
+}
 
 def substring(str: String, from: Int): String =
     if (from < 0 || length(str) <= from)
@@ -81,7 +84,7 @@ def split(str: String, sep: String): List[String] = {
             Cons(substring(str, startcopy), Nil())
         } else {
             if(substring(str, startcheck, startcheck + length(sep)) == sep) {
-                Cons(substring(str, startcopy, startcheck), 
+                Cons(substring(str, startcopy, startcheck),
                      rec(startcheck + length(sep), startcheck + length(sep)))
             } else {
                 rec(startcheck + 1, startcopy)
@@ -90,8 +93,8 @@ def split(str: String, sep: String): List[String] = {
     }
     if (sep == "") {
         map(str){ c => c }
-    } else { 
-        rec(0,0) 
+    } else {
+        rec(0,0)
     }
 }
 
