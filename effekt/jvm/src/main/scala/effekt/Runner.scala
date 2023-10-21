@@ -4,7 +4,6 @@ import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
 import effekt.util.getOrElseAborting
-
 import kiama.util.IO
 
 /**
@@ -85,6 +84,25 @@ trait Runner[Executable] {
     }
     go(progs0)
   }
+
+  /**
+   * Create a executable file with at the given path with the given content. The file will have
+   * the permissions UNIX permissions 744.
+   */
+  def createExecutableFile(path: String, content: String)(using C: Context): Unit = {
+    import java.nio.file.{Files, Path}
+    import java.nio.file.attribute.PosixFilePermission.*
+    import scala.jdk.CollectionConverters.SetHasAsJava
+
+    val path1 = Path.of(path)
+    val perms = Set(
+      OWNER_READ, OWNER_WRITE, OWNER_EXECUTE,
+      GROUP_READ,
+      OTHERS_READ
+    )
+    IO.createFile(path, content)
+    Files.setPosixFilePermissions(path1, SetHasAsJava(perms).asJava)
+  }
 }
 
 object JSRunner extends Runner[String] {
@@ -101,18 +119,17 @@ object JSRunner extends Runner[String] {
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
 
   def build(path: String)(using C: Context): String =
-    val out = C.config.outputPath()
-    val jsFilePath = (out / path).unixPath
+    val out = C.config.outputPath().getAbsolutePath.stripSuffix(".")
+    val jsFilePath = (out / path.stripPrefix(".")).unixPath
     // create "executable" using shebang besides the .js file
-    val jsScriptFilePath = (out / path.stripSuffix(s".$extension")).unixPath
+    val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
     val jsScript = s"require('${jsFilePath}').main().run()"
     val shebang = "#!/usr/bin/env node"
-    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript")
-    jsScript
+    createExecutableFile(jsScriptFilePath, s"$shebang\n$jsScript")
+    jsScriptFilePath
 
   def eval(path: String)(using C: Context): Unit =
-    val jsScript = build(path)
-    exec("node", "--eval", jsScript)
+    exec(build(path))
 }
 
 trait ChezRunner extends Runner[String] {
@@ -126,11 +143,15 @@ trait ChezRunner extends Runner[String] {
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
   def build(path: String)(using C: Context): String =
-    val out = C.config.outputPath()
-    (out / path).unixPath
+    val out = C.config.outputPath().getAbsolutePath
+    val schemeFilePath = (out / path).unixPath
+    val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
+    val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
+    createExecutableFile(bashScriptPath, bashScript)
+    bashScriptPath
 
   def eval(path: String)(using C: Context): Unit =
-    exec("scheme", "--script", build(path))
+    exec(build(path))
 }
 
 object ChezMonadicRunner extends ChezRunner {
