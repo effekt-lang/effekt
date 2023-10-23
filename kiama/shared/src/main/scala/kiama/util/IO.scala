@@ -25,8 +25,11 @@ object IO {
     OutputStreamWriter,
     StringReader
   }
+  import java.nio.file.{Files, Path}
   import java.nio.file.Files.deleteIfExists
   import java.nio.file.Paths.get
+  import java.nio.file.attribute.PosixFilePermission.*
+  import scala.jdk.CollectionConverters.SetHasAsJava
 
   /**
    * Return a new buffered reader on the file with the given name.
@@ -62,12 +65,25 @@ object IO {
     new BufferedReader(new StringReader(string))
 
   /**
-   * Create a file with the given filename and content.
+   * Create a file with the given filename and content. If [[executable]] is set, the created
+   * file will be given the POSIX permission set of 744.
    */
-  def createFile(filename: String, content: String): Unit = {
+  def createFile(filename: String, content: String, executable: Boolean = false): Unit = {
     val writer = filewriter(filename)
-    writer.write(content)
-    writer.close()
+    try {
+      if (executable) {
+        val pPath = Path.of(filename)
+        val perms = Set(
+          OWNER_READ, OWNER_WRITE, OWNER_EXECUTE,
+          GROUP_READ,
+          OTHERS_READ
+        )
+        Files.setPosixFilePermissions(pPath, SetHasAsJava(perms).asJava)
+      }
+      writer.write(content)
+    } finally {
+      writer.close()
+    }
   }
 
   /**
