@@ -52,9 +52,10 @@ trait Runner[Executable] {
   def build(executable: Executable)(using Context): String
 
   /**
-   * Runs the executable (e.g. the main file).
+   * Runs the executable (e.g. the main file) by calling the build function.
    */
-  def eval(executable: Executable)(using Context): Unit
+  def eval(executable: Executable)(using Context): Unit =
+    exec(build(executable))
 
   def canRunExecutable(command: String*): Boolean =
     try {
@@ -84,25 +85,6 @@ trait Runner[Executable] {
     }
     go(progs0)
   }
-
-  /**
-   * Create a executable file with at the given path with the given content. The file will have
-   * the permissions UNIX permissions 744.
-   */
-  def createExecutableFile(path: String, content: String)(using C: Context): Unit = {
-    import java.nio.file.{Files, Path}
-    import java.nio.file.attribute.PosixFilePermission.*
-    import scala.jdk.CollectionConverters.SetHasAsJava
-
-    val path1 = Path.of(path)
-    val perms = Set(
-      OWNER_READ, OWNER_WRITE, OWNER_EXECUTE,
-      GROUP_READ,
-      OTHERS_READ
-    )
-    IO.createFile(path, content)
-    Files.setPosixFilePermissions(path1, SetHasAsJava(perms).asJava)
-  }
 }
 
 object JSRunner extends Runner[String] {
@@ -118,18 +100,19 @@ object JSRunner extends Runner[String] {
     if canRunExecutable("node", "--version") then Right(())
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
 
+  /**
+   * Creates an executable `.js` file besides the given `.js` file ([[path]])
+   * and then returns the absolute path of the created executable.
+   */
   def build(path: String)(using C: Context): String =
-    val out = C.config.outputPath().getAbsolutePath.stripSuffix(".")
-    val jsFilePath = (out / path.stripPrefix(".")).unixPath
+    val out = C.config.outputPath().getAbsolutePath
+    val jsFilePath = (out / path).unixPath
     // create "executable" using shebang besides the .js file
     val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
     val jsScript = s"require('${jsFilePath}').main().run()"
     val shebang = "#!/usr/bin/env node"
-    createExecutableFile(jsScriptFilePath, s"$shebang\n$jsScript")
+    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
     jsScriptFilePath
-
-  def eval(path: String)(using C: Context): Unit =
-    exec(build(path))
 }
 
 trait ChezRunner extends Runner[String] {
@@ -142,16 +125,17 @@ trait ChezRunner extends Runner[String] {
     if canRunExecutable("scheme", "--help") then Right(())
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
+  /**
+   * Creates an executable bash script besides the given `.ss` file ([[path]])
+   * and returns the resulting absolute path.
+   */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val schemeFilePath = (out / path).unixPath
     val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
     val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
-    createExecutableFile(bashScriptPath, bashScript)
+    IO.createFile(bashScriptPath, bashScript, true)
     bashScriptPath
-
-  def eval(path: String)(using C: Context): Unit =
-    exec(build(path))
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -182,6 +166,12 @@ object LLVMRunner extends Runner[String] {
     optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
+  /**
+   * Compile the LLVM source file (`<...>.ll`) to an executable
+   *
+   * Requires LLVM and GCC to be installed on the machine.
+   * Assumes [[path]] has the format "SOMEPATH.ll".
+   */
   override def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
@@ -201,15 +191,6 @@ object LLVMRunner extends Runner[String] {
     val executableFile = basePath
     exec(gcc, gccMainFile, "-o", executableFile, objPath)
     executableFile
-
-  /**
-   * Compile the LLVM source file (`<...>.ll`) to an executable
-   *
-   * Requires LLVM and GCC to be installed on the machine.
-   * Assumes [[path]] has the format "SOMEPATH.ll".
-   */
-  def eval(path: String)(using C: Context): Unit =
-    exec(build(path))
 }
 
 
@@ -226,6 +207,12 @@ object MLRunner extends Runner[String] {
     if canRunExecutable("mlton") then Right(())
     else Left("Cannot find mlton. This is required to use the ML backend.")
 
+  /**
+   * Compile the MLton source file (`<...>.sml`) to an executable.
+   *
+   * Requires the MLton compiler to be installed on the machine.
+   * Assumes [[path]] has the format "SOMEPATH.sml".
+   */
   override def build(path: String)(using C: Context): String = 
     val out = C.config.outputPath()
     val buildFile = (out / "main.mlb").canonicalPath
@@ -234,13 +221,4 @@ object MLRunner extends Runner[String] {
       "-default-type", "int64", // to avoid integer overflows
       "-output", executable, buildFile)
     executable
-
-  /**
-   * Compile the MLton source file (`<...>.sml`) to an executable.
-   *
-   * Requires the MLton compiler to be installed on the machine.
-   * Assumes [[path]] has the format "SOMEPATH.sml".
-   */
-  def eval(path: String)(using C: Context): Unit =
-    exec(build(path))
 }
