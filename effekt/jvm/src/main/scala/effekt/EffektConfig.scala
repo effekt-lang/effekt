@@ -12,8 +12,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val compile: ScallopOption[Boolean] = toggle(
     "compile",
-    descrYes = "Compile the Effekt program",
-    descrNo = "Run the effekt program in the interpreter",
+    descrYes = "Compile the Effekt program to the backend specific representation",
+    default = Some(false)
+  )
+
+  val build: ScallopOption[Boolean] = toggle(
+    "build",
+    descrYes = "Compile the Effekt program and build a backend specific executable",
     default = Some(false)
   )
 
@@ -114,10 +119,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   def requiresCompilation(): Boolean = !server()
 
-  def interpret(): Boolean = !server() && !compile()
+  def interpret(): Boolean = !server() && !compile() && !build()
 
   validateFilesIsDirectory(includePath)
 
-  // force some other configs manually to intialize them when compiling with native-image
+  // force some other configs manually to initialize them when compiling with native-image
   server; output; filenames
 }
