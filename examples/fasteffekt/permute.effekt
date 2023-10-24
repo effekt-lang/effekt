@@ -1,44 +1,81 @@
 import mutable/array
+import effekt
 
-
-def main() = {
+def Permute(innerIterations: Int) : Boolean = {
     var count = 0;
-    def swap(arr: Array[Int], a: Int, b: Int) = {
-        var swapped = arr.unsafeGet(a);
+    var arr = emptyArray(0);
+
+    def swap(a: Int, b: Int) = {
+        var swapped: Int = unsafeGet(arr,a);
         put(arr,a,arr.unsafeGet(b));
         put(arr,b, swapped);
     }
 
-    def permute(arr: Array[Int], n: Int): Unit = {
-        println("permute arr")
-        //how to: arr.toString()?
+    def permute(n: Int): Unit = {
+        count = count + 1;
         if (n != 0) {
             val n1 = n - 1;
-            permute(arr, n1);
-            each(arr.size()-1,0){
-                i => 
-                arr.swap(n1, i);
-                arr.permute(n1);
-                arr.swap(n1, i);
+            permute(n1);
+            //FIXME: each only ever counts up.
+            var i = n1;
+            while(i >= 0){
+                swap(n1, i);
+                permute(n1);
+                swap(n1, i);
+                i = i - 1;
             }
         }
     }
 
-    def run(): Unit = {
-        val count = 0;
-        val arr = emptyArray[Int](6);
-
-        var i = 0;
-        while (i < arr.size()) {
-            put(arr,i, 1);  
-            i=i+1;      
-        }
-        println("start permute");
-
-        permute(arr, 6);
-
+    def verifyResult(result: Int): Boolean = {
+        return result == 8660;
     }
 
-    run()
+    def benchmark(): Int = {
+        count = 0;
+        arr = emptyArray[Int](6);
+
+        each(0,arr.size()){
+            i =>
+            put(arr,i, 1);  
+        }
+        permute(6);
+        return count;
+    }
+
+    def innerBenchmarkLoop(innerIterations: Int): Boolean = {
+        var okay = true;
+        //FIXME: return early from for loop
+        var i = 0;
+        while(i < innerIterations) {
+            val verified = verifyResult(benchmark())
+            if (not(verified)) {
+                println("abort early, benchmark generated wrong result")
+                okay = false;
+                i = innerIterations;
+                //abort
+            } else {
+                i = i + 1;
+            }
+        }
+        return okay;
+    }
+
+    return innerBenchmarkLoop(innerIterations);
+    //TODO how to measure time?
 }
 
+def measure() = {
+    val start: Int = currentTimeNanos();
+    Permute(10);
+    val end: Int = currentTimeNanos();
+    val durInt = end-start;
+    val duration = toDouble(durInt)/1000000.0;  //TODO how to write 10d ?
+    println("took:");
+    println(duration);
+    println("seconds");
+}
+
+def main() = {
+    measure();
+}
