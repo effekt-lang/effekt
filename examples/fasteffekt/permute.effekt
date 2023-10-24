@@ -1,14 +1,14 @@
 import mutable/array
-import effekt
+import examples/fasteffekt/benchmark
 
-def Permute(innerIterations: Int) : Boolean = {
+def Permute(innerIterations: Int) = {
     var count = 0;
     var arr = emptyArray(0);
 
-    def swap(a: Int, b: Int) = {
-        var swapped: Int = unsafeGet(arr,a);
-        put(arr,a,arr.unsafeGet(b));
-        put(arr,b, swapped);
+    def swap(i: Int, j: Int) = {
+        var swapped: Int = unsafeGet(arr,i);
+        put(arr,i,arr.unsafeGet(j));
+        put(arr,j, swapped);
     }
 
     def permute(n: Int): Unit = {
@@ -27,55 +27,31 @@ def Permute(innerIterations: Int) : Boolean = {
         }
     }
 
-    def verifyResult(result: Int): Boolean = {
-        return result == 8660;
-    }
-
     def benchmark(): Int = {
         count = 0;
         arr = emptyArray[Int](6);
 
-        each(0,arr.size()){
-            i =>
+        each(0,arr.size()){ i =>
             put(arr,i, 1);  
         }
         permute(6);
         return count;
     }
 
-    def innerBenchmarkLoop(innerIterations: Int): Boolean = {
-        var okay = true;
-        //FIXME: return early from for loop
-        var i = 0;
-        while(i < innerIterations) {
-            val verified = verifyResult(benchmark())
-            if (not(verified)) {
-                println("abort early, benchmark generated wrong result")
-                okay = false;
-                i = innerIterations;
-                //abort
-            } else {
-                i = i + 1;
-            }
-        }
-        return okay;
+    def verifyResult(result: Int): Boolean = {
+        return result == 8660;
     }
 
-    return innerBenchmarkLoop(innerIterations);
-    //TODO how to measure time?
+    return innerBenchmarkLoop(innerIterations){benchmark}{verifyResult}
 }
 
-def measure() = {
+def main() = {
     val start: Int = currentTimeNanos();
-    Permute(10);
+    Permute(1000);
     val end: Int = currentTimeNanos();
     val durInt = end-start;
     val duration = toDouble(durInt)/1000000.0;  //TODO how to write 10d ?
     println("took:");
     println(duration);
     println("seconds");
-}
-
-def main() = {
-    measure();
 }
