@@ -228,7 +228,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case tps ~ (vps, bps) ~ body => BlockLiteral(tps.getOrElse(Nil), vps, bps, body) : BlockLiteral }
+    ( `{` ~> (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ {
+      case tps ~ (vps, bps) ~ body => BlockLiteral(tps.getOrElse(Nil), vps, bps, body) : BlockLiteral
+    }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
@@ -246,9 +248,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
 
   lazy val lambdaParams: P[(List[ValueParam], List[BlockParam])] =
-    ( valueParamsOpt ^^ { ps => (ps, Nil) }
+    ( params ^^ { case vps ~ bps => (vps, bps) }
+    | valueParamsOpt ^^ { ps => (ps, Nil) }
     | idDef ^^ { id => (List(ValueParam(id, None) : ValueParam), Nil) }
-    | params ^^ { case vps ~ bps => (vps, bps) }
     )
 
   lazy val maybeValueArgs: P[List[Term]] =
@@ -524,8 +526,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
   lazy val blockType: P[BlockType] =
-    ( (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
-      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams.getOrElse(Nil), vparams, bparams, t, effs)
+    ( (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ (`(` ~> manySep(valueType, `,`) <~ `)`).? ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
+      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams.getOrElse(Nil), vparams.getOrElse(Nil), bparams, t, effs)
     }
     |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, Nil, tpes, ret, eff) }
     | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(Nil, List(t), Nil, ret, eff) }
