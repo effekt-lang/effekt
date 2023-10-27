@@ -482,7 +482,7 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
+  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
 }
 

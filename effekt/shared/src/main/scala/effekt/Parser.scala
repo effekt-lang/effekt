@@ -228,7 +228,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case (vps, bps) ~ body => BlockLiteral(Nil, vps, bps, body) : BlockLiteral }
+    ( `{` ~> (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case tps ~ (vps, bps) ~ body => BlockLiteral(tps.getOrElse(Nil), vps, bps, body) : BlockLiteral }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
@@ -524,13 +524,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
-    |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
-    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
+    ( (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
+      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams.getOrElse(Nil), vparams, bparams, t, effs)
+    }
+    |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, Nil, tpes, ret, eff) }
+    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(Nil, List(t), Nil, ret, eff) }
     | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
-    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
+    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, Nil, ret, eff) }
     | failure("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
     )
 
