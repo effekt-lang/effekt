@@ -1,0 +1,11 @@
+module cd/Vector2D
+
+record Vector2D (
+    x: Int, y: Int
+)
+
+def x(t: Vector2D) = {
+    t match {
+        case Vector2D(x,y) => return x
+    }
+}
