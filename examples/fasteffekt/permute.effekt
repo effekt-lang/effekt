@@ -1,6 +1,7 @@
 import mutable/array
 import examples/fasteffekt/benchmark
 
+<<<<<<< Updated upstream
 def Permute(innerIterations: Int) = {
     var count = 0;
     var arr = emptyArray(0);
@@ -23,13 +24,46 @@ def Permute(innerIterations: Int) = {
                 permute(n1);
                 swap(n1, i);
                 i = i - 1;
+=======
+
+def main() = region r {
+    var count = 0;
+    def swap(arr: Array[Int], a: Int, b: Int) = {
+        var swapped = arr.unsafeGet(a);
+        arr.put(a,arr.unsafeGet(b));
+        arr.put(b, swapped);
+    }
+
+    def permute(arr: Array[Int], n: Int): Unit = {
+        println("permute arr")
+        count = count + 1;
+        //how to: arr.toString()?
+        if (n != 0) {
+            val n1 = n - 1;
+            permute(arr, n1);
+            for (var i = n1; i >= 0; i++) {
+            
+            bug report
+            design report
+            for loop impelemtiation with recursion under hood
+            
+            for (arr.size()) { i => 
+                arr.swap(n1, i);
+                arr.permute(n1);
+                arr.swap(n1, i);
+>>>>>>> Stashed changes
             }
         }
     }
 
+<<<<<<< Updated upstream
     def benchmark(): Int = {
         count = 0;
         arr = emptyArray[Int](6);
+=======
+    def run(): Unit = {
+        val arr = emptyArray[Int](6);
+>>>>>>> Stashed changes
 
         each(0,arr.size()){ i =>
             put(arr,i, 1);  
