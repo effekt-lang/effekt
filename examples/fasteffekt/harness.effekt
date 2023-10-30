@@ -2,8 +2,8 @@ module examples/fasteffekt/harness
 
 
 import examples/fasteffekt/permute
-
-
+import io/args
+import text/string
 
 def printList(strings: List[String]): Unit = {
     var myString = "";
@@ -51,9 +51,25 @@ def doRuns(innerIterations: Int, iterations: Int){benchmark: Int=>Unit} = {
         ();
     }
     reportBenchmark(iterations, totalRunTime)
-  }
+}
+
+def doBenchmark(name: String, inner: Int, iterations: Int) = {
+    if (name == "Permute") {
+        doRuns(inner, iterations){Permute}
+    } else {
+        panic("unknown benchmark")
+    }
+}
 
 def main() = {
-    println("start runner");
-    doRuns(100, 100){Permute}
+    ["Permute","10", "100"] match {
+        case Cons(x, Cons(y, Cons(z, Nil()))) => 
+            (x, toInt(y), toInt(z)) match {
+                case (benchName, Some(iterations), Some(innerIterations)) => 
+                    doBenchmark(benchName, iterations, innerIterations);
+                case _ => println("Unexpected non-integer(s) '" ++ show(y) ++ "', '" ++ show(z) ++ "'")
+            }
+        case other => println("usage: <benchmark> <iterations> <innerIterations>");
+    }
 }
+
