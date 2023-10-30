@@ -62,7 +62,10 @@ def doBenchmark(name: String, inner: Int, iterations: Int) = {
 }
 
 def main() = {
-    ["Permute","10", "100"] match {
+    val debugStartTime : Int = currentTimeNanos();
+
+
+    ["Permute","100", "100"] match {
         case Cons(x, Cons(y, Cons(z, Nil()))) => 
             (x, toInt(y), toInt(z)) match {
                 case (benchName, Some(iterations), Some(innerIterations)) => 
@@ -71,5 +74,9 @@ def main() = {
             }
         case other => println("usage: <benchmark> <iterations> <innerIterations>");
     }
+
+    val diff = currentTimeNanos() - debugStartTime;
+    val runTime = diff/1000;
+    println("DEBUG: runner total took: " ++ show(runTime) ++ " us");
 }
 
