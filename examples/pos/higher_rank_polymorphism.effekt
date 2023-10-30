@@ -1,12 +1,4 @@
-def invoke[B] {f: [A](A) => B }: B = {
-    f(1);
-    f("hello")
-}
-
 def len[A](l: List[A]) { f: [B](List[B]) => Int }: Int =
-    f(l)
-
-def len2[A](l: List[A]) { f: List[A] => Int }: Int =
     f(l)
 
 def count[A](l: List[A]): Int = l match {
@@ -30,8 +22,6 @@ def higherRankBlockWithEff { f: [A](A){ A => A } => A / Eff[A] }: Unit =
     }
 
 def main() = {
-    invoke { println }
-    println(len([1, 2, 3]){ count })
     println(len([1, 2, 3]){ count })
     higherRankBlockArg { [A](a: A){g: A => A} =>
         g(g(a))
