@@ -2,5 +2,8 @@ def f { g: [A]{ A => A } => Unit }: Unit =
     g { a => a }
 
 def main() = {
-    f { [A]{ g : A => A } => println(g(42)) }
+    f { [A]{ g : A => A } =>
+        g(42);
+        ()
+    }
 }
