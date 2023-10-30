@@ -1,0 +1,12 @@
+module examples/fasteffekt/benchmark
+
+def innerBenchmarkLoop(iterations: Int){benchmark: ()=>Int}{verifyResult: Int => Boolean} = {
+    each(0, iterations) {
+        i =>
+        if (not(verifyResult(benchmark()))) {
+            panic("incorrect benchmark result")
+        };
+        ();
+    }
+}
+

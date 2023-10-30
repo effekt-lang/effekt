@@ -1,0 +1,59 @@
+module examples/fasteffekt/harness
+
+
+import examples/fasteffekt/permute
+
+
+
+def printList(strings: List[String]): Unit = {
+    var myString = "";
+    foreach[String](strings){ 
+        s => 
+        myString = infixConcat(myString, s); ();
+    };
+    println(myString);
+}
+
+def printResult(runTimeMicros: Int) = {
+    val timeS: String = show[Int](runTimeMicros);
+    printList(["Permute: iterations=1 runtime: ", timeS, " us"]);
+}
+
+def reportBenchmark(iterations: Int, runTimeMicros: Int) = {
+    printList([
+        "permute: iterations=",
+        show(iterations),
+        " average: ",
+        show(toDouble(runTimeMicros) / toDouble(iterations)),
+        " us total: ",
+        show(runTimeMicros),
+        " us"]);
+}
+
+
+//@pure
+def measureMikros(innerIterations: Int){benchmark: Int=>Unit}: Int = {
+    val startTime : Int = currentTimeNanos();
+    benchmark(innerIterations);
+    val diff = currentTimeNanos() - startTime;
+    val runTime = diff/1000;
+
+    return runTime
+  }
+
+def doRuns(innerIterations: Int, iterations: Int){benchmark: Int=>Unit} = {
+    var totalRunTime = 0;
+    each(0, iterations) {
+        i => 
+        val runTime = measureMikros(innerIterations){ benchmark }
+        printResult(runTime);
+        totalRunTime = totalRunTime + runTime;
+        ();
+    }
+    reportBenchmark(iterations, totalRunTime)
+  }
+
+def main() = {
+    println("start runner");
+    doRuns(100, 100){Permute}
+}

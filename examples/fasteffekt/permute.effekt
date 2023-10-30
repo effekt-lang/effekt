@@ -79,13 +79,3 @@ def main() = region r {
     return innerBenchmarkLoop(innerIterations){benchmark}{verifyResult}
 }
 
-def main() = {
-    val start: Int = currentTimeNanos();
-    Permute(1000);
-    val end: Int = currentTimeNanos();
-    val durInt = end-start;
-    val duration = toDouble(durInt)/1000000.0;  //TODO how to write 10d ?
-    println("took:");
-    println(duration);
-    println("seconds");
-}
