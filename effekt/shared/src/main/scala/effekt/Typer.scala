@@ -554,7 +554,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(tpe) => (e zip tpe) map { case (e, tpe) => checkExpr(e, Some(List(tpe))) }
         }
         val tpes = checked flatMap { _.tpe }
-        val effs = checked map { _.effects } reduce { _ ++ _ }
+        val effs = checked.foldLeft(Pure)((x, y) => x ++ y.effects) // TODO MRV: foldLeft
         Result(tpes, effs)
 
       case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
@@ -702,15 +702,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result((), unhandledEffects)
 
       case d @ source.ValDef(id, annot, binding) =>
-        val Result(t, effBinding) = d.symbol.map(_.tpe) match {
-          case Nil => checkStmt(binding, None)
-          case tpes =>
-            val Result(_, eff) = binding checkAgainst tpes.flatten
-            // use annotated, not inferred type
-            Result(tpes.flatten, eff)
+        val tpeList = d.symbol.map(_.tpe)
+        val Result(t, effBinding) = if (tpeList.forall(_.isDefined)) {
+          val Result(_, effBinding) = binding checkAgainst tpeList.flatten
+          Result(tpeList.flatten, effBinding)
+        } else {
+          checkStmt(binding, None)
         }
 
-        (d.symbol zip t) foreach { case (sym, tpe) => Context.bind(sym, tpe) } // TODO MRV 26
+        // TODO MRV: check for same length
+        (d.symbol zip t) foreach { case (sym, tpe) => Context.bind(sym, tpe) } // TODO MRV: zip?
 
         Result((), effBinding)
 
