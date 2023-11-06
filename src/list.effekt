@@ -1,0 +1,87 @@
+// class Element {
+//   constructor(v) {
+//     this.val = v;
+//     this.next = null;
+//   }
+
+//   length() {
+//     if (this.next === null) {
+//       return 1;
+//     }
+//     return 1 + this.next.length();
+//   }
+// }
+
+import examples/fasteffekt/benchmark
+
+def List() = {
+    println("run list benchmark");
+
+    def benchmark(): Int = {
+        var result = 0;
+        // arr = emptyArray[Int](6);
+
+        // each(0,arr.size()){ i =>
+        //     put(arr,i, 1);  
+        // }
+        // permute(6);
+        return count;
+    }
+
+    def makeList(lenght: int) = {
+
+    }
+
+    def verifyResult(result: Int): Boolean = {
+        return result == 10;
+    }
+
+    return 0;
+}
+// class List extends Benchmark {
+//   benchmark() {
+//     const result = this.tail(
+//       this.makeList(15),
+//       this.makeList(10),
+//       this.makeList(6)
+//     );
+//     return result.length();
+//   }
+
+//   makeList(length) {
+//     if (length === 0) {
+//       return null;
+//     }
+//     const e = new Element(length);
+//     e.next = this.makeList(length - 1);
+//     return e;
+//   }
+
+//   isShorterThan(x, y) {
+//     let xTail = x;
+//     let yTail = y;
+
+//     while (yTail !== null) {
+//       if (xTail === null) { return true; }
+//       xTail = xTail.next;
+//       yTail = yTail.next;
+//     }
+//     return false;
+//   }
+
+//   tail(x, y, z) {
+//     if (this.isShorterThan(y, x)) {
+//       return this.tail(
+//         this.tail(x.next, y, z),
+//         this.tail(y.next, z, x),
+//         this.tail(z.next, x, y)
+//       );
+//     }
+//     return z;
+//   }
+
+//   verifyResult(result) {
+//     return 10 === result;
+//   }
+// }
+
