@@ -57,7 +57,7 @@ def tail(x: Option[Element], y: Option[Element], z: Option[Element]): Option[Ele
     }
 }
 
-def List() = {
+def List(_: Int) = {
     def benchmark(): Int = {
         val result = 
         tail(
@@ -77,5 +77,5 @@ def List() = {
 }
 
 def main() = {
-    List();
+    List(0);
 }
