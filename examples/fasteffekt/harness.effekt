@@ -2,6 +2,7 @@ module examples/fasteffekt/harness
 
 
 import examples/fasteffekt/permute
+import examples/fasteffekt/list
 import io/args
 import text/string
 
@@ -56,16 +57,17 @@ def doRuns(innerIterations: Int, iterations: Int){benchmark: Int=>Unit} = {
 def doBenchmark(name: String, inner: Int, iterations: Int) = {
     if (name == "Permute") {
         doRuns(inner, iterations){Permute}
+    } else if (name == "List") {
+        doRuns(inner, iterations){List}
     } else {
         panic("unknown benchmark")
     }
 }
 
-def main() = {
+def attemptBenchmarkExec(args: List[String]) = {
     val debugStartTime : Int = currentTimeNanos();
 
-
-    ["Permute","100", "100"] match {
+    args match {
         case Cons(x, Cons(y, Cons(z, Nil()))) => 
             (x, toInt(y), toInt(z)) match {
                 case (benchName, Some(iterations), Some(innerIterations)) => 
@@ -78,5 +80,9 @@ def main() = {
     val diff = currentTimeNanos() - debugStartTime;
     val runTime = diff/1000;
     println("DEBUG: runner total took: " ++ show(runTime) ++ " us");
+}
+
+def main() = {
+    attemptBenchmarkExec(["List","100", "100"])
 }
 
