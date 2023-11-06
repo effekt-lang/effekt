@@ -1,11 +1,5 @@
 import examples/fasteffekt/benchmark
 
-
-// class Element {
-//   constructor(v) {
-//     this.val = v;
-//     this.next = null;
-//   }
 record Element (
     value: Int, child: Option[Element]
 )
@@ -15,13 +9,6 @@ def length(element: Option[Element]): Int =
         case None() => return 0;
         case Some(Element(value, child)) => return 1 + length(child) 
     }
-//   length() {
-//     if (this.next === null) {
-//       return 1;
-//     }
-//     return 1 + this.next.length();
-//   }
-// }
 
 def isShorterThan(x: Option[Element], y: Option[Element]): Boolean = {
     var xTail:Option[Element] = x;
@@ -36,14 +23,6 @@ def isShorterThan(x: Option[Element], y: Option[Element]): Boolean = {
         }
     }
     return bigger;
-
-//     while (yTail !== null) {
-//       if (xTail === null) { return true; }
-//       xTail = xTail.next;
-//       yTail = yTail.next;
-//     }
-//     return false;
-
 }
 
 def makeList(lenght: Int): Option[Element] = {
@@ -54,36 +33,31 @@ def makeList(lenght: Int): Option[Element] = {
     }
 }
 
-  //no idea what that function does.
-    def tail(x: Option[Element], y: Option[Element], z: Option[Element]): Option[Element] = {
-        if (y.isShorterThan(x)) {
-            (x,y,z) match {
-                case (Some(xx),Some(yy),Some(zz)) => 
-                    //compiler KNOWS that xx,yy,zz are not None() => can access children.
+//no idea what that function does.
+def tail(x: Option[Element], y: Option[Element], z: Option[Element]): Option[Element] = {
+    if (y.isShorterThan(x)) {
+        (x,y,z) match {
+            case (Some(xx),Some(yy),Some(zz)) => 
+                val yChild : Option[Element] = yy.child;
+                val zChild : Option[Element] = zz.child;
+                val xChild : Option[Element] = xx.child;
 
-                    //all children have type Option[Element]
-                    val xChild = xx.child;
-                    val yChild = yy.child;
-                    val zChild = zz.child;
-
-                    val xxx = tail(xChild, y, z);
-                    val yyy = tail(yChild, z, x);
-                    val zzz = tail(zChild, x, y);
-                    tail(
-                        xxx,
-                        yyy,
-                        zzz
-                    )
-                case _ => panic("oh no!");
-            }
-        } else {
-            z;
+                val xxx: Option[Element] = tail(xChild, y, z);
+                val yyy: Option[Element] = tail(yChild, z, x);
+                val zzz: Option[Element] = tail(zChild, x, y);
+                tail(
+                    xxx,
+                    yyy,
+                    zzz
+                )
+            case _ => panic("oh no!");
         }
+    } else {
+        z;
     }
+}
 
 def List() = {
-    println("run list benchmark");
-
     def benchmark(): Int = {
         val result = 
         tail(
@@ -93,7 +67,6 @@ def List() = {
         );
         length(result);
     }
-    
     
 
     def verifyResult(result: Int): Boolean = {
@@ -106,23 +79,3 @@ def List() = {
 def main() = {
     List();
 }
-// class List extends Benchmark {
-
-
-
-//   tail(x, y, z) {
-//     if (this.isShorterThan(y, x)) {
-//       return this.tail(
-//         this.tail(x.next, y, z),
-//         this.tail(y.next, z, x),
-//         this.tail(z.next, x, y)
-//       );
-//     }
-//     return z;
-//   }
-
-//   verifyResult(result) {
-//     return 10 === result;
-//   }
-// }
-
