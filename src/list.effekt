@@ -4,10 +4,10 @@ record Element (
     value: Int, child: Option[Element]
 )
 
-def length(element: Option[Element]): Int = 
+def length(element: Option[Element]): Int = //TODO length is 0 if next == Nil()
     element match {
-        case None() => return 0;
-        case Some(Element(value, child)) => return 1 + length(child) 
+        case None() => 0
+        case Some(Element(value, child)) => 1 + length(child) 
     }
 
 def isShorterThan(x: Option[Element], y: Option[Element]): Boolean = {
@@ -15,7 +15,7 @@ def isShorterThan(x: Option[Element], y: Option[Element]): Boolean = {
     var yTail:Option[Element] = y;
     var run = true;
     var bigger = false;
-    while (run) {
+    while (run) {   //TODO use recursion here
         (xTail,yTail) match {
             case (_, None()) => run = false; bigger = false;
             case (None(), _) => run =false; bigger = true;
@@ -25,11 +25,11 @@ def isShorterThan(x: Option[Element], y: Option[Element]): Boolean = {
     return bigger;
 }
 
-def makeList(lenght: Int): Option[Element] = {
-    return if(lenght == 0) {
+def makeList(length: Int): Option[Element] = {
+    if (length == 0) {
         None()
     } else {
-        Some(Element(0, makeList(lenght-1)))
+        Some(Element(length, makeList(length-1)))
     }
 }
 
@@ -42,13 +42,10 @@ def tail(x: Option[Element], y: Option[Element], z: Option[Element]): Option[Ele
                 val zChild : Option[Element] = zz.child;
                 val xChild : Option[Element] = xx.child;
 
-                val xxx: Option[Element] = tail(xChild, y, z);
-                val yyy: Option[Element] = tail(yChild, z, x);
-                val zzz: Option[Element] = tail(zChild, x, y);
                 tail(
-                    xxx,
-                    yyy,
-                    zzz
+                    tail(xChild, y, z),
+                    tail(yChild, z, x),
+                    tail(zChild, x, y)
                 )
             case _ => panic("oh no!");
         }
