@@ -1,0 +1,5 @@
+def main() = {
+    var time = currentTimeNanos();
+    var timeMillis = time / 1000000;
+    println("time millis: " ++ show(timeMillis))
+}

@@ -1,0 +1,37 @@
+import immutable/list
+
+interface DataBase {
+    //will save name to database
+    def saveName(name: String): Unit
+
+    //returns list of currently saved names
+    def getNames(): List[String]
+
+    //prints all names to console
+    def printNames(): Unit
+}
+
+def myApplication(){ db: DataBase } = {
+    db.saveName("Max");
+    db.printNames()
+}
+
+def main() = {
+    var names: List[String] = [];
+
+    def firebase = new DataBase {
+        def saveName(name: String) = 
+            names = Cons[String](name, names)
+        
+        def getNames() = {
+            return names;
+        }
+         
+        def printNames() = {
+            names.foreach(){ name => println(name); ()}
+        }
+    };
+
+    myApplication(){ firebase }
+}
+
