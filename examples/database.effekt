@@ -17,11 +17,23 @@ record Student(
     id: Int
 )
 
+
+
 def myApplication(){ db: DataBase[Student] } = {
-    db.addEntry(Student("Max","Marschall",0));
-    db.addEntry(Student("Peter","Lustig",1));
-    db.addEntry(Student("Pierre","Drole",2));
-    db.addEntry(Student("Airan","Sayüt",3));
+    var currentId = 0;
+    def nextId():Int = {
+        val c = currentId;
+        currentId = currentId +1;
+        return c;
+    }
+    def newStudent(firstName: String, lastName: String): Student = {
+        Student(firstName, lastName, nextId());
+    }
+
+    db.addEntry(newStudent("Max","Marschall"));
+    db.addEntry(newStudent("Peter","Lustig"));
+    db.addEntry(newStudent("Pierre","Drole"));
+    db.addEntry(newStudent("Airan","Sayüt"));
 
     db.printEntries[Student]()
     println("db current state:")
