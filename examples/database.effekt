@@ -40,12 +40,33 @@ def myApplication(){ db: DataBase[Student] } = {
     println(db.getEntries[Student]())
 }
 
+def makeNewDB(){ r: Region }:DataBase[Student] at { r } = {
+    //create database instance
+    var names: List[Student] in r = [];
+    def firebase = new DataBase[Student] {
+        
+        def addEntry(entry: Student) = {
+            names = Cons[Student](entry, names)
+        }
+        
+        def getEntries() = {
+            return names;
+        }
+         
+        def printEntries() = {
+            names.foreach(){ name => println(name); ()}
+        }
+    };
+    return firebase
+}
+
 def main() = {
 
     //create database instance
     var names: List[Student] = [];
     var idCounter = 0;
     def firebase = new DataBase[Student] {
+        
         def addEntry(entry: Student) = {
             names = Cons[Student](entry, names)
         }
@@ -59,6 +80,10 @@ def main() = {
         }
     };
 
+    region r {     
+        def fb2 = makeNewDB(){ r };
+        myApplication(){ fb2 }
+    }
+
     //run application
-    myApplication(){ firebase }
 }
