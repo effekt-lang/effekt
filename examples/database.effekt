@@ -2,36 +2,54 @@ import immutable/list
 
 interface DataBase {
     //will save name to database
-    def saveName(name: String): Unit
+    def addStudent(firstName: String, lastName: String): Unit
 
     //returns list of currently saved names
-    def getNames(): List[String]
+    def getStudents(): List[Student]
 
     //prints all names to console
-    def printNames(): Unit
+    def printStudents(): Unit
 }
 
+record Student(
+    firstName: String,
+    lastName: String,
+    id: Int
+)
+
 def myApplication(){ db: DataBase } = {
-    db.saveName("Max");
-    db.printNames()
+    db.addStudent("Max","Marschall");
+    db.addStudent("Peter","Lustig");
+    db.addStudent("Pierre","Drole");
+    db.addStudent("Airan","Sayüt");
+
+    db.printStudents()
+    println("db current state:")
+    println(db.getStudents())
 }
 
 def main() = {
-    var names: List[String] = [];
 
+    //create database instance
+    var names: List[Student] = [];
+    var idCounter = 0;
     def firebase = new DataBase {
-        def saveName(name: String) = 
-            names = Cons[String](name, names)
+        def addStudent(firstName: String, name: String) = {
+            val student = Student(firstName, name, idCounter);
+            idCounter = idCounter + 1;
+            names = Cons[Student](student, names)
+        }
+            
         
-        def getNames() = {
+        def getStudents() = {
             return names;
         }
          
-        def printNames() = {
+        def printStudents() = {
             names.foreach(){ name => println(name); ()}
         }
     };
 
+    //run application
     myApplication(){ firebase }
 }
-
