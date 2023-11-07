@@ -1,14 +1,14 @@
 import immutable/list
 
-interface DataBase {
+interface DataBase[R] {
     //will save name to database
-    def addStudent(firstName: String, lastName: String): Unit
+    def addEntry(entry: R): Unit
 
     //returns list of currently saved names
-    def getStudents(): List[Student]
+    def getEntries(): List[R]
 
     //prints all names to console
-    def printStudents(): Unit
+    def printEntries(): Unit
 }
 
 record Student(
@@ -17,15 +17,15 @@ record Student(
     id: Int
 )
 
-def myApplication(){ db: DataBase } = {
-    db.addStudent("Max","Marschall");
-    db.addStudent("Peter","Lustig");
-    db.addStudent("Pierre","Drole");
-    db.addStudent("Airan","Sayüt");
+def myApplication(){ db: DataBase[Student] } = {
+    db.addEntry(Student("Max","Marschall",0));
+    db.addEntry(Student("Peter","Lustig",1));
+    db.addEntry(Student("Pierre","Drole",2));
+    db.addEntry(Student("Airan","Sayüt",3));
 
-    db.printStudents()
+    db.printEntries[Student]()
     println("db current state:")
-    println(db.getStudents())
+    println(db.getEntries[Student]())
 }
 
 def main() = {
@@ -33,19 +33,16 @@ def main() = {
     //create database instance
     var names: List[Student] = [];
     var idCounter = 0;
-    def firebase = new DataBase {
-        def addStudent(firstName: String, name: String) = {
-            val student = Student(firstName, name, idCounter);
-            idCounter = idCounter + 1;
-            names = Cons[Student](student, names)
+    def firebase = new DataBase[Student] {
+        def addEntry(entry: Student) = {
+            names = Cons[Student](entry, names)
         }
-            
         
-        def getStudents() = {
+        def getEntries() = {
             return names;
         }
          
-        def printStudents() = {
+        def printEntries() = {
             names.foreach(){ name => println(name); ()}
         }
     };
