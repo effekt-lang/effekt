@@ -10,3 +10,8 @@ def innerBenchmarkLoop(iterations: Int){benchmark: ()=>Int}{verifyResult: Int =>
     }
 }
 
+interface Benchmark {
+    def benchmark(): Int
+    def verifyResult(result: Int): Boolean
+}
+
