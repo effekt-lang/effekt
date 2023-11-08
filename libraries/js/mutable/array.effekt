@@ -9,7 +9,7 @@ extern type Array[T]
 def emptyArray[T](): Array[T] = emptyArray(0)
 
 //initialize array with default values
-def initArray[T](size: Int, default: T) : Array[T] = {
+def arrayFromValue[T](size: Int, default: T) : Array[T] = {
     val arr = emptyArray[T](size)
     each(0,arr.size()){ i=> put(arr, i, default)}
     return arr;

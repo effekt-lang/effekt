@@ -18,7 +18,7 @@ def main() = {
     put(arr, 4, "foo");
     println(show(get(arr, 4)))
 
-    val arrWithVals = initArray(4,"Hello World");
+    val arrWithVals = arrayFromValue(4,"Hello World");
     println(arrWithVals)
 
     val arrByF = arrayFromLoop(5){ i => i};
