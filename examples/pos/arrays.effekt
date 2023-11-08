@@ -21,7 +21,7 @@ def main() = {
     val arrWithVals = arrayFromValue(4,"Hello World");
     println(arrWithVals)
 
-    val arrByF = arrayFromLoop(5){ i => i};
+    val arrByF = arrayFromLoop(5){ i => i };
     println(arrByF);
 
     var arrByList = arrayFromList([1,5,17]);
