@@ -20,12 +20,15 @@ def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
   }
 }
 
-def foreachIndex[T](list: List[T], i: Int){ f: (Int, T) => Unit}: Unit = {
-  list match {
-    case Nil() => ();
-    case Cons(head, tail) => f(i, head); foreachIndex(tail, i+1){f}
+def foreachIndex[T](list: List[T]){ f: (Int, T) => Unit}: Unit = {
+  def worker[T](list: List[T], i: Int){ f: (Int, T) => Unit}: Unit = {
+    list match {
+      case Nil() => ();
+      case Cons(head, tail) => f(i, head); worker(tail, i+1){f}
 
-  }
+    }
+  };
+  worker(list,0){f};
 }
 
 def map[A, B](l: List[A]) { f: A => B } : List[B] = {

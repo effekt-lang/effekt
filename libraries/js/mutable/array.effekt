@@ -25,7 +25,7 @@ def arrayFromList[T](list: List[T]): Array[T] = {
   val listSize = list.size();
   val arr = emptyArray(listSize);
 
-  foreachIndex(list, 0){(i, head) => put(arr, i, head)}
+  foreachIndex(list){(i, head) => put(arr, i, head)}
   return arr;
 }
 
