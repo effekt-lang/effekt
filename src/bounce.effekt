@@ -73,10 +73,33 @@ def bounce(ball: Ball): Tuple2[Ball, Boolean] = {
     (Ball(x,y, xVel, yVel), bounced)
 }
 
+def bitAnd(x: Int, y: Int) = mod(x,(y+1)) 
 
-// class Bounce extends Benchmark {
-//   benchmark() {
-//     const random = new som.Random();
+def Random() = {
+    var seed = 74755;
+    def next(): Int = {
+        seed = bitAnd((seed * 1309) + 13849, 65535);
+        seed;
+    }
+    ();
+}
+
+// class Random {
+//   constructor() {
+//     this.seed = 74755;
+//   }
+
+//   next() {
+//     this.seed = ((this.seed * 1309) + 13849) & 65535;
+//     return this.seed;
+//   }
+// }
+
+def verifyResult(result: Int) =
+    result == 1331
+   
+// def benchmark(): Int = {
+//     val random = new som.Random();
 //     const ballCount = 100;
 //     let bounces = 0;
 //     const balls = new Array(ballCount);
@@ -96,8 +119,5 @@ def bounce(ball: Ball): Tuple2[Ball, Boolean] = {
 //     return bounces;
 //   }
 
-//   verifyResult(result) {
-//     return result === 1331;
-//   }
-// }
+
 
