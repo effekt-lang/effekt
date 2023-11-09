@@ -5,6 +5,10 @@ import examples/fasteffekt/benchmark
 def Mandelbrot(size: Int) = {
 
     def brot(size: Int): Int = {
+        var sum = 0;
+        var byteAcc = 0;
+        var bitNum = 0;
+
         each(0, size){ y =>
             val ci: Double = (2.0 * toDouble(y) / toDouble(size)) - 1.0;
             each(0,size){ x =>
@@ -32,18 +36,18 @@ def Mandelbrot(size: Int) = {
                 }
 
                 //FIXME byteshift
-                byteAcc = ( byteAcc << 1) + escape;
-                bitNum += 1;
+                byteAcc = ( byteAcc * 2) + escape;
+                bitNum = bitNum + 1;
 
                 if (bitNum == 8) {
-                    sum = sum ^ byteAcc;
+                    sum = sum * byteAcc;    //this needs to be sum ^ byteAcc
                     byteAcc = 0;
                     bitNum = 0;
                 } else if (x == size - 1) {
-                    byteAcc <<= (8 - bitNum);
-                    sum = sum ^ byteAcc;
+                    byteAcc = byteAcc * (8 - bitNum); //this needs to be byteAcc << (8 - bitNum);
+                    sum = sum * byteAcc; //this needs to be sum ^byteAcc
                     byteAcc = 0;
-                    bitNum == 0;
+                    bitNum = 0;
                 }
             }
         }
@@ -58,16 +62,19 @@ def Mandelbrot(size: Int) = {
     }
 
     def verifyResult(result: Int) = {
+        //FIXME: result is off because i swapped all shift operations for multiplication, to make it compilable
+        
+        println("result = "++show(result))
         if (size == 500) {
             (result == 191)
         } else if ( size == 750) {
-            (resulte == 50);
+            (result == 50);
         } else if ( size == 1) {
-            (resulte == 128);
+            (result == 128);
+        } else {
+            println("no known result for this problemsize:"++show(size)++" result="++show(result));
+            false;
         }
-
-        println("no known result for this problemsize:"++size++" result="++result);
-        return false;
     }
 
     return innerBenchmarkLoop(size){benchmark}{verifyResult}
