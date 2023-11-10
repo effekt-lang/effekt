@@ -1,7 +1,5 @@
 module examples/pos/sideeffects
 
-import immutable/list
-
 effect Get(): Int
 
 def foo() = println("hello2")

@@ -36,6 +36,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
         case (pattern, branch) => brackets(group(toDoc(pattern) <+> toDoc(branch)))
       } ++ els))))
     case Handle(handlers, body) => parens("handle" <+> parens(align(vcat(handlers map toDoc))) <+> nest(line <> toDoc(body)))
+    case Handler(constructorName, operations) =>
+      brackets(toDoc(constructorName) <+> align(vcat(operations.map {
+        case Operation(name, params, k, impl) =>
+          parens(toDoc(name) <+> parens(hsep(params map toDoc, space)) <+> toDoc(k) <+> nest(line <> toDoc(impl)))
+      })))
   }
 
   def toDoc(definition: Def): Doc = definition match {
@@ -58,14 +63,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
         vcat(expressions map toDoc) <>
         line <>
         toDoc(result))
-  }
-
-  def toDoc(h: Handler): Doc = h match {
-    case Handler(constructorName, operations) =>
-      brackets(toDoc(constructorName) <+> align(vcat(operations.map {
-        case Operation(name, params, k, impl) =>
-          parens(toDoc(name) <+> parens(hsep(params map toDoc, space)) <+> toDoc(k) <+> nest(line <> toDoc(impl)))
-      })))
   }
 
   def parens(docs: List[Doc]): Doc = parens(hsep(docs))

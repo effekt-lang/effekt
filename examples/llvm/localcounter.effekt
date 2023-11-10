@@ -1,0 +1,10 @@
+
+def main() = region r {
+    var x in r = 0
+    def next() = {
+        x = x + 1;
+        x
+    }
+    println(next())
+    println(next())
+}

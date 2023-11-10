@@ -7,10 +7,12 @@ def somePerson(): Person =
 
 def foo(p: Person) = p.name
 
+def show(p: Person) = "Person(" ++ show(p.name) ++ ", " ++ show(p.id) ++ ")"
+
 def main() = {
   val x = (1, "goo");
 
   println(somePerson().foo);
   println(x.first);
-  println(somePerson())
+  println(show(somePerson()))
 }

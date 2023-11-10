@@ -1,0 +1,17 @@
+module examples/pos/builtins
+
+type Color { Red(); Green(); Blue() }
+
+def show(c: Color) = c match {
+    case Red() => "Red()"
+    case Green() => "Green()"
+    case Blue() => "Blue()"
+}
+
+def main() = {
+    println(1);
+    println("foo");
+    println(true);
+    println(1 == 2);
+    println(show(Red()))
+}

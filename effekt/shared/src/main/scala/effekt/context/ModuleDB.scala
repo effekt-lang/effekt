@@ -37,11 +37,10 @@ trait ModuleDB { self: Context =>
   /**
    * Tries to find a module for the given source, will run compiler on demand
    */
-  def moduleOf(source: Source): Module = {
+  def moduleOf(source: Source): Module =
     tryModuleOf(source).getOrElse {
       abort(s"Cannot compile dependency: ${stripSuffix(source.name)}")
     }
-  }
 
   private def stripSuffix(path: String): String =
     path.stripSuffix(".effekt").stripSuffix(".md")
@@ -50,7 +49,7 @@ trait ModuleDB { self: Context =>
    * Tries to find a module for the given source, will run compiler on demand
    */
   def tryModuleOf(source: Source): Option[Module] = for {
-    mod <- runFrontend(source)(using this)
+    mod <- compiler.runFrontend(source)(using this)
   } yield mod
 
   /**

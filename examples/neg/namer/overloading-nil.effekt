@@ -1,0 +1,8 @@
+def Nil(): Int = 42
+
+def destruct(l: List[Int]) = l match {
+  case Nil() => 0
+  case Cons(_, _) => 1
+}
+
+def main() = ()

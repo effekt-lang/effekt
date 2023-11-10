@@ -4,23 +4,19 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 
-object PreTyper extends Phase[NameResolved, NameResolved] {
+object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
-  val phaseName = "pre-typer"
+  import source._
 
-  def run(input: NameResolved)(implicit C: Context) = {
-    val traversal = new BoxUnboxInference
-    val transformedTree = traversal.rewrite(input.tree)
+  val phaseName = "box-unbox"
+
+  def run(input: NameResolved)(using Context) = {
+    val transformedTree = rewrite(input.tree)
 
     if (Context.messaging.hasErrors) { None }
     else { Some(input.copy(tree = transformedTree)) }
   }
-}
 
-
-class BoxUnboxInference {
-
-  import source._
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
     case ModuleDecl(path, imports, defs) =>
@@ -37,7 +33,7 @@ class BoxUnboxInference {
    */
   def rewriteAsBlock(e: Term)(using C: Context): Term = visit(e) {
     case v: Var => v.definition match {
-      case sym: (ValueSymbol | symbols.VarBinder) => Unbox(v).inheritPosition(v)
+      case sym: (ValueSymbol | symbols.RefBinder) => Unbox(v).inheritPosition(v)
       case sym: BlockSymbol => v
     }
 
@@ -53,7 +49,7 @@ class BoxUnboxInference {
 
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
-      case sym: (ValueSymbol | symbols.VarBinder) => v
+      case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol => Box(None, v).inheritPosition(v)
     }
 
@@ -126,7 +122,7 @@ class BoxUnboxInference {
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
     case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
-      case sym: (ValueSymbol | symbols.VarBinder) =>
+      case sym: (ValueSymbol | symbols.RefBinder) =>
         source.ExprTarget(source.Unbox(source.Var(t.id).inheritPosition(t)).inheritPosition(t)).inheritPosition(t)
       case sym: BlockSymbol =>
         t
@@ -141,8 +137,11 @@ class BoxUnboxInference {
     case ValDef(id, annot, binding) =>
       ValDef(id, annot, rewrite(binding))
 
-    case VarDef(id, annot, region, binding) =>
-      VarDef(id, annot, region, rewrite(binding))
+    case RegDef(id, annot, region, binding) =>
+      RegDef(id, annot, region, rewrite(binding))
+
+    case VarDef(id, annot, binding) =>
+      VarDef(id, annot, rewrite(binding))
 
     case DefDef(id, annot, binding) =>
       val block = rewriteAsBlock(binding)

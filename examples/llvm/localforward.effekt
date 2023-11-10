@@ -1,0 +1,11 @@
+def sumPaths(): Int = {
+  val state = 42
+
+  def explore(): Int = state
+  def explore2(): Int = explore()
+
+  explore2()
+}
+
+def main() =  println(sumPaths())
+

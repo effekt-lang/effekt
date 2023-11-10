@@ -1,0 +1,4 @@
+Say(Person(John), Is(Person(Mary), InLoveWith(Person(John))))
+Say(Person(John), Is(Person(Mary), InLoveWith(Person(John))))
+Say(Person(Peter), Say(Person(John), Is(Person(Mary), InLoveWith(Person(Peter)))))
+ForAll(Person(x0), Implies(Is(Person(x0), Woman()), Say(Person(John), Is(Person(x0), InLoveWith(Person(John))))))

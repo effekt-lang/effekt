@@ -27,9 +27,8 @@
 
 (define (with-region body)
   (let* ([stack (car mk)]
-          [arena (Stack-arena stack)])
+         [arena (Stack-arena stack)])
     (body arena)))
-
 
 (define (withSubCont p f)
   (call/cc (lambda (k)

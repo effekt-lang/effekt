@@ -3,7 +3,7 @@ def bar {r: Region} = {
   fun() { x = x + 1; x }
 }
 
-def ex1() = {
+def ex1() = region this {
   val alloc = bar {this};
 
   alloc();
@@ -15,7 +15,7 @@ def ex2() = region r {
   println(x + x)
 }
 
-def ex3() = {
+def ex3() = region this {
   var x in this = 42;
   println(x + x)
 }

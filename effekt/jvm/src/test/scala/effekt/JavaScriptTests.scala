@@ -12,33 +12,20 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends EffektTests {
 
+  def backendName = "js"
+
   override def included: List[File] = List(
     examplesDir / "pos",
     examplesDir / "neg",
-    examplesDir / "casestudies"
+    examplesDir / "casestudies",
+    examplesDir / "benchmarks"
   )
 
-  override lazy val ignored: List[File] = List(
+  override def ignored: List[File] = List(
     // we deprecated locally defined type and effect declarations, for now.
     examplesDir / "neg" / "existential_effect_leaks.effekt",
     examplesDir / "neg" / "scoped.effekt",
   )
-
-  def runTestFor(input: File, check: File, expected: String): Unit =
-    test(input.getPath) {
-      val out = interpretJS(input)
-      assertNoDiff(out, expected, s"Output running '${input.getPath}' differed from check file '${check.getPath}'.")
-    }
-
-  def interpretJS(file: File): String = {
-    // this resets the caches before each test:
-    // effekt.util.Task.reset()
-    val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js"))
-    configs.verify()
-    compiler.compileFile(file.getPath, configs)
-    configs.stringEmitter.result()
-  }
 }
 
 object TestUtils {
@@ -69,7 +56,7 @@ object TestUtils {
         val shouldGenerate = regenerateAll || f.lastModified() > checkfile.lastModified()
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
-          val out = interpretJS(f)
+          val out = run(f)
 
           // Save checkfile in source folder (e.g. examples/)
           // We remove ansi colors to make check files human-readable.

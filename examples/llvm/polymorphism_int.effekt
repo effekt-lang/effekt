@@ -1,0 +1,7 @@
+def id[A](a: A): A = a
+
+def main() = {
+    val x = 2
+    val y = id(x)
+    println(y)
+}

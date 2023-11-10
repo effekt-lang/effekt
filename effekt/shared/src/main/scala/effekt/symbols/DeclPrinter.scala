@@ -34,11 +34,11 @@ object DeclPrinter extends ParenPrettyPrinter {
 
     case TypeAlias(name, tparams, tpe) =>
       val tps = show(tparams)
-      "type" <+> name.toString <> tps <+> "=" <+> tpe.toString
+      "type" <+> name.toString <> tps <+> "=" <+> pp"$tpe"
 
     case EffectAlias(name, tparams, eff) =>
       val tps = show(tparams)
-      "effect" <+> name.toString <> tps <+> "=" <+> eff.toString
+      "effect" <+> name.toString <> tps <+> "=" <+> pp"${eff}"
 
     case DataType(name, tparams, ctors) =>
       val tps = show(tparams)
@@ -46,6 +46,11 @@ object DeclPrinter extends ParenPrettyPrinter {
         format("def", ctor, ctor.annotatedResult, ctor.annotatedEffects)
       }
       "type" <+> name.toString <> tps <+> braces(nest(line <> vsep(ctrs)) <> line)
+
+    case Record(name, tparams, ctor) =>
+      val tps = show(tparams)
+      val ctrs = format("def", ctor, ctor.annotatedResult, ctor.annotatedEffects)
+      "type" <+> name.toString <> tps <+> braces(nest(line <> ctrs) <> line)
 
     case f: ExternFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)

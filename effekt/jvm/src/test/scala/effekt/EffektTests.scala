@@ -4,13 +4,19 @@ import java.io.File
 
 import sbt.io._
 import sbt.io.syntax._
+import scala.sys.process.*
 
 import scala.language.implicitConversions
 
 trait EffektTests extends munit.FunSuite {
 
+  // The name of the backend as it is passed to the --backend flag.
+  def backendName: String
+
+  def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
+
   // The sources of all testfiles are stored here:
-  lazy val examplesDir = new File("examples")
+  def examplesDir = new File("examples")
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
   def ignored: List[File] = List()
@@ -18,9 +24,28 @@ trait EffektTests extends munit.FunSuite {
   // Folders to discover and run tests in
   def included: List[File] = List()
 
-  def runTestFor(input: File, check: File, expectedResult: String): Unit
+  def runTestFor(input: File, expected: String): Unit =
+    test(input.getPath + s" (${backendName})") {
+      assertNoDiff(run(input), expected)
+    }
 
-  def runTests() = included.foreach(runPositiveTestsIn)
+  def run(input: File): String =
+    val compiler = new effekt.Driver {}
+    val configs = compiler.createConfig(Seq(
+      "--Koutput", "string",
+      "--backend", backendName,
+      "--out", output.getPath
+    ))
+    configs.verify()
+    compiler.compileFile(input.getPath, configs)
+    configs.stringEmitter.result()
+
+
+  def runTests() =
+    Backend.backend(backendName).runner.checkSetup() match {
+      case Left(msg) => test(s"${this.getClass.getName}: ${msg}".ignore) { () }
+      case Right(value) => included.foreach(runPositiveTestsIn)
+    }
 
   def runPositiveTestsIn(dir: File): Unit = //describe(dir.getName) {
     dir.listFiles.foreach {
@@ -40,7 +65,7 @@ trait EffektTests extends munit.FunSuite {
           test(f.getName.ignore) { () }
         } else {
           val contents = IO.read(checkfile)
-          runTestFor(f, checkfile, contents)
+          runTestFor(f, contents)
         }
 
       case _ => ()

@@ -19,7 +19,7 @@ case object GlobalCapabilityScope extends CapabilityScope {
   // If we try to find a capability for an effect that is known to be unhandled (that is no outer scope could
   // potentially handle it, then we raise an error.
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    C.abort(pretty"Unhandled effect ${tpe}")
+    C.abort(pretty"Effect ${tpe} is not allowed in this context.")
 }
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)

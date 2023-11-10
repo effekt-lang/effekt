@@ -1,0 +1,8 @@
+interface Konsole { def print(msg: String): Unit }
+
+def main() = {
+  def c = new Konsole {
+    def print(msg) = resume(())
+  };
+  ()
+}

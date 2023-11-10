@@ -11,7 +11,7 @@ lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effe
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 
 
-lazy val effektVersion = "0.2.0"
+lazy val effektVersion = "0.2.1"
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -81,9 +81,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // Test configuration
     // ------------------
-    // TODO make parallel execution for tests safe (probably synchronization issues with std IO) and
-    //   then enable.
-    Test / parallelExecution := false,
+    Test / parallelExecution := true,
 
     Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
@@ -125,7 +123,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       // prepend shebang to make jar file executable
       val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
-      IO.append(binary, "#! /usr/bin/env -S java -jar\n")
+      IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
     },
 

@@ -32,10 +32,7 @@ case class RecordNames(sym: Symbol) {
   val typeName = ChezName(basename + "$Type" + id)
   val predicate = ChezName(name + "?")
   val matcher = ChezName("match-" + name)
-  val constructor = sym match {
-    case _: effekt.symbols.Interface => ChezName(s"make-${name}")
-    case _ => uid
-  }
+  val constructor = ChezName(name)
 }
 
 // https://www.scheme.com/csug8/objects.html
@@ -50,7 +47,8 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
     case r: symbols.Record => r.constructor
     // right now, we also use core.Records to represent capabilities
     case i: symbols.Interface => i
-    case other => sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
+    case other => other
+      // sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
   }
 
   val names = RecordNames(did)
@@ -72,26 +70,4 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
   }
 
   List(record, matcher)
-}
-
-
-// STATE
-// -----
-
-// (define (getter ref)
-//  (lambda () (unbox ref)))
-//
-// (define (setter ref)
-//  (lambda (v) (set-box! ref v)))
-def generateStateAccessors: List[chez.Function] = {
-  val ref = ChezName("ref")
-  val value = ChezName("value")
-
-  val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-    chez.Lambda(Nil, chez.Builtin("unbox", Variable(ref))))
-
-  val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-    chez.Lambda(List(value), chez.Builtin("set-box!", Variable(ref), Variable(value))))
-
-  List(getter, setter)
 }

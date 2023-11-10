@@ -1,0 +1,11 @@
+def main() = {
+    println(cos(2.0 * PI));
+    println(sin(0.5 * PI));
+    println(toInt(atan(1.55740772465490 * PI)));
+    println(tan(0.25 * PI));
+    println(sqrt(4.0) - 1.0);
+    println(square(2.0) - 3.0);
+    println(log(2.71828182845904));
+    println(log1p(1.71828182845904));
+    println(exp(0.0))
+}

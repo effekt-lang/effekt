@@ -1,0 +1,1 @@
+Cons(MkTriple(10, 4, 1), Cons(MkTriple(10, 3, 2), Cons(MkTriple(9, 5, 1), Cons(MkTriple(9, 4, 2), Cons(MkTriple(8, 6, 1), Cons(MkTriple(8, 5, 2), Cons(MkTriple(8, 4, 3), Cons(MkTriple(7, 6, 2), Cons(MkTriple(7, 5, 3), Cons(MkTriple(6, 5, 4), Nil()))))))))))

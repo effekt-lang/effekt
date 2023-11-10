@@ -237,6 +237,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
 
   def rewriteCase(sym: Symbol, owner: Symbol): CaseDef =
     if (sym.isCaseClass) rewriteCaseCaseClass(sym, owner)
+    else if (sym.isEnumCase) rewriteCaseObject(sym, owner)
     else rewriteCaseTrait(sym, owner)
 
   // case Return.unapply(e) => Return.apply(rewrite(e))
@@ -283,6 +284,20 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     // case e @ (_: Expr) => rewrite(e)
     CaseDef(Bind(e, Typed(Wildcard(), TypeIdent(typeSym))), None,
       Block(Nil, rewrite(Ref(e), tpt)))
+  }
+
+  // case e: Expr.type => e
+  def rewriteCaseObject(typeSym: Symbol, owner: Symbol): CaseDef = {
+    val tpe = Singleton(Ref(typeSym))
+    val tpt = typeSym.termRef
+    val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
+
+    // TODO this is not working, yet. It is still generating "Unreachable case".
+    report.errorAndAbort(s"Case objects are not yet supported by structural rewrites: ${typeSym}")
+
+    // case e @ (_: Expr) => e
+    CaseDef(Bind(e, TypedOrTest(Wildcard(), tpe)), None,
+      Block(Nil, Ref(e)))
   }
 
 
@@ -425,3 +440,5 @@ def showTreeImpl[A: Type](a: Expr[A])(using Quotes): Expr[A] = {
   report.info(Printer.TreeStructure.show(a.asTerm))
   a
 }
+
+

@@ -1,0 +1,33 @@
+def len[A](l: List[A]) { f: [B](List[B]) => Int }: Int =
+    f(l)
+
+def count[A](l: List[A]): Int = l match {
+    case Nil() => 0
+    case Cons(x, xs) => 1 + count(xs)
+}
+
+def higherRankBlockArg { f: [A](A){ A => A } => A }: Unit =
+    println(f(42) { a => a })
+
+effect Eff[A] {
+    def eff(a: A): Unit
+}
+
+def higherRankBlockWithEff { f: [A](A){ A => A } => A / Eff[A] }: Unit =
+    try {
+        f(42) { a => a };
+        ()
+    } with Eff[Int] {
+        def eff(a) = println(a)
+    }
+
+def main() = {
+    println(len([1, 2, 3]){ count })
+    higherRankBlockArg { [A](a: A){g: A => A} =>
+        g(g(a))
+    }
+    higherRankBlockWithEff { [T](x: T){f: T => T} =>
+        do eff(x);
+        f(x)
+    }
+}

@@ -1,0 +1,5 @@
+effect Exc(msg: String): Unit
+
+def foo[R] { f : R / Exc }: R = <>
+
+def whatIWanted[R] { f : () => R / Exc }: R = <>

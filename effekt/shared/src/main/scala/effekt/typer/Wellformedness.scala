@@ -7,18 +7,6 @@ import effekt.context.assertions.*
 import effekt.source.{ Def, ExprTarget, IdTarget, MatchPattern, Tree }
 import effekt.source.Tree.{ Query, Visit }
 
-object PostTyper extends Phase[Typechecked, Typechecked] {
-
-  val phaseName = "post-typer"
-
-  def run(input: Typechecked)(implicit C: Context) =
-    val Typechecked(source, tree, mod) = input
-    Wellformedness.check(mod, tree)
-
-    if (Context.messaging.hasErrors) { None }
-    else { Some(input) }
-}
-
 class WFContext(var effectsInScope: List[Interface]) {
   def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
 }
@@ -32,7 +20,16 @@ class WFContext(var effectsInScope: List[Interface]) {
  * - lexical scoping of effects
  * - escape of capabilities through types
  */
-object Wellformedness extends Visit[WFContext] {
+object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] {
+
+  val phaseName = "wellformedness"
+
+  def run(input: Typechecked)(implicit C: Context) =
+    val Typechecked(source, tree, mod) = input
+    check(mod, tree)
+
+    if (Context.messaging.hasErrors) { None }
+    else { Some(input) }
 
   def check(mod: Module, tree: source.ModuleDecl)(using Context): Unit = {
 
@@ -47,6 +44,18 @@ object Wellformedness extends Visit[WFContext] {
     query(tree)
   }
 
+  override def stmt(using Context, WFContext) = {
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, binding), rest) =>
+      val tpe = Context.inferredTypeOf(rest)
+
+      val free = freeCapture(tpe)
+      val capt = tree.symbol.capture
+
+      if free contains capt then Context.at(stmt) {
+        Context.error(pp"Local variable ${id} escapes through the returned value of type ${tpe}.")
+      }
+  }
+
   override def expr(using Context, WFContext) = {
 
     /**
@@ -56,7 +65,6 @@ object Wellformedness extends Visit[WFContext] {
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
-      val selfRegion = Context.getSelfRegion(tree)
 
       val free = freeCapture(tpe)
       val escape = free intersect bound
@@ -64,12 +72,6 @@ object Wellformedness extends Visit[WFContext] {
       if (escape.nonEmpty) {
         Context.at(prog) {
           Context.error(pp"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}")
-        }
-      }
-
-      if (free contains selfRegion) {
-        Context.at(prog) {
-          Context.error(pp"The return type ${tpe} of the handler body must not mention the self region.")
         }
       }
 
@@ -114,32 +116,11 @@ object Wellformedness extends Visit[WFContext] {
     }
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
-      val selfRegion = Context.getSelfRegion(tree)
-      val returnType = Context.inferredTypeOf(body)
-
-      if (freeCapture(returnType) contains selfRegion) {
-        Context.at(body) {
-          Context.error(s"The return type ${returnType} of the function body must not mention the region of the function itself.")
-        }
-      }
-
       scoped { query(body) }
   }
 
   override def defn(using C: Context, WF: WFContext) = {
-    /**
-     * For functions we check that the self region does not leave as part of the return type.
-     */
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
-      val selfRegion = Context.getSelfRegion(tree)
-      val returnType = Context.inferredTypeOf(body)
-
-      if (freeCapture(returnType) contains selfRegion) {
-        Context.at(body) {
-          Context.error(pp"The return type ${returnType} of the function body must not mention the region of the function itself.")
-        }
-      }
-
       scoped { query(body) }
 
     /**

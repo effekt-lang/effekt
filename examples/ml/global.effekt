@@ -1,0 +1,9 @@
+def countDown(from: Int) = {
+  var i in global = from;
+  while (i > 0) {
+    println(i)
+    i = i - 1
+  }
+}
+
+def main() = countDown(3)

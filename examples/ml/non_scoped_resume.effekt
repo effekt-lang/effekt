@@ -1,0 +1,21 @@
+// this is a minified version of nim.effekt
+
+effect Do(n: Int): Unit
+
+def range { block: Int => Unit } = {
+  // this introduces a fresh region:
+  var i = 0;
+  block(2);
+}
+
+// strangely the conditional is necessary to reproduce the bug
+def conditional(n: Int): Unit / Do = if (n > 0) { do Do(n) }
+
+def handler { prog: => Unit / Do }: Unit =
+  try { prog() }
+  with Do { (n) =>
+    // here we call resume in a fresh region (non-scoped)
+    range { i => resume(()) }
+  }
+
+def main() = handler { conditional(2) }

@@ -241,14 +241,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
-    context.runFrontend(src) map { f } getOrElse {
+    context.compiler.runFrontend(src) map { f } getOrElse {
       report(source, context.messaging.buffer, context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
-    context.runFrontend(source) map { f } getOrElse {
+    context.compiler.runFrontend(source) map { f } getOrElse {
       report(source, context.messaging.buffer, context.config)
     }
   }

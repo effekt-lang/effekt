@@ -19,6 +19,6 @@ def parameter[T] {a: Array[T]} = {
 def main() = {
   val f: () => Int at {foo} = user;
   val arr = makeArray[Int](10);
-  println(arr)
+  println(arr);
   ()
 }

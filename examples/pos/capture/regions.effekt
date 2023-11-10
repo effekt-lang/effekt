@@ -84,7 +84,7 @@ def testLifted2() = try {
   println(underHandler { o.get() })
 } with Get { println("before"); resume(42); println("after") }
 
-def main() = {
+def main() = region this {
 
   def outer = this
 

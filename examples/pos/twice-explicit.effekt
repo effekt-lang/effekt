@@ -1,0 +1,27 @@
+effect Exc(): Unit
+
+// Expected: no warning
+def test1() =
+  try { e1.Exc() }
+  with e1: Exc { () }
+  with e2: Exc { () }
+
+// Expected: warning
+def test2() =
+  try { do Exc() }
+  with Exc { () }
+  with e2: Exc { () }
+
+// Expected: warning
+def test2() =
+  try { do Exc() }
+  with e1: Exc { () }
+  with Exc { () }
+
+// Expected: warning
+def test3() =
+  try { do Exc() }
+  with Exc { () }
+  with Exc { () }
+
+def main() = ()

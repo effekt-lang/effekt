@@ -21,7 +21,7 @@ const $runtime = (function() {
     return cell
   }
 
-  function Arena() {
+function Arena() {
     return {
       fields: [], // Array[Cell],
       fresh: function(init) {
@@ -134,9 +134,8 @@ const $runtime = (function() {
   }
 
   function withState(init, f) {
-    const cell = Cell(init)
     return Control(k => {
-      k.fields.push(cell);
+      const cell = k.arena.fresh(init)
       return Step(f(cell), k)
     })
   }
@@ -243,6 +242,7 @@ const $runtime = (function() {
     lift: f => f,
     handle: handle,
     fresh: Cell,
+    state: withState,
 
     _if: (c, thn, els) => c ? thn() : els(),
     withRegion: withRegion,
