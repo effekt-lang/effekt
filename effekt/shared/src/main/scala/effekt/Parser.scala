@@ -2,7 +2,6 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
-import effekt.symbols.TypeVar.TypeParam
 import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
 import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
