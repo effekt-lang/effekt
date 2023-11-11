@@ -2,10 +2,10 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
-import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Range, Source, StringSource }
+import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
+import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
 import scala.language.implicitConversions
@@ -107,8 +107,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful).? ~ (`=` ~/> functionBody) ^^ {
-      case id ~ tparams ~ (vparams ~ bparams) ~ eff ~ body => FunDef(id, tparams, vparams, bparams, eff, body)
+    `def` ~/> idDef ~ params ~ (`:` ~> effectful).? ~ (`=` ~/> functionBody) ^^ {
+      case id ~ (tparams ~ vparams ~ bparams) ~ eff ~ body => FunDef(id, tparams, vparams, bparams, eff, body)
     }
 
   lazy val functionBody: P[Stmt] =
@@ -145,8 +145,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
-      case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
+      case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ body =>
         ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
 
@@ -176,10 +176,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   /**
    * Parameters
    */
-  lazy val params: P[List[ValueParam] ~ List[BlockParam]] =
-    ( valueParams ~ blockParams
-    | valueParams ~ success(List.empty[BlockParam])
-    | success(List.empty[ValueParam]) ~ blockParams
+  lazy val params: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+    ( maybeTypeParams ~ valueParams ~ blockParams
+    | maybeTypeParams ~ valueParams ~ success(List.empty[BlockParam])
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
@@ -228,8 +228,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ {
-      case tps ~ (vps, bps) ~ body => BlockLiteral(tps.getOrElse(Nil), vps, bps, body) : BlockLiteral
+    ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ {
+      case (tps, vps, bps) ~ body => BlockLiteral(tps, vps, bps, body) : BlockLiteral
     }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
@@ -247,10 +247,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
 
-  lazy val lambdaParams: P[(List[ValueParam], List[BlockParam])] =
-    ( params ^^ { case vps ~ bps => (vps, bps) }
-    | valueParamsOpt ^^ { ps => (ps, Nil) }
-    | idDef ^^ { id => (List(ValueParam(id, None) : ValueParam), Nil) }
+  lazy val lambdaParams: P[(List[Id], List[ValueParam], List[BlockParam])] =
+    ( params ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
+    | valueParamsOpt ^^ { ps => (Nil, ps, Nil) }
+    | idDef ^^ { id => (Nil, List(ValueParam(id, None) : ValueParam), Nil) }
     )
 
   lazy val maybeValueArgs: P[List[Term]] =
@@ -516,6 +516,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | primValueType
     )
 
+  lazy val maybeValueTypes: P[List[ValueType]] =
+    (`(` ~> manySep(valueType, `,`) <~ `)`).? ^^ { vps => vps.getOrElse(Nil) }
+
   lazy val primValueType: P[ValueType] =
     ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
@@ -526,10 +529,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
   lazy val blockType: P[BlockType] =
-    ( (`[` ~> manySep(idDef, `,`) <~ `]`).? ~ (`(` ~> manySep(valueType, `,`) <~ `)`).? ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
-      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams.getOrElse(Nil), vparams.getOrElse(Nil), bparams, t, effs)
+    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
+      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
     }
-    |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, Nil, tpes, ret, eff) }
+    | some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, Nil, tpes, ret, eff) }
     | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(Nil, List(t), Nil, ret, eff) }
     | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
     // TODO only allow this on parameters, not elsewhere...
