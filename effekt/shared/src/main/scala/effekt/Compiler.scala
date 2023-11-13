@@ -125,6 +125,14 @@ trait Compiler[Executable] {
       mod
     }
 
+  def runMiddleend(source: Source)(using Context): Option[Typechecked] =
+    (Parser andThen
+    Namer andThen
+    BoxUnboxInference andThen
+    Typer andThen
+    Wellformedness andThen
+    AnnotateCaptures)(source)
+
   /**
    * Called after running the frontend from editor services.
    *
