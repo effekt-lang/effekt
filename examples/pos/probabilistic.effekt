@@ -127,18 +127,21 @@ def obsLst(lRef: List[Ref], lB: List[Boolean]): Unit / { Heap, Fail } = {
 /// 1               001            [false,false,true]
 /// 5               101            [true,false,true]
 def toBoolLst(len: Int, num: Int): List[Boolean] = try {
-  if (num < 0) { do Fail() }
-  else {
-    if (len < 0) { do Fail() }
-    else if (len == 0) { Nil() }
+  def toBoolLstRev(len: Int, num: Int): List[Boolean] = {
+    if (num < 0) { do Fail() }
     else {
-      if (mod(num, 2) == 1) {
-        toBoolLst(len - 1, num / 2).append([true])
-      } else {
-        toBoolLst(len - 1, num / 2).append([false])
+      if (len < 0) { do Fail() }
+      else if (len == 0) { Nil() }
+      else {
+        if (mod(num, 2) == 1) {
+          Cons(true, toBoolLst(len - 1, num / 2))
+        } else {
+          Cons(false, toBoolLst(len - 1, num / 2))
+        }
       }
     }
-  }
+  };
+  reverse(toBoolLstRev(len, num))
 } with Fail[A] { () => println("toBoolLst: Unexpected negative number."); [] }
 
 /// Observe the possibilities of true/false combinations for the RVs
@@ -299,8 +302,8 @@ def grassModel(rain: Ref) = {
   do Prior(rain, 0.2);
   val sprinkler = Flip(0.1);
   val grassIsWet = do Disj(do Disj(
-    do Conj(Flip(0.8),rain),
-    do Conj(Flip(0.95),sprinkler)),
+    do Conj(Flip(0.8), rain),
+    do Conj(Flip(0.95), sprinkler)),
     Flip(0.01));
   grassIsWet
 }
