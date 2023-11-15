@@ -298,14 +298,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val valDefs: P[Def] =
      `val` ~> someSep(valDef, `,`) ~ (`=` ~/> stmt) ^^ {
-        case defs ~ binding =>
-          val ids = defs.map(_._1)
-          val tpes = defs.map(_._2)
-          ValDef(ids, tpes, binding)
+        case defs ~ binding => ValDef(defs.asInstanceOf, binding)
      }
 
-  lazy val valDef: P[(IdDef, Option[ValueType])] =
-    idDef ~ (`:` ~/> valueType).? ^^ { case id ~ tpe => (id, tpe)}
+  lazy val valDef: P[Param] =
+    idDef ~ (`:` ~/> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe)}
 
   lazy val varDef: P[Def] =
     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`in` ~/> idRef).? ~ (`=` ~/> stmt) ^^ {

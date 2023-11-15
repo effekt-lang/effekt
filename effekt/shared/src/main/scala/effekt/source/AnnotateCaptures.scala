@@ -73,7 +73,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
     case b @ source.BlockLiteral(tps, vps, bps, body) =>
       val selfRegion = Context.annotation(Annotations.SelfRegion, b)
-      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.head.capture))
+      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
   }
 
   override def defn(using Context, Unit) = {
@@ -82,10 +82,10 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
      */
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val selfRegion = Context.annotation(Annotations.SelfRegion, tree)
-      query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.head.capture))
+      query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
 
     case tree @ VarDef(id, annot, region, binding) =>
-      val symbol = tree.symbol.head
+      val symbol = tree.symbol
       query(binding) ++ captureOf(symbol.region)
   }
 

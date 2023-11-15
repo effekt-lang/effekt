@@ -505,15 +505,6 @@ trait AnnotationsDB { self: Context =>
   }
 
   /**
-   * Searching the symbol for a definition
-   *
-   * These lookups should not fail (except there is a bug in the compiler)
-   */
-
-  def symbolsOf(tree: source.Definition): List[Symbol] =
-    tree.ids.map(symbolOf)
-
-  /**
    * Searching the definition for a symbol
    */
   def definitionTreeOption(s: Symbol): Option[source.IdDef] =

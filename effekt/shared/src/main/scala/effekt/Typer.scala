@@ -192,7 +192,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
 
       case tree @ source.Region(name, body) =>
-        val selfRegion = tree.symbol.head
+        val selfRegion = tree.symbol
         Context.bind(selfRegion)
 
         val inferredCapture = Context.freshCaptVar(CaptUnificationVar.RegionRegion(tree))
@@ -207,7 +207,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (1) extract all handled effects and capabilities
         val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
-          val capability = h.capability.map { _.symbol.head }.getOrElse { Context.freshCapabilityFor(effect) }
+          val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
           Context.bind(capability, capability.tpe, CaptureSet(capability.capture))
           capability
         }
@@ -248,7 +248,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // Helper definitions:
         // - capabilities that are bound explicitly by the user
-        val explicitCapabilities = handlers.flatMap { _.capability.map(_.symbol.head) }.toSet
+        val explicitCapabilities = handlers.flatMap { _.capability.map(_.symbol) }.toSet
         // - all effects that are handled
         val handled = ConcreteEffects(handlerFor.map(_._1))
         // - capabilities grouped by effect
@@ -375,7 +375,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           (params zip vps).foreach {
             case (param, decl) =>
-              val sym = param.symbol.head
+              val sym = param.symbol
               val annotType = sym.tpe
               annotType.foreach { t => matchDeclared(t, decl, param) }
               Context.bind(sym, annotType.getOrElse(decl))
@@ -490,7 +490,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
-    case p @ source.AnyPattern(id) => Map(p.symbol.head -> sc)
+    case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
     case p @ source.LiteralPattern(lit) => Context.abort("Matching literals is not supported at the moment.")
       //      lit.checkAgainst(sc)
       //      Map.empty
@@ -564,17 +564,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
-      val fun = d.symbol.head
+      val fun = d.symbol
 
       // (1) make up a fresh capture unification variable and annotate on function symbol
       val cap = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
       Context.bind(fun, cap)
 
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
-      fun.annotatedType.foreach { tpe => Context.bind(d.symbol.head, tpe) }
+      fun.annotatedType.foreach { tpe => Context.bind(d.symbol, tpe) }
 
     case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body) =>
-      val fun = d.symbol.head
+      val fun = d.symbol
 
       Context.bind(fun, fun.toType, fun.capture)
       if (fun.effects.canonical.nonEmpty) {
@@ -582,10 +582,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
     case d @ source.ExternResource(id, tpe) =>
-      Context.bind(d.symbol.head)
+      Context.bind(d.symbol)
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      d.symbol.head.operations.foreach { op =>
+      d.symbol.operations.foreach { op =>
         if (op.effects.toList contains op.appliedInterface) {
           Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
         }
@@ -597,7 +597,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { c =>
-        val constructor = c.symbol.head
+        val constructor = c.symbol
         Context.bind(constructor, constructor.toType, CaptureSet())
         constructor.fields.foreach { field =>
           val tpe = field.toType
@@ -606,7 +606,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
     case d @ source.RecordDef(id, tparams, fields) =>
-      val constructor = d.symbol.head.constructor
+      val constructor = d.symbol.constructor
       Context.bind(constructor, constructor.toType, CaptureSet())
       constructor.fields.foreach { field =>
         val tpe = field.toType
@@ -614,15 +614,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(field, tpe, CaptureSet())
       }
 
-    case d: source.TypeDef => wellformed(d.symbol.head.tpe)
-    case d: source.EffectDef => wellformed(d.symbol.head.effs)
+    case d: source.TypeDef => wellformed(d.symbol.tpe)
+    case d: source.EffectDef => wellformed(d.symbol.effs)
     case _ => ()
   }
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
     d match {
       case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
-        val sym = d.symbol.head
+        val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
         val selfRegion = Context.getSelfRegion(d)
@@ -701,7 +701,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), unhandledEffects)
 
-      case d @ source.ValDef(id, annot, binding) =>
+      case d @ source.ValDef(binders, binding) =>
         val tpeList = d.symbol.map(_.tpe)
         val Result(t, effBinding) = if (tpeList.forall(_.isDefined)) {
           val Result(_, effBinding) = binding checkAgainst tpeList.flatten
@@ -716,7 +716,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result((), effBinding)
 
       case d @ source.VarDef(id, annot, reg, binding) =>
-        val sym = d.symbol.head // TODO MRV: List?
+        val sym = d.symbol // TODO MRV: List?
 
         // we use the current region as an approximation for the state
         val stCapt = reg map Context.symbolOf map {
@@ -745,13 +745,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         given inferredCapture: Captures = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
 
-        val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.head.tpe)
-        Context.bind(d.symbol.head, t, inferredCapture)
+        val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
+        Context.bind(d.symbol, t, inferredCapture)
         Result((), effBinding)
 
       case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
-        d.symbol.head.vparams foreach Context.bind
-        d.symbol.head.bparams foreach Context.bind
+        d.symbol.vparams foreach Context.bind
+        d.symbol.bparams foreach Context.bind
         Result((), Pure)
 
       // all other definitions have already been prechecked
@@ -796,23 +796,23 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val valueTypes = (vparams zip vps) map {
         case (param, expected) =>
           val adjusted = typeSubst substitute expected
-          val tpe = param.symbol.head.tpe.map { got =>
+          val tpe = param.symbol.tpe.map { got =>
             matchDeclared(got, adjusted, param);
             got
           } getOrElse { adjusted }
           // bind types to check body
-          Context.bind(param.symbol.head, tpe)
+          Context.bind(param.symbol, tpe)
           tpe
       }
 
       val blockTypes = (bparams zip bps) map {
         case (param, expTpe) =>
           val adjusted = typeSubst substitute expTpe
-          val sym = param.symbol.head
+          val sym = param.symbol
           val got = sym.tpe
           matchDeclared(got, adjusted, param)
           // bind types to check body
-          Context.bind(param.symbol.head, got, CaptureSet(sym.capture))
+          Context.bind(param.symbol, got, CaptureSet(sym.capture))
           got
       }
 
@@ -821,7 +821,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
 
       // (5) Substitute capture params
-      val captParams = (bparams.map(_.symbol.head) ++ capabilities).map { p => p.capture }
+      val captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
       val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
 
       // (6) Substitute both types and captures into expected return type
@@ -849,15 +849,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case arg @ source.BlockLiteral(tparams, vparams, bparams, body) => Context in {
       val tps = tparams.map { p => p.symbol.asTypeParam }
       val vps = vparams.map { p =>
-        val param = p.symbol.head
-        val tpe = p.symbol.head.tpe.getOrElse {
+        val param = p.symbol
+        val tpe = p.symbol.tpe.getOrElse {
           Context.abort("Expected type needs to be known for function arguments at the moment.")
         }
         Context.bind(param, tpe)
         tpe
       }
       val bps = bparams.map { p =>
-        val param = p.symbol.head
+        val param = p.symbol
         val tpe = param.tpe
         Context.bind(param, tpe)
         tpe
@@ -877,14 +877,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val capabilities = effs.canonical.map { caps.apply }
       Context.bindCapabilities(arg, capabilities)
 
-      val cps = (bparams.map(_.symbol.head) ++ capabilities).map(_.capture)
+      val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
 
       val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
 
 
       // Like with functions, bound parameters and capabilities are not closed over
       usingCaptureWithout(inferredCapture) {
-        (bparams.map(_.symbol.head) ++ capabilities).map(_.capture) ++ List(selfRegion)
+        (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion)
       }
 
       Result(funType, Pure)

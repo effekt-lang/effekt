@@ -115,28 +115,7 @@ sealed trait Named extends Tree
 
 // Something that later will be stored in the symbol table
 sealed trait Definition extends Named {
-  def ids: List[IdDef] = this match {
-    case FunDef(id, _, _, _, _, _) => List(id)
-    case ValDef(ids, _, _) => ids
-    case VarDef(id, _, _, _) => List(id)
-    case DefDef(id, _, _) => List(id)
-    case InterfaceDef(id, _, _, _) => List(id)
-    case DataDef(id, _, _) => List(id)
-    case RecordDef(id, _, _) => List(id)
-    case TypeDef(id, _, _) => List(id)
-    case EffectDef(id, _, _) => List(id)
-    case ExternType(id, _) => List(id)
-    case ExternDef(_, id, _, _, _, _, _) => List(id)
-    case ExternResource(id, _) => List(id)
-    case ExternInterface(id, _) => List(id)
-    case ExternInclude(_, _, id) => List(id)
-    case ValueParam(id, _) => List(id)
-    case BlockParam(id, _) => List(id)
-    case Constructor(id, _) => List(id)
-    case Operation(id, _, _, _) => List(id)
-    case AnyPattern(id) => List(id)
-    case Region(id, body) => List(id)
-  }
+  def id: IdDef
 }
 
 // Something that later can be looked up in the symbol table
@@ -191,7 +170,7 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: List[IdDef], annot: List[Option[ValueType]], binding: Stmt)
+  case ValDef(binders: List[ValueParam], binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) // TODO MRV 26: List?
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
@@ -539,7 +518,7 @@ object Named {
   type ResolvedDefinitions[T <: Definitions] = T match {
     // Defs
     case FunDef       => symbols.UserFunction
-    case ValDef       => symbols.Binder.ValBinder // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
+    case ValDef       => List[symbols.Binder.ValBinder] // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
     case VarDef       => symbols.Binder.VarBinder
     case DefDef       => symbols.Binder.DefBinder
     case InterfaceDef => symbols.BlockTypeConstructor.Interface
@@ -588,7 +567,10 @@ object Named {
   }
 
   extension [T <: Definitions](t: T & Definition) {
-    def symbol(using C: Context): List[ResolvedDefinitions[T]] = C.symbolsOf(t).asInstanceOf
+    def symbol(using C: Context): ResolvedDefinitions[T] = t match {
+      case t: ValDef => t.binders.map { (b: ValueParam) => C.symbolOf(b.id) }.asInstanceOf
+      case _ => C.symbolOf(t.id).asInstanceOf
+    }
   }
   extension [T <: References](t: T & Reference) {
     def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf

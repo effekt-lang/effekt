@@ -108,7 +108,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
         module.definitions.foreach {
           case u: Def =>
-            outputCode(DeclPrinter(context.symbolsOf(u)), config)
+            outputCode(DeclPrinter(List(context.symbolOf(u.id))), config)
         }
       }
     }
@@ -220,16 +220,16 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        d.ids.foreach(id => (context.symbolOption(id) match {
+        context.symbolOption(d.id) match {
           case Some(v: ValueSymbol) =>
-            Some(context.valueTypeOf(v))
+            Some(v, context.valueTypeOf(v))
           case Some(b: BlockSymbol) =>
-            Some(context.blockTypeOf(b))
+            Some(b, context.blockTypeOf(b))
           case t =>
             None
-        }) map { tpe =>
+        } map { case (id, tpe) =>
           outputCode(pp"${id}: ${tpe}", config)
-        })
+        }
       }
 
     case _ => ()
@@ -296,7 +296,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
-      val otherDefs = definitions.filterNot { other => d.ids.map{_.name}.forall(other.ids.map{_.name}.contains) }
+      val otherDefs = definitions.filterNot { other => d.id == other.id }
       copy(definitions = otherDefs :+ d)
     }
     def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
