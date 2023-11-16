@@ -111,12 +111,16 @@ case class IdRef(name: String) extends Id {
   }
 }
 
-// Something that later will be stored in the symbol table
+/**
+ * Something that later will be stored in the symbol table
+ */
 sealed trait Definition extends Tree {
   def id: IdDef
 }
 
-// Something that later can be looked up in the symbol table
+/**
+ * Something that later can be looked up in the symbol table
+ */
 sealed trait Reference extends Tree {
   def id: IdRef
 }
@@ -621,14 +625,14 @@ object BlockType {
   // (see https://github.com/lampepfl/dotty/issues/16299)
   type Resolvable = BlockTypeTree | FunctionType | BlockTypeRef
 
-  type Resolved[T <: Resolvable] <: symbols.Type = T match {
+  type TypeFor[T <: Resolvable] <: symbols.Type = T match {
     case BlockTypeTree => symbols.BlockType
     case FunctionType => symbols.FunctionType
     case BlockTypeRef => symbols.InterfaceType
   }
 
   extension [T <: Resolvable] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
+    def resolve(using C: Context): TypeFor[T] = C.resolvedType(t).asInstanceOf
   }
 }
 
