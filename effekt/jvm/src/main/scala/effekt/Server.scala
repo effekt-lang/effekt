@@ -3,8 +3,8 @@ package effekt
 import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
-import effekt.source.{FunDef, Hole, ModuleDecl, Tree}
-import effekt.util.{PlainMessaging, getOrElseAborting}
+import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
+import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
 
 import kiama.util.{ Filenames, Position, Services, Source }
