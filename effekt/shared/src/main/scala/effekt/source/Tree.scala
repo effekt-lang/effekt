@@ -507,7 +507,7 @@ object Named {
 
   type Params = ValueParam | BlockParam
   type Externs = ExternDef | ExternResource | ExternInterface | ExternType
-  type Defs = FunDef | ValDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
+  type Defs = FunDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
   type Types = ValueTypeRef | BlockTypeRef
@@ -518,7 +518,6 @@ object Named {
   type ResolvedDefinitions[T <: Definitions] = T match {
     // Defs
     case FunDef       => symbols.UserFunction
-    case ValDef       => List[symbols.Binder.ValBinder] // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
     case VarDef       => symbols.Binder.VarBinder
     case DefDef       => symbols.Binder.DefBinder
     case InterfaceDef => symbols.BlockTypeConstructor.Interface
@@ -566,12 +565,22 @@ object Named {
     case TagPattern => symbols.Constructor
   }
 
+  /**
+   * Definitions resolve to exactly one symbol, which is the one they introduce
+   */
   extension [T <: Definitions](t: T & Definition) {
-    def symbol(using C: Context): ResolvedDefinitions[T] = t match {
-      case t: ValDef => t.binders.map { (b: ValueParam) => C.symbolOf(b.id).asInstanceOf[symbols.Binder.ValBinder] }.asInstanceOf[ResolvedDefinitions[T]]
-      case _ => C.symbolOf(t.id).asInstanceOf[ResolvedDefinitions[T]]
-    }
+    def symbol(using C: Context): ResolvedDefinitions[T] =
+      C.symbolOf(t.id).asInstanceOf
   }
+
+  /**
+   * `ValDef`s resolve to potentially multiple symbols.
+   */
+  extension (t: ValDef) {
+    def boundSymbols(using C: Context): List[effekt.symbols.Binder.ValBinder] =
+      t.binders.map { (b: ValueParam) => C.symbolOf(b.id) }.asInstanceOf
+  }
+
   extension [T <: References](t: T & Reference) {
     def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf
   }
