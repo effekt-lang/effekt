@@ -215,7 +215,6 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     case d: Def =>
       val extendedDefs = module + d
       val decl = extendedDefs.make(UnitLit())
-      val output = config.output()
 
       runFrontend(source, decl, config) { cu =>
         module = extendedDefs
