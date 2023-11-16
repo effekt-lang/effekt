@@ -515,7 +515,7 @@ object Named {
   type Calls = Do | Select | MethodCall | IdTarget
   type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
 
-  type ResolvedDefinitions[T <: Definitions] = T match {
+  type ResolvedDefinitions[T <: Definitions] <: Symbol = T match {
     // Defs
     case FunDef       => symbols.UserFunction
     case VarDef       => symbols.Binder.VarBinder
@@ -543,7 +543,7 @@ object Named {
     case AnyPattern  => symbols.ValueParam
   }
 
-  type ResolvedReferences[T <: References] = T match {
+  type ResolvedReferences[T <: References] <: Symbol = T match {
     // Types
     case ValueTypeRef => symbols.TypeConstructor
     case BlockTypeRef => symbols.BlockTypeConstructor
@@ -565,12 +565,19 @@ object Named {
     case TagPattern => symbols.Constructor
   }
 
+  import effekt.context.Annotations
+
   /**
    * Definitions resolve to exactly one symbol, which is the one they introduce
    */
   extension [T <: Definitions](t: T & Definition) {
     def symbol(using C: Context): ResolvedDefinitions[T] =
-      C.symbolOf(t.id).asInstanceOf
+      symbolOption getOrElse {
+        C.panic(s"Internal Compiler Error: Cannot find symbol for ${t.id}")
+      }
+
+    def symbolOption(using C: Context): Option[ResolvedDefinitions[T]] =
+      C.annotationOption(Annotations.Symbol, t.id).map(_.asInstanceOf[ResolvedDefinitions[T]])
   }
 
   /**
@@ -578,13 +585,22 @@ object Named {
    */
   extension (t: ValDef) {
     def boundSymbols(using C: Context): List[effekt.symbols.Binder.ValBinder] =
-      t.binders.map { (b: ValueParam) => C.symbolOf(b.id) }.asInstanceOf
+      // the symbol of a ValueParam is a symbols.ValueParam, not a ValBinder!
+      t.binders.map { (b: ValueParam) => b.symbol; ??? }
   }
 
+  /**
+   * References resolve to exactly one symbol.
+   *
+   * Looking them up creates a backreference for IDE support
+   */
   extension [T <: References](t: T & Reference) {
-    def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf
+    def definition(using C: Context): ResolvedReferences[T] =
+      val sym = C.symbolOf(t.id)
+      val refs = C.annotationOption(Annotations.References, sym).getOrElse(Set.empty)
+      C.annotate(Annotations.References, sym, refs + t)
+      sym.asInstanceOf
   }
-
 }
 export Named.symbol
 

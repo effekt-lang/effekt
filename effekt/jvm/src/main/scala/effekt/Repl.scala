@@ -107,8 +107,10 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
         module.definitions.foreach {
-          case u: Def =>
-            outputCode(DeclPrinter(List(u.id.symbol)), config)
+          case u: Named.Definitions =>
+            outputCode(DeclPrinter(u.symbol), config)
+          case d: ValDef => ???
+          case d: ExternInclude => ???
         }
       }
     }
@@ -220,15 +222,20 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        context.symbolOption(d.id) match {
-          case Some(v: ValueSymbol) =>
-            Some(v, context.valueTypeOf(v))
-          case Some(b: BlockSymbol) =>
-            Some(b, context.blockTypeOf(b))
-          case t =>
-            None
-        } map { case (id, tpe) =>
-          outputCode(pp"${id}: ${tpe}", config)
+        d match {
+          case d: Named.Definitions =>
+            d.symbolOption match {
+              case Some(v: ValueSymbol) =>
+                Some(v, context.valueTypeOf(v))
+              case Some(b: BlockSymbol) =>
+                Some(b, context.blockTypeOf(b))
+              case t =>
+                None
+            } foreach { case (id, tpe) =>
+              outputCode(pp"${id}: ${tpe}", config)
+            }
+          case d: ValDef => ???
+          case d: ExternInclude => config.output().emitln("extern definitions loaded")
         }
       }
 
@@ -296,7 +303,11 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
-      val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
+      val otherDefs = definitions.filterNot {
+        case other: Named.Definitions => other.id.name == d.id.name
+        case other: ValDef => other.binders.map(_.id.name) contains d.id.name
+        case d: ExternInclude => false
+      }
       copy(definitions = otherDefs :+ d)
     }
     def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
