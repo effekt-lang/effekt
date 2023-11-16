@@ -80,7 +80,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def preresolve(d: Def)(using Context): Unit = Context.focusing(d) {
 
-    case d @ source.ValDef(binders, binding) =>
+    case d @ source.ValDef(binders, binding, _) =>
       ()
 
     case d @ source.VarDef(id, annot, region, binding) =>
@@ -225,7 +225,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, p)
       Context.bind(p.capture)
 
-    case d @ source.ValDef(binders, binding) =>
+    case d @ source.ValDef(binders, binding, _) =>
       val tpes = binders.map(a => a.tpe.map(resolve)) // TODO MRV: remove Option[]
       resolveGeneric(binding)
       (binders zip tpes) foreach { case (source.ValueParam(id, _), tpe) =>

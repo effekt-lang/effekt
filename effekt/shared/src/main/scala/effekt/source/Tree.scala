@@ -170,7 +170,7 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(binders: List[ValueParam], binding: Stmt)
+  case ValDef(binders: List[ValueParam], binding: Stmt, val id: IdDef = IdDef(""))
   case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) // TODO MRV 26: List?
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
@@ -206,8 +206,8 @@ enum Def extends Definition {
    */
   case ExternInclude(path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
 
-
 }
+
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
   type Declaration = InterfaceDef | DataDef | RecordDef
@@ -568,8 +568,8 @@ object Named {
 
   extension [T <: Definitions](t: T & Definition) {
     def symbol(using C: Context): ResolvedDefinitions[T] = t match {
-      case t: ValDef => t.binders.map { (b: ValueParam) => C.symbolOf(b.id) }.asInstanceOf
-      case _ => C.symbolOf(t.id).asInstanceOf
+      case t: ValDef => t.binders.map { (b: ValueParam) => C.symbolOf(b.id).asInstanceOf[symbols.Binder.ValBinder] }.asInstanceOf[ResolvedDefinitions[T]]
+      case _ => C.symbolOf(t.id).asInstanceOf[ResolvedDefinitions[T]]
     }
   }
   extension [T <: References](t: T & Reference) {

@@ -701,7 +701,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), unhandledEffects)
 
-      case d @ source.ValDef(binders, binding) =>
+      case d @ source.ValDef(binders, binding, _) =>
         val tpeList = d.symbol.map(_.tpe)
         val Result(t, effBinding) = if (tpeList.forall(_.isDefined)) {
           val Result(_, effBinding) = binding checkAgainst tpeList.flatten
