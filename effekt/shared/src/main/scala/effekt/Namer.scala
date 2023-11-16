@@ -226,10 +226,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.bind(p.capture)
 
     case d @ source.ValDef(binders, binding, _) =>
-      val tpes = binders.map(a => a.tpe.map(resolve)) // TODO MRV: remove Option[]
       resolveGeneric(binding)
-      (binders zip tpes) foreach { case (source.ValueParam(id, _), tpe) =>
-        Context.define(id, ValBinder(Name.local(id), tpe, d))
+      binders.foreach { case source.ValueParam(id, tpe) =>
+        Context.define(id, ValBinder(Name.local(id), tpe.map(resolve), d))
       }
 
     case d @ source.VarDef(id, annot, region, binding) =>

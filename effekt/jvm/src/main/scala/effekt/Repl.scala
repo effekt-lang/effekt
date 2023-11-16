@@ -108,7 +108,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
         module.definitions.foreach {
           case u: Def =>
-            outputCode(DeclPrinter(List(context.symbolOf(u.id))), config)
+            outputCode(DeclPrinter(List(u.id.symbol)), config)
         }
       }
     }
@@ -296,7 +296,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
-      val otherDefs = definitions.filterNot { other => d.id == other.id }
+      val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
       copy(definitions = otherDefs :+ d)
     }
     def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
