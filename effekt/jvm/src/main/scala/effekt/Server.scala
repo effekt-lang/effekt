@@ -235,8 +235,8 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   } yield res
 
   def needsUpdate(annotated: (List[ValueType], Effects), inferred: (List[ValueType], Effects))(using Context): Boolean = {
-    val (tpe1, effs1) = annotated
-    val (tpe2, effs2) = inferred
+    val (tpes1, effs1) = annotated
+    val (tpes2, effs2) = inferred
 
     val differentArity = tpes1.size != tpes2.size
     val differentEffects = effs1 != effs2
