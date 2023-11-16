@@ -238,7 +238,12 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     val (tpe1, effs1) = annotated
     val (tpe2, effs2) = inferred
 
-    tpe1.size != tpe2.size || tpe1.zip(tpe2).forall { case (t1, t2) => t1 != t2 } || effs1 != effs2
+    val differentArity = tpes1.size != tpes2.size
+    val differentEffects = effs1 != effs2
+
+    def differentTypes = (tpes1 zip tpes2).forall { case (tpe1, tpe2) => tpe1 != tpe2 }
+
+    differentArity || differentEffects || differentTypes
   }
 
   case class CaptureInfo(location: Location, captureText: String)
