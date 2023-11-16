@@ -77,7 +77,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val repl: P[Tree] = toplevel | expr | importDecl
 
   lazy val toplevel: P[Def] =
-    ( valDefs
+    ( valDef
     | funDef
     | defDef
     | interfaceDef
@@ -94,7 +94,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDefs
+    ( valDef
     | funDef
     | defDef
     // aliases are allowed, since they are fully resolved during name checking
@@ -296,16 +296,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
        }
     )
 
-  lazy val valDefs: P[Def] =
-     `val` ~> someSep(valDef, `,`) ~ (`=` ~/> stmt) ^^ {
-        case defs ~ binding =>
-          val ids = defs.map(_._1)
-          val tpes = defs.map(_._2)
-          ValDef(ids, tpes, binding)
-     }
-
-  lazy val valDef: P[(IdDef, Option[ValueType])] =
-    idDef ~ (`:` ~/> valueType).? ^^ { case id ~ tpe => (id, tpe)}
+  lazy val valDef: P[Def] =
+    `val` ~> someSep(valueParamOpt, `,`) ~ (`=` ~/> stmt) ^^  {
+      case binders ~ binding => ValDef(binders, binding)
+    }
 
   lazy val varDef: P[Def] =
     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`in` ~/> idRef).? ~ (`=` ~/> stmt) ^^ {

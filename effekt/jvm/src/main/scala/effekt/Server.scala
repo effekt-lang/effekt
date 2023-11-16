@@ -201,7 +201,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
    * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
    */
   def inferEffectsAction(fun: FunDef)(using C: Context): Option[TreeAction] =
-    val symbol = fun.symbol.head
+    val symbol = fun.symbol
     for {
     // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)

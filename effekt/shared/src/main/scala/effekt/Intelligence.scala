@@ -77,7 +77,7 @@ trait Intelligence {
     case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
     case s: SelfParam => s.tree match {
-      case d: source.Def => Some(d.ids.head) // TODO MRV 14
+      case d: source.Def => Some(d.id)
       case _             => Some(s.tree)
     }
     case u => C.definitionTreeOption(u)

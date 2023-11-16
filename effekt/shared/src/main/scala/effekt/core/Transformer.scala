@@ -41,27 +41,27 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformToplevel(d: source.Def)(using Context): List[Definition | Declaration | Extern] = d match {
     case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val tparams = tps.map { p => p.symbol }
-      val cparams = bps.map { b => b.symbol.head.capture }
+      val cparams = bps.map { b => b.symbol.capture }
       val vparams = vps map transform
       val bparams = bps map transform
-      List(Definition.Def(f.symbol.head, BlockLit(tparams, cparams, vparams, bparams, transform(body))))
+      List(Definition.Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body))))
 
     case d @ source.DataDef(id, _, ctors) =>
-      val datatype = d.symbol.head
+      val datatype = d.symbol
       List(Data(datatype, datatype.tparams, datatype.constructors.map(transform)))
 
     case d @ source.RecordDef(id, _, _) =>
-      val rec = d.symbol.head
+      val rec = d.symbol
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
-    case v @ source.ValDef(ids, _, binding) if pureOrIO(binding) =>
+    case v @ source.ValDef(_, binding, _) if pureOrIO(binding) =>
       List(Definition.Let(v.symbol, Run(transform(binding)))) // TODO MRV: symbol must return list
 
-    case v @ source.ValDef(ids, _, binding) =>
+    case v @ source.ValDef(_, binding, _) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
     case v @ source.DefDef(id, annot, binding) =>
-      val sym = v.symbol.head
+      val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
         Definition.Def(sym, transformAsBlock(binding))
       }
@@ -78,7 +78,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.at(d) { Context.abort("Mutable variable bindings currently not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
-      val interface = d.symbol.head
+      val interface = d.symbol
       List(core.Interface(interface, interface.tparams, interface.operations.map {
         case op @ symbols.Operation(name, tps, vps, resultType, effects, interface) =>
           // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
@@ -95,9 +95,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }))
 
     case f @ source.ExternDef(pure, id, _, vps, bps, _, body) =>
-      val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol.head
+      val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
-      val cps = bps.map(b => b.symbol.head.capture)
+      val cps = bps.map(b => b.symbol.capture)
       List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, ret.map(transform), transform(capt), body))
 
 
@@ -138,25 +138,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.DefStmt(d, rest) => d match {
       case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
         val tparams = tps.map { p => p.symbol }
-        val cparams = bps.map { b => b.symbol.head.capture }
+        val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
         val bparams = bps map transform
-        Def(f.symbol.head, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
+        Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
 
-      case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
+      case v @ source.ValDef(_, binding, _) if pureOrIO(binding) =>
         Let(v.symbol, Run(transform(binding)), transform(rest))
 
-      case v @ source.ValDef(id, _, binding) =>
+      case v @ source.ValDef(_, binding, _) =>
         Val(v.symbol, transform(binding), transform(rest))
 
       case v @ source.DefDef(id, annot, binding) =>
-        val sym = v.symbol.head
+        val sym = v.symbol
         insertBindings {
           Def(sym, transformAsBlock(binding), transform(rest))
         }
 
       case v @ source.VarDef(id, _, reg, binding) =>
-        val sym = v.symbol.head
+        val sym = v.symbol
         insertBindings {
           Context.bind(transform(binding)) match {
             case List(v) => State(sym, v, sym.region, transform(rest))
@@ -276,7 +276,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.BlockLiteral(tps, vps, bps, body) =>
       val tparams = tps.map(t => t.symbol)
-      val cparams = bps.map { b => b.symbol.head.capture }
+      val cparams = bps.map { b => b.symbol.capture }
       BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))
 
     case s @ source.New(impl) =>
@@ -384,7 +384,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.TryHandle(prog, handlers) =>
       val (bps, cps) = handlers.map { h =>
-        val cap = h.capability.get.symbol.head
+        val cap = h.capability.get.symbol
         (BlockParam(cap), cap.capture)
       }.unzip
 
@@ -399,7 +399,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
     case r @ source.Region(name, body) =>
-      val region = r.symbol.head
+      val region = r.symbol
       val tpe = Context.blockTypeOf(region)
       val cap: core.BlockParam = core.BlockParam(region, transform(tpe))
       Context.bind(Region(BlockLit(Nil, List(region.capture), Nil, List(cap), transform(body)))) match {
@@ -575,9 +575,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
   }
 
-  def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol.head)
+  def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol)
 
-  def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol.head)
+  def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol)
 
   def insertBindings(stmt: => Stmt)(using Context): Stmt = {
     val (body, bindings) = Context.withBindings { stmt }
@@ -633,7 +633,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // Uses the bind effect to bind the right hand sides of clauses!
   private def preprocess(sc: List[ValueVar], clause: source.MatchClause)(using Context): Clause = { // TODO MRV: scrutinee is list of ValueVar
     def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
-      case p @ source.AnyPattern(id) => p.symbol
+      case p @ source.AnyPattern(id) => List(p.symbol)
       case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)
       case _ => Nil
     }

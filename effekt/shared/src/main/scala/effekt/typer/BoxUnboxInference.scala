@@ -134,8 +134,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case FunDef(id, tparams, vparams, bparams, ret, body) =>
       FunDef(id, tparams, vparams, bparams, ret, rewrite(body))
 
-    case ValDef(id, annot, binding) =>
-      ValDef(id, annot, rewrite(binding))
+    case ValDef(binders, binding, _) =>
+      ValDef(binders, rewrite(binding))
 
     case VarDef(id, annot, region, binding) =>
       VarDef(id, annot, region, rewrite(binding))

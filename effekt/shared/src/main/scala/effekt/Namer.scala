@@ -80,7 +80,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def preresolve(d: Def)(using Context): Unit = Context.focusing(d) {
 
-    case d @ source.ValDef(id, annot, binding) =>
+    case d @ source.ValDef(binders, binding, _) =>
       ()
 
     case d @ source.VarDef(id, annot, region, binding) =>
@@ -225,11 +225,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, p)
       Context.bind(p.capture)
 
-    case d @ source.ValDef(ids, annots, binding) =>
-      val tpes = annots.map(a => a.map(resolve)) // TODO MRV: remove Option[]
+    case d @ source.ValDef(binders, binding, _) =>
       resolveGeneric(binding)
-      (ids zip tpes) foreach { (id, tpe) =>
-        Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
+      binders.foreach { case source.ValueParam(id, tpe) =>
+        Context.define(id, ValBinder(Name.local(id), tpe.map(resolve), d))
       }
 
     case d @ source.VarDef(id, annot, region, binding) =>
@@ -253,7 +252,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
-      val sym = f.symbol.head
+      val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
@@ -292,7 +291,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
-      val data = d.symbol.head
+      val data = d.symbol
       data.constructors = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshNameFor(id)
@@ -304,7 +303,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // The record has been resolved as part of the preresolution step
     case d @ source.RecordDef(id, tparams, fs) =>
-      val record = d.symbol.head
+      val record = d.symbol
       val name = Context.freshNameFor(id)
       val constructor = Constructor(name, record.tparams, null, record)
       // we define the constructor on a copy to avoid confusion with symbols
