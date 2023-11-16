@@ -1,12 +1,12 @@
 package effekt
 
-import effekt.source._
+import effekt.source.*
 import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic }
 import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
-import kiama.util.{ Console, REPL, Source, StringSource, Range }
+import kiama.util.{ Console, REPL, Range, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
@@ -107,7 +107,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
         module.definitions.foreach {
-          case u: Named.Definitions =>
+          case u: Definition.Resolvable =>
             outputCode(DeclPrinter(u.symbol), config)
           case d: ValDef => ???
           case d: ExternInclude => ???
@@ -223,7 +223,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
         // try to find the symbol for the def to print the type
         d match {
-          case d: Named.Definitions =>
+          case d: Definition.Resolvable =>
             d.symbolOption match {
               case Some(v: ValueSymbol) =>
                 Some(v, context.valueTypeOf(v))
@@ -304,7 +304,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     def +(d: Def) = {
       // drop all equally named definitions for now.
       val otherDefs = definitions.filterNot {
-        case other: Named.Definitions => other.id.name == d.id.name
+        case other: Definition.Resolvable => other.id.name == d.id.name
         case other: ValDef => other.binders.map(_.id.name) contains d.id.name
         case d: ExternInclude => false
       }
