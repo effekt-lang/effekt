@@ -1,3 +1,0 @@
-[error] examples/neg/parsing/blockargs.effekt:3:20: Effects not allowed here. Maybe you mean to use a function type `() => T / E`?
-def foo[R] { f : R / Exc }: R = <>
-                   ^

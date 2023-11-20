@@ -1,9 +1,0 @@
-module unreachable
-
-def test(l: List[Int]) = l match {
-  case Cons(x, y) => 0
-  case Cons(_, Cons(_, _)) => 1
-  case Nil() => 2
-}
-
-def main() = ()

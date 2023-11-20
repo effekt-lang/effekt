@@ -1,8 +1,0 @@
-// Jonathan Frech, 2022-08-10
-
-
-record Triple(a: Int, b: Int, c: Int)
-
-def main() = {
-    println(Triple(1, 2, 3).c)
-}

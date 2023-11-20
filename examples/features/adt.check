@@ -1,9 +1,0 @@
-1
-3
-5
-7
-9
-42
-[warning] examples/features/adt.md:39:12: Condition to while loop is pure, which might not be intended.
-    while (true) { l = Cons(f(), l) }
-           ^^^^

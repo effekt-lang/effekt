@@ -1,9 +1,0 @@
-module io/args
-
-import effekt
-import immutable/list
-import mutable/array
-
-extern io def nativeArgs(): Array[String] = "process.argv.slice(2)"
-
-def commandLineArgs(): List[String] = nativeArgs().toList

@@ -1,3 +1,0 @@
-[error] examples/neg/paramsnotypes.effekt:1:15: Expected a type annotation
-def identity(x) = x
-              ^

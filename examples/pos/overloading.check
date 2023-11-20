@@ -1,2 +1,0 @@
-Cons(2, Cons(3, Cons(4, Nil())))
-Some(5)

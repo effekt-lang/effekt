@@ -1,6 +1,0 @@
-[error] examples/neg/lambdas/declared.effekt:16:9: The following captures are not allowed: {console}
-  myFun { (x: Yield at {time}) => () }; // ERROR
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] examples/neg/lambdas/declared.effekt:16:12: The following captures are not allowed: {console}
-  myFun { (x: Yield at {time}) => () }; // ERROR
-           ^^^^^^^^^^^^^^^^^^

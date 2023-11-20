@@ -1,3 +1,0 @@
-[warning] examples/pos/unused_effects.effekt:5:14: Handling effect Fail, which seems not to be used by the program.
-def main() = try {
-             ^

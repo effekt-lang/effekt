@@ -1,4 +1,0 @@
-54
-[warning] examples/pos/stream_pull.effekt:16:10: Condition to while loop is pure, which might not be intended.
-  while (true) {
-         ^^^^

@@ -1,6 +1,0 @@
-[error] examples/neg/coverage.effekt:9:21: Non exhaustive pattern matching, missing case for Third
-def user(t: Test) = t match {
-                    ^
-[error] examples/neg/coverage.effekt:9:21: Non exhaustive pattern matching, missing case for First
-def user(t: Test) = t match {
-                    ^

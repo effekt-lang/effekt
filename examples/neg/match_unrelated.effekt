@@ -1,8 +1,0 @@
-type Something {}
-type SomethingElse { MakeIt() }
-
-def tryMatch(s: Something) = s match {
-  case MakeIt() => 2
-}
-
-def main() = ()

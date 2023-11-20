@@ -1,3 +1,0 @@
-[error] examples/neg/issue50.effekt:16:11: Not allowed {Effect2$capability}
-      k = fun (x: Unit) { resume(x) };
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
