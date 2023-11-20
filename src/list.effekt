@@ -1,4 +1,4 @@
-import examples/fasteffekt/benchmark
+import src/benchmark
 
 record Element (
     value: Int, child: Option[Element]
