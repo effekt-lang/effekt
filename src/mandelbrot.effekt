@@ -1,6 +1,6 @@
 
 // const { Benchmark } = require('./benchmark');
-import examples/fasteffekt/benchmark
+import src/benchmark
 
 extern pure def xor(a: Int, b: Int): Int = "a ^ b"
 
