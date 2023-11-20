@@ -82,6 +82,10 @@ def Mandelbrot(size: Int) = {
     return innerBenchmarkLoop(size){benchmark}{verifyResult}
 }
 
+def main() = {
+    Mandelbrot(1);
+}
+
 // class Mandelbrot extends Benchmark {
 //   verifyResult(result, innerIterations) {
 //     if (innerIterations === 500) { return result === 191; }
