@@ -175,6 +175,33 @@ def report[E] { prog: => Unit / Exception[E] }: Unit =
 def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception, msg) = () }
 
+// Control Flow
+// ============
+effect Control {
+  def break(): Unit
+  def continue(): Unit
+}
+
+def loop { f: () => Unit / Control }: Unit = try {
+  def go(): Unit = { f(); go() }
+  go()
+} with Control {
+  def break() = ()
+  def continue() = loop { f }
+}
+
+/**
+ * Calls provided action repeatedly. `start` is inclusive, `end` is not.
+ */
+def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
+  var i = start;
+  loop {
+    if (i < end) { val el = i; i = i + 1; action(el) }
+    else { do break() }
+  }
+}
+
+def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
 
 // Benchmarking
 // ============
