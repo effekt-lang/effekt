@@ -1,0 +1,87 @@
+import mutable/array
+
+record Body(
+  x: Double,
+  y: Double,
+  z: Double,
+  vx: Double,
+  vy: Double,
+  vz: Double,
+  mass: Double
+)
+
+
+def main() = {
+  val PI = 3.141592653589793
+  val SOLAR_MASS = 4.0 * PI * PI
+  val DAYS_PER_YER = 365.24;
+
+  def offsetMomentum(px: Double, py: Double, pz: Double, body: Body) = {
+    Body(
+      body.x, body.y, body.z,
+      0.0 -(px / SOLAR_MASS),
+      0.0 -(py / SOLAR_MASS),
+      0.0 -(pz / SOLAR_MASS),
+      body.mass)
+  }
+
+  def createBodies(): Array[Body] = {
+    val bodies: Array[Body] = emptyArray[Body](5)
+   val jupiter = Body(
+    4.84143144246472090,
+    -1.16032004402742839,
+    -0.10362204447112311,
+    0.001660076642744037,
+    0.007699011184197404,
+    -0.0000690460016972063,
+    0.0009547919384243266
+  );
+
+  val saturn = Body(
+    8.34336671824458,
+    4.124798564124305,
+    -0.4035234171143214,
+    -0.002767425107268624,
+    0.004998528012349172,
+    0.00002304172975737639,
+    0.0002858859806661308
+  );
+
+  val uranus = Body(
+    12.89436956213913,
+    -15.11115140169863,
+    -0.22330757889265574,
+    0.002964601375647616,
+    0.0023784717395948095,
+    -0.000029658956854023755,
+    0.00004366244043351563
+  );
+
+  val neptune = Body(
+    15.379697114850917,
+    -25.919314609987964,
+    0.17925877295037118,
+    0.002680677724903893,
+    0.001628241700382423,
+    -0.00009515922545197159,
+    0.00005151389020466115
+  );
+
+    val sun = Body(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+
+
+    put(bodies,0,sun);
+    put(bodies,1,jupiter);
+    put(bodies,2,saturn);
+    put(bodies,3,uranus);
+    put(bodies,4,neptune);
+
+    bodies
+  }
+
+  val bodies: Array[Body] = createBodies();
+  each(0,bodies.size()){ i =>
+    println(show(bodies.unsafeGet(i)))
+  };
+  ();
+}
