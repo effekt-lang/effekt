@@ -14,7 +14,7 @@ lazy val lspDependencies = Seq(
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(Seq(
-    scalaVersion := "3.2.0",
+    scalaVersion := "3.3.1",
     scalacOptions ++= Seq(
       "-encoding", "utf8",
       "-deprecation",
