@@ -200,15 +200,20 @@ trait Intelligence {
 
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
-    case s: VarBinder =>
+    case c: VarBinder =>
+      val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
 
       val ex =
-        s"""|Each variable declaration introduces a new scope.
+        s"""|Like in other languages, mutable variable binders like `${c.name}`
+            |can be modified (e.g., `${c.name} = VALUE`) by code that has `${c.name}`
+            |in its lexical scope.
             |
-            |Variables must only be accessed while they are still live.
-            |""".stripMargin
+            |However, as opposed to other languages, variable binders in Effekt
+            |are stack allocated and show the right backtracking behavior in
+            |combination with effect handlers.
+         """.stripMargin
 
-      SymbolInfo(s, "Local variable", None, Some(ex))
+      SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
 
     case s: RegBinder =>
 
@@ -227,21 +232,6 @@ trait Intelligence {
     case c: ValBinder =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value binder", signature, None)
-
-    case c: VarBinder =>
-      val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-
-      val ex =
-        s"""|Like in other languages, mutable variable binders like `${c.name}`
-            |can be modified (e.g., `${c.name} = VALUE`) by code that has `${c.name}`
-            |in its lexical scope.
-            |
-            |However, as opposed to other languages, variable binders in Effekt
-            |are stack allocated and show the right backtracking behavior in
-            |combination with effect handlers.
-         """.stripMargin
-
-      SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
 
     case c: DefBinder =>
       val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
