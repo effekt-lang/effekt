@@ -310,18 +310,20 @@ object Tree {
     case leaf => ()
   }
 
-  class Query extends Structural {
-    def empty: Set[Id] = Set.empty
-    def combine(r1: Set[Id], r2: Set[Id]): Set[Id] = r1 ++ r2
+  trait Query extends Structural {
+    type M
 
-    def query(p: Pure): Set[Id] = queryStructurally(p, empty, combine)
-    def query(e: Expr): Set[Id] = queryStructurally(e, empty, combine)
-    def query(s: Stmt): Set[Id] = queryStructurally(s, empty, combine)
-    def query(b: Block): Set[Id] = queryStructurally(b, empty, combine)
-    def query(d: Definition): Set[Id] = queryStructurally(d, empty, combine)
-    def query(d: Implementation): Set[Id] = queryStructurally(d, empty, combine)
-    def query(d: Operation): Set[Id] = queryStructurally(d, empty, combine)
-    def query(matchClause: (Id, BlockLit)): Set[Id] = matchClause match {
+    def empty: M
+    def combine(r1: M, r2: M): M
+
+    def query(p: Pure): M = queryStructurally(p, empty, combine)
+    def query(e: Expr): M = queryStructurally(e, empty, combine)
+    def query(s: Stmt): M = queryStructurally(s, empty, combine)
+    def query(b: Block): M = queryStructurally(b, empty, combine)
+    def query(d: Definition): M = queryStructurally(d, empty, combine)
+    def query(d: Implementation): M = queryStructurally(d, empty, combine)
+    def query(d: Operation): M = queryStructurally(d, empty, combine)
+    def query(matchClause: (Id, BlockLit)): M = matchClause match {
       case (id, lit) => query(lit)
     }
   }
@@ -365,6 +367,89 @@ object Tree {
   }
 }
 
+object freeVariables {
+
+  case class Variables(values: Set[Id], blocks: Set[Id]) {
+    def ++(other: Variables) = Variables(values ++ other.values, blocks ++ other.blocks)
+    def --(other: Variables) = Variables(values -- other.values, blocks -- other.blocks)
+  }
+  object Variables {
+    def value(id: Id) = Variables(Set(id), Set.empty)
+    def block(id: Id) = Variables(Set.empty, Set(id))
+    def empty = Variables(Set.empty, Set.empty)
+  }
+
+  def free(e: Expr): Variables = e match {
+    case DirectApp(b, targs, vargs, bargs) => free(b) ++ all(vargs, free) ++ all(bargs, free)
+    case Run(s) => free(s)
+    case Pure.ValueVar(id, annotatedType) => Variables.value(id)
+    case Pure.Literal(value, annotatedType) => Variables.empty
+    case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
+    case Pure.Select(target, field, annotatedType) => free(target)
+    case Pure.Box(b, annotatedCapture) => free(b)
+  }
+
+  def free(b: Block): Variables = b match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Variables.block(id)
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      free(body) -- all(vparams, bound) -- all(bparams, bound)
+
+    case Block.Member(block, field, annotatedTpe) => free(block)
+    case Block.Unbox(pure) => free(pure)
+    case Block.New(impl) => free(impl)
+  }
+
+  def free(d: Definition): Variables = d match {
+    case Definition.Def(id, block) => free(block)
+    case Definition.Let(id, binding) => free(binding)
+  }
+
+  def all[T](t: IterableOnce[T], f: T => Variables): Variables =
+    t.iterator.foldLeft(Variables.empty) { case (xs, t) => f(t) ++ xs }
+
+  def free(impl: Implementation): Variables = all(impl.operations, free)
+
+  def free(op: Operation): Variables = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      free(body) -- all(vparams, bound) -- all(bparams, bound) -- all(resume, bound)
+  }
+  def free(s: Stmt): Variables = s match {
+    // currently local functions cannot be mutually recursive
+    case Stmt.Scope(defs, body) =>
+      var stillFree = Variables.empty
+      var boundSoFar = Variables.empty
+      defs.foreach { d =>
+        stillFree = stillFree ++ (free(d) -- boundSoFar)
+        boundSoFar = boundSoFar ++ bound(d)
+      }
+      stillFree ++ (free(body) -- boundSoFar)
+
+    case Stmt.Return(expr) => free(expr)
+    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id))
+    case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
+    case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
+    case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
+      case (id, lit) => free(lit)
+    })
+    case Stmt.Region(body) => free(body)
+    // are mutable variables now block variables or not?
+    case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region) ++ (free(body) -- Variables.block(id))
+    case Stmt.Var(id, init, capture, body) => free(init) ++ (free(body) -- Variables.block(id))
+    case Stmt.Get(id, annotatedCapt, annotatedTpe) => Variables.block(id)
+    case Stmt.Put(id, annotatedCapt, value) => Variables.block(id)
+
+    case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
+    case Stmt.Hole() => Variables.empty
+  }
+
+  def bound(t: ValueParam): Variables = Variables.value(t.id)
+  def bound(t: BlockParam): Variables = Variables.block(t.id)
+
+  def bound(d: Definition): Variables = d match {
+    case Definition.Def(id, block) => Variables.value(id)
+    case Definition.Let(id, binding) => Variables.block(id)
+  }
+}
 
 
 object substitutions {
