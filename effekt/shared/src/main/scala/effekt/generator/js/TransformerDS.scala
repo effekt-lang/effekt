@@ -25,7 +25,7 @@ object TransformerDS {
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.map(toJS)
     val decls   = module.declarations.flatMap(toJS)
-    val stmts   = module.definitions.map(toJS)
+    val stmts   = module.definitions.flatMap(toJS)
     val state   = generateStateAccessors
     js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
@@ -80,7 +80,7 @@ object TransformerDS {
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
-    case Run(s) => Context.panic("`run` not implemented, yet...")
+    case Run(s) => js.Call(js.Lambda(Nil, js.MaybeBlock(toJS(s)(x => js.Return(x)))), Nil)
   }
 
   type Bind[T] = (T => js.Stmt) => List[js.Stmt]
@@ -91,7 +91,7 @@ object TransformerDS {
   def toJS(s: core.Stmt)(using DeclarationContext, Context): Bind[js.Expr] = s match {
 
     case Scope(definitions, body) =>
-      Bind { k => definitions.map(toJS) ++ toJS(body)(k) }
+      Bind { k => definitions.flatMap(toJS) ++ toJS(body)(k) }
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       //      val (stmts, ret) = toJS(body)
@@ -154,18 +154,21 @@ object TransformerDS {
   def toJS(handler: core.Implementation)(using DeclarationContext, Context): js.Expr =
     Context.panic("`run` not implemented, yet...")
 
-  def toJS(d: core.Definition)(using DeclarationContext, Context): js.Stmt = d match {
+  def toJS(d: core.Definition)(using DeclarationContext, Context): List[js.Stmt] = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      js.Function(nameDef(id), (vps ++ bps) map toJS, toJS(body)(x => js.Return(x)))
+      List(js.Function(nameDef(id), (vps ++ bps) map toJS, toJS(body)(x => js.Return(x))))
 
     case Definition.Def(id, block) =>
-      js.Const(nameDef(id), toJS(block))
+      List(js.Const(nameDef(id), toJS(block)))
+
+    case Definition.Let(Wildcard(), core.Run(s)) =>
+      toJS(s)(x => js.ExprStmt(x))
 
     case Definition.Let(Wildcard(), binding) =>
-      js.ExprStmt(toJS(binding))
+      List(js.ExprStmt(toJS(binding)))
 
     case Definition.Let(id, binding) =>
-      js.Const(nameDef(id), toJS(binding))
+      List(js.Const(nameDef(id), toJS(binding)))
   }
 
   def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
