@@ -32,6 +32,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(expr)                  => "return" <+> toDoc(expr) <> ";"
     case ExprStmt(expr)                => toDoc(expr) <> ";"
     case Const(id, expr)               => "const" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
+    case Let(id, expr)                 => "let" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
     case Destruct(ids, expr)           => "const" <+> braces(hsep(ids.map(toDoc), comma)) <+> "=" <+> toDoc(expr) <> ";"
     case Assign(target, expr)          => toDoc(target) <+> "=" <+> toDoc(expr) <> ";"
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)

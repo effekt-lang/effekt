@@ -87,6 +87,8 @@ object TransformerDS {
   def Return[T](t: T): Bind[T] = k => List(k(t))
   def Bind[T](b: Bind[T]): Bind[T] = b
 
+  def entrypoint(s: List[js.Stmt]): List[js.Stmt] = s // js.MethodCall($effekt, JSName("entrypoint"), args: _*)
+
 
   def toJS(s: core.Stmt)(using DeclarationContext, Context): Bind[js.Expr] = s match {
 
@@ -118,12 +120,17 @@ object TransformerDS {
       //      (sw :: stmts, ret)
 
     case Val(Wildcard(), binding, body) =>
-      // monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
-      Context.panic("Not implemented yet")
+      Bind { k => entrypoint { toJS(binding)(x => js.ExprStmt(x)) } ++ toJS(body)(k) }
 
+    // this is the whole reason for the Bind monad
+    // [[ val x = bind; body ]](k) =
+    //   let x = undefined;
+    //   [[bind]](x = []);
+    //   [[body]](k)
     case Val(id, binding, body) =>
-      // monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
-      Context.panic("Not implemented yet")
+      Bind { k =>
+        js.Let(nameDef(id), Undefined) :: entrypoint { toJS(binding)(x => js.Assign(nameRef(id), x)) } ::: toJS(body)(k)
+      }
 
     case Var(id, init, cap, body) =>
       Context.panic("Not implemented yet")
@@ -137,8 +144,12 @@ object TransformerDS {
     case Return(e) =>
       Return(toJS(e))
 
-    case Try(body, hs) =>
-      Context.panic("Not implemented yet")
+    case Try(core.BlockLit(_, _, _, _, body), hs) =>
+      // TODO implement properly
+      toJS(body)
+
+    case Try(_, _) =>
+      Context.panic("Body of the try is expected to be a block literal in core.")
 
     case Region(body) =>
       Context.panic("Not implemented yet")

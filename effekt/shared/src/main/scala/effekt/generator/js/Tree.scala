@@ -121,6 +121,9 @@ enum Stmt {
   // e.g. const x = <EXPR>
   case Const(name: JSName, binding: Expr)
 
+  // e.g. let x = <EXPR>
+  case Let(name: JSName, binding: Expr)
+
   // e.g. <EXPR> = <EXPR>
   case Assign(target: Expr, value: Expr)
 
@@ -155,6 +158,8 @@ def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
   case head :: Nil => head
   case head :: next => js.Block(stmts)
 }
+
+val Undefined = RawExpr("undefined")
 
 object monadic {
 
