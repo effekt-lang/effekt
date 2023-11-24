@@ -87,7 +87,11 @@ object TransformerDS {
   def Return[T](t: T): Bind[T] = k => List(k(t))
   def Bind[T](b: Bind[T]): Bind[T] = b
 
-  def entrypoint(s: List[js.Stmt]): List[js.Stmt] = s // js.MethodCall($effekt, JSName("entrypoint"), args: _*)
+  def entrypoint(s: List[js.Stmt]): List[js.Stmt] = List(js.Try(s, JSName("k"), Nil))
+
+    //  List(js.ExprStmt(js.MethodCall($effekt, JSName("entrypoint"), js.Lambda(
+    //    Nil, js.MaybeBlock(s)
+    //  ))))
 
 
   def toJS(s: core.Stmt)(using DeclarationContext, Context): Bind[js.Expr] = s match {

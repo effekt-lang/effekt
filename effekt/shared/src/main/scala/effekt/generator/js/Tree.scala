@@ -139,6 +139,9 @@ enum Stmt {
   // e.g. if (<EXPR>) { <STMT> } else { <STMT> }
   case If(cond: Expr, thn: Stmt, els: Stmt)
 
+  // e.g. try { <STMT>* } catch(x) { <STMT>* }
+  case Try(prog: List[Stmt], name: JSName, handler: List[Stmt])
+
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
 }
