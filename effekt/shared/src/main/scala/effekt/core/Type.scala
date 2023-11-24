@@ -144,7 +144,10 @@ object Type {
 
       BlockType.Function(tparams, cparams, vparams, bparams, body.tpe)
     case Block.Member(b, field, tpe) => tpe
-    case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].tpe
+    case Block.Unbox(pure) => pure.tpe match {
+      case List(tpe) => tpe.asInstanceOf[ValueType.Boxed].tpe
+      case _ => ??? // TODO MRV
+    }
     case Block.New(impl) => impl.tpe
   }
   def inferCapt(block: Block): Captures = block match {
@@ -152,7 +155,10 @@ object Type {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       body.capt -- cparams
     case Block.Member(block, field, tpe) => block.capt
-    case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].capt
+    case Block.Unbox(pure) => pure.tpe match {
+      case List(tpe) => tpe.asInstanceOf[ValueType.Boxed].capt
+      case _ => ??? // TODO MRV
+    }
     case Block.New(impl) => impl.capt
   }
 
