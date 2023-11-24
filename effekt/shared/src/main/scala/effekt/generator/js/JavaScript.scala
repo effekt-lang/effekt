@@ -46,7 +46,7 @@ class JavaScript extends Compiler[String] {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      val doc = pretty(Transformer.compile(input, mainSymbol).commonjs)
+      val doc = pretty(TransformerDS.compile(input, mainSymbol).commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 

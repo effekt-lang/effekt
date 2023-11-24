@@ -133,6 +133,9 @@ enum Stmt {
   // e.g. function <NAME>(x, y) { <STMT>* }
   case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
 
+  // e.g. if (<EXPR>) { <STMT> } else { <STMT> }
+  case If(cond: Expr, thn: Stmt, els: Stmt)
+
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
 }
@@ -147,6 +150,11 @@ def JsString(scalaString: String): Expr = RawExpr(s"\"${scalaString}\"")
 
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
+def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
+  case Nil => ???
+  case head :: Nil => head
+  case head :: next => js.Block(stmts)
+}
 
 object monadic {
 
