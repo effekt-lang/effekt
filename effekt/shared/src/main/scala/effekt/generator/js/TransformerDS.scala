@@ -9,6 +9,8 @@ import effekt.core.Variables
 import effekt.core.Variables.{ all, bound, free }
 import effekt.symbols.{ Module, Symbol, Wildcard }
 
+import scala.collection.mutable
+
 
 /**
  * Precondition: we assume that the core tree has been lambda-lifted and all anonymous blocks
@@ -23,6 +25,10 @@ object TransformerDS {
     prog(using L ++ l)
   }
 
+  type Continuations = mutable.ArrayBuffer[js.Function]
+  def emitContinuation(name: JSName, result: JSName, locals: List[JSName], body: List[js.Stmt])(using K: Continuations): Unit =
+    K += js.Function(name, result :: locals, body)
+
   def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
     given DeclarationContext = new DeclarationContext(input.core.declarations)
@@ -30,12 +36,16 @@ object TransformerDS {
     toJS(input.core, Nil, exports)
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Locals, Context): js.Module = {
+
+    given ks: Continuations = mutable.ArrayBuffer.empty
+
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.map(toJS)
     val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.flatMap(toJS)
     val state   = generateStateAccessors
-    js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
+
+    js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts ++ ks.toList)
   }
 
   def toJS(p: Param): JSName = nameDef(p.id)
@@ -58,7 +68,7 @@ object TransformerDS {
       js.RawStmt(contents)
   }
 
-  def toJS(b: core.Block)(using DeclarationContext, Locals, Context): js.Expr = b match {
+  def toJS(b: core.Block)(using DeclarationContext, Locals, Continuations, Context): js.Expr = b match {
     // [[ f ]] = f
     case BlockVar(v, _, _) => nameRef(v)
 
@@ -79,7 +89,7 @@ object TransformerDS {
   /**
    * Translation of expressions is trivial
    */
-  def toJS(expr: core.Expr)(using DeclarationContext, Locals, Context): js.Expr = expr match {
+  def toJS(expr: core.Expr)(using DeclarationContext, Locals, Continuations, Context): js.Expr = expr match {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
@@ -95,15 +105,20 @@ object TransformerDS {
   def Return[T](t: T): Bind[T] = k => List(k(t))
   def Bind[T](b: Bind[T]): Bind[T] = b
 
-  def entrypoint(result: Id, vars: Variables)(s: List[js.Stmt]): List[js.Stmt] = List(js.Try(s, JSName("k"), List(RawStmt(
-    s""" /*
-       |  * result: ${uniqueName(result)}
-       |  * free value variables: ${vars.values.map(uniqueName).mkString(", ")}
-       |  * free block variables: ${vars.blocks.map(uniqueName).mkString(", ")}
-       |  */
-       |""".stripMargin))))
+  def entrypoint(result: JSName, k: JSName, vars: List[JSName])(s: List[js.Stmt]): List[js.Stmt] =
+    val suspension = freshName("suspension")
+    val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
+    List(js.Try(s, suspension, List(js.Throw(js.Call(js.Member(js.Variable(suspension), js.push), List(frame))))))
 
-  def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, C: Context): Bind[js.Expr] = s match {
+//   List(js.Try(s, JSName("k"), List(RawStmt(
+//    s""" /*
+//       |  * result: ${uniqueName(result)}
+//       |  * free value variables: ${vars.values.map(uniqueName).mkString(", ")}
+//       |  * free block variables: ${vars.blocks.map(uniqueName).mkString(", ")}
+//       |  */
+//       |""".stripMargin))))
+
+  def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind[js.Expr] = s match {
 
     case Scope(definitions, body) =>
       var locals = L
@@ -144,7 +159,19 @@ object TransformerDS {
 
     case Val(Wildcard(), binding, body) =>
       val free = Variables.free(body) intersect L
-      Bind { k => entrypoint(Wildcard(), free) { toJS(binding)(x => js.ExprStmt(x)) } ++ toJS(body)(k) }
+      // Here we fix the order of arguments
+      val freeValues = free.values.toList
+      val freeBlocks = free.blocks.toList
+      val contId = freshName("k") // TODO improve name and prefix current function name
+      val result = JSName("_ignore")
+
+      val instrumented = entrypoint(result, contId, (freeValues ++ freeBlocks).map(uniqueName)) { toJS(binding)(x => js.ExprStmt(x)) }
+
+      Bind { k =>
+        val translatedBody = toJS(body)(k)
+        emitContinuation(contId, result, (freeValues ++ freeBlocks).map(nameDef), translatedBody)
+        instrumented ++ translatedBody
+      }
 
     // this is the whole reason for the Bind monad
     // [[ val x = bind; body ]](k) =
@@ -153,10 +180,19 @@ object TransformerDS {
     //   [[body]](k)
     case Val(id, binding, body) =>
       val free = (Variables.free(body) -- Variables.value(id)) intersect L
-      val instrumented = entrypoint(id, free) { toJS(binding)(x => js.Assign(nameRef(id), x)) }
+      // Here we fix the order of arguments
+      val freeValues = free.values.toList
+      val freeBlocks = free.blocks.toList
+      val contId = freshName("k")
+      val result = nameDef(id)
+
+      val instrumented = entrypoint(result, contId, (freeValues ++ freeBlocks).map(uniqueName)) { toJS(binding)(x => js.Assign(nameRef(id), x)) }
 
       bindingLocals(L ++ Variables.value(id)) {
-        Bind { k => js.Let(nameDef(id), Undefined) :: instrumented ::: toJS(body)(k) }
+        Bind { k =>
+          val translatedBody = toJS(body)(k)
+          emitContinuation(contId, result, (freeValues ++ freeBlocks).map(nameDef), translatedBody)
+          js.Let(nameDef(id), Undefined) :: instrumented ::: translatedBody }
       }
 
     case Var(id, init, cap, body) =>
@@ -189,10 +225,10 @@ object TransformerDS {
 
   }
 
-  def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Context): js.Expr =
+  def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
     Context.panic("`run` not implemented, yet...")
 
-  def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, C: Context): List[js.Stmt] = d match {
+  def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): List[js.Stmt] = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
       List(js.Function(nameDef(id), (vps ++ bps) map toJS, bindingLocals(all(vps, bound) ++ all(bps, bound)) {
         toJS(body)(x => js.Return(x))
@@ -289,4 +325,8 @@ object TransformerDS {
 
   // name references for fields and methods
   def memberNameRef(id: Symbol): JSName = uniqueName(id)
+
+  def freshName(s: String): JSName =
+    JSName(s + Symbol.fresh.next())
+
 }

@@ -6,6 +6,7 @@ package js
 case class JSName(name: String)
 
 val $effekt = Variable(JSName("$effekt"))
+val push = JSName("push")
 
 enum Import {
   // import * as <name> from "<file>";
@@ -141,6 +142,9 @@ enum Stmt {
 
   // e.g. try { <STMT>* } catch(x) { <STMT>* }
   case Try(prog: List[Stmt], name: JSName, handler: List[Stmt])
+
+  // e.g. throw e
+  case Throw(expr: Expr)
 
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
