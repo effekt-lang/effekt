@@ -367,17 +367,15 @@ object Tree {
   }
 }
 
-object freeVariables {
+case class Variables(values: Set[Id], blocks: Set[Id]) {
+  def ++(other: Variables) = Variables(values ++ other.values, blocks ++ other.blocks)
+  def --(other: Variables) = Variables(values -- other.values, blocks -- other.blocks)
+}
+object Variables {
 
-  case class Variables(values: Set[Id], blocks: Set[Id]) {
-    def ++(other: Variables) = Variables(values ++ other.values, blocks ++ other.blocks)
-    def --(other: Variables) = Variables(values -- other.values, blocks -- other.blocks)
-  }
-  object Variables {
-    def value(id: Id) = Variables(Set(id), Set.empty)
-    def block(id: Id) = Variables(Set.empty, Set(id))
-    def empty = Variables(Set.empty, Set.empty)
-  }
+  def value(id: Id) = Variables(Set(id), Set.empty)
+  def block(id: Id) = Variables(Set.empty, Set(id))
+  def empty = Variables(Set.empty, Set.empty)
 
   def free(e: Expr): Variables = e match {
     case DirectApp(b, targs, vargs, bargs) => free(b) ++ all(vargs, free) ++ all(bargs, free)

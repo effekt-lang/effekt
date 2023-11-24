@@ -5,7 +5,7 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.{ *, given }
-import effekt.core.freeVariables.Variables
+import effekt.core.Variables
 import effekt.symbols.{ Module, Symbol, Wildcard }
 
 
@@ -16,6 +16,9 @@ import effekt.symbols.{ Module, Symbol, Wildcard }
  * - objects are not supported, for now
  */
 object TransformerDS {
+
+  type Locals = core.Variables
+
   def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
     given DeclarationContext = new DeclarationContext(input.core.declarations)
@@ -125,7 +128,7 @@ object TransformerDS {
       //      (sw :: stmts, ret)
 
     case Val(Wildcard(), binding, body) =>
-      val free = freeVariables.free(body)
+      val free = Variables.free(body)
       Bind { k => entrypoint(Wildcard(), free) { toJS(binding)(x => js.ExprStmt(x)) } ++ toJS(body)(k) }
 
     // this is the whole reason for the Bind monad
@@ -135,7 +138,7 @@ object TransformerDS {
     //   [[body]](k)
     case Val(id, binding, body) =>
       Bind { k =>
-        val free = freeVariables.free(body) -- Variables.value(id)
+        val free = Variables.free(body) -- Variables.value(id)
         js.Let(nameDef(id), Undefined) :: entrypoint(id, free) { toJS(binding)(x => js.Assign(nameRef(id), x)) } ::: toJS(body)(k)
       }
 
