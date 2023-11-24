@@ -370,6 +370,8 @@ object Tree {
 case class Variables(values: Set[Id], blocks: Set[Id]) {
   def ++(other: Variables) = Variables(values ++ other.values, blocks ++ other.blocks)
   def --(other: Variables) = Variables(values -- other.values, blocks -- other.blocks)
+
+  def intersect(other: Variables) = Variables(values intersect other.values, blocks intersect other.blocks)
 }
 object Variables {
 

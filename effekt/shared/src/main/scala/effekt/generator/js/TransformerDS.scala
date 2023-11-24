@@ -6,6 +6,7 @@ import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.{ *, given }
 import effekt.core.Variables
+import effekt.core.Variables.{ all, bound, free }
 import effekt.symbols.{ Module, Symbol, Wildcard }
 
 
@@ -18,13 +19,17 @@ import effekt.symbols.{ Module, Symbol, Wildcard }
 object TransformerDS {
 
   type Locals = core.Variables
+  def bindingLocals[T](l: Locals)(prog: Locals ?=> T)(using L: Locals): T = {
+    prog(using L ++ l)
+  }
 
   def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
     given DeclarationContext = new DeclarationContext(input.core.declarations)
+    given Locals = core.Variables.empty
     toJS(input.core, Nil, exports)
 
-  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module = {
+  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Locals, Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.map(toJS)
     val decls   = module.declarations.flatMap(toJS)
@@ -53,7 +58,7 @@ object TransformerDS {
       js.RawStmt(contents)
   }
 
-  def toJS(b: core.Block)(using DeclarationContext, Context): js.Expr = b match {
+  def toJS(b: core.Block)(using DeclarationContext, Locals, Context): js.Expr = b match {
     // [[ f ]] = f
     case BlockVar(v, _, _) => nameRef(v)
 
@@ -74,7 +79,7 @@ object TransformerDS {
   /**
    * Translation of expressions is trivial
    */
-  def toJS(expr: core.Expr)(using DeclarationContext, Context): js.Expr = expr match {
+  def toJS(expr: core.Expr)(using DeclarationContext, Locals, Context): js.Expr = expr match {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
@@ -98,10 +103,20 @@ object TransformerDS {
        |  */
        |""".stripMargin))))
 
-  def toJS(s: core.Stmt)(using DeclarationContext, Context): Bind[js.Expr] = s match {
+  def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, C: Context): Bind[js.Expr] = s match {
 
     case Scope(definitions, body) =>
-      Bind { k => definitions.flatMap(toJS) ++ toJS(body)(k) }
+      var locals = L
+      given Locals = locals
+
+      val defs = definitions.flatMap {
+        case d : Definition.Def => Context.panic("Local definitions should have been lambda lifted already.")
+        case d : Definition.Let =>
+          val stmts = toJS(d)
+          locals = locals ++ bound(d)
+          stmts
+      }
+      Bind { k => defs ++ toJS(body)(k) }
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       //      val (stmts, ret) = toJS(body)
@@ -128,7 +143,7 @@ object TransformerDS {
       //      (sw :: stmts, ret)
 
     case Val(Wildcard(), binding, body) =>
-      val free = Variables.free(body)
+      val free = Variables.free(body) intersect L
       Bind { k => entrypoint(Wildcard(), free) { toJS(binding)(x => js.ExprStmt(x)) } ++ toJS(body)(k) }
 
     // this is the whole reason for the Bind monad
@@ -137,9 +152,11 @@ object TransformerDS {
     //   [[bind]](x = []);
     //   [[body]](k)
     case Val(id, binding, body) =>
-      Bind { k =>
-        val free = Variables.free(body) -- Variables.value(id)
-        js.Let(nameDef(id), Undefined) :: entrypoint(id, free) { toJS(binding)(x => js.Assign(nameRef(id), x)) } ::: toJS(body)(k)
+      val free = (Variables.free(body) -- Variables.value(id)) intersect L
+      val instrumented = entrypoint(id, free) { toJS(binding)(x => js.Assign(nameRef(id), x)) }
+
+      bindingLocals(L ++ Variables.value(id)) {
+        Bind { k => js.Let(nameDef(id), Undefined) :: instrumented ::: toJS(body)(k) }
       }
 
     case Var(id, init, cap, body) =>
@@ -154,9 +171,9 @@ object TransformerDS {
     case Return(e) =>
       Return(toJS(e))
 
-    case Try(core.BlockLit(_, _, _, _, body), hs) =>
+    case Try(core.BlockLit(_, _, _, bps, body), hs) =>
       // TODO implement properly
-      toJS(body)
+      bindingLocals(all(bps, bound)) { toJS(body) }
 
     case Try(_, _) =>
       Context.panic("Body of the try is expected to be a block literal in core.")
@@ -172,12 +189,14 @@ object TransformerDS {
 
   }
 
-  def toJS(handler: core.Implementation)(using DeclarationContext, Context): js.Expr =
+  def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Context): js.Expr =
     Context.panic("`run` not implemented, yet...")
 
-  def toJS(d: core.Definition)(using DeclarationContext, Context): List[js.Stmt] = d match {
+  def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, C: Context): List[js.Stmt] = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      List(js.Function(nameDef(id), (vps ++ bps) map toJS, toJS(body)(x => js.Return(x))))
+      List(js.Function(nameDef(id), (vps ++ bps) map toJS, bindingLocals(all(vps, bound) ++ all(bps, bound)) {
+        toJS(body)(x => js.Return(x))
+      }))
 
     case Definition.Def(id, block) =>
       List(js.Const(nameDef(id), toJS(block)))
