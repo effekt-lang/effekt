@@ -446,8 +446,8 @@ object freeVariables {
   def bound(t: BlockParam): Variables = Variables.block(t.id)
 
   def bound(d: Definition): Variables = d match {
-    case Definition.Def(id, block) => Variables.value(id)
-    case Definition.Let(id, binding) => Variables.block(id)
+    case Definition.Def(id, block) => Variables.block(id)
+    case Definition.Let(id, binding) => Variables.value(id)
   }
 }
 

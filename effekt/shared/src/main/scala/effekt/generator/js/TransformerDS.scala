@@ -4,9 +4,9 @@ package js
 
 import effekt.context.Context
 import effekt.context.assertions.*
-import effekt.core.{given, *}
-
-import effekt.symbols.{ Symbol, Module, Wildcard }
+import effekt.core.{ *, given }
+import effekt.core.freeVariables.Variables
+import effekt.symbols.{ Module, Symbol, Wildcard }
 
 
 /**
@@ -87,12 +87,13 @@ object TransformerDS {
   def Return[T](t: T): Bind[T] = k => List(k(t))
   def Bind[T](b: Bind[T]): Bind[T] = b
 
-  def entrypoint(s: List[js.Stmt]): List[js.Stmt] = List(js.Try(s, JSName("k"), Nil))
-
-    //  List(js.ExprStmt(js.MethodCall($effekt, JSName("entrypoint"), js.Lambda(
-    //    Nil, js.MaybeBlock(s)
-    //  ))))
-
+  def entrypoint(result: Id, vars: Variables)(s: List[js.Stmt]): List[js.Stmt] = List(js.Try(s, JSName("k"), List(RawStmt(
+    s""" /*
+       |  * result: ${uniqueName(result)}
+       |  * free value variables: ${vars.values.map(uniqueName).mkString(", ")}
+       |  * free block variables: ${vars.blocks.map(uniqueName).mkString(", ")}
+       |  */
+       |""".stripMargin))))
 
   def toJS(s: core.Stmt)(using DeclarationContext, Context): Bind[js.Expr] = s match {
 
@@ -124,7 +125,8 @@ object TransformerDS {
       //      (sw :: stmts, ret)
 
     case Val(Wildcard(), binding, body) =>
-      Bind { k => entrypoint { toJS(binding)(x => js.ExprStmt(x)) } ++ toJS(body)(k) }
+      val free = freeVariables.free(body)
+      Bind { k => entrypoint(Wildcard(), free) { toJS(binding)(x => js.ExprStmt(x)) } ++ toJS(body)(k) }
 
     // this is the whole reason for the Bind monad
     // [[ val x = bind; body ]](k) =
@@ -133,7 +135,8 @@ object TransformerDS {
     //   [[body]](k)
     case Val(id, binding, body) =>
       Bind { k =>
-        js.Let(nameDef(id), Undefined) :: entrypoint { toJS(binding)(x => js.Assign(nameRef(id), x)) } ::: toJS(body)(k)
+        val free = freeVariables.free(body) -- Variables.value(id)
+        js.Let(nameDef(id), Undefined) :: entrypoint(id, free) { toJS(binding)(x => js.Assign(nameRef(id), x)) } ::: toJS(body)(k)
       }
 
     case Var(id, init, cap, body) =>
