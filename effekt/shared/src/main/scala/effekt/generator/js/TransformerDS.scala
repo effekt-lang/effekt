@@ -207,9 +207,14 @@ object TransformerDS {
     case Return(e) =>
       Return(toJS(e))
 
+    // const exc = { raise: ... }; try { }
     case Try(core.BlockLit(_, _, _, bps, body), hs) =>
+      val suspension = freshName("suspension")
+      val handlerDefs = (bps zip hs) map {
+        case (param, handler) => js.Const(toJS(param), toJS(handler))
+      }
       // TODO implement properly
-      bindingLocals(all(bps, bound)) { toJS(body) }
+      Bind { k => handlerDefs ++ List(js.Try(bindingLocals(all(bps, bound)) { toJS(body)(k) }, suspension, List())) }
 
     case Try(_, _) =>
       Context.panic("Body of the try is expected to be a block literal in core.")
@@ -226,7 +231,12 @@ object TransformerDS {
   }
 
   def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
-    Context.panic("`run` not implemented, yet...")
+    js.Object(handler.operations.map {
+      case Operation(id, tps, cps, vps, bps, resume, body) =>
+        nameDef(id) -> js.Lambda((vps ++ bps ++ resume.toList) map toJS, bindingLocals(all(vps, bound) ++ all(bps, bound) ++ all(resume, bound)) {
+          js.Block(toJS(body)(x => js.Return(x))) // return here is dangerous...
+        })
+    })
 
   def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): List[js.Stmt] = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
