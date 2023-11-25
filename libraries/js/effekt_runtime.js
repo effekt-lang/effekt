@@ -61,6 +61,20 @@ function Arena() {
   }
   const Nil = null
 
+  // final def reverseOnto[A, B, C](init: Frames[A, B], tail: Stack[B, C]): Stack[A, C] = init match {
+  //   case first :: rest => reverseOnto(rest, first :: tail)
+  //   case Nil => tail
+  // }
+  function reverseOnto(init, tail) {
+    let rest = init;
+    let result = tail;
+    while (rest !== Nil) {
+      result = Cons(rest.head, result)
+      rest = rest.tail
+    }
+    return result
+  }
+
   // Frame = A => Control[B]
 
   // Metacontinuations / Stacks
@@ -233,11 +247,60 @@ function Arena() {
     return body => reset(p)(body.apply(null, caps))
   }
 
+  // sealed trait Resumption[A, R]
+  // case class Empty[A]() extends Resumption[A, A]
+  // case class Segment[A, B, C](head: Stack[B, C], prompt: Prompt, tail: Resumption[A, B]) extends Resumption[A, C]
+  class Segment {
+    constructor(head, prompt, tail) {
+      this.head = head;
+      this.prompt = prompt;
+      this.tail = tail;
+    }
+  }
+  const Empty = null;
+
+  function pushStack(cont, prompt, pure) {
+    return new Segment(pure, prompt, cont)
+  }
+
+  function rewind(k, value) {
+    if (k === Empty) {
+      return value
+    } else {
+      const prompt = k.prompt;
+      let rest = k.head // the pure frames
+      // The trampoline
+      try {
+        let curr = rewind(k.tail, value)
+        while (rest !== Nil) {
+          const f = rest.head
+          rest = rest.tail
+          curr = f(curr)
+        }
+        return curr
+      } catch (s) {
+        const k = pushStack(s.cont, prompt, reverseOnto(s.frames, rest))
+        if (s.prompt === prompt)  {
+          return s.body((value) => rewind(k, value))
+        } else {
+          throw new Suspension(s.prompt, s.body, Nil, k)
+        }
+      }
+    }
+  }
+
+  // case class Suspend[A, X, Y, R](
+  //   body: Continuation[A, R] => R,
+  //   prompt: Prompt,
+  //   pure: Frames[X, Y],
+  //   cont: Resumption[A, X]
+  // )
   class Suspension {
-    constructor(p, impl, frames) {
+    constructor(p, body, frames, cont) {
       this.prompt = p;
-      this.impl = impl;
+      this.body = body;
       this.frames = frames;
+      this.cont = cont;
     }
   }
 
@@ -253,8 +316,8 @@ function Arena() {
 
     freshPrompt: function() { return ++_prompt; },
 
-    suspend: function(prompt, impl) {
-      throw new Suspension(prompt, impl, Nil)
+    suspend: function(prompt, body) {
+      throw new Suspension(prompt, body, Nil, Empty)
     },
 
     _if: (c, thn, els) => c ? thn() : els(),
@@ -265,19 +328,17 @@ function Arena() {
 
     push: function(suspension, frame) {
       // Assuming `suspension` is a value or variable you want to return
-      return new Suspension(suspension.prompt, suspension.impl,
-        Cons(frame, suspension.frames));
+      return new Suspension(suspension.prompt, suspension.body,
+        Cons(frame, suspension.frames), suspension.cont);
     },
 
-    handle: function(prompt, suspension) {
-      if (suspension.prompt === prompt) {
-        console.log("correct handler")
-        suspension.impl(function(r) { console.error("continuation called with", r) })
+    handle: function(prompt, s) {
+      const k = pushStack(s.cont, prompt, reverseOnto(s.frames, Nil))
+      if (s.prompt === prompt)  {
+        return s.body((value) => rewind(k, value))
       } else {
-        console.log("wrong handler")
-        console.error("abort!")
+        throw new Suspension(s.prompt, s.body, Nil, k)
       }
-      // Handle the frame here
     },
 
     hole: function() { throw "Implementation missing" }
