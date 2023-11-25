@@ -98,7 +98,10 @@ object TransformerDS {
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
-    case Run(s) => js.Call(js.Lambda(Nil, js.MaybeBlock(toJS(s)(x => js.Return(x)))), Nil)
+    case Run(s) => toJS(s)(x => js.Return(x)) match {
+      case List(js.Return(e)) => e
+      case stmts => js.Call(js.Lambda(Nil, js.Block(stmts)), Nil)
+    }
   }
 
   type Bind[T] = (T => js.Stmt) => List[js.Stmt]

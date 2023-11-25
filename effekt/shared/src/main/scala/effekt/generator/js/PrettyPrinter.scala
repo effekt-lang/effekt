@@ -17,9 +17,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     pretty(vsep(stmts map toDoc, line))
 
   def toDoc(expr: Expr): Doc = expr match {
-    case Call(callee, args)           => toDoc(callee) <> parens(args map toDoc)
+    case Call(callee, args)           => toDocParens(callee) <> parens(args map toDoc)
     case RawExpr(raw)                 => string(raw)
-    case Member(callee, selection)    => toDoc(callee) <> "." <> toDoc(selection)
+    case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
     case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
     case Lambda(params, Block(stmts)) => parens(params map toDoc) <+> "=>" <+> jsBlock(stmts.map(toDoc))
@@ -27,6 +27,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Object(properties)           => group(jsBlock(vsep(properties.map { case (n, d) => toDoc(n) <> ":" <+> toDoc(d) }, comma)))
     case ArrayLiteral(elements)       => brackets(elements map toDoc)
     case Variable(name)               => toDoc(name)
+  }
+
+  // to be used in low precedence positions
+  def toDocParens(e: Expr): Doc = e match {
+    case e: IfExpr => parens(toDoc(e))
+    case e: Lambda => parens(toDoc(e))
+    case e => toDoc(e)
   }
 
   def toDoc(stmt: Stmt): Doc = stmt match {
