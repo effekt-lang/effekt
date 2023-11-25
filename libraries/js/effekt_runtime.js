@@ -233,6 +233,14 @@ function Arena() {
     return body => reset(p)(body.apply(null, caps))
   }
 
+  class Suspension {
+    constructor(p, impl, frames) {
+      this.prompt = p;
+      this.impl = impl;
+      this.frames = frames;
+    }
+  }
+
   return {
     pure: pure,
     callcc: callcc,
@@ -240,14 +248,36 @@ function Arena() {
     delayed: delayed,
     // no lifting for prompt based implementation
     lift: f => f,
-    handle: handle,
     fresh: Cell,
     state: withState,
+
+    freshPrompt: function() { return ++_prompt; },
+
+    suspend: function(prompt, impl) {
+      throw new Suspension(prompt, impl, Nil)
+    },
 
     _if: (c, thn, els) => c ? thn() : els(),
     withRegion: withRegion,
     constructor: (_, tag) => function() {
       return { __tag: tag, __data: Array.from(arguments) }
+    },
+
+    push: function(suspension, frame) {
+      // Assuming `suspension` is a value or variable you want to return
+      return new Suspension(suspension.prompt, suspension.impl,
+        Cons(frame, suspension.frames));
+    },
+
+    handle: function(prompt, suspension) {
+      if (suspension.prompt === prompt) {
+        console.log("correct handler")
+        suspension.impl(function(r) { console.error("continuation called with", r) })
+      } else {
+        console.log("wrong handler")
+        console.error("abort!")
+      }
+      // Handle the frame here
     },
 
     hole: function() { throw "Implementation missing" }

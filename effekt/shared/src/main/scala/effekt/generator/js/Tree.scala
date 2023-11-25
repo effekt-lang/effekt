@@ -6,7 +6,7 @@ package js
 case class JSName(name: String)
 
 val $effekt = Variable(JSName("$effekt"))
-val push = JSName("push")
+def builtin(name: String, args: Expr*): js.Expr = js.MethodCall($effekt, JSName(name), args: _*)
 
 enum Import {
   // import * as <name> from "<file>";

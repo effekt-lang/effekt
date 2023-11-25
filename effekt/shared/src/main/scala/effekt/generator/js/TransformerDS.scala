@@ -105,10 +105,10 @@ object TransformerDS {
   def Return[T](t: T): Bind[T] = k => List(k(t))
   def Bind[T](b: Bind[T]): Bind[T] = b
 
-  def entrypoint(result: JSName, k: JSName, vars: List[JSName])(s: List[js.Stmt]): List[js.Stmt] =
+  def entrypoint(result: JSName, k: JSName, vars: List[JSName], s: List[js.Stmt]): List[js.Stmt] =
     val suspension = freshName("suspension")
     val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
-    List(js.Try(s, suspension, List(js.Throw(js.Call(js.Member(js.Variable(suspension), js.push), List(frame))))))
+    List(js.Try(s, suspension, List(js.Throw(js.builtin("push",js.Variable(suspension), frame)))))
 
 //   List(js.Try(s, JSName("k"), List(RawStmt(
 //    s""" /*
@@ -157,21 +157,6 @@ object TransformerDS {
       //      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))
       //      (sw :: stmts, ret)
 
-    case Val(Wildcard(), binding, body) =>
-      val free = Variables.free(body) intersect L
-      // Here we fix the order of arguments
-      val freeValues = free.values.toList
-      val freeBlocks = free.blocks.toList
-      val contId = freshName("k") // TODO improve name and prefix current function name
-      val result = JSName("_ignore")
-
-      val instrumented = entrypoint(result, contId, (freeValues ++ freeBlocks).map(uniqueName)) { toJS(binding)(x => js.ExprStmt(x)) }
-
-      Bind { k =>
-        val translatedBody = toJS(body)(k)
-        emitContinuation(contId, result, (freeValues ++ freeBlocks).map(nameDef), translatedBody)
-        instrumented ++ translatedBody
-      }
 
     // this is the whole reason for the Bind monad
     // [[ val x = bind; body ]](k) =
@@ -179,20 +164,27 @@ object TransformerDS {
     //   [[bind]](x = []);
     //   [[body]](k)
     case Val(id, binding, body) =>
-      val free = (Variables.free(body) -- Variables.value(id)) intersect L
+      val free = Variables.free(body) intersect L
       // Here we fix the order of arguments
       val freeValues = free.values.toList
       val freeBlocks = free.blocks.toList
-      val contId = freshName("k")
+      val contId = freshName("k") // TODO improve name and prefix current function name
       val result = nameDef(id)
 
-      val instrumented = entrypoint(result, contId, (freeValues ++ freeBlocks).map(uniqueName)) { toJS(binding)(x => js.Assign(nameRef(id), x)) }
+      // the last statement in the binding differs if it is bound to a wildcard
+      // ...x = result...    vs.   ...result...
+      val bindingStmts = id match {
+        case Wildcard() => toJS(binding)(x => js.ExprStmt(x))
+        case id         => toJS(binding)(x => js.Assign(nameRef(id), x))
+      }
+
+      val instrumented = entrypoint(result, contId, (freeValues ++ freeBlocks).map(uniqueName), bindingStmts)
 
       bindingLocals(L ++ Variables.value(id)) {
         Bind { k =>
-          val translatedBody = toJS(body)(k)
-          emitContinuation(contId, result, (freeValues ++ freeBlocks).map(nameDef), translatedBody)
-          js.Let(nameDef(id), Undefined) :: instrumented ::: translatedBody }
+          emitContinuation(contId, result, (freeValues ++ freeBlocks).map(nameDef), toJS(body)(x => js.Return(x)))
+          instrumented ++ toJS(body)(k)
+        }
       }
 
     case Var(id, init, cap, body) =>
@@ -207,14 +199,22 @@ object TransformerDS {
     case Return(e) =>
       Return(toJS(e))
 
+    // const prompt = $effekt.freshPrompt()
     // const exc = { raise: ... }; try { }
     case Try(core.BlockLit(_, _, _, bps, body), hs) =>
       val suspension = freshName("suspension")
-      val handlerDefs = (bps zip hs) map {
-        case (param, handler) => js.Const(toJS(param), toJS(handler))
-      }
+      val prompt = freshName("prompt")
+
+      val promptDef = js.Const(prompt, js.builtin("freshPrompt"))
+
+      val (handlerNames, handlerDefs) = (bps zip hs).map {
+        case (param, handler) => (toJS(param), js.Const(toJS(param), toJS(handler, prompt)))
+      }.unzip
+
       // TODO implement properly
-      Bind { k => handlerDefs ++ List(js.Try(bindingLocals(all(bps, bound)) { toJS(body)(k) }, suspension, List())) }
+      Bind { k => promptDef :: handlerDefs ++ List(js.Try(bindingLocals(all(bps, bound)) { toJS(body)(k) }, suspension,
+        List(k(js.builtin("handle", js.Variable(prompt), js.Variable(suspension))))))
+      }
 
     case Try(_, _) =>
       Context.panic("Body of the try is expected to be a block literal in core.")
@@ -230,12 +230,31 @@ object TransformerDS {
 
   }
 
+  // TODO generate fresh prompt (int)
+  //   pass prompt to handler variant of objects, not to others
+
+
+  def toJS(handler: core.Implementation, prompt: JSName)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
+    js.Object(handler.operations.map {
+      // () => $effekt.suspend(this, (resume_730) => { return $effekt.unit; })
+      case Operation(id, tps, cps, vps, bps, Some(resume), body) =>
+        val lambda = js.Lambda((vps ++ bps) map toJS, bindingLocals(all(vps, bound) ++ all(bps, bound) ++ bound(resume)) {
+          js.Return(js.builtin("suspend", js.Variable(prompt), js.Lambda(List(toJS(resume)), js.Block(toJS(body)(x => js.Return(x))))))
+        })
+
+        nameDef(id) -> lambda
+
+      case Operation(id, tps, cps, vps, bps, None, body) => Context.panic("Effect handler should take continuation")
+    })
+
   def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
     js.Object(handler.operations.map {
-      case Operation(id, tps, cps, vps, bps, resume, body) =>
-        nameDef(id) -> js.Lambda((vps ++ bps ++ resume.toList) map toJS, bindingLocals(all(vps, bound) ++ all(bps, bound) ++ all(resume, bound)) {
-          js.Block(toJS(body)(x => js.Return(x))) // return here is dangerous...
+      case Operation(id, tps, cps, vps, bps, None, body) =>
+        nameDef(id) -> js.Lambda((vps ++ bps) map toJS, bindingLocals(all(vps, bound) ++ all(bps, bound)) {
+          js.Block(toJS(body)(x => js.Return(x)))
         })
+      case Operation(id, tps, cps, vps, bps, Some(k), body) =>
+        Context.panic("Object cannot take continuation")
     })
 
   def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): List[js.Stmt] = d match {

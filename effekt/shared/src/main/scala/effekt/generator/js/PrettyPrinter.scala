@@ -9,6 +9,8 @@ import scala.language.implicitConversions
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
+  override val defaultIndent = 2
+
   def toDoc(name: JSName): Doc = name.name
 
   def format(stmts: List[Stmt]): Document =
@@ -19,8 +21,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case RawExpr(raw)                 => string(raw)
     case Member(callee, selection)    => toDoc(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
-    case Lambda(params, Return(expr)) => parens(parens(params map toDoc) <+> "=>" <> nested(toDoc(expr)))
-    case Lambda(params, body)         => parens(parens(params map toDoc) <+> "=>" <> nested(toDoc(body)))
+    case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
+    case Lambda(params, Block(stmts)) => parens(params map toDoc) <+> "=>" <+> jsBlock(stmts.map(toDoc))
+    case Lambda(params, body)         => parens(params map toDoc) <+> "=>" <> jsBlock(toDoc(body))
     case Object(properties)           => group(jsBlock(vsep(properties.map { case (n, d) => toDoc(n) <> ":" <+> toDoc(d) }, comma)))
     case ArrayLiteral(elements)       => brackets(elements map toDoc)
     case Variable(name)               => toDoc(name)
@@ -56,5 +59,5 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def jsBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
 
-  def jsBlock(docs: List[Doc]): Doc = jsBlock(vsep(docs, line))
+  def jsBlock(docs: List[Doc]): Doc = jsBlock(vcat(docs))
 }
