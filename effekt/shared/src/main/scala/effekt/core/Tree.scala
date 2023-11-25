@@ -108,7 +108,7 @@ enum Extern extends Tree {
 }
 
 
-enum Definition {
+enum Definition extends Tree {
   def id: Id
 
   case Def(id: Id, block: Block)
@@ -310,21 +310,43 @@ object Tree {
     case leaf => ()
   }
 
-  trait Query extends Structural {
-    type M
+  trait Query[Ctx, Res] extends Structural {
 
-    def empty: M
-    def combine(r1: M, r2: M): M
+    def empty: Res
+    def combine: (r1: Res, r2: Res) => Res
 
-    def query(p: Pure): M = queryStructurally(p, empty, combine)
-    def query(e: Expr): M = queryStructurally(e, empty, combine)
-    def query(s: Stmt): M = queryStructurally(s, empty, combine)
-    def query(b: Block): M = queryStructurally(b, empty, combine)
-    def query(d: Definition): M = queryStructurally(d, empty, combine)
-    def query(d: Implementation): M = queryStructurally(d, empty, combine)
-    def query(d: Operation): M = queryStructurally(d, empty, combine)
-    def query(matchClause: (Id, BlockLit)): M = matchClause match {
-      case (id, lit) => query(lit)
+    def all[T](t: IterableOnce[T], f: T => Res): Res =
+      t.iterator.foldLeft(empty) { case (xs, t) => combine(f(t), xs) }
+
+    def pure(using Ctx): PartialFunction[Pure, Res] = PartialFunction.empty
+    def expr(using Ctx): PartialFunction[Expr, Res] = PartialFunction.empty
+    def stmt(using Ctx): PartialFunction[Stmt, Res] = PartialFunction.empty
+    def block(using Ctx): PartialFunction[Block, Res] = PartialFunction.empty
+    def defn(using Ctx): PartialFunction[Definition, Res] = PartialFunction.empty
+    def impl(using Ctx): PartialFunction[Implementation, Res] = PartialFunction.empty
+    def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
+    def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
+    def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
+
+    /**
+     * Hook that can be overridden to perform an action at every node in the tree
+     */
+    def visit[T](t: T)(visitor: Ctx ?=> T => Res)(using Ctx): Res = visitor(t)
+
+    inline def structuralQuery[T](el: T, pf: PartialFunction[T, Res])(using Ctx): Res = visit(el) { t =>
+      if pf.isDefinedAt(el) then pf.apply(el) else queryStructurally(t, empty, combine)
+    }
+
+    def query(p: Pure)(using Ctx): Res = structuralQuery(p, pure)
+    def query(e: Expr)(using Ctx): Res = structuralQuery(e, expr)
+    def query(s: Stmt)(using Ctx): Res = structuralQuery(s, stmt)
+    def query(b: Block)(using Ctx): Res = structuralQuery(b, block)
+    def query(d: Definition)(using Ctx): Res = structuralQuery(d, defn)
+    def query(d: Implementation)(using Ctx): Res = structuralQuery(d, impl)
+    def query(d: Operation)(using Ctx): Res = structuralQuery(d, operation)
+    def query(matchClause: (Id, BlockLit))(using Ctx): Res =
+      if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
+        case (id, lit) => query(lit)
     }
   }
 
