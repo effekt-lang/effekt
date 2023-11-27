@@ -14,7 +14,9 @@ fi
 # Read the benchmark paths into an array
 declare -a benchmarks
 while IFS= read -r line; do
-    benchmarks+=("$line")
+    if [[ ! $line =~ ^# ]]; then
+        benchmarks+=("$line")
+    fi
 done < "$file_list"
 
 # Initialize a variable to track if any command fails
