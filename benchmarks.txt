@@ -1,5 +1,5 @@
 # -------------- list of all files that the CI benchmark pipeline will run
 src/list.effekt
 src/mandelbrot.effekt
-# src/permute.effekt
+src/permute.effekt
 # -------------- lastline dont delete
