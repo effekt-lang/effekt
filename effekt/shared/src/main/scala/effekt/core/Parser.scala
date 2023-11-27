@@ -234,14 +234,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // f@f2 : Exc
   lazy val trackedBlockParam: P[(Id, BlockParam)] =
     ( `{` ~> id ~ (`@` ~> id)  ~ (`:` ~> blockType) <~ `}` ^^ {
-        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe): Param.BlockParam)
+        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe, Set(capt)): Param.BlockParam)
       }
     // abbreviation: f : Exc .= f@f : Exc
     | blockParam ^^ { p => p.id -> p }
     )
 
   lazy val blockParam: P[BlockParam] =
-    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe): Param.BlockParam }
+    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe, Set(id)): Param.BlockParam }
 
 
   // Types

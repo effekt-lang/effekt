@@ -1,6 +1,8 @@
 package effekt
 package core
 
+import effekt.PhaseResult.CoreTransformed
+
 import scala.collection.mutable.ListBuffer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.builtins.*
@@ -18,16 +20,18 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
-      case CoreTransformed(source, tree, mod, module) =>
-        // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-        val mainSymbol = Context.checkMain(mod)
-        val withoutUnused = RemoveUnusedDefinitions(Set(mainSymbol), module)
-
-        // (2) inline unique block definitions
-        val inlined = InlineUnique(Set(mainSymbol), withoutUnused)
-
-        Some(CoreTransformed(source, tree, mod, inlined))
+      case CoreTransformed(source, tree, mod, core) =>
+        Some(CoreTransformed(source, tree, mod, optimize(Context.checkMain(mod), core)))
     }
+
+  def optimize(mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context) =
+     // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
+    val withoutUnused = RemoveUnusedDefinitions(Set(mainSymbol), core)
+
+    // (2) inline unique block definitions
+    val inlined = InlineUnique(Set(mainSymbol), withoutUnused)
+
+    inlined
 }
 
 object RemoveUnusedDefinitions {

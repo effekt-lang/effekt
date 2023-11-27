@@ -242,9 +242,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
           def etaExpandDirect(f: ExternFunction): BlockLit = {
             assert(effects.isEmpty)
-            val bparams: List[Param.BlockParam] = bparamtps.map { t => Param.BlockParam(TmpBlock(), transform(t)) }
+            val bparams: List[Param.BlockParam] = bparamtps.map { t => val id = TmpBlock(); Param.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
-              case Param.BlockParam(id, tpe) => Block.BlockVar(id, tpe, Set(id))
+              case Param.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
             }
             val result = TmpValue()
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
@@ -365,7 +365,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case r @ source.Region(name, body) =>
       val region = r.symbol
       val tpe = Context.blockTypeOf(region)
-      val cap: core.BlockParam = core.BlockParam(region, transform(tpe))
+      val cap: core.BlockParam = core.BlockParam(region, transform(tpe), Set(region.capture))
       Context.bind(Region(BlockLit(Nil, List(region.capture), Nil, List(cap), transform(body))))
 
     case source.Hole(stmts) =>
@@ -689,7 +689,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
   def BlockParam(id: BlockSymbol)(using Context): core.BlockParam =
-    core.BlockParam(id, transform(Context.blockTypeOf(id)))
+    core.BlockParam(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
 
   def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
     core.ValueVar(id, transform(Context.valueTypeOf(id)))

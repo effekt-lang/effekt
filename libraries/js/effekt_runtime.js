@@ -263,6 +263,16 @@ function Arena() {
     return new Segment(pure, prompt, cont)
   }
 
+  // TODO maybe inline later to save native frames
+  function handleOrRethrow(prompt, s, rest) {
+    const k = pushStack(s.cont, prompt, reverseOnto(s.frames, rest))
+    if (s.prompt === prompt)  {
+      return s.body((value) => rewind(k, value))
+    } else {
+      throw new Suspension(s.prompt, s.body, Nil, k)
+    }
+  }
+
   function rewind(k, value) {
     if (k === Empty) {
       return value
@@ -279,12 +289,7 @@ function Arena() {
         }
         return curr
       } catch (s) {
-        const k = pushStack(s.cont, prompt, reverseOnto(s.frames, rest))
-        if (s.prompt === prompt)  {
-          return s.body((value) => rewind(k, value))
-        } else {
-          throw new Suspension(s.prompt, s.body, Nil, k)
-        }
+        return handleOrRethrow(prompt, s, rest)
       }
     }
   }
@@ -314,16 +319,19 @@ function Arena() {
     fresh: Cell,
     state: withState,
 
-    freshPrompt: function() { return ++_prompt; },
-
-    suspend: function(prompt, body) {
-      throw new Suspension(prompt, body, Nil, Empty)
-    },
-
     _if: (c, thn, els) => c ? thn() : els(),
     withRegion: withRegion,
     constructor: (_, tag) => function() {
       return { __tag: tag, __data: Array.from(arguments) }
+    },
+
+    hole: function() { throw "Implementation missing" },
+
+    // runtime used by the generalized exceptions implementation
+    freshPrompt: function() { return ++_prompt; },
+
+    suspend: function(prompt, body) {
+      throw new Suspension(prompt, body, Nil, Empty)
     },
 
     push: function(suspension, frame) {
@@ -333,15 +341,8 @@ function Arena() {
     },
 
     handle: function(prompt, s) {
-      const k = pushStack(s.cont, prompt, reverseOnto(s.frames, Nil))
-      if (s.prompt === prompt)  {
-        return s.body((value) => rewind(k, value))
-      } else {
-        throw new Suspension(s.prompt, s.body, Nil, k)
-      }
-    },
-
-    hole: function() { throw "Implementation missing" }
+      return handleOrRethrow(prompt, s, Nil)
+    }
   }
 })()
 

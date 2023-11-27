@@ -244,8 +244,8 @@ object Transformer {
       List(js.Return(js.Object(List(
         `tag`  -> js.RawExpr(tagValue.toString),
         `name` -> JsString(constructor.id.name.name),
-        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f.id)) })
-      ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) })))
+        `data` -> js.ArrayLiteral(fields map { f => js.Variable(nameDef(f.id)) })
+      ) ++ fields.map { f => (nameDef(f.id), js.Variable(nameDef(f.id))) })))
     )
   }
 
@@ -296,7 +296,7 @@ object Transformer {
 
   def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
 
-  def nameRef(id: Symbol)(using C: Context): js.Expr = Variable(uniqueName(id))
+  def nameRef(id: Symbol)(using C: Context): js.Expr = js.Variable(uniqueName(id))
 
   // name references for fields and methods
   def memberNameRef(id: Symbol): JSName = uniqueName(id)

@@ -13,8 +13,7 @@ import scala.collection.mutable
 
 
 /**
- * Precondition: we assume that the core tree has been lambda-lifted and all anonymous blocks
- *   are bound.
+ * Precondition: we assume that in the core tree all named definitions have been lambda-lifted
  *
  * - objects are not supported, for now
  * - lambda lifting of known functions is essential, since closures are expensive in JS
@@ -30,8 +29,10 @@ object TransformerDS {
     given DeclarationContext = new DeclarationContext(input.core.declarations)
 
     val lifted = LambdaLifting.lift(input.core)
-    given Locals = new Locals(lifted)
-    toJS(lifted, Nil, exports)
+    val inlined = Optimizer.optimize(mainSymbol, lifted)
+
+    given Locals = new Locals(inlined)
+    toJS(inlined, Nil, exports)
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Locals, Context): js.Module = {
 
@@ -81,7 +82,7 @@ object TransformerDS {
 
     // [[ { x => ... } ]] = ERROR
     case BlockLit(tps, cps, vps, bps, body) =>
-      Context.panic("Should have been lambda lifted and explicitly bound")
+      js.Lambda(vps.map(toJS) ++ bps.map(toJS), js.Block(toJS(body)(x => js.Return(x))))
   }
 
   /**
@@ -110,14 +111,6 @@ object TransformerDS {
     val suspension = freshName("suspension")
     val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
     List(js.Try(s, suspension, List(js.Throw(js.builtin("push",js.Variable(suspension), frame)))))
-
-//   List(js.Try(s, JSName("k"), List(RawStmt(
-//    s""" /*
-//       |  * result: ${uniqueName(result)}
-//       |  * free value variables: ${vars.values.map(uniqueName).mkString(", ")}
-//       |  * free block variables: ${vars.blocks.map(uniqueName).mkString(", ")}
-//       |  */
-//       |""".stripMargin))))
 
   def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind[js.Expr] = s match {
 
@@ -165,25 +158,27 @@ object TransformerDS {
     //   [[bind]](x = []);
     //   [[body]](k)
     case d @ Val(id, binding, body) =>
-      val free = L.apply(d)
       // Here we fix the order of arguments
-      val freeValues = free.values.toList
-      val freeBlocks = free.blocks.toList
-      val contId = freshName("k") // TODO improve name and prefix current function name
+      val free = L.apply(d).toList
+      val freeValues = free.collect { case core.Variable.Value(id, tpe) => id }
+      val freeBlocks = free.collect { case core.Variable.Block(id, tpe, capt) => id }
+      val freeIds = freeValues ++ freeBlocks
+
+      val contId = freshName(s"k_${id.name}") // TODO improve name and prefix current function name
       val result = nameDef(id)
 
       // the last statement in the binding differs if it is bound to a wildcard
       // ...x = result...    vs.   ...result...
-      val bindingStmts = id match {
-        case Wildcard() => toJS(binding)(x => js.ExprStmt(x))
-        case id         => toJS(binding)(x => js.Assign(nameRef(id), x))
+      val (maybeLet, bindingStmts) = id match {
+        case Wildcard() => (Nil, toJS(binding)(x => js.ExprStmt(x)))
+        case id         => (List(js.Let(nameDef(id), js.Undefined)), toJS(binding)(x => js.Assign(nameRef(id), x)))
       }
 
-      val instrumented = entrypoint(result, contId, (freeValues ++ freeBlocks).map(uniqueName), bindingStmts)
+      val instrumented = entrypoint(result, contId, freeIds.map(uniqueName), bindingStmts)
 
       Bind { k =>
-        emitContinuation(contId, result, (freeValues ++ freeBlocks).map(nameDef), toJS(body)(x => js.Return(x)))
-        instrumented ++ toJS(body)(k)
+        emitContinuation(contId, result, freeIds.map(nameDef), toJS(body)(x => js.Return(x)))
+        maybeLet ++ instrumented ++ toJS(body)(k)
       }
 
     case Var(id, init, cap, body) =>
@@ -193,6 +188,7 @@ object TransformerDS {
       Return(js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS)))
 
     case If(cond, thn, els) =>
+
       Bind { k => List(js.If(toJS(cond), js.MaybeBlock(toJS(thn)(k)), js.MaybeBlock(toJS(els)(k)))) }
 
     case Return(e) =>
@@ -293,8 +289,8 @@ object TransformerDS {
       List(js.Return(js.Object(List(
         `tag`  -> js.RawExpr(tagValue.toString),
         `name` -> JsString(constructor.id.name.name),
-        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f.id)) })
-      ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) })))
+        `data` -> js.ArrayLiteral(fields map { f => js.Variable(nameDef(f.id)) })
+      ) ++ fields.map { f => (nameDef(f.id), js.Variable(nameDef(f.id))) })))
     )
   }
 
@@ -344,7 +340,7 @@ object TransformerDS {
 
   def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
 
-  def nameRef(id: Symbol)(using C: Context): js.Expr = Variable(uniqueName(id))
+  def nameRef(id: Symbol)(using C: Context): js.Expr = js.Variable(uniqueName(id))
 
   // name references for fields and methods
   def memberNameRef(id: Symbol): JSName = uniqueName(id)
@@ -368,7 +364,11 @@ object TransformerDS {
  * WARNING: the mapping is performed by object identity, so rewriting the tree looses the annotations.
  * WARNING: since the local-context is lost, do NOT use it by querying on demand (e.g. `locals.query(myTree)`)
  */
+
+
 class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, Variables] {
+
+
 
   // DB
   // --
@@ -390,8 +390,8 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
 
   // Scoping
   // -------
-  def freeBlock(id: Id)(using L: Variables): Variables = Variables.block(id) intersect L
-  def freeValue(id: Id)(using L: Variables): Variables = Variables.value(id) intersect L
+  def freeBlock(id: Id)(using L: Variables): Variables = L.filter(v => v.id == id)
+  def freeValue(id: Id)(using L: Variables): Variables = L.filter(v => v.id == id)
   def binding(bound: Variables)(prog: Variables ?=> Variables)(using L: Variables): Variables =
     prog(using L ++ bound) -- bound
 
@@ -429,15 +429,19 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
       stillFree ++ binding(boundSoFar) { query(body) }
 
     case d @ Stmt.Val(id, rhs, body) =>
-      query(rhs) ++ binding(Variables.value(id)) {
+      query(rhs) ++ binding(Variables.value(id, rhs.tpe)) {
         // we annotate the free variables of the continuation
         val freeInBody = query(body)
         db.update(LocallyFree, d, freeInBody)
         freeInBody
       }
 
-    case core.Alloc(id, init, region, body) => query(init) ++ freeBlock(region) ++ binding(Variables.block(id)) { query(body) }
-    case core.Var(id, init, capture, body) => query(init) ++ binding(Variables.block(id)) { query(body) }
+    case core.Alloc(id, init, region, body) =>
+      val bound = Variables.block(id, Type.TState(init.tpe), Set(region))
+      query(init) ++ freeBlock(region) ++ binding(bound) { query(body) }
+    case core.Var(id, init, capture, body) =>
+      val bound = Variables.block(id, Type.TState(init.tpe), Set(capture))
+      query(init) ++ binding(bound) { query(body) }
     case core.Get(id, annotatedCapt, annotatedTpe) => freeBlock(id)
     case core.Put(id, annotatedCapt, value) => freeBlock(id)
   }
@@ -456,18 +460,26 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
 
   // saturate free variables transitively
   def resolveFreeVariables(vars: Variables): Variables =
-    var transitiveVars = Variables(vars.values, Set.empty)
-
-    vars.blocks.foreach { id =>
-      transitiveVars = transitiveVars ++ transitiveClosure.getOrElseUpdate(id,
-        // this is ok, since local definitions cannot be mutual at the moment (otherwise this will not terminate)
-        resolveFreeVariables(freeVariablesOfDefs.getOrElse(id, Variables.block(id))))
+    vars.flatMap {
+      case x: Variable.Value => Set(x)
+      case f: Variable.Block => resolve(f.id).getOrElse(Set(f))
     }
-    transitiveVars
 
-  freeVariablesOfDefs.foreach {
-    case (id, vars) => transitiveClosure.getOrElseUpdate(id, resolveFreeVariables(vars))
-  }
+  def resolve(id: Id): Option[Variables] =
+    transitiveClosure.get(id) match {
+      case Some(value) => Some(value)
+      case None =>
+        freeVariablesOfDefs.get(id).map { before =>
+          transitiveClosure.update(id, Variables.empty)
+          val result = resolveFreeVariables(before)
+          transitiveClosure.update(id, result)
+          result
+        }
+    }
+
+
+  freeVariablesOfDefs.keySet.foreach { resolve }
+
 }
 
 class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite {
@@ -477,22 +489,24 @@ class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite
   /**
    * fixes the order of free variables, can vary from compilation to compilation
    */
-  case class Info(values: List[(Id, core.ValueType)], blocks: List[(Id, core.BlockType, core.Captures)]) {
-    def valueParams: List[core.ValueParam] = values.map { case (id, tpe) => core.ValueParam(id, tpe) }
-    def blockParams: List[core.BlockParam] = blocks.map { case (id, tpe, capt) => core.BlockParam(id, tpe) }
-    def valueArgs   = values.map { case (id, tpe) => core.ValueVar(id, tpe) }
-    def blockArgs   = blocks.map { case (id, tpe, capt) => core.BlockVar(id, tpe, capt) }
+  case class Info(values: List[Variable.Value], blocks: List[Variable.Block]) {
+    def valueParams: List[core.ValueParam] = values.map { case Variable.Value(id, tpe) => core.ValueParam(id, tpe) }
+    def blockParams: List[core.BlockParam] = blocks.map { case Variable.Block(id, tpe, capt) => core.BlockParam(id, tpe, capt) }
+    def captureParams: List[core.Capture] = blocks.map {
+      case Variable.Block(id, tpe, cs) if cs.size == 1 => cs.head
+      case Variable.Block(id, tpe, cs) => Context.panic(s"Since we only close over block parameters, the capture set should be a single variable (but got ${cs})")
+    }
+
+    def valueArgs   = values.map { case Variable.Value(id, tpe) => core.ValueVar(id, tpe) }
+    def blockArgs   = blocks.map { case Variable.Block(id, tpe, capt) => core.BlockVar(id, tpe, capt) }
+    def captureArgs = blocks.map { case Variable.Block(id, tpe, cs) => cs }
   }
-  val infos = locals.transitiveClosure.map {
-    // TODO maybe we need typed free variables, instead of translating here again. Or remember the core types for symbols.
+  val infos: Map[Id, Info] = locals.transitiveClosure.map {
     case (id, vars) => (id, Info(
-      vars.values.toList.map { x => (x, core.Transformer.transform(Context.valueTypeOf(x))) },
-      vars.blocks.toList.map { f => (f,
-        core.Transformer.transform(Context.blockTypeOf(f)),
-        core.Transformer.transform(Context.captureOf(f.asBlockSymbol)))
-      }
+      vars.toList.collect { case x: Variable.Value => x },
+      vars.toList.collect { case f: Variable.Block => f }
     ))
-  }
+  }.toMap
   val lifted: mutable.ListBuffer[core.Definition] = mutable.ListBuffer.empty
 
   // only needs adaptation if it is a closure
@@ -501,32 +515,62 @@ class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite
     case None => false
   }
 
+  // we adapt the type of the reference since now it closes over less variables but receives more as arguments
+  // e.g. (Int) => Unit at {io, f}    ===>   (Int, f: Exc) => Unit at {io}
+  def adaptReference(b: BlockVar): BlockVar = b match
+    case b if !needsCallsiteAdaptation(b.id) => b
+    case BlockVar(id, BlockType.Function(tps, cps, vps, bps, ret), annotatedCapt) =>
+      val info = infos(id)
+      val additionalValues = info.values.map { x => x.tpe }
+      val (additionalCaptures, additionalBlocks, removedCaptures) = info.blocks.map {
+        case Variable.Block(id, tpe, capt) => (id, tpe, capt)
+      }.unzip3
+      val newType = BlockType.Function(tps, cps ++ additionalCaptures, vps ++ additionalValues, bps ++ additionalBlocks, ret)
+      // TODO what if the block parameters have been renamed somewhere---subtracting from capture won't help then.
+      val newCapture = annotatedCapt -- removedCaptures.flatten
+      BlockVar(id, newType, newCapture)
+    case other => Context.panic("Cannot lambda lift non-functions.")
+
   override def stmt = {
     case core.Scope(defs, body) =>
       core.Scope(defs.flatMap {
         // we lift named local definitions to the toplevel
         case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
-          lifted.append(Definition.Def(id, BlockLit(tparams, cparams, vparams ++ infos(id).valueParams, bparams ++ infos(id).blockParams, rewrite(body))))
+
+          lifted.append(Definition.Def(id,
+            BlockLit(tparams,
+              // Here we add cparams for the closed over bparams
+              cparams ++ infos(id).captureParams,
+              vparams ++ infos(id).valueParams,
+              bparams ++ infos(id).blockParams,
+              rewrite(body))))
           Nil
         case other => List(rewrite(other))
       }, rewrite(body))
 
     case core.App(b: BlockVar, targs, vargs, bargs) if needsCallsiteAdaptation(b.id) =>
-      core.App(b, targs, vargs ++ infos(b.id).valueArgs, bargs ++ infos(b.id).blockArgs)
+      core.App(adaptReference(b), targs, vargs.map(rewrite) ++ infos(b.id).valueArgs, bargs.map(rewrite) ++ infos(b.id).blockArgs)
   }
 
   override def block = {
     // Here we now need to eta expand
-    case core.BlockVar(id, tpe, capt) if needsCallsiteAdaptation(id) =>
-      println(id)
-      ???
+    // e.g. f : (Int) => Unit @ {io,exc}   ===>   { (n) => f(n, exc) }
+    //   the type of f after transformation is `(Int, Exc) => Unit @ {io}`
+    case f @ core.BlockVar(id, core.BlockType.Function(tps, cps, vps, bps, res), capt) if needsCallsiteAdaptation(id) =>
+      val vparams: List[core.ValueParam] = vps map { tpe => core.ValueParam(Id("x"), tpe) }
+      val bparams: List[core.BlockParam] = (cps zip bps) map { case (capt, tpe) => core.BlockParam(Id("f"), tpe, Set(capt)) }
+
+      val targs = tps map { tpe => core.ValueType.Var(tpe) }
+      val vargs = vparams.map { p => core.ValueVar(p.id, p.tpe) } ++ infos(id).valueArgs
+      val bargs = (bparams zip cps).map { case (p, c) => core.BlockVar(p.id, p.tpe, Set(c)) } ++ infos(id).blockArgs
+      core.BlockLit(tps, cps, vparams, bparams, core.App(adaptReference(f), targs, vargs, bargs))
   }
 
   override def expr = {
     case core.DirectApp(b: BlockVar, targs, vargs, bargs) if needsCallsiteAdaptation(b.id) =>
-      core.DirectApp(b, targs, vargs ++ infos(b.id).valueArgs, bargs ++ infos(b.id).blockArgs)
+      core.DirectApp(b, targs, vargs.map(rewrite) ++ infos(b.id).valueArgs, bargs.map(rewrite) ++ infos(b.id).blockArgs)
     case core.PureApp(b: BlockVar, targs, vargs) if needsCallsiteAdaptation(b.id) =>
-      core.PureApp(b, targs, vargs ++ infos(b.id).valueArgs)
+      core.PureApp(b, targs, vargs.map(rewrite) ++ infos(b.id).valueArgs)
   }
 }
 object LambdaLifting {

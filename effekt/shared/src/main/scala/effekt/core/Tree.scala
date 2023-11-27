@@ -211,7 +211,7 @@ enum Param extends Tree {
   def id: Id
 
   case ValueParam(id: Id, tpe: ValueType)
-  case BlockParam(id: Id, tpe: BlockType)
+  case BlockParam(id: Id, tpe: BlockType, capt: Captures)
 }
 export Param.*
 
@@ -389,22 +389,34 @@ object Tree {
   }
 }
 
-case class Variables(values: Set[Id], blocks: Set[Id]) {
-  def ++(other: Variables) = Variables(values ++ other.values, blocks ++ other.blocks)
-  def --(other: Variables) = Variables(values -- other.values, blocks -- other.blocks)
+enum Variable {
+  case Value(id: Id, tpe: core.ValueType)
+  case Block(id: Id, tpe: core.BlockType, capt: core.Captures)
 
-  def intersect(other: Variables) = Variables(values intersect other.values, blocks intersect other.blocks)
+  def id: Id
+
+  // lookup and comparison should still be done per-id, not structurally
+  override def equals(other: Any): Boolean = other match {
+    case other: Variable => this.id == other.id
+    case _ => false
+  }
+  override def hashCode(): Int = id.hashCode
 }
+
+type Variables = Set[Variable]
+
 object Variables {
 
-  def value(id: Id) = Variables(Set(id), Set.empty)
-  def block(id: Id) = Variables(Set.empty, Set(id))
-  def empty = Variables(Set.empty, Set.empty)
+  import core.Type.{TState, TRegion}
+
+  def value(id: Id, tpe: ValueType) = Set(Variable.Value(id, tpe))
+  def block(id: Id, tpe: BlockType, capt: Captures) = Set(Variable.Block(id, tpe, capt))
+  def empty: Variables = Set.empty
 
   def free(e: Expr): Variables = e match {
     case DirectApp(b, targs, vargs, bargs) => free(b) ++ all(vargs, free) ++ all(bargs, free)
     case Run(s) => free(s)
-    case Pure.ValueVar(id, annotatedType) => Variables.value(id)
+    case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
     case Pure.Select(target, field, annotatedType) => free(target)
@@ -412,7 +424,7 @@ object Variables {
   }
 
   def free(b: Block): Variables = b match {
-    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Variables.block(id)
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Variables.block(id, annotatedTpe, annotatedCapt)
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       free(body) -- all(vparams, bound) -- all(bparams, bound)
 
@@ -447,7 +459,7 @@ object Variables {
       stillFree ++ (free(body) -- boundSoFar)
 
     case Stmt.Return(expr) => free(expr)
-    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id))
+    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
@@ -455,21 +467,21 @@ object Variables {
     })
     case Stmt.Region(body) => free(body)
     // are mutable variables now block variables or not?
-    case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region) ++ (free(body) -- Variables.block(id))
-    case Stmt.Var(id, init, capture, body) => free(init) ++ (free(body) -- Variables.block(id))
-    case Stmt.Get(id, annotatedCapt, annotatedTpe) => Variables.block(id)
-    case Stmt.Put(id, annotatedCapt, value) => Variables.block(id)
+    case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region, TRegion, Set(region)) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(region)))
+    case Stmt.Var(id, init, capture, body) => free(init) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(capture)))
+    case Stmt.Get(id, annotatedCapt, annotatedTpe) => Variables.block(id, core.Type.TState(annotatedTpe), annotatedCapt)
+    case Stmt.Put(id, annotatedCapt, value) => Variables.block(id, core.Type.TState(value.tpe), annotatedCapt)
 
     case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
     case Stmt.Hole() => Variables.empty
   }
 
-  def bound(t: ValueParam): Variables = Variables.value(t.id)
-  def bound(t: BlockParam): Variables = Variables.block(t.id)
+  def bound(t: ValueParam): Variables = Variables.value(t.id, t.tpe)
+  def bound(t: BlockParam): Variables = Variables.block(t.id, t.tpe, t.capt)
 
   def bound(d: Definition): Variables = d match {
-    case Definition.Def(id, block) => Variables.block(id)
-    case Definition.Let(id, binding) => Variables.value(id)
+    case Definition.Def(id, block) => Variables.block(id, block.tpe, block.capt)
+    case Definition.Let(id, binding) => Variables.value(id, binding.tpe)
   }
 }
 
@@ -645,7 +657,7 @@ object substitutions {
 
   def substitute(param: Param.BlockParam)(using Substitution): Param.BlockParam =
     param match {
-      case Param.BlockParam(id, tpe) => Param.BlockParam(id, substitute(tpe))
+      case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, substitute(tpe), substitute(capt))
     }
 
   def substitute(tpe: ValueType)(using subst: Substitution): ValueType =

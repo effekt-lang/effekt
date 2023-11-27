@@ -2,7 +2,7 @@ package effekt
 
 import effekt.PhaseResult.{ CoreLifted, CoreTransformed }
 import effekt.context.Context
-import effekt.core.{ DirectStyleMutableState, Transformer, Optimizer }
+import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
