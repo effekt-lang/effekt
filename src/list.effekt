@@ -1,0 +1,67 @@
+import src/benchmark
+import immutable/list
+
+def length(element: List[Int]): Int =
+  element match {
+    case Nil() => 0
+    case Cons(value, child) => 1 + length(child) 
+  }
+
+def isShorterThan(x: List[Int], y: List[Int]): Boolean = {
+  var xTail = x;
+  var yTail = y;
+  var run = true;
+  var bigger = false;
+  (xTail,yTail) match {
+    case (_, Nil()) => false
+    case (Nil(), _) => true
+    case (Cons(_,xTail),Cons(_,yTail)) => isShorterThan(xTail,yTail)
+  }
+}
+
+def makeList(length: Int): List[Int] = {
+  if (length == 0) {
+    Nil()
+  } else {
+    Cons(length, makeList(length - 1))
+  }
+}
+
+//no idea what that function does.
+def tail(x: List[Int], y: List[Int], z: List[Int]): List[Int] = {
+  if (y.isShorterThan(x)) {
+    (x,y,z) match {
+      case (Cons(_,xChild),Cons(_,yChild),Cons(_,zChild)) => 
+        tail(
+          tail(xChild, y, z),
+          tail(yChild, z, x),
+          tail(zChild, x, y)
+        )
+      case _ => panic("oh no!");
+    }
+  } else {
+    z
+  }
+}
+
+def List(_: Int) = {
+  def benchmark(): Int = {
+    val result = tail(
+      makeList(15),
+      makeList(10),
+      makeList(6)
+    );
+    length(result)
+  }
+  
+
+  def verifyResult(result: Int): Boolean = {
+    return result == 10;
+  }
+
+  return innerBenchmarkLoop(1){benchmark}{verifyResult};
+}
+
+def main() = {
+  List(0);
+}
