@@ -1,4 +1,5 @@
 import mutable/array
+import src/benchmark
 
 record Body(
   x: Double,
@@ -10,8 +11,20 @@ record Body(
   mass: Double
 )
 
+def makeBody(  x: Double,
+  y: Double,
+  z: Double,
+  vx: Double,
+  vy: Double,
+  vz: Double,
+  mass: Double): Body = {
+  val PI = 3.141592653589793;
+  val DAYS_PER_YER = 365.24;
+  val SOLAR_MASS = 4.0 * PI * PI;
+  Body(x,y,z, vx * DAYS_PER_YER, vy * DAYS_PER_YER, vz * DAYS_PER_YER, mass * SOLAR_MASS)
+}
 
-def main() = {
+def nbody(problemSize: Int) = {
   val PI = 3.141592653589793
   val SOLAR_MASS = 4.0 * PI * PI
   val DAYS_PER_YER = 365.24;
@@ -27,7 +40,7 @@ def main() = {
 
   def createBodies(): Array[Body] = {
     val bodies: Array[Body] = emptyArray[Body](5)
-    val jupiter = Body(
+    val jupiter = makeBody(
       4.84143144246472090,
       -1.16032004402742839,
       -0.10362204447112311,
@@ -37,7 +50,7 @@ def main() = {
       0.0009547919384243266
     );
 
-    val saturn = Body(
+    val saturn = makeBody(
       8.34336671824458,
       4.124798564124305,
       -0.4035234171143214,
@@ -47,7 +60,7 @@ def main() = {
       0.0002858859806661308
     );
 
-    val uranus = Body(
+    val uranus = makeBody(
       12.89436956213913,
       -15.11115140169863,
       -0.22330757889265574,
@@ -57,7 +70,7 @@ def main() = {
       0.00004366244043351563
     );
 
-    val neptune = Body(
+    val neptune = makeBody(
       15.379697114850917,
       -25.919314609987964,
       0.17925877295037118,
@@ -67,7 +80,7 @@ def main() = {
       0.00005151389020466115
     );
 
-    val sun = Body(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+    val sun = makeBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 
 
     put(bodies,0,sun);
@@ -76,14 +89,27 @@ def main() = {
     put(bodies,3,uranus);
     put(bodies,4,neptune);
 
+    var px = 0.0;
+    var py = 0.0;
+    var pz = 0.0;
+
+    each(0,bodies.size()){ i => 
+      val b = bodies.unsafeGet(i)
+      px = px + b.vx * b.mass;
+      py = py + b.vy * b.mass;
+      pz = pz + b.vz * b.mass;
+      }
+
+    put(bodies, 0, offsetMomentum(px,py,pz,sun))
+
     bodies
   }
 
   def advance(dt: Double, bodies: Array[Body]) = {
     each(0,bodies.size()){ i =>
-      val iBody: Body = bodies.unsafeGet(i);
+      var iBody: Body = bodies.unsafeGet(i);
       each(i+1,bodies.size()){ j =>
-        val jBody: Body = bodies.unsafeGet(j);
+        var jBody: Body = bodies.unsafeGet(j);
         val dx = iBody.x - jBody.x;
         val dy = iBody.y - jBody.y;
         val dz = iBody.z - jBody.z;
@@ -91,18 +117,88 @@ def main() = {
         val dSquared = dx * dx + dy * dy + dz * dz;
         val distance = sqrt(dSquared);
         val mag = dt / (dSquared * distance);
+ 
+        iBody = Body(
+          iBody.x, iBody.y, iBody.z,
+          iBody.vx - dx * jBody.mass * mag,
+          iBody.vy - dy * jBody.mass * mag,
+          iBody.vz - dz * jBody.mass * mag,
+          iBody.mass
+        );
 
-        ();
+        jBody = Body(
+          jBody.x, jBody.y, jBody.z,
+          jBody.vx + dx * iBody.mass * mag,
+          jBody.vy + dy * iBody.mass * mag,
+          jBody.vz + dz * iBody.mass * mag,
+          jBody.mass
+        );
+ 
+ 
+        put(bodies,i,iBody);
+        put(bodies,j,jBody);
       }
-      ();
     }
-    ();
+
+    each(0,bodies.size()){ i =>
+    val body = bodies.unsafeGet(i);
+      put(bodies, i, Body(
+        body.x + dt * body.vx,
+        body.y + dt * body.vy,
+        body.z + dt * body.vz,
+        body.vx,
+        body.vy,
+        body.vz,
+        body.mass
+      ))
+    }
+  };
+
+  def energy(bodies: Array[Body]): Double = {
+    var e = 0.0;
+    each(0, bodies.size()){ i =>
+      val iBody = bodies.unsafeGet(i);
+      e = e + 0.5 * iBody.mass * (iBody.vx * iBody.vx + iBody.vy * iBody.vy + iBody.vz * iBody.vz);
+
+      each(i+1, bodies.size()){ j => 
+        val jBody = bodies.unsafeGet(j);
+        val dx = iBody.x - jBody.x;
+        val dy = iBody.y - jBody.y;
+        val dz = iBody.z - jBody.z;
+
+        val distance = sqrt(dx * dx + dy * dy + dz * dz);
+        e = e - (iBody.mass * jBody.mass) / distance;
+      }
+    }
+    e
   }
 
-  val bodies: Array[Body] = createBodies();
-  advance(1, bodies)
-  each(0,bodies.size()){ i =>
-    println(show(bodies.unsafeGet(i)))
-  };
-  ();
+  def benchmark(): Double = {
+    val bodies: Array[Body] = createBodies();
+    each(0, problemSize) { i => 
+      advance(0.01, bodies)
+ 
+    }
+    energy(bodies)
+  }
+
+  def verifyResult(result: Double): Boolean = {
+     if (problemSize == 250000) {
+       (result - 0.1690859889909308) < 0.0000000000000001;
+      } else if (problemSize == 1) {
+        result == -0.16907495402506745;
+      }  else {
+        return false;
+      }
+  }
+
+  //benchmark()
+  //problem sized loop happens in benchmark itself.
+  //not my choice ¯\_(ツ)_/¯
+  innerBenchmarkLoop[Double](1){benchmark}{verifyResult}
+}
+
+def main() = {
+  nbody(1);
+  nbody(250000);
 }
