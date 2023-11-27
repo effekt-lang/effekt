@@ -6,7 +6,7 @@ extern pure def xor(a: Int, b: Int): Int = "a ^ b"
 extern pure def lshift(a: Int, b: Int): Int = "a << b"
 
 def Mandelbrot(size: Int) = {
-  def brot(size: Int): Int = {
+  def mandelbrot(size: Int): Int = {
     var sum = 0;
     var byteAcc = 0;
     var bitNum = 0;
@@ -31,7 +31,7 @@ def Mandelbrot(size: Int) = {
 
           //preserve recalculation
           zrzr = zr * zr;
-          zizi = zi*zi
+          zizi = zi * zi
 
           if (zrzr + zizi > 4.0) {
             notDone = false;
@@ -40,11 +40,11 @@ def Mandelbrot(size: Int) = {
           z = z + 1;
         }
 
-        byteAcc = lshift( byteAcc, 1) + escape;
+        byteAcc = lshift(byteAcc, 1) + escape;
         bitNum = bitNum + 1;
 
         if (bitNum == 8) {
-          sum = xor(sum,byteAcc);
+          sum = xor(sum, byteAcc);
           byteAcc = 0;
           bitNum = 0;
         } else if (x == size - 1) {
@@ -56,13 +56,13 @@ def Mandelbrot(size: Int) = {
       }
     }
 
-    return sum;
+    sum
   }
 
 
 
   def benchmark() = {
-    return brot(size)
+    return mandelbrot(size)
   }
 
   def verifyResult(result: Int) = {
@@ -78,7 +78,7 @@ def Mandelbrot(size: Int) = {
     }
   }
 
-  return innerBenchmarkLoop(1){benchmark}{verifyResult}
+  innerBenchmarkLoop(1){benchmark}{verifyResult}
 }
 
 def main() = {
@@ -91,7 +91,7 @@ def main() = {
     panic("XOR operation is faulty!")
   }
 
-   if (lshift(123,456) != 31488) {
+  if (lshift(123,456) != 31488) {
     panic("XOR operation is faulty!")
   }
 }
