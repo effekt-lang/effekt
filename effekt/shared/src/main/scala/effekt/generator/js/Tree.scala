@@ -109,6 +109,11 @@ enum Expr {
 }
 export Expr.*
 
+enum Pattern {
+  case Variable(name: JSName)
+  case Array(ps: List[Pattern])
+}
+
 enum Stmt {
   // e.g. { <STMT>* }
   case Block(stmts: List[Stmt])
@@ -120,10 +125,10 @@ enum Stmt {
   case RawStmt(raw: String)
 
   // e.g. const x = <EXPR>
-  case Const(name: JSName, binding: Expr)
+  case Const(pattern: Pattern, binding: Expr)
 
   // e.g. let x = <EXPR>
-  case Let(name: JSName, binding: Expr)
+  case Let(pattern: Pattern, binding: Expr)
 
   // e.g. <EXPR> = <EXPR>
   case Assign(target: Expr, value: Expr)
@@ -132,7 +137,7 @@ enum Stmt {
   case Destruct(names: List[JSName], binding: Expr)
 
   // e.g. switch (sc) { case <EXPR>: <STMT>; ...; default: <STMT> }
-  case Switch(scrutinee: Expr, branches: List[(Expr, Stmt)], default: Option[Stmt])
+  case Switch(scrutinee: Expr, branches: List[(Expr, List[Stmt])], default: Option[List[Stmt]]) // TODO maybe flatten?
 
   // e.g. function <NAME>(x, y) { <STMT>* }
   case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
@@ -146,10 +151,16 @@ enum Stmt {
   // e.g. throw e
   case Throw(expr: Expr)
 
+  // e.g. break
+  case Break()
+
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
 }
 export Stmt.*
+
+def Const(name: JSName, binding: Expr): Stmt = js.Const(Pattern.Variable(name), binding)
+def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
 // Some smart constructors
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)

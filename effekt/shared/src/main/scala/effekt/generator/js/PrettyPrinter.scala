@@ -49,9 +49,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
     case Try(prog, id, handler)        => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
     case Throw(expr)                   => "throw" <+> toDoc(expr) <> ";"
+    case Break()                       => "break;"
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
-      case (tag, body) => "case" <+> toDoc(tag) <> ":" <+> toDoc(body)
-    } ++ default.toList.map { body => "default:" <+> toDoc(body) })
+      case (tag, stmts) => "case" <+> toDoc(tag) <> ":" <+> nested(stmts map toDoc)
+    } ++ default.toList.map { stmts => "default:" <+> nested(stmts map toDoc) })
+  }
+
+  def toDoc(pattern: Pattern): Doc = pattern match {
+    case Pattern.Variable(name) => toDoc(name)
+    case Pattern.Array(ps) => brackets(ps map toDoc)
   }
 
   // some helpers
@@ -59,6 +65,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   val emptyline: Doc = line <> line
 
   def nested(content: Doc): Doc = group(nest(line <> content))
+
+  def nested(docs: List[Doc]): Doc = group(nest(line <> vcat(docs)))
 
   def parens(docs: List[Doc]): Doc = parens(hsep(docs, comma))
 

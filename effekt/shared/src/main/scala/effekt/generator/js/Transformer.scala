@@ -221,7 +221,7 @@ object Transformer {
       val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
         // f17.apply(null, sc.__data)
         case (c, block) =>
-          (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
+          (tagFor(c), List(js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`)))))
       }, None)
 
       val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))

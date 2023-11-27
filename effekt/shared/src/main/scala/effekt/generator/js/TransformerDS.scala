@@ -118,7 +118,7 @@ object TransformerDS {
 
       val defs = definitions.flatMap {
         case d : Definition.Def =>
-          //Context.panic("Local definitions should have been lambda lifted already.")
+          Context.panic("Local definitions should have been lambda lifted already.")
           val stmts = toJS(d)
           stmts
         case d : Definition.Let =>
@@ -139,17 +139,19 @@ object TransformerDS {
 
     // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
     case Match(sc, clauses, default) =>
-      Context.panic("Not implemented yet")
-      //      val scrutinee = toJS(sc)
-      //
-      //      val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
-      //        // f17.apply(null, sc.__data)
-      //        case (c, block) =>
-      //          (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
-      //      }, None)
-      //
-      //      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))
-      //      (sw :: stmts, ret)
+      Bind { k =>
+        val scrutinee = toJS(sc)
+        js.Switch(js.Member(scrutinee, `tag`), clauses map {
+          case (c, core.BlockLit(_, _, Nil, _, body)) =>
+            (tagFor(c), toJS(body)(k) :+ js.Break())
+          case (c, core.BlockLit(_, _, vparams, _, body)) =>
+            (tagFor(c), {
+              // { const [x, y, z] = sc.__data; [[ body ]] }; break
+              val const = js.Const(js.Pattern.Array(vparams.map { p => js.Pattern.Variable(nameDef(p.id)) }), js.Member(scrutinee, `data`))
+              (const :: toJS(body)(k)) :+ js.Break()
+            })
+        }, default.map(s => toJS(s)(k))) :: Nil
+      }
 
 
     // this is the whole reason for the Bind monad
@@ -258,6 +260,9 @@ object TransformerDS {
 
     case Definition.Let(Wildcard(), core.Run(s)) =>
       toJS(s)(x => js.ExprStmt(x))
+
+    case Definition.Let(id, core.Run(s)) =>
+      js.Let(nameDef(id), js.Undefined) :: toJS(s)(x => js.Assign(nameRef(id), x))
 
     case Definition.Let(Wildcard(), binding) =>
       List(js.ExprStmt(toJS(binding)))
