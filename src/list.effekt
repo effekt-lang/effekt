@@ -26,7 +26,7 @@ def makeList(length: Int): List[Int] = {
     if (length == 0) {
         Nil()
     } else {
-        Cons(length, makeList(length-1))
+        Cons(length, makeList(length - 1))
     }
 }
 
