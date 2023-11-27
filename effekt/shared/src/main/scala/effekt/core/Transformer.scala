@@ -689,7 +689,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
   def BlockParam(id: BlockSymbol)(using Context): core.BlockParam =
-    core.BlockParam(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
+    core.BlockParam(id, transform(Context.blockTypeOf(id)), Set(id))
 
   def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
     core.ValueVar(id, transform(Context.valueTypeOf(id)))

@@ -220,7 +220,7 @@ object TransformerDS {
       Context.panic("Not implemented yet")
 
     case Hole() =>
-      Context.panic("Not implemented yet")
+      Return(js.builtin("hole"))
 
     case Get(id, capt, tpe) => Context.panic("Should have been translated to direct style")
     case Put(id, capt, value) =>  Context.panic("Should have been translated to direct style")
