@@ -47,7 +47,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Assign(target, expr)          => toDoc(target) <+> "=" <+> toDoc(expr) <> ";"
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)
     case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
-    case Try(prog, id, handler)        => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
+    case Try(prog, id, handler, Nil)   => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
+    case Try(prog, id, handler, fin)    => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc)) <+> "finally" <+> jsBlock(fin.map(toDoc))
     case Throw(expr)                   => "throw" <+> toDoc(expr) <> ";"
     case Break()                       => "break;"
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {

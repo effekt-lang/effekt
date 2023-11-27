@@ -184,7 +184,9 @@ object TransformerDS {
       }
 
     case Var(id, init, cap, body) =>
-      Context.panic("Not implemented yet")
+      Bind { k =>
+        js.Const(nameDef(id), js.builtin("fresh", toJS(init))) :: toJS(body)(k)
+      }
 
     case App(b, targs, vargs, bargs) =>
       Return(js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS)))
@@ -204,13 +206,17 @@ object TransformerDS {
 
       val promptDef = js.Const(prompt, js.builtin("freshPrompt"))
 
+      val freshRegion = js.ExprStmt(js.builtin("freshRegion"))
+
+      val regionCleanup = js.ExprStmt(js.builtin("leaveRegion"))
+
       val (handlerNames, handlerDefs) = (bps zip hs).map {
         case (param, handler) => (toJS(param), js.Const(toJS(param), toJS(handler, prompt)))
       }.unzip
 
       // TODO implement properly
-      Bind { k => promptDef :: handlerDefs ++ List(js.Try(toJS(body)(k), suspension,
-        List(k(js.builtin("handle", js.Variable(prompt), js.Variable(suspension))))))
+      Bind { k => promptDef :: handlerDefs ::: (js.Try(freshRegion :: toJS(body)(k), suspension,
+        List(k(js.builtin("handle", js.Variable(prompt), js.Variable(suspension)))), List(regionCleanup)) :: Nil)
       }
 
     case Try(_, _) =>

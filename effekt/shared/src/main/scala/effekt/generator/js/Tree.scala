@@ -146,7 +146,7 @@ enum Stmt {
   case If(cond: Expr, thn: Stmt, els: Stmt)
 
   // e.g. try { <STMT>* } catch(x) { <STMT>* }
-  case Try(prog: List[Stmt], name: JSName, handler: List[Stmt])
+  case Try(prog: List[Stmt], name: JSName, handler: List[Stmt], fin: List[Stmt] = Nil)
 
   // e.g. throw e
   case Throw(expr: Expr)
