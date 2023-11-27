@@ -16,11 +16,13 @@ all_success=true
 # Loop through each file in the list
 for file in "${file_list[@]}"; do
     # Call effekt.sh for the current file
-    effekt.sh "$file" >> tmp
-    res="$?"
-    echo "$file => $res"
+    effekt.sh "$file" > tmp
+    grep -q "error" tmp
+    hasError=$?
+    echo "hasError=$hasError"
+
     # Check the exit code of the effekt.sh call
-    if [ "$res" -ne 0 ]; then
+    if [ $hasError -eq 0 ]; then
         # If any call fails, set the flag to false
         all_success=false
         echo "benchmark failed: $file"
