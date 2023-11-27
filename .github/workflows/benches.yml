@@ -1,4 +1,4 @@
-name: Execute Bash Script on Push
+name: Run benchmarks
 
 on:
   push:
@@ -21,6 +21,6 @@ jobs:
           npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz
 
 
-      - name: Execute Bash Script
+      - name: Execute Benchmarks
         run: |
           chmod +x run_benches.sh && ./run_benches.sh   
