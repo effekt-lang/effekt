@@ -2,25 +2,31 @@
 
 echo "Run benchmarks"
 
-# List of files
-file_list=(
-    "src/list.effekt"
-    "src/mandelbrot.effekt"
-    "src/permute.effekt"
-    # Add more file names as needed
-)
+# File containing paths to benchmarks (one per line)
+file_list="benchmarks.txt"
+
+# Check if the file exists
+if [ ! -f "$file_list" ]; then
+    echo "Benchmark file $file_list not found."
+    exit 1
+fi
+
+# Read the benchmark paths into an array
+declare -a benchmarks
+while IFS= read -r line; do
+    benchmarks+=("$line")
+done < "$file_list"
 
 # Initialize a variable to track if any command fails
 all_success=true
 
-# Loop through each file in the list
-for file in "${file_list[@]}"; do
+# Loop through each benchmark file path in the list
+for file in "${benchmarks[@]}"; do
     # Call effekt.sh for the current file
+    echo "run $file"
     effekt.sh "$file" > tmp
     grep -q "error" tmp
     hasError=$?
-    echo "hasError=$hasError"
-
     # Check the exit code of the effekt.sh call
     if [ $hasError -eq 0 ]; then
         # If any call fails, set the flag to false

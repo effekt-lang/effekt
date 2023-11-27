@@ -1,0 +1,4 @@
+src/list.effekt
+src/mandelbrot.effekt
+src/permute.effekt
+# lastline dont delete
