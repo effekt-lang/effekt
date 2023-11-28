@@ -43,7 +43,7 @@ jobs:
     - name: Set up NodeJS
       uses: actions/setup-node@v1
       with:
-        node-version: '10.x'
+        node-version: '12.x'
 
     - name: Run tests
       run: sbt clean test
