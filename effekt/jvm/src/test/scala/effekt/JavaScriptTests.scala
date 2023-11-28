@@ -30,12 +30,7 @@ class JavaScriptTests extends EffektTests {
     // ---------------------------------------------
 
     // trampolining
-    examplesDir / "pos" / "stacksafe.effekt",
-
-    // bidirectional
-    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
-    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
-
+    examplesDir / "pos" / "stacksafe.effekt"
   )
 }
 

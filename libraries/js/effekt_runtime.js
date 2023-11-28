@@ -1,6 +1,7 @@
 const $runtime = (function() {
 
   // Regions
+  // TODO maybe use weak refs (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakRef)
   function Cell(init) {
     var _value = init;
     const cell = ({
@@ -177,6 +178,9 @@ function Arena() {
 
     suspend: function(prompt, body) {
       throw new Suspension(prompt, body, Nil, Empty)
+    },
+    suspend_bidirectional: function(prompt, caps, body) {
+      throw new Suspension(prompt, body, Cons(thunk => thunk.apply(null, caps), Nil), Empty)
     },
 
     push: function(suspension, frame) {

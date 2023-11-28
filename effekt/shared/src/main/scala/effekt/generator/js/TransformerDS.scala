@@ -234,7 +234,21 @@ object TransformerDS {
 
   def toJS(handler: core.Implementation, prompt: JSName)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
     js.Object(handler.operations.map {
-      // () => $effekt.suspend(this, (resume_730) => { return $effekt.unit; })
+      // (args...cap...) => $effekt.suspend(prompt, (resume) => { ... body ... resume((cap...) => { ... }) ... })
+      case Operation(id, tps, cps, vps, bps,
+          Some(BlockParam(resume, core.BlockType.Function(_, _, _, List(core.BlockType.Function(_, _, _, bidirectionalTpes, _)), _), _)),
+          body) =>
+        // add parameters for bidirectional arguments
+        val biParams = bidirectionalTpes.map { _ => freshName("cap") }
+        val biArgs   = biParams.map { p => js.Variable(p) }
+
+        val lambda = js.Lambda((vps ++ bps).map(toJS) ++ biParams,
+          js.Return(js.builtin("suspend_bidirectional", js.Variable(prompt), js.ArrayLiteral(biArgs), js.Lambda(List(nameDef(resume)),
+            js.Block(toJS(body)(x => js.Return(x)))))))
+
+        nameDef(id) -> lambda
+
+      // (args...) => $effekt.suspend(prompt, (resume) => { ... BODY ... resume(v) ... })
       case Operation(id, tps, cps, vps, bps, Some(resume), body) =>
         val lambda = js.Lambda((vps ++ bps) map toJS,
           js.Return(js.builtin("suspend", js.Variable(prompt), js.Lambda(List(toJS(resume)), js.Block(toJS(body)(x => js.Return(x)))))))
