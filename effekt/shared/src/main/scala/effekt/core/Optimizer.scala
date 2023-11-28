@@ -10,6 +10,8 @@ import effekt.core.Pure.ValueVar
 import effekt.symbols.TmpValue
 import effekt.util.messages.INTERNAL_ERROR
 
+import scala.collection.mutable
+
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   val phaseName: String = "core-optimizer"
@@ -60,20 +62,21 @@ object RemoveUnusedDefinitions {
 object InlineUnique {
 
   case class InlineContext(
-    // is mutable to update when introducing temporaries
-    var usage: Map[Id, Usage],
+    // is mutable to update when introducing temporaries;
+    // they should also be visible after leaving a scope (so mutable.Map and not `var usage`).
+    usage: mutable.Map[Id, Usage],
     defs: Map[Id, Definition]
   ) {
     def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other)
 
-    def ++=(fresh: Map[Id, Usage]): Unit = { usage = usage ++ fresh }
+    def ++=(fresh: Map[Id, Usage]): Unit = { usage ++= fresh }
   }
 
   def apply(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl = {
     val usage = Reachable(m) ++ entrypoints.map(id => id -> Usage.Many).toMap
     val defs = m.definitions.map(d => d.id -> d).toMap
 
-    val (updatedDefs, _) = scope(m.definitions)(using InlineContext(usage, defs))
+    val (updatedDefs, _) = scope(m.definitions)(using InlineContext(mutable.Map.from(usage), defs))
     m.copy(definitions = updatedDefs)
   }
 
