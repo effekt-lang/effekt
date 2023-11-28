@@ -92,6 +92,7 @@ class MLTests extends EffektTests {
 
     // array api
     examplesDir / "pos" / "raytracer.effekt",
+    examplesDir / "pos" / "issue319.effekt",
 
     // async
     examplesDir / "pos" / "io" / "async_file_io.effekt",

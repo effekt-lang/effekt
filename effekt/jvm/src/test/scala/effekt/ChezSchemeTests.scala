@@ -23,6 +23,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "ml",
 
     examplesDir / "pos" / "arrays.effekt",
+    examplesDir / "pos" / "issue319.effekt",
     examplesDir / "pos" / "maps.effekt",
 
     // bidirectional effects are not yet supported in our Chez backend
