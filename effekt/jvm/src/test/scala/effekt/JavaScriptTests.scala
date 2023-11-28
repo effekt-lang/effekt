@@ -36,15 +36,6 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "pos" / "bidirectional" / "iterators.effekt",
     examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
 
-    // regions
-    examplesDir / "benchmarks" / "generator.effekt",
-    examplesDir / "pos" / "lambdas" / "generators.effekt",
-    examplesDir / "pos" / "lambdas" / "scheduler.effekt",
-    examplesDir / "pos" / "recursiveobject.effekt",
-    examplesDir / "pos" / "capture" / "regions.effekt",
-    examplesDir / "pos" / "liftinference.effekt",
-    examplesDir / "pos" / "capture" / "selfregion.effekt"
-
   )
 }
 

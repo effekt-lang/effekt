@@ -115,27 +115,13 @@ object TransformerDS {
   def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind[js.Expr] = s match {
 
     case Scope(definitions, body) =>
-
-      val defs = definitions.flatMap {
-        case d : Definition.Def =>
-          Context.panic("Local definitions should have been lambda lifted already.")
-          val stmts = toJS(d)
-          stmts
-        case d : Definition.Let =>
-          val stmts = toJS(d)
-          stmts
-      }
-      Bind { k => defs ++ toJS(body)(k) }
-
-    case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      //      val (stmts, ret) = toJS(body)
-      //      (js.Const(nameDef(id), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
-      Context.panic("Not implemented yet")
+      Bind { k => definitions.flatMap { toJS } ++ toJS(body)(k) }
 
     case Alloc(id, init, region, body) =>
-      //      val (stmts, ret) = toJS(body)
-      //      (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
-      Context.panic("Not implemented yet")
+      val jsRegion = if region == symbols.builtins.globalRegion then js.Member($effekt, JSName("global")) else nameRef(region)
+      Bind { k =>
+        js.Const(nameDef(id), js.MethodCall(jsRegion, `fresh`, toJS(init))) :: toJS(body)(k)
+      }
 
     // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
     case Match(sc, clauses, default) =>
@@ -192,7 +178,6 @@ object TransformerDS {
       Return(js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS)))
 
     case If(cond, thn, els) =>
-
       Bind { k => List(js.If(toJS(cond), js.MaybeBlock(toJS(thn)(k)), js.MaybeBlock(toJS(els)(k)))) }
 
     case Return(e) =>
@@ -205,9 +190,7 @@ object TransformerDS {
       val prompt = freshName("prompt")
 
       val promptDef = js.Const(prompt, js.builtin("freshPrompt"))
-
       val freshRegion = js.ExprStmt(js.builtin("freshRegion"))
-
       val regionCleanup = js.ExprStmt(js.builtin("leaveRegion"))
 
       val (handlerNames, handlerDefs) = (bps zip hs).map {
@@ -222,8 +205,20 @@ object TransformerDS {
     case Try(_, _) =>
       Context.panic("Body of the try is expected to be a block literal in core.")
 
-    case Region(body) =>
-      Context.panic("Not implemented yet")
+    case Region(core.BlockLit(_, _, _, List(r), body)) =>
+      val suspension = freshName("suspension")
+      val region = nameDef(r.id)
+
+      val freshRegion = js.Const(region, js.builtin("freshRegion"))
+      val regionCleanup = js.ExprStmt(js.builtin("leaveRegion"))
+
+      Bind { k =>
+        js.Try(freshRegion :: toJS(body)(k), suspension,
+          List(k(js.builtin("handle", js.Undefined, js.Variable(suspension)))), List(regionCleanup)) :: Nil
+      }
+
+    case Region(_) =>
+      Context.panic("Body of the region is expected to be a block literal in core.")
 
     case Hole() =>
       Return(js.builtin("hole"))

@@ -193,7 +193,9 @@ function Arena() {
       return enterRegion(new Arena)
     },
 
-    leaveRegion: leaveRegion
+    leaveRegion: leaveRegion,
+
+    global: global
   }
 })()
 
