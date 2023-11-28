@@ -52,7 +52,7 @@ extern pure def copy[T](arr: Array[T]): Array[T] =
 def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
   var l = Nil[T]()
-  while (i > 0) {
+  while (i >= 0) {
     l = Cons(unsafeGet(arr, i), l)
     i = i - 1
   }
