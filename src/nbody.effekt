@@ -11,7 +11,8 @@ record Body(
   mass: Double
 )
 
-def makeBody(  x: Double,
+def makeBody( 
+  x: Double,
   y: Double,
   z: Double,
   vx: Double,
