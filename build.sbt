@@ -86,7 +86,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
     // show duration of the tests
-    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
+    Test / testOptions += Tests.Argument(TestFrameworks.MUnit, "-oD"),
 
     // disable tests for assembly to speed up build
     assembly / test := {},
@@ -158,7 +158,12 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Compile / sourceGenerators += TreeDocs.generator.taskValue
   )
   .jsSettings(
+
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
+
+    testFrameworks += new TestFramework("utest.runner.Framework"),
 
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
