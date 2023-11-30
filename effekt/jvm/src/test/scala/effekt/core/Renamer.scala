@@ -35,6 +35,9 @@ class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite
     case core.Alloc(id, init, reg, body) => withBinding(id) {
       core.Alloc(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
     }
+    case core.Var(id, init, capt, body) => withBinding(id) {
+      core.Var(rewrite(id), rewrite(init), rewrite(capt), rewrite(body))
+    }
   }
 
   override def block: PartialFunction[Block, Block] = {
