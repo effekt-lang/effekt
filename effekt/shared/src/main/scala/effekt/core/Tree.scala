@@ -348,6 +348,11 @@ object Tree {
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
+    def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
+    def rewrite(t: BlockType): BlockType = rewriteStructurally(t)
+    def rewrite(t: BlockType.Interface): BlockType.Interface = rewriteStructurally(t)
+    def rewrite(capt: Captures): Captures = capt.map(rewrite)
+
     def rewrite(m: ModuleDecl): ModuleDecl =
       m match {
         case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>

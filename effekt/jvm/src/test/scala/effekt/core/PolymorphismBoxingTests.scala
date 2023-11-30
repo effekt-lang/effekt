@@ -1,18 +1,15 @@
-package effekt
+package effekt.core
 
-import java.io.File
-import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
+import effekt.{core, source, symbols}
 import effekt.context.Context
-import effekt.source.{IdDef, Import, ModuleDecl}
-import kiama.{parsing, util}
+import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
+import effekt.source.{IdDef, Import}
 import effekt.symbols.{Module, Name, TypeConstructor, TypeSymbol, ValueSymbol, ValueType}
-import effekt.source
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
 import kiama.parsing.{Failure, NoSuccess, Success}
-import kiama.util.Severities
 
-abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
+abstract class AbstractPolymorphismBoxingTests extends CoreTransformationTests {
 
   def boxDef(tpe: ValueType.ValueTypeApp): List[symbols.Symbol] = {
     val tpeCns: symbols.TypeConstructor.Record =
@@ -33,9 +30,9 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
   /** Mock context for Polymorphism boxing.
    * Only implements what is actually used by [[core.PolymorphismBoxing]]
    */
-  object context extends Context(new util.Positions()) {
-    this.module = new Module(ModuleDecl("test", List(Import("effekt")), List()), util.StringSource("", "test")) {
-      override def findPrelude: Module = new Module(ModuleDecl("effekt", List(), List()), util.StringSource("", "effekt")) {
+  object context extends Context(new kiama.util.Positions()) {
+    this.module = new Module(source.ModuleDecl("test", List(Import("effekt")), List()), kiama.util.StringSource("", "test")) {
+      override def findPrelude: Module = new Module(effekt.source.ModuleDecl("effekt", List(), List()), kiama.util.StringSource("", "effekt")) {
         override def types: Map[String, TypeSymbol] = boxtpes.collect[String, symbols.TypeSymbol]{
           case (k,t: symbols.TypeSymbol) => (k,t)
         }
@@ -49,69 +46,14 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
     def findSource(path: String): Option[kiama.util.Source] = None
   }
 
-  val names = new core.Names(boxtpes ++
+  override protected val defaultNames = new Names(boxtpes ++
     symbols.builtins.rootTypes ++ Map(
     // TODO maybe add used names
   ))
 
-  class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite {
-    var bound: List[symbols.Symbol] = Nil
-    def withBindings[R](ids: List[symbols.Symbol])( f: => R ): R = {
-      val oldBound = bound
-      bound = ids ++ bound
-      val res = f
-      bound = oldBound
-      res
-    }
-    def withBinding[R](id: symbols.Symbol)( f: => R ): R = withBindings(List(id))(f)
-
-    override def id: PartialFunction[core.Id, core.Id] = { id =>
-      if (bound.contains(id)) {
-        names.idFor(prefix ++ (bound.length - bound.indexOf(id)).toString)
-      } else id
-    }
-
-    override def stmt: PartialFunction[Stmt, Stmt] = {
-      case core.Scope(definitions, rest) => withBindings(definitions.map{
-          case core.Definition.Def(id, _) => id
-          case core.Definition.Let(id, _) => id
-        }){
-        core.Scope(definitions map rewrite, rewrite(rest))
-      }
-      case core.Val(id, binding, body) => withBinding(id){
-        core.Val(rewrite(id), rewrite(binding), rewrite(body))
-      }
-      case core.Alloc(id, init, reg, body) => withBinding(id){
-        core.Alloc(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
-      }
-    }
-    override def block: PartialFunction[Block, Block] = {
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-        withBindings(cparams ++ vparams.map(_.id) ++ bparams.map(_.id)){
-          Block.BlockLit(tparams, cparams map rewrite, vparams map rewrite, bparams map rewrite,
-            rewrite(body))
-        }
-    }
-
-    def apply(m: core.ModuleDecl): core.ModuleDecl = m match {
-      case core.ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-        core.ModuleDecl(path, imports, declarations, externs, definitions map rewrite, exports)
-    }
-  }
-
-  def assertTransformsTo(input: String, expected: String): Unit = {
-    val pInput = core.CoreParsers.module(input, names) match {
-      case Success(result, next) => result
-      case nosuccess: NoSuccess => fail(nosuccess.toMessage)
-    }
-    val pExpected = core.CoreParsers.module(expected, names) match {
-      case Success(result, next) => result
-      case nosuccess: NoSuccess => fail(nosuccess.toMessage)
-    }
+  def transform(input: ModuleDecl): ModuleDecl = {
     given core.PolymorphismBoxing.PContext = new PolymorphismBoxing.PContext(List())(using context)
-    val got = PolymorphismBoxing.transform(pInput)
-    val renamer: Renamer = Renamer(names)
-    assertEquals(renamer(got), renamer(pExpected))
+    PolymorphismBoxing.transform(input)
   }
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
