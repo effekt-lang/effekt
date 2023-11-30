@@ -40,7 +40,6 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
     symbols.builtins.rootTypes ++ Map(
     // TODO maybe add used names
   ))
-
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
 
