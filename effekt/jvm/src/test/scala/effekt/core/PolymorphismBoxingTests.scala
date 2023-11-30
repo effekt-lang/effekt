@@ -9,7 +9,7 @@ import effekt.util.messages
 import effekt.util.messages.DebugMessaging
 import kiama.parsing.{Failure, NoSuccess, Success}
 
-abstract class AbstractPolymorphismBoxingTests extends CoreTransformationTests {
+abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(PolymorphismBoxing) {
 
   def boxDef(tpe: ValueType.ValueTypeApp): List[symbols.Symbol] = {
     val tpeCns: symbols.TypeConstructor.Record =
@@ -28,7 +28,7 @@ abstract class AbstractPolymorphismBoxingTests extends CoreTransformationTests {
   }.map { c => (c.name.name, c) }.toMap
 
   /** Make sure that the stdlib module is found, with the appropriate `Boxed`... definitions */
-  testContext.module = new Module(source.ModuleDecl("test", List(Import("effekt")), List()), kiama.util.StringSource("", "test")) {
+  override val theSourceModule = new Module(source.ModuleDecl("test", List(Import("effekt")), List()), kiama.util.StringSource("", "test")) {
     override def findPrelude: Module = new Module(effekt.source.ModuleDecl("effekt", List(), List()), kiama.util.StringSource("", "effekt")) {
       override def types: Map[String, TypeSymbol] = boxtpes.collect[String, symbols.TypeSymbol]{
         case (k,t: symbols.TypeSymbol) => (k,t)
@@ -41,10 +41,6 @@ abstract class AbstractPolymorphismBoxingTests extends CoreTransformationTests {
     // TODO maybe add used names
   ))
 
-  def transform(input: ModuleDecl): ModuleDecl = {
-    given core.PolymorphismBoxing.PContext = new PolymorphismBoxing.PContext(List())
-    PolymorphismBoxing.transform(input)
-  }
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
 
