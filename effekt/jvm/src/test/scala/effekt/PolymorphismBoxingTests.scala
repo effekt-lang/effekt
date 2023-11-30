@@ -93,6 +93,11 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
         }
     }
 
+    override def rewrite(p: core.Param.BlockParam): core.Param.BlockParam = p match {
+      case core.Param.BlockParam(id, tpe) =>
+        withBinding(id) { core.Param.BlockParam(rewrite(id), rewrite(tpe)) }
+    }
+
     def apply(m: core.ModuleDecl): core.ModuleDecl = m match {
       case core.ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
         core.ModuleDecl(path, imports, declarations, externs, definitions map rewrite, exports)
