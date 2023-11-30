@@ -42,8 +42,8 @@ class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite
 
   override def block: PartialFunction[Block, Block] = {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      withBindings(cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
-        Block.BlockLit(tparams, cparams map rewrite, vparams map rewrite, bparams map rewrite,
+      withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
+        Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
           rewrite(body))
       }
   }
