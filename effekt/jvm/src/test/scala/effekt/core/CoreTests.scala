@@ -24,10 +24,12 @@ trait CoreTests extends munit.FunSuite {
       case err: NoSuccess => fail(s"Parsing ${nickname} failed: ${err.message}")
     }
   }
+
+  protected given testContext: TestContext = new TestContext
 }
 
 trait CoreTransformationTests extends CoreTests {
-  def transform(input: ModuleDecl): ModuleDecl // TODO provide with useful implicit [[effekt.context.Context]] for testing
+  def transform(input: ModuleDecl): ModuleDecl
 
   def assertTransformsTo(input: String, expected: String,
                          clue: => Any = "transformation result is not the expected one",
