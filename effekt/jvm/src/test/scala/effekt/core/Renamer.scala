@@ -2,7 +2,7 @@ package effekt.core
 
 import effekt.{core, symbols}
 
-class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite {
+class Renamer(names: core.Names, prefix: String = "$") extends core.Tree.Rewrite {
   var bound: List[symbols.Symbol] = Nil
 
   def withBindings[R](ids: List[symbols.Symbol])(f: => R): R = {
@@ -35,12 +35,15 @@ class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite
     case core.Alloc(id, init, reg, body) => withBinding(id) {
       core.Alloc(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
     }
+    case core.Var(id, init, capt, body) => withBinding(id) {
+      core.Var(rewrite(id), rewrite(init), rewrite(capt), rewrite(body))
+    }
   }
 
   override def block: PartialFunction[Block, Block] = {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      withBindings(cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
-        Block.BlockLit(tparams, cparams map rewrite, vparams map rewrite, bparams map rewrite,
+      withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
+        Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
           rewrite(body))
       }
   }
