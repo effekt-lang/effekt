@@ -34,6 +34,13 @@ object TransformerDS {
     given Locals = new Locals(inlined)
     toJS(inlined, Nil, exports)
 
+
+  /**
+   * Entrypoint used by the LSP server to show the compiled output AND used by
+   * the website.
+   */
+  def compileSeparate(input: AllTransformed)(using Context) = ???
+
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Locals, Context): js.Module = {
 
     given ks: Continuations = mutable.ArrayBuffer.empty

@@ -2,9 +2,9 @@ package effekt
 package generator
 package js
 
+import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 import effekt.core.DirectStyleMutableState
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -52,7 +52,7 @@ class JavaScript extends Compiler[String] {
 
   // The Compilation Pipeline for VSCode
   // -----------------------------------
-  lazy val Separate = allToCore(Core) map { in => (in.main, Transformer.compileSeparate(in)) }
+  lazy val Separate:  Phase[Source, (CoreTransformed, Module)] = allToCore(Core) map { in => (in.main, TransformerDS.compileSeparate(in)) }
 
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)
