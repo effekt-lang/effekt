@@ -3,24 +3,13 @@ import effekt.symbols
 
 class RenamerTests extends CoreTests {
 
-  // Override defaultNames to allow us to refer to renamed symbols below
-  override val defaultNames = new Names(symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures) {
-    override def idFor(name: String): Id = {
-      if(name.startsWith("renamed")){
-        super.idFor("$" + name.substring("renamed".length))
-      } else {
-        super.idFor(name)
-      }
-    }
-  }
-
   def assertRenamedTo(input: String,
                       renamed: String,
                       clue: => Any = "Not renamed to given value",
                       names: Names = defaultNames)(using munit.Location) = {
     val pInput = parse(input, "input", names)
     val pExpected = parse(renamed, "expected", names)
-    val renamer = new Renamer(names)
+    val renamer = new Renamer(names, "renamed") // use "renamed" as prefix so we can refer to it
     val obtained = renamer(pInput)
     assertEquals(obtained, pExpected, clue)
   }
