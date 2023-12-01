@@ -2,27 +2,58 @@ module io/async
 
 extern include "async.js"
 
-extern type Promise[T]
+// Promises
 
-interface AsyncIO {
-  def read(path: String): Promise[String]
+extern type Promise[T]
+extern pure def immediate[T](t: T): Promise[T] = "Promise.resolve(t)"
+extern io def sequence[T, R](p: Promise[T], cont: T => Promise[R] at {io}): Promise[R] =
+  "p.then(res => cont(res).run())"
+
+interface Async {
   def await[T](p: Promise[T]): T
 }
 
-def asyncIO[R](p: () => R / AsyncIO at {io}): R = try {
-  p()
-} with AsyncIO {
-  def read(path) = resume(readPromise(path))
-  def await[T](p) = awaitPromise(p, resume)
+/**
+ * This acts as a "reflect" for promises.
+ */
+def value[T](p: Promise[T]): T / Async = do await(p)
+
+/**
+ * This acts as a "reify" boundary for promises.
+ *
+ *    async {
+ *        val x: Int = value(p: Promise[Int])
+ *        ...
+ *        result : Boolean
+ *    } : Promise[Boolean]
+ */
+def async[R](p: () => R / Async at {io}): Promise[R] = try {
+  immediate(p())
+} with Async {
+  def await[T](p) = p.sequence(resume)
 }
 
-def block[T](p: Promise[T]) = do await(p)
+extern control def block[R](p: Promise[R]): R =
+  "$effekt.callcc(k => p.then(res => k(res)))"
+
+
+// File IO
 
 extern io def readPromise(path: String): Promise[String] =
   "fsPromises.readFile(path, 'utf8')"
 
-extern io def awaitPromise[T, R](p: Promise[T], cont: T => R at {io}): R =
-  "p.then(res => cont(res).run())"
+def read(path: String): String / Async = value(readPromise(path))
+
+// Time
+
+
+//extern io def waitPromise(millis: Int): Promise[Unit] =
+
+
+// Forking
+
+extern io def forkPromise(process: () => Unit at {io}): Unit =
+  "setTimeout(() => process().run(), 0)"
 
 extern io def fork(process: () => Unit at {io}): Unit =
   "setTimeout(() => process().run(), 0)"
