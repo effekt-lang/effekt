@@ -67,6 +67,8 @@ def write(path: String, contents: String): Unit / Async = writeAsync(path, conte
 
 
 // Time
+// ----
+
 extern io def waitAsync(millis: Int): Promise[Unit] =
   "new Promise((success, failure) => setTimeout(success, millis))"
 
