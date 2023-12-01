@@ -49,9 +49,9 @@ class Renamer(names: core.Names, prefix: String = "$") extends core.Tree.Rewrite
   }
 
   override def rewrite(p: core.Param.BlockParam): core.Param.BlockParam = p match {
-    case core.Param.BlockParam(id, tpe) =>
+    case core.Param.BlockParam(id, tpe, capt) =>
       withBinding(id) {
-        core.Param.BlockParam(rewrite(id), rewrite(tpe))
+        core.Param.BlockParam(rewrite(id), rewrite(tpe), rewrite(capt))
       }
   }
 
