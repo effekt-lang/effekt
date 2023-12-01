@@ -383,9 +383,9 @@ object Namer extends Phase[Parsed, NameResolved] {
           } getOrElse {
             Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
           }
-          val tps = tparams.map(resolve)
-          val vps = params.map(resolve)
           Context scoped {
+            val tps = tparams.map(resolve)
+            val vps = params.map(resolve)
             Context.bindValues(vps)
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
