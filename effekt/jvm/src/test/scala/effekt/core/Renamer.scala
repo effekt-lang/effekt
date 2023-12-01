@@ -2,7 +2,7 @@ package effekt.core
 
 import effekt.{core, symbols}
 
-class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite {
+class Renamer(names: core.Names, prefix: String = "$") extends core.Tree.Rewrite {
   var bound: List[symbols.Symbol] = Nil
 
   def withBindings[R](ids: List[symbols.Symbol])(f: => R): R = {

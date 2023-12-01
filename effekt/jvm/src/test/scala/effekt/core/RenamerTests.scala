@@ -1,6 +1,18 @@
 package effekt.core
+import effekt.symbols
 
 class RenamerTests extends CoreTests {
+
+  // Override defaultNames to allow us to refer to renamed symbols below
+  override val defaultNames = new Names(symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures) {
+    override def idFor(name: String): Id = {
+      if(name.startsWith("renamed")){
+        super.idFor("$" + name.substring("renamed".length))
+      } else {
+        super.idFor(name)
+      }
+    }
+  }
 
   def assertRenamedTo(input: String,
                       renamed: String,
@@ -37,8 +49,8 @@ class RenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  val l1 = (foo:(Int)=>Int@{})(4);
-        |  return l1:Int
+        |  val renamed1 = (foo:(Int)=>Int@{})(4);
+        |  return renamed1:Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -57,8 +69,8 @@ class RenamerTests extends CoreTests {
       """module main
         |
         |def foo = { () =>
-        |  var l1 @ global = (foo:(Int)=>Int@{})(4);
-        |  return l1:Int
+        |  var renamed1 @ global = (foo:(Int)=>Int@{})(4);
+        |  return renamed1:Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -75,8 +87,8 @@ class RenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { (l1:Int) =>
-        |  return l1:Int
+        |def foo = { (renamed1:Int) =>
+        |  return renamed1:Int
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
@@ -99,7 +111,7 @@ class RenamerTests extends CoreTests {
           |type Data { X(a:Int, b:Int) }
           |def foo = { () =>
           |  12 match {
-          |    X : {(l2:Int, l1:Int) => return l2:Int }
+          |    X : {(renamed2:Int, renamed1:Int) => return renamed2:Int }
           |  }
           |}
           |""".stripMargin
@@ -116,8 +128,8 @@ class RenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { ['l2](l1: l2) =>
-        |  return l1:Identity[l2]
+        |def foo = { ['renamed2](renamed1: renamed2) =>
+        |  return renamed1:Identity[renamed2]
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)
