@@ -3,7 +3,13 @@ module io/async
 extern include "async.js"
 
 // Promises
+// --------
 
+/**
+ * A JavaScript Promise
+ *
+ * <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise>
+ */
 extern type Promise[T]
 extern pure def immediate[T](t: T): Promise[T] = "Promise.resolve(t)"
 extern io def sequence[T, R](p: Promise[T], cont: T => Promise[R] at {io}): Promise[R] =
@@ -33,27 +39,35 @@ def async[R](p: () => R / Async at {io}): Promise[R] = try {
   def await[T](p) = p.sequence(resume)
 }
 
+/**
+ * Blocks execution of the program and waits for the promise to complete.
+ */
 extern control def block[R](p: Promise[R]): R =
   "$effekt.callcc(k => p.then(res => k(res)))"
 
 
 // File IO
+// -------
 
-extern io def readPromise(path: String): Promise[String] =
+/**
+ * <https://nodejs.org/api/fs.html#fspromisesreadfilepath-options>
+ */
+extern io def readAsync(path: String): Promise[String] =
   "fsPromises.readFile(path, 'utf8')"
 
-def read(path: String): String / Async = value(readPromise(path))
+/**
+ * <https://nodejs.org/api/fs.html#fspromiseswritefilefile-data-options>
+ */
+extern io def writeAsync(path: String, contents: String): Promise[Unit] =
+  "fsPromises.writeFile(path, contents, { encoding: 'utf8' }).then(x => $effekt.unit)"
+
+
+def read(path: String): String / Async = readAsync(path).value
+def write(path: String, contents: String): Unit / Async = writeAsync(path, contents).value
+
 
 // Time
+extern io def waitAsync(millis: Int): Promise[Unit] =
+  "new Promise((success, failure) => setTimeout(success, millis))"
 
-
-//extern io def waitPromise(millis: Int): Promise[Unit] =
-
-
-// Forking
-
-extern io def forkPromise(process: () => Unit at {io}): Unit =
-  "setTimeout(() => process().run(), 0)"
-
-extern io def fork(process: () => Unit at {io}): Unit =
-  "setTimeout(() => process().run(), 0)"
+def wait(millis: Int): Unit / Async = waitAsync(millis).value
