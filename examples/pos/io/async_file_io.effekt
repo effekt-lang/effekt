@@ -1,8 +1,8 @@
 import io/async
 
 def program(path1: String, path2: String) =  {
-  val f1 = async(box { read(path1) })
-  val f2 = async(box { read(path2) })
+  val f1 = async[String, FileNotFound](box { read(path1) })
+  val f2 = async[String, FileNotFound](box { read(path2) })
 
   val results1 = f1.value
   val results2 = f2.value
@@ -11,12 +11,12 @@ def program(path1: String, path2: String) =  {
   println(results2)
 }
 
-def main() = {
+def main() = ignoring[FileNotFound] {
   println("Running program")
 
   def path(file: String) = "examples/pos/io/" ++ file
 
-  val both = async(box {
+  val both = async[Unit, FileNotFound](box {
     program(path("demo_file1.txt"), path("demo_file2.js"))
     println("done reading files.")
   })

@@ -2,6 +2,37 @@ module io/async
 
 extern include "async.js"
 
+// Results
+// =======
+// The "reification" of the Exception[E] effect.
+type Result[A, E] {
+  Error(exception: E, msg: String);
+  Success(a: A)
+}
+
+def result[A, E] { f: () => A / Exception[E] }: Result[A, E] = try {
+  Success(f())
+} with Exception[E] {
+  def raise[A](exc, msg) = Error(exc, msg)
+}
+/**
+ * Extracts the value of a result, if available
+ * Monadic "reflection"
+ */
+def get[A, E](r: Result[A, E]): A / Exception[E] = r match {
+  case Success(a) => a
+  case Error(exc, msg) => do raise(exc, msg)
+}
+
+/**
+ * Exception type aggregating builtin JS exceptions
+ */
+extern type JSException
+extern pure def message(e: JSException): String = "e.message"
+extern pure def toString(e: JSException): String = "e.toString"
+
+
+
 // Promises
 // --------
 
@@ -10,19 +41,25 @@ extern include "async.js"
  *
  * <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise>
  */
-extern type Promise[T]
-extern pure def immediate[T](t: T): Promise[T] = "Promise.resolve(t)"
-extern io def sequence[T, R](p: Promise[T], cont: T => Promise[R] at {io}): Promise[R] =
+extern type JSPromise[T]
+extern pure def jsResolve[T](t: T): JSPromise[T] =
+  "Promise.resolve(t)"
+extern pure def jsThen[T, R](p: JSPromise[T], cont: T => JSPromise[R] at {io}): JSPromise[R] =
   "p.then(res => cont(res).run())"
+extern pure def jsThen[T, R](p: JSPromise[T], thn: T => JSPromise[R] at {io}, els: JSException => JSPromise[R] at {io}): JSPromise[R] = "p.then(res => thn(res).run(), res => els(res).run())"
+
+type Promise[T, E] = JSPromise[Result[T, E]]
+def immediate[T, E](t: T): Promise[T, E] = jsResolve(Success(t))
+def failure[T, E](e: E, msg: String): Promise[T, E] = jsResolve(Error(e, msg))
 
 interface Async {
-  def await[T](p: Promise[T]): T
+  def await[T, E](p: Promise[T, E]): T / Exception[E]
 }
 
 /**
  * This acts as a "reflect" for promises.
  */
-def value[T](p: Promise[T]): T / Async = do await(p)
+def value[T, E](p: Promise[T, E]): T / { Async, Exception[E] } = do await(p)
 
 /**
  * This acts as a "reify" boundary for promises.
@@ -33,43 +70,67 @@ def value[T](p: Promise[T]): T / Async = do await(p)
  *        result : Boolean
  *    } : Promise[Boolean]
  */
-def async[R](p: () => R / Async at {io}): Promise[R] = try {
+def async[R, E](p: () => R / { Async, Exception[E] } at {io}): Promise[R, E] = try {
   immediate(p())
 } with Async {
-  def await[T](p) = p.sequence(resume)
+  def await[T, E2](p) = p.jsThen(box {
+    case Success(v) => resume { return v }
+    case Error(exc, msg) => resume { do raise(exc, msg) }
+  }, box { exc => panic("Unhandled JS exception in FFI: " ++ exc.toString) })
+} with Exception[E] {
+  def raise[A](exc: E, msg: String) = failure(exc, msg)
 }
 
 /**
  * Blocks execution of the program and waits for the promise to complete.
  */
-extern control def block[R](p: Promise[R]): R =
+extern control def blockResult[R, E](p: Promise[R, E]): Result[R, E] =
   "$effekt.callcc(k => p.then(res => k(res)))"
+
+def block[R, E](p: Promise[R, E]): R / Exception[E] =
+  p.blockResult match {
+    case Success(v) => v
+    case Error(exc, msg) => do raise(exc, msg)
+  }
 
 
 // File IO
 // -------
 
+record FileNotFound()
+
 /**
  * <https://nodejs.org/api/fs.html#fspromisesreadfilepath-options>
  */
-extern io def readAsync(path: String): Promise[String] =
+extern io def unsafeReadAsync(path: String): JSPromise[String] =
   "fsPromises.readFile(path, 'utf8')"
+
+// TODO the conversion from JSPromise to Promise could be made more modular
+def readAsync(path: String): Promise[String, FileNotFound] =
+  unsafeReadAsync(path).jsThen(box { r => immediate(r) }, box { e => failure(FileNotFound(), e.message) })
 
 /**
  * <https://nodejs.org/api/fs.html#fspromiseswritefilefile-data-options>
  */
-extern io def writeAsync(path: String, contents: String): Promise[Unit] =
+extern io def unsafeWriteAsync(path: String, contents: String): JSPromise[Unit] =
   "fsPromises.writeFile(path, contents, { encoding: 'utf8' }).then(x => $effekt.unit)"
 
+def writeAsync(path: String, contents: String): Promise[Unit, FileNotFound] =
+  unsafeWriteAsync(path, contents).jsThen(box { r => immediate(r) }, box { e => failure(FileNotFound(), e.message) })
 
-def read(path: String): String / Async = readAsync(path).value
-def write(path: String, contents: String): Unit / Async = writeAsync(path, contents).value
+
+def read(path: String): String / { Async, Exception[FileNotFound] } = readAsync(path).value
+def write(path: String, contents: String): Unit / { Async, Exception[FileNotFound] } = writeAsync(path, contents).value
 
 
 // Time
 // ----
 
-extern io def waitAsync(millis: Int): Promise[Unit] =
-  "new Promise((success, failure) => setTimeout(success, millis))"
+extern io def unsafeWaitAsync(millis: Int): JSPromise[Unit] =
+  "new Promise((success, failure) => setTimeout(success, millis)).then(x => $effekt.unit)"
 
-def wait(millis: Int): Unit / Async = waitAsync(millis).value
+// this is a bad smell since it cannot throw an exception
+def waitAsync(millis: Int): Promise[Unit, Nothing] =
+  unsafeWaitAsync(millis).jsThen(box { r => immediate(r) }, box { r => panic("Cannot happen!") })
+
+def wait(millis: Int): Unit / Async = ignoring[Nothing] { waitAsync(millis).value }

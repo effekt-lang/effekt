@@ -6,13 +6,6 @@ extern include "file_include.js"
 
 extern type FileDescriptor
 
-extern type Buffer
-
-type Result[A] {
-  Error(msg: String);
-  Success(a: A)
-}
-
 extern type Promise[T]
 
 extern io def readPromise(path: String): Promise[String] =
