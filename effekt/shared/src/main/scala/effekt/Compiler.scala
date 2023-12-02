@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.PhaseResult.{ CoreLifted, CoreTransformed }
+import effekt.PhaseResult.{ AllTransformed, CoreLifted, CoreTransformed }
 import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
@@ -235,6 +235,22 @@ trait Compiler[Executable] {
      */
     Transformer
   }
+
+  /**
+   * Maps the phase over all core modules (dependencies and the main module)
+   */
+  def all(phase: Phase[CoreTransformed, CoreTransformed]): Phase[AllTransformed, AllTransformed] =
+    new Phase[AllTransformed, AllTransformed] {
+      val phaseName = s"all-${phase.phaseName}"
+
+      def run(input: AllTransformed)(using Context) = for {
+        main <- phase(input.main)
+        dependencies <- input.dependencies.foldRight[Option[List[CoreTransformed]]](Some(Nil)) {
+          case (dep, Some(deps)) => phase(dep).map(_ :: deps)
+          case (_, _) => None
+        }
+      } yield AllTransformed(input.source, main, dependencies)
+    }
 
   def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
     val phaseName = "core-dependencies"

@@ -39,7 +39,7 @@ class JavaScript extends Compiler[String] {
   // ------------------------
   // Source => Core [=> DirectStyleState] => JS
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend andThen DirectStyleMutableState
+    Frontend andThen Middleend andThen DirectStyleMutableState andThen core.LambdaLifting
   }
 
   lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer map {
@@ -52,7 +52,10 @@ class JavaScript extends Compiler[String] {
 
   // The Compilation Pipeline for VSCode
   // -----------------------------------
-  lazy val Separate:  Phase[Source, (CoreTransformed, Module)] = allToCore(Core) map { in => (in.main, TransformerDS.compileSeparate(in)) }
+  lazy val Separate:  Phase[Source, (CoreTransformed, Module)] =
+    allToCore(Core) map { in =>
+        (in.main, TransformerDS.compileSeparate(in))
+    }
 
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)

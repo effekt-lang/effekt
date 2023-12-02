@@ -26,22 +26,64 @@ object TransformerDS {
 
   def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
-    given DeclarationContext = new DeclarationContext(input.core.declarations)
+    val moduleDecl = input.core
+    given DeclarationContext = new DeclarationContext(moduleDecl.declarations)
 
-    val lifted = LambdaLifting.lift(input.core)
-    val inlined = Optimizer.optimize(mainSymbol, lifted)
-
-    given Locals = new Locals(inlined)
-    toJS(inlined, Nil, exports)
+    given Locals = new Locals(moduleDecl)
+    toJS(moduleDecl, Nil, exports)
 
 
   /**
    * Entrypoint used by the LSP server to show the compiled output AND used by
    * the website.
    */
-  def compileSeparate(input: AllTransformed)(using Context) = ???
+  def compileSeparate(input: AllTransformed)(using Context) = {
+    val module = input.main.mod
+
+    val allDeclarations = input.dependencies.foldLeft(input.main.core.declarations) {
+      case (decls, dependency) => decls ++ dependency.core.declarations
+    }
+
+    given D: DeclarationContext = new DeclarationContext(allDeclarations)
+
+    def shouldExport(sym: Symbol) = sym match {
+      // do not export fields, since they are no defined functions
+      case fld if D.findField(fld).isDefined => false
+      // do not export effect operations, since they are translated to field selection as well.
+      case op if D.findProperty(op).isDefined => false
+      // all others are fine
+      case _ => true
+    }
+
+    // also search all mains and use last one (shadowing), if any.
+    val allMains = input.main.core.exports.collect {
+      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
+    }
+
+    val required = usedImports(input.main)
+
+    // this is mostly to import $effekt
+    val dependencies = module.dependencies.map {
+      d => js.Import.All(JSName(jsModuleName(d.path)), jsModuleFile(d.path))
+    }
+    val imports = dependencies ++ required.toList.map {
+      case (mod, syms) =>
+        js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
+    }
+
+    val provided = module.terms.values.flatten.toList.distinct
+    val exports = allMains.lastOption.toList ++ provided.collect {
+      case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
+    }
+
+    given Locals = new Locals(input.main.core)
+
+    toJS(input.main.core, imports, exports)
+  }
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Locals, Context): js.Module = {
+
+
 
     given ks: Continuations = mutable.ArrayBuffer.empty
 
@@ -375,5 +417,42 @@ object TransformerDS {
   def freshName(s: String): JSName =
     JSName(s + Symbol.fresh.next())
 
+
+  // Separate Compilation (Website)
+  // ------------------------------
+
+  /**
+   * Analyse core to find references to symbols defined in other modules.
+   *
+   * Necessary for generating the linker code (separate compilation for the web)
+   */
+  private def usedImports(input: CoreTransformed): Map[Module, Set[Symbol]] = {
+    val dependencies = input.mod.dependencies
+
+    // Create a mapping Termsymbol -> Module
+    val publicDependencySymbols = dependencies.flatMap {
+      m => m.terms.values.flatten.map(sym => (sym : Symbol) -> m)
+    }.toMap
+
+    var usedFrom: Map[Module, Set[Symbol]] = Map.empty
+
+    def register(m: Module, sym: Symbol) = {
+      val before = usedFrom.getOrElse(m, Set.empty)
+      usedFrom = usedFrom.updated(m, before + sym)
+    }
+
+    // Traverse tree once more to find all used symbols, defined in other modules.
+    def findUsedDependencies(t: Definition) =
+      Tree.visit(t) {
+        case BlockVar(x, tpe, capt) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+        case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+      }
+
+    input.core.definitions.foreach(findUsedDependencies)
+
+    usedFrom
+  }
 }
 
