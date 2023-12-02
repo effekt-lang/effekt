@@ -21,12 +21,14 @@ trait CoreTests extends munit.FunSuite {
   }
   def parse(input: String,
             nickname: String = "input",
-            names: Names = defaultNames): ModuleDecl = {
+            names: Names = defaultNames)(using Location): ModuleDecl = {
     CoreParsers.module(input, names) match {
       case Success(result, next) if next.atEnd => result
       case Success(result, next) => fail(s"Parsing ${nickname} had trailing garbage: " +
         s"${next.source.toString.substring(next.offset)}")
-      case err: NoSuccess => fail(s"Parsing ${nickname} failed: ${err.message}")
+      case err: NoSuccess =>
+        val pos = err.next.position
+        fail(s"Parsing ${nickname} failed\n[${pos.line}:${pos.column}] ${err.message}")
     }
   }
 
