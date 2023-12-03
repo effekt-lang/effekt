@@ -128,6 +128,7 @@ class RenamerTests extends CoreTests {
   test("pseudo recursive"){
     val input =
       """ module main
+        |
         | def bar = { () => return 1 }
         | def main = { () =>
         |   def foo = { () => (bar : () => Unit @ {})() }
@@ -138,6 +139,7 @@ class RenamerTests extends CoreTests {
 
     val expected =
       """ module main
+        |
         | def bar = { () => return 1 }
         | def main = { () =>
         |   def renamed1 = { () => (bar : () => Unit @ {})() }
@@ -148,4 +150,28 @@ class RenamerTests extends CoreTests {
 
     assertRenamedTo(input, expected)
   }
+  // TODO this needs to be fixed
+  //  test("shadowing let bindings"){
+  //    val input =
+  //      """ module main
+  //        |
+  //        | def main = { () =>
+  //        |   let x = 1
+  //        |   let x = 2
+  //        |   return x:Int
+  //        | }
+  //        |""".stripMargin
+  //
+  //    val expected =
+  //      """ module main
+  //        |
+  //        | def main = { () =>
+  //        |   let renamed1 = 1
+  //        |   let renamed2 = 2
+  //        |   return renamed2:Int
+  //        | }
+  //        |""".stripMargin
+  //
+  //    assertRenamedTo(input, expected)
+  //  }
 }

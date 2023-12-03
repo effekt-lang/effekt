@@ -54,9 +54,8 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
           // can be recursive
           withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
         case (d : core.Definition.Let) :: rest =>
-          // non-recursive
-          val renamed = rewrite(d)
-          withBinding(d.id) { go(rest, defs :+ renamed) }
+          // TODO let bindings are non-recursive (check that this holds!)
+          withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
         case Nil => core.Scope(defs, rewrite(body))
       }
 
