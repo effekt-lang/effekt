@@ -30,6 +30,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: Block): String =
     pretty(toDoc(t), 60).layout
 
+  def format(e: Expr): String =
+    pretty(toDoc(e), 60).layout
+
+  val show: PartialFunction[Any, String] = {
+    case m: ModuleDecl => format(m).layout
+    case d: Definition  => format(List(d))
+    case s: Stmt       => format(s)
+    case t: ValueType  => format(t)
+    case t: BlockType  => format(t)
+    case b: Block      => format(b)
+    case e: Expr       => format(e)
+  }
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
@@ -215,5 +228,4 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def block(content: Doc): Doc = braces(nest(line <> content) <> line)
 
   def block(docs: List[Doc]): Doc = block(vsep(docs, line))
-
 }
