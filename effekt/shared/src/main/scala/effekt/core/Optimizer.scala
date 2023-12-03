@@ -80,19 +80,18 @@ object InlineUnique {
     // is mutable to update when introducing temporaries;
     // they should also be visible after leaving a scope (so mutable.Map and not `var usage`).
     usage: mutable.Map[Id, Usage],
-    defs: Map[Id, Definition],
-    compilerContext: Context
+    defs: Map[Id, Definition]
   ) {
-    def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other, compilerContext)
+    def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other)
 
     def ++=(fresh: Map[Id, Usage]): Unit = { usage ++= fresh }
   }
 
-  def apply(entrypoints: Set[Id], m: ModuleDecl)(using C: Context): ModuleDecl = {
+  def apply(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl = {
     val usage = Reachable(m) ++ entrypoints.map(id => id -> Usage.Many).toMap
     val defs = m.definitions.map(d => d.id -> d).toMap
 
-    val (updatedDefs, _) = rewrite(m.definitions)(using InlineContext(mutable.Map.from(usage), defs, C))
+    val (updatedDefs, _) = rewrite(m.definitions)(using InlineContext(mutable.Map.from(usage), defs))
     m.copy(definitions = updatedDefs)
   }
 
@@ -290,9 +289,16 @@ class Reachable(
 
   def process(s: Stmt)(using defs: Map[Id, Definition]): Unit = s match {
     case Stmt.Scope(definitions, body) =>
-      val allDefs = defs ++ definitions.map(d => d.id -> d).toMap
-      definitions.foreach(process)
-      process(body)(using allDefs)
+      var currentDefs = defs
+      definitions.foreach {
+        case d: Definition.Def =>
+          currentDefs += d.id -> d // recursive
+          process(d)(using currentDefs)
+        case d: Definition.Let =>
+          process(d)(using currentDefs)
+          currentDefs += d.id -> d // non-recursive
+      }
+      process(body)(using currentDefs)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>

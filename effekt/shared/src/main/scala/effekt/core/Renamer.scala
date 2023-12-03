@@ -47,14 +47,21 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   }
 
   override def stmt: PartialFunction[Stmt, Stmt] = {
+    case core.Scope(definitions, body) =>
 
-    // TODO here the scoping is not correct
-    case core.Scope(definitions, rest) => withBindings(definitions.map {
-      case core.Definition.Def(id, _) => id
-      case core.Definition.Let(id, _) => id
-    }) {
-      core.Scope(definitions map rewrite, rewrite(rest))
-    }
+      def go(rest: List[Definition], defs: List[Definition]): core.Scope = rest match {
+        case (d : core.Definition.Def) :: rest =>
+          // can be recursive
+          withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
+        case (d : core.Definition.Let) :: rest =>
+          // non-recursive
+          val renamed = rewrite(d)
+          withBinding(d.id) { go(rest, defs :+ renamed) }
+        case Nil => core.Scope(defs, rewrite(body))
+      }
+
+      go(definitions, Nil)
+
     case core.Val(id, binding, body) => withBinding(id) {
       import effekt.core
       core.Val(rewrite(id), rewrite(binding), rewrite(body))

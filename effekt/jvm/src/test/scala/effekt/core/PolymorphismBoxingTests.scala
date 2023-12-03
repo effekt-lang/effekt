@@ -36,10 +36,10 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
     }
   }
 
-  override protected val defaultNames = new Names(boxtpes ++
+  override protected val defaultNames = boxtpes ++
     symbols.builtins.rootTypes ++ Map(
     // TODO maybe add used names
-  ))
+  )
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
 

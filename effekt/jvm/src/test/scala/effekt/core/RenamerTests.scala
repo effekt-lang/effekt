@@ -6,7 +6,7 @@ class RenamerTests extends CoreTests {
   def assertRenamedTo(input: String,
                       renamed: String,
                       clue: => Any = "Not renamed to given value",
-                      names: Names = defaultNames)(using munit.Location) = {
+                      names: Names = Names(defaultNames))(using munit.Location) = {
     val pInput = parse(input, "input", names)
     val pExpected = parse(renamed, "expected", names)
     val renamer = new Renamer(names, "renamed") // use "renamed" as prefix so we can refer to it
@@ -106,6 +106,7 @@ class RenamerTests extends CoreTests {
           |""".stripMargin
     assertRenamedTo(input, expected)
   }
+
   test("type parameters"){
     val input =
       """module main
@@ -121,6 +122,30 @@ class RenamerTests extends CoreTests {
         |  return renamed2:Identity[renamed1]
         |}
         |""".stripMargin
+    assertRenamedTo(input, expected)
+  }
+
+  test("pseudo recursive"){
+    val input =
+      """ module main
+        | def bar = { () => return 1 }
+        | def main = { () =>
+        |   def foo = { () => (bar : () => Unit @ {})() }
+        |   def bar = { () => return 2 }
+        |   (foo : () => Unit @ {})()
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ module main
+        | def bar = { () => return 1 }
+        | def main = { () =>
+        |   def renamed1 = { () => (bar : () => Unit @ {})() }
+        |   def renamed2 = { () => return 2 }
+        |   (renamed1 : () => Unit @ {})()
+        | }
+        |""".stripMargin
+
     assertRenamedTo(input, expected)
   }
 }

@@ -10,7 +10,7 @@ import effekt.PhaseResult.CoreTransformed
  */
 trait CoreTests extends munit.FunSuite {
 
-  protected def defaultNames = new Names(symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures)
+  protected def defaultNames = symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures
 
   def shouldBeEqual(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location) =
     assertEquals(obtained, expected, {
@@ -30,13 +30,13 @@ trait CoreTests extends munit.FunSuite {
   def assertAlphaEquivalent(obtained: ModuleDecl,
                             expected: ModuleDecl,
                             clue: => Any = "values are not alpha-equivalent",
-                            names: Names = defaultNames)(using Location): Unit = {
+                            names: Names = Names(defaultNames))(using Location): Unit = {
     val renamer = Renamer(names, "$")
     shouldBeEqual(renamer(obtained), renamer(expected), clue)
   }
   def parse(input: String,
             nickname: String = "input",
-            names: Names = defaultNames)(using Location): ModuleDecl = {
+            names: Names = Names(defaultNames))(using Location): ModuleDecl = {
     CoreParsers.module(input, names) match {
       case Success(result, next) if next.atEnd => result
       case Success(result, next) => fail(s"Parsing ${nickname} had trailing garbage: " +
@@ -55,7 +55,7 @@ trait CoreTransformationTests extends CoreTests {
 
   def assertTransformsTo(input: String, expected: String,
                          clue: => Any = "transformation result is not the expected one",
-                         names: Names = defaultNames)(using Location): Unit = {
+                         names: Names = Names(defaultNames))(using Location): Unit = {
     val pInput = parse(input, "input", names = names)
     val pExpected = parse(expected, "expected result", names = names)
     val obtained = transform(pInput)
