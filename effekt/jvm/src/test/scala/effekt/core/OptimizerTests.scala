@@ -10,7 +10,7 @@ class OptimizerTests extends CoreTests {
     input: String,
     transformed: String,
     names: Names = Names(defaultNames + ("main" -> mainSymbol))
-  )(using munit.Location) = {
+  )(transform: ModuleDecl => ModuleDecl)(using munit.Location) = {
     val moduleHeader =
       """module test
         |
@@ -21,9 +21,20 @@ class OptimizerTests extends CoreTests {
     // the parser is not assigning symbols correctly, so we need to run renamer first
     val renamed = Renamer(names).rewrite(pInput)
 
-    val obtained = RemoveUnusedDefinitions(Set(mainSymbol), renamed).run()
+    val obtained = transform(renamed)
     assertAlphaEquivalent(obtained, pExpected, "Not transformed to")
   }
+
+  def removeUnused(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree =>
+      RemoveUnusedDefinitions(Set(mainSymbol), tree).run()
+    }
+
+  def inlineOnce(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree =>
+      val (result, count) = InlineUnique.once(Set(mainSymbol), tree)
+      result
+    }
 
   test("toplevel"){
     val input =
@@ -35,7 +46,7 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => return 42 }
         |""".stripMargin
 
-    assertTransformsTo(input, expected)
+    removeUnused(input, expected)
   }
 
   test("transitive (length 3)"){
@@ -47,7 +58,7 @@ class OptimizerTests extends CoreTests {
         | def main = { () => (bam : () => Unit @ {})() }
         |""".stripMargin
 
-    assertTransformsTo(input, input)
+    removeUnused(input, input)
   }
 
   test("recursive (unused)"){
@@ -61,7 +72,7 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => return 42 }
         |""".stripMargin
 
-    assertTransformsTo(input, expected)
+    removeUnused(input, expected)
   }
 
   test("recursive used"){
@@ -71,7 +82,7 @@ class OptimizerTests extends CoreTests {
         | def main = { () => (foo : () => Unit @ {})() }
         |""".stripMargin
 
-    assertTransformsTo(input, input)
+    removeUnused(input, input)
   }
 
   test("nested all removed"){
@@ -86,7 +97,28 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => return 2 }
         |""".stripMargin
 
-    assertTransformsTo(input, expected)
+    removeUnused(input, expected)
+  }
+  // let y = !(println: (String) => Unit @ {io})("hello")
+  test("drop pure let expressions"){
+    val input =
+      """ def main = { () =>
+        |   let x = (add : (Int, Int) => Int @ {})(1, 2)
+        |   let y = !(println: (String) => Unit @ {io})("hello")
+        |   let z = 7
+        |   return z:Int
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () =>
+        |   let y = !(println: (String) => Unit @ {io})("hello")
+        |   let z = 7
+        |   return z:Int
+        | }
+        |""".stripMargin
+
+    removeUnused(input, expected)
   }
 
   test("pseudo recursive"){
@@ -108,7 +140,60 @@ class OptimizerTests extends CoreTests {
         | }
         |""".stripMargin
 
-    assertTransformsTo(input, expected)
+    removeUnused(input, expected)
+  }
+
+  test("inline toplevel"){
+    val input =
+      """ def foo = { () => return 42 }
+        | def main = { () => (foo : () => Unit @ {})() }
+        |""".stripMargin
+
+    val expected =
+      """ def foo = { () => return 42 }
+        | def main = { () => return 42 }
+        |""".stripMargin
+
+    inlineOnce(input, expected)
+  }
+
+  test("inline with argument"){
+    val input =
+      """ def foo = { (n: Int) => return n:Int }
+        | def main = { () => (foo : (Int) => Unit @ {})(42) }
+        |""".stripMargin
+
+    val expected =
+      """ def foo = { (n: Int) => return n:Int }
+        | def main = { () => return 42 }
+        |""".stripMargin
+
+    inlineOnce(input, expected)
+  }
+
+  test("inline higher order function"){
+    val input =
+      """ def foo = { (n: Int) => return n:Int }
+        | def hof = { (){f : (Int) => Int} =>
+        |   (f : (Int) => Int @ {f})(1)
+        | }
+        | def main = { () =>
+        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Unit @ {}) }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def foo = { (n: Int) => return n:Int }
+        | def hof = { (){f : (Int) => Int} =>
+        |   (f : (Int) => Int @ {f})(1)
+        | }
+        | def main = { () =>
+        |   def local(n: Int) = return n:Int
+        |   (local : (Int) => Int @ {})(1)
+        | }
+        |""".stripMargin
+
+    inlineOnce(input, expected)
   }
 
 }

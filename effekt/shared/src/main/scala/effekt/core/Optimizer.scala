@@ -18,6 +18,8 @@ import effekt.util.messages.INTERNAL_ERROR
 
 import scala.collection.mutable
 
+import kiama.util.Counter
+
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   val phaseName: String = "core-optimizer"
@@ -30,14 +32,17 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   def optimize(mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context) =
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-    val withoutUnused = RemoveUnusedDefinitions(Set(mainSymbol), core).run()
+    var tree = RemoveUnusedDefinitions(Set(mainSymbol), core).run()
 
     // (2) inline unique block definitions
-    val inlined = InlineUnique(Set(mainSymbol), withoutUnused)
-    //val inlined2 = InlineUnique(Set(mainSymbol), inlined)
-
-    // (3) drop unused definitions after inlining
-    RemoveUnusedDefinitions(Set(mainSymbol), inlined).run()
+    var lastCount = 1
+    while (lastCount > 0) {
+      val (inlined, count) = InlineUnique.once(Set(mainSymbol), tree)
+      // (3) drop unused definitions after inlining
+      tree = RemoveUnusedDefinitions(Set(mainSymbol), inlined).run()
+      lastCount = count
+    }
+    tree
 }
 
 class RemoveUnusedDefinitions(entrypoints: Set[Id], m: ModuleDecl) extends core.Tree.Rewrite {
@@ -46,9 +51,11 @@ class RemoveUnusedDefinitions(entrypoints: Set[Id], m: ModuleDecl) extends core.
 
   override def stmt = {
     // Remove local unused definitions
-    case Scope(defs, stmt) => Scope(defs.collect {
+    case Scope(defs, stmt) =>
+      scope(defs.collect {
         case d: Definition.Def if reachable.isDefinedAt(d.id) => rewrite(d)
-        case d: Definition.Let => rewrite(d)
+        // we only keep non-pure OR reachable let bindings
+        case d: Definition.Let if d.capt.nonEmpty || reachable.isDefinedAt(d.id) => rewrite(d)
       }, rewrite(stmt))
   }
 
@@ -80,19 +87,22 @@ object InlineUnique {
     // is mutable to update when introducing temporaries;
     // they should also be visible after leaving a scope (so mutable.Map and not `var usage`).
     usage: mutable.Map[Id, Usage],
-    defs: Map[Id, Definition]
+    defs: Map[Id, Definition],
+    inlineCount: Counter = Counter(0)
   ) {
     def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other)
 
     def ++=(fresh: Map[Id, Usage]): Unit = { usage ++= fresh }
   }
 
-  def apply(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl = {
+  def once(entrypoints: Set[Id], m: ModuleDecl): (ModuleDecl, Int) = {
     val usage = Reachable(m) ++ entrypoints.map(id => id -> Usage.Many).toMap
     val defs = m.definitions.map(d => d.id -> d).toMap
 
-    val (updatedDefs, _) = rewrite(m.definitions)(using InlineContext(mutable.Map.from(usage), defs))
-    m.copy(definitions = updatedDefs)
+    val context = InlineContext(mutable.Map.from(usage), defs)
+
+    val (updatedDefs, _) = rewrite(m.definitions)(using context)
+    (m.copy(definitions = updatedDefs), context.inlineCount.value)
   }
 
   def shouldInline(id: Id)(using ctx: InlineContext): Boolean =
@@ -117,7 +127,8 @@ object InlineUnique {
     val filtered = definitions.collect {
       case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
       // we drop aliases
-      case Definition.Let(id, binding) if !binding.isInstanceOf[ValueVar] => Definition.Let(id, rewrite(binding))
+      case Definition.Let(id, binding) if !binding.isInstanceOf[ValueVar] =>
+        Definition.Let(id, rewrite(binding))
     }
     (filtered, allDefs)
 
@@ -179,6 +190,7 @@ object InlineUnique {
     case Block.BlockVar(id, _, _) if shouldInline(id) =>
       blockDefFor(id) match {
         case Some(value) =>
+          C.inlineCount.next()
           //println(s"Inlining: ${id}")
           val renamed = Renamer.rename(value)
           //          debug(renamed)

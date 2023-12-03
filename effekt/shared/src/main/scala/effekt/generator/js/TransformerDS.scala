@@ -27,6 +27,7 @@ object TransformerDS {
   def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
     val moduleDecl = input.core
+
     given DeclarationContext = new DeclarationContext(moduleDecl.declarations)
 
     given Locals = new Locals(moduleDecl)

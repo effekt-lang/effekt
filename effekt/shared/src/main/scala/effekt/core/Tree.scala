@@ -278,21 +278,28 @@ export Stmt.*
 object normal {
 
   def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
-    binding match {
+    (binding, body) match {
+
+      // [[ val x = STMT; return x ]] == STMT
+      case (_, Stmt.Return(Pure.ValueVar(other, _))) if other == id =>
+        binding
+
+      //  [[ val x = return EXPR; STMT ]] = [[ let x = EXPR; STMT ]]
+      //
       // This opt is too good for JS: it blows the stack on
       // recursive functions that are used to encode while...
       //
       // The solution to this problem is implemented in core.MakeStackSafe:
       //   all recursive functions that could blow the stack are trivially wrapped
       //   again, after optimizing.
-      case Stmt.Return(expr) =>
+      case (Stmt.Return(expr), body) =>
         scope(List(Definition.Let(id, expr)), body)
 
       // here we are flattening scopes; be aware that this extends
       // life-times of bindings!
       //
       // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
-      case Stmt.Scope(definitions, binding) =>
+      case (Stmt.Scope(definitions, binding), body) =>
         scope(definitions, valDef(id, binding, body))
 
       case _ => Stmt.Val(id, binding, body)

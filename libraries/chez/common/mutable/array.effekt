@@ -20,7 +20,7 @@ extern pure def unsafeGet[T](arr: Array[T], index: Int): T =
   "(vector-ref arr index)"
 
 // TODO raises a scheme exception if out of bounds
-extern pure def put[T](arr: Array[T], index: Int, value: T): Unit =
+extern io def put[T](arr: Array[T], index: Int, value: T): Unit =
   "(begin (vector-set! arr index value) #f)"
 
 extern pure def toArray[A](l: CSList[A]): Array[A] =
