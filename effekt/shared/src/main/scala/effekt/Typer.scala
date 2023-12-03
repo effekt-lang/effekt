@@ -537,8 +537,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context in {
           Context.bind(sym, stTpe, stCapt)
           val inferredCapture = Context.freshCaptVar(CaptUnificationVar.VarRegion(d))
-          given Captures = Context.without(inferredCapture, List(sym.capture))
-          val Result(res, eff) = checkStmt(rest, expected)
+          val Result(res, eff) = {
+            given Captures = Context.without(inferredCapture, List(sym.capture))
+            checkStmt(rest, expected)
+          }
+
+          usingCapture(inferredCapture) // it continues to flow into the outer scope
           Result(res, eff ++ effBind)
         }
 
