@@ -273,6 +273,123 @@ enum Stmt extends Tree {
 export Stmt.*
 
 /**
+ * Smart constructors to establish some normal form
+ */
+object normal {
+
+  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+    binding match {
+      // This opt is too good for JS: it blows the stack on
+      // recursive functions that are used to encode while...
+      //
+      // The solution to this problem is implemented in core.MakeStackSafe:
+      //   all recursive functions that could blow the stack are trivially wrapped
+      //   again, after optimizing.
+      case Stmt.Return(expr) =>
+        scope(List(Definition.Let(id, expr)), body)
+
+      // here we are flattening scopes; be aware that this extends
+      // life-times of bindings!
+      //
+      // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
+      case Stmt.Scope(definitions, binding) =>
+        scope(definitions, valDef(id, binding, body))
+
+      case _ => Stmt.Val(id, binding, body)
+    }
+
+  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
+  def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
+    case Stmt.Scope(others, body) => scope(definitions ++ others, body)
+    case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
+  }
+
+  // new { def f = BLOCK }.f  =  BLOCK
+  def member(b: Block, field: Id, annotatedTpe: BlockType): Block = b match {
+    case Block.New(impl) =>
+      val Operation(name, tps, cps, vps, bps, resume, body) =
+        impl.operations.find(op => op.name == field).getOrElse {
+          INTERNAL_ERROR("Should not happen")
+        }
+      assert(resume.isEmpty, "We do not inline effectful capabilities at that point")
+      BlockLit(tps, cps, vps, bps, body)
+    case _ => Block.Member(b, field, annotatedTpe)
+  }
+
+  // TODO perform record selection here, if known
+  def select(target: Pure, field: Id, annotatedType: ValueType): Pure =
+    Select(target, field, annotatedType)
+
+  def app(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
+    callee match {
+      case b : Block.BlockLit => reduce(b, targs, vargs, bargs)
+      case other => Stmt.App(callee, targs, vargs, bargs)
+    }
+
+  def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
+    callee match {
+      case b : Block.BlockLit =>
+        INTERNAL_ERROR(
+          """|This should not happen!
+             |User defined functions always have to be called with App, not PureApp.
+             |If this error does occur, this means this changed.
+             |Check `core.Transformer.makeFunctionCall` for details.
+             |""".stripMargin)
+      case other => Pure.PureApp(callee, targs, vargs)
+    }
+
+  // "match" is a keyword in Scala
+  // TODO perform matching here, if scrutinee statically known
+  def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
+    Match(scrutinee, clauses, default)
+
+  def directApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
+    callee match {
+      case b : Block.BlockLit => run(reduce(b, targs, vargs, Nil))
+      case other => DirectApp(callee, targs, vargs, bargs)
+    }
+
+  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt = {
+
+    // Only bind if not already a variable!!!
+    var ids: Set[Id] = Set.empty
+    var bindings: List[Definition.Def] = Nil
+    var bvars: List[Block.BlockVar] = Nil
+
+    // (1) first bind
+    bargs foreach {
+      case x: Block.BlockVar => bvars = bvars :+ x
+      // introduce a binding
+      case block =>
+        val id = symbols.TmpBlock()
+        bindings = bindings :+ Definition.Def(id, block)
+        bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
+        ids += id
+    }
+
+    // (2) substitute
+    val body = substitutions.substitute(b, targs, vargs, bvars)
+
+    scope(bindings, body)
+  }
+
+  def run(s: Stmt): Expr = s match {
+    case Stmt.Return(expr) => expr
+    case _ => Run(s)
+  }
+
+  def box(b: Block, capt: Captures): Pure = b match {
+    case Block.Unbox(pure) => pure
+    case b => Box(b, capt)
+  }
+
+  def unbox(p: Pure): Block = p match {
+    case Pure.Box(b, _) => b
+    case p => Unbox(p)
+  }
+}
+
+/**
  * An instance of an interface, concretely implementing the operations.
  *
  * Used to represent handlers / capabilities, and objects / modules.

@@ -11,7 +11,7 @@ class RenamerTests extends CoreTests {
     val pExpected = parse(renamed, "expected", names)
     val renamer = new Renamer(names, "renamed") // use "renamed" as prefix so we can refer to it
     val obtained = renamer(pInput)
-    assertEquals(obtained, pExpected, clue)
+    shouldBeEqual(obtained, pExpected, clue)
   }
 
   test("No bound local variables"){
@@ -100,7 +100,7 @@ class RenamerTests extends CoreTests {
           |type Data { X(a:Int, b:Int) }
           |def foo = { () =>
           |  12 match {
-          |    X : {(renamed2:Int, renamed1:Int) => return renamed2:Int }
+          |    X : {(renamed1:Int, renamed2:Int) => return renamed1:Int }
           |  }
           |}
           |""".stripMargin
@@ -117,8 +117,8 @@ class RenamerTests extends CoreTests {
     val expected =
       """module main
         |
-        |def foo = { ['renamed2](renamed1: renamed2) =>
-        |  return renamed1:Identity[renamed2]
+        |def foo = { ['renamed1](renamed2: renamed1) =>
+        |  return renamed2:Identity[renamed1]
         |}
         |""".stripMargin
     assertRenamedTo(input, expected)

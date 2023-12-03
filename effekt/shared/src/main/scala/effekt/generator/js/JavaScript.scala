@@ -53,7 +53,7 @@ class JavaScript extends Compiler[String] {
   // The Compilation Pipeline for VSCode
   // -----------------------------------
   lazy val Separate:  Phase[Source, (CoreTransformed, Module)] =
-    allToCore(Core) map { in =>
+    allToCore(Core) andThen all(core.LambdaLifting) map { in =>
         (in.main, TransformerDS.compileSeparate(in))
     }
 

@@ -27,10 +27,8 @@ class LambdaLiftingTests extends CorePhaseTests(LambdaLifting) {
       """module main
         |
         |def outer = { () =>
-        |   {
-        |     val res = (local: () => Int @ {})();
-        |     return res:Int
-        |   }
+        |  val res = (local: () => Int @ {})();
+        |  return res:Int
         |}
         |
         |def local = { () => return 42 }

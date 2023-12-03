@@ -92,7 +92,7 @@ object Transformer {
         val (noDependencies, rest) = todo.partition { d => (fvs(id(d)) -- emitted).isEmpty }
         if (noDependencies.isEmpty) {
           val mutuals = rest.map(id).mkString(", ")
-          C.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
+          C.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitions could be mutually recursive: ${mutuals} ")
         } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(id).toSet)
     }
 

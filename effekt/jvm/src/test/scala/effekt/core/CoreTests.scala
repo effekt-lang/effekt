@@ -10,14 +10,29 @@ import effekt.PhaseResult.CoreTransformed
  */
 trait CoreTests extends munit.FunSuite {
 
-  protected val defaultNames = new Names(symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures)
+  protected def defaultNames = new Names(symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures)
+
+  def shouldBeEqual(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location) =
+    assertEquals(obtained, expected, {
+      s"""${clue}
+        |=====================
+        |Got:
+        |----
+        |${effekt.core.PrettyPrinter.format(obtained).layout}
+        |
+        |Expected:
+        |---------
+        |${effekt.core.PrettyPrinter.format(expected).layout}
+        |
+        |""".stripMargin
+    })
 
   def assertAlphaEquivalent(obtained: ModuleDecl,
                             expected: ModuleDecl,
                             clue: => Any = "values are not alpha-equivalent",
                             names: Names = defaultNames)(using Location): Unit = {
-    val renamer = Renamer(names)
-    assertEquals(renamer(obtained), renamer(expected), clue=clue)
+    val renamer = Renamer(names, "$")
+    shouldBeEqual(renamer(obtained), renamer(expected), clue)
   }
   def parse(input: String,
             nickname: String = "input",

@@ -7,6 +7,8 @@ import scala.collection.mutable
 import effekt.core.Variables
 import effekt.core.Variables.{ all, bound, free }
 
+import effekt.core.normal.scope
+
 class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite {
 
   val locals = Locals(m)
@@ -54,21 +56,21 @@ class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite
       // TODO what if the block parameters have been renamed somewhere---subtracting from capture won't help then.
       val newCapture = annotatedCapt -- removedCaptures.flatten
       BlockVar(id, newType, newCapture)
+
     case other => Context.panic("Cannot lambda lift non-functions.")
 
   override def stmt = {
     case core.Scope(defs, body) =>
-      core.Scope(defs.flatMap {
+      scope(defs.flatMap {
         // we lift named local definitions to the toplevel
         case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
-
           lifted.append(Definition.Def(id,
-            BlockLit(tparams,
+            Renamer.rename(BlockLit(tparams,
               // Here we add cparams for the closed over bparams
               cparams ++ infos(id).captureParams,
               vparams ++ infos(id).valueParams,
               bparams ++ infos(id).blockParams,
-              rewrite(body))))
+              rewrite(body)))))
           Nil
         case other => List(rewrite(other))
       }, rewrite(body))
