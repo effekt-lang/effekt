@@ -9,17 +9,14 @@ import effekt.context.Context
  * @param names used to look up a reference by name to resolve to the same symbols.
  *              This is only used by tests to deterministically rename terms and check for
  *              alpha-equivalence.
- * @param prefix if the prefix is empty, the original name will be used
+ * @param prefix if the prefix is empty, the original name will be used as a prefix
  *
  * @param C the context is used to copy annotations from old symbols to fresh symbols
  */
 class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
 
-  // TODO PROBLEM: if the input is not Barendregt, then the output will also not be...
-  //   withBindings currently is invoked multiple times for the same id...
-
   // maps symbols bound in the current scope to their renamed variants.
-  private var bound: Map[Id, Id] = Map.empty
+  private var bound: List[Map[Id, Id]] = List.empty
 
   private var suffix: Int = 0
 
@@ -30,20 +27,28 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
   def withBindings[R](ids: List[Id])(f: => R): R =
     val before = bound
+    val env = ids.map{ x => x -> freshIdFor(x) }.toMap
     try {
-      ids.foreach { id =>
-        bound.getOrElse(id, {
-          bound = bound.updated(id, freshIdFor(id))
-        })
-      }
+      bound = env :: bound
       f
     } finally { bound = before }
 
+  /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
+  /** Skip the innermost environment frame temporarily */
+  def unbind[R](f: => R): R = {
+    val before = bound
+    try {
+      bound = bound.tail
+      f
+    } finally { bound = before }
+  }
 
   // free variables are left untouched
   override def id: PartialFunction[core.Id, core.Id] = {
-    case id => bound.getOrElse(id, id)
+    case id => bound.collectFirst{
+      case bnds if bnds.contains(id) => bnds(id)
+    }.getOrElse(id)
   }
 
   override def stmt: PartialFunction[Stmt, Stmt] = {
@@ -53,23 +58,21 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
         case (d : core.Definition.Def) :: rest =>
           // can be recursive
           withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
-        case (d : core.Definition.Let) :: rest =>
-          // TODO let bindings are non-recursive (check that this holds!)
-          withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
+        case core.Definition.Let(id, binding) :: rest =>
+          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), unbind{ rewrite(binding) } )) }
         case Nil => core.Scope(defs, rewrite(body))
       }
 
       go(definitions, Nil)
 
     case core.Val(id, binding, body) => withBinding(id) {
-      import effekt.core
-      core.Val(rewrite(id), rewrite(binding), rewrite(body))
+      core.Val(rewrite(id), unbind { rewrite(binding) }, rewrite(body))
     }
     case core.Alloc(id, init, reg, body) => withBinding(id) {
-      core.Alloc(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
+      core.Alloc(rewrite(id), unbind { rewrite(init) } , unbind { rewrite(reg) }, rewrite(body))
     }
     case core.Var(id, init, capt, body) => withBinding(id) {
-      core.Var(rewrite(id), rewrite(init), rewrite(capt), rewrite(body))
+      core.Var(rewrite(id), unbind { rewrite(init) }, unbind { rewrite(capt) }, rewrite(body))
     }
   }
 
