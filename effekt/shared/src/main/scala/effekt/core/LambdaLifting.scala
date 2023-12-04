@@ -193,10 +193,11 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
       stillFree ++ binding(boundSoFar) { query(body) }
 
     case d @ Stmt.Val(id, rhs, body) =>
-      query(rhs) ++ binding(Variables.value(id, rhs.tpe)) {
+      val bound = Variables.value(id, rhs.tpe)
+      query(rhs) ++ binding(bound) {
         // we annotate the free variables of the continuation
         val freeInBody = query(body)
-        db.update(LocallyFree, d, freeInBody)
+        db.update(LocallyFree, d, freeInBody -- bound)
         freeInBody
       }
 
