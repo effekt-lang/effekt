@@ -51,7 +51,7 @@ lazy val testingDependencies = Seq(
   "org.scalameta" %% "munit" % "0.7.29" % Test
 )
 
-lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
+lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("kiama"))
   .settings(commonSettings)
   .settings(noPublishSettings)
   .settings(
@@ -59,6 +59,9 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("ki
   )
   .jvmSettings(
     libraryDependencies ++= (replDependencies ++ lspDependencies)
+  )
+  .nativeSettings(
+    // TODO
   )
 
 lazy val root = project.in(file("effekt"))
@@ -68,7 +71,7 @@ lazy val root = project.in(file("effekt"))
     Compile / run := (effekt.jvm / Compile / run).evaluated
   ))
 
-lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
+lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("effekt"))
   .settings(
     name := "effekt",
     version := effektVersion
@@ -123,7 +126,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       // prepend shebang to make jar file executable
       val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
-      IO.append(binary, "#!/usr/bin/env -S java -jar\n")
+      IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
     },
 
@@ -168,7 +171,11 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
+  .nativeSettings(
+    // TODO
+  )
 
+lazy val effektNative = effekt.native
 
 lazy val platform = Def.task {
   val platformString = System.getProperty("os.name").toLowerCase
