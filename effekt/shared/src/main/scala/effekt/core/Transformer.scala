@@ -122,9 +122,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
-      val es = transformAsPure(e)
-      val wildcards = List.tabulate(es.size)(_ => Wildcard())
-      Val(wildcards, insertBindings { Return(es) }, transform(rest))
+      val (_, bindings) = Context.withBindings { transformAsPure(e) }
+      Context.reifyBindings(transform(rest), bindings)
 
     // return e
     case source.Return(e) => insertBindings {
@@ -839,6 +838,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def withBindings[R](block: => R): (R, ListBuffer[Binding]) = Context in {
+    // TODO MRV: the following looks very wrong
     val before = bindings
     val b = ListBuffer.empty[Binding]
     bindings = b
