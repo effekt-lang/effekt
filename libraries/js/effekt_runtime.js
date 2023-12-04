@@ -81,21 +81,13 @@ function Arena() {
   }
   const Empty = null;
 
-  let _stacksize = 0;
-
-  // unwind the stack for 100 tailcalls
-  const STACK_LIMIT = 100;
-
-
   // TODO maybe inline later to save native frames
   function handleOrRethrow(prompt, s, rest) {
     if (!(s instanceof Suspension)) throw s;
 
     const region = currentRegion
     const k = new Segment(reverseOnto(s.frames, rest), prompt, region, region.backup(), s.cont)
-    if (s.prompt === TAILCALL) {
-      return rewind(k, s.body)
-    } else if (s.prompt === prompt)  {
+    if (s.prompt === prompt)  {
       return s.body((value) => rewind(k, () => value))
     } else {
       throw new Suspension(s.prompt, s.body, Nil, k)
@@ -195,20 +187,6 @@ function Arena() {
 
     handle: function(prompt, s) {
       return handleOrRethrow(prompt, s, Nil)
-    },
-
-    // we treat tailcalls as a special/builtin effect
-    tailcall: function(thunk) {
-      if (++_stacksize > STACK_LIMIT) {
-        _stacksize = 0;
-        throw new Suspension(TAILCALL, thunk, Nil, Empty)
-      } else {
-        return thunk()
-      }
-    },
-
-    run: function(thunk) {
-      try { return thunk() } catch (t) { return handleOrRethrow(null, t, Nil) }
     },
 
     freshRegion: function() {

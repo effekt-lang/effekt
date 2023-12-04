@@ -19,9 +19,11 @@ import scala.collection.mutable
  */
 object TransformerDirect extends Transformer {
 
-  // return $effekt.run(() => body)
+
   def run(body: js.Expr): js.Stmt =
-    js.Return(builtin("run", js.Lambda(Nil, js.Return(body))))
+    js.Return(body)
+    //    // return $effekt.run(() => body)
+    //    js.Return(builtin("run", js.Lambda(Nil, js.Return(body))))
 
   def transformModule(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module =
     given Locals = new Locals(module)
@@ -186,8 +188,8 @@ object TransformerDirect extends Transformer {
     case App(b, targs, vargs, bargs) =>
       val call = js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
       Bind {
-        // Tail call!
-        case Continuation.Return => List(js.Return(js.builtin("tailcall", js.Lambda(Nil, call))))
+        // Tail call! (cannot be supported like this)
+        // case Continuation.Return => List(js.Return(js.builtin("tailcall", js.Lambda(Nil, call))))
         case k => List(k(call))
       }
 
