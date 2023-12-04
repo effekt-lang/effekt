@@ -7,6 +7,7 @@ import effekt.context.assertions.*
 import effekt.core.{ *, given }
 import effekt.core.Variables
 import effekt.core.Variables.{ all, bound, free }
+import effekt.core.substitutions.{ Substitution, substitute }
 import effekt.symbols.{ Module, Symbol, Wildcard }
 
 import scala.collection.mutable
@@ -19,6 +20,31 @@ import scala.collection.mutable
  */
 object TransformerDirect extends Transformer {
 
+  /**
+   * Aggregates the contextual information required by the transformation
+   */
+  case class TransformerContext(
+    // the toplevel declarations, used to generate pattern matches
+    declarations: DeclarationContext,
+    // free variables used to generate continuations
+    locals: Locals,
+    // continuations emitted by the transformer
+    continuations: Continuations,
+    // currently, lexically enclosing functions and their parameters (used to determine whether a call is recursive)
+    enclosingFunctions: Map[Id, List[core.Variable]],
+    // used to register functions that are recognized as tail recursive
+    tailCalled: mutable.Set[Id],
+    // the usual compiler context
+    compiler: Context
+  ) {
+    def binding[T](fun: Id, params: List[core.Variable])(body: TransformerContext ?=> T): T =
+      body(using this.copy(enclosingFunctions = enclosingFunctions.updated(fun, params)))
+    def clearingScope[T](body: TransformerContext ?=> T): T =
+      body(using this.copy(enclosingFunctions = Map.empty))
+  }
+  // auto extractors
+  given (using C: TransformerContext): DeclarationContext = C.declarations
+  given (using C: TransformerContext): Context = C.compiler
 
   def run(body: js.Expr): js.Stmt =
     js.Return(body)
@@ -30,12 +56,13 @@ object TransformerDirect extends Transformer {
     toJS(module, imports, exports)
 
   type Continuations = mutable.ArrayBuffer[js.Function]
-  def emitContinuation(name: JSName, result: JSName, locals: List[JSName], body: List[js.Stmt])(using K: Continuations): Unit =
-    K += js.Function(name, result :: locals, body)
+  def emitContinuation(name: JSName, result: JSName, locals: List[JSName], body: List[js.Stmt])(using C: TransformerContext): Unit =
+    C.continuations += js.Function(name, result :: locals, body)
 
-  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Locals, Context): js.Module = {
+  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using D: DeclarationContext, L: Locals, C: Context): js.Module = {
 
     given ks: Continuations = mutable.ArrayBuffer.empty
+    given TransformerContext = TransformerContext(D, L, ks, Map.empty, mutable.Set.empty, C)
 
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.map(toJS)
@@ -66,7 +93,7 @@ object TransformerDirect extends Transformer {
       js.RawStmt(contents)
   }
 
-  def toJS(b: core.Block)(using DeclarationContext, Locals, Continuations, Context): js.Expr = b match {
+  def toJS(b: core.Block)(using C: TransformerContext): js.Expr = b match {
     // [[ f ]] = f
     case BlockVar(v, _, _) => nameRef(v)
 
@@ -81,13 +108,13 @@ object TransformerDirect extends Transformer {
 
     // [[ { x => ... } ]] = ERROR
     case BlockLit(tps, cps, vps, bps, body) =>
-      js.Lambda(vps.map(toJS) ++ bps.map(toJS), js.Block(toJS(body)(Continuation.Return)))
+      js.Lambda(vps.map(toJS) ++ bps.map(toJS), C.clearingScope { js.Block(toJS(body)(Continuation.Return)) })
   }
 
   /**
    * Translation of expressions is trivial
    */
-  def toJS(expr: core.Expr)(using DeclarationContext, Locals, Continuations, Context): js.Expr = expr match {
+  def toJS(expr: core.Expr)(using TransformerContext): js.Expr = expr match {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
@@ -123,7 +150,7 @@ object TransformerDirect extends Transformer {
     val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
     List(js.Try(s, suspension, List(js.Return(js.builtin("push",js.Variable(suspension), frame)))))
 
-  def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind = s match {
+  def toJS(s: core.Stmt)(using C: TransformerContext): Bind = s match {
 
     case Scope(definitions, body) =>
       Bind { k => definitions.flatMap { toJS } ++ toJS(body)(k) }
@@ -158,7 +185,7 @@ object TransformerDirect extends Transformer {
     //   [[body]](k)
     case d @ Val(id, binding, body) =>
       // Here we fix the order of arguments
-      val free = L.apply(d).toList
+      val free = C.locals(d).toList
       val freeValues = free.collect { case core.Variable.Value(id, tpe) => id }
       val freeBlocks = free.collect { case core.Variable.Block(id, tpe, capt) => id }
       val freeIds = freeValues ++ freeBlocks
@@ -176,7 +203,7 @@ object TransformerDirect extends Transformer {
       val instrumented = entrypoint(result, contId, freeIds.map(uniqueName), bindingStmts)
 
       Bind { k =>
-        emitContinuation(contId, result, freeIds.map(nameDef), toJS(body)(Continuation.Return))
+        emitContinuation(contId, result, freeIds.map(nameDef), C.clearingScope { toJS(body)(Continuation.Return) })
         maybeLet ++ instrumented ++ toJS(body)(k)
       }
 
@@ -185,13 +212,46 @@ object TransformerDirect extends Transformer {
         js.Const(nameDef(id), js.builtin("fresh", toJS(init))) :: toJS(body)(k)
       }
 
-    case App(b, targs, vargs, bargs) =>
-      val call = js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
+    // obviously recursive calls
+    case App(b : BlockVar, targs, vargs, bargs) if C.enclosingFunctions.isDefinedAt(b.id) =>
       Bind {
         // Tail call! (cannot be supported like this)
-        // case Continuation.Return => List(js.Return(js.builtin("tailcall", js.Lambda(Nil, call))))
-        case k => List(k(call))
+        // [[ rec(foo, bar) ]] =  { x = foo; y = bar; continue rec }
+        case Continuation.Return =>
+          C.tailCalled += b.id
+          // continue
+          val params = C.enclosingFunctions(b.id)
+          val stmts = mutable.ListBuffer.empty[js.Stmt]
+
+          stmts.append(js.RawStmt("/* prepare tail call */"))
+
+          // to prevent accidentally recursive bindings like `x = () => x`, we need to see which parameters occur in
+          // the arguments
+          val freeVars = (vargs.flatMap(Variables.free) ++ bargs.flatMap(Variables.free)).toSet.intersect(params.toSet)
+          val valueSubst = freeVars.collect { case core.Variable.Value(id, tpe) =>
+            val tmp = Id(s"tmp")
+            stmts.append(js.Const(uniqueName(tmp), nameRef(id)))
+            id -> core.Pure.ValueVar(tmp, tpe)
+          }
+          val blockSubst = freeVars.collect { case core.Variable.Block(id, tpe, capt) =>
+            val tmp = Id(s"tmp")
+            stmts.append(js.Const(uniqueName(tmp), nameRef(id)))
+            id -> core.BlockVar(tmp, tpe, capt)
+          }
+
+          given Substitution = Substitution(Map.empty, Map.empty, valueSubst.toMap, blockSubst.toMap)
+          val args = vargs.map(v => toJS(substitute(v))) ++ bargs.map(b => toJS(substitute(b)))
+
+          (params zip args) foreach {
+            case (param, arg) => stmts.append(js.Assign(nameRef(param.id), arg))
+          }
+
+          stmts.append(js.Continue(Some(uniqueName(b.id))))
+          stmts.toList
+        case k => List(k(js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))))
       }
+
+    case App(b, targs, vargs, bargs) => Return(js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS)))
 
     case If(cond, thn, els) =>
       Bind { k => List(js.If(toJS(cond), js.MaybeBlock(toJS(thn)(k)), js.MaybeBlock(toJS(els)(k)))) }
@@ -243,7 +303,7 @@ object TransformerDirect extends Transformer {
 
   }
 
-  def toJS(handler: core.Implementation, prompt: JSName)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
+  def toJS(handler: core.Implementation, prompt: JSName)(using C: TransformerContext): js.Expr =
     js.Object(handler.operations.map {
       // (args...cap...) => $effekt.suspend(prompt, (resume) => { ... body ... resume((cap...) => { ... }) ... })
       case Operation(id, tps, cps, vps, bps,
@@ -255,7 +315,7 @@ object TransformerDirect extends Transformer {
 
         val lambda = js.Lambda((vps ++ bps).map(toJS) ++ biParams,
           js.Return(js.builtin("suspend_bidirectional", js.Variable(prompt), js.ArrayLiteral(biArgs), js.Lambda(List(nameDef(resume)),
-            js.Block(toJS(body)(Continuation.Return))))))
+            C.clearingScope { js.Block(toJS(body)(Continuation.Return)) }))))
 
         nameDef(id) -> lambda
 
@@ -263,24 +323,36 @@ object TransformerDirect extends Transformer {
       case Operation(id, tps, cps, vps, bps, Some(resume), body) =>
         val lambda = js.Lambda((vps ++ bps) map toJS,
           js.Return(js.builtin("suspend", js.Variable(prompt),
-            js.Lambda(List(toJS(resume)), js.Block(toJS(body)(Continuation.Return))))))
+            js.Lambda(List(toJS(resume)), C.clearingScope {  js.Block(toJS(body)(Continuation.Return)) }))))
 
         nameDef(id) -> lambda
 
       case Operation(id, tps, cps, vps, bps, None, body) => Context.panic("Effect handler should take continuation")
     })
 
-  def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
+  def toJS(handler: core.Implementation)(using C: TransformerContext): js.Expr =
     js.Object(handler.operations.map {
       case Operation(id, tps, cps, vps, bps, None, body) =>
-        nameDef(id) -> js.Lambda((vps ++ bps) map toJS, js.Block(toJS(body)(Continuation.Return)))
+        nameDef(id) -> js.Lambda((vps ++ bps) map toJS, C.clearingScope { js.Block(toJS(body)(Continuation.Return)) })
       case Operation(id, tps, cps, vps, bps, Some(k), body) =>
         Context.panic("Object cannot take continuation")
     })
 
-  def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): List[js.Stmt] = d match {
-    case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      List(js.Function(nameDef(id), (vps ++ bps) map toJS, toJS(body)(Continuation.Return)))
+  def toJS(d: core.Definition)(using C: TransformerContext): List[js.Stmt] = d match {
+    case d @ Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
+      C.binding (id, vps.flatMap(Variables.bound) ++ bps.flatMap(Variables.bound)) {
+        val translatedBody = toJS(body)(Continuation.Return)
+        val isRecursive = C.tailCalled.contains(id)
+
+        if (isRecursive) {
+          // function ID(params) { ID : while(true) { BODY } }
+          List(js.Function(nameDef(id), (vps ++ bps) map toJS,
+            List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(id))))))
+        } else {
+          // function ID(params) { BODY }
+          List(js.Function(nameDef(id), (vps ++ bps) map toJS, translatedBody))
+        }
+      }
 
     case Definition.Def(id, block) =>
       List(js.Const(nameDef(id), toJS(block)))
