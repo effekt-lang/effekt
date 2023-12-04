@@ -93,13 +93,23 @@ function Arena() {
 
   // TODO maybe inline later to save native frames
   function handleOrRethrow(prompt, s, rest) {
-    const region = currentRegion
-    const k = new Segment(reverseOnto(s.frames, rest), prompt, region, region.backup(), s.cont)
-    if (s.prompt === prompt)  {
-      return s.body((value) => rewind(k, value))
-    } else {
-      throw new Suspension(s.prompt, s.body, Nil, k)
-    }
+    // trampoline if tailcall
+    if (s instanceof TailCall) {
+      try { return trampolineTailCall(s) }
+      catch (s) { return handleOrRethrow(prompt, s, rest) }
+
+    // attempt handling
+    } else if (s instanceof Suspension) {
+      const region = currentRegion
+      const k = new Segment(reverseOnto(s.frames, rest), prompt, region, region.backup(), s.cont)
+      if (s.prompt === prompt)  {
+        return s.body((value) => rewind(k, value))
+      } else {
+        throw new Suspension(s.prompt, s.body, Nil, k)
+      }
+
+    // rethrow
+    } else { throw s; }
   }
 
   function rewind(k, value) {
@@ -126,6 +136,24 @@ function Arena() {
         return handleOrRethrow(prompt, s, rest)
       } finally {
         leaveRegion()
+      }
+    }
+  }
+
+  class TailCall {
+    constructor(closure) {
+      this.force = closure
+    }
+  }
+
+  function trampolineTailCall(t) {
+    if (!(t instanceof TailCall)) throw t;
+    let thunk = t
+
+    while (true) {
+      try { return thunk.force() } catch (t) {
+        if (!(t instanceof TailCall)) throw t
+        thunk = t
       }
     }
   }
@@ -183,14 +211,30 @@ function Arena() {
       throw new Suspension(prompt, body, Cons(thunk => thunk.apply(null, caps), Nil), Empty)
     },
 
+    // suspension: the raised exception.
     push: function(suspension, frame) {
-      // Assuming `suspension` is a value or variable you want to return
-      return new Suspension(suspension.prompt, suspension.body,
-        Cons(frame, suspension.frames), suspension.cont);
+      if (suspension instanceof TailCall) {
+        try { return trampolineTailCall(suspension) }
+        catch (s) { return $effekt.push(s, frame) }
+      } else if (suspension instanceof Suspension) {
+        // Assuming `suspension` is a value or variable you want to return
+        return new Suspension(suspension.prompt, suspension.body,
+          Cons(frame, suspension.frames), suspension.cont);
+      } else {
+        throw suspension
+      }
     },
 
     handle: function(prompt, s) {
       return handleOrRethrow(prompt, s, Nil)
+    },
+
+    tailcall: function(thunk) {
+      throw new Thunk(thunk)
+    },
+
+    run: function(thunk) {
+      try { return thunk() } catch (t) { return trampolineTailCall(t) }
     },
 
     freshRegion: function() {
