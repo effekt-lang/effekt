@@ -189,7 +189,7 @@ def nbody(problemSize: Int) = {
       } else if (problemSize == 1) {
         result == -0.16907495402506745;
       }  else {
-        return false;
+        false
       }
   }
 
