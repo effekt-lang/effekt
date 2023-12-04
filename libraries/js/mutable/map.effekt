@@ -1,18 +1,25 @@
 module mutable/map
 
+import mutable/array
 import immutable/option
 
 // A mutable map, backed by a JavaScript Map.
 extern type Map[K, V]
 
 extern pure def emptyMap[K, V](): Map[K, V] =
-    "new Map()"
+  "new Map()"
 
 def get[K, V](m: Map[K, V], key: K): Option[V] =
-    m.unsafeGet(key).undefinedToOption
+  m.unsafeGet(key).undefinedToOption
 
 extern pure def unsafeGet[K, V](m: Map[K, V], key: K): V =
-    "m.get(key)"
+  "m.get(key)"
 
 extern io def update[K, V](m: Map[K, V], key: K, value: V): Unit =
-    "(function() { m.set(key, value); return $effekt.unit })()"
+  "(function() { m.set(key, value); return $effekt.unit })()"
+
+extern pure def values[K, V](map: Map[K, V]): Array[V] =
+  "Array.from(map.values())"
+
+extern pure def keys[K, V](map: Map[K, V]): Array[K] =
+  "Array.from(map.keys())"

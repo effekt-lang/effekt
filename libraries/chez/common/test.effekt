@@ -19,9 +19,8 @@ def assertFalse(condition: Boolean) =
 def assertEqual[A](obtained: A, expected: A, msg: String) =
   do assert(obtained == expected, msg)
 
-// Note: every other backend uses a generic `show` instead
-def assertEqual[A](obtained: A, expected: A) { show : A => String } =
-  do assert(obtained == expected, "Obtained: " ++ show(obtained) ++ "\n but expected:" ++ show(expected))
+def assertEqual[A](obtained: A, expected: A) =
+  do assert(obtained == expected, "Obtained: " ++ obtained.show ++ "\n but expected:" ++ expected.show)
 
 interface Test {
   def success(name: String): Unit

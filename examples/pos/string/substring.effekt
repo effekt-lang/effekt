@@ -1,0 +1,33 @@
+module examples/pos/string/substring
+
+import text/string
+
+def printString(s: String): Unit = {
+  val pretty =
+    if (s.length == 0) { "<empty>" }
+    else { s }
+
+  println(pretty)
+}
+
+def main() = {
+  val emptyString = ""
+  printString(emptyString.substring(0))
+  printString(emptyString.substring(1))
+
+  val bread = "bread"
+  printString(bread.substring(-1))
+  printString(bread.substring(0))
+  printString(bread.substring(2))
+  printString(bread.substring(4))
+  printString(bread.substring(5))
+
+  printString(bread.substring(0, 5))
+  printString(bread.substring(1, 4))
+  printString(bread.substring(-1, 6))
+  printString(bread.substring(2, 3))
+  printString(bread.substring(3, 3))
+  printString(bread.substring(4, 1))
+  printString(bread.substring(100, -100))
+}
+

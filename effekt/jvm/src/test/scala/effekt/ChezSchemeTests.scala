@@ -40,6 +40,13 @@ abstract class ChezSchemeTests extends EffektTests {
     // see comment on commit 61492d9
     examplesDir / "casestudies" / "anf.md",
 
+    // indexOf and lastIndexOf are not implemented in text/string
+    examplesDir / "pos" / "string" / "indexOf.effekt",
+
+    // missing array-related functions & methods
+    examplesDir / "pos" / "array" / "list_conversion.effekt",
+    examplesDir / "pos" / "array" / "sum.effekt",
+
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",
 

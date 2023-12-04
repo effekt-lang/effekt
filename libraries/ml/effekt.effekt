@@ -71,6 +71,12 @@ extern pure def infixSub(x: Double, y: Double): Double =
 extern pure def infixDiv(x: Double, y: Double): Double =
   "(x: real) / y"
 
+def min(n: Int, m: Int): Int =
+    if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+    if (n > m) n else m
+
 // trig
 // ====
 
