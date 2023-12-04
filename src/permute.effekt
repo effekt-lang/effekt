@@ -1,5 +1,5 @@
 import mutable/array
-import examples/fasteffekt/benchmark
+import src/benchmark
 
 def Permute(innerIterations: Int) = {
     var count = 0;
@@ -45,3 +45,7 @@ def Permute(innerIterations: Int) = {
     return innerBenchmarkLoop(innerIterations){benchmark}{verifyResult}
 }
 
+def main() = {
+    Permute(1)
+    Permute(10)
+}

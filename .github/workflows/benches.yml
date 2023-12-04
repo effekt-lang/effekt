@@ -1,0 +1,26 @@
+name: Run benchmarks
+
+on:
+  push:
+
+jobs:
+  execute_bash_script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'  # Choose the Node.js version you need
+
+      - name: Install latest effekt
+        run: |
+          npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz
+
+
+      - name: Execute Benchmarks
+        run: |
+          chmod +x run_benches.sh && ./run_benches.sh   
