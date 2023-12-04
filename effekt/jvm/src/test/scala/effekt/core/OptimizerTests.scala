@@ -36,6 +36,11 @@ class OptimizerTests extends CoreTests {
       result
     }
 
+  def inlineFull(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree =>
+      InlineUnique.full(Set(mainSymbol), tree)
+    }
+
   test("toplevel"){
     val input =
       """ def foo = { () => return 42 }
@@ -194,6 +199,24 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     inlineOnce(input, expected)
+  }
+
+  test("fully inline higher order function"){
+    val input =
+      """ def foo = { (n: Int) => return n:Int }
+        | def hof = { (){f : (Int) => Int} =>
+        |   (f : (Int) => Int @ {f})(1)
+        | }
+        | def main = { () =>
+        |   (hof : (){f : (Int) => Int} => Int @ {})(){ (foo : (Int) => Unit @ {}) }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => return 1 }
+        |""".stripMargin
+
+    inlineFull(input, expected)
   }
 
 }

@@ -87,7 +87,7 @@ object InlineUnique {
     defs: Map[Id, Definition],
     inlineCount: Counter = Counter(0)
   ) {
-    def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other)
+    def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other, inlineCount)
 
     def ++=(fresh: Map[Id, Usage]): Unit = { usage ++= fresh }
   }
@@ -158,9 +158,6 @@ object InlineUnique {
       case _ => b
     }
 
-  def debug(s: Stmt): Unit = println(core.PrettyPrinter.format(s))
-  def debug(s: Block): Unit = println(core.PrettyPrinter.format(s))
-
   def rewrite(d: Definition)(using InlineContext): Definition = d match {
     case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
     case Definition.Let(id, binding) => Definition.Let(id, rewrite(binding))
@@ -199,11 +196,7 @@ object InlineUnique {
       blockDefFor(id) match {
         case Some(value) =>
           C.inlineCount.next()
-          //println(s"Inlining: ${id}")
-          val renamed = Renamer.rename(value)
-          //          debug(renamed)
-          //          debug(value)
-          renamed
+          Renamer.rename(value)
         case None => b
       }
     case b @ Block.BlockVar(id, _, _) => dealias(b)
