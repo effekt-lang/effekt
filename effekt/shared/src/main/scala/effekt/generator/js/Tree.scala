@@ -23,12 +23,12 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
    * Generates the Javascript module skeleton for whole program compilation
    */
   def commonjs: List[Stmt] = {
-    val effekt = js.Const(List(JSName("$effekt")), js.Object())
+    val effekt = js.Const(JSName("$effekt"), js.Object())
 
     val importStmts = imports.map {
       // const MOD = require(PATH)
       case Import.All(name, file) =>
-        js.Const(List(name), js.Call(Variable(JSName("require")), List(JsString(s"./${file}"))))
+        js.Const(name, js.Call(Variable(JSName("require")), List(JsString(s"./${file}"))))
 
       // const {NAMES, ...} = require(PATH)
       case Import.Selective(names, file) =>
@@ -57,14 +57,14 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
     val importStmts = imports.map {
       // const MOD = load(PATH)
       case Import.All(name, file) =>
-        js.Const(List(name), js.Call(Variable(JSName("load")), List(JsString(file))))
+        js.Const(name, js.Call(Variable(JSName("load")), List(JsString(file))))
 
       // const {NAMES, ...} = load(PATH)
       case Import.Selective(names, file) =>
         js.Destruct(names, js.Call(Variable(JSName("load")), List(JsString(file))))
     }
 
-    val declaration = js.Const(List(name), js.Object())
+    val declaration = js.Const(name, js.Object())
 
     // module.exports = Object.assign(MODULE, { EXPORTS })
     val exportStatement = js.ExprStmt(js.Call(RawExpr("module.exports = Object.assign"), List(
@@ -112,14 +112,20 @@ enum Stmt {
   // e.g. { <STMT>* }
   case Block(stmts: List[Stmt])
 
+  // e.g. return <EXPR>
+  case Return(expr: Expr)
+
   // e.g. return [<EXPR>*]
-  case Return(exprs: List[Expr])
+  case Returns(exprs: List[Expr])
 
   // A raw JS String
   case RawStmt(raw: String)
 
+  // e.g. const x = <EXPR>
+  case Const(name: JSName, binding: Expr)
+
   // e.g. const [x, y] = <EXPR>
-  case Const(names: List[JSName], binding: Expr)
+  case Consts(names: List[JSName], binding: Expr)
 
   // e.g. <EXPR> = <EXPR>
   case Assign(target: Expr, value: Expr)
@@ -141,7 +147,7 @@ export Stmt.*
 // Some smart constructors
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
 
-def Lambda(params: List[JSName], body: Expr): Expr = Lambda(params, Return(List(body)))
+def Lambda(params: List[JSName], body: Expr): Expr = Lambda(params, Return(body))
 
 def JsString(scalaString: String): Expr = RawExpr(s"\"${scalaString}\"")
 
@@ -167,9 +173,9 @@ object monadic {
 
   def Builtin(name: String, args: Expr*): Control = js.MethodCall($effekt, JSName(name), args: _*)
 
-  def Lambda(params: List[JSName], stmts: List[Stmt], ret: List[Control]): Expr =
+  def Lambda(params: List[JSName], stmts: List[Stmt], ret: Control): Expr =
     js.Lambda(params, js.Block(stmts :+ js.Return(ret)))
 
-  def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: List[Control]): Stmt =
+  def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: Control): Stmt =
     js.Function(name, params, stmts :+ js.Return(ret))
 }
