@@ -21,6 +21,16 @@ object TypePrinter extends ParenPrettyPrinter {
   def show(t: Effects): String = pretty(toDoc(t), 80).layout
   def show(t: List[ValueType | TypeVar]): String = pretty(maybeTypeParams(t), 80).layout
 
+  val show: PartialFunction[Any, String] = {
+    case id: source.Id      => TypePrinter.show(id)
+    case name: Name         => name.name
+    case t: symbols.Type    => TypePrinter.show(t)
+    case t: Capture         => TypePrinter.show(t)
+    case t: Captures        => TypePrinter.show(t)
+    case t: Effects         => TypePrinter.show(t)
+    case t: ConcreteEffects => TypePrinter.show(t.toEffects)
+  }
+
   def toDoc(m: Type): Doc = m match {
     case tpe: ValueType => toDoc(tpe)
     case tpe: BlockType => toDoc(tpe)
@@ -88,17 +98,10 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def maybeTypeParams(tparams: List[ValueType | TypeVar]): Doc =
     if (tparams.isEmpty) "" else typeParams(tparams)
+
 }
 
 implicit class ErrorMessageInterpolator(private val sc: StringContext) extends AnyVal {
-  def pp(args: Any*): String = sc.s(args.map {
-    case id: source.Id   => TypePrinter.show(id)
-    case name: Name      => name.name
-    case t: symbols.Type => TypePrinter.show(t)
-    case t: Capture      => TypePrinter.show(t)
-    case t: Captures     => TypePrinter.show(t)
-    case t: Effects      => TypePrinter.show(t)
-    case t: ConcreteEffects => TypePrinter.show(t.toEffects)
-    case other           => other.toString
-  }: _*)
+  def pp(args: Any*): String = sc.s(args.map(TypePrinter.show.orElse(_.toString)): _*)
 }
+

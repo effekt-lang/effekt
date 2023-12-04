@@ -6,6 +6,7 @@ package js
 case class JSName(name: String)
 
 val $effekt = Variable(JSName("$effekt"))
+def builtin(name: String, args: Expr*): js.Expr = js.MethodCall($effekt, JSName(name), args: _*)
 
 enum Import {
   // import * as <name> from "<file>";
@@ -108,6 +109,11 @@ enum Expr {
 }
 export Expr.*
 
+enum Pattern {
+  case Variable(name: JSName)
+  case Array(ps: List[Pattern])
+}
+
 enum Stmt {
   // e.g. { <STMT>* }
   case Block(stmts: List[Stmt])
@@ -119,7 +125,10 @@ enum Stmt {
   case RawStmt(raw: String)
 
   // e.g. const x = <EXPR>
-  case Const(name: JSName, binding: Expr)
+  case Const(pattern: Pattern, binding: Expr)
+
+  // e.g. let x = <EXPR>
+  case Let(pattern: Pattern, binding: Expr)
 
   // e.g. <EXPR> = <EXPR>
   case Assign(target: Expr, value: Expr)
@@ -128,15 +137,36 @@ enum Stmt {
   case Destruct(names: List[JSName], binding: Expr)
 
   // e.g. switch (sc) { case <EXPR>: <STMT>; ...; default: <STMT> }
-  case Switch(scrutinee: Expr, branches: List[(Expr, Stmt)], default: Option[Stmt])
+  case Switch(scrutinee: Expr, branches: List[(Expr, List[Stmt])], default: Option[List[Stmt]]) // TODO maybe flatten?
 
   // e.g. function <NAME>(x, y) { <STMT>* }
   case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
+
+  // e.g. if (<EXPR>) { <STMT> } else { <STMT> }
+  case If(cond: Expr, thn: Stmt, els: Stmt)
+
+  // e.g. try { <STMT>* } catch(x) { <STMT>* }
+  case Try(prog: List[Stmt], name: JSName, handler: List[Stmt], fin: List[Stmt] = Nil)
+
+  // e.g. throw e
+  case Throw(expr: Expr)
+
+  // label : while (<EXPR>) { <STMT>* }
+  case While(cond: Expr, stmts: List[Stmt], label: Option[JSName])
+
+  // e.g. break
+  case Break()
+
+  // e.g. continue l
+  case Continue(label: Option[JSName])
 
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
 }
 export Stmt.*
+
+def Const(name: JSName, binding: Expr): Stmt = js.Const(Pattern.Variable(name), binding)
+def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
 // Some smart constructors
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
@@ -147,6 +177,13 @@ def JsString(scalaString: String): Expr = RawExpr(s"\"${scalaString}\"")
 
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
+def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
+  case Nil => ???
+  case head :: Nil => head
+  case head :: next => js.Block(stmts)
+}
+
+val Undefined = RawExpr("undefined")
 
 object monadic {
 

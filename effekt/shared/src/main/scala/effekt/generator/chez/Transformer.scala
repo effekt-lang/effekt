@@ -36,7 +36,7 @@ object TransformerCallCC extends Transformer {
     chez.Let(List(Binding(param, binding)), body)
 
   def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", Variable(main))
+    chez.Builtin("run", chez.Variable(main))
 }
 
 trait Transformer {
@@ -99,7 +99,7 @@ trait Transformer {
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
 
     case Alloc(id, init, region, body) =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
+      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", chez.Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
@@ -173,12 +173,12 @@ trait Transformer {
 
   def toChez(block: Block): chez.Expr = block match {
     case BlockVar(id, _, _) =>
-      Variable(nameRef(id))
+      chez.Variable(nameRef(id))
 
     case b @ BlockLit(tps, cps, vps, bps, body) => toChez(b)
 
     case Member(b, field, tpe) =>
-      chez.Call(Variable(nameRef(field)), List(toChez(b)))
+      chez.Call(chez.Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) => toChez(e)
 
@@ -187,7 +187,7 @@ trait Transformer {
 
   def toChez(impl: Implementation): chez.Expr =
     val ChezName(name) = nameRef(impl.interface.name)
-    chez.Call(Variable(ChezName(name)), impl.operations.map(toChez))
+    chez.Call(chez.Variable(ChezName(name)), impl.operations.map(toChez))
 
   def toChez(op: Operation): chez.Expr = op match {
     case Operation(name, tps, cps, vps, bps, resume, body) =>
@@ -226,10 +226,10 @@ trait Transformer {
     val value = ChezName("value")
 
     val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-      chez.Lambda(Nil, pure(chez.Builtin("unbox", Variable(ref)))))
+      chez.Lambda(Nil, pure(chez.Builtin("unbox", chez.Variable(ref)))))
 
     val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-      chez.Lambda(List(value), pure(chez.Builtin("set-box!", Variable(ref), Variable(value)))))
+      chez.Lambda(List(value), pure(chez.Builtin("set-box!", chez.Variable(ref), chez.Variable(value)))))
 
     List(getter, setter)
   }

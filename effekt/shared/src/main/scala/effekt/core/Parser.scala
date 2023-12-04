@@ -121,6 +121,12 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 
+  lazy val stmts: P[Stmt] =
+    many(definition) ~ stmt ^^ {
+      case Nil ~ stmt => stmt
+      case defs ~ stmt => Stmt.Scope(defs, stmt)
+    }
+
   lazy val clause: P[(Id, BlockLit)] = (id <~ `:`) ~ blockLit ^^ { case id ~ cl => id -> cl }
 
   // Implementations
@@ -194,7 +200,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     )
 
   lazy val blockLit: P[Block.BlockLit] =
-    `{` ~> parameters ~ (`=>` ~/> stmt) <~ `}` ^^ {
+    `{` ~> parameters ~ (`=>` ~/> stmts) <~ `}` ^^ {
       case (tparams, cparams, vparams, bparams) ~ body =>
         Block.BlockLit(tparams, cparams, vparams, bparams, body) : Block.BlockLit
       }
@@ -234,14 +240,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // f@f2 : Exc
   lazy val trackedBlockParam: P[(Id, BlockParam)] =
     ( `{` ~> id ~ (`@` ~> id)  ~ (`:` ~> blockType) <~ `}` ^^ {
-        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe): Param.BlockParam)
+        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe, Set(capt)): Param.BlockParam)
       }
     // abbreviation: f : Exc .= f@f : Exc
     | blockParam ^^ { p => p.id -> p }
     )
 
   lazy val blockParam: P[BlockParam] =
-    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe): Param.BlockParam }
+    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe, Set(id)): Param.BlockParam }
 
 
   // Types

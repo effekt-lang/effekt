@@ -9,7 +9,7 @@ import effekt.core.Block.BlockLit
 import effekt.lifted.Expr.ValueVar
 
 /**
- * [[Phase]] on [[CoreTransformed]] to make programs stack safe on paltforms
+ * [[Phase]] on [[CoreTransformed]] to make programs stack safe on platforms
  * that do not support TCO.
   *
  * This is necessary for backends like JS, where we should use the monadic trampoline
