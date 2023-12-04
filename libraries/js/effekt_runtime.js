@@ -230,6 +230,7 @@ function Arena() {
     },
 
     tailcall: function(thunk) {
+      // TODO maybe count and not throw every tailcall
       throw new Thunk(thunk)
     },
 

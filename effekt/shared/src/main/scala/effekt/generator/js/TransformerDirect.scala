@@ -74,7 +74,7 @@ object TransformerDirect extends Transformer {
 
     // [[ { x => ... } ]] = ERROR
     case BlockLit(tps, cps, vps, bps, body) =>
-      js.Lambda(vps.map(toJS) ++ bps.map(toJS), js.Block(toJS(body)(x => js.Return(x))))
+      js.Lambda(vps.map(toJS) ++ bps.map(toJS), js.Block(toJS(body)(Continuation.Return)))
   }
 
   /**
@@ -89,22 +89,35 @@ object TransformerDirect extends Transformer {
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
-    case Run(s) => toJS(s)(x => js.Return(x)) match {
+    case Run(s) => toJS(s)(Continuation.Return) match {
       case List(js.Return(e)) => e
       case stmts => js.Call(js.Lambda(Nil, js.Block(stmts)), Nil)
     }
   }
 
-  type Bind[T] = (T => js.Stmt) => List[js.Stmt]
-  def Return[T](t: T): Bind[T] = k => List(k(t))
-  def Bind[T](b: Bind[T]): Bind[T] = b
+  enum Continuation {
+    case Return
+    case Ignore
+    case Assign(id: Id)
+
+    def apply(result: js.Expr): js.Stmt = this match {
+      case Continuation.Return     => js.Return(result)
+      case Continuation.Ignore     => js.ExprStmt(result)
+      case Continuation.Assign(id) => js.Assign(nameRef(id), result)
+    }
+  }
+
+
+  type Bind = Continuation => List[js.Stmt]
+  def Return(result: js.Expr): Bind = k => List(k(result))
+  def Bind(b: Bind): Bind = b
 
   def entrypoint(result: JSName, k: JSName, vars: List[JSName], s: List[js.Stmt]): List[js.Stmt] =
     val suspension = freshName("suspension")
     val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
     List(js.Try(s, suspension, List(js.Throw(js.builtin("push",js.Variable(suspension), frame)))))
 
-  def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind[js.Expr] = s match {
+  def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind = s match {
 
     case Scope(definitions, body) =>
       Bind { k => definitions.flatMap { toJS } ++ toJS(body)(k) }
@@ -150,14 +163,14 @@ object TransformerDirect extends Transformer {
       // the last statement in the binding differs if it is bound to a wildcard
       // ...x = result...    vs.   ...result...
       val (maybeLet, bindingStmts) = id match {
-        case Wildcard() => (Nil, toJS(binding)(x => js.ExprStmt(x)))
-        case id         => (List(js.Let(nameDef(id), js.Undefined)), toJS(binding)(x => js.Assign(nameRef(id), x)))
+        case Wildcard() => (Nil, toJS(binding)(Continuation.Ignore))
+        case id         => (List(js.Let(nameDef(id), js.Undefined)), toJS(binding)(Continuation.Assign(id)))
       }
 
       val instrumented = entrypoint(result, contId, freeIds.map(uniqueName), bindingStmts)
 
       Bind { k =>
-        emitContinuation(contId, result, freeIds.map(nameDef), toJS(body)(x => js.Return(x)))
+        emitContinuation(contId, result, freeIds.map(nameDef), toJS(body)(Continuation.Return))
         maybeLet ++ instrumented ++ toJS(body)(k)
       }
 
@@ -189,7 +202,6 @@ object TransformerDirect extends Transformer {
         case (param, handler) => (toJS(param), js.Const(toJS(param), toJS(handler, prompt)))
       }.unzip
 
-      // TODO implement properly
       Bind { k => promptDef :: handlerDefs ::: (js.Try(freshRegion :: toJS(body)(k), suspension,
         List(k(js.builtin("handle", js.Variable(prompt), js.Variable(suspension)))), List(regionCleanup)) :: Nil)
       }
@@ -236,14 +248,15 @@ object TransformerDirect extends Transformer {
 
         val lambda = js.Lambda((vps ++ bps).map(toJS) ++ biParams,
           js.Return(js.builtin("suspend_bidirectional", js.Variable(prompt), js.ArrayLiteral(biArgs), js.Lambda(List(nameDef(resume)),
-            js.Block(toJS(body)(x => js.Return(x)))))))
+            js.Block(toJS(body)(Continuation.Return))))))
 
         nameDef(id) -> lambda
 
       // (args...) => $effekt.suspend(prompt, (resume) => { ... BODY ... resume(v) ... })
       case Operation(id, tps, cps, vps, bps, Some(resume), body) =>
         val lambda = js.Lambda((vps ++ bps) map toJS,
-          js.Return(js.builtin("suspend", js.Variable(prompt), js.Lambda(List(toJS(resume)), js.Block(toJS(body)(x => js.Return(x)))))))
+          js.Return(js.builtin("suspend", js.Variable(prompt),
+            js.Lambda(List(toJS(resume)), js.Block(toJS(body)(Continuation.Return))))))
 
         nameDef(id) -> lambda
 
@@ -253,23 +266,23 @@ object TransformerDirect extends Transformer {
   def toJS(handler: core.Implementation)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
     js.Object(handler.operations.map {
       case Operation(id, tps, cps, vps, bps, None, body) =>
-        nameDef(id) -> js.Lambda((vps ++ bps) map toJS, js.Block(toJS(body)(x => js.Return(x))))
+        nameDef(id) -> js.Lambda((vps ++ bps) map toJS, js.Block(toJS(body)(Continuation.Return)))
       case Operation(id, tps, cps, vps, bps, Some(k), body) =>
         Context.panic("Object cannot take continuation")
     })
 
   def toJS(d: core.Definition)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): List[js.Stmt] = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      List(js.Function(nameDef(id), (vps ++ bps) map toJS, toJS(body)(x => js.Return(x))))
+      List(js.Function(nameDef(id), (vps ++ bps) map toJS, toJS(body)(Continuation.Return)))
 
     case Definition.Def(id, block) =>
       List(js.Const(nameDef(id), toJS(block)))
 
     case Definition.Let(Wildcard(), core.Run(s)) =>
-      toJS(s)(x => js.ExprStmt(x))
+      toJS(s)(Continuation.Ignore)
 
     case Definition.Let(id, core.Run(s)) =>
-      js.Let(nameDef(id), js.Undefined) :: toJS(s)(x => js.Assign(nameRef(id), x))
+      js.Let(nameDef(id), js.Undefined) :: toJS(s)(Continuation.Assign(id))
 
     case Definition.Let(Wildcard(), binding) =>
       List(js.ExprStmt(toJS(binding)))

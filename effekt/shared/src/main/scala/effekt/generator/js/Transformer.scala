@@ -141,7 +141,7 @@ trait Transformer {
 
   def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
 
-  def nameRef(id: Symbol)(using C: Context): js.Expr = js.Variable(uniqueName(id))
+  def nameRef(id: Symbol): js.Expr = js.Variable(uniqueName(id))
 
   // name references for fields and methods
   def memberNameRef(id: Symbol): JSName = uniqueName(id)
