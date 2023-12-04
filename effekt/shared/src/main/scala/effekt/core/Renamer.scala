@@ -15,8 +15,8 @@ import effekt.context.Context
  */
 class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
 
-  // maps symbols bound in the current scope to their renamed variants.
-  private var bound: List[Map[Id, Id]] = List.empty
+  // list of scopes that map bound symbols to their renamed variants.
+  private var scopes: List[Map[Id, Id]] = List.empty
 
   private var suffix: Int = 0
 
@@ -26,27 +26,18 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
     names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
-    val before = bound
-    val env = ids.map{ x => x -> freshIdFor(x) }.toMap
+    val before = scopes
     try {
-      bound = env :: bound
+      scopes = ids.map { x => x -> freshIdFor(x) }.toMap :: scopes
       f
-    } finally { bound = before }
+    } finally { scopes = before }
 
   /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
-  /** Skip the innermost environment frame temporarily */
-  def unbind[R](f: => R): R = {
-    val before = bound
-    try {
-      bound = bound.tail
-      f
-    } finally { bound = before }
-  }
 
   // free variables are left untouched
   override def id: PartialFunction[core.Id, core.Id] = {
-    case id => bound.collectFirst{
+    case id => scopes.collectFirst {
       case bnds if bnds.contains(id) => bnds(id)
     }.getOrElse(id)
   }
@@ -59,21 +50,27 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
           // can be recursive
           withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
         case core.Definition.Let(id, binding) :: rest =>
-          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), unbind{ rewrite(binding) } )) }
+          // resolve binding in outer scope
+          val resolvedBinding = rewrite(binding)
+          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), resolvedBinding)) }
         case Nil => core.Scope(defs, rewrite(body))
       }
 
       go(definitions, Nil)
 
-    case core.Val(id, binding, body) => withBinding(id) {
-      core.Val(rewrite(id), unbind { rewrite(binding) }, rewrite(body))
-    }
-    case core.Alloc(id, init, reg, body) => withBinding(id) {
-      core.Alloc(rewrite(id), unbind { rewrite(init) } , unbind { rewrite(reg) }, rewrite(body))
-    }
-    case core.Var(id, init, capt, body) => withBinding(id) {
-      core.Var(rewrite(id), unbind { rewrite(init) }, unbind { rewrite(capt) }, rewrite(body))
-    }
+    case core.Val(id, binding, body) =>
+      val resolvedBinding = rewrite(binding)
+      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
+
+    case core.Alloc(id, init, reg, body) =>
+      val resolvedInit = rewrite(init)
+      val resolvedReg = rewrite(reg)
+      withBinding(id) { core.Alloc(rewrite(id), resolvedInit, resolvedReg, rewrite(body)) }
+
+    case core.Var(id, init, capt, body) =>
+      val resolvedInit = rewrite(init)
+      val resolvedCapt = rewrite(capt)
+      withBinding(id) { core.Var(rewrite(id), resolvedInit, resolvedCapt, rewrite(body)) }
   }
 
   override def block: PartialFunction[Block, Block] = {
