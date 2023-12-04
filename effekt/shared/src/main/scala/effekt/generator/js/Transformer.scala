@@ -20,11 +20,14 @@ trait Transformer {
 
   def transformModule(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module
 
+  def run(body: js.Expr): js.Stmt
+
   /**
    * Entrypoint used by the compiler to compile whole programs
    */
   def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
-    val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
+    val exports = List(js.Export(JSName("main"), js.Lambda(Nil, run(js.Call(nameRef(mainSymbol), Nil)))))
+
     val moduleDecl = input.core
     given DeclarationContext = new DeclarationContext(moduleDecl.declarations)
     transformModule(moduleDecl, Nil, exports)

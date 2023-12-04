@@ -18,6 +18,11 @@ import scala.collection.mutable
  * - lambda lifting of known functions is essential, since closures are expensive in JS
  */
 object TransformerDirect extends Transformer {
+
+  // return $effekt.run(() => body)
+  def run(body: js.Expr): js.Stmt =
+    js.Return(builtin("run", js.Lambda(Nil, js.Return(body))))
+
   def transformModule(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module =
     given Locals = new Locals(module)
     toJS(module, imports, exports)
@@ -107,7 +112,6 @@ object TransformerDirect extends Transformer {
     }
   }
 
-
   type Bind = Continuation => List[js.Stmt]
   def Return(result: js.Expr): Bind = k => List(k(result))
   def Bind(b: Bind): Bind = b
@@ -115,7 +119,7 @@ object TransformerDirect extends Transformer {
   def entrypoint(result: JSName, k: JSName, vars: List[JSName], s: List[js.Stmt]): List[js.Stmt] =
     val suspension = freshName("suspension")
     val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
-    List(js.Try(s, suspension, List(js.Throw(js.builtin("push",js.Variable(suspension), frame)))))
+    List(js.Try(s, suspension, List(js.Return(js.builtin("push",js.Variable(suspension), frame)))))
 
   def toJS(s: core.Stmt)(using DC: DeclarationContext, L: Locals, K: Continuations, C: Context): Bind = s match {
 
@@ -180,7 +184,12 @@ object TransformerDirect extends Transformer {
       }
 
     case App(b, targs, vargs, bargs) =>
-      Return(js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS)))
+      val call = js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
+      Bind {
+        // Tail call!
+        case Continuation.Return => List(js.Return(js.builtin("tailcall", js.Lambda(Nil, call))))
+        case k => List(k(call))
+      }
 
     case If(cond, thn, els) =>
       Bind { k => List(js.If(toJS(cond), js.MaybeBlock(toJS(thn)(k)), js.MaybeBlock(toJS(els)(k)))) }
@@ -231,10 +240,6 @@ object TransformerDirect extends Transformer {
     case Put(id, capt, value) =>  Context.panic("Should have been translated to direct style")
 
   }
-
-  // TODO generate fresh prompt (int)
-  //   pass prompt to handler variant of objects, not to others
-
 
   def toJS(handler: core.Implementation, prompt: JSName)(using DeclarationContext, Locals, Continuations, Context): js.Expr =
     js.Object(handler.operations.map {

@@ -41,19 +41,9 @@ function Arena() {
   }
 
   const global = {
-    fresh: function(init) { return Cell(init) }
-  }
-
-  // Result -- Trampoline
-  function Step(c, k) {
-    return { isStep: true, c: c, k: k }
-  }
-  function trampoline(r) {
-    var res = r
-    while (res !== null && res !== undefined && res.isStep) {
-      res = res.c.apply(res.k)
-    }
-    return res
+    fresh: function(init) { return Cell(init) },
+    backup: function() {},
+    restore: function(_) {}
   }
 
   // Lists / Pairs
@@ -73,7 +63,8 @@ function Arena() {
     return result
   }
 
-  var _prompt = 2;
+  const TAILCALL = -1
+  let _prompt = 2;
 
 
   // sealed trait Resumption[A, R]
@@ -90,31 +81,30 @@ function Arena() {
   }
   const Empty = null;
 
+  let _stacksize = 0;
+
+  // unwind the stack for 100 tailcalls
+  const STACK_LIMIT = 100;
+
 
   // TODO maybe inline later to save native frames
   function handleOrRethrow(prompt, s, rest) {
-    // trampoline if tailcall
-    if (s instanceof TailCall) {
-      try { return trampolineTailCall(s) }
-      catch (s) { return handleOrRethrow(prompt, s, rest) }
+    if (!(s instanceof Suspension)) throw s;
 
-    // attempt handling
-    } else if (s instanceof Suspension) {
-      const region = currentRegion
-      const k = new Segment(reverseOnto(s.frames, rest), prompt, region, region.backup(), s.cont)
-      if (s.prompt === prompt)  {
-        return s.body((value) => rewind(k, value))
-      } else {
-        throw new Suspension(s.prompt, s.body, Nil, k)
-      }
-
-    // rethrow
-    } else { throw s; }
+    const region = currentRegion
+    const k = new Segment(reverseOnto(s.frames, rest), prompt, region, region.backup(), s.cont)
+    if (s.prompt === TAILCALL) {
+      return rewind(k, s.body)
+    } else if (s.prompt === prompt)  {
+      return s.body((value) => rewind(k, () => value))
+    } else {
+      throw new Suspension(s.prompt, s.body, Nil, k)
+    }
   }
 
-  function rewind(k, value) {
+  function rewind(k, thunk) {
     if (k === Empty) {
-      return value
+      return thunk()
     } else {
       const prompt = k.prompt;
       const region = k.region;
@@ -125,7 +115,7 @@ function Arena() {
         enterRegion(region);
         region.restore(k.backup);
 
-        let curr = rewind(k.tail, value)
+        let curr = rewind(k.tail, thunk)
         while (rest !== Nil) {
           const f = rest.head
           rest = rest.tail
@@ -140,23 +130,6 @@ function Arena() {
     }
   }
 
-  class TailCall {
-    constructor(closure) {
-      this.force = closure
-    }
-  }
-
-  function trampolineTailCall(t) {
-    if (!(t instanceof TailCall)) throw t;
-    let thunk = t
-
-    while (true) {
-      try { return thunk.force() } catch (t) {
-        if (!(t instanceof TailCall)) throw t
-        thunk = t
-      }
-    }
-  }
 
   // case class Suspend[A, X, Y, R](
   //   body: Continuation[A, R] => R,
@@ -205,6 +178,7 @@ function Arena() {
     freshPrompt: function() { return ++_prompt; },
 
     suspend: function(prompt, body) {
+      _stacksize = 0;
       throw new Suspension(prompt, body, Nil, Empty)
     },
     suspend_bidirectional: function(prompt, caps, body) {
@@ -213,29 +187,28 @@ function Arena() {
 
     // suspension: the raised exception.
     push: function(suspension, frame) {
-      if (suspension instanceof TailCall) {
-        try { return trampolineTailCall(suspension) }
-        catch (s) { return $effekt.push(s, frame) }
-      } else if (suspension instanceof Suspension) {
-        // Assuming `suspension` is a value or variable you want to return
-        return new Suspension(suspension.prompt, suspension.body,
-          Cons(frame, suspension.frames), suspension.cont);
-      } else {
-        throw suspension
-      }
+      if (!(suspension instanceof Suspension)) throw suspension;
+      // Assuming `suspension` is a value or variable you want to return
+      throw new Suspension(suspension.prompt, suspension.body,
+        Cons(frame, suspension.frames), suspension.cont);
     },
 
     handle: function(prompt, s) {
       return handleOrRethrow(prompt, s, Nil)
     },
 
+    // we treat tailcalls as a special/builtin effect
     tailcall: function(thunk) {
-      // TODO maybe count and not throw every tailcall
-      throw new Thunk(thunk)
+      if (++_stacksize > STACK_LIMIT) {
+        _stacksize = 0;
+        throw new Suspension(TAILCALL, thunk, Nil, Empty)
+      } else {
+        return thunk()
+      }
     },
 
     run: function(thunk) {
-      try { return thunk() } catch (t) { return trampolineTailCall(t) }
+      try { return thunk() } catch (t) { return handleOrRethrow(null, t, Nil) }
     },
 
     freshRegion: function() {

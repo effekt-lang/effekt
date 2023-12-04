@@ -17,6 +17,10 @@ import scala.language.implicitConversions
 
 object TransformerMonadic extends Transformer {
 
+  // return BODY.run()
+  def run(body: js.Expr): js.Stmt =
+    js.Return(js.Call(js.Member(body, JSName("run")), Nil))
+
   def transformModule(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module =
     toJS(module, imports, exports)
 
