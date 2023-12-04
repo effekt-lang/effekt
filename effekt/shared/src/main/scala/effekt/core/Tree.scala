@@ -342,7 +342,8 @@ object normal {
              |If this error does occur, this means this changed.
              |Check `core.Transformer.makeFunctionCall` for details.
              |""".stripMargin)
-      case other => Pure.PureApp(callee, targs, vargs)
+      case other =>
+        Pure.PureApp(callee, targs, vargs)
     }
 
   // "match" is a keyword in Scala

@@ -38,6 +38,8 @@ trait Symbol {
     case _             => false
   }
 
+  def show: String = name.toString + id
+
   override def toString: String = name.toString
 }
 object Symbol {

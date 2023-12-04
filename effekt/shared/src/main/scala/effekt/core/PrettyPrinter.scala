@@ -41,6 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case t: BlockType  => format(t)
     case b: Block      => format(b)
     case e: Expr       => format(e)
+    case x: Id         => x.show
   }
 
   val emptyline: Doc = line <> line
@@ -75,7 +76,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   //def toDoc(n: Name): Doc = n.toString
 
-  def toDoc(s: symbols.Symbol): Doc = s.name.name + s.id
+  def toDoc(s: symbols.Symbol): Doc = s.show
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
