@@ -95,7 +95,6 @@ object InlineUnique {
   def once(entrypoints: Set[Id], m: ModuleDecl): (ModuleDecl, Int) = {
     val usage = Reachable(m) ++ entrypoints.map(id => id -> Usage.Many).toMap
     val defs = m.definitions.map(d => d.id -> d).toMap
-
     val context = InlineContext(mutable.Map.from(usage), defs)
 
     val (updatedDefs, _) = rewrite(m.definitions)(using context)

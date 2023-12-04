@@ -151,8 +151,14 @@ enum Stmt {
   // e.g. throw e
   case Throw(expr: Expr)
 
+  // label : while (<EXPR>) { <STMT>* }
+  case While(cond: Expr, stmts: List[Stmt], label: Option[JSName])
+
   // e.g. break
   case Break()
+
+  // e.g. continue l
+  case Continue(label: Option[JSName])
 
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)

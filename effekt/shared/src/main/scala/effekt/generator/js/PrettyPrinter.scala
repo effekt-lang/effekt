@@ -51,6 +51,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Try(prog, id, handler, fin)    => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc)) <+> "finally" <+> jsBlock(fin.map(toDoc))
     case Throw(expr)                   => "throw" <+> toDoc(expr) <> ";"
     case Break()                       => "break;"
+    case Continue(label)               => "continue" <> label.map(l => space <> toDoc(l)).getOrElse(emptyDoc) <> ";"
+    case While(cond, stmts, label)     =>
+      label.map(l => toDoc(l) <> ":" <> space).getOrElse(emptyDoc) <>
+        "while" <+> parens(toDoc(cond)) <+> jsBlock(stmts.map(toDoc))
+
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
       case (tag, stmts) => "case" <+> toDoc(tag) <> ":" <+> nested(stmts map toDoc)
     } ++ default.toList.map { stmts => "default:" <+> nested(stmts map toDoc) })
