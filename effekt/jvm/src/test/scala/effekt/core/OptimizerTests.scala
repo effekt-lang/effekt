@@ -27,7 +27,7 @@ class OptimizerTests extends CoreTests {
 
   def removeUnused(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
-      RemoveUnusedDefinitions.remove(Set(mainSymbol), tree)
+      Deadcode.remove(Set(mainSymbol), tree)
     }
 
   def inlineOnce(input: String, expected: String)(using munit.Location) =
