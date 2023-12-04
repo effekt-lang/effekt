@@ -30,24 +30,17 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         Some(CoreTransformed(source, tree, mod, optimize(Context.checkMain(mod), core)))
     }
 
-  def optimize(mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context) =
+  def optimize(mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-    var tree = RemoveUnusedDefinitions(Set(mainSymbol), core).run()
+    var tree = RemoveUnusedDefinitions.remove(mainSymbol, core)
 
     // (2) inline unique block definitions
-    var lastCount = 1
-    while (lastCount > 0) {
-      val (inlined, count) = InlineUnique.once(Set(mainSymbol), tree)
-      // (3) drop unused definitions after inlining
-      tree = RemoveUnusedDefinitions(Set(mainSymbol), inlined).run()
-      lastCount = count
-    }
-    tree
+    InlineUnique.full(Set(mainSymbol), tree)
 }
 
-class RemoveUnusedDefinitions(entrypoints: Set[Id], m: ModuleDecl) extends core.Tree.Rewrite {
+class RemoveUnusedDefinitions(entrypoints: Set[Id], definitions: Map[Id, Definition]) extends core.Tree.Rewrite {
 
-  val reachable = Reachable(entrypoints, m.definitions.map(d => d.id -> d).toMap)
+  val reachable = Reachable(entrypoints, definitions)
 
   override def stmt = {
     // Remove local unused definitions
@@ -59,18 +52,22 @@ class RemoveUnusedDefinitions(entrypoints: Set[Id], m: ModuleDecl) extends core.
       }, rewrite(stmt))
   }
 
-  def run(): ModuleDecl = {
-    m.copy(
-      // Remove top-level unused definitions
-      definitions = m.definitions.filter { d => reachable.isDefinedAt(d.id) }.map(rewrite),
-      externs = m.externs.collect {
-        case e: Extern.Def if reachable.isDefinedAt(e.id) => e
-        case e: Extern.Include => e
-      }
-    )
-  }
+  override def rewrite(m: ModuleDecl): ModuleDecl = m.copy(
+    // Remove top-level unused definitions
+    definitions = m.definitions.collect { case d if reachable.isDefinedAt(d.id) => rewrite(d) },
+    externs = m.externs.collect {
+      case e: Extern.Def if reachable.isDefinedAt(e.id) => e
+      case e: Extern.Include => e
+    }
+  )
 }
 
+object RemoveUnusedDefinitions {
+  def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
+    RemoveUnusedDefinitions(entrypoints, m.definitions.map(d => d.id -> d).toMap).rewrite(m)
+  def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
+    remove(Set(entrypoint), m)
+}
 /**
  * Inlines block definitions that are only used exactly once.
  *
@@ -104,6 +101,17 @@ object InlineUnique {
     val (updatedDefs, _) = rewrite(m.definitions)(using context)
     (m.copy(definitions = updatedDefs), context.inlineCount.value)
   }
+
+  def full(entrypoints: Set[Id], m: ModuleDecl) =
+    var lastCount = 1
+    var tree = m
+    while (lastCount > 0) {
+      val (inlined, count) = InlineUnique.once(entrypoints, tree)
+      // (3) drop unused definitions after inlining
+      tree = RemoveUnusedDefinitions.remove(entrypoints, inlined)
+      lastCount = count
+    }
+    tree
 
   def shouldInline(id: Id)(using ctx: InlineContext): Boolean =
     ctx.usage.get(id) match {
