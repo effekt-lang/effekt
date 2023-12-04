@@ -25,12 +25,6 @@ class JavaScriptTests extends EffektTests {
     // we deprecated locally defined type and effect declarations, for now.
     examplesDir / "neg" / "existential_effect_leaks.effekt",
     examplesDir / "neg" / "scoped.effekt",
-
-    // Missing features in new direct style backend:
-    // ---------------------------------------------
-
-    // trampolining
-    examplesDir / "pos" / "stacksafe.effekt"
   )
 }
 
