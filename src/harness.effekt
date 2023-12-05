@@ -1,8 +1,7 @@
-module examples/fasteffekt/harness
+module harness
 
-
-import examples/fasteffekt/permute
-import examples/fasteffekt/list
+import src/permute
+import src/list
 import io/args
 import text/string
 
