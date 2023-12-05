@@ -32,13 +32,13 @@ class OptimizerTests extends CoreTests {
 
   def inlineOnce(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
-      val (result, count) = InlineUnique.once(Set(mainSymbol), tree)
+      val (result, count) = Inline.once(Set(mainSymbol), tree)
       result
     }
 
   def inlineFull(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
-      InlineUnique.full(Set(mainSymbol), tree)
+      Inline.full(Set(mainSymbol), tree)
     }
 
   test("toplevel"){
