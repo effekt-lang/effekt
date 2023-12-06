@@ -10,7 +10,7 @@ import kiama.util.Source
  */
 case class MarkdownSource(source: Source) extends Source {
 
-  val fenceLine = """^```\s*(effekt)?\s*(:[^`]*)?$""".r
+  val fenceLine = """^```\s*(effekt)?\s*((\s|:)[^`]*)?$""".r
   val otherFenceLine = """^```[^`\n]*$""".r
 
   def name = source.name
