@@ -136,9 +136,10 @@ trait Transformer {
   def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
 
   val `fresh` = JSName("fresh")
-  val `tag` = JSName("__tag")
-  val `name` = JSName("__name")
-  val `data` = JSName("__data")
+  val `ref`   = JSName("ref")
+  val `tag`   = JSName("__tag")
+  val `name`  = JSName("__name")
+  val `data`  = JSName("__data")
 
   def nameDef(id: Symbol): JSName = uniqueName(id)
 
