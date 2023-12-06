@@ -95,6 +95,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // disable tests for assembly to speed up build
     assembly / test := {},
 
+    // Options to compile Effekt with native-image
+    // -------------------------------------------
+    nativeImageOptions ++= Seq(
+      "--no-fallback",
+      "--initialize-at-build-time",
+      "--report-unsupported-elements-at-runtime",
+      "-H:DynamicProxyConfigurationFiles=../../../../project/dynamic-proxies.json"
+    ),
+
     // Assembling one big jar-file and packaging it
     // --------------------------------------------
     assembly / mainClass := Some("effekt.Server"),
