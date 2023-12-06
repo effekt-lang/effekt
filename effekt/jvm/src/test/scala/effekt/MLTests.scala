@@ -77,13 +77,13 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "mutualrecursion.effekt",
 
     // heap
-    examplesDir / "casestudies" / "ad.md",
+    examplesDir / "casestudies" / "ad.effekt..md",
 
     // regex
-    examplesDir / "casestudies" / "anf.md",
-    examplesDir / "casestudies" / "lexer.md",
-    examplesDir / "casestudies" / "parser.md",
-    examplesDir / "casestudies" / "prettyprinter.md",
+    examplesDir / "casestudies" / "anf.effekt.md",
+    examplesDir / "casestudies" / "lexer.effekt.md",
+    examplesDir / "casestudies" / "parser.effekt.md",
+    examplesDir / "casestudies" / "prettyprinter.effekt.md",
     examplesDir / "pos" / "simpleparser.effekt",
 
     // cont
@@ -102,8 +102,8 @@ class MLTests extends EffektTests {
 
     // Unclear issue
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
-    examplesDir / "casestudies" / "buildsystem.md",
-    examplesDir / "casestudies" / "naturalisticdsls.md",
+    examplesDir / "casestudies" / "buildsystem.effekt.md",
+    examplesDir / "casestudies" / "naturalisticdsls.effekt.md",
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
     examplesDir / "pos" / "emptymatch.effekt",
