@@ -55,7 +55,7 @@ lazy val testingDependencies = Seq(
   "org.scalameta" %% "munit" % "0.7.29" % Test
 )
 
-lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("kiama"))
+lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
   .settings(commonSettings)
   .settings(noPublishSettings)
   .settings(
@@ -63,9 +63,6 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatf
   )
   .jvmSettings(
     libraryDependencies ++= (replDependencies ++ lspDependencies)
-  )
-  .nativeSettings(
-    // TODO
   )
 
 lazy val root = project.in(file("effekt"))
@@ -75,14 +72,14 @@ lazy val root = project.in(file("effekt"))
     Compile / run := (effekt.jvm / Compile / run).evaluated
   ))
 
-lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("effekt"))
+lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
     version := effektVersion
   )
   .settings(commonSettings)
   .dependsOn(kiama)
-  // .enablePlugins(NativeImagePlugin)
+  .enablePlugins(NativeImagePlugin)
   .jvmSettings(
     libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
 
@@ -97,20 +94,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlat
 
     // disable tests for assembly to speed up build
     assembly / test := {},
-
-
-    // Options to compile Effekt with native-image
-    // -------------------------------------------
-    //    nativeImageOptions ++= Seq(
-    //      "--no-fallback",
-    //      "--initialize-at-build-time",
-    //      "--report-unsupported-elements-at-runtime",
-    //      "-H:+ReportExceptionStackTraces",
-    //      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
-    //      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
-    //      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
-    //    ),
-
 
     // Assembling one big jar-file and packaging it
     // --------------------------------------------
@@ -175,11 +158,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform, NativePlat
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
-  .nativeSettings(
-    // TODO
-  )
-
-lazy val effektNative = effekt.native
 
 lazy val platform = Def.task {
   val platformString = System.getProperty("os.name").toLowerCase
