@@ -109,7 +109,7 @@ object JSRunner extends Runner[String] {
     val jsFilePath = (out / path).unixPath
     // create "executable" using shebang besides the .js file
     val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
-    val jsScript = s"require('${jsFilePath}').main().run()"
+    val jsScript = s"require('${jsFilePath}').main()"
     val shebang = "#!/usr/bin/env node"
     IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
     jsScriptFilePath
@@ -213,7 +213,7 @@ object MLRunner extends Runner[String] {
    * Requires the MLton compiler to be installed on the machine.
    * Assumes [[path]] has the format "SOMEPATH.sml".
    */
-  override def build(path: String)(using C: Context): String = 
+  override def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
     val buildFile = (out / "main.mlb").canonicalPath
     val executable = (out / "mlton-main").canonicalPath

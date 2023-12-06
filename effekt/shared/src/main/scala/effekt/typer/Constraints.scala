@@ -228,6 +228,7 @@ class Constraints(
     updateSubstitution()
 
   def solve(toRemove: Set[CNode]): Unit =
+
     // (1) Remove them from pending
     pendingInactive = pendingInactive -- toRemove
 

@@ -1,0 +1,16 @@
+effect raise(): Int
+
+
+def main() =
+  try {
+    val x = {
+      def f(n: Int): Int / {} =
+        {
+          val z = if (true) do raise() else { do raise() + 1 };
+          z
+        }
+      val z = f(1);
+      f(2)
+    }
+    println(x)
+  } with e1: raise { println("Inner Handler!") }

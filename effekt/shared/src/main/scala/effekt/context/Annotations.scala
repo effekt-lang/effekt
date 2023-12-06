@@ -29,7 +29,7 @@ class Annotations private(
 
   def copy: Annotations = new Annotations(annotations)
 
-  private def annotationsAt[K, V](ann: Annotation[K, V]): Map[Key[K], V] =
+  def annotationsAt[K, V](ann: Annotation[K, V]): Map[Key[K], V] =
     annotations.getOrElse(ann, Map.empty).asInstanceOf
 
   def update[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
@@ -88,6 +88,10 @@ object Annotations {
       case k: Key[_] => key == k.key
       case _         => false
     }
+  }
+
+  object Key {
+    def unapply[T](k: Key[T]): Option[T] = Some(k.key)
   }
 
   private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] =

@@ -50,7 +50,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, transform(tpe))
-    case core.BlockParam(id, tpe) => BlockParam(id, transform(tpe))
+    case core.BlockParam(id, tpe, capt) => BlockParam(id, transform(tpe))
   }
 
   def transform(tpe: core.ValueType): lifted.ValueType = tpe match {
@@ -104,7 +104,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       val self = Param.EvidenceParam(EvidenceSymbol()) // will never be used!
       val eparams = bps map {
-        case core.BlockParam(id, tpe) => Param.EvidenceParam(EvidenceSymbol())
+        case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
       }
       Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), body)
     case core.Extern.Include(contents) =>
@@ -115,7 +115,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Param.ValueParam(id, tpe) => lifted.Param.ValueParam(id, transform(tpe))
   }
   def transform(p: core.Param.BlockParam): lifted.Param.BlockParam = p match {
-    case core.Param.BlockParam(id, tpe) => lifted.Param.BlockParam(id, transform(tpe))
+    case core.Param.BlockParam(id, tpe, capt) => lifted.Param.BlockParam(id, transform(tpe))
   }
 
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
@@ -140,7 +140,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // introduce one evidence symbol per blockparam
       val transformedParams = params map {
-        case p @ core.BlockParam(id, tpe) =>
+        case p @ core.BlockParam(id, tpe, capt) =>
           environment = environment.bind(id)
           transform(p)
       }
@@ -163,7 +163,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // introduce one evidence symbol per blockparam
       val transformedParams = params map {
-        case p @ core.BlockParam(id, tpe) =>
+        case p @ core.BlockParam(id, tpe, capt) =>
           environment = environment.bind(id)
           transform(p)
       }
@@ -268,7 +268,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // introduce one evidence symbol per blockparam
       val evidenceParams = bps map {
-        case core.BlockParam(id, tpe) =>
+        case core.BlockParam(id, tpe, capt) =>
           val ev = EvidenceSymbol()
           environment = environment.bind(id, Lift.Var(ev))
           Param.EvidenceParam(ev)

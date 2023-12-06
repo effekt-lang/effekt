@@ -1,0 +1,16 @@
+effect Amb { def flip(): Boolean }
+
+def ex1() =  {
+
+  val f: () => Unit at {} = box {
+    try {
+      var x = 1;
+      if (do flip()) { x = 2 }
+      // uses {io}
+      println(x)
+    } with amb:Amb { def flip() = { resume(false) } }
+  }
+  f()
+}
+
+def main() = ex1()
