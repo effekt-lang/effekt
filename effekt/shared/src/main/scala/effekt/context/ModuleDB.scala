@@ -43,7 +43,7 @@ trait ModuleDB { self: Context =>
     }
 
   private def stripSuffix(path: String): String =
-    path.stripSuffix(".effekt").stripSuffix(".md")
+    path.stripSuffix(".md").stripSuffix(".effekt")
 
   /**
    * Tries to find a module for the given source, will run compiler on demand

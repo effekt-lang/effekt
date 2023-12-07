@@ -34,11 +34,11 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "propagators.effekt",
 
     // the number representations differ in JS and Chez
-    examplesDir / "casestudies" / "ad.md",
+    examplesDir / "casestudies" / "ad.effekt.md",
 
     // in the CallCC variant, we cannot have toplevel vals at the moment (their bindings need to be wrapped in `(run (thunk ...))`
     // see comment on commit 61492d9
-    examplesDir / "casestudies" / "anf.md",
+    examplesDir / "casestudies" / "anf.effekt.md",
 
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",

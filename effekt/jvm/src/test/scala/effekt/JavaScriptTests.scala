@@ -47,7 +47,7 @@ object TestUtils {
   def generateCheckFilesIn(dir: File, regenerateAll: Boolean): Unit = {
     dir.listFiles.foreach {
       case f if f.isDirectory && !ignored.contains(f) => generateCheckFilesIn(f, regenerateAll)
-      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
+      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
         val checkfile = path / (baseName + ".check")

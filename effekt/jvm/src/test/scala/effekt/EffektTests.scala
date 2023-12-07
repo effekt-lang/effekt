@@ -51,7 +51,7 @@ trait EffektTests extends munit.FunSuite {
     dir.listFiles.foreach {
       case f if f.isDirectory && !ignored.contains(f) =>
         runPositiveTestsIn(f)
-      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
+      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
 

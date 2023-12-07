@@ -14,9 +14,3 @@ Other, independent case studies:
 
 - [Automatic Differentiation](ad.md): Using effect handlers to implement backpropagation.
 - [Naturalistic DSLs](naturalisticdsls.md): Using effect handlers to model linguistic effects and express natural language examples.
-
----
-_(Please do not be confused by the following, which is necessary since these Markdown files are executed as tests)_
-```
-def main() = ()
-```
