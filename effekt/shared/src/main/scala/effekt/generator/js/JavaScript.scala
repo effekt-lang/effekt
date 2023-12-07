@@ -42,19 +42,19 @@ class JavaScript extends Compiler[String] {
     Frontend andThen Middleend andThen DirectStyleMutableState andThen core.LambdaLifting
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      val doc = pretty(TransformerDirect.compile(input, mainSymbol).commonjs)
+      val doc = pretty(TransformerMonadic.compile(input, mainSymbol).commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
   // The Compilation Pipeline for VSCode
   // -----------------------------------
   lazy val Separate:  Phase[Source, (CoreTransformed, Module)] =
-    allToCore(Core) andThen all(core.LambdaLifting) map { in =>
-        (in.main, TransformerDirect.compileSeparate(in))
+    allToCore(Core) map { in =>
+        (in.main, TransformerMonadic.compileSeparate(in))
     }
 
   private def pretty(stmts: List[js.Stmt]): Document =

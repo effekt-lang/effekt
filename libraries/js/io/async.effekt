@@ -22,7 +22,7 @@ extern io def readPromise(path: String): Promise[String] =
   "fsPromises.readFile(path, 'utf8')"
 
 extern io def awaitPromise[T, R](p: Promise[T], cont: T => R at {io}): R =
-  "p.then(cont)"
+  "p.then(res => cont(res).run())"
 
 extern io def fork(process: () => Unit at {io}): Unit =
-  "setTimeout(() => process(), 0)"
+  "setTimeout(() => process().run(), 0)"
