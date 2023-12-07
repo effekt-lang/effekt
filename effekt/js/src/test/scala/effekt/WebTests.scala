@@ -40,7 +40,7 @@ object WebTests extends TestSuite {
     def evaluate[A](imports: List[String], content: String) = {
       server.writeFile("interactive.effekt", imports.map(i => s"import $i").mkString("\n") + s"\n\ndef main() = ${content}")
       val mainFile = server.compileFile("interactive.effekt")
-      load(mainFile.replace("out/", "")).main().asInstanceOf[A]
+      load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]
     }
 
     test("Evaluate simple expressions in REPL") {

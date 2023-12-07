@@ -164,7 +164,7 @@ object TransformerMonadic extends Transformer {
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)
-      (js.Const(nameDef(id), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
+      (js.Const(nameDef(id), js.MethodCall($effekt, `ref`, toJS(init))) :: stmts, ret)
 
     case Alloc(id, init, region, body) =>
       val (stmts, ret) = toJSStmt(body)
