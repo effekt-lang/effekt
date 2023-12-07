@@ -225,6 +225,7 @@
 {
   "name":"org.eclipse.lsp4j.DocumentFormattingParams",
   "allDeclaredMethods":true,
+  "allDeclaredFields":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
@@ -296,6 +297,11 @@
 },
 {
   "name":"org.eclipse.lsp4j.FormattingCapabilities",
+  "allDeclaredFields":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"org.eclipse.lsp4j.FormattingOptions",
   "allDeclaredFields":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
