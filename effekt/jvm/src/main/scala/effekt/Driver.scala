@@ -54,7 +54,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    * In LSP mode: invoked for each file opened in an editor
    */
   override def compileSource(source: Source, config: EffektConfig): Unit = try {
-    val src = if (source.name.endsWith(".effekt.md")) { MarkdownSource(source) } else { source }
+    val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
 
     // remember that we have seen this source, this is used by LSP (kiama.util.Server)
     sources(source.name) = src
