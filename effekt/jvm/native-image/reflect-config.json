@@ -38,7 +38,8 @@
 },
 {
   "name":"kiama.util.SetTraceNotificationParams",
-  "allDeclaredFields":true
+  "allDeclaredFields":true,
+  "allPublicConstructors":true
 },
 {
   "name":"org.eclipse.lsp4j.CallHierarchyCapabilities",
@@ -222,6 +223,11 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"org.eclipse.lsp4j.DocumentFormattingParams",
+  "allDeclaredMethods":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
   "name":"org.eclipse.lsp4j.DocumentHighlightCapabilities",
   "allDeclaredFields":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
@@ -270,6 +276,11 @@
 },
 {
   "name":"org.eclipse.lsp4j.ExecuteCommandOptions",
+  "allDeclaredFields":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"org.eclipse.lsp4j.ExecuteCommandParams",
   "allDeclaredFields":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
@@ -417,16 +428,6 @@
 },
 {
   "name":"org.eclipse.lsp4j.SelectionRangeCapabilities",
-  "allDeclaredFields":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"org.eclipse.lsp4j.SemanticHighlightingCapabilities",
-  "allDeclaredFields":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"org.eclipse.lsp4j.SemanticHighlightingServerCapabilities",
   "allDeclaredFields":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },

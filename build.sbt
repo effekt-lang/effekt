@@ -101,7 +101,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       "--no-fallback",
       "--initialize-at-build-time",
       "--report-unsupported-elements-at-runtime",
-      "-H:DynamicProxyConfigurationFiles=../../../../project/dynamic-proxies.json"
+      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json",
+      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
+      "-H:+ReportExceptionStackTraces",
+      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
     ),
 
     // Assembling one big jar-file and packaging it
