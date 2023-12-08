@@ -171,8 +171,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     assembleJS := {
       (Compile / clean).value
       (Compile / compile).value
-      val resultDir = (Compile / fastLinkJSOutput).value
-      val jsFile = IO.listFiles(resultDir, "main.js")(0)
+      val jsFile = (Compile / fullOptJS).value.data
       val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
       IO.copyFile(jsFile, outputFile)
     },
