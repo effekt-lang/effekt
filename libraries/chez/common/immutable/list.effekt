@@ -22,6 +22,45 @@ def foreach[A](l: List[A]) { f: A => Unit } : Unit =
       foreach(rest) { a => f(a) }
   }
 
+def foreachIndex[A](l: List[A]) { f: (Int, A) => Unit } : Unit = {
+  def loop(remainder: List[A], i: Int): Unit =
+   if (not(remainder.isEmpty)) remainder match {
+    case Nil() => ()
+    case Cons(a, as) => f(i, a); loop(as, i + 1)
+  }
+
+  loop(l, 0)
+}
+
+def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+  def loop(lst: List[A], acc: List[B]): List[B] = lst match {
+    case Nil() => acc
+    case Cons(a, as) =>
+      val optB = f(a)
+      optB match {
+        case None() => loop(as, acc)
+        case Some(b) => loop(as, Cons(b, acc))
+      }
+  }
+  loop(l, Nil()).reverse
+}
+
+def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
+  def loop(lst: List[A], acc: List[B]): List[B] = lst match {
+    case Nil() => acc
+    case Cons(a, as) =>
+      val bs = f(a)
+      loop(as, acc.append(bs))
+  }
+  loop(l, Nil())
+}
+
+def sum(l: List[Int]): Int =
+  l match {
+    case Nil() => 0
+    case Cons(a, as) => a + sum(as)
+  }
+
 def size[A](l: List[A]): Int = l match {
   case Nil() => 0
   case Cons(_, rest) => 1 + rest.size

@@ -1,0 +1,11 @@
+module examples/pos/list/sum
+
+import immutable/list
+
+def main() = {
+  val empty = Nil[Int]()
+  println(empty.sum())
+
+  val l = [1, 2, 3]
+  println(l.sum())
+}

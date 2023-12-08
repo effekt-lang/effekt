@@ -195,8 +195,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(reg)
 
         val inferredCapture = Context.freshCaptVar(CaptUnificationVar.RegionRegion(tree))
-        given Captures = Context.without(inferredCapture, List(reg.capture))
-        checkStmt(body, expected)
+
+        try {
+          given Captures = Context.without(inferredCapture, List(reg.capture))
+          checkStmt(body, expected)
+        } finally { usingCapture(inferredCapture) }
 
       case tree @ source.TryHandle(prog, handlers) =>
 
@@ -537,8 +540,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context in {
           Context.bind(sym, stTpe, stCapt)
           val inferredCapture = Context.freshCaptVar(CaptUnificationVar.VarRegion(d))
-          given Captures = Context.without(inferredCapture, List(sym.capture))
-          val Result(res, eff) = checkStmt(rest, expected)
+          val Result(res, eff) = try {
+            given Captures = Context.without(inferredCapture, List(sym.capture))
+            checkStmt(rest, expected)
+          } finally { usingCapture(inferredCapture) }
+
           Result(res, eff ++ effBind)
         }
 

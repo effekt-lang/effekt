@@ -1,6 +1,7 @@
 import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
+import benchmarks._
 
 // additional targets that can be used in sbt
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
@@ -9,7 +10,6 @@ lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.
 lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
-
 
 lazy val effektVersion = "0.2.1"
 
@@ -20,6 +20,7 @@ lazy val noPublishSettings = Seq(
 
 lazy val commonSettings = Seq(
   scalaVersion := "3.3.1",
+  semanticdbEnabled := true,
   scalacOptions ++= Seq(
     "-encoding", "utf8",
     "-deprecation",
@@ -27,6 +28,9 @@ lazy val commonSettings = Seq(
     // "-Xlint",
     // "-Xcheck-macros",
     "-Xfatal-warnings",
+    // we can use scalafix's organize imports once the next Scala version is out.
+    // https://github.com/scalacenter/scalafix/pull/1800
+    // "-Wunused:imports",
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
@@ -155,7 +159,11 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     },
     generateDocumentation := TreeDocs.replacer.value,
     Compile / sourceGenerators += versionGenerator.taskValue,
-    Compile / sourceGenerators += TreeDocs.generator.taskValue
+    Compile / sourceGenerators += TreeDocs.generator.taskValue,
+
+    collectBenchmarks := benchmarks.collect.value,
+    buildBenchmarks   := benchmarks.build.value,
+    bench             := benchmarks.measure.value
   )
   .jsSettings(
 

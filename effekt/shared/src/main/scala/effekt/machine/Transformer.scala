@@ -135,13 +135,6 @@ object Transformer {
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
         // TODO deal with BlockLit
         id match {
-          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock() =>
-            // TODO this is a hack, values is in general shorter than environment
-            val environment = getBlocksParams(id)
-            transform(args).run { values =>
-              // Here we actually need a substitution to prepare the environment for the jump
-              Substitute(environment.zip(values), Jump(Label(transform(id), environment)))
-            }
           case symbols.BlockParam(_, _) =>
             transform(args).run { values =>
               Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values)
@@ -154,8 +147,12 @@ object Transformer {
               PushStack(Variable(transform(id), Type.Stack()),
                 Return(returnedValues))
             }
-          case _ =>
-            ErrorReporter.abort(s"Unsupported blocksymbol: $id")
+          case other =>
+            val environment = getBlocksParams(id)
+            transform(args).run { values =>
+              // Here we actually need a substitution to prepare the environment for the jump
+              Substitute(environment.zip(values), Jump(Label(transform(id), environment)))
+            }
         }
 
 

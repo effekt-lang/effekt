@@ -115,6 +115,11 @@ extern pure def floor(d: Double): Int =
 extern pure def ceil(d: Double): Int =
   "Math.ceil(d)"
 
+def min(n: Int, m: Int): Int =
+    if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+    if (n > m) n else m
 
 // Comparison ops
 // ==============

@@ -9,21 +9,31 @@ import scala.language.implicitConversions
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
+  override val defaultIndent = 2
+
   def toDoc(name: JSName): Doc = name.name
 
   def format(stmts: List[Stmt]): Document =
     pretty(vsep(stmts map toDoc, line))
 
   def toDoc(expr: Expr): Doc = expr match {
-    case Call(callee, args)           => toDoc(callee) <> parens(args map toDoc)
+    case Call(callee, args)           => toDocParens(callee) <> parens(args map toDoc)
     case RawExpr(raw)                 => string(raw)
-    case Member(callee, selection)    => toDoc(callee) <> "." <> toDoc(selection)
+    case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
-    case Lambda(params, Return(expr)) => parens(parens(params map toDoc) <+> "=>" <> nested(toDoc(expr)))
-    case Lambda(params, body)         => parens(parens(params map toDoc) <+> "=>" <> nested(toDoc(body)))
+    case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
+    case Lambda(params, Block(stmts)) => parens(params map toDoc) <+> "=>" <+> jsBlock(stmts.map(toDoc))
+    case Lambda(params, body)         => parens(params map toDoc) <+> "=>" <> jsBlock(toDoc(body))
     case Object(properties)           => group(jsBlock(vsep(properties.map { case (n, d) => toDoc(n) <> ":" <+> toDoc(d) }, comma)))
     case ArrayLiteral(elements)       => brackets(elements map toDoc)
     case Variable(name)               => toDoc(name)
+  }
+
+  // to be used in low precedence positions
+  def toDocParens(e: Expr): Doc = e match {
+    case e: IfExpr => parens(toDoc(e))
+    case e: Lambda => parens(toDoc(e))
+    case e => toDoc(e)
   }
 
   def toDoc(stmt: Stmt): Doc = stmt match {
@@ -32,12 +42,28 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(expr)                  => "return" <+> toDoc(expr) <> ";"
     case ExprStmt(expr)                => toDoc(expr) <> ";"
     case Const(id, expr)               => "const" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
+    case Let(id, expr)                 => "let" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
     case Destruct(ids, expr)           => "const" <+> braces(hsep(ids.map(toDoc), comma)) <+> "=" <+> toDoc(expr) <> ";"
     case Assign(target, expr)          => toDoc(target) <+> "=" <+> toDoc(expr) <> ";"
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)
+    case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
+    case Try(prog, id, handler, Nil)   => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
+    case Try(prog, id, handler, fin)    => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc)) <+> "finally" <+> jsBlock(fin.map(toDoc))
+    case Throw(expr)                   => "throw" <+> toDoc(expr) <> ";"
+    case Break()                       => "break;"
+    case Continue(label)               => "continue" <> label.map(l => space <> toDoc(l)).getOrElse(emptyDoc) <> ";"
+    case While(cond, stmts, label)     =>
+      label.map(l => toDoc(l) <> ":" <> space).getOrElse(emptyDoc) <>
+        "while" <+> parens(toDoc(cond)) <+> jsBlock(stmts.map(toDoc))
+
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
-      case (tag, body) => "case" <+> toDoc(tag) <> ":" <+> toDoc(body)
-    } ++ default.toList.map { body => "default:" <+> toDoc(body) })
+      case (tag, stmts) => "case" <+> toDoc(tag) <> ":" <+> nested(stmts map toDoc)
+    } ++ default.toList.map { stmts => "default:" <+> nested(stmts map toDoc) })
+  }
+
+  def toDoc(pattern: Pattern): Doc = pattern match {
+    case Pattern.Variable(name) => toDoc(name)
+    case Pattern.Array(ps) => brackets(ps map toDoc)
   }
 
   // some helpers
@@ -46,11 +72,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 
+  def nested(docs: List[Doc]): Doc = group(nest(line <> vcat(docs)))
+
   def parens(docs: List[Doc]): Doc = parens(hsep(docs, comma))
 
   def brackets(docs: List[Doc]): Doc = brackets(hsep(docs, comma))
 
   def jsBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
 
-  def jsBlock(docs: List[Doc]): Doc = jsBlock(vsep(docs, line))
+  def jsBlock(docs: List[Doc]): Doc = jsBlock(vcat(docs))
 }

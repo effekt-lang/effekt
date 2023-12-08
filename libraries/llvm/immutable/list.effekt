@@ -17,10 +17,48 @@ def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
   }
 }
 
+def foreachIndex[T](list: List[T]){ f: (Int, T) => Unit}: Unit = {
+  def worker[T](list: List[T], i: Int){ f: (Int, T) => Unit}: Unit = {
+    list match {
+      case Nil() => ();
+      case Cons(head, tail) => f(i, head); worker(tail, i+1){f}
+
+    }
+  };
+  worker(list,0){f};
+}
+
 def map[A, B](l: List[A]) { f: A => B } : List[B] = {
   var acc = Nil[B]()
   l.foreach { el => acc = Cons(f(el), acc) }
   acc.reverse
+}
+
+def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+  var acc = Nil[B]()
+  l.foreach { a =>
+    val optB = f(a)
+    optB match {
+      case None() => ();
+      case Some(b) => acc = Cons(b, acc);
+    }
+  }
+  acc.reverse
+}
+
+def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
+  var acc = Nil[B]()
+  l.foreach { a =>
+    val bs = f(a)
+    acc = acc.append(bs)
+  }
+  acc
+}
+
+def sum(list: List[Int]): Int = {
+  var n = 0;
+  list.foreach { x => n = n + x };
+  n
 }
 
 def size[A](l: List[A]): Int = {
