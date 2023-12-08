@@ -8,6 +8,7 @@ lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
 lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 lazy val install = taskKey[Unit]("Installs the current version locally")
+lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 
@@ -166,6 +167,14 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     bench             := benchmarks.measure.value
   )
   .jsSettings(
+
+    assembleJS := {
+      (Compile / clean).value
+      (Compile / compile).value
+      val jsFile = (Compile / fullOptJS).value.data
+      val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
+      IO.copyFile(jsFile, outputFile)
+    },
 
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
