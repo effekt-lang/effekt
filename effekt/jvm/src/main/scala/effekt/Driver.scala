@@ -102,7 +102,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     report(source, C.messaging.buffer, config)
     
     // exit with non-zero code if not in repl/server mode and messaging buffer contains errors
-    if (!(config.repl() || config.server()) && C.messaging.hasErrors)
+    if (config.exitOnError() && C.messaging.hasErrors)
       sys.exit(1)
   }
 }

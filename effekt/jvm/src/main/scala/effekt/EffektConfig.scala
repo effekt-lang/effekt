@@ -123,6 +123,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   def repl(): Boolean = filenames().isEmpty && !server() && !compile()
 
+  def exitOnError(): Boolean = !repl() && !server()
+
   validateFilesIsDirectory(includePath)
 
   // force some other configs manually to initialize them when compiling with native-image
