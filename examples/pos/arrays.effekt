@@ -18,12 +18,12 @@ def main() = {
     put(arr, 4, "foo");
     println(show(get(arr, 4)))
 
-    val arrWithVals = arrayFromValue(4,"Hello World");
+    val arrWithVals = fill(4, "Hello World");
     println(arrWithVals)
 
-    val arrByF = arrayFromLoop(5){ i => i };
+    val arrByF = build(5){ i => i };
     println(arrByF);
 
-    var arrByList = arrayFromList([1,5,17]);
+    var arrByList = fromList([1, 5, 17]);
     println(arrByList)
 }

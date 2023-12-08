@@ -94,6 +94,12 @@ extern pure def toInt(d: Double): Int =
 extern pure def toDouble(d: Int): Double =
   "d"
 
+def min(n: Int, m: Int): Int =
+    if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+    if (n > m) n else m
+
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Boolean =

@@ -1,6 +1,6 @@
 import mutable/array
 
 def main() = {
-  val array = arrayFromList([1,2,3]);
+  val array = fromList([1,2,3]);
   println(array.toList)
 }
