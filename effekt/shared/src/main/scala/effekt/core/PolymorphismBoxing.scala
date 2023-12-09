@@ -204,8 +204,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(pure: Pure)(using PContext): Pure = pure match {
     case Pure.ValueVar(id, annotatedType) => Pure.ValueVar(id, transform(annotatedType))
     case Pure.Literal(value, annotatedType) => Pure.Literal(value, transform(annotatedType))
-    case Pure.PureApp(b, targs, vargs) =>
-      instantiate(b, targs).callPure(b, vargs map transform)
+    case Pure.PureApp(b, targs, vargs) => instantiate(b, targs).callPure(b, vargs map transform)
+    case m : Pure.Make => ???
     case Pure.Select(target, field, annotatedType) => {
       val (symbol, targs) = target.tpe match {
         case ValueType.Data(symbol, targs) => (symbol, targs)

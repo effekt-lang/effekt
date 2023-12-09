@@ -169,12 +169,24 @@ case class Run(s: Stmt) extends Expr
  * -------------------------------------------
  */
 enum Pure extends Expr {
+
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
 
-  // invariant, block b is pure.
+  /**
+   * Pure FFI calls. Invariant, block b is pure.
+   */
   case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+
+  /**
+   * Constructor calls
+   */
+  case Make(constructor: Id, dataType: ValueType/* .Data */, targs: List[ValueType], vargs: List[Pure])
+
+  /**
+   * Record Selection
+   */
   case Select(target: Pure, field: Id, annotatedType: ValueType)
 
   case Box(b: Block, annotatedCapture: Captures)
@@ -333,6 +345,9 @@ object normal {
       case other => Stmt.App(callee, targs, vargs, bargs)
     }
 
+  def make(id: Id, tpe: ValueType, targs: List[ValueType], vargs: List[Pure]): Pure =
+    Pure.Make(id, tpe, targs, vargs)
+
   def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
     callee match {
       case b : Block.BlockLit =>
@@ -347,9 +362,16 @@ object normal {
     }
 
   // "match" is a keyword in Scala
-  // TODO perform matching here, if scrutinee statically known
   def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
-    Match(scrutinee, clauses, default)
+    scrutinee match {
+      case Pure.Make(constructor, dataType, targs, vargs) =>
+        clauses.collectFirst { case (tag, lit) if tag == constructor => lit }
+          .map(body => app(body, Nil, vargs, Nil))
+          .orElse { default }.getOrElse { sys error "Should not happen" }
+      case other =>
+        Match(scrutinee, clauses, default)
+    }
+
 
   def directApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
     callee match {
@@ -544,6 +566,7 @@ object Variables {
     case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
+    case Pure.Make(constr, tpe, targs, vargs) => all(vargs, free)
     case Pure.Select(target, field, annotatedType) => free(target)
     case Pure.Box(b, annotatedCapture) => free(b)
   }
@@ -747,6 +770,10 @@ object substitutions {
 
       case Literal(value, annotatedType) =>
         Literal(value, substitute(annotatedType))
+
+      case Make(id, tpe, targs, vargs) =>
+        // do we EVER substitute constructor ids?
+        Make(id, substitute(tpe), targs.map(substitute), vargs.map(substitute))
 
       case PureApp(b, targs, vargs) =>
         PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))

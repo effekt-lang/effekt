@@ -504,7 +504,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
-        PureApp(BlockVar(r), targs, vargsT)
+        // TODO how robust is this?
+        val tpe = transform(Context.inferredTypeOf(call))
+        Make(r, tpe, targs, vargsT)
       case f: Operation =>
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
