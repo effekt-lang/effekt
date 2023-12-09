@@ -86,8 +86,12 @@ enum Expr {
   // e.g. <EXPR>(<EXPR>)
   case Call(callee: Expr, arguments: List[Expr])
 
-  // e.g. 42 (represented as Scala string "42") and inserted verbatim
-  case RawExpr(raw: String)
+  // e.g. new <EXPR>(<EXPR>)
+  case New(callee: Expr, arguments: List[Expr])
+
+  // e.g. "" <EXPR> " + " <EXPR>
+  //   raw JS splices, always start with a prefix string, then interleaved with arguments
+  case RawExpr(raw: List[String], args: List[Expr])
 
   // e.g. (<EXPR> ? <EXPR> : <EXPR>)
   case IfExpr(cond: Expr, thn: Expr, els: Expr)
@@ -108,6 +112,13 @@ enum Expr {
   case Variable(name: JSName)
 }
 export Expr.*
+
+def RawExpr(str: String): js.Expr = Expr.RawExpr(List(str), Nil)
+
+implicit class JavaScriptInterpolator(private val sc: StringContext) extends AnyVal {
+  def js(args: Expr*): Expr = RawExpr(sc.parts.toList, args.toList)
+}
+
 
 enum Pattern {
   case Variable(name: JSName)
@@ -141,6 +152,11 @@ enum Stmt {
 
   // e.g. function <NAME>(x, y) { <STMT>* }
   case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
+
+  // e.g. class <NAME> {
+  //        <NAME>(x, y) { <STMT>* }...
+  //      }
+  case Class(name: JSName, methods: List[Stmt.Function])
 
   // e.g. if (<EXPR>) { <STMT> } else { <STMT> }
   case If(cond: Expr, thn: Stmt, els: Stmt)
@@ -212,4 +228,6 @@ object monadic {
 
   def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: Control): Stmt =
     js.Function(name, params, stmts :+ js.Return(ret))
+
+  def asExpr(c: Control): Expr = c
 }

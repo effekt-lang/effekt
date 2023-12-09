@@ -63,7 +63,7 @@ object TransformerMonadic extends Transformer {
     case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
-    case Make(id, tpe, targs, vargs) => js.Call(nameRef(id), vargs map toJS)
+    case Make(id, tpe, targs, vargs) => js.New(nameRef(id), vargs map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
     case Run(s) => monadic.Run(toJSMonadic(s))
@@ -158,7 +158,7 @@ object TransformerMonadic extends Transformer {
    *
    * That is, multiple statements that end in one monadic return
    */
-  def toJSStmt(s: core.Stmt)(using DeclarationContext, Context): (List[js.Stmt], monadic.Control) = s match {
+  def toJSStmt(s: core.Stmt)(using D: DeclarationContext, C: Context): (List[js.Stmt], monadic.Control) = s match {
     case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
@@ -177,11 +177,23 @@ object TransformerMonadic extends Transformer {
 
       val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
         // f17.apply(null, sc.__data)
-        case (c, block) =>
-          (tagFor(c), List(js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`)))))
+        case (c, block@BlockLit(tparams, cparams, vparams, bparams, body)) =>
+          val fields = D.getConstructor(c).fields.map(_.id)
+          val freeVars = core.Variables.free(body).map(_.id)
+
+          val params = vparams.map { p => p.id }
+          def isUsed(x: Id) = freeVars contains x
+
+          val extractedFields = (params zip fields).collect { case (p, f) if isUsed(p) =>
+            js.Const(nameDef(p), js.Member(scrutinee, memberNameRef(f)))
+          }
+
+          val (stmts, ret) = toJSStmt(body)
+
+          (tagFor(c), extractedFields ++ stmts ++ List(js.Return(monadic.asExpr(ret))))
       }, None)
 
-      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))
+      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js"null")))
       (sw :: stmts, ret)
 
 
