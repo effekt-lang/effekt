@@ -25,6 +25,10 @@ import effekt.util.messages.INTERNAL_ERROR
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
  *     │
+ *     │─ [[ Definition ]]
+ *     │  │─ [[ Def ]]
+ *     │  │─ [[ Let ]]
+ *     │
  *     │─ [[ Expr ]]
  *     │  │─ [[ DirectApp ]]
  *     │  │─ [[ Run ]]
@@ -163,6 +167,7 @@ case class Run(s: Stmt) extends Expr
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
  *     │─ [[ PureApp ]]
+ *     │─ [[ Make ]]
  *     │─ [[ Select ]]
  *     │─ [[ Box ]]
  *
