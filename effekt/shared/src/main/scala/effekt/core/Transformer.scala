@@ -231,12 +231,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val vargs = vparams.map { case Param.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
 
           // [[ f ]] = { (x) => f(x) }
-          def etaExpandPure(b: Constructor | ExternFunction): BlockLit = {
+          def etaExpandPure(b: ExternFunction): BlockLit = {
             assert(bparamtps.isEmpty)
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
               Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
+          }
+
+          // [[ f ]] = { (x) => make f(x) }
+          def etaExpandConstructor(b: Constructor): BlockLit = {
+            assert(bparamtps.isEmpty)
+            assert(effects.isEmpty)
+            assert(cparams.isEmpty)
+            BlockLit(tparams, Nil, vparams, Nil,
+              Stmt.Return(Make(b, core.ValueType.Data(b.tpe, targs), targs, vargs)))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
@@ -254,7 +263,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
-            case cns: Constructor => etaExpandPure(cns)
+            case cns: Constructor => etaExpandConstructor(cns)
             case f: ExternFunction if isPure(f.capture) => etaExpandPure(f)
             case f: ExternFunction if pureOrIO(f.capture) => etaExpandDirect(f)
             // does not require change of calling convention, so no eta expansion
