@@ -125,13 +125,14 @@ trait Compiler[Executable] {
       mod
     }
 
-  def runMiddleend(source: Source)(using Context): Option[Typechecked] =
-    (Parser andThen
-    Namer andThen
-    BoxUnboxInference andThen
-    Typer andThen
-    Wellformedness andThen
-    AnnotateCaptures)(source)
+  /**
+   * Used by the server to typecheck, report type errors and show
+   * captures at boxes and definitions 
+   */
+  def runMiddleend(source: Source)(using Context): Option[Module] =
+    val typechecked = Frontend(source)
+    typechecked.foreach(res => validate(source, res.mod))
+    typechecked.flatMap(Middleend.run).map(_.mod)
 
   /**
    * Called after running the frontend from editor services.

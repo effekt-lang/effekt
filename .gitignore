@@ -13,6 +13,7 @@ licenses/
 bin
 .metals/
 .vscode/
+.bloop/
 *.tgz
 
 notes/
