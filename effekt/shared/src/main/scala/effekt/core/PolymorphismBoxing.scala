@@ -308,7 +308,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   class FunctionIdentityCoercer[Ty <: BlockType, Te <: Block](
       from: Ty, to: Ty, targs: List[ValueType]) extends IdentityCoercer[Ty, Te](from, to) with FunctionCoercer[Ty, Te] {
     override def call(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt =
-      Stmt.App(block, targs map transformArg, vargs.map(transform(_)), bargs map transform)
+      Stmt.App(block, targs map transformArg, vargs.map(transform), bargs map transform)
     override def callPure(block: Te, vargs: List[Pure])(using PContext): Pure =
       Pure.PureApp(block, targs map transformArg, vargs map transform)
     override def callDirect(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Expr =
