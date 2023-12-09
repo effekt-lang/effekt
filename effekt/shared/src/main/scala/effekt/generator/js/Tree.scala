@@ -2,11 +2,18 @@ package effekt
 package generator
 package js
 
+import scala.collection.immutable.{ AbstractSeq, LinearSeq }
+
 // TODO choose appropriate representation and apply conversions
 case class JSName(name: String)
 
-val $effekt = Variable(JSName("$effekt"))
-def builtin(name: String, args: Expr*): js.Expr = js.MethodCall($effekt, JSName(name), args: _*)
+object $effekt {
+  val namespace = Variable(JSName("$effekt"))
+  def field(name: String): js.Expr =
+    js.Member(namespace, JSName(name))
+  def call(name: String, args: js.Expr*): js.Expr =
+    js.MethodCall(namespace, JSName(name), args: _*)
+}
 
 enum Import {
   // import * as <name> from "<file>";
@@ -219,9 +226,9 @@ object monadic {
 
   def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
   def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)
-  def Handle(handlers: List[Expr], body: Expr): Control = js.Call(Builtin("handleMonadic", js.ArrayLiteral(handlers)), List(body))
+  def Handle(body: Expr): Control = Builtin("handleMonadic", body)
 
-  def Builtin(name: String, args: Expr*): Control = js.MethodCall($effekt, JSName(name), args: _*)
+  def Builtin(name: String, args: Expr*): Control = $effekt.call(name, args: _*)
 
   def Lambda(params: List[JSName], stmts: List[Stmt], ret: Control): Expr =
     js.Lambda(params, js.Block(stmts :+ js.Return(ret)))

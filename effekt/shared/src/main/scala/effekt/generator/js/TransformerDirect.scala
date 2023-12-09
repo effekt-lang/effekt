@@ -115,7 +115,7 @@ object TransformerDirect extends Transformer {
    * Translation of expressions is trivial
    */
   def toJS(expr: core.Expr)(using TransformerContext): js.Expr = expr match {
-    case Literal((), _) => js.Member($effekt, JSName("unit"))
+    case Literal((), _) => $effekt.field("unit")
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
@@ -149,7 +149,7 @@ object TransformerDirect extends Transformer {
   def entrypoint(result: JSName, k: JSName, vars: List[JSName], s: List[js.Stmt]): List[js.Stmt] =
     val suspension = freshName("suspension")
     val frame = js.Lambda(List(result), js.Call(js.Variable(k), js.Variable(result) :: vars.map(js.Variable.apply)))
-    List(js.Try(s, suspension, List(js.Return(js.builtin("push",js.Variable(suspension), frame)))))
+    List(js.Try(s, suspension, List(js.Return($effekt.call("push",js.Variable(suspension), frame)))))
 
   def toJS(s: core.Stmt)(using C: TransformerContext): Bind = s match {
 
@@ -157,7 +157,7 @@ object TransformerDirect extends Transformer {
       Bind { k => definitions.flatMap { toJS } ++ toJS(body)(k) }
 
     case Alloc(id, init, region, body) =>
-      val jsRegion = if region == symbols.builtins.globalRegion then js.Member($effekt, JSName("global")) else nameRef(region)
+      val jsRegion = if region == symbols.builtins.globalRegion then $effekt.field("global") else nameRef(region)
       Bind { k =>
         js.Const(nameDef(id), js.MethodCall(jsRegion, `fresh`, toJS(init))) :: toJS(body)(k)
       }
@@ -210,7 +210,7 @@ object TransformerDirect extends Transformer {
 
     case Var(id, init, cap, body) =>
       Bind { k =>
-        js.Const(nameDef(id), js.builtin("fresh", toJS(init))) :: toJS(body)(k)
+        js.Const(nameDef(id), $effekt.call("fresh", toJS(init))) :: toJS(body)(k)
       }
 
     // obviously recursive calls
@@ -266,16 +266,16 @@ object TransformerDirect extends Transformer {
       val suspension = freshName("suspension")
       val prompt = freshName("prompt")
 
-      val promptDef = js.Const(prompt, js.builtin("freshPrompt"))
-      val freshRegion = js.ExprStmt(js.builtin("freshRegion"))
-      val regionCleanup = js.ExprStmt(js.builtin("leaveRegion"))
+      val promptDef = js.Const(prompt, $effekt.call("freshPrompt"))
+      val freshRegion = js.ExprStmt($effekt.call("freshRegion"))
+      val regionCleanup = js.ExprStmt($effekt.call("leaveRegion"))
 
       val (handlerNames, handlerDefs) = (bps zip hs).map {
         case (param, handler) => (toJS(param), js.Const(toJS(param), toJS(handler, prompt)))
       }.unzip
 
       Bind { k => promptDef :: handlerDefs ::: (js.Try(freshRegion :: toJS(body)(k), suspension,
-        List(k(js.builtin("handle", js.Variable(prompt), js.Variable(suspension)))), List(regionCleanup)) :: Nil)
+        List(k($effekt.call("handle", js.Variable(prompt), js.Variable(suspension)))), List(regionCleanup)) :: Nil)
       }
 
     case Try(_, _) =>
@@ -285,19 +285,19 @@ object TransformerDirect extends Transformer {
       val suspension = freshName("suspension")
       val region = nameDef(r.id)
 
-      val freshRegion = js.Const(region, js.builtin("freshRegion"))
-      val regionCleanup = js.ExprStmt(js.builtin("leaveRegion"))
+      val freshRegion = js.Const(region, $effekt.call("freshRegion"))
+      val regionCleanup = js.ExprStmt($effekt.call("leaveRegion"))
 
       Bind { k =>
         js.Try(freshRegion :: toJS(body)(k), suspension,
-          List(k(js.builtin("handle", js.Undefined, js.Variable(suspension)))), List(regionCleanup)) :: Nil
+          List(k($effekt.call("handle", js.Undefined, js.Variable(suspension)))), List(regionCleanup)) :: Nil
       }
 
     case Region(_) =>
       Context.panic("Body of the region is expected to be a block literal in core.")
 
     case Hole() =>
-      Return(js.builtin("hole"))
+      Return($effekt.call("hole"))
 
     case Get(id, capt, tpe) => Context.panic("Should have been translated to direct style")
     case Put(id, capt, value) =>  Context.panic("Should have been translated to direct style")
@@ -315,7 +315,7 @@ object TransformerDirect extends Transformer {
         val biArgs   = biParams.map { p => js.Variable(p) }
 
         val lambda = js.Lambda((vps ++ bps).map(toJS) ++ biParams,
-          js.Return(js.builtin("suspend_bidirectional", js.Variable(prompt), js.ArrayLiteral(biArgs), js.Lambda(List(nameDef(resume)),
+          js.Return($effekt.call("suspend_bidirectional", js.Variable(prompt), js.ArrayLiteral(biArgs), js.Lambda(List(nameDef(resume)),
             C.clearingScope { js.Block(toJS(body)(Continuation.Return)) }))))
 
         nameDef(id) -> lambda
@@ -323,7 +323,7 @@ object TransformerDirect extends Transformer {
       // (args...) => $effekt.suspend(prompt, (resume) => { ... BODY ... resume(v) ... })
       case Operation(id, tps, cps, vps, bps, Some(resume), body) =>
         val lambda = js.Lambda((vps ++ bps) map toJS,
-          js.Return(js.builtin("suspend", js.Variable(prompt),
+          js.Return($effekt.call("suspend", js.Variable(prompt),
             js.Lambda(List(toJS(resume)), C.clearingScope {  js.Block(toJS(body)(Continuation.Return)) }))))
 
         nameDef(id) -> lambda
