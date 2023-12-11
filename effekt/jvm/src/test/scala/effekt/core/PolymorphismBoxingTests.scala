@@ -42,7 +42,6 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
   )
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
-
   test("simple non-polymorphic code should stay the same"){
     val code =
       """module main
@@ -87,7 +86,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
-        |def idInt = { (x: Int) => return (id: ['A]('A) => 'A @ {})[BoxedInt]((MkBoxedInt: (Int) => BoxedInt @ {})(x: Int)).unboxInt: Int }
+        |def idInt = { (x: Int) => return (id: ['A]('A) => 'A @ {})[BoxedInt](make BoxedInt MkBoxedInt(x: Int)).unboxInt: Int }
         |""".stripMargin
     assertTransformsTo(from, to)
   }
@@ -103,7 +102,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
-        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt]((MkBoxedInt: (Int) => BoxedInt @ {})(x: Int)) ; return tmp:BoxedInt.unboxInt: Int }
+        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt](make BoxedInt MkBoxedInt(x: Int)) ; return tmp:BoxedInt.unboxInt: Int }
         |""".stripMargin
     assertTransformsTo(from, to)
   }
@@ -127,7 +126,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |def idInt = { (x: Int) =>
         |    {
         |        let res = run {
-        |            let boxedRes = !(id: ['A]('A) => 'A @ {})[BoxedInt]((MkBoxedInt: (Int) => BoxedInt @ {})(x: Int))
+        |            let boxedRes = !(id: ['A]('A) => 'A @ {})[BoxedInt](make BoxedInt MkBoxedInt(x: Int))
         |            return boxedRes:BoxedInt.unboxInt: Int
         |        }
         |        return res: Int
@@ -151,7 +150,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |      {
         |         def originalFn = { (x: Int) => return x: Int }
         |         val result = (originalFn: (Int) => Int @ {})(boxedX: BoxedInt.unboxInt: Int);
-        |         return (MkBoxedInt: (Int) => BoxedInt @ {})(result: Int)
+        |         return make BoxedInt MkBoxedInt(result: Int)
         |      }
         |    };
         |    return r:BoxedInt.unboxInt: Int
@@ -182,11 +181,11 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |                  (hhofargarg: Int) =>
         |                      {
         |                        def tmp = hhofargB: ('A) => 'A @ {}
-        |                        val rres = (tmp: ('A) => 'A @ {})((MkBoxedInt: (Int) => BoxedInt @ {})(hhofargarg: Int));
+        |                        val rres = (tmp: ('A) => 'A @ {})(make BoxedInt MkBoxedInt(hhofargarg: Int));
         |                        return rres:BoxedInt.unboxInt: Int
         |                      }
         |              };
-        |              return (MkBoxedInt: (Int) => BoxedInt @ {})(res:Int)
+        |              return make BoxedInt MkBoxedInt(res:Int)
         |          }
         |    };
         |    return result:BoxedInt.unboxInt: Int

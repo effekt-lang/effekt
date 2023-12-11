@@ -9,7 +9,7 @@ val showGeneric: PartialFunction[Any, String] = {
 }
 
 val show: PartialFunction[Any, String] =
-  TypePrinter.show orElse core.PrettyPrinter.show orElse showGeneric
+  TypePrinter.show orElse core.PrettyPrinter.show orElse lifted.PrettyPrinter.show orElse showGeneric
 
 inline def debug[A](inline value: A): A =
   ${ debugMacros.debugCode('value) }
