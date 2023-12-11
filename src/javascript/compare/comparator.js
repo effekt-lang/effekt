@@ -22,8 +22,10 @@ function executeCommands(commands) {
   commands.forEach((command, index) => {
     const performance = { name: command[0], effekt: -1, js: -1 }
     outputs.push(performance)
-    execute(command[1], (time) => performance.effekt = time)
-    execute(command[2], (time) => performance.js = time)
+    console.log("comparator running in dir:",__dirname)
+    const dirtyCd = "cd "+__dirname+" && cd ../../.. &&"
+    execute(dirtyCd+command[1], (time) => performance.effekt = time)
+    execute(dirtyCd+command[2], (time) => performance.js = time)
   });
 
   const outputFileName = 'commandOutputs.txt';

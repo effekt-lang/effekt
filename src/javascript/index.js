@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
 console.log("Running fasteffekt benchmarks (this may take a couple minutes)")
-const runAll = require('./compare/comparator')
+console.log(__dirname)
+const path = require('path');
+const runAll = require(path.resolve(__dirname, "./compare/comparator"))
 runAll()
