@@ -204,12 +204,16 @@ trait Transformer {
 
     // Traverse tree once more to find all used symbols, defined in other modules.
     def findUsedDependencies(t: Definition) =
-      Tree.visit(t) {
+      def go(t: Any): Unit = Tree.visit(t) {
         case BlockVar(x, tpe, capt) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
         case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
+        case Make(tpe, id, args) if publicDependencySymbols.isDefinedAt(id) =>
+          register(publicDependencySymbols(id), id)
+          args.foreach(go)
       }
+      go(t)
 
     input.core.definitions.foreach(findUsedDependencies)
 

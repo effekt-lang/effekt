@@ -16,6 +16,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(stmts: List[Stmt]): Document =
     pretty(vsep(stmts map toDoc, line))
 
+  val show: PartialFunction[Any, String] = {
+    case m: js.Module  => format(m.stmts).layout
+  }
 
   def toDoc(expr: Expr): Doc = expr match {
     case Call(callee, args)           => toDocParens(callee) <> parens(args map toDoc)
