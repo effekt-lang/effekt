@@ -21,6 +21,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(defs: List[Definition]): String =
     pretty(toDoc(defs), 60).layout
 
+  val show: PartialFunction[Any, String] = {
+    case m: ModuleDecl => format(m).layout
+    case d: Definition  => format(List(d))
+    case s: Stmt       => format(s)
+    case x: Id         => x.show
+  }
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
@@ -66,6 +73,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(s: String, _)   => "\"" + s + "\""
     case l: Literal              => l.value.toString
     case ValueVar(id, _)         => id.name.toString
+
+    case Make(data, tag, args) =>
+      "make" <+> toDoc(data) <+> toDoc(tag) <> parens(hsep(args map argToDoc, comma))
 
     case PureApp(b, targs, args) =>
       val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))

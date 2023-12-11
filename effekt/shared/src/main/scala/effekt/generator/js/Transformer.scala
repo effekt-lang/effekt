@@ -87,15 +87,38 @@ trait Transformer {
 
   def generateConstructor(constructor: Constructor, tagValue: Int): js.Stmt = {
     val fields = constructor.fields
-    js.Function(
-      nameDef(constructor.id),
-      fields.map { f => nameDef(f.id) },
-      List(js.Return(js.Object(List(
-        `tag`  -> js.RawExpr(tagValue.toString),
-        `name` -> JsString(constructor.id.name.name),
-        `data` -> js.ArrayLiteral(fields map { f => js.Variable(nameDef(f.id)) })
-      ) ++ fields.map { f => (nameDef(f.id), js.Variable(nameDef(f.id))) })))
-    )
+    // class Id {
+    //   constructor(param...) { this.param = param; ...  }
+    //   __reflect() { return { name: "NAME", data: [this.param...] }
+    //   __equals(other) { ... }
+    // }
+    val params = fields.map { f => nameDef(f.id) }
+
+    def set(field: JSName, value: js.Expr): js.Stmt = js.Assign(js.Member(js"this", field), value)
+    def get(field: JSName): js.Expr = js.Member(js"this", field)
+
+    val initParams = params.map { param => set(param, js.Variable(param))  }
+    val initTag    = set(`tag`, js.RawExpr(tagValue.toString))
+    val jsConstructor: js.Function = js.Function(JSName("constructor"), params, initTag :: initParams)
+
+    val jsReflect: js.Function = js.Function(`reflect`, Nil, List(js.Return(js.Object(List(
+      `tag`  -> js.RawExpr(tagValue.toString),
+      `name` -> JsString(constructor.id.name.name),
+      `data` -> js.ArrayLiteral(fields map { f => get(memberNameRef(f.id)) }))))))
+
+    val other = freshName("other")
+    def otherGet(field: JSName): js.Expr = js.Member(js.Variable(other), field)
+    def compare(field: JSName): js.Expr = js"${get(field)} !== ${otherGet(field)}"
+    val noop    = js.Block(Nil)
+    val abort   = js.Return(js"false")
+    val succeed = js.Return(js"true")
+    val otherExists   = js.If(js"!${js.Variable(other)}", abort, noop)
+    val compareTags   = js.If(compare(`tag`), abort, noop)
+    val compareFields = params.map(f => js.If(compare(f), abort, noop))
+
+    val jsEquals: js.Function = js.Function(`equals`, List(other), otherExists :: compareTags :: compareFields ::: List(succeed))
+
+    js.Class(nameDef(constructor.id), List(jsConstructor, jsReflect, jsEquals))
   }
 
   // const $getOp = "get$1234"
@@ -140,6 +163,8 @@ trait Transformer {
   val `tag`   = JSName("__tag")
   val `name`  = JSName("__name")
   val `data`  = JSName("__data")
+  val `reflect`  = JSName("__reflect")
+  val `equals`  = JSName("__equals")
 
   def nameDef(id: Symbol): JSName = uniqueName(id)
 
@@ -179,12 +204,16 @@ trait Transformer {
 
     // Traverse tree once more to find all used symbols, defined in other modules.
     def findUsedDependencies(t: Definition) =
-      Tree.visit(t) {
+      def go(t: Any): Unit = Tree.visit(t) {
         case BlockVar(x, tpe, capt) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
         case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
+        case Make(tpe, id, args) if publicDependencySymbols.isDefinedAt(id) =>
+          register(publicDependencySymbols(id), id)
+          args.foreach(go)
       }
+      go(t)
 
     input.core.definitions.foreach(findUsedDependencies)
 

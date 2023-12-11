@@ -57,12 +57,13 @@ object TransformerMonadic extends Transformer {
   }
 
   def toJS(expr: core.Expr)(using DeclarationContext, Context): js.Expr = expr match {
-    case Literal((), _) => js.Member($effekt, JSName("unit"))
+    case Literal((), _) => $effekt.field("unit")
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
+    case Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
     case Run(s) => monadic.Run(toJSMonadic(s))
@@ -73,6 +74,38 @@ object TransformerMonadic extends Transformer {
       case Operation(id, tps, cps, vps, bps, resume, body) =>
         val (stmts, ret) = toJSStmt(body)
         nameDef(id) -> monadic.Lambda((vps ++ bps ++ resume.toList) map toJS, stmts, ret)
+    })
+
+  def toJS(handler: core.Implementation, prompt: js.Expr)(using DeclarationContext, Context): js.Expr =
+    js.Object(
+      handler.operations.map {
+        // (args...cap...) => $effekt.shift(prompt, (resume) => { ... body ... resume((cap...) => { ... }) ... })
+        case Operation(id, tps, cps, vps, bps,
+            Some(BlockParam(resume, core.BlockType.Function(_, _, _, List(core.BlockType.Function(_, _, _, bidirectionalTpes, _)), _), _)),
+            body) =>
+          // add parameters for bidirectional arguments
+          val biParams = bidirectionalTpes.map { _ => freshName("cap") }
+          val biArgs   = biParams.map { p => js.Variable(p) }
+          val thunk    = freshName("thunk")
+          val force    = monadic.Call(js.Variable(thunk), biArgs)
+
+          val (stmts, ret) = toJSStmt(body)
+          val lambda = monadic.Lambda((vps ++ bps).map(toJS) ++ biParams, Nil,
+            monadic.Bind(monadic.Builtin("shift", prompt,
+              monadic.Lambda(List(nameDef(resume)), stmts, ret)), thunk, force))
+
+          nameDef(id) -> lambda
+
+      // (args...) => $effekt.shift(prompt, (resume) => { ... BODY ... resume(v) ... })
+      case Operation(id, tps, cps, vps, bps, Some(resume), body) =>
+        val (stmts, ret) = toJSStmt(body)
+        val lambda = monadic.Lambda((vps ++ bps) map toJS, Nil,
+          monadic.Builtin("shift", prompt,
+            monadic.Lambda(List(toJS(resume)), stmts, ret)))
+
+        nameDef(id) -> lambda
+
+      case Operation(id, tps, cps, vps, bps, None, body) => Context.panic("Effect handler should take continuation")
     })
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module = {
@@ -113,8 +146,22 @@ object TransformerMonadic extends Transformer {
     case Return(e) =>
       monadic.Pure(toJS(e))
 
-    case Try(body, hs) =>
-      monadic.Handle(hs map toJS, toJS(body))
+    // $effekt.handle(p => {
+    //   const amb = { flip: ... };
+    //
+    // })
+    case Try(core.BlockLit(_, _, _, bps, body), hs) =>
+      val prompt = freshName("p")
+
+      val handlerDefs = (bps zip hs).map {
+        case (param, handler) => js.Const(toJS(param), toJS(handler, js.Variable(prompt)))
+      }
+      val (stmts, ret) = toJSStmt(body)
+
+      monadic.Handle(monadic.Lambda(List(prompt), handlerDefs ++ stmts, ret))
+
+    case Try(_, _) =>
+      Context.panic("Body of the try is expected to be a block literal in core.")
 
     case Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
@@ -157,14 +204,14 @@ object TransformerMonadic extends Transformer {
    *
    * That is, multiple statements that end in one monadic return
    */
-  def toJSStmt(s: core.Stmt)(using DeclarationContext, Context): (List[js.Stmt], monadic.Control) = s match {
+  def toJSStmt(s: core.Stmt)(using D: DeclarationContext, C: Context): (List[js.Stmt], monadic.Control) = s match {
     case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)
-      (js.Const(nameDef(id), js.MethodCall($effekt, `ref`, toJS(init))) :: stmts, ret)
+      (js.Const(nameDef(id), $effekt.call("ref", toJS(init))) :: stmts, ret)
 
     case Alloc(id, init, region, body) =>
       val (stmts, ret) = toJSStmt(body)
@@ -176,11 +223,23 @@ object TransformerMonadic extends Transformer {
 
       val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
         // f17.apply(null, sc.__data)
-        case (c, block) =>
-          (tagFor(c), List(js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`)))))
+        case (c, block@BlockLit(tparams, cparams, vparams, bparams, body)) =>
+          val fields = D.getConstructor(c).fields.map(_.id)
+          val freeVars = core.Variables.free(body).map(_.id)
+
+          val params = vparams.map { p => p.id }
+          def isUsed(x: Id) = freeVars contains x
+
+          val extractedFields = (params zip fields).collect { case (p, f) if isUsed(p) =>
+            js.Const(nameDef(p), js.Member(scrutinee, memberNameRef(f)))
+          }
+
+          val (stmts, ret) = toJSStmt(body)
+
+          (tagFor(c), extractedFields ++ stmts ++ List(js.Return(monadic.asExpr(ret))))
       }, None)
 
-      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))
+      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js"null")))
       (sw :: stmts, ret)
 
 

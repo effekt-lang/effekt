@@ -159,6 +159,7 @@ object Inline {
 
   def rewrite(p: Pure)(using InlineContext): Pure = p match {
     case Pure.PureApp(b, targs, vargs) => pureApp(rewrite(b), targs, vargs.map(rewrite))
+    case Pure.Make(data, tag, vargs) => make(data, tag, vargs.map(rewrite))
     // currently, we don't inline values, but we can dealias them
     case x @ Pure.ValueVar(id, annotatedType) => dealias(x)
 

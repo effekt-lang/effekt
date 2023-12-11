@@ -6,9 +6,6 @@ extern include "effekt_runtime.js"
 // Builtins
 extern include "effekt_builtins.js"
 
-// Pattern Matching
-extern include "effekt_matching.js"
-
 def locally[R] { f: => R }: R = f()
 
 // Side effecting ops

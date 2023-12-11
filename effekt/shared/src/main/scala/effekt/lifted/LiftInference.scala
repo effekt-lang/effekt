@@ -233,8 +233,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.ValueVar(sym, tpe) =>
       ValueVar(sym, transform(tpe))
 
-    case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
+    case core.PureApp(b, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs.map(transform), args map transform)
+
+    case core.Make(data, tag, args: List[core.Expr]) =>
+      Make(transform(data).asInstanceOf, tag, args map transform)
 
     case core.Select(target, field, tpe) =>
       Select(transform(target), field, transform(tpe))

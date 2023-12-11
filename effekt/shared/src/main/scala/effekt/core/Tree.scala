@@ -25,6 +25,10 @@ import effekt.util.messages.INTERNAL_ERROR
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
  *     │
+ *     │─ [[ Definition ]]
+ *     │  │─ [[ Def ]]
+ *     │  │─ [[ Let ]]
+ *     │
  *     │─ [[ Expr ]]
  *     │  │─ [[ DirectApp ]]
  *     │  │─ [[ Run ]]
@@ -163,18 +167,33 @@ case class Run(s: Stmt) extends Expr
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
  *     │─ [[ PureApp ]]
+ *     │─ [[ Make ]]
  *     │─ [[ Select ]]
  *     │─ [[ Box ]]
  *
  * -------------------------------------------
  */
 enum Pure extends Expr {
+
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
 
-  // invariant, block b is pure.
+  /**
+   * Pure FFI calls. Invariant, block b is pure.
+   */
   case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+
+  /**
+   * Constructor calls
+   *
+   * Note: the structure mirrors interface implementation
+   */
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
+
+  /**
+   * Record Selection
+   */
   case Select(target: Pure, field: Id, annotatedType: ValueType)
 
   case Box(b: Block, annotatedCapture: Captures)
@@ -333,6 +352,9 @@ object normal {
       case other => Stmt.App(callee, targs, vargs, bargs)
     }
 
+  def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
+    Pure.Make(tpe, tag, vargs)
+
   def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
     callee match {
       case b : Block.BlockLit =>
@@ -347,9 +369,16 @@ object normal {
     }
 
   // "match" is a keyword in Scala
-  // TODO perform matching here, if scrutinee statically known
   def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
-    Match(scrutinee, clauses, default)
+    scrutinee match {
+      case Pure.Make(dataType, ctorTag, vargs) =>
+        clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
+          .map(body => app(body, Nil, vargs, Nil))
+          .orElse { default }.getOrElse { sys error "Should not happen" }
+      case other =>
+        Match(scrutinee, clauses, default)
+    }
+
 
   def directApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
     callee match {
@@ -498,6 +527,8 @@ object Tree {
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
+    def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
+
     def rewrite(t: BlockType): BlockType = rewriteStructurally(t)
     def rewrite(t: BlockType.Interface): BlockType.Interface = rewriteStructurally(t)
     def rewrite(capt: Captures): Captures = capt.map(rewrite)
@@ -544,6 +575,7 @@ object Variables {
     case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
+    case Pure.Make(data, tag, vargs) => all(vargs, free)
     case Pure.Select(target, field, annotatedType) => free(target)
     case Pure.Box(b, annotatedCapture) => free(b)
   }
@@ -747,6 +779,9 @@ object substitutions {
 
       case Literal(value, annotatedType) =>
         Literal(value, substitute(annotatedType))
+
+      case Make(tpe, tag, vargs) =>
+        Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))
 
       case PureApp(b, targs, vargs) =>
         PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))

@@ -31,8 +31,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
         None
     }
 
-  lazy val `run` = keyword("run")
-  lazy val `;`   = super.literal(";")
+  lazy val `run`  = keyword("run")
+  lazy val `;`    = super.literal(";")
+  lazy val `make` = keyword("make")
 
   /**
    * Literals
@@ -154,6 +155,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( literal
     | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
+    | `make` ~> dataType ~ id ~ valueArgs ^^ Pure.Make.apply
     | block ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
     | failure("Expected a pure expression.")
     )
@@ -261,10 +263,13 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   lazy val primValueType: P[ValueType] =
     ( typeParam ^^ ValueType.Var.apply
-    | id ~ maybeTypeArgs ^^ ValueType.Data.apply
+    | dataType
     | `(` ~> valueType <~ `)`
     | failure("Expected a value type")
     )
+
+  lazy val dataType: P[ValueType.Data] =
+    id ~ maybeTypeArgs ^^ { case id ~ targs => ValueType.Data(id, targs) : ValueType.Data }
 
   lazy val blockType: P[BlockType] =
     ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ^^ {

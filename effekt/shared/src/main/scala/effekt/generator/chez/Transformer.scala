@@ -203,6 +203,7 @@ trait Transformer {
 
     case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
+    case Make(data, tag, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 
     case Select(b, field, _) =>
       chez.Call(nameRef(field), toChez(b))

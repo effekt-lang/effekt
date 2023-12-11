@@ -84,6 +84,7 @@ class MLTests extends EffektTests {
     examplesDir / "casestudies" / "lexer.effekt.md",
     examplesDir / "casestudies" / "parser.effekt.md",
     examplesDir / "casestudies" / "prettyprinter.effekt.md",
+    examplesDir / "benchmarks" / "pretty.effekt",
     examplesDir / "pos" / "simpleparser.effekt",
 
     // cont

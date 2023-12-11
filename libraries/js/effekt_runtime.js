@@ -198,7 +198,7 @@ const $runtime = (function() {
 
   const delayed = a => Control(k => apply(k, a()))
 
-  const shift = p => f => Control(k => {
+  const shift = (p, f) => Control(k => {
     const split = splitAt(k, p)
     const localCont = a => Control(k =>
       Step(pure(a), pushSubcont(split.head, k)))
@@ -222,36 +222,11 @@ const $runtime = (function() {
       })).then(a => a.shouldRun ? a.cont() : $effekt.pure(a.cont))
   }
 
-  const reset = p => c => Control(k => Step(c, Stack(Nil, Arena(), p, k)))
+  //const reset = (p, c => Control(k => Step(c, Stack(Nil, Arena(), p, k)))
 
-  function handleMonadic(handlers) {
+  function handleMonadic(body) {
     const p = _prompt++;
-
-    // modify all implementations in the handlers to capture the continuation at prompt p
-    const caps = handlers.map(h => {
-      var cap = Object.create({})
-      for (var op in h) {
-        const impl = h[op];
-        cap[op] = function() {
-          // split two kinds of arguments, parameters of the operation and capabilities
-          const args = Array.from(arguments);
-          const arity = impl.length - 1
-          const oargs = args.slice(0, arity)
-          const caps = args.slice(arity)
-          var r = shift(p)(k => impl.apply(null, oargs.concat([k])))
-          // resume { caps => e}
-          if (caps.length > 0) {
-            return r.then(f => f.apply(null, caps))
-          }
-          // resume(v)
-          else {
-            return r
-          }
-        }
-      }
-      return cap;
-    });
-    return body => reset(p)(body.apply(null, caps))
+    return Control(k => Step(body(p), Stack(Nil, Arena(), p, k)))
   }
 
   // Direct Style Runtime
@@ -364,6 +339,7 @@ const $runtime = (function() {
     handleMonadic: handleMonadic,
     ref: Cell,
     state: withState,
+    shift: shift,
     _if: (c, thn, els) => c ? thn() : els(),
     withRegion: withRegion,
 
