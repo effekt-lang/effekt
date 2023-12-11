@@ -3,7 +3,7 @@ const fs = require('fs');
 
 // List of shell commands
 const commands = [
-  ['Permute','effekt.sh src/runner/runPermute.effekt', 'node javascript/runner/runPermute.js'],
+  ['Permute','effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
   // Add more commands as needed
 ];
 
@@ -31,6 +31,6 @@ function executeCommands(commands) {
   console.log(`Command outputs saved to ${outputFileName}`);
 }
 
-executeCommands(commands)
-
+const runAll = () => executeCommands(commands)
+module.exports = runAll
 // 
