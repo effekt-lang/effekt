@@ -630,6 +630,85 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     }
   }
 
+  case class Template[T](strings: List[String], args: List[T])
+
+  /**
+   * Parses the contents of a string and searches for unquotes ${ ... }
+   *
+   * returns the list of unquotes and their respectively preceding string.
+   *
+   *     "   BEFORE   ${ x }   AFTER "
+   *      ^^^^^^^^^^^^  ^^^
+   *        prefix     unquote
+   */
+  def unquote[T](contents: Parser[T]): Parser[Template[T]] = new Parser[Template[T]] {
+    import scala.collection.mutable
+    import scala.util.boundary
+    import scala.util.boundary.break
+
+
+    def apply(in: Input): ParseResult[Template[T]] = boundary {
+      val content = in.source.content
+      val lastIndex = content.length
+      var pos = in.offset
+      var prefixStart = pos
+
+      // results
+      val prefixes = mutable.ListBuffer.empty[String]
+      val arguments = mutable.ListBuffer.empty[T]
+
+      def eos: Boolean =
+        pos >= lastIndex
+
+      def isUnquoteStart: Boolean =
+        content.charAt(pos) == '$' && content.charAt(pos + 1) == '{'
+
+      def skipUnquoteStart(): Unit =
+        pos = pos + 2
+
+      def skipUnquoteEnd(): Unit =
+        pos = pos + 1
+
+      def isUnquoteEnd: Boolean =
+        content.charAt(pos) == '}'
+
+      def isWhitespace: Boolean = {
+        val ch = content.charAt(pos)
+        ch == ' ' || ch == '\t' ||  ch == '\n' ||  ch == '\r'
+      }
+
+      def skipWhitespace(): Unit =
+        while (isWhitespace) { pos = pos + 1 }
+
+      def unquote(): Boolean =
+        if (!isUnquoteStart) return false
+        prefixes.append(content.substring(prefixStart, pos))
+        skipUnquoteStart()
+
+        skipWhitespace()
+        contents.apply(Input(in.source, pos)) match {
+          case Success(result, next) =>
+            arguments.append(result)
+            pos = next.offset
+          case error: NoSuccess => break(error)
+        }
+        skipWhitespace()
+
+        // }
+        if (!isUnquoteEnd)
+          break(kiama.parsing.Error("Expected '}' to close splice within string.", Input(in.source, pos)))
+
+        skipUnquoteEnd()
+        prefixStart = pos
+        true
+
+      while (!eos) if (!unquote()) { pos = pos + 1 }
+
+      if (!eos) { prefixes.append(content.substring(pos, lastIndex)) }
+      Success(Template(prefixes.toList, arguments.toList), Input(in.source, pos))
+    }
+  }
+
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
@@ -735,9 +814,9 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   /**
    * Literals
    */
-  lazy val integerLiteral = "([-+])?(0|[1-9][0-9]*)".r
-  lazy val doubleLiteral = "([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r
-  lazy val stringLiteral = """\"(\\.|[^\"])*\"""".r
+  lazy val integerLiteral  = "([-+])?(0|[1-9][0-9]*)".r
+  lazy val doubleLiteral   = "([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r
+  lazy val stringLiteral   = """\"(\\.|[^\"])*\"""".r
 
   // Delimiter for multiline strings
   val multi = "\"\"\""
