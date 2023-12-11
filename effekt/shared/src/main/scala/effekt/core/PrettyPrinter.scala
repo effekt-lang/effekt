@@ -84,8 +84,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(value, _)         => value.toString
     case ValueVar(id, _)           => toDoc(id)
 
-    case PureApp(b, targs, vargs)   => toDoc(b) <> argsToDoc(targs, vargs, Nil)
-    case Make(b, tpe, targs, vargs)   => toDoc(b) <> argsToDoc(targs, vargs, Nil)
+    case PureApp(b, targs, vargs)  => toDoc(b) <> argsToDoc(targs, vargs, Nil)
+    case Make(data, tag, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(Nil, vargs, Nil)
     case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Select(b, field, tpe) => toDoc(b) <> "." <> toDoc(field)

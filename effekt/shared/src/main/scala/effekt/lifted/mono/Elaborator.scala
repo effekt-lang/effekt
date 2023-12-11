@@ -441,6 +441,7 @@ def elaborate(e: Expr)(using T: TransformationContext): Expr = e match {
   case Expr.ValueVar(id, annotatedType) => e
   case Expr.Literal(value, annotatedType) => e
   case Expr.PureApp(b, targs, args) => e // we do not touch pure applications
+  case Expr.Make(data, tag, args) => e
   case Expr.Select(target, field, annotatedType) => Expr.Select(elaborate(target), field, annotatedType)
   case Expr.Box(b) => Expr.Box(elaborate(b))
   case Expr.Run(s) => Expr.Run(elaborate(s))

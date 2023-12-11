@@ -1237,32 +1237,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)
     }
-
-  /**
-   * Helper methods on function symbols to retreive its type
-   * either from being annotated or by looking it up (if already typechecked...)
-   */
-  extension (fun: Callable)(using Context) {
-    // invariant: only works if ret is defined!
-    def toType: FunctionType =
-      annotatedType.get
-    def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =
-      val bcapt = fun.bparams.map { p => p.capture }
-      val tps = fun.tparams
-      val vps = fun.vparams.map { p => p.tpe.get }
-      val bps = fun.bparams.map { p => p.tpe }
-      FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
-
-    def annotatedType: Option[FunctionType] =
-      for {
-        ret <- fun.annotatedResult;
-        effs <- fun.annotatedEffects
-        effects = effs.distinct
-        // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
-        //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
-      } yield toType(ret, effects, capt)
-  }
   //</editor-fold>
 
 }

@@ -287,7 +287,7 @@ object TransformerLift {
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
     case ValueVar(id, _)  => chez.Variable(nameRef(id))
-
+    case Make(data, tag, args) => chez.Call(nameRef(tag), args map toChez)
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
       case e: Expr  => toChez(e)
       case b: Block => toChez(b)

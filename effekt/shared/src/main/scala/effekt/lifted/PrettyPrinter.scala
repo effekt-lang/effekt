@@ -67,6 +67,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal              => l.value.toString
     case ValueVar(id, _)         => id.name.toString
 
+    case Make(data, tag, args) =>
+      "make" <+> toDoc(data) <+> toDoc(tag) <> parens(hsep(args map argToDoc, comma))
+
     case PureApp(b, targs, args) =>
       val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
       toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))

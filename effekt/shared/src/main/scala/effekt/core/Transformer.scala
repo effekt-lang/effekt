@@ -245,7 +245,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(Make(b, core.ValueType.Data(b.tpe, targs), targs, vargs)))
+              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, vargs)))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
@@ -486,7 +486,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
         val remainingTypeParams = tparams.drop(targs.size)
         val bparams = Nil
-        // TODO this is exactly like in [[Typer.toType]] -- TODO repeated here:
+        // TODO this is exactly like in [[Callable.toType]] -- TODO repeated here:
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
         val cparams = effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
@@ -513,9 +513,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
-        // TODO how robust is this?
-        val tpe = transform(Context.inferredTypeOf(call))
-        Make(r, tpe, targs, vargsT)
+        Make(core.ValueType.Data(r.tpe, targs), r, vargsT)
       case f: Operation =>
         Context.panic("Should have been translated to a method call!")
       case f: Field =>

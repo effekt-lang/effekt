@@ -236,11 +236,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.PureApp(b, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs.map(transform), args map transform)
 
-    case core.Make(id, tpe, targs, args: List[core.Expr]) =>
-      // we need to rediscover the type of the constructor:
-      // we probably do not need a polymorphic type, though.
-      val constructorType = core.BlockType.Function(Nil, Nil, args.map(_.tpe), Nil, tpe)
-      PureApp(BlockVar(id, transform(constructorType)), Nil, args map transform)
+    case core.Make(data, tag, args: List[core.Expr]) =>
+      Make(transform(data).asInstanceOf, tag, args map transform)
 
     case core.Select(target, field, tpe) =>
       Select(transform(target), field, transform(tpe))

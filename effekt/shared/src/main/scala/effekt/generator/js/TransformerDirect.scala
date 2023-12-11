@@ -121,7 +121,7 @@ object TransformerDirect extends Transformer {
     case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
     case PureApp(b, targs, vargs) => js.Call(toJS(b), vargs map toJS)
-    case Make(id, tpe, targs, vargs) => js.Call(nameRef(id), vargs map toJS)
+    case Make(tpe, tag, vargs) => js.Call(nameRef(tag), vargs map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
     case Run(s) => toJS(s)(Continuation.Return) match {

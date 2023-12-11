@@ -113,6 +113,25 @@ trait Callable extends BlockSymbol {
   def bparams: List[BlockParam]
   def annotatedResult: Option[ValueType]
   def annotatedEffects: Option[Effects]
+
+   // invariant: only works if ret is defined!
+  def toType: FunctionType = annotatedType.get
+
+  def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =
+    val tps = tparams
+    val vps = vparams.map { p => p.tpe.get }
+    val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
+    FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
+
+  def annotatedType: Option[FunctionType] =
+    for {
+      ret <- annotatedResult;
+      effs <- annotatedEffects
+      effects = effs.distinct
+      // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
+      //   in the future namer needs to annotate the function with the capture parameters it introduced.
+      capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
+    } yield toType(ret, effects, capt)
 }
 
 case class UserFunction(

@@ -186,8 +186,10 @@ enum Pure extends Expr {
 
   /**
    * Constructor calls
+   *
+   * Note: the structure mirrors interface implementation
    */
-  case Make(constructor: Id, dataType: ValueType/* .Data */, targs: List[ValueType], vargs: List[Pure])
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
 
   /**
    * Record Selection
@@ -350,8 +352,8 @@ object normal {
       case other => Stmt.App(callee, targs, vargs, bargs)
     }
 
-  def make(id: Id, tpe: ValueType, targs: List[ValueType], vargs: List[Pure]): Pure =
-    Pure.Make(id, tpe, targs, vargs)
+  def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
+    Pure.Make(tpe, tag, vargs)
 
   def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
     callee match {
@@ -369,8 +371,8 @@ object normal {
   // "match" is a keyword in Scala
   def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
     scrutinee match {
-      case Pure.Make(constructor, dataType, targs, vargs) =>
-        clauses.collectFirst { case (tag, lit) if tag == constructor => lit }
+      case Pure.Make(dataType, ctorTag, vargs) =>
+        clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
           .map(body => app(body, Nil, vargs, Nil))
           .orElse { default }.getOrElse { sys error "Should not happen" }
       case other =>
@@ -525,6 +527,8 @@ object Tree {
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
+    def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
+
     def rewrite(t: BlockType): BlockType = rewriteStructurally(t)
     def rewrite(t: BlockType.Interface): BlockType.Interface = rewriteStructurally(t)
     def rewrite(capt: Captures): Captures = capt.map(rewrite)
@@ -571,7 +575,7 @@ object Variables {
     case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
-    case Pure.Make(constr, tpe, targs, vargs) => all(vargs, free)
+    case Pure.Make(data, tag, vargs) => all(vargs, free)
     case Pure.Select(target, field, annotatedType) => free(target)
     case Pure.Box(b, annotatedCapture) => free(b)
   }
@@ -776,9 +780,8 @@ object substitutions {
       case Literal(value, annotatedType) =>
         Literal(value, substitute(annotatedType))
 
-      case Make(id, tpe, targs, vargs) =>
-        // do we EVER substitute constructor ids?
-        Make(id, substitute(tpe), targs.map(substitute), vargs.map(substitute))
+      case Make(tpe, tag, vargs) =>
+        Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))
 
       case PureApp(b, targs, vargs) =>
         PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))

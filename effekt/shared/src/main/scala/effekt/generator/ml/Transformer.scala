@@ -426,20 +426,16 @@ object Transformer {
       }
     case ValueVar(id, _) => ml.Variable(name(id))
 
+    case Make(data, tag, vargs) =>
+      ml.Expr.Make(name(tag), expsToTupleIsh(vargs map toML))
+
     case PureApp(b, _, args) =>
       val mlArgs = args map {
         case e: Expr => toML(e)
         case b: Block => toML(b)
         case e: Evidence => toML(e)
       }
-      b match {
-        // TODO do not use symbols here, but look up in module declaration
-        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _)), _) =>
-          ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
-        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _)), _) =>
-          ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
-        case _ => ml.Call(toML(b), mlArgs)
-      }
+      ml.Call(toML(b), mlArgs)
 
     case Select(b, field, _) =>
       ml.Call(name(field))(toML(b))
