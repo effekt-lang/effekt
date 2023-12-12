@@ -3,7 +3,7 @@ const permutationsModule = require(path.resolve(__dirname, "../Permute"))
 const measure = require(path.resolve(__dirname, "../Measure"))
 
 const run = () => {
-  for (let i = 0; i < 1000 * 1000; i++) {
+  for (let i = 0; i < 100 * 1000; i++) {
     permutationsModule.newInstance().benchmark()
   }
 }

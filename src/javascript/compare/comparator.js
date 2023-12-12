@@ -1,6 +1,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 
+
 // List of shell commands
 const commands = [
   ['Permute', 'effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
@@ -29,9 +30,11 @@ function executeCommands(commands) {
     execute(dirtyCd + command[2], (time) => performance.js = time)
   });
 
-  const outputFileName = 'commandOutputs.txt';
-  fs.writeFileSync(outputFileName, JSON.stringify(outputs.map(perf => ({ ...perf, ratio: perf.effekt / perf.js })), null, 3));
-  console.log(`Command outputs saved to ${outputFileName}`);
+  const outputFile = "fasteffekt_results.json"
+  const resultString =  JSON.stringify(outputs.map(perf => ({ ...perf, ratio: perf.effekt / perf.js })), null, 3)
+  fs.writeFileSync(outputFile, resultString);
+  console.log(`Command outputs saved to ${outputFile}`);
+  console.log(resultString)
 }
 
 const runAll = () => executeCommands(commands)

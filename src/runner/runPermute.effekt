@@ -3,7 +3,7 @@ import src/measure
 
 def main() = {
   println(measureMillis{
-    each(0,1000){ i =>
+    each(0,100){ i =>
         Permute(10)
     }
   })
