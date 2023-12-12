@@ -185,9 +185,14 @@ object Transformer {
 
   def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, RawExpr(body))
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, toML(body))
     case Extern.Include(contents) =>
       RawBind(contents)
+  }
+
+  def toML(t: Template[lifted.Expr]): ml.Expr = t match {
+    case Template(List(string), Nil) => ml.RawExpr(string)
+    case _ => sys error "Splices not yet supported in the ML backend"
   }
 
   def toMLExpr(stmt: Stmt)(using C: TransformerContext): CPS = stmt match {

@@ -55,10 +55,15 @@ object Transformer {
         case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       noteBlockParams(name, params map transform, List.empty)
-      Extern(transform(name), transformedParams, transform(ret), body)
+      Extern(transform(name), transformedParams, transform(ret), transform(body))
 
     case lifted.Extern.Include(contents) =>
       Include(contents)
+  }
+
+  def transform(t: Template[lifted.Expr]): String = t match {
+    case Template(List(string), Nil) => string
+    case _ => sys error "Splices not yet supported in backends based on Machine IR"
   }
 
   def transform(stmt: lifted.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =

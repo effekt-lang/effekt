@@ -106,7 +106,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       val eparams = bps map {
         case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
       }
-      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), ???)
+      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
+        Template(body.strings, body.args.map(transform)))
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
   }
