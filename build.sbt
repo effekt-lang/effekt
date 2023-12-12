@@ -226,8 +226,8 @@ lazy val stdLibGenerator = Def.task {
 
     val virtuals = resources.get.map { file =>
       val filename = file.relativeTo(baseDir).get
-      val content = IO.read(file).replaceAllLiterally("$", "$$")
-      s"""file(raw\"\"\"$filename\"\"\").write(raw\"\"\"$content\"\"\")"""
+      val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
+      s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
     }
 
     val scalaCode =
@@ -236,6 +236,9 @@ package effekt.util
 import effekt.util.paths._
 
 object Resources {
+
+  def loadIntoFile(filename: String, contents: String): Unit =
+    file(filename).write(contents.replace("!!!MULTILINEMARKER!!!", "\\"\\"\\""))
 
   def load() = {
 ${virtuals.mkString("\n\n")}
