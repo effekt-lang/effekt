@@ -386,18 +386,6 @@ class ParsersBase(positions: Positions) {
 
     // Aliases
 
-    // /**
-    //  * Repetition zero or more times.
-    //  */
-    // def * : Parser[CC[T]] =
-    //     rep (p)
-
-    // /**
-    //  * Repetition one or more times.
-    //  */
-    // def + : Parser[CC[T]] =
-    //     rep1 (p)
-
     /**
      * Optional parsing.
      */
@@ -722,7 +710,7 @@ class ParsersBase(positions: Positions) {
    * A parser that matches a regex string after skipping any whitespace.
    * The form of the latter is defined by the `whitespace` parser.
    */
-  implicit def regex(r: Regex): Parser[String] =
+  def regex(r: Regex, expected: => String): Parser[String] =
     Parser {
       in =>
         val s = in.source.content.substring(in.offset)
@@ -730,9 +718,12 @@ class ParsersBase(positions: Positions) {
           case Some(m) =>
             Success(s.substring(0, m.end), Input(in.source, in.offset + m.end))
           case None =>
-            Failure(s"string matching regex '$r' expected but ${in.found} found", in)
+            Failure(s"${expected} expected but ${in.found} found", in)
         }
     }
+
+  implicit def regex(r: Regex): Parser[String] =
+    regex(r, s"string matching regex '$r'")
 
   /**
    * A parser that matches a regex string after skipping any whitespace.
@@ -851,7 +842,7 @@ class ParsersBase(positions: Positions) {
    * that it's not immediately followed by something that extends it.
    */
   def keywords(ext: Regex, kws: List[String]): Parser[String] =
-    regex("(%s)(%s|\\z)".format(kws.mkString("|"), ext).r)
+    regex("(%s)(%s|\\z)".format(kws.mkString("|"), ext).r, "Keyword")
 
   /**
    * Convert the digit string `s` to an `Int` if it's in range, but return an
