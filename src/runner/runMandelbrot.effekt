@@ -1,0 +1,10 @@
+import src/mandelbrot
+import src/measure
+
+def main() = {
+  println(measureMillis{
+    each(0,2){ i =>
+        Mandelbrot(750)
+    }
+  })
+}

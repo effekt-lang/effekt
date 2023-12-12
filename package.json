@@ -1,0 +1,29 @@
+{
+  "name": "fasteffekt",
+  "version": "1.0.0",
+  "description": "Benchmarking for the Effekt language",
+  "main": "index.js",
+  "scripts": {
+    "start": "./src/javascript/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:effekt": "./run_benches.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IR0NSIGHT/fasteffekt.git"
+  },
+  "bin": {
+    "fasteffekt": "./src/javascript/index.js"
+  },
+  "keywords": [
+    "Effekt",
+    "fasteffekt",
+    "benchmark"
+  ],
+  "author": "IR0NSIGHT/Maximilian Marschall",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/IR0NSIGHT/fasteffekt/issues"
+  },
+  "homepage": "https://github.com/IR0NSIGHT/fasteffekt#readme"
+}
