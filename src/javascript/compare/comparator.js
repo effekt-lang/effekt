@@ -5,6 +5,7 @@ const fs = require('fs');
 // List of shell commands
 const commands = [
   ['permute', 'src/effekt/benchmark/permute.effekt', 'node src/javascript/runner/runPermute.js'],
+  ["nbody", "src/effekt/benchmark/nbody.effekt", "node src/javascript/runner/runNbody.js"],
   ['list', 'src/effekt/benchmark/list.effekt', 'node src/javascript/runner/runList.js'],
   ["mandelbrot", "src/effekt/benchmark/mandelbrot.effekt","node src/javascript/runner/runMandelbrot.js"]
   // Add more commands as needed
