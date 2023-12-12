@@ -1,0 +1,55 @@
+import io/args
+import text/string
+import immutable/list
+
+
+def measureMillis{ operation: () => Unit }: Int = {
+    val startTime : Int = currentTimeNanos();
+    operation();
+    val diff = currentTimeNanos() - startTime;
+    val runTime = diff/1000000;
+
+    return runTime
+}
+
+
+//runs benchmark. will use minibench if --verify was given as cmd arg.
+//returns measured time from benchmarks as list[Int] as JSON String.
+def runFromCli{ miniBench: () => Unit }{ bench: () =>Unit }: String = {
+    val isVerify = commandLineArgs() match {
+      case Cons(_,Cons(arg,_)) => (arg == "--verify") 
+      case _ => false
+    }
+
+    val iterations: Int = commandLineArgs() match {
+      case Cons(its,_) => its.unsafeToInt() //FIXME compiler doesnt choose correct overload for "toInt"
+      case _ => panic("cli runner was not given cmd arg for iterations!")
+    }
+
+    var durationLog: List[Int] = Nil()
+
+    if (isVerify) {
+      each(0,3){ i => 
+        durationLog = Cons(measureMillis{miniBench},durationLog)
+      }
+    } else {
+      each(0,iterations){ i =>
+        durationLog = Cons(measureMillis{bench},durationLog)
+      }
+    }
+    intListToJson(durationLog)
+}
+
+
+def intListToJson(l: List[Int]): String = {
+  var out: String = "["
+  val size = l.size()
+  foreachIndex[Int](l){ (index, entry) =>
+    out = out ++ show(entry); ();
+    if (index < size-1)
+      out = out ++ ","
+  }
+  out = out ++ "]"
+  out
+}
+

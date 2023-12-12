@@ -1,8 +1,0 @@
-def measureMillis{ operation: () => Unit }: Int = {
-    val startTime : Int = currentTimeNanos();
-    operation();
-    val diff = currentTimeNanos() - startTime;
-    val runTime = diff/1000000;
-
-    return runTime
-}
