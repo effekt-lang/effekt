@@ -5,7 +5,8 @@ const fs = require('fs');
 // List of shell commands
 const commands = [
   ['Permute', 'effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
-  ['List', 'effekt.sh src/runner/runList.effekt', 'node src/javascript/runner/runList.js']
+  ['List', 'effekt.sh src/runner/runList.effekt', 'node src/javascript/runner/runList.js'],
+  ["Mandelbrot", "effekt.sh src/runner/runMandelbrot.effekt","node src/javascript/runner/runMandelbrot.js"]
   // Add more commands as needed
 ];
 
@@ -31,7 +32,7 @@ function executeCommands(commands) {
   });
 
   const outputFile = "fasteffekt_results.json"
-  const resultString =  JSON.stringify(outputs.map(perf => ({ ...perf, ratio: perf.effekt / perf.js })), null, 3)
+  const resultString = JSON.stringify(outputs.map(perf => ({ ...perf, ratio: perf.effekt / perf.js })), null, 3)
   fs.writeFileSync(outputFile, resultString);
   console.log(`Command outputs saved to ${outputFile}`);
   console.log(resultString)
