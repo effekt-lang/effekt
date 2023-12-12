@@ -4,9 +4,9 @@ const fs = require('fs');
 
 // List of shell commands
 const commands = [
-  ['Permute', 'effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
-  ['List', 'effekt.sh src/runner/runList.effekt', 'node src/javascript/runner/runList.js'],
-  ["Mandelbrot", "effekt.sh src/runner/runMandelbrot.effekt","node src/javascript/runner/runMandelbrot.js"]
+  ['permute', 'src/effekt/benchmark/permute.effekt', 'node src/javascript/runner/runPermute.js'],
+  ['list', 'src/effekt/benchmark/list.effekt', 'node src/javascript/runner/runList.js'],
+  ["mandelbrot", "src/effekt/benchmark/mandelbrot.effekt","node src/javascript/runner/runMandelbrot.js"]
   // Add more commands as needed
 ];
 
@@ -20,15 +20,21 @@ const execute = (command, onOutput) => {
   onOutput(output.trim())
 }
 
-function executeCommands(commands) {
+function executeCommands(commands, isVerify) {
   const outputs = [];
   commands.forEach((command, index) => {
     const performance = { name: command[0], effekt: -1, js: -1 }
     outputs.push(performance)
     console.log("running benchmark:", performance.name)
-    const dirtyCd = "cd " + __dirname + " && cd ../../.. &&"
-    execute(dirtyCd + command[1], (time) => performance.effekt = time)
-    execute(dirtyCd + command[2], (time) => performance.js = time)
+    const dirtyCd = "cd " + __dirname + " && cd ../../.. && "
+    const verifyArgs = isVerify ? " --verify" : ""
+
+    const [executableName, effektPath, jsCmd ] = command
+    const effektCmd = `effekt.sh -b ${effektPath} && ./out/${executableName} ` 
+    execute(dirtyCd + effektCmd + verifyArgs, (time) => performance.effekt = time)
+
+
+    execute(dirtyCd + jsCmd + verifyArgs, (time) => performance.js = time)
   });
 
   const outputFile = "fasteffekt_results.json"
@@ -38,6 +44,6 @@ function executeCommands(commands) {
   console.log(resultString)
 }
 
-const runAll = () => executeCommands(commands)
+const runAll = (isVerify) => executeCommands(commands, isVerify)
 module.exports = runAll
 // 
