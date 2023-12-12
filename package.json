@@ -4,7 +4,9 @@
   "description": "Benchmarking for the Effekt language",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "./src/javascript/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:effekt": "./run_benches.sh"
   },
   "repository": {
     "type": "git",
