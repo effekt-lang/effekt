@@ -3,7 +3,8 @@ const fs = require('fs');
 
 // List of shell commands
 const commands = [
-  ['Permute','effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
+  ['Permute', 'effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
+  ['List', 'effekt.sh src/runner/runList.effekt', 'node src/javascript/runner/runList.js']
   // Add more commands as needed
 ];
 
@@ -22,10 +23,10 @@ function executeCommands(commands) {
   commands.forEach((command, index) => {
     const performance = { name: command[0], effekt: -1, js: -1 }
     outputs.push(performance)
-    console.log("comparator running in dir:",__dirname)
-    const dirtyCd = "cd "+__dirname+" && cd ../../.. &&"
-    execute(dirtyCd+command[1], (time) => performance.effekt = time)
-    execute(dirtyCd+command[2], (time) => performance.js = time)
+    console.log("running benchmark:", performance.name)
+    const dirtyCd = "cd " + __dirname + " && cd ../../.. &&"
+    execute(dirtyCd + command[1], (time) => performance.effekt = time)
+    execute(dirtyCd + command[2], (time) => performance.js = time)
   });
 
   const outputFileName = 'commandOutputs.txt';

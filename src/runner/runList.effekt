@@ -1,10 +1,10 @@
-import src/permute
+import src/list
 import src/measure
 
 def main() = {
   println(measureMillis{
     each(0,1000){ i =>
-        Permute(10)
+        List(-1)
     }
   })
 }
