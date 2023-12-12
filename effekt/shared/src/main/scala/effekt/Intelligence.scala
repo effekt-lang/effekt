@@ -9,7 +9,7 @@ trait Intelligence {
   import effekt.symbols._
   import builtins.TState
 
-  type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
+  type EffektTree = kiama.relation.Tree[AnyRef & Product, ModuleDecl]
 
   case class SymbolInfo(
     symbol: Symbol,
@@ -39,8 +39,9 @@ trait Intelligence {
   def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
     decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
+    allTrees = tree.nodes.collect { case t: Tree => t }
     pos = C.positions
-    trees = pos.findNodesContaining(tree.nodes, position)
+    trees = pos.findNodesContaining(allTrees, position)
     nodes = trees.sortWith {
       (t1, t2) =>
         val p1s = pos.getStart(t1).get
