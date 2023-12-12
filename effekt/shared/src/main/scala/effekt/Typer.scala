@@ -755,7 +755,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result((), effBind)
 
       case d @ source.DefDef(id, annot, binding) =>
-
         given inferredCapture: CaptUnificationVar = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
 
         // we require inferred Capture to be solved after checking this block.
@@ -765,13 +764,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result((), effBinding)
         }
 
-      case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
+      case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) => Context.withUnificationScope {
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
 
         body.args.foreach { arg => checkExpr(arg, None) }
 
         Result((), Pure)
+      }
 
       // all other definitions have already been prechecked
       case d =>

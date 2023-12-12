@@ -186,11 +186,6 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        Context scoped {
-          Context.bindValues(vps)
-          Context.bindBlocks(bps)
-          body.args.foreach(resolveGeneric)
-        }
         ExternFunction(name, tps, vps, bps, tpe, eff, capt, body)
       })
     }
@@ -286,6 +281,15 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) =>
+      val sym = f.symbol
+      Context scoped {
+        sym.tparams.foreach { p => Context.bind(p) }
+        Context.bindValues(sym.vparams)
+        Context.bindBlocks(sym.bparams)
+        body.args.foreach(resolveGeneric)
+      }
+
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
       val effectSym = Context.resolveType(id).asControlEffect
       effectSym.operations = operations.map {
@@ -337,7 +341,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
-    case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
