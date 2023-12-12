@@ -130,9 +130,10 @@ trait Compiler[Executable] {
    * captures at boxes and definitions 
    */
   def runMiddleend(source: Source)(using Context): Option[Module] =
-    val typechecked = Frontend(source)
-    typechecked.foreach(res => validate(source, res.mod))
-    typechecked.flatMap(Middleend.run).map(_.mod)
+    (Frontend andThen Middleend)(source).map { res => 
+      validate(res.source, res.mod)
+      res.mod
+    }
 
   /**
    * Called after running the frontend from editor services.
