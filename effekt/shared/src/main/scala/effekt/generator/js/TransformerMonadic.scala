@@ -122,7 +122,12 @@ object TransformerMonadic extends Transformer {
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
-    val externs = module.externs.map(toJS)
+    val externs = module.externs.collect {
+      // only keep control externs and those with block parameters. All others are inlined away
+      case d : Extern.Def if d.annotatedCapture contains symbols.builtins.ControlCapability.capture => toJS(d)
+      case d : Extern.Def if d.bparams.nonEmpty => toJS(d)
+      case d : Extern.Include => toJS(d)
+    }
     val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
     val state   = generateStateAccessors
