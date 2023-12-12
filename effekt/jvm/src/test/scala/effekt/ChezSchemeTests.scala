@@ -26,6 +26,10 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "issue319.effekt",
     examplesDir / "pos" / "maps.effekt",
 
+    // splices not yet supported in Chez backends
+    examplesDir / "pos" / "capture" / "resources.effekt" ,
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
+
     // bidirectional effects are not yet supported in our Chez backend
     examplesDir / "pos" / "bidirectional",
 
@@ -72,9 +76,6 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
   def backendName = "chez-lift"
 
   override def ignored: List[File] = super.ignored ++ List(
-
-    // splices not yet supported
-    examplesDir / "pos" / "capture" / "resources.effekt" ,
 
     // regions are not yet supported
     examplesDir / "benchmarks" / "generator.effekt",

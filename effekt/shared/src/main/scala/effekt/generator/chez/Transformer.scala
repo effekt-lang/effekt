@@ -129,10 +129,15 @@ trait Transformer {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
-          chez.RawExpr(???)))
+          toChez(body)))
 
     case Extern.Include(contents) =>
       RawDef(contents)
+  }
+
+  def toChez(t: Template[core.Expr]): chez.Expr = t match {
+    case Template(List(string), Nil) => chez.RawExpr(string)
+    case _ => sys error "Splices not yet supported in the Chez backend"
   }
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
