@@ -98,7 +98,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), body))
+      val args = body.args.map(transformAsExpr).map {
+        case p: Pure => p: Pure
+        case _ => Context.abort("Spliced arguments need to be pure expressions.")
+      }
+      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt),
+        Template(body.strings, args)))
 
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))

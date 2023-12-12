@@ -129,7 +129,7 @@ trait Transformer {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
-          chez.RawExpr(body)))
+          chez.RawExpr(???)))
 
     case Extern.Include(contents) =>
       RawDef(contents)

@@ -71,7 +71,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( `extern` ~> externBody ^^ Extern.Include.apply
     | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> externBody) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body)
+        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, ???)
     })
 
   lazy val externBody = stringLiteral | multilineString

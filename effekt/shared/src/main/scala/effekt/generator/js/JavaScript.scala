@@ -39,10 +39,10 @@ class JavaScript extends Compiler[String] {
   // ------------------------
   // Source => Core [=> DirectStyleState] => JS
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend andThen DirectStyleMutableState andThen core.LambdaLifting
+    Frontend andThen Middleend andThen DirectStyleMutableState
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe andThen core.LambdaLifting map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)

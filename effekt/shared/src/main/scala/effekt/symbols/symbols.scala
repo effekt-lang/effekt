@@ -381,7 +381,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  body: String = ""
+  body: Template[source.Term]
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)

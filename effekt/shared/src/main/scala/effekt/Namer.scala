@@ -186,6 +186,11 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
+        Context scoped {
+          Context.bindValues(vps)
+          Context.bindBlocks(bps)
+          body.args.foreach(resolveGeneric)
+        }
         ExternFunction(name, tps, vps, bps, tpe, eff, capt, body)
       })
     }

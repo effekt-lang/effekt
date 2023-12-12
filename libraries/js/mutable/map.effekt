@@ -13,13 +13,20 @@ def get[K, V](m: Map[K, V], key: K): Option[V] =
   m.unsafeGet(key).undefinedToOption
 
 extern pure def unsafeGet[K, V](m: Map[K, V], key: K): V =
-  "m.get(key)"
+  "${m}.get(${key})"
+
+extern """
+function map$update(m, key, value) {
+  m.set(key, value);
+  return $effekt.unit
+}
+"""
 
 extern io def update[K, V](m: Map[K, V], key: K, value: V): Unit =
-  "(function() { m.set(key, value); return $effekt.unit })()"
+  "map$update(${m}, ${key}, ${value})"
 
 extern pure def values[K, V](map: Map[K, V]): Array[V] =
-  "Array.from(map.values())"
+  "Array.from(${map}.values())"
 
 extern pure def keys[K, V](map: Map[K, V]): Array[K] =
-  "Array.from(map.keys())"
+  "Array.from(${map}.keys())"

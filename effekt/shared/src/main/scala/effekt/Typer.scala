@@ -768,6 +768,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
+
+        body.args.foreach { arg => checkExpr(arg, None) }
+
         Result((), Pure)
 
       // all other definitions have already been prechecked
