@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{ Annotation, Annotations, Context, ContextOps }
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -702,16 +702,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result((), unhandledEffects)
 
       case d @ source.ValDef(binders, binding, _) =>
-        val tpeList = d.symbol.map(_.tpe)
-        val Result(t, effBinding) = if (tpeList.forall(_.isDefined)) {
-          val Result(_, effBinding) = binding checkAgainst tpeList.flatten
-          Result(tpeList.flatten, effBinding)
+        // TODO cleanup after turning Option[List[ValueType]] into List[Option[ValueType]]
+        val tpes = d.boundSymbols.map(_.tpe)
+        val Result(t, effBinding) = if (tpes.forall(_.isDefined)) {
+          val Result(_, effBinding) = binding checkAgainst tpes.flatten
+          Result(tpes.flatten, effBinding)
         } else {
           checkStmt(binding, None)
         }
 
         // TODO MRV: check for same length
-        (d.symbol zip t) foreach { case (sym, tpe) => Context.bind(sym, tpe) } // TODO MRV: zip?
+        (d.boundSymbols zip t) foreach { case (sym, tpe) => Context.bind(sym, tpe) } // TODO MRV: zip?
 
         Result((), effBinding)
 

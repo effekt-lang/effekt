@@ -208,7 +208,7 @@ object Annotations {
    *
    * Filled by namer and used for reverse lookup in LSP server
    */
-  val References = Annotation[symbols.Symbol, List[source.Reference]](
+  val References = Annotation[symbols.Symbol, Set[source.Reference]](
     "References",
     "the references referring to symbol"
   )
@@ -485,23 +485,22 @@ trait AnnotationsDB { self: Context =>
       // addDefinedSymbolToSource(sym)
   }
 
-  def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
-    panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
-  }
+  /**
+   * Should only be used rarely.
+   *
+   * Instead, if possible, should use Def.symbol or ValDef.boundSymbols on the
+   * parent tree (the [[source.Def]]).
+   */
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)
 
   /**
-   * Searching the definitions for a Reference
+   * Should only be used rarely.
    *
-   * This one can fail.
+   * Instead, try to use more specific variants like Def.symbol, or ValDef.boundSymbols instead.
    */
-  def symbolOf(tree: source.Reference): Symbol = {
-    val sym = symbolOf(tree.id)
-
-    val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
-    annotate(Annotations.References, sym, tree :: refs)
-    sym
+  def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
+    panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
   }
 
   /**
@@ -535,8 +534,8 @@ trait AnnotationsDB { self: Context =>
    */
   def distinctReferencesTo(sym: Symbol): List[source.Reference] =
     annotationOption(Annotations.References, sym)
-      .getOrElse(Nil)
-      .distinctBy(r => System.identityHashCode(r))
+      .getOrElse(Set.empty)
+      .toList
 
   def captureOf(sym: BlockSymbol): symbols.Captures =
     annotation(Annotations.Captures, sym)

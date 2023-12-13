@@ -55,7 +55,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
     case v @ source.ValDef(_, binding, _) if pureOrIO(binding) =>
-      List(Definition.Let(v.symbol, Run(transform(binding)))) // TODO MRV: symbol must return list
+      List(Definition.Let(v.boundSymbols, Run(transform(binding)))) // TODO MRV: symbol must return list
 
     case v @ source.ValDef(_, binding, _) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
@@ -143,10 +143,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
 
       case v @ source.ValDef(_, binding, _) if pureOrIO(binding) =>
-        Let(v.symbol, Run(transform(binding)), transform(rest))
+        Let(v.boundSymbols, Run(transform(binding)), transform(rest))
 
       case v @ source.ValDef(_, binding, _) =>
-        Val(v.symbol, transform(binding), transform(rest))
+        Val(v.boundSymbols, transform(binding), transform(rest))
 
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol

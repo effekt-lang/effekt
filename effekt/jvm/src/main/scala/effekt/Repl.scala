@@ -1,12 +1,12 @@
 package effekt
 
-import effekt.source._
+import effekt.source.*
 import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic }
 import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
-import kiama.util.{ Console, REPL, Source, StringSource, Range }
+import kiama.util.{ Console, REPL, Range, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
@@ -107,8 +107,10 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
         module.definitions.foreach {
-          case u: Def =>
-            outputCode(DeclPrinter(List(u.id.symbol)), config)
+          case u: Definition.Resolvable =>
+            outputCode(DeclPrinter(u.symbol), config)
+          case d: ValDef => ???
+          case d: ExternInclude => ???
         }
       }
     }
@@ -220,15 +222,20 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        context.symbolOption(d.id) match {
-          case Some(v: ValueSymbol) =>
-            Some(v, context.valueTypeOf(v))
-          case Some(b: BlockSymbol) =>
-            Some(b, context.blockTypeOf(b))
-          case t =>
-            None
-        } map { case (id, tpe) =>
-          outputCode(pp"${id}: ${tpe}", config)
+        d match {
+          case d: Definition.Resolvable =>
+            d.symbolOption match {
+              case Some(v: ValueSymbol) =>
+                Some(v, context.valueTypeOf(v))
+              case Some(b: BlockSymbol) =>
+                Some(b, context.blockTypeOf(b))
+              case t =>
+                None
+            } foreach { case (id, tpe) =>
+              outputCode(pp"${id}: ${tpe}", config)
+            }
+          case d: ValDef => ???
+          case d: ExternInclude => config.output().emitln("extern definitions loaded")
         }
       }
 
@@ -296,7 +303,11 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
-      val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
+      val otherDefs = definitions.filterNot {
+        case other: Definition.Resolvable => other.id.name == d.id.name
+        case other: ValDef => other.binders.map(_.id.name) contains d.id.name
+        case d: ExternInclude => false
+      }
       copy(definitions = otherDefs :+ d)
     }
     def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)

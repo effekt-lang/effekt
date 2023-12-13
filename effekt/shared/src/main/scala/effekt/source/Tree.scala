@@ -2,7 +2,7 @@ package effekt
 package source
 
 import effekt.context.Context
-import effekt.symbols.Symbol
+import effekt.symbols.{ Symbol, TypeSymbol }
 
 /**
  * Data type representing source program trees.
@@ -111,15 +111,17 @@ case class IdRef(name: String) extends Id {
   }
 }
 
-sealed trait Named extends Tree
-
-// Something that later will be stored in the symbol table
-sealed trait Definition extends Named {
+/**
+ * Something that later will be stored in the symbol table
+ */
+sealed trait Definition extends Tree {
   def id: IdDef
 }
 
-// Something that later can be looked up in the symbol table
-sealed trait Reference extends Named {
+/**
+ * Something that later can be looked up in the symbol table
+ */
+sealed trait Reference extends Tree {
   def id: IdRef
 }
 
@@ -431,8 +433,6 @@ export MatchPattern.*
 /**
  * Types and Effects
  *
- * TODO generalize to blocks that can take blocks
- *
  * ----------[[ effekt.source.Type ]]----------
  *
  *   ─ [[ Type ]]
@@ -503,22 +503,16 @@ object Effects {
 case class CaptureSet(captures: List[IdRef]) extends Tree
 
 
-object Named {
+object Definition {
 
   type Params = ValueParam | BlockParam
   type Externs = ExternDef | ExternResource | ExternInterface | ExternType
-  type Defs = FunDef | ValDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
-  type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
+  type Defs = FunDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
+  type Resolvable = Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
-  type Types = ValueTypeRef | BlockTypeRef
-  type Vars = Var | Assign
-  type Calls = Do | Select | MethodCall | IdTarget
-  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
-
-  type ResolvedDefinitions[T <: Definitions] = T match {
+  type SymbolFor[T <: Resolvable] <: Symbol = T match {
     // Defs
     case FunDef       => symbols.UserFunction
-    case ValDef       => List[symbols.Binder.ValBinder] // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
     case VarDef       => symbols.Binder.VarBinder
     case DefDef       => symbols.Binder.DefBinder
     case InterfaceDef => symbols.BlockTypeConstructor.Interface
@@ -544,7 +538,40 @@ object Named {
     case AnyPattern  => symbols.ValueParam
   }
 
-  type ResolvedReferences[T <: References] = T match {
+  import effekt.context.Annotations
+
+  /**
+   * Definitions resolve to exactly one symbol, which is the one they introduce
+   */
+  extension [T <: Resolvable](t: T & Definition) {
+    def symbol(using C: Context): SymbolFor[T] =
+      symbolOption getOrElse {
+        C.panic(s"Internal Compiler Error: Cannot find symbol for ${t.id}")
+      }
+
+    def symbolOption(using C: Context): Option[SymbolFor[T]] =
+      C.annotationOption(Annotations.Symbol, t.id).map(_.asInstanceOf[SymbolFor[T]])
+  }
+
+  /**
+   * `ValDef`s resolve to potentially multiple symbols.
+   */
+  extension (t: ValDef) {
+    def boundSymbols(using C: Context): List[effekt.symbols.Binder.ValBinder] =
+      // the symbol of a ValueParam is a symbols.ValueParam, not a ValBinder!
+      t.binders.map { (b: ValueParam) => b.symbol; ??? }
+  }
+}
+
+
+object Reference {
+
+  type Types = ValueTypeRef | BlockTypeRef
+  type Vars = Var | Assign
+  type Calls = Do | Select | MethodCall | IdTarget
+  type Resolvable = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
+
+  type SymbolFor[T <: Resolvable] <: Symbol = T match {
     // Types
     case ValueTypeRef => symbols.TypeConstructor
     case BlockTypeRef => symbols.BlockTypeConstructor
@@ -566,52 +593,54 @@ object Named {
     case TagPattern => symbols.Constructor
   }
 
-  extension [T <: Definitions](t: T & Definition) {
-    def symbol(using C: Context): ResolvedDefinitions[T] = t match {
-      case t: ValDef => t.binders.map { (b: ValueParam) => C.symbolOf(b.id).asInstanceOf[symbols.Binder.ValBinder] }.asInstanceOf[ResolvedDefinitions[T]]
-      case _ => C.symbolOf(t.id).asInstanceOf[ResolvedDefinitions[T]]
-    }
-  }
-  extension [T <: References](t: T & Reference) {
-    def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf
-  }
+  import effekt.context.Annotations
 
+  /**
+   * References resolve to exactly one symbol.
+   *
+   * Looking them up creates a backreference for IDE support
+   */
+  extension [T <: Resolvable](t: T & Reference) {
+    def definition(using C: Context): SymbolFor[T] =
+      val sym = C.symbolOf(t.id)
+      val refs = C.annotationOption(Annotations.References, sym).getOrElse(Set.empty)
+      C.annotate(Annotations.References, sym, refs + t)
+      sym.asInstanceOf
+  }
 }
-export Named.symbol
 
-// MOVE TO NAMER
-object Resolvable {
 
-  // Value Types
-  // -----------
+object ValueType {
   extension (t: ValueType) {
     def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf
   }
+}
+
+
+object BlockType {
 
   // BLock Types
   // -----------
   // we need to avoid widening, so here we define BlockType as a sum without a common parent
   // (see https://github.com/lampepfl/dotty/issues/16299)
-  type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
+  type Resolvable = BlockTypeTree | FunctionType | BlockTypeRef
 
-  type Resolved[T <: BlockTypes] = T match {
+  type TypeFor[T <: Resolvable] <: symbols.Type = T match {
     case BlockTypeTree => symbols.BlockType
     case FunctionType => symbols.FunctionType
     case BlockTypeRef => symbols.InterfaceType
   }
 
-  extension [T <: BlockTypes] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
+  extension [T <: Resolvable] (t: T) {
+    def resolve(using C: Context): TypeFor[T] = C.resolvedType(t).asInstanceOf
   }
+}
 
-  // Capture Sets
-  // ------------
+object CaptureSet {
   extension (capt: source.CaptureSet) {
     def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
   }
 }
-export Resolvable.resolve
-
 
 object Tree {
 
