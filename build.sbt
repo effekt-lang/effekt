@@ -186,6 +186,13 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
 
+lazy val lspServerTest = project
+  .in(file("lspTest"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(
+    // for an application with a main method
+    scalaJSUseMainModuleInitializer := true,
+  )
 
 lazy val platform = Def.task {
   val platformString = System.getProperty("os.name").toLowerCase
