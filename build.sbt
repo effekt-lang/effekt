@@ -186,12 +186,18 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
 
-lazy val lspServerTest = project
+lazy val lspTest = project
   .in(file("lspTest"))
   .enablePlugins(ScalaJSPlugin)
+  .enablePlugins(ScalaJSBundlerPlugin)
   .settings(
-    // for an application with a main method
     scalaJSUseMainModuleInitializer := true,
+    Compile / npmDependencies ++= Seq(
+      "@types/node" -> "^20.10.4",
+      "@types/vscode" -> "^1.85.0",
+      "vscode-languageclient" -> "^9.0.1",
+      "vscode" -> "^1.1.37"
+    )
   )
 
 lazy val platform = Def.task {
