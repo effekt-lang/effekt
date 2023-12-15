@@ -1,40 +1,35 @@
-package lspTest.Facade
+package lspTest
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 import scala.scalajs.js.annotation.JSGlobal
 
-@js.native
-trait LanguageClientOptions extends js.Object {
-  var documentSelector: js.Array[String] = js.native
-  var diagnosticCollectionName: String = js.native
-}
+object Facade {
+    @js.native
+    @JSImport("net", "createConnection")
+    def createConnection(options: SocketOptions, connectListener: js.Function0[Unit]): Socket = js.native
 
-object LanguageClientOptions {
-    def apply(documentSelector: js.Array[String], diagnosticCollectionName: String) = {
-        val options = (new js.Object).asInstanceOf[LanguageClientOptions]
-        options.documentSelector = documentSelector
-        options.diagnosticCollectionName = diagnosticCollectionName
-        options
+    trait SocketOptions extends js.Object {
+        var port: js.UndefOr[Int] = js.undefined
+        var host: js.UndefOr[String] = js.undefined
+    }
+
+    @JSImport("net", "Socket")
+    @js.native
+    class Socket extends js.Object {
+        def this(options: SocketOptions) = this()
+        def connect(path: String, connectListener: js.Function0[Unit]): Socket = js.native
+        def connect(port: Int, host: String, connectListener: js.Function0[Unit]): Socket = js.native
+        def destroyed: Boolean = js.native
+        def readyState: String = js.native
+        def localAddress: js.UndefOr[String] = js.native
+        def localPort: js.UndefOr[Int] = js.native
+        def remoteAddress: js.UndefOr[String] = js.native
+        def remotePort: js.UndefOr[Int] = js.native
+        def end(): Socket = js.native
+        def setEncoding(encoding: String): Socket = js.native
+        def setKeepAlive(enable: Boolean): Socket = js.native
+        def setNoDelay(noDelay: Boolean): Socket = js.native
+        def setTimeout(timeout: Double): Socket = js.native
     }
 }
-
-@js.native
-trait ServerOptions extends js.Object {
-  var command: String = js.native
-  var args: js.Array[String] = js.native
-}
-
-object ServerOptions {
-    def apply(command: String, args: js.Array[String]) = {
-        val options = (new js.Object).asInstanceOf[ServerOptions]
-        options.command = command
-        options.args = args
-        options
-    }
-}
-
-@js.native
-@JSImport("vscode-languageclient", "LanguageClient")
-class LanguageClient(val id: String, val name: String, serverOptions: ServerOptions, clientOptions: LanguageClientOptions) extends js.Object
-

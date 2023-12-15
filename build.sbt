@@ -1,6 +1,7 @@
 import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
+import scalajsbundler.util.JSON.{obj,str}
 import benchmarks._
 import EffektVersion.effektVersion
 
@@ -236,10 +237,7 @@ lazy val lspTest = project
   .settings(
     scalaJSUseMainModuleInitializer := true,
     Compile / npmDependencies ++= Seq(
-      "@types/node" -> "^20.10.4",
-      "@types/vscode" -> "^1.85.0",
-      "vscode-languageclient" -> "^9.0.1",
-      "vscode" -> "^1.1.37"
+      "vscode-languageserver-protocol" -> "^3.17.5",
     )
   )
 
