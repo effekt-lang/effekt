@@ -82,7 +82,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         }
 
         // we are in one of three exclusive modes: LSPServer, Compile, Run
-        if (config.server()) { compiler.runFrontend(src) }
+        if (config.server()) { compiler.runMiddleend(src) }
         else if (config.interpret()) { compile() foreach runner.eval }
         else if (config.build()) { compile() foreach runner.build }  
         else if (config.compile()) { compile() }

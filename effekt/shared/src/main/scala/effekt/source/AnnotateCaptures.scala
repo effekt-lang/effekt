@@ -19,6 +19,8 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   val phaseName = "annotate-captures"
 
   def run(input: Typechecked)(using C: Context) =
+    // reset allCaptures since multiple runs of this phase may pollute it with outdated information
+    allCaptures = Nil
     annotate(input.tree, input.source)
     Some(input)
 
