@@ -120,6 +120,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "licenses",
 
+    // cli flag so sbt doesn't crash when effekt does
+    addCommandAlias("run", "runMain effekt.Server --noexit-on-error"),
 
     assembleBinary := {
       val jarfile = assembly.value
