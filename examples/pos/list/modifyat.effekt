@@ -1,0 +1,16 @@
+module examples/pos/list/modifyat
+
+import immutable/option
+import immutable/list
+
+// used to circumvent missing universal `show` & `println` on some backends
+def printOptionOfList(l: Option[List[Int]]): Unit = l match {
+  case None() => println("None()")
+  case Some(value) => println("Some(" ++ show(value) ++ ")")
+}
+
+def main() = {
+  // synchronized with doctest in `modifyAt`
+  printOptionOfList([1, 2, 3].modifyAt(1) { n => n + 100 })
+  printOptionOfList([1, 2, 3].modifyAt(10) { n => n + 100 })
+}

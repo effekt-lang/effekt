@@ -1,0 +1,2 @@
+Some(Cons(1, Cons(102, Cons(3, Nil()))))
+None()

@@ -1,0 +1,20 @@
+module examples/pos/list/get
+
+import immutable/option
+import immutable/list
+
+def main() = {
+  val empty: List[Int] = Nil()
+
+  println(get(empty, -1))
+  println(get(empty, 0))
+  println(get(empty, 1))
+
+  val list: List[Int] = [1, 2, 3, 4, 5]
+
+  println(get(list, -1))
+  println(get(list, 0))
+  println(get(list, 1))
+  println(get(list, 4))
+  println(get(list, 5))
+}

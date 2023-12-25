@@ -1,0 +1,12 @@
+module examples/pos/list/take
+
+import immutable/list
+
+def main() = {
+  // synchronized with doctests in `drop`
+  println([1, 2, 3].drop(2))
+  println([1, 2, 3].drop(0))
+  println([1, 2, 3].drop(3))
+  println([1, 2, 3].drop(5))
+  println([1, 2, 3].drop(-1))
+}

@@ -1,0 +1,21 @@
+module examples/pos/list/all
+
+import immutable/list
+
+def main() = {
+  val empty: List[Int] = Nil()
+
+  println(empty.all { x => true })
+  println(empty.all { x => x > 0 })
+  println(empty.all { x => x < 0 })
+
+  val list: List[Int] = [1, 2, 3, 4, 5]
+
+  println(list.all { x => true })
+  println(list.all { x => false })
+  println(list.all { x => x > 0 })
+  println(list.all { x => x < 10 })
+  println(list.all { x => x > 3 })
+  println(list.all { x => x <= 3 })
+  println(list.all { x => x > 10 })
+}

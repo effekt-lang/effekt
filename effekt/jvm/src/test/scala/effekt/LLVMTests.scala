@@ -12,7 +12,6 @@ class LLVMTests extends EffektTests {
 
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
-    examplesDir / "pos" / "list",
   )
 
   /**

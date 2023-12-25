@@ -1,0 +1,35 @@
+index: -1
+Nil()
+Nil()
+
+index: 0
+Nil()
+Nil()
+
+index: 1
+Nil()
+Nil()
+
+index: -1
+Nil()
+Cons(1, Cons(2, Cons(3, Nil())))
+
+index: 0
+Nil()
+Cons(1, Cons(2, Cons(3, Nil())))
+
+index: 1
+Cons(1, Nil())
+Cons(2, Cons(3, Nil()))
+
+index: 2
+Cons(1, Cons(2, Nil()))
+Cons(3, Nil())
+
+index: 3
+Cons(1, Cons(2, Cons(3, Nil())))
+Nil()
+
+index: 4
+Cons(1, Cons(2, Cons(3, Nil())))
+Nil()
