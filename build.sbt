@@ -189,13 +189,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
 lazy val lspTest = project
   .in(file("lspTest"))
-  .enablePlugins(ScalaJSPlugin)
   .enablePlugins(ScalaJSBundlerPlugin)
+  .enablePlugins(ScalablyTypedConverterPlugin)
   .settings(
-    scalaJSUseMainModuleInitializer := true,
     Compile / npmDependencies ++= Seq(
+      "@types/node" -> "^20.10.6",
       "vscode-languageserver-protocol" -> "^3.17.5",
-    )
+    ),
+    scalaJSUseMainModuleInitializer := true,
+    stUseScalaJsDom := false
   )
 
 lazy val platform = Def.task {
