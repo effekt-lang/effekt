@@ -1,42 +1,41 @@
 package lspTest
 
 import scala.scalajs.js
-
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 import scala.scalajs.concurrent.JSExecutionContext
+import scala.util.{Success, Failure}
+import typings.node.netMod.createConnection
+import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
+import typings.vscodeJsonrpc.libCommonMessageReaderMod.MessageReader
+import typings.vscodeJsonrpc.libCommonMessageWriterMod.MessageWriter
+import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.createProtocolConnection
+import typings.vscodeLanguageserverProtocol.libCommonProtocolMod.InitializeParams
+import typings.vscodeLanguageserverProtocol.mod.InitializeRequest
 
 object Main {
-  def initialize(socket: Net.Socket): Unit = {
+  def test(client: Client) {
     implicit val ec: ExecutionContext = JSExecutionContext.queue
-
-    val connection = Protocol.createProtocolConnection(socket, socket, Protocol.ConsoleLogger)
-    connection.listen()
-
-    connection.sendRequest(Protocol.InitializeRequest.tpe, Protocol.InitializeParams).toFuture
-      .transform((res) => {
-        println("ok")
-        println(js.JSON.stringify(res))
-      }, (err) => {
-        throw new Error(err)
-      })
-  }
-
-  // TODO: somehow only initialize when actually connected
-  def listener() = {
-    println("connected")
+    client.openDocument("hover", "effect Exc(msg: String): Unit").onComplete {
+      case Success(_) => client.sendHover("hover", 0, 8)
+      case Failure(_) => println("error while opening document")
+    }
   }
 
   def main(args: Array[String]): Unit = {
-    // Process.spawn("effekt.sh", js.Array("-s", "--debug"))
+    // val process = typings.node.childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug"))
+    // TODO: createConnection with opts and TCP timeout
 
-    val options = new Net.SocketOptions {
-      port = 5007
-      host = "127.0.0.1"
+    val socket = createConnection(5007, "127.0.0.1")
+    val reader = socket.asInstanceOf[MessageReader]
+    val writer = socket.asInstanceOf[MessageWriter]
+    val logger = Logger(println, println, println, println)
+    val connection = createProtocolConnection(reader, writer, logger)
+    connection.listen()
+
+    implicit val ec: ExecutionContext = JSExecutionContext.queue
+    connection.sendRequest(InitializeRequest.method.asInstanceOf[String], InitializeParams).toFuture.onComplete {
+      case Success(_) => test(new Client(connection))
+      case Failure(_) => println("error during initialization")
     }
-
-    val socket = Net.createConnection(options, listener.asInstanceOf[js.Function0[Unit]])
-
-    initialize(socket)
   }
 }
