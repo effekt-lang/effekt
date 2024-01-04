@@ -347,3 +347,94 @@ object LLVMRunner extends Runner[String] {
 
     executableFile
 }
+
+object JITRunner extends Runner[String] {
+  // FIXME Run rpyeffect-asm in between (How to package??)
+  import scala.sys.process.Process
+
+  val extension = "mcore.json"
+
+  override def standardLibraryPath(root: File): File = root / "libraries" / "jit"
+
+  def platform = {
+    val arch = Process(Seq(s"uname", "-m")).!!.trim
+    val os = Process(Seq(s"uname", "-s")).!!.trim
+    "%s-%s".format(arch, os)
+  }
+
+  def findAsmJar(): Either[String, effekt.util.paths.File] = ???
+
+  /**
+   * Tries to find the path to the JIT binary. Proceeds in the following order:
+   * 1) specified in an environment variable `EFFEKT_JIT_BIN`
+   * 2) relative to the current working directory
+   * 3) relative to the executed JAR file (effekt.jar)
+   *
+   * If successful, returns `Right(file)`, otherwise `Left(errorMessage)`
+   */
+  def findJITBinary(platform: String): Either[String, effekt.util.paths.File] = {
+    // TODO better error handling than Left(String)
+    import effekt.util.paths.file
+    val supportedJITPlatforms = List("x86_64-Linux", "arm64-Darwin")
+
+    if (!supportedJITPlatforms.contains(platform)) {
+      return Left(s"Unsupported platform ${platform}. Currently supported platforms: ${supportedJITPlatforms.mkString(", ")}")
+    }
+
+    val binaryName = s"${platform}/rpyeffect-jit";
+
+    // 1) iin Environment variable EFFEKT_BIN
+    if (System.getenv.containsKey("EFFEKT_JIT_BIN")) {
+      return Right(System.getenv("EFFEKT_JIT_BIN"))
+    }
+
+    // 2) in PWD
+    val pwd = file(".")
+    if ((pwd / "bin" / binaryName).exists) {
+      return Right(pwd / "bin" / binaryName)
+    }
+
+    // 3) next to JAR
+    val jarPath = effekt.util.paths.file(getClass.getProtectionDomain.getCodeSource.getLocation.toURI).parent;
+    if ((jarPath / binaryName).exists) {
+      return Right(jarPath / binaryName)
+    }
+
+     Left("Cannot find path to the JIT binary")
+  }
+
+  override def checkSetup(): Either[String, Unit] = {
+    findJITBinary(platform).flatMap{ jitBinaryPath =>
+        if canRunExecutable(jitBinaryPath.unixPath, "--check") then Right(())
+        else Left("Cannot run jit executable file at %s.".format(jitBinaryPath.unixPath))
+    }.flatMap{ _ => findAsmJar() }.flatMap { asmJarPath =>
+      if canRunExecutable(???, "--check") then Right(())
+      else Left("Cannot run asm jar at %s.".format(asmJarPath.unixPath))
+    }
+  }
+
+  override def build(path: String)(using C: Context): String = {
+    val out = C.config.outputPath()
+    val basePath = (out / path.stripSuffix(".mcore.json")).unixPath
+
+    val asmJar = findAsmJar().getOrElse{ C.abort("Cannot find rpyeffect-asm.") }
+    val jitBinary = findJITBinary(platform).getOrElse{ C.abort("Cannot find JIT binary.") }
+
+    val executableFile = basePath
+    exec(???, ???)
+    executableFile
+  }
+
+  override def eval(executable: String)(using C: Context): Unit = {
+    val out = C.config.outputPath()
+    findAsmJar() match {
+      case Left(err) => sys.error(err)
+      case Right(asmJar) => ???
+    };
+    findJITBinary(platform) match {
+      case Left(err) => sys.error(err)
+      case Right(jitBinary) =>
+        exec(jitBinary.unixPath, (out / executable).canonicalPath)
+    }
+  }
+}
