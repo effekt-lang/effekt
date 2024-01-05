@@ -1,0 +1,10 @@
+interface Obj {
+    def foo(x: Int): Int
+}
+
+def main () = {
+    def o = new Obj {
+        def foo(x) = {x + 40}
+    }
+    println(o.foo(2))
+}

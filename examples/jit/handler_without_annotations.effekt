@@ -1,0 +1,8 @@
+module handler_without_annotations
+
+effect Emit(n: Int): Unit
+
+def main() = try { do Emit(1)
+} with Emit { (n) =>
+  resume(())
+}

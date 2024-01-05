@@ -1,0 +1,16 @@
+
+def fibonacci(n: Int): Int = {
+  if(n < 2) {
+    1
+  } else {
+    val x = fibonacci(n - 1);
+    val y = fibonacci(n - 2);
+    x + y
+  }
+}
+  
+def main() = {
+  val r = fibonacci(30);
+  println(r)
+}
+

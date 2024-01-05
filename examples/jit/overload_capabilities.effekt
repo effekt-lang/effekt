@@ -1,0 +1,23 @@
+type TokenKind { Number(); Ident(); Punct(); Space() }
+
+record Token(kind: TokenKind, text: String)
+
+effect Nondet {
+  def fail[A](msg: String): A
+}
+effect Lexer {
+  def next(): Token
+}
+
+effect Parser = { Nondet, Lexer }
+
+def accept { p: Token => Boolean } : Unit / Parser = ()
+def accept(exp: TokenKind) : Unit / Parser = ()
+
+// this is a call to an overloaded function where each of the functions intoduce
+// a capability.
+// The capability introduced by the first `accept` should not be present anymore when
+// checking the second accept.
+def ident() = accept(Ident())
+
+def main() = ()

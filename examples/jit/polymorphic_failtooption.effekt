@@ -1,0 +1,32 @@
+effect Fail(): Unit
+
+type Option[A] {
+    None(); Some(value: A)
+}
+def println(oi: Option[Int]): Unit = {
+    oi match {
+        case None() => println("None")
+        case Some(i) => println(i)
+    }
+}
+
+def runFail[A]{ f : => A / Fail }: Option[A] = {
+    try {
+        Some(f())
+    } with Fail {
+        None()
+    }
+}
+
+def safeDiv(x: Int, y: Int): Int / Fail = {
+    if(y == 0){
+        do Fail(); 0
+    } else {
+        x/y
+    }
+}
+
+def main() = {
+    println(runFail { safeDiv(6,3) })
+    println(runFail { safeDiv(2,0) })
+}

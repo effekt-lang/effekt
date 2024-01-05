@@ -1,0 +1,13 @@
+
+def even(n: Int): Boolean =
+  if (n <= 0) true else odd(n - 1)
+
+def odd(n: Int): Boolean =
+  if (n <= 0) false else even(n - 1)
+
+def main() = {
+  println(even(18))
+  println(even(17))
+  println(even(16))
+  println(even(15))
+}

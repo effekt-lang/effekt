@@ -1,0 +1,10 @@
+effect Console { def println(msg: String): Unit }
+
+def myFunction { console: Console } =
+  console.println("hello")
+
+
+def main() = {
+  def console = new Console { def println(msg: String) = println(msg) }
+  myFunction {console}
+}

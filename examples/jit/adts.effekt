@@ -1,0 +1,12 @@
+type OneTwo {
+  One(x: Int);
+  Two(x: Int, y: Int)
+}
+
+def main() = {
+  val a = Two(5, 9);
+  a match {
+    case One(u) => println(u)
+    case Two(v, w) => println(v + w)
+  }
+}

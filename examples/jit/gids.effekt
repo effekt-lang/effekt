@@ -1,0 +1,27 @@
+// Jonathan Frech, 2022-05-19
+
+
+effect GID {
+    def gid(): Int
+}
+
+def f(): Int / GID = {
+    do gid() + do gid()
+}
+def g(): Int / GID = {
+    0
+}
+def h(): Int / GID = {
+    do gid() + do gid() + do gid()
+}
+
+def main() = {
+    var n = 0
+    try {
+        println(f())
+        println(g())
+        println(h())
+    } with GID {
+        def gid() = { n = n+1; resume(n) }
+    }
+}

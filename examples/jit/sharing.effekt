@@ -1,0 +1,18 @@
+
+type Maybe {
+  Nothing();
+  Just(value: Int)
+}
+
+def main() = {
+  val thing = Just(9);
+  thing match {
+    case Nothing() => println(0)
+    case Just(i) => println(i)
+  };
+  thing match {
+    case Nothing() => println(0)
+    case Just(i) => println(i)
+  }
+}
+
