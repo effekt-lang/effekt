@@ -1,0 +1,31 @@
+module examples/llvm/recursive
+
+type List {
+  Nil();
+  Con(head: Int, tail: List)
+}
+
+def range(l: Int, h: Int): List = {
+  if(l >= h) {
+    Nil()
+  } else {
+    Con(l, range(l + 1, h))
+  }
+}
+
+def map(list: List) { func: Int => Int }: List =
+  list match {
+    case Nil() => Nil()
+    case Con(elem, rest) => Con(func(elem), map(rest) {func})
+  }
+
+def sum(list: List): Int = {
+  list match {
+    case Nil() => 0
+    case Con(elem, rest) => elem + sum(rest)
+  }
+}
+
+def main() = {
+  println(sum(map(range(0, 10)) { a => a + 1 }));
+}

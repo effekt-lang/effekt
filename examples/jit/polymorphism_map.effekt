@@ -1,0 +1,16 @@
+type List[A] {
+    Nil(); Cons(hd: A, tl: List[A])
+}
+
+def map[A,B](lst: List[A]){f: A => B}: List[B] = {
+    lst match {
+        case Nil() => Nil()
+        case Cons(hd, tl) => Cons(f(hd), map(tl){f})
+    }
+}
+
+def main() = {
+    val values = [1,2,3,4,5]
+    val squares = map(values){ n => n * n }
+    map(squares){ n => println(n) }
+}

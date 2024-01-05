@@ -1,0 +1,13 @@
+// Jonathan Frech, 2022-08-08, 2022-08-10
+
+
+def p(b: Boolean): Unit = {
+  if (b) { println(1) } else { println(0) }
+}
+
+def main() = {
+    p(true == false)
+    p(false == (true == false))
+    p((false == (true == false)) == true)
+    p(((false == (true == false)) == true) == false)
+}

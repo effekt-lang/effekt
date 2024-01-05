@@ -1,0 +1,26 @@
+module blockparams
+
+def foo { f : Int => Int } =
+  f(2)
+
+def bar { f : (Int, Boolean) => Unit } =
+  f(2, true)
+
+def main() = {
+  val r = foo { (x: Int) =>
+    x + 1
+  };
+  println(r);
+
+  val r2 = foo { x => x + 1 };
+  println(r2);
+
+  bar { (x: Int, y: Boolean) =>
+    if (y) { println(x) } else { println(0) }
+  };
+
+  bar { (x, y) =>
+    if (y) { println(x) } else { println(0) }
+  }
+}
+

@@ -1,0 +1,12 @@
+def foo(n: Int, m: Int) = {
+
+  def localFunction(x: Boolean) =
+    if (x) { 1 } else { 2 }
+
+  val a = n <= 0
+  val b = m <= 0
+
+  localFunction(a) + localFunction(b)
+}
+
+def main() = println(foo(1, 0))

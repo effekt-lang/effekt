@@ -1,0 +1,14 @@
+
+effect Emit(n: Int) : Unit
+
+
+
+def main() = {
+  try {
+    do Emit(1);
+    do Emit(2);
+  } with Emit { (n: Int) =>
+    println(n); resume(())
+  }
+}
+

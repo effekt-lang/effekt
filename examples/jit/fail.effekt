@@ -1,0 +1,12 @@
+
+effect Fail(): Int
+
+def main() = {
+  try {
+    println(0);
+    do Fail();
+    println(2)
+  } with Fail { () =>
+    println(1)
+  }
+}

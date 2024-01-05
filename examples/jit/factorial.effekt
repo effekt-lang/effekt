@@ -1,0 +1,13 @@
+
+def factorial(n: Int): Int = {
+  def go(n: Int, a: Int): Int = {
+    if(n < 1) {
+      a
+    } else {
+      go(n - 1, n * a)
+    }
+  };
+  go(n, 1)
+}
+
+def main() = println(factorial(10))

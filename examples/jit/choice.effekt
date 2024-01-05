@@ -1,0 +1,22 @@
+
+
+effect Flip(): Boolean
+effect Fail[A](): A
+
+def choice(n : Int): Int / { Flip, Fail } =
+  if (n < 1) {
+    do Fail()
+  } else if (do Flip()) {
+    n
+  } else {
+    choice(n - 1)
+  }
+
+def handledTriples(n : Int, s : Int) =
+  try {
+    try {
+      println(choice(1))
+    } with Fail[A] { () }
+  } with Flip { resume(true); resume(false) }
+
+def main() = handledTriples(6, 6)

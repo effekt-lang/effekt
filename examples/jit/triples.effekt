@@ -1,0 +1,36 @@
+
+effect Flip(): Boolean
+effect Fail[A](): A
+
+record Triple(a: Int, b: Int, c: Int)
+
+def choice(n : Int): Int / { Flip, Fail } =
+  if (n < 1) {
+    do Fail()
+  } else if (do Flip()) {
+    n
+  } else {
+    choice(n - 1)
+  }
+
+def triples(n: Int, s: Int) = {
+  val i = choice(n);
+  val j = choice(i - 1);
+  val k = choice(j - 1);
+  if ((i + j + k) == s) {
+    Triple(i, j, k)
+  } else {
+    do Fail()
+  }
+}
+
+def handledTriples(n : Int, s : Int) =
+  try {
+    try {
+      val t = triples(n, s);
+      println(t.a); println(t.b); println(t.c)
+    } with Fail[A] { () }
+  } with Flip { resume(true); resume(false) }
+
+def main() = handledTriples(100, 15)
+

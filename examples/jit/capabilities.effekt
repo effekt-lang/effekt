@@ -1,0 +1,19 @@
+effect Emit(n: Int) : Unit
+
+
+def loop(n: Int): Unit / Emit = {
+  if (n < 0) {
+    ()
+  } else {
+    do Emit(n);
+    loop(n - 1)
+  }
+}
+
+def main() = {
+  try {
+    loop(10)
+  } with Emit { (n: Int) =>
+    println(n); resume(())
+  }
+}

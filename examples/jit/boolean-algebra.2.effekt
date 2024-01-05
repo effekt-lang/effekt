@@ -1,0 +1,15 @@
+// Jonathan Frech, 2022-08-17
+
+
+def output(p: Boolean): Unit = {
+  if (p) { println(1) } else { println(0) }
+}
+
+def main() = {
+    output(false || true)
+    output(not(true))
+    output(not(not(false)))
+    output(not(false) && true)
+    output(not(false) && not(not(true)))
+    output(not(not(false) && not(not(true))))
+}
