@@ -1,0 +1,18 @@
+module io/args
+
+import effekt
+import immutable/list
+
+extern pure def get_argc(): Int = "get_argc(): Int"
+extern pure def get_arg(i: Int): String = "get_arg(Int): String"
+
+def commandLineArgs(): List[String] = {
+    def rec(start: Int): List[String] = {
+        if (start >= get_argc()) {
+            Nil()
+        } else {
+            Cons(get_arg(start), rec(start + 1))
+        }
+    }
+    rec(0)
+}

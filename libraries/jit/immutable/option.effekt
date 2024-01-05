@@ -1,0 +1,65 @@
+module immutable/option
+
+import effekt
+import unsafe/internal
+
+type Option[A] {
+  None();
+  Some(value: A)
+}
+
+def isDefined[A](self: Option[A]): Boolean = self match {
+  case None()  => false
+  case Some(v) => true
+}
+
+def isEmpty[A](self: Option[A]): Boolean =
+  self.isEmpty.not
+
+def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {
+  case None()  => that()
+  case Some(v) => Some(v)
+}
+
+def getOrElse[A](self: Option[A]) { that: => A }: A = self match {
+  case None() => that()
+  case Some(v) => v
+}
+
+def map[A, B](self: Option[A]) { f: A => B }: Option[B] = self match {
+  case None()  => None()
+  case Some(v) => Some(f(v))
+}
+
+def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
+  case None()  => ()
+  case Some(v) => f(v)
+}
+
+// for now define some common cases; TODO better solution
+def showOption[A](o: Option[A]){ showA: A => String }: String = o match {
+  case None() => "None()"
+  case Some(v) => "Some(" ++ showA(v) ++ ")"
+}
+def show(o: Option[Int]): String = showOption(o){ v => show(v) }
+def show(o: Option[Double]): String = showOption(o){ v => show(v) }
+def show(o: Option[Boolean]): String = showOption(o){ v => show(v) }
+def show(o: Option[String]): String = showOption(o){ v => v }
+def println(o: Option[Int]): Unit = println(show(o))
+def println(o: Option[Double]): Unit = println(show(o))
+def println(o: Option[Boolean]): Unit = println(show(o))
+def println(o: Option[String]): Unit = println(show(o))
+
+def unsafeToOption[A]{ body: () => A }: Option[A] = {
+  clearErrorFlag()
+  val r = body()
+  if (checkErrorFlag()) {
+    None()
+  } else {
+    Some(r)
+  }
+}
+def safeDiv(num: Int, denom: Int): Option[Int] = unsafeToOption{ num / denom }
+def safeDiv(num: Double, denom: Double): Option[Double] = unsafeToOption{ num / denom }
+def safeMod(num: Int, denom: Int): Option[Int] = unsafeToOption{ mod(num, denom) }
+def safeMod(num: Double, denom: Double): Option[Double] = unsafeToOption{ mod(num, denom) }
