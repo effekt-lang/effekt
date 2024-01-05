@@ -3,38 +3,29 @@ package lspTest
 import scala.scalajs.js
 import scala.concurrent.ExecutionContext
 import scala.scalajs.concurrent.JSExecutionContext
-import scala.util.{Success, Failure}
-import typings.node.childProcessMod
-import typings.node.netMod.NetConnectOpts
-import typings.node.netMod.{NetConnectOpts, createConnection}
 import scala.scalajs.js.timers
+import scala.util.{Success, Failure}
+import typings.node.{childProcessMod, netMod}
 import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
 import typings.vscodeJsonrpc.libCommonMessageReaderMod.MessageReader
 import typings.vscodeJsonrpc.libCommonMessageWriterMod.MessageWriter
+import typings.vscodeLanguageserverProtocol.libCommonConnectionMod
+import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import typings.vscodeLanguageserverProtocol.libCommonProtocolMod.InitializeParams
 import typings.vscodeLanguageserverProtocol.mod.InitializeRequest
-import typings.vscodeLanguageserverProtocol.libCommonConnectionMod
 
 object Main {
-  def test(client: Client) {
-    implicit val ec: ExecutionContext = JSExecutionContext.queue
-    client.openDocument("hover", "effect Exc(msg: String): Unit").onComplete {
-      case Success(_) => client.sendHover("hover", 0, 8)
-      case Failure(_) => println("error while opening document")
-    }
-  }
-
-  def tryConnect(port: Int, host: String) {
-    val socket = createConnection(port, host)
+  def tryConnect(port: Int, host: String, callback: Function[ProtocolConnection, Unit]) {
+    val socket = netMod.createConnection(port, host)
 
     // needed since server process doesn't start immediately
-    socket.on("error", ev => {
+    socket.on("error", _ => {
       timers.setTimeout(500) {
-        tryConnect(port, host)
+        tryConnect(port, host, callback)
       }
     })
 
-    socket.on("connect", ev => {
+    socket.on("connect", _ => {
       val reader = socket.asInstanceOf[MessageReader]
       val writer = socket.asInstanceOf[MessageWriter]
       val logger = Logger(println, println, println, println)
@@ -43,15 +34,20 @@ object Main {
 
       implicit val ec: ExecutionContext = JSExecutionContext.queue
       connection.sendRequest(InitializeRequest.method.asInstanceOf[String], InitializeParams).toFuture.onComplete {
-        case Success(_) => test(new Client(connection))
+        case Success(_) => callback(connection)
         case Failure(_) => println("error during initialization")
       }
     })
   }
 
   def main(args: Array[String]): Unit = {
-    val process = childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug"))
+    val port = 5007
+    val process = childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug", s"--debugPort $port"))
 
-    tryConnect(5007, "127.0.0.1")
+    tryConnect(port, "127.0.0.1", connection => {
+      val client = new Client(connection)
+      val tests = new Tests(client)
+      tests.runAll()
+    })
   }
 }
