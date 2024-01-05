@@ -1,0 +1,4 @@
+module unsafe/internal
+
+extern io def checkErrorFlag(): Boolean = "checkErrorFlag(): Boolean"
+extern io def clearErrorFlag(): Unit = "clearErrorFlag(): Unit"
