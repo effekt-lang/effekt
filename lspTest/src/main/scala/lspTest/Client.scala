@@ -5,6 +5,8 @@ import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import typings.vscodeLanguageserverProtocol.libCommonProtocolMod.{InitializeParams, DidOpenTextDocumentParams, HoverParams}
 import typings.vscodeLanguageserverProtocol.mod._
+import typings.vscodeLanguageserverProtocol.libCommonProtocolMod.DocumentSymbolParams
+import typings.vscodeLanguageserverTypes.mod
 
 class Client(val connection: ProtocolConnection) {
   def openDocument(file: String, content: String) = {
@@ -18,11 +20,18 @@ class Client(val connection: ProtocolConnection) {
     connection.sendNotification(DidOpenTextDocumentNotification.`type`, params).toFuture
   }
 
-  def sendHover(file: String, line: Int, column: Int) = {
-    val hoverParams = HoverParams(
-        Position.create(line, column),
-        TextDocumentIdentifier.create(s"file:///$file")
+  def sendDocumentSymbol(file: String) = {
+    val params = DocumentSymbolParams(
+      TextDocumentIdentifier.create(s"file:///$file")
     )
-    connection.sendRequest(HoverRequest.`type`, hoverParams).toFuture
+    connection.sendRequest(DocumentSymbolRequest.`type`, params).toFuture
+  }
+
+  def sendHover(file: String, position: mod.Position) = {
+    val params = HoverParams(
+      Position.create(position.line, position.character),
+      TextDocumentIdentifier.create(s"file:///$file")
+    )
+    connection.sendRequest(HoverRequest.`type`, params).toFuture
   }
 }

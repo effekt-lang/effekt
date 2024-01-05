@@ -5,17 +5,30 @@ import scala.util.{Success, Failure}
 import scala.concurrent.ExecutionContext
 import scala.scalajs.concurrent.JSExecutionContext
 import typings.node.fsMod
+import scala.concurrent.Future
+import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol,Position}
 
 class Tests(val client: Client) {
   def testsDir = "examples2"
 
-  def testHover(file: String) = {
-    implicit val ec: ExecutionContext = JSExecutionContext.queue
-
-    client.sendHover(file, 0, 8).onComplete {
-      case Success(v) => println(js.JSON.stringify(v.asInstanceOf[js.Object]))
-      case Failure(_) => println("error during hoverRequest")
+  def testDocumentSymbol(file: String)(implicit ec: ExecutionContext) = {
+    client.sendDocumentSymbol(file).transform {
+      case Success(v) => Success(v.asInstanceOf[js.Array[DocumentSymbol]])
+      case Failure(_) => Failure(new Error("documentSymbolRequest"))
     }
+  }
+
+  def testHover(file: String, position: Position)(implicit ec: ExecutionContext) = {
+    client.sendHover(file, position).transform {
+      case Success(v) => Success(v)
+      case Failure(_) => Failure(new Error("hoverRequest"))
+    }
+  }
+
+  def testSymbols(file: String, symbols: js.Array[DocumentSymbol])(implicit ec: ExecutionContext) = {
+    symbols.foreach(symbol => {
+      testHover(file, symbol.range.start)
+    })
   }
 
   def runTests(file: String) = {
@@ -23,7 +36,10 @@ class Tests(val client: Client) {
 
     client.openDocument(file, fsMod.readFileSync(file).toString).onComplete {
       case Success(_) => {
-        testHover(file)
+        testDocumentSymbol(file).onComplete {
+          case Success(symbols) => testSymbols(file, symbols)
+          case Failure(_) => println("error during hoverRequest")
+        }
       }
       case Failure(_) => println("error during didOpenTextDocumentNotification")
     }
