@@ -39,23 +39,20 @@ function executeCommands(commands, isVerify) {
 
     const [executableName, effektPath, jsCmd] = command
     const effektCmd = dirtyCd + `effekt.sh -b ${effektPath} && ./out/${executableName} ` + amount + verifyArgs
-    console.log("run: ", effektCmd)
     execute(effektCmd, (time) => performance.effekt = time)
 
     // run pure JS benchmark 
     const jsExecCmd = dirtyCd + jsCmd + amount + verifyArgs;
-    console.log(jsExecCmd)
     execute(jsExecCmd, (time) => performance.js = time)
   });
 
-  console.log("raw output:", outputs)
   const analysis = outputs.map(mark => ({ ...mark, effekt: analyzeDurations(mark.effekt), js: analyzeDurations(mark.js) }))
 
   const outputFile = "fasteffekt_results.json"
   const resultString = JSON.stringify(analysis.map(perf => ({ ...perf, ratio: perf.effekt.sum / perf.js.sum })), null, 3)
   fs.writeFileSync(outputFile, resultString);
-  console.log(`Command outputs saved to ${outputFile}`);
-  console.log(analysis.map(mark => ({ name: mark.name, effekt: mark.effekt.sum, js: mark.js.sum, ratio: mark.effekt.sum / mark.js.sum })))
+  console.log(`Verbose analysis saved to ${outputFile}`);
+  console.log("Mini analysis:",analysis.map(mark => ({ name: mark.name, effekt: mark.effekt.sum, js: mark.js.sum, ratio: mark.effekt.sum / mark.js.sum })))
 }
 
 /**
@@ -63,7 +60,6 @@ function executeCommands(commands, isVerify) {
  * @param {string} durations : list of duration times for every benchmark run
  */
 const analyzeDurations = (durations) => {
-  console.log("Durations:" ,durations)
   durations = JSON.parse(durations);
   const sum = durations.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
   const avg = sum / durations.length
