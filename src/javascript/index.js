@@ -2,7 +2,7 @@
 
 const { verify } = require('crypto');
 const path = require('path');
-const runAll = require(path.resolve(__dirname, "./compare/comparator"))
+const runAll = require("./compare/comparator")
 
 const arg = process.argv.length > 2 ? process.argv[2].toLowerCase() : ""
 const isHelp = (arg == "--help" || arg == "-h")
@@ -13,6 +13,8 @@ if (isHelp) {
   benchmarking the current install of the effekt language.
   will execute benchmarks in effekt and JS.
   outputs results to console and JSON file
+  execute all benchmarks: fasteffekt [--small]
+  run with: 
   options:
     --help, -h:      documentation
     --small, -s:     run minimal benchmark to verify they all work
