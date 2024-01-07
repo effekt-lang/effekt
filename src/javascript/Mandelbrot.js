@@ -31,6 +31,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+const { runFromCli } = require("./cliRunner");
+
 // The Computer Language Benchmarks Game
 // http://benchmarksgame.alioth.debian.org
 //
@@ -116,3 +118,16 @@ class Mandelbrot {
 }
 
 exports.newInstance = () => new Mandelbrot();
+
+const miniRun = () => {
+  new Mandelbrot().innerBenchmarkLoop(1)
+}
+
+const normalRun = () => {
+  new Mandelbrot().innerBenchmarkLoop(750)
+}
+
+const main = () => {
+  console.log(runFromCli(miniRun, normalRun))
+}
+main()
