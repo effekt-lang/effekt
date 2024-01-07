@@ -1,12 +1,7 @@
 import src/benchmark
 import mutable/array
-// class Ball {
-//   constructor(random) {
-//   this.x = random.next() % 500;
-//   this.y = random.next() % 500;
-//   this.xVel = (random.next() % 300) - 150;
-//   this.yVel = (random.next() % 300) - 150;
-//   }
+import src/effekt/cliRunner
+
 record Ball(
   x: Double,
   y: Double,
@@ -29,33 +24,6 @@ def randomBall(){ rand: Random }: Ball = {
 
 def abs(n: Double): Double = if (n < 0.0) 0.0 - n else n
 
-//   bounce() {
-//   const xLimit = 500;
-//   const yLimit = 500;
-//   let bounced = false;
-
-//   this.x += this.xVel;
-//   this.y += this.yVel;
-
-//   if (this.x > xLimit) {
-//     this.x = xLimit; this.xVel = 0 - Math.abs(this.xVel); bounced = true;
-//   }
-
-//   if (this.x < 0) {
-//     this.x = 0; this.xVel = Math.abs(this.xVel); bounced = true;
-//   }
-
-//   if (this.y > yLimit) {
-//     this.y = yLimit; this.yVel = 0 - Math.abs(this.yVel); bounced = true;
-//   }
-
-//   if (this.y < 0) {
-//     this.y = 0; this.yVel = Math.abs(this.yVel); bounced = true;
-//   }
-
-//   return bounced;
-//   }
-// }
 def bounce(ball: Ball): Tuple2[Ball, Boolean] = {
   val xLimit = 500.0;
   val yLimit = 500.0;
@@ -89,19 +57,6 @@ def bounce(ball: Ball): Tuple2[Ball, Boolean] = {
 }
 
 def bitAnd(x: Int, y: Int) = mod(x,(y+1)) 
-
-
-
-// class Random {
-//   constructor() {
-//   this.seed = 74755;
-//   }
-
-//   next() {
-//   this.seed = ((this.seed * 1309) + 13849) & 65535;
-//   return this.seed;
-//   }
-
 
 def withRandom[R]{ program: { Random } => R}: R = {
   var seed = 74755;   //FIXME is mutable from everywhere, use "withRandom" with block
@@ -148,10 +103,17 @@ def Bounce(iterations: Int) = {
   innerBenchmarkLoop(iterations){benchmark}{verifyResult}
 }
 
-def main() = {
+def miniRun() = {
   Bounce(1)
 }
 
+def normalRun() = {
+  Bounce(1)
+}
+
+def main() = {
+    println(runFromCli{ miniRun }{ normalRun })
+}
 
 
 
