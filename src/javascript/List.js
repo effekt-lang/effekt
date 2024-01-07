@@ -21,6 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+const { runFromCli } = require("./cliRunner");
+
 class Element {
   constructor(v) {
     this.val = v;
@@ -81,4 +83,17 @@ class List {
   }
 }
 
-exports.newInstance = () => new List();
+
+const miniRun = () => {
+  new List().benchmark()
+}
+
+const normalRun = () => {
+  new List().benchmark()
+  //TODO add more iterations maybe?
+}
+
+const main = () => {
+  console.log(runFromCli(miniRun, normalRun))
+}
+main()
