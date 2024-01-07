@@ -15,10 +15,10 @@ interface Random {
 
 def randomBall(){ rand: Random }: Ball = {
   Ball(
-    toDouble(mod(rand.next(),500)),
-    toDouble(mod(rand.next(),500)),
-    toDouble(mod(rand.next(),300)-150),
-    toDouble(mod(rand.next(),300)-150)
+    toDouble(rand.next().mod(500)),
+    toDouble(rand.next().mod(500)),
+    toDouble(rand.next().mod(300) - 150),
+    toDouble(rand.next().mod(300) - 150)
   )
 }
 
@@ -112,7 +112,7 @@ def normalRun() = {
 }
 
 def main() = {
-    println(runFromCli{ miniRun }{ normalRun })
+  println(runFromCli{ miniRun }{ normalRun })
 }
 
 
