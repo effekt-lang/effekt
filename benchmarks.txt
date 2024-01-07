@@ -3,4 +3,5 @@ src/effekt/benchmark/list.effekt
 src/effekt/benchmark/mandelbrot.effekt
 src/effekt/benchmark/permute.effekt
 src/effekt/benchmark/nbody.effekt
+src/effekt/bounce.effekt
 # -------------- lastline dont delete
