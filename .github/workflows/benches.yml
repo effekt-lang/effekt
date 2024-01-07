@@ -14,13 +14,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '14'  # Choose the Node.js version you need
+          node-version: '18.16.1'  # Choose the Node.js version you need
 
       - name: Install latest effekt
         run: |
-          npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz
-
-
+          git clone git@github.com:effekt-lang/effekt.git &&
+          git checkout cbff76e875c7ce4aca5e52fd8ef170c1f66b97e9 &&
+          cd effekt &&
+          sbt install
+        #run: |
+        #  npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz &&
+        #  npm link &&
+        #  npm list -g
       - name: Execute Benchmarks
         run: |
-          chmod +x run_benches.sh && ./run_benches.sh   
+          fasteffekt -s  

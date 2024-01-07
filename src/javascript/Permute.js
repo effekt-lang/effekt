@@ -20,7 +20,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
+const { runFromCli } = require("./cliRunner")
 
 class Permute {
   constructor() {
@@ -59,4 +59,17 @@ class Permute {
   }
 }
 
-exports.newInstance = () => new Permute();
+const miniRun = () => {
+  new Permute().benchmark()
+}
+
+const normalRun = () => {
+  for (let i = 0; i < 10; i++) {
+    new Permute().benchmark()
+  }
+}
+
+const main = () => {
+  console.log(runFromCli(miniRun, normalRun))
+}
+main()

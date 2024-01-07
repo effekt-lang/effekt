@@ -1,5 +1,6 @@
 import mutable/array
 import src/benchmark
+import src/effekt/cliRunner
 
 record Body(
   x: Double,
@@ -199,7 +200,14 @@ def nbody(problemSize: Int) = {
   innerBenchmarkLoop[Double](1){benchmark}{verifyResult}
 }
 
-def main() = {
+def miniRun() = {
   nbody(1);
+}
+
+def normalRun() = {
   nbody(250000);
+}
+
+def main() = {
+  println(runFromCli{ miniRun }{ normalRun })
 }

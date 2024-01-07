@@ -1,5 +1,7 @@
 import mutable/array
 import src/benchmark
+import io/args
+import src/effekt/cliRunner
 
 def Permute(innerIterations: Int) = {
     var count = 0;
@@ -45,7 +47,15 @@ def Permute(innerIterations: Int) = {
     return innerBenchmarkLoop(innerIterations){benchmark}{verifyResult}
 }
 
-def main() = {
+def miniRun() = {
     Permute(1)
+}
+
+def normalRun() = {
     Permute(10)
 }
+
+def main() = {
+    println(runFromCli{ miniRun }{ normalRun })
+}
+

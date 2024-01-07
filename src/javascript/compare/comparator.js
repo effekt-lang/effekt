@@ -1,12 +1,18 @@
+/**
+ * this file is the main benchmark-tool logic.
+ * it has predefined shell commands that it executes, measures and logs
+ * called by index.js 
+ */
 const { execSync } = require('child_process');
 const fs = require('fs');
 
 
 // List of shell commands
 const commands = [
-  ['Permute', 'effekt.sh src/runner/runPermute.effekt', 'node src/javascript/runner/runPermute.js'],
-  ['List', 'effekt.sh src/runner/runList.effekt', 'node src/javascript/runner/runList.js'],
-  ["Mandelbrot", "effekt.sh src/runner/runMandelbrot.effekt","node src/javascript/runner/runMandelbrot.js"]
+  ['permute', 'src/effekt/benchmark/permute.effekt', 'node src/javascript/Permute.js'],
+  ["nbody", "src/effekt/benchmark/nbody.effekt", "node src/javascript/Nbody.js"],
+  ['list', 'src/effekt/benchmark/list.effekt', 'node src/javascript/List.js'],
+  ["mandelbrot", "src/effekt/benchmark/mandelbrot.effekt", "node src/javascript/Mandelbrot.js"]
   // Add more commands as needed
 ];
 
@@ -20,24 +26,48 @@ const execute = (command, onOutput) => {
   onOutput(output.trim())
 }
 
-function executeCommands(commands) {
+function executeCommands(commands, isVerify) {
   const outputs = [];
   commands.forEach((command, index) => {
-    const performance = { name: command[0], effekt: -1, js: -1 }
+    const performance = { name: command[0], effekt: {}, js: {} }
     outputs.push(performance)
+
     console.log("running benchmark:", performance.name)
-    const dirtyCd = "cd " + __dirname + " && cd ../../.. &&"
-    execute(dirtyCd + command[1], (time) => performance.effekt = time)
-    execute(dirtyCd + command[2], (time) => performance.js = time)
+    const dirtyCd = "cd " + __dirname + " && cd ../../.. && "
+    const amount = " 3 "
+    const verifyArgs = isVerify ? " --verify" : ""
+
+    const [executableName, effektPath, jsCmd] = command
+    const effektCmd = dirtyCd + `effekt.sh -b ${effektPath} && ./out/${executableName} ` + amount + verifyArgs
+    execute(effektCmd, (time) => performance.effekt = time)
+
+    // run pure JS benchmark 
+    const jsExecCmd = dirtyCd + jsCmd + amount + verifyArgs;
+    execute(jsExecCmd, (time) => performance.js = time)
   });
 
+  const analysis = outputs.map(mark => ({ ...mark, effekt: analyzeDurations(mark.effekt), js: analyzeDurations(mark.js) }))
+
   const outputFile = "fasteffekt_results.json"
-  const resultString = JSON.stringify(outputs.map(perf => ({ ...perf, ratio: perf.effekt / perf.js })), null, 3)
+  const resultString = JSON.stringify(analysis.map(perf => ({ ...perf, ratio: perf.effekt.sum / perf.js.sum })), null, 3)
   fs.writeFileSync(outputFile, resultString);
-  console.log(`Command outputs saved to ${outputFile}`);
-  console.log(resultString)
+  console.log(`Verbose analysis saved to ${outputFile}`);
+  console.log("Mini analysis:",analysis.map(mark => ({ name: mark.name, effekt: mark.effekt.sum, js: mark.js.sum, ratio: mark.effekt.sum / mark.js.sum })))
 }
 
-const runAll = () => executeCommands(commands)
+/**
+ * analyze duration array
+ * @param {string} durations : list of duration times for every benchmark run
+ */
+const analyzeDurations = (durations) => {
+  durations = JSON.parse(durations);
+  const sum = durations.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+  const avg = sum / durations.length
+
+  return { sum: sum, avg: avg, durations: durations }
+}
+
+
+const runAll = (isVerify) => executeCommands(commands, isVerify)
 module.exports = runAll
 // 

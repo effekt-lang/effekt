@@ -1,5 +1,6 @@
 
 import src/benchmark
+import src/effekt/cliRunner
 
 extern pure def xor(a: Int, b: Int): Int = "a ^ b"
 
@@ -81,17 +82,14 @@ def Mandelbrot(size: Int) = {
   innerBenchmarkLoop(1){benchmark}{verifyResult}
 }
 
-def main() = {
-  Mandelbrot(1);
+def miniRun() = {
+  Mandelbrot(1)
+}
+
+def normalRun() = {
   Mandelbrot(750);
-  Mandelbrot(500);
+}
 
-  //unit tests
-  if (xor(123,456) != 435) {
-    panic("XOR operation is faulty!")
-  }
-
-  if (lshift(123,456) != 31488) {
-    panic("XOR operation is faulty!")
-  }
+def main() = {
+  println(runFromCli{ miniRun }{ normalRun })
 }

@@ -1,5 +1,6 @@
 import src/benchmark
 import immutable/list
+import src/effekt/cliRunner
 
 def length(element: List[Int]): Int =
   element match {
@@ -62,6 +63,14 @@ def List(_: Int) = {
   return innerBenchmarkLoop(1){benchmark}{verifyResult};
 }
 
+def miniRun() = {
+  List(-1);
+}
+
+def normalRun() = {
+  List(-1);
+}
+
 def main() = {
-  List(0);
+  println(runFromCli{ miniRun }{ normalRun })
 }
