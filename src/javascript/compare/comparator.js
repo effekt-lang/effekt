@@ -15,6 +15,7 @@ const commands = [
   ["mandelbrot", "src/effekt/benchmark/mandelbrot.effekt", "node src/javascript/Mandelbrot.js"],
   ["bounce","src/effekt/benchmark/bounce.effekt","node src/javascript/bounce.js"]
   // Add more commands as needed
+  
 ];
 
 /**
