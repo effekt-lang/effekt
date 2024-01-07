@@ -7,6 +7,8 @@
 //
 // Based on nbody.java ported to SOM, and then JavaScript by Stefan Marr.
 
+const { runFromCli } = require("./cliRunner");
+
 const PI = 3.141592653589793;
 const SOLAR_MASS = 4 * PI * PI;
 const DAYS_PER_YER = 365.24;
@@ -183,4 +185,16 @@ class NBody {
   }
 }
 
-exports.newInstance = () => new NBody();
+
+const miniRun = () => {
+  new NBody().innerBenchmarkLoop(1)
+}
+
+const normalRun = () => {
+  new NBody().innerBenchmarkLoop(250000)
+}
+
+const main = () => {
+  console.log(runFromCli(miniRun, normalRun))
+}
+main()
