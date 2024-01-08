@@ -1,49 +1,71 @@
 package lspTest
 
 import scala.scalajs.js
-import scala.util.{Success, Failure}
 import scala.concurrent.ExecutionContext
-import scala.scalajs.concurrent.JSExecutionContext
-import typings.node.fsMod
 import scala.concurrent.Future
-import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol,Position}
+import scala.util.{Success, Failure}
+import typings.node.fsMod
+import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, Position}
 
-class Tests(val client: Client) {
+class Tests(val client: Client)(implicit ec: ExecutionContext) {
   def testsDir = "examples2"
 
-  def testDocumentSymbol(file: String)(implicit ec: ExecutionContext) = {
-    client.sendDocumentSymbol(file).transform {
+  def testDocumentSymbol(file: String) =
+    client.requestDocumentSymbol(file).transform {
+      // TODO: compare v with reference file
       case Success(v) => Success(v.asInstanceOf[js.Array[DocumentSymbol]])
       case Failure(_) => Failure(new Error("documentSymbolRequest"))
     }
-  }
 
-  def testHover(file: String, position: Position)(implicit ec: ExecutionContext) = {
-    client.sendHover(file, position).transform {
+  def testHover(file: String, position: Position) =
+    client.requestHover(file, position).transform {
+      // TODO: compare v with reference file
       case Success(v) => Success(v)
       case Failure(_) => Failure(new Error("hoverRequest"))
     }
-  }
 
-  def testSymbols(file: String, symbols: js.Array[DocumentSymbol])(implicit ec: ExecutionContext) = {
-    symbols.foreach(symbol => {
-      testHover(file, symbol.range.start)
-    })
-  }
+  def testCodeAction(file: String, start: Position, end: Position) =
+    client.requestCodeAction(file, start, end).transform {
+      // TODO: compare v with reference file
+      case Success(v) => Success(v)
+      case Failure(_) => Failure(new Error("codeAction"))
+    }
+  
+  def testDefinition(file: String, position: Position) =
+    client.requestDefinition(file, position).transform {
+      // TODO: compare v with reference file
+      case Success(v) => Success(v)
+      case Failure(_) => Failure(new Error("definition"))
+    }
 
-  def runTests(file: String) = {
-    implicit val ec: ExecutionContext = JSExecutionContext.queue
+  def testReferences(file: String, position: Position) =
+    client.requestReferences(file, position).transform {
+      // TODO: compare v with reference file
+      case Success(v) => Success(v)
+      case Failure(_) => Failure(new Error("references"))
+    }
 
+  def testSymbols(file: String) =
+    testDocumentSymbol(file).transform {
+      case Success(symbols) => Success(symbols.foreach(symbol => {
+        // TODO: accumulated error handling
+        // TODO: test according to symbol kind
+        testHover(file, symbol.range.start)
+        testCodeAction(file, symbol.range.start, symbol.range.end)
+        testDefinition(file, symbol.range.start) 
+        testReferences(file, symbol.range.start)
+      }))
+      case Failure(_) => Failure(new Error("documentSymbolRequest"))
+    }
+
+  def runTests(file: String) =
     client.openDocument(file, fsMod.readFileSync(file).toString).onComplete {
       case Success(_) => {
-        testDocumentSymbol(file).onComplete {
-          case Success(symbols) => testSymbols(file, symbols)
-          case Failure(_) => println("error during hoverRequest")
-        }
+        // TODO: accumulated error handling
+        testSymbols(file)
       }
-      case Failure(_) => println("error during didOpenTextDocumentNotification")
+      case Failure(_) => println("didOpenTextDocumentNotification")
     }
-  }
 
   def runTestsInDirectory(dir: String): Unit =
     fsMod.readdirSync(dir).foreach(sub => {
