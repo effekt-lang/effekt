@@ -1,9 +1,9 @@
 package lspTest
 
 import scala.scalajs.js
+import scala.scalajs.js.timers
 import scala.concurrent.ExecutionContext
 import scala.scalajs.concurrent.JSExecutionContext
-import scala.scalajs.js.timers
 import scala.util.{Success, Failure}
 import typings.node.{childProcessMod, netMod}
 import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
@@ -11,8 +11,6 @@ import typings.vscodeJsonrpc.libCommonMessageReaderMod.MessageReader
 import typings.vscodeJsonrpc.libCommonMessageWriterMod.MessageWriter
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
-import typings.vscodeLanguageserverProtocol.libCommonProtocolMod.InitializeParams
-import typings.vscodeLanguageserverProtocol.mod.InitializeRequest
 
 object Main {
   def tryConnect(port: Int, host: String, callback: Function[ProtocolConnection, Unit]) {
@@ -32,22 +30,29 @@ object Main {
       val connection = libCommonConnectionMod.createProtocolConnection(reader, writer, logger)
       connection.listen()
 
-      implicit val ec: ExecutionContext = JSExecutionContext.queue
-      connection.sendRequest(InitializeRequest.method.asInstanceOf[String], InitializeParams).toFuture.onComplete {
-        case Success(_) => callback(connection)
-        case Failure(_) => println("error during initialization")
-      }
+      callback(connection)
     })
   }
 
   def main(args: Array[String]): Unit = {
+    implicit val ec: ExecutionContext = JSExecutionContext.queue
+
     val port = 5007
-    val process = childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug", s"--debugPort $port"))
+    childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug", s"--debugPort $port"))
 
     tryConnect(port, "127.0.0.1", connection => {
       val client = new Client(connection)
-      val tests = new Tests(client)
-      tests.runAll()
+
+      client.initialize.onComplete {
+        case Success(_) => {
+          val tests = new Tests(client)
+
+          tests.runAll()
+          // client.exit()
+          // connection.end()
+        }
+        case Failure(v) => println(v.printStackTrace())
+      }
     })
   }
 }
