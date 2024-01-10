@@ -7,7 +7,7 @@ import scala.util.{Success, Failure}
 import typings.node.fsMod
 import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, Position}
 
-class Tests(val client: Client)(implicit ec: ExecutionContext) {
+class Tests(val client: Client)(implicit ec: ExecutionContext) extends munit.FunSuite {
   def testsDir = "examples2"
 
   def testDocumentSymbol(file: String) =
