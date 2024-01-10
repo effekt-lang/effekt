@@ -192,10 +192,11 @@ lazy val lspTest = project
   .enablePlugins(ScalaJSBundlerPlugin)
   .enablePlugins(ScalablyTypedConverterPlugin)
   .settings(
-    Compile / npmDependencies ++= Seq(
+    Test / npmDependencies ++= Seq(
       "@types/node" -> "^20.10.6",
       "vscode-languageserver-protocol" -> "^3.17.5",
     ),
+    libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
     scalaJSUseMainModuleInitializer := true,
     stUseScalaJsDom := false
   )

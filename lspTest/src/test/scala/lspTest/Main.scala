@@ -12,7 +12,7 @@ import typings.vscodeJsonrpc.libCommonMessageWriterMod.MessageWriter
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 
-object Main {
+class LspTestSuite extends munit.FunSuite {
   def tryConnect(port: Int, host: String, callback: Function[ProtocolConnection, Unit]) {
     val socket = netMod.createConnection(port, host)
 
