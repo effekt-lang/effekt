@@ -1,4 +1,4 @@
-import src/benchmark
+import src/effekt/benchmark
 import mutable/array
 import src/effekt/cliRunner
 
