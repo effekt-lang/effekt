@@ -9,12 +9,31 @@ import typings.vscodeLanguageserverProtocol.libCommonProtocolMod._
 import typings.vscodeLanguageserverTypes.mod.Position
 import typings.vscodeLanguageserverTypes.mod.ReferenceContext
 import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
+import scala.concurrent.Future
+import typings.vscodeLanguageserverProtocol.anon.Name
 
 class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) {
   def toURI(file: String) = s"file:///$file"
 
+  // TODO: use different capabilities and test whether the server respects them
+  def capabilities = ClientCapabilities()
+    .setExperimentalUndefined
+    .setGeneralUndefined
+    .setNotebookDocumentUndefined
+    .setTextDocumentUndefined
+    .setWindowUndefined
+    .setWorkspaceUndefined
+
   def initialize() = {
-    connection.sendRequest(InitializeRequest.method.asInstanceOf[String], InitializeParams).toFuture
+    val params = _InitializeParams(capabilities)
+      .setClientInfo(Name("LSP testing client"))
+      .setLocaleUndefined
+      .setRootPathNull
+      .setRootUriNull
+      .setInitializationOptionsUndefined
+      .setTraceUndefined
+      .setWorkDoneTokenUndefined
+    connection.sendRequest("initialize", params).toFuture
     // connection.sendNotification(InitializedNotification.`type`, StObject().asInstanceOf[InitializedParams]).toFuture
     // TODO: chaining these futures results in a java.lang.ClassCastException
   }
