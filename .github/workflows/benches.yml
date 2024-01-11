@@ -15,17 +15,36 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18.16.1'  # Choose the Node.js version you need
-
-      - name: Install latest effekt
+      
+      - name: Set up Git user and email
         run: |
-          git clone git@github.com:effekt-lang/effekt.git &&
-          git checkout cbff76e875c7ce4aca5e52fd8ef170c1f66b97e9 &&
+          git config --global user.name "Maximilian Marschall"
+          git config --global user.email "max1marschall@gmail.com"
+
+      - name: set up ssh
+        run: |
+          ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_rsa
+          ssh-add -L
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Install specific effekt
+        run: |
+          git clone https://github.com/effekt-lang/effekt.git &&
           cd effekt &&
+          git checkout cbff76e875c7ce4aca5e52fd8ef170c1f66b97e9
+
+      - name: Set up submodule
+        run: |
+          cd effekt
+          git config submodule.kiama.url https://github.com/effekt-lang/kiama.git &&
+          git submodule update --init --recursive &&
           sbt install
-        #run: |
-        #  npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz &&
-        #  npm link &&
-        #  npm list -g
+
       - name: Execute Benchmarks
         run: |
+          npm link &&
+          npm list -g &&
           fasteffekt -s  
