@@ -12,8 +12,10 @@ const commands = [
   ['permute', 'src/effekt/benchmark/permute.effekt', 'node src/javascript/Permute.js'],
   ["nbody", "src/effekt/benchmark/nbody.effekt", "node src/javascript/Nbody.js"],
   ['list', 'src/effekt/benchmark/list.effekt', 'node src/javascript/List.js'],
-  ["mandelbrot", "src/effekt/benchmark/mandelbrot.effekt", "node src/javascript/Mandelbrot.js"]
+  ["mandelbrot", "src/effekt/benchmark/mandelbrot.effekt", "node src/javascript/Mandelbrot.js"],
+  ["bounce","src/effekt/benchmark/bounce.effekt","node src/javascript/bounce.js"]
   // Add more commands as needed
+  
 ];
 
 /**

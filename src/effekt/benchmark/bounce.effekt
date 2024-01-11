@@ -1,0 +1,119 @@
+import src/benchmark
+import mutable/array
+import src/effekt/cliRunner
+
+record Ball(
+  x: Double,
+  y: Double,
+  xVel: Double,
+  yVel: Double
+)
+
+interface Random {
+  def next(): Int
+}
+
+def randomBall(){ rand: Random }: Ball = {
+  Ball(
+    toDouble(rand.next().mod(500)),
+    toDouble(rand.next().mod(500)),
+    toDouble(rand.next().mod(300) - 150),
+    toDouble(rand.next().mod(300) - 150)
+  )
+}
+
+def abs(n: Double): Double = if (n < 0.0) 0.0 - n else n
+
+def bounce(ball: Ball): Tuple2[Ball, Boolean] = {
+  val xLimit = 500.0;
+  val yLimit = 500.0;
+  var bounced = false;
+  var x = ball.x + ball.xVel;
+  var y = ball.y + ball.yVel;
+  var xVel = ball.xVel;
+  var yVel = ball.yVel;
+
+  if (x > xLimit) {
+    x = xLimit; 
+    xVel = 0.0 - abs(xVel);
+    bounced = true;
+  }
+  if (x < 0.0) {
+    x = 0.0;
+    xVel = abs(xVel)
+    bounced = true;
+  }
+  if (y > yLimit) {
+    y = yLimit;
+    yVel = 0.0 - abs(yVel);
+    bounced = true;
+  }
+  if (y < 0.0) {
+    y = 0.0;
+    yVel = abs(yVel);
+    bounced = true;
+  }
+  (Ball(x,y, xVel, yVel), bounced)
+}
+
+def bitAnd(x: Int, y: Int) = mod(x,(y+1)) 
+
+def withRandom[R]{ program: { Random } => R}: R = {
+  var seed = 74755;   //FIXME is mutable from everywhere, use "withRandom" with block
+  def rand = new Random {
+    def next() = {
+    seed = bitAnd((seed * 1309) + 13849, 65535);
+    seed;
+    }
+  }
+  program{rand}
+}
+
+def Bounce(iterations: Int) = {
+  def verifyResult(result: Int) = 
+    result == 1331
+
+  def runBenchdef(){ rand: Random }: Int = {
+     val ballCount = 100;
+    var bounces = 0;
+    val balls = emptyArray[Ball]()
+    each(0, ballCount){ i => 
+      val rBall = randomBall(){ rand }
+      put(balls, i, rBall)
+    }
+
+
+    each(0, 50) { i => 
+      each(0, ballCount) { i => 
+        val ball = balls.unsafeGet(i);
+        val (bouncedBall, didBounce) = bounce(ball);
+        put(balls, i, bouncedBall);
+        if (didBounce)
+          bounces = bounces + 1;
+      }
+    }
+    
+    return bounces;
+  }
+
+  def benchmark(): Int = {
+    withRandom{ { rand: Random } => runBenchdef(){ rand }}
+  }  
+  
+  innerBenchmarkLoop(iterations){benchmark}{verifyResult}
+}
+
+def miniRun() = {
+  Bounce(1)
+}
+
+def normalRun() = {
+  Bounce(1) //FIXME change problem size => is NOT ignored
+}
+
+def main() = {
+  println(runFromCli{ miniRun }{ normalRun })
+}
+
+
+
