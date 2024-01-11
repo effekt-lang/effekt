@@ -16,20 +16,6 @@ jobs:
         with:
           node-version: '18.16.1'  # Choose the Node.js version you need
       
-      - name: Set up Git user and email
-        run: |
-          git config --global user.name "Maximilian Marschall"
-          git config --global user.email "max1marschall@gmail.com"
-
-      - name: set up ssh
-        run: |
-          ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/id_rsa
-          ssh-add -L
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
       - name: Install specific effekt
         run: |
           git clone https://github.com/effekt-lang/effekt.git &&
