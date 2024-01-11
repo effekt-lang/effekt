@@ -33,9 +33,18 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
       .setInitializationOptionsUndefined
       .setTraceUndefined
       .setWorkDoneTokenUndefined
-    connection.sendRequest("initialize", params).toFuture
-    // connection.sendNotification(InitializedNotification.`type`, StObject().asInstanceOf[InitializedParams]).toFuture
-    // TODO: chaining these futures results in a java.lang.ClassCastException
+
+    // (1) send initialization request
+    connection.sendRequest("initialize", params).toFuture.flatMap { result: InitializeResult[js.Any] =>
+      // (2) on success, send initialized notification
+      connection.sendNotification(InitializedNotification.`type`, StObject().asInstanceOf[InitializedParams]).toFuture.flatMap { _ =>
+        Future.successful(result)
+      } recoverWith {
+        case error => Future.failed(error)
+      }
+    } recoverWith {
+      case error => Future.failed(error)
+    }
   }
 
   def exit() = {
