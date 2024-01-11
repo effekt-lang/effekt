@@ -6,8 +6,21 @@ import scala.concurrent.Future
 import scala.util.{Success, Failure}
 import typings.node.fsMod
 import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, Position}
+import utest._
 
-class Tests(val client: Client)(implicit ec: ExecutionContext) extends munit.FunSuite {
+class Tests(val client: Client)(implicit ec: ExecutionContext) {
+
+  def tests = Tests {
+    test("hallo") {
+      assert(2 == 5)
+    }
+    // "testSuccess" - {
+    //   Future {
+    //     assert(true)
+    //   }
+    // }
+  }
+
   def testsDir = "examples2"
 
   def testDocumentSymbol(file: String) =

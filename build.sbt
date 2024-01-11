@@ -196,7 +196,8 @@ lazy val lspTest = project
       "@types/node" -> "^20.10.6",
       "vscode-languageserver-protocol" -> "^3.17.5",
     ),
-    libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % Test,
+    testFrameworks += new TestFramework("utest.runner.Framework"),
     scalaJSUseMainModuleInitializer := true,
     stUseScalaJsDom := false
   )
