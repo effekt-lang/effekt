@@ -16,7 +16,7 @@ const runFromCli = (miniBench, normalBench) => {
   var durationLog = isSmall ?
     Array(3).fill(0).map(i => measureMillis(miniBench))
     :
-    Array(iterations).fill(0).map(i => measureMillis(miniBench))
+    Array(iterations).fill(0).map(i => measureMillis(normalBench))
   return JSON.stringify(durationLog)
 }
 
