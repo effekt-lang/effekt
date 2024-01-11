@@ -1,5 +1,5 @@
 import mutable/array
-import src/benchmark
+import src/effekt/benchmark
 import io/args
 import src/effekt/cliRunner
 

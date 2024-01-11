@@ -1,5 +1,5 @@
 
-import src/benchmark
+import src/effekt/benchmark
 import src/effekt/cliRunner
 
 extern pure def xor(a: Int, b: Int): Int = "a ^ b"

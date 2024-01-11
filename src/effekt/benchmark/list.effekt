@@ -1,4 +1,4 @@
-import src/benchmark
+import src/effekt/benchmark
 import immutable/list
 import src/effekt/cliRunner
 
