@@ -108,7 +108,7 @@ def miniRun() = {
 }
 
 def normalRun() = {
-  Bounce(1)
+  Bounce(1) //FIXME change problem size => is NOT ignored
 }
 
 def main() = {
