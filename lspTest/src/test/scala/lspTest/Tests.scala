@@ -1,27 +1,37 @@
 package lspTest
 
-import scala.scalajs.js
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import scala.scalajs.js
 import scala.util.{Success, Failure}
 import typings.node.fsMod
 import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, Position}
 import utest._
 
 class Tests(val client: Client)(implicit ec: ExecutionContext) {
+  def samplesDir = "lspTest/tests/samples"
 
   def tests = Tests {
-    test("hallo") {
-      assert(2 == 5)
+    test("open files") {
+      forEachSample { file =>
+        client.openDocument(file, fsMod.readFileSync(file).toString).transform {
+          case Success(_) => Success()
+          case Failure(_) => Failure(new Error("didOpenTextDocumentNotification failed"))
+        }
+      }
     }
-    // "testSuccess" - {
-    //   Future {
-    //     assert(true)
-    //   }
-    // }
-  }
 
-  def testsDir = "examples2"
+    test("request symbols") {
+      forEachSample { file =>
+        client.requestDocumentSymbol(file).transform {
+          case Success(v) => Success(
+            Checker.checkSample("documentSymbolRequest", file, v.asInstanceOf[js.Object])
+          )
+          case Failure(_) => Failure(new Error("documentSymbolRequest failed"))
+        }
+      }
+    }
+  }
 
   def testDocumentSymbol(file: String) =
     client.requestDocumentSymbol(file).transform {
@@ -80,14 +90,18 @@ class Tests(val client: Client)(implicit ec: ExecutionContext) {
       case Failure(_) => println("didOpenTextDocumentNotification")
     }
 
-  def runTestsInDirectory(dir: String): Unit =
-    fsMod.readdirSync(dir).foreach(sub => {
-      val path = s"$dir/$sub"
-      if (fsMod.statSync(path).get.isDirectory)
-        runTestsInDirectory(path) // iterate in sub directory
-      else if (path.endsWith(".effekt"))
-        runTests(path)
-    })
-
-  def runAll() = runTestsInDirectory(testsDir)
+  def forEachSample(callback: String => Future[Unit]): Future[Unit] = {
+    Future.sequence {
+      fsMod.readdirSync(samplesDir).toSeq.flatMap { sub =>
+        val path = s"$samplesDir/$sub"
+        if (fsMod.statSync(path).get.isDirectory) {
+          Seq(forEachSample(callback)) // iterate in sub directory
+        } else if (path.endsWith(".effekt")) {
+          Seq(callback(path))
+        } else {
+          Seq.empty[Future[Unit]]
+        }
+      }
+    }.map(_ => ())
+  }
 }

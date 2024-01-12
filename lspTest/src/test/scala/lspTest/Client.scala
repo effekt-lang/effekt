@@ -2,15 +2,15 @@ package lspTest
 
 import scala.scalajs.js
 import scala.concurrent.ExecutionContext
-import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
+import scala.concurrent.Future
 import org.scalablytyped.runtime.StObject
+import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
+import typings.vscodeLanguageserverProtocol.anon.Name
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import typings.vscodeLanguageserverProtocol.libCommonProtocolMod._
+import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
 import typings.vscodeLanguageserverTypes.mod.Position
 import typings.vscodeLanguageserverTypes.mod.ReferenceContext
-import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
-import scala.concurrent.Future
-import typings.vscodeLanguageserverProtocol.anon.Name
 
 class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) {
   def toURI(file: String) = s"file:///$file"
