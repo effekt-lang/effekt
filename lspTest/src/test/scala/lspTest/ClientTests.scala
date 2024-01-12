@@ -8,20 +8,20 @@ import typings.node.fsMod
 import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, Position}
 import utest._
 
-class Tests(val client: Client)(implicit ec: ExecutionContext) {
+class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
   def samplesDir = "lspTest/tests/samples"
 
   def tests = Tests {
-    test("open files") {
+    test("Open files") {
       forEachSample { file =>
         client.openDocument(file, fsMod.readFileSync(file).toString).transform {
-          case Success(_) => Success()
+          case Success(_) => Success(())
           case Failure(_) => Failure(new Error("didOpenTextDocumentNotification failed"))
         }
       }
     }
 
-    test("request symbols") {
+    test("Request symbols") {
       forEachSample { file =>
         client.requestDocumentSymbol(file).transform {
           case Success(v) => Success(
@@ -94,7 +94,7 @@ class Tests(val client: Client)(implicit ec: ExecutionContext) {
     Future.sequence {
       fsMod.readdirSync(samplesDir).toSeq.flatMap { sub =>
         val path = s"$samplesDir/$sub"
-        if (fsMod.statSync(path).get.isDirectory) {
+        if (fsMod.statSync(path).get.isDirectory()) {
           Seq(forEachSample(callback)) // iterate in sub directory
         } else if (path.endsWith(".effekt")) {
           Seq(callback(path))

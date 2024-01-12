@@ -35,7 +35,7 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
       .setWorkDoneTokenUndefined
 
     // (1) send initialization request
-    connection.sendRequest("initialize", params).toFuture.flatMap { result: InitializeResult[js.Any] =>
+    connection.sendRequest("initialize", params).toFuture.flatMap { (result: InitializeResult[js.Any]) =>
       // (2) on success, send initialized notification
       connection.sendNotification(InitializedNotification.`type`, StObject().asInstanceOf[InitializedParams]).toFuture.flatMap { _ =>
         Future.successful(result)
