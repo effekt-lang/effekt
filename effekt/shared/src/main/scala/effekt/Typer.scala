@@ -4,10 +4,10 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotation, Annotations, Context, ContextOps }
+import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
-import effekt.symbols.*
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
+import effekt.symbols.{BlockType, Capture, *}
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
@@ -359,7 +359,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           //
           // TODO we need to do something with bidirectional effects and region checking here.
           //  probably change instantiation to also take capture args.
-          val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
+          val (rigids, crigids, df @ FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
             Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
           // (3) check parameters
@@ -375,20 +375,34 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
 
           val Result(_, effs) = continuationDetails match {
-            case None => retAnnotation match
+            case None => {
 
-              case Some(_) =>
-                // if there is a return type annotation from the user, report an error
-                // see PR #148 for more details
-                // TODO: Can we somehow use the return type provided by the user?
-                Context.abort(pretty"Unexpected type annotation on operation ${op}.")
+              // ...
 
-              case None =>
-                // no answer type, no annotation, just check body
-                body checkAgainst tpe
+              retAnnotation match {
+                case Some(Effectful(otherTpe, otherEffs2)) =>
+                  // if there is a return type annotation from the user, report an error
+                  // see PR #148 for more details
+                  // TODO: Can we somehow use the return type provided by the user?
+                  Context.abort(pretty"Unexpected type annotation on operation ${op}.")
 
-            case Some(ret, continuationCapt) =>
-              // answer type, we have a continuation!
+                case None => {
+                  // no answer type, no annotation, just check body
+                  val typeParams = tparams map { _.symbol.asTypeParam }
+                  val typeSubst = Substitutions.types(tps, typeParams map { ValueTypeRef.apply })
+                  val effects = typeSubst substitute otherEffs
+                  val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
+                  val captParams = capabilities map { p => p.capture }
+                  val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
+                  Context.bind(Context.symbolOf(op).asBlockSymbol, BlockType.FunctionType(tps, captParams, vps, Nil, tpe, otherEffs))
+                  val Result(bodyType, bodyEffs) = Context.bindingCapabilities(op, capabilities) {
+                    body checkAgainst tpe
+                  }
+                  Result(bodyType, bodyEffs -- effects)
+                }
+              }
+            }
+            case Some(ret, continuationCapt) => {
 
               // if there is a return type annotation from the user, report an error
               // see PR #148 for more details
@@ -411,6 +425,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
               body checkAgainst ret
+            }
           }
 
           handlerEffects = handlerEffects ++ effs

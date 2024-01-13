@@ -24,13 +24,15 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   val phaseName = "explicit-capabilities"
 
-  def run(input: Typechecked)(using C: Context) = Some(input.copy(tree = rewrite(input.tree)))
+  def run(input: Typechecked)(using C: Context) = 
+    val x = rewrite(input.tree)
+    
+    Some(input.copy(tree = x))
 
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
-
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
   }
 
@@ -103,7 +105,19 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       }
 
       TryHandle(body, hs)
-
+/*
+    case n @ source.New(impl @ Implementation(interface, clauses)) => {
+      val cs = clauses map {
+        case op @ OpClause(id, tparams, vparams, ret, body, resume) => {
+          val capabilities = Context.annotation(Annotations.BoundCapabilities, op)
+          val capParams = capabilities.map(definitionFor)
+          val bodyAsBlock = source.BlockLiteral(tparams, vparams, capParams, rewrite(body))
+          OpClause(id, tparams, vparams, ret, bodyAsBlock, resume)
+        }
+      }
+      source.New(Implementation(interface, cs))
+    }
+*/
     case b @ source.BlockLiteral(tps, vps, bps, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(definitionFor)
