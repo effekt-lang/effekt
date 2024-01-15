@@ -15,17 +15,22 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18.16.1'  # Choose the Node.js version you need
-
-      - name: Install latest effekt
+      
+      - name: Install specific effekt
         run: |
-          git clone git@github.com:effekt-lang/effekt.git &&
-          git checkout cbff76e875c7ce4aca5e52fd8ef170c1f66b97e9 &&
+          git clone https://github.com/effekt-lang/effekt.git &&
           cd effekt &&
+          git checkout cbff76e875c7ce4aca5e52fd8ef170c1f66b97e9
+
+      - name: Set up submodule
+        run: |
+          cd effekt
+          git config submodule.kiama.url https://github.com/effekt-lang/kiama.git &&
+          git submodule update --init --recursive &&
           sbt install
-        #run: |
-        #  npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz &&
-        #  npm link &&
-        #  npm list -g
+
       - name: Execute Benchmarks
         run: |
+          npm link &&
+          npm list -g &&
           fasteffekt -s  
