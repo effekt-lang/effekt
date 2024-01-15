@@ -1,7 +1,6 @@
 package lspTest
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.concurrent.duration._
 import scala.scalajs.concurrent.JSExecutionContext
 import scala.scalajs.js
 import scala.scalajs.js.timers
@@ -15,9 +14,12 @@ import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConne
 import utest._
 
 object LspTestSuite extends TestSuite {
-  def timeoutFuture[T](f: Future[T], duration: FiniteDuration)(implicit ec: ExecutionContext): Future[T] = {
+  val connectionTimeout = 3000 // in ms
+  val retryTimeout = 100 // in ms
+
+  def timeoutFuture[T](f: Future[T], duration: Int)(implicit ec: ExecutionContext): Future[T] = {
     val p = Promise[T]()
-    val timeoutHandle = timers.setTimeout(duration.toMillis.toDouble) {
+    val timeoutHandle = timers.setTimeout(duration) {
       p.tryFailure(new Error("Connection timed out"))
     }
     f.onComplete { result =>
@@ -34,7 +36,7 @@ object LspTestSuite extends TestSuite {
     val socket = netMod.createConnection(port, host)
 
     socket.on("error", _ => {
-      timers.setTimeout(100) {
+      timers.setTimeout(retryTimeout) {
         tryConnect(port, host).onComplete {
           case Success(connection) => promise.success(connection)
           case Failure(exception) => promise.failure(exception)
@@ -52,8 +54,16 @@ object LspTestSuite extends TestSuite {
       promise.success(connection)
     })
 
-    timeoutFuture(connectionFuture, 3.seconds)
+    timeoutFuture(connectionFuture, connectionTimeout)
   }
+
+  // utest runs async tests in *parallel*, while we want sequential execution
+  // TODO: Find better way of forcing sequentiality with futures
+  val futures = Array.fill[Future[Any]](4)(null)
+
+  // variables have to be defined outside of the Tests block in order to be shared among tests
+  var client: Client = null
+  var connection: ProtocolConnection = null
 
   def tests = Tests {
     implicit val ec: ExecutionContext = JSExecutionContext.queue
@@ -61,37 +71,50 @@ object LspTestSuite extends TestSuite {
     val port = 5007
     childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug", s"--debugPort $port"))
 
-    // (1) try to connect to LSP server
-    test("LSP server connection") {
-      tryConnect(port, "127.0.0.1").flatMap { connection =>
-        // TODO: abstract into own tests and runAsync
-        val client = new Client(connection)
-
-        // (2) try to initialize server
-        client.initialize.flatMap { result =>
-          Checker.checkStats("initialization", result)
-
-          val tests = new Tests(client)
-
-          // (3) run all LSP tests
-          TestRunner.runAndPrintAsync(tests.tests, "Tests").flatMap { results =>
-            // val leafResults = results.leaves.toSeq
-            // assert(leafResults(0).value.isSuccess)
-            Future.successful()
-          }
-        }.recoverWith {
-          // initialization failed, probably fatal request logic error
-          case error => Future.failed(error)
+    test("Connect to server") {
+      futures(0) = tryConnect(port, "127.0.0.1").transform {
+        case Success(_connection) => {
+          connection = _connection
+          client = new Client(connection)
+          Success(())
         }
-      }.recoverWith {
-        // connection failed, probably by connection timeout
-        case error => Future.failed(error)
+        case error => error
       }
+      futures(0)
+    }
+
+    test("Request initialization") {
+      futures(1) = futures(0).flatMap { _ =>
+        client.initialize().transform {
+          case Success(result) => {
+            Checker.checkStats("initialization", result)
+            Success(())
+          }
+          case error => error
+        }
+      }
+      futures(1)
+    }
+
+    test("Run all client tests") {
+      futures(2) = futures(1).flatMap { _ =>
+        val tests = new ClientTests(client)
+        TestRunner.runAndPrintAsync(tests.tests, "Tests")
+      }
+      futures(2)
+    }
+
+    test("Exit client") {
+      futures(3) = futures(2).flatMap { _ =>
+        client.exit().transform {
+          case Success(_) => {
+            connection.end()
+            Success(())
+          }
+          case error => error
+        }
+      }
+      futures(3)
     }
   }
-
-  // TODO: Run this after everything
-  //   client.exit().onComplete {
-  //     case _ => connection.end()
-  //   }
 }
