@@ -329,7 +329,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.error("Duplicate definitions of operations")
 
       clauses foreach Context.withFocus {
-        case d @ source.OpClause(op, tparams, params, retAnnotation, body, resume) =>
+        case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
+          // TODO
+          assert(bparams.isEmpty, "Block parameters currently not supported for operations")
           val declaration = d.definition
 
           val declaredType = Context.lookupFunctionType(declaration)
@@ -363,10 +365,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
           // (3) check parameters
-          if (vps.size != params.size)
-            Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${vps.size}.")
+          if (vps.size != vparams.size)
+            Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but ${op.name} expects ${vps.size}.")
 
-          (params zip vps).foreach {
+          (vparams zip vps).foreach {
             case (param, decl) =>
               val sym = param.symbol
               val annotType = sym.tpe
@@ -374,6 +376,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.bind(sym, annotType.getOrElse(decl))
           }
 
+          // distinguish between handler operation or object operation (which does not capture a cont.)
           val Result(_, effs) = continuationDetails match {
             case None => {
 
@@ -391,11 +394,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   val typeParams = tparams map { _.symbol.asTypeParam }
                   val typeSubst = Substitutions.types(tps, typeParams map { ValueTypeRef.apply })
                   val effects = typeSubst substitute otherEffs
+                  // term-level capabilities
                   val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
-                  val captParams = capabilities map { p => p.capture }
-                  val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
-                  Context.bind(Context.symbolOf(op).asBlockSymbol, BlockType.FunctionType(tps, captParams, vps, Nil, tpe, otherEffs))
-                  val Result(bodyType, bodyEffs) = Context.bindingCapabilities(op, capabilities) {
+                  //val captParams = capabilities map { p => p.capture }
+                  // TODO associate term-level capabilties with type-level capture (cparams)
+                  (capabilities zip cparams).foreach {
+                    case (cap, cparam) =>
+                      ()
+                  }
+                  // val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
+                  // TODO apply captSubst (maybe)
+                  Context.bind(Context.symbolOf(op).asBlockSymbol, BlockType.FunctionType(tps, cparams, vps, Nil, tpe, otherEffs))
+                  val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
                     body checkAgainst tpe
                   }
                   Result(bodyType, bodyEffs -- effects)

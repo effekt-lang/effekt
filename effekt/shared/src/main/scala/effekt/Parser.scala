@@ -428,13 +428,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
         val synthesizedId = IdRef(id.name)
         val interface = BlockTypeRef(id, Nil) withPositionOf id
-        Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf id))
+        Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, Nil, None, body, resume) withPositionOf id))
       }
     )
 
   lazy val defClause: P[OpClause] =
     (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
-      case id ~ tparams ~ vparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, ret, body, resume)
+      case id ~ tparams ~ vparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, Nil, ret, body, resume)
     }
 
   lazy val clause: P[MatchClause] =

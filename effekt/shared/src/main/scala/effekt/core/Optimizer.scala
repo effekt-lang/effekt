@@ -18,6 +18,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
     val tree = Deadcode.remove(mainSymbol, core)
 
+    println(util.show(tree))
     // (2) inline unique block definitions
-    Inline.full(Set(mainSymbol), tree)
+    //Inline.full(Set(mainSymbol), tree)
+    tree
 }

@@ -453,20 +453,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
 
     Implementation(coreType, sig.operations.map(clauses.apply).map {
-      case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
+      case op @ source.OpClause(id, tparams, vparams, bparams, ret, body, resume) =>
         val vps = vparams.map(transform)
         val tps = tparams.map { p => p.symbol }
 
         // We cannot annotate the transparent capture of resume here somewhere since all
         // block parameters are automatically tracked by our current encoding of core.Tree.
         // So resume is a separate parameter.
-        val resumeParam = if (isHandler) {
+        val (resumeParam, bps, cps) = if (isHandler) {
           val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
-          Some(BlockParam(resumeSymbol))
-        } else { None }
-        // TODO the operation could be effectful, so needs to take a block param here.
-        val bps = Nil
-        val cps = Nil
+          (Some(BlockParam(resumeSymbol)), Nil, Nil)
+        } else {
+          (None, bparams map transform, bparams map { b => b.symbol.capture })
+        }
         core.Operation(op.definition, tps, cps, vps, bps, resumeParam, transform(body))
     })
   }
