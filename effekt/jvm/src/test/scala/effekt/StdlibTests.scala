@@ -26,3 +26,14 @@ class StdlibChezSchemeCallCCTests extends StdlibTests {
 class StdlibChezSchemeLiftTests extends StdlibTests {
   def backendName: String = "chez-lift"
 }
+class StdlibMLTests extends StdlibTests {
+  def backendName: String = "ml"
+
+  override lazy val ignored: List[File] = List(
+    // For every function using `foreach`:
+    // [error] Effect polymorphic recursion is not allowed. The following definition is effect polymorphic since unification variable X occurs in instantiation ...
+    examplesDir / "stdlib" / "list" / "join.effekt",
+    examplesDir / "stdlib" / "list" / "flatmap.effekt",
+  )
+}
+}

@@ -114,9 +114,6 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
 
-    examplesDir / "pos" / "probabilistic.effekt",
-
-    // `immutable/list` is not ported to the ML backend
-    examplesDir / "pos" / "list",
+    examplesDir / "pos" / "probabilistic.effekt"
   )
 }
