@@ -6,6 +6,9 @@ import immutable/option
 // Used as a type for `Exception` in functions which expect a nonempty list.
 record EmptyList()
 
+// Used as a type for `Exception` in functions where an index can be out of bounds.
+record OutOfBounds()
+
 // Immutable linked list for finite sequences of elements.
 type List[A] {
   Nil();
@@ -86,61 +89,56 @@ def headOption[A](l: List[A]): Option[A] = l match {
 // Get the value at given index.
 //
 // O(N)
-def get[A](list: List[A], index: Int): Option[A] = {
-  def go(list: List[A], i: Int): Option[A] = {
+def get[A](list: List[A], index: Int): A / Exception[OutOfBounds] = {
+  def go(list: List[A], i: Int): A / Exception[OutOfBounds] = {
     list match {
-      case Nil() => None()
+      case Nil() => do raise(OutOfBounds(), "Trying to get an element outside the bounds of a list")
       case Cons(x, xs) =>
         if (i == 0) {
-          Some(x)
+          x
         } else {
           go(xs, i - 1)
         }
     }
   }
-  go(list, index)
-}
 
-// Get the value at given index.
-// Panics when the index is out of bounds.
-//
-// O(N)
-def unsafeGet[A](list: List[A], index: Int): A = {
-  get(list, index) match {
-    case Some(value) => value
-    case None() => panic[A]("unsafeGet: list out of bounds: " ++ show(index))
-  }
+  go(list, index)
 }
 
 // Traverse a list, applying the given action on every element.
 //
 // O(N)
-def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
+def foreach[A](l: List[A]) { f: A => Unit / Control } : Unit = {
   var remainder = l
-  while(not(remainder.isEmpty)) {
-    remainder match {
-      case Nil() => ()
-      case Cons(a, as) =>
-        f(a)
-        remainder = as
-    }
+  loop {
+    if (not(remainder.isEmpty)) {
+      remainder match {
+        case Nil() => ()
+        case Cons(a, as) =>
+          remainder = as
+          f(a)
+      }
+    } else { do break() }
   }
 }
 
 // Traverse a list, applying the given action on every element and its (zero-based) index.
 //
 // O(N)
-def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit}: Unit = {
-  def go[A](list: List[A], i: Int){ f: (Int, A) => Unit}: Unit = {
-    list match {
-      case Nil() => ();
-      case Cons(head, tail) =>
-        f(i, head)
-        go(tail, i+1){f}
-    }
+def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit / Control }: Unit = {
+  var remainder = list
+  var i = 0
+  loop {
+    if (not(remainder.isEmpty)) {
+      remainder match {
+        case Nil() => ()
+        case Cons(a, as) =>
+          remainder = as
+          i = i + 1
+          f(i, a)
+      }
+    } else { do break() }
   }
-
-  go(list, 0){f}
 }
 
 // Map a function `f` over elements in a given list.
@@ -415,7 +413,7 @@ def updateAt[A](list: List[A], index: Int) { update: A => A }: List[A] = {
 }
 
 // Modify the element at given index in the list using the `update` function.
-// Returns `None()` if the index is out of bounds.
+// Throws `OutOfBounds` if the index is out of bounds.
 //
 // See: `updateAt`
 // Examples:
@@ -428,11 +426,11 @@ def updateAt[A](list: List[A], index: Int) { update: A => A }: List[A] = {
 // ```
 //
 // O(N)
-def modifyAt[A](list: List[A], index: Int) { update: A => A }: Option[List[A]] = {
+def modifyAt[A](list: List[A], index: Int) { update: A => A }: List[A] / Exception[OutOfBounds] = {
   list.splitAt(index) match {
     case (left, Cons(x, right)) =>
-      Some(left.append(Cons(update(x), right)))
-    case _ => None()
+      left.append(Cons(update(x), right))
+    case _ => do raise(OutOfBounds(), "Trying to modify an element outside the bounds of a list")
   }
 }
 

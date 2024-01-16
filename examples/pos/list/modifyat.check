@@ -1,2 +1,2 @@
-Some(Cons(1, Cons(102, Cons(3, Nil()))))
-None()
+Success(Cons(1, Cons(102, Cons(3, Nil()))))
+Error(Trying to modify an element outside the bounds of a list)
