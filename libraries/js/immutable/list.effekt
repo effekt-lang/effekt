@@ -127,7 +127,7 @@ def foreach[A](l: List[A]) { f: A => Unit / Control } : Unit = {
 // O(N)
 def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit / Control }: Unit = {
   var remainder = list
-  var i = 0
+  var i = -1
   loop {
     if (not(remainder.isEmpty)) {
       remainder match {
