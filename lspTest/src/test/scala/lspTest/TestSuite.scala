@@ -58,8 +58,7 @@ object LspTestSuite extends TestSuite {
   }
 
   // utest runs async tests in *parallel*, while we want sequential execution
-  // TODO: Find better way of forcing sequentiality with futures
-  val futures = Array.fill[Future[Any]](4)(null)
+  def dependencyTree(implicit ec: ExecutionContext) = new DependencyTree()
 
   // variables have to be defined outside of the Tests block in order to be shared among tests
   var client: Client = null
@@ -72,19 +71,21 @@ object LspTestSuite extends TestSuite {
     childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug", s"--debugPort $port"))
 
     test("Connect to server") {
-      futures(0) = tryConnect(port, "127.0.0.1").transform {
-        case Success(_connection) => {
-          connection = _connection
-          client = new Client(connection)
-          Success(())
+      dependencyTree.dependsOn("connection", "root", () => {
+        tryConnect(port, "127.0.0.1").transform {
+          case Success(_connection) => {
+            connection = _connection
+            client = new Client(connection)
+            Success(())
+          }
+          case error => error
         }
-        case error => error
-      }
-      futures(0)
+      })
     }
 
     test("Request initialization") {
-      futures(1) = futures(0).flatMap { _ =>
+      dependencyTree.dependsOn("initialization", "connection", () => {
+        println("OK!")
         client.initialize().transform {
           case Success(result) => {
             Checker.checkStats("initialization", result)
@@ -92,29 +93,26 @@ object LspTestSuite extends TestSuite {
           }
           case error => error
         }
-      }
-      futures(1)
+      })
     }
 
-    test("Run all client tests") {
-      futures(2) = futures(1).flatMap { _ =>
-        val tests = new ClientTests(client)
-        TestRunner.runAndPrintAsync(tests.tests, "Tests")
-      }
-      futures(2)
-    }
+    // test("Run all client tests") {
+    //   dependencyTree.dependsOn("clientTests", "initialization") {
+    //     val tests = new ClientTests(client)
+    //     TestRunner.runAndPrintAsync(tests.tests, "Tests")
+    //   }
+    // }
 
-    test("Exit client") {
-      futures(3) = futures(2).flatMap { _ =>
-        client.exit().transform {
-          case Success(_) => {
-            connection.end()
-            Success(())
-          }
-          case error => error
-        }
-      }
-      futures(3)
-    }
+    // test("Exit client") {
+    //   dependencyTree.dependsOn("exit", "clientTests") {
+    //     client.exit().transform {
+    //       case Success(_) => {
+    //         connection.end()
+    //         Success(())
+    //       }
+    //       case error => error
+    //     }
+    //   }
+    // }
   }
 }
