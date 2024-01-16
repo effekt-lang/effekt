@@ -13,7 +13,7 @@ def isDefined[A](self: Option[A]): Boolean = self match {
 }
 
 def isEmpty[A](self: Option[A]): Boolean =
-  self.isEmpty.not
+  self.isDefined.not
 
 def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {
   case None()  => that()
@@ -35,6 +35,10 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
   case Some(v) => f(v)
 }
 
+// =========================================
+// `show` / `println` overloads for options:
+// =========================================
+
 // for now define some common cases; TODO better solution
 def showOption[A](o: Option[A]){ showA: A => String }: String = o match {
   case None() => "None()"
@@ -43,3 +47,7 @@ def showOption[A](o: Option[A]){ showA: A => String }: String = o match {
 def show(o: Option[Int]): String = showOption(o){ e => show(e) }
 def show(o: Option[Double]): String = showOption(o){ e => show(e) }
 def show(o: Option[Boolean]): String = showOption(o){ e => show(e) }
+
+def println(o: Option[Int]): Unit = println(show(o))
+def println(o: Option[Double]): Unit = println(show(o))
+def println(o: Option[Boolean]): Unit = println(show(o))
