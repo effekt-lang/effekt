@@ -3,6 +3,7 @@ package generator
 package llvm
 
 import effekt.machine
+import effekt.util.intercalate
 import effekt.machine.analysis.*
 
 import scala.collection.mutable
@@ -42,10 +43,14 @@ object Transformer {
       case machine.Extern(functionName, parameters, returnType, body) =>
         VerbatimFunction(transform(returnType), functionName, parameters.map {
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-        }, body)
+        }, transform(body))
       case machine.Include(content) =>
         Verbatim(content)
     }
+
+  def transform(t: Template[machine.Variable]): String = intercalate(t.strings, t.args.map {
+    case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
+  }).mkString
 
   def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
