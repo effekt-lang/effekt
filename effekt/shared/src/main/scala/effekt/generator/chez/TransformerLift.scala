@@ -200,17 +200,15 @@ object TransformerLift {
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
-          case p => Some(ChezName(p.id.name.name)) },
+          case p => Some(nameDef(p.id)) },
           toChez(body)))
 
     case Extern.Include(contents) =>
       RawDef(contents)
   }
 
-  def toChez(t: Template[lifted.Expr]): chez.Expr = t match {
-    case Template(List(string), Nil) => chez.RawExpr(string)
-    case _ => sys error "Splices not yet supported in the Chez Lift backend"
-  }
+  def toChez(t: Template[lifted.Expr]): chez.Expr =
+    chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
     case Definition.Def(id, block) =>

@@ -2,6 +2,7 @@ package effekt
 package generator
 package chez
 
+import effekt.util.intercalate
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -23,7 +24,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(expr: Expr): Doc = expr match {
     case Call(callee, Nil)       => parens(toDoc(callee))
     case Call(callee, arguments) => parens(toDoc(callee) <+> group(align(hsep(arguments map toDoc, line))))
-    case RawExpr(raw)            => string(raw)
+    case RawExpr(strings, args)  => hcat(intercalate(strings.map(string), args.map(toDoc)))
     case RawValue(raw)           => string(raw)
     case Let(bindings, body)     => parens("let" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
     case Let_*(bindings, body)   => parens("let*" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
