@@ -13,7 +13,7 @@ import typings.vscodeLanguageserverProtocol.libCommonConnectionMod
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import utest._
 
-object LspTestSuite extends TestSuite {
+object LspTestSuite extends TestSuite with SequentialExecutor {
   val connectionTimeout = 3000 // in ms
   val retryTimeout = 100 // in ms
 
@@ -57,62 +57,50 @@ object LspTestSuite extends TestSuite {
     timeoutFuture(connectionFuture, connectionTimeout)
   }
 
-  // utest runs async tests in *parallel*, while we want sequential execution
-  def dependencyTree(implicit ec: ExecutionContext) = new DependencyTree()
-
   // variables have to be defined outside of the Tests block in order to be shared among tests
   var client: Client = null
   var connection: ProtocolConnection = null
 
   def tests = Tests {
-    implicit val ec: ExecutionContext = JSExecutionContext.queue
+    implicit val ec: ExecutionContext = framework.ExecutionContext.RunNow
 
     val port = 5007
     childProcessMod.spawn("effekt.sh", js.Array("-s", "--debug", s"--debugPort $port"))
 
     test("Connect to server") {
-      dependencyTree.dependsOn("connection", "root", () => {
-        tryConnect(port, "127.0.0.1").transform {
-          case Success(_connection) => {
-            connection = _connection
-            client = new Client(connection)
-            Success(())
-          }
-          case error => error
+      tryConnect(port, "127.0.0.1").transform {
+        case Success(_connection) => {
+          connection = _connection
+          client = new Client(connection)
+          Success(())
         }
-      })
+        case error => error
+      }
     }
 
     test("Request initialization") {
-      dependencyTree.dependsOn("initialization", "connection", () => {
-        println("OK!")
-        client.initialize().transform {
-          case Success(result) => {
-            Checker.checkStats("initialization", result)
-            Success(())
-          }
-          case error => error
+      client.initialize().transform {
+        case Success(result) => {
+          Checker.checkStats("initialization", result)
+          Success(())
         }
-      })
+        case error => error
+      }
     }
 
-    // test("Run all client tests") {
-    //   dependencyTree.dependsOn("clientTests", "initialization") {
-    //     val tests = new ClientTests(client)
-    //     TestRunner.runAndPrintAsync(tests.tests, "Tests")
-    //   }
-    // }
+    test("Run all client tests") {
+      val tests = new ClientTests(client)
+      TestRunner.runAndPrintAsync(tests.tests, "Tests", executor = SequentialExecutor)
+    }
 
-    // test("Exit client") {
-    //   dependencyTree.dependsOn("exit", "clientTests") {
-    //     client.exit().transform {
-    //       case Success(_) => {
-    //         connection.end()
-    //         Success(())
-    //       }
-    //       case error => error
-    //     }
-    //   }
-    // }
+    test("Exit client") {
+      client.exit().transform {
+        case Success(_) => {
+          connection.end()
+          Success(())
+        }
+        case error => error
+      }
+    }
   }
 }
