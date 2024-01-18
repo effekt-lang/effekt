@@ -1,9 +1,9 @@
 module text/regex
 
 extern type MLList[Elem] // = 'elem list
-extern pure def isEmpty[A](l: MLList[A]): Boolean = "null l"
-extern pure def head[A](l: MLList[A]): A = "hd l"
-extern pure def tail[A](l: MLList[A]): MLList[A] = "tl l"
+extern pure def isEmpty[A](l: MLList[A]): Boolean = "null ${l}"
+extern pure def head[A](l: MLList[A]): A = "hd ${l}"
+extern pure def tail[A](l: MLList[A]): MLList[A] = "tl ${l}"
 
 def toList[A](l: MLList[A]): List[A] =
   if (l.isEmpty) Nil() else Cons(l.head, toList(l.tail))
@@ -12,8 +12,8 @@ extern type Char // TODO move to text/string
 type Chars = MLList[Char]
 
 
-extern pure def chars(str: String): Chars = "String.explode str"
-extern pure def toString(chars: Chars): String = "String.implode chars"
+extern pure def chars(str: String): Chars = "String.explode ${str}"
+extern pure def toString(chars: Chars): String = "String.implode ${chars}"
 
 extern """
 
@@ -42,7 +42,7 @@ record Match(matched: String)
 
 // TODO handle CannotParse and CannotCompile ml exceptions.
 extern pure def regex(regexString: String): Regex =
-  "RegExp.compileString regexString"
+  "RegExp.compileString ${regexString}"
 
 
 // A stream of elements of type Elem, read from a source of type Source
@@ -75,17 +75,26 @@ fun unsafeSplit str sep =
     | SOME v => allMatched (#1 v);
 """
 
-extern pure def getMatch(result: MLMatchResult): String = "matchedString result"
-extern pure def getRemainder(result: MLMatchResult): Chars = "remainderChars result"
+extern pure def getMatch(result: MLMatchResult): String =
+  "matchedString ${result}"
+extern pure def getRemainder(result: MLMatchResult): Chars =
+  "remainderChars ${result}"
 
-extern pure def unsafeSplit(str: String, ch: Char): MLList[String] = "String.fields (fn c => c = ch) str"
+extern pure def unsafeSplit(str: String, ch: Char): MLList[String] =
+  "String.fields (fn c => c = ${ch}) ${str}"
 
 extern pure def unsafeMatchPrefix(r: Regex, str: Chars): MLOption[MLMatchResult] =
-  "RegExp.prefix r List.getItem str"
+  "RegExp.prefix ${r} List.getItem ${str}"
 
-extern pure def unsafeSplit(str: String, sep: String): MLList[String] = "unsafeSplit str sep"
+extern pure def unsafeSplit(str: String, sep: String): MLList[String] =
+  "unsafeSplit ${str} ${sep}"
 
-extern pure def unsafeLines(str: String): MLList[String] = """String.fields (fn c => c = #"\n") str"""
+extern """
+val NEWLINE_CHAR = #"\n";
+"""
+
+extern pure def unsafeLines(str: String): MLList[String] =
+  "String.fields (fn c => c = NEWLINE_CHAR) ${str}"
 
 def lines(str: String): List[String] = unsafeLines(str).toList
 

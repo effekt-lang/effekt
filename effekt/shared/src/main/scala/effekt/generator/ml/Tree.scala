@@ -64,8 +64,9 @@ enum Expr {
   // e.g. (<EXPR>(<EXPR>, ..., <EXPR>))
   case Call(callee: Expr, args: List[Expr])
 
-  // e.g. (display "foo")
-  case RawExpr(raw: String)
+  // e.g. "" <EXPR> " + " <EXPR>
+  //   raw ml splices, always start with a prefix string, then interleaved with arguments
+  case RawExpr(raw: List[String], args: List[Expr])
 
   // e.g. 42 (represented as Scala string "42") and inserted verbatim
   case RawValue(raw: String)
@@ -101,6 +102,9 @@ enum Expr {
 }
 
 export Expr.*
+
+def RawExpr(str: String): ml.Expr = Expr.RawExpr(List(str), Nil)
+
 
 case class MatchClause(pattern: Pattern, body: Expr)
 enum Pattern {
@@ -289,7 +293,7 @@ object Vars {
 
     // congruence cases
     case Expr.Call(callee, args) => free(callee) ++ args.map(free)
-    case Expr.RawExpr(raw) => Vars.empty
+    case Expr.RawExpr(raw, args) => args.map(free)
     case Expr.RawValue(raw) => Vars.empty // we don't know
     case Expr.Tuple(terms) => terms.map(free)
     case Expr.Sequence(exps, rest) => exps.map(free) ++ free(rest)

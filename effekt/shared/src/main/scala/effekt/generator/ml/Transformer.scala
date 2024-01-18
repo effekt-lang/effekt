@@ -185,15 +185,13 @@ object Transformer {
 
   def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, toML(body))
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
     case Extern.Include(contents) =>
       RawBind(contents)
   }
 
-  def toML(t: Template[lifted.Expr]): ml.Expr = t match {
-    case Template(List(string), Nil) => ml.RawExpr(string)
-    case _ => sys error "Splices not yet supported in the ML backend"
-  }
+  def toML(t: Template[lifted.Expr])(using TransformerContext): ml.Expr =
+    ml.RawExpr(t.strings, t.args.map(e => toML(e)))
 
   def toMLExpr(stmt: Stmt)(using C: TransformerContext): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
@@ -257,7 +255,7 @@ object Transformer {
       CPS.reified(prog.reify())
 
     // TODO maybe don't drop the continuation here? Although, it is dead code.
-    case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
+    case lifted.Hole() => CPS.inline { k => ml.RawExpr("raise Hole") }
 
     case lifted.Scope(definitions, body) => CPS.reflected { k =>
       // TODO couldn't it be that the definitions require the continuation?
