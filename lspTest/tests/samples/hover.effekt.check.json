@@ -1,3 +1,13 @@
 {
-	"documentSymbolRequest": [{"name":"msg","kind":13,"range":{"start":{"line":0,"character":11},"end":{"line":0,"character":14}},"selectionRange":{"start":{"line":0,"character":11},"end":{"line":0,"character":14}},"detail":"Value parameter"},{"name":"Exc","kind":6,"range":{"start":{"line":0,"character":7},"end":{"line":0,"character":10}},"selectionRange":{"start":{"line":0,"character":7},"end":{"line":0,"character":10}},"detail":"Effect operation"}]
+	"documentSymbolRequest": [{"name":"msg","kind":13,"range":{"start":{"line":0,"character":11},"end":{"line":0,"character":14}},"selectionRange":{"start":{"line":0,"character":11},"end":{"line":0,"character":14}},"detail":"Value parameter"},{"name":"Exc","kind":6,"range":{"start":{"line":0,"character":7},"end":{"line":0,"character":10}},"selectionRange":{"start":{"line":0,"character":7},"end":{"line":0,"character":10}},"detail":"Effect operation"}],
+	"hoverRequest": [
+		{
+			"context": {"line":0,"character":7},
+			"result": {"contents":{"kind":"markdown","value":"#### Effect operation\n```effekt\ndef Exc(msg: String): Unit / {}\n```\n"}}
+		},
+		{
+			"context": {"line":0,"character":11},
+			"result": {"contents":{"kind":"markdown","value":"#### Value parameter\n```effekt\nmsg: String\n```\n"}}
+		}
+	]
 }
