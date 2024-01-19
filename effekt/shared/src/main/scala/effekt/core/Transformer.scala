@@ -490,11 +490,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         // TODO this is exactly like in [[Callable.toType]] -- TODO repeated here:
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        val cparams = effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
+        val cparams = bparams.map(b => b.capture) ++ effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
         val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.get))
         val bparamTpes = bparams.map(b => substitution.substitute(b.tpe))
-        
-        FunctionType(remainingTypeParams, cparams, vparamTpes, Nil, substitution.substitute(resultType), substitution.substitute(effects))
+
+        FunctionType(remainingTypeParams, cparams, vparamTpes, bparamTpes, substitution.substitute(resultType), substitution.substitute(effects))
     }
 
     case InterfaceType(i: ExternInterface, targs) =>

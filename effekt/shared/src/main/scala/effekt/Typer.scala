@@ -330,12 +330,39 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       clauses foreach Context.withFocus {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
-          if (!bparams.isEmpty)
-              Context.error("Block parameters are bound by resume and not the effect operation itself")
 
-          val declaration = d.definition
+          val capturesContinuation = continuationDetails.isDefined
 
-          val declaredType = Context.lookupFunctionType(declaration)
+          if (bparams.nonEmpty)
+            Context.error("Block parameters are bound by resume and not the effect operation itself")
+
+          retAnnotation.foreach {
+            case Effectful(otherTpe, otherEffs2) =>
+              // if there is a return type annotation from the user, report an error
+              // see PR #148 for more details
+              // TODO: Can we somehow use the return type provided by the user?
+              Context.abort(pretty"Unexpected type annotation on operation ${op}.")
+          }
+
+          val originalDeclaration = Context.lookupFunctionType(d.definition)
+
+          //
+          // [[ declaredType ]] drops the block parameters for effect handlers since they are bound by the continuation,
+          // so in the above example this would be:
+          //
+          //   FunctionType(Nil, List(@exc), Nil, List(), tau, List((TExc, @exc)), Nil)
+          //
+          // What might become a problem is that `tau` still mentions `@f` free.
+          val declaredType = originalDeclaration
+          //
+          //            if (capturesContinuation)
+          //              // effect handler: block parameters are bound by the continuation, not the operation
+          //              originalDeclaration.copy(
+          //                cparams = originalDeclaration.cparams.drop(originalDeclaration.bparams.size),
+          //                bparams = Nil)
+          //            else
+          //              // object: the signature stays the same
+          //              originalDeclaration
 
           // Create fresh type parameters for existentials.
           //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
@@ -349,21 +376,30 @@ object Typer extends Phase[NameResolved, Typechecked] {
           if (existentials.size != expectedTypeParams)
             Context.error(pretty"Number of type parameters (${existentials.size}) does not match declaration of ${op.name} ($expectedTypeParams).")
 
-          // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
-          // of bidirectional effects and capture polymorphism (still has to be tested).
-          val cparams = declaredType.effects.canonical.map { tpe => CaptureParam(tpe.name) }
+          val canonicalEffects = declaredType.effects.canonical
 
-          // (1) Instantiate block type of effect operation
-          // Bidirectional example:
-          //   effect Bidirectional { def op(): Int / {Exc} }
-          // where op has
-          //   FunctionType(Nil, List(@exc), Nil, Nil, TInt, List((TExc, @exc)), Nil)
-          // in general @exc could occur in TInt.
+          // Create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
+          // of bidirectional effects and capture polymorphism (still has to be tested).
           //
-          // TODO we need to do something with bidirectional effects and region checking here.
-          //  probably change instantiation to also take capture args.
-          val (rigids, crigids, df @ FunctionType(tps, cps, vps, bps, tpe, otherEffs)) =
-            Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
+          // These parameters need to be bound later in [[ CapabilityPassing ]]
+          // TODO maybe introduce the blockparameters here already?
+          val cparamsForEffects = canonicalEffects.map { tpe => CaptureParam(tpe.name) }
+
+          // Instantiate block type of effect operation
+          //
+          // Bidirectional example:
+          //
+          //   effect Bidirectional { def op() {f: sigma}: tau / {Exc} }
+          //
+          // where op has
+          //
+          //   FunctionType(Nil, List(@f, @exc), Nil, List(sigma), tau, List((TExc, @exc)), Nil)
+          //
+          // in general @exc or @f could occur in tau.
+          val (rigids, crigids, df @ FunctionType(Nil, Nil, vps, bps, tpe, otherEffs)) =
+            Context.instantiate(declaredType, targs ++ existentials, cparamsForEffects.map(cap => CaptureSet(cap))) : @unchecked
+
+          def isBidirectional = otherEffs.nonEmpty || originalDeclaration.bparams.nonEmpty
 
           // (3) check parameters
           if (vps.size != vparams.size)
@@ -379,53 +415,38 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           // distinguish between handler operation or object operation (which does not capture a cont.)
           val Result(_, effs) = continuationDetails match {
-            case None => {
-
-              // ...
-
-              retAnnotation match {
-                case Some(Effectful(otherTpe, otherEffs2)) =>
-                  // if there is a return type annotation from the user, report an error
-                  // see PR #148 for more details
-                  // TODO: Can we somehow use the return type provided by the user?
-                  Context.abort(pretty"Unexpected type annotation on operation ${op}.")
-
-                case None => {
-                  // no answer type, no annotation, just check body
-                  val typeParams = tparams map { _.symbol.asTypeParam }
-                  val typeSubst = Substitutions.types(tps, typeParams map { ValueTypeRef.apply })
-                  val effects = typeSubst substitute otherEffs
-                  // term-level capabilities
-                  val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
-                  //val captParams = capabilities map { p => p.capture }
-                  // TODO associate term-level capabilties with type-level capture (cparams)
-                  (capabilities zip cparams).foreach {
-                    case (cap, cparam) =>
-                      ()
-                  }
-                  // val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
-                  // TODO apply captSubst (maybe)
-                  Context.bind(Context.symbolOf(op).asBlockSymbol, BlockType.FunctionType(tps, cparams, vps, Nil, tpe, otherEffs))
-                  val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
-                    body checkAgainst tpe
-                  }
-                  Result(bodyType, bodyEffs -- effects)
-                }
+            // normal object: no continuation there
+            case None =>
+              val capabilities = otherEffs.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
+              //val captParams = capabilities map { p => p.capture }
+              // TODO associate term-level capabilties with type-level capture (cparams)
+              (capabilities zip cparamsForEffects).foreach {
+                case (cap, cparam) =>
+                  ()
               }
-            }
-            case Some(ret, continuationCapt) => {
+              // val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
+              // TODO apply captSubst (maybe)
 
-              // if there is a return type annotation from the user, report an error
-              // see PR #148 for more details
-              retAnnotation.foreach { _ =>
-                // TODO: Can we somehow use the return type provided by the user?
-                Context.abort(pretty"Unexpected type annotation on operation ${op}.")
+              // TODO why is this necessary, again?
+              //Context.bind(Context.symbolOf(op).asBlockSymbol, BlockType.FunctionType(Nil, cparamsForEffects, vps, Nil, tpe, otherEffs))
+              val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
+                body checkAgainst tpe
               }
+              Result(bodyType, bodyEffs -- otherEffs)
 
+
+
+            // handler implementation: we have a continuation
+            case Some(ret, continuationCapt) =>
               // (4) synthesize type of continuation
-              val resumeType = if (otherEffs.nonEmpty) {
-                // resume { e }
-                val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
+              val resumeType = if (isBidirectional) {
+                // resume { {f} => e }
+
+                // add blockparameters and their captures to resume
+                val cparams = originalDeclaration.cparams.dropRight(cparamsForEffects.size) ++ cparamsForEffects
+                val bparams = originalDeclaration.bparams // the TYPES still need to be substituted in bparams...
+
+                val resumeType = FunctionType(Nil, cparams, Nil, bparams, tpe, otherEffs)
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
                 FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
               } else {
@@ -436,7 +457,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
               body checkAgainst ret
-            }
           }
 
           handlerEffects = handlerEffects ++ effs

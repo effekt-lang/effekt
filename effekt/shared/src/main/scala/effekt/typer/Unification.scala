@@ -188,7 +188,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   /**
    * Instantiate a typescheme with fresh, rigid type variables
    *
-   * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+   * i.e. `[T1, T2, C] (T1, T1) {sigma} => T2` becomes `(?T1, ?T1){} => ?T2[C !-> ?C]`
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[Captures], FunctionType) = {
     val position = C.focus
