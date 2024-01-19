@@ -296,7 +296,7 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
@@ -362,7 +362,7 @@ export CallTarget.*
 // Declarations
 // ------------
 case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition
+case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
 
 
 // Implementations

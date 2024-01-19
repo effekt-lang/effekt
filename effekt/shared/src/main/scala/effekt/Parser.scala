@@ -127,8 +127,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val effectOp: P[Operation] =
-    idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> effectful) ^^ Operation.apply
-
+    idDef ~ maybeTypeParams ~ valueParams ~ maybeBlockParams ~/ (`:` ~/> effectful) ^^ Operation.apply
 
   lazy val externDef: P[Def] =
     ( externType
@@ -185,6 +184,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val blockParams: P[List[BlockParam]] =
     some(`{` ~/> blockParam <~ `}`)
+
+  lazy val maybeBlockParams: P[List[BlockParam]] =
+    blockParams.? ^^ { bs => bs getOrElse Nil }
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
@@ -401,8 +403,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     (accessExpr <~ `match` ~/ `{`) ~/ (many(clause) <~ `}`) ^^ Match.apply
 
   lazy val doExpr: P[Term] =
-    `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {
-      case op ~ targs ~ vargs => Do(None, op, targs, vargs)
+    `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ~ maybeBlockArgs ^^ {
+      case op ~ targs ~ vargs ~ bargs => Do(None, op, targs, vargs, bargs)
     }
 
   lazy val handleExpr: P[Term] =
@@ -451,7 +453,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
-
 
   lazy val assignExpr: P[Term] =
     idRef ~ (`=` ~> expr) ^^ Assign.apply
