@@ -1,7 +1,6 @@
 package lspTest
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.scalajs.concurrent.JSExecutionContext
 import scala.scalajs.js
 import scala.scalajs.js.timers
 import scala.util.{Success, Failure}

@@ -1,6 +1,6 @@
 package lspTest
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import utest._
 
 // utest runs async tests in *parallel*, while we want sequential execution
