@@ -89,7 +89,9 @@ object LspTestSuite extends TestSuite with SequentialExecutor {
 
     test("Run all client tests") {
       val tests = new ClientTests(client)
-      TestRunner.runAndPrintAsync(tests.tests, "Tests", executor = SequentialExecutor)
+      TestRunner.runAndPrintAsync(tests.tests, "Tests", executor = SequentialExecutor).map { results =>
+          assert(results.leaves.forall(leaf => leaf.value.isSuccess))
+      }
     }
 
     test("Exit client") {
