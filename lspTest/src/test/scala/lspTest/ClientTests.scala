@@ -6,7 +6,7 @@ import scala.concurrent.Future
 import scala.scalajs.js
 import scala.util.{Success, Failure}
 import typings.node.fsMod
-import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, SymbolInformation, Position}
+import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, SymbolInformation, Position, Range}
 import utest._
 import javax.swing.text.Document
 
@@ -39,71 +39,61 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     }
 
     // TODO: fix flaky hovering?!
-    test("Hover symbols") - retry(3) {
+    test("Symbol hover") {
       forEachSample { file =>
-        Future.sequence {
-          symbols.getOrElse(file, js.Array()).map { symbol =>
-            // TODO: support SymbolInformation (instanceOf doesn't work on JS traits!)
-            // val position = symbol match
-            //   case s: DocumentSymbol => s.range.start
-            //   case s: SymbolInformation => s.location.range.start
-            val position = symbol.asInstanceOf[DocumentSymbol].range.start
+        testEachSymbol(file, "hoverRequest", range =>
+          client.requestHover(file, range.start)
+        )
+      }
+    }
+    
+    test("Symbol code action") {
+      forEachSample { file =>
+        testEachSymbol(file, "codeActionRequest", range =>
+          client.requestCodeAction(file, range.start, range.end)
+        )
+      }
+    }
 
-            client.requestHover(file, position).transform {
-              case Success(v) => {
-                Checker.checkContextualSample("hoverRequest", position, file, v.asInstanceOf[js.Object])
-                Success(())
-              }
-              case Failure(_) => Failure(new Error("hoverRequest failed"))
-            }
-          }
-        }.map(_ => ())
+    test("Symbol definition") {
+      forEachSample { file =>
+        testEachSymbol(file, "definitionRequest", range =>
+          client.requestDefinition(file, range.start)
+        )
+      }
+    }
+
+    test("Symbol references") {
+      forEachSample { file =>
+        testEachSymbol(file, "referencesRequest", range =>
+          client.requestReferences(file, range.start)
+        )
       }
     }
   }
 
-  def testCodeAction(file: String, start: Position, end: Position) =
-    client.requestCodeAction(file, start, end).transform {
-      // TODO: compare v with reference file
-      case Success(v) => Success(v)
-      case Failure(_) => Failure(new Error("codeAction"))
-    }
-  
-  def testDefinition(file: String, position: Position) =
-    client.requestDefinition(file, position).transform {
-      // TODO: compare v with reference file
-      case Success(v) => Success(v)
-      case Failure(_) => Failure(new Error("definition"))
-    }
+  def symbolToRange(symbol: DocumentSymbol | SymbolInformation) = {
+    // TODO: support SymbolInformation (instanceOf doesn't work on JS traits!)
+    // val range = symbol match
+    //   case s: DocumentSymbol => s.range
+    //   case s: SymbolInformation => s.location.range
+    symbol.asInstanceOf[DocumentSymbol].range
+  }
 
-  def testReferences(file: String, position: Position) =
-    client.requestReferences(file, position).transform {
-      // TODO: compare v with reference file
-      case Success(v) => Success(v)
-      case Failure(_) => Failure(new Error("references"))
-    }
-
-  // def testSymbols(file: String) =
-  //   testDocumentSymbol(file).transform {
-  //     case Success(symbols) => Success(symbols.foreach(symbol => {
-  //       // TODO: accumulated error handling
-  //       // TODO: test according to symbol kind
-  //       testHover(file, symbol.range.start)
-  //       testCodeAction(file, symbol.range.start, symbol.range.end)
-  //       testDefinition(file, symbol.range.start) 
-  //       testReferences(file, symbol.range.start)
-  //     }))
-  //     case Failure(_) => Failure(new Error("documentSymbolRequest"))
-  //   }
-
-  // def runTests(file: String) =
-  //   client.openDocument(file, fsMod.readFileSync(file).toString).onComplete {
-  //     case Success(_) => {
-  //       // TODO: accumulated error handling
-  //       testSymbols(file)
-  //     }
-  //     case Failure(_) => println("didOpenTextDocumentNotification")
-  //   }
+  def testEachSymbol(file: String, request: String, callback: Range => Future[Any]) = {
+    Future.sequence {
+      symbols.getOrElse(file, js.Array()).map { symbol =>
+        val range = symbolToRange(symbol)
+        callback(range).transform {
+          case Success(v) => {
+            Checker.checkContextualSample(request, range, file, v.asInstanceOf[js.Object])
+            Success(())
+          }
+          case Failure(_) => Failure(new Error(s"$request failed"))
+        }
+      }
+    }.map(_ => ())
+  }
 
   def forEachSample(callback: String => Future[Unit]): Future[Unit] = {
     Future.sequence {
