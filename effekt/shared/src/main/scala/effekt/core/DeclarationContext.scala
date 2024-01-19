@@ -9,32 +9,39 @@ import PrettyPrinter.*
  * The `find*` methods return `Option[*]`, the `get*` call `Context.panic` if no matching declaration can be found.
  * Also provides some extension methods for convenience.
  */
-class DeclarationContext(val declarations: List[Declaration]) {
+class DeclarationContext(
+  val declarations: List[Declaration],
+  val externs: List[Extern]
+) {
+
+  lazy val externDefs: Map[Id, Extern.Def] = externs.collect {
+     case d: Extern.Def => d.id -> d
+   }.toMap
 
   // Maps to speed-up lookup. Assumes that, if we ever lookup a Constructor/Field/Interface/...,
   // we will eventually lookup most of them (and caches all in a respective map).
 
   lazy val datas: Map[Id, Declaration.Data] = declarations.collect {
-    case data: Declaration.Data => (data.id -> data)
+    case data: Declaration.Data => data.id -> data
   }.toMap
 
   lazy val interfaces: Map[Id, Declaration.Interface] = declarations.collect {
-    case ifce: Declaration.Interface => (ifce.id -> ifce)
+    case ifce: Declaration.Interface => ifce.id -> ifce
   }.toMap
 
   case class ConstructorRef(data: Declaration.Data, constructor: Constructor)
   lazy val constructors: Map[Id, ConstructorRef] = datas.values.flatMap{ data =>
-    data.constructors.map { cns => (cns.id -> ConstructorRef(data, cns)) }
+    data.constructors.map { cns => cns.id -> ConstructorRef(data, cns) }
   }.toMap
 
   case class FieldRef(constructorRef: ConstructorRef, field: Field) { export constructorRef.* }
   lazy val fields: Map[Id, FieldRef] = constructors.values.flatMap { c =>
-    c.constructor.fields.map { f => (f.id -> FieldRef(c, f)) }
+    c.constructor.fields.map { f => f.id -> FieldRef(c, f) }
   }.toMap
 
   case class PropertyRef(interface: Declaration.Interface, property: Property)
   lazy val properties: Map[Id, PropertyRef] = interfaces.values.flatMap { i =>
-    i.properties.map { p => (p.id -> PropertyRef(i, p)) }
+    i.properties.map { p => p.id -> PropertyRef(i, p) }
   }.toMap
 
   def findDeclaration(id: Id): Option[Declaration] = declarations.find(_.id == id)
@@ -62,6 +69,8 @@ class DeclarationContext(val declarations: List[Declaration]) {
       if tag == -1 then None else Some(tag)
     }
   }
+
+  def findExternDef(id: Id): Option[Extern.Def] = externDefs.get(id)
 
   def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse {
     context.panic(s"No declaration found for ${id}.")
@@ -98,6 +107,9 @@ class DeclarationContext(val declarations: List[Declaration]) {
   }
   def getPropertyTag(id: Id)(using context: ErrorReporter): Int = findPropertyTag(id).getOrElse{
     context.panic(s"No declaration found for property ${id}")
+  }
+  def getExternDef(id: Id)(using context: ErrorReporter): Extern.Def = findExternDef(id).getOrElse{
+    context.panic(s"No extern definition found for ${id}")
   }
 
   extension(field: Field) {

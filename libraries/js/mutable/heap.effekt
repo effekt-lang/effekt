@@ -1,14 +1,32 @@
 module mutable/heap
 
-extern include "heap_include.js"
+extern """
+var heap$data = {};
+var heap$pointer = 0;
+
+function heap$fresh(init) {
+    const ref = heap$pointer++;
+    heap$data[ref] = init;
+    return ref
+}
+
+function heap$put(ref, value) {
+    heap$data[ref] = value;
+    return null
+}
+
+function get$impl(ref) {
+    return heap$data[ref];
+}
+"""
 
 extern type HeapRef[T]
 
 extern io def fresh[T](init: T): HeapRef[T] =
-    "fresh$impl(init)"
+    "heap$fresh(${init})"
 
 extern io def put[T](ref: HeapRef[T], value: T): Unit =
-    "put$impl(ref, value)"
+    "heap$put(${ref}, ${value})"
 
 extern io def get[T](ref: HeapRef[T]): T =
-    "get$impl(ref)"
+    "heap$data[${ref}]"

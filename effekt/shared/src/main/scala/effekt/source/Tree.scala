@@ -194,7 +194,7 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
+  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: Template[Term]) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -708,6 +708,10 @@ object Tree {
     def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
+
+    def query(t: Template[Term])(using Context, Ctx): Res =
+      combineAll(t.args.map(query))
+
 
     inline def structuralQuery[T <: Tree](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Context, Ctx): Res =
       visit(el) { t =>

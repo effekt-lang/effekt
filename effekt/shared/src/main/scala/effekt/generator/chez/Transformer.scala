@@ -128,12 +128,15 @@ trait Transformer {
   def toChez(decl: core.Extern): chez.Def = decl match {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
-          chez.RawExpr(body)))
+        chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
+          toChez(body)))
 
     case Extern.Include(contents) =>
       RawDef(contents)
   }
+
+  def toChez(t: Template[core.Expr]): chez.Expr =
+    chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
     case Definition.Def(id, block) =>

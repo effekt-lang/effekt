@@ -98,7 +98,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), body))
+      val args = body.args.map(transformAsExpr).map {
+        case p: Pure => p: Pure
+        case _ => Context.abort("Spliced arguments need to be pure expressions.")
+      }
+      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt),
+        Template(body.strings, args)))
 
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
@@ -264,8 +269,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
-            case f: ExternFunction if isPure(f.capture) => etaExpandPure(f)
-            case f: ExternFunction if pureOrIO(f.capture) => etaExpandDirect(f)
+            case f: ExternFunction if f.capture.pure => etaExpandPure(f)
+            case f: ExternFunction if f.capture.pureOrIO => etaExpandDirect(f)
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
@@ -421,7 +426,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transformAsBlock)
       // val captArgs = blockArgs.map(b => b.capt) //transform(Context.inferredCapture(b)))
 
-      if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
+      if (capture.pureOrIO && bargs.forall { pureOrIO }) {
         Run(App(Unbox(e), typeArgs, valueArgs, blockArgs))
       } else {
         Context.bind(App(Unbox(e), typeArgs, valueArgs, blockArgs))
@@ -507,9 +512,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: ExternFunction if isPure(f.capture) =>
+      case f: ExternFunction if f.capture.pure =>
         PureApp(BlockVar(f), targs, vargsT)
-      case f: ExternFunction if pureOrIO(f.capture) =>
+      case f: ExternFunction if f.capture.pureOrIO =>
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
@@ -714,28 +719,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // we can conservatively approximate to false, in order to disable the optimizations
   def pureOrIO(t: source.Tree)(using Context): Boolean =
     Context.inferredCaptureOption(t) match {
-      case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
+      case Some(capt) => asConcreteCaptureSet(capt).pureOrIO
       case _         => false
     }
 
   def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
-    case Some(capt) => asConcreteCaptureSet(capt).captures.isEmpty
+    case Some(capt) => asConcreteCaptureSet(capt).pure
     case _         => false
   }
 
-  def pureOrIO(t: BlockSymbol)(using Context): Boolean = pureOrIO(asConcreteCaptureSet(Context.captureOf(t)))
+  def pureOrIO(t: BlockSymbol)(using Context): Boolean = asConcreteCaptureSet(Context.captureOf(t)).pureOrIO
 
-  def isPure(r: CaptureSet): Boolean = r.captures.isEmpty
-
-  def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
-    c =>
-      def isIO = c == builtins.IOCapability.capture
-      // mutable state is now in CPS and not considered IO anymore.
-      def isMutableState = c.isInstanceOf[LexicalRegion]
-      def isResource = c.isInstanceOf[Resource]
-      def isControl = c == builtins.ControlCapability.capture
-      !(isControl || isMutableState) && (isIO || isResource)
-  }
 }
 
 private[core] enum Binding {

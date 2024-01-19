@@ -10,6 +10,11 @@ import kiama.util.{Position, Positions, Range, Source, StringSource}
 import scala.util.matching.Regex
 import scala.language.implicitConversions
 
+/**
+ * String templates containing unquotes `${... : T}`
+ */
+case class Template[+T](strings: List[String], args: List[T])
+
 object Parser extends Phase[Source, Parsed] {
 
   val phaseName = "parser"
@@ -147,16 +152,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val externFun: P[Def] =
     `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ body =>
-        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
     }
 
   lazy val externResource: P[Def] =
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
-
-  lazy val externBody: P[String] =
-    ( multilineString
-    | s"(?!${multi})\"([^\"\n]*)\"".r // single-line strings
+  lazy val externBody: P[Template[Term]] =
+    ( multilineString ^^ { s => Template(List(s), Nil) }
+    | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
@@ -630,6 +634,92 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     }
   }
 
+  /**
+   * Parses the contents of a string and searches for unquotes ${ ... }
+   *
+   * returns the list of unquotes and their respectively preceding string.
+   *
+   *     "   BEFORE   ${ x }   AFTER "
+   *      ^^^^^^^^^^^^  ^^^
+   *        prefix     unquote
+   */
+
+  import scala.collection.mutable
+  import scala.util.boundary
+  import scala.util.boundary.break
+  def templateString[T](contents: Parser[T]): Parser[Template[T]] =
+    Parser { in =>
+      boundary {
+        val content = in.source.content
+        val lastIndex = content.length
+        var pos = in.offset
+
+        // results
+        val strings = mutable.ListBuffer.empty[String]
+        val arguments = mutable.ListBuffer.empty[T]
+
+        // helpers
+        def eos: Boolean =
+          pos >= lastIndex
+
+        def unquoteStart: Boolean =
+          !eos && content.charAt(pos) == '$' && content.charAt(pos + 1) == '{'
+
+        def unquoteEnd: Boolean =
+          !eos && content.charAt(pos) == '}'
+
+        def skipUnquoteStart(): Unit =
+          pos = pos + 2
+
+        def skipUnquoteEnd(): Unit =
+          if (!eos && unquoteEnd) { pos = pos + 1 }
+          else break(kiama.parsing.Error("Expected '}' to close splice within string.", Input(in.source, pos)))
+
+        def quote: Boolean =
+          content.charAt(pos) == '"'
+
+        def whitespace: Boolean = {
+          val ch = content.charAt(pos)
+          ch == ' ' || ch == '\t' ||  ch == '\n' ||  ch == '\r'
+        }
+
+        def skipWhitespace(): Unit =
+          while (whitespace) { pos = pos + 1 }
+
+        def parseQuote(): Unit =
+          if (!eos && quote) { pos = pos + 1 }
+          else break(Failure("Expected \" to start a string", Input(in.source, pos)))
+
+        def parseStringPart(): Unit =
+          val before = pos
+          while (!eos && !quote && !unquoteStart) { pos = pos + 1 }
+          strings.append(content.substring(before, pos))
+
+        def parseUnquote(): Unit = {
+          skipUnquoteStart()
+          skipWhitespace()
+          contents(Input(in.source, pos)) match {
+            case Success(result, next) =>
+              arguments.append(result)
+              pos = next.offset
+            case error: NoSuccess => break(error)
+          }
+          skipWhitespace()
+          skipUnquoteEnd()
+        }
+
+
+        parseQuote()
+        parseStringPart()
+        while (unquoteStart) {
+          parseUnquote()
+          if (!quote) parseStringPart()
+        }
+        parseQuote()
+        Success(Template(strings.toList, arguments.toList), Input(in.source, pos))
+      }
+    }
+
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
@@ -719,7 +809,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   )
 
   def keyword(kw: String): Parser[String] =
-    (s"$kw(?!$nameRest)").r
+    regex((s"$kw(?!$nameRest)").r, kw)
 
   lazy val anyKeyword =
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
@@ -727,17 +817,19 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   /**
    * Whitespace Handling
    */
-  lazy val linebreak = """(\r\n|\n)""".r
-  lazy val singleline = """//[^\n]*(\n|\z)""".r
-  lazy val multiline = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
-  override val whitespace = rep("""\s+""".r | singleline | multiline)
+  lazy val linebreak      = """(\r\n|\n)""".r
+  lazy val singleline     = """//[^\n]*(\n|\z)""".r
+  lazy val multiline      = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
+  lazy val simplespace    = """\s+""".r
+
+  override val whitespace = rep(simplespace | singleline | multiline | failure("Expected whitespace"))
 
   /**
    * Literals
    */
-  lazy val integerLiteral = "([-+])?(0|[1-9][0-9]*)".r
-  lazy val doubleLiteral = "([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r
-  lazy val stringLiteral = """\"(\\.|[^\"])*\"""".r
+  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
+  lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
+  lazy val stringLiteral   = regex("""\"(\\.|[^\"])*\"""".r, "String literal")
 
   // Delimiter for multiline strings
   val multi = "\"\"\""

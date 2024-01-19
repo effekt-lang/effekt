@@ -4,11 +4,13 @@ package util
 import effekt.symbols.TypePrinter
 
 
-val showGeneric: PartialFunction[Any, String] = {
+lazy val showGeneric: PartialFunction[Any, String] = {
+  case l: List[_] =>
+    l.map(show).mkString("List(", ", ", ")")
   case other => other.toString
 }
 
-val show: PartialFunction[Any, String] =
+lazy val show: PartialFunction[Any, String] =
   TypePrinter.show orElse
     core.PrettyPrinter.show orElse
     lifted.PrettyPrinter.show orElse

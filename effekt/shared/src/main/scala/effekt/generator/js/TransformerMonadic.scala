@@ -26,23 +26,16 @@ object TransformerMonadic extends Transformer {
 
   def toJS(p: Param): JSName = nameDef(p.id)
 
-  // For externs, do not sanitize anything. We assume the programmer
-  // knows what they are doing.
-  def externParams(p: Param)(using C: Context): JSName = {
-    val name = p.id.name.name
-    if (reserved contains name) {
-      C.warning(s"Identifier '${name}' is used in an extern function, but is a JS reserved keyword.")
-    }
-    JSName(name)
-  }
-
-  def toJS(e: core.Extern)(using Context): js.Stmt = e match {
+  def toJS(e: core.Extern)(using DeclarationContext, Context): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
+      js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
   }
+
+  def toJS(t: Template[Pure])(using DeclarationContext, Context): js.Expr =
+    js.RawExpr(t.strings, t.args.map(toJS))
 
   def toJS(b: core.Block)(using DeclarationContext, Context): js.Expr = b match {
     case BlockVar(v, _, _) =>
@@ -56,13 +49,32 @@ object TransformerMonadic extends Transformer {
     case New(handler) => toJS(handler)
   }
 
-  def toJS(expr: core.Expr)(using DeclarationContext, Context): js.Expr = expr match {
+  // TODO this could be done in core.Tree
+  def inlineExtern(args: List[Pure], params: List[ValueParam], template: Template[Pure])(using D: DeclarationContext, C: Context): js.RawExpr =
+      import core.substitutions.*
+      val valueSubstitutions = (params zip args).map { case (param, pure) => param.id -> pure }.toMap
+      given Substitution = Substitution(Map.empty, Map.empty, valueSubstitutions, Map.empty)
+
+      js.RawExpr(template.strings, template.args.map(substitute).map(toJS))
+
+  def toJS(expr: core.Expr)(using D: DeclarationContext, C: Context): js.Expr = expr match {
     case Literal((), _) => $effekt.field("unit")
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
-    case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
-    case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
+
+    case DirectApp(f: core.Block.BlockVar, targs, vargs, Nil) =>
+      val extern = D.getExternDef(f.id)
+      inlineExtern(vargs, extern.vparams, extern.body)
+
+    case DirectApp(b, targs, vargs, bargs) =>
+      js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
+
+    case PureApp(f: core.Block.BlockVar, targs, vargs) =>
+      val extern = D.getExternDef(f.id)
+      inlineExtern(vargs, extern.vparams, extern.body)
+
+    case PureApp(b, targs, args) => C.panic("Should have been inlined")
     case Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
@@ -110,13 +122,30 @@ object TransformerMonadic extends Transformer {
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
-    val externs = module.externs.map(toJS)
+    val externs = module.externs.collect {
+      case d if cannotInline(d) => toJS(d)
+    }
     val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
     val state   = generateStateAccessors
     js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
 
+  /**
+   * Exports are used in separate compilation (on the website).
+   * We should only export those symbols that we have not inlined away, already.
+   */
+  override def shouldExport(id: Id)(using D: DeclarationContext): Boolean =
+    super.shouldExport(id) && D.findExternDef(id).forall(cannotInline)
+
+
+  def cannotInline(f: Extern): Boolean = f match {
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+      val hasBlockParameters = bparams.nonEmpty
+      val isControlEffecting = annotatedCapture contains symbols.builtins.ControlCapability.capture
+      hasBlockParameters || isControlEffecting
+    case Extern.Include(contents) => true
+  }
 
   /**
    * Translate the statement to a javascript expression in a monadic expression context.

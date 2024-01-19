@@ -85,13 +85,15 @@ object TransformerDirect extends Transformer {
     JSName(name)
   }
 
-  def toJS(e: core.Extern)(using Context): js.Stmt = e match {
+  def toJS(e: core.Extern)(using TransformerContext): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
+      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(body))))
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
   }
+
+  def toJS(t: Template[Pure])(using TransformerContext): js.Expr = js.RawExpr(t.strings, t.args.map(toJS))
 
   def toJS(b: core.Block)(using C: TransformerContext): js.Expr = b match {
     // [[ f ]] = f

@@ -61,5 +61,10 @@ object WebTests extends TestSuite {
 
       assert(result.contains("infixAdd"))
     }
+
+    test("Load file with multiline extern strings") {
+      val result = evaluate[Int](List("immutable/list", "mutable/heap"), "Cons(1, Cons(2, Nil())).size")
+      assert(result == 2)
+    }
   }
 }

@@ -29,7 +29,8 @@ trait Transformer {
     val exports = List(js.Export(JSName("main"), js.Lambda(Nil, run(js.Call(nameRef(mainSymbol), Nil)))))
 
     val moduleDecl = input.core
-    given DeclarationContext = new DeclarationContext(moduleDecl.declarations)
+
+    given DeclarationContext = new DeclarationContext(moduleDecl.declarations, moduleDecl.externs)
     transformModule(moduleDecl, Nil, exports)
 
   /**
@@ -38,24 +39,20 @@ trait Transformer {
    */
   def compileSeparate(input: AllTransformed)(using Context) = {
     val module = input.main.mod
+    val mainModuleDecl = input.main.core
 
-    val allDeclarations = input.dependencies.foldLeft(input.main.core.declarations) {
+    val allDeclarations = input.dependencies.foldLeft(mainModuleDecl.declarations) {
       case (decls, dependency) => decls ++ dependency.core.declarations
     }
 
-    given D: DeclarationContext = new DeclarationContext(allDeclarations)
-
-    def shouldExport(sym: Symbol) = sym match {
-      // do not export fields, since they are no defined functions
-      case fld if D.findField(fld).isDefined => false
-      // do not export effect operations, since they are translated to field selection as well.
-      case op if D.findProperty(op).isDefined => false
-      // all others are fine
-      case _ => true
+    val allExterns = input.dependencies.foldLeft(mainModuleDecl.externs) {
+      case (externs, dependency) => externs ++ dependency.core.externs
     }
 
+    given D: DeclarationContext = new DeclarationContext(allDeclarations, allExterns)
+
     // also search all mains and use last one (shadowing), if any.
-    val allMains = input.main.core.exports.collect {
+    val allMains = mainModuleDecl.exports.collect {
       case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
     }
 
@@ -75,7 +72,16 @@ trait Transformer {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }
 
-    transformModule(input.main.core, imports, exports)
+    transformModule(mainModuleDecl, imports, exports)
+  }
+
+  def shouldExport(sym: Symbol)(using D: DeclarationContext): Boolean = sym match {
+    // do not export fields, since they are no defined functions
+    case fld if D.findField(fld).isDefined => false
+    // do not export effect operations, since they are translated to field selection as well.
+    case op if D.findProperty(op).isDefined => false
+    // all others are fine
+    case _ => true
   }
 
 
