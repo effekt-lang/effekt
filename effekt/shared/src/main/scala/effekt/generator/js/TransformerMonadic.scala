@@ -123,10 +123,7 @@ object TransformerMonadic extends Transformer {
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.collect {
-      // only keep control externs and those with block parameters. All others are inlined away
-      case d : Extern.Def if d.annotatedCapture contains symbols.builtins.ControlCapability.capture => toJS(d)
-      case d : Extern.Def if d.bparams.nonEmpty => toJS(d)
-      case d : Extern.Include => toJS(d)
+      case d if cannotInline(d) => toJS(d)
     }
     val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
@@ -134,6 +131,21 @@ object TransformerMonadic extends Transformer {
     js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
 
+  /**
+   * Exports are used in separate compilation (on the website).
+   * We should only export those symbols that we have not inlined away, already.
+   */
+  override def shouldExport(id: Id)(using D: DeclarationContext): Boolean =
+    super.shouldExport(id) && D.findExternDef(id).forall(cannotInline)
+
+
+  def cannotInline(f: Extern): Boolean = f match {
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+      val hasBlockParameters = bparams.nonEmpty
+      val isControlEffecting = annotatedCapture contains symbols.builtins.ControlCapability.capture
+      hasBlockParameters || isControlEffecting
+    case Extern.Include(contents) => true
+  }
 
   /**
    * Translate the statement to a javascript expression in a monadic expression context.

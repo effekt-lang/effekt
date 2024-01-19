@@ -51,15 +51,6 @@ trait Transformer {
 
     given D: DeclarationContext = new DeclarationContext(allDeclarations, allExterns)
 
-    def shouldExport(sym: Symbol) = sym match {
-      // do not export fields, since they are no defined functions
-      case fld if D.findField(fld).isDefined => false
-      // do not export effect operations, since they are translated to field selection as well.
-      case op if D.findProperty(op).isDefined => false
-      // all others are fine
-      case _ => true
-    }
-
     // also search all mains and use last one (shadowing), if any.
     val allMains = mainModuleDecl.exports.collect {
       case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
@@ -82,6 +73,15 @@ trait Transformer {
     }
 
     transformModule(mainModuleDecl, imports, exports)
+  }
+
+  def shouldExport(sym: Symbol)(using D: DeclarationContext): Boolean = sym match {
+    // do not export fields, since they are no defined functions
+    case fld if D.findField(fld).isDefined => false
+    // do not export effect operations, since they are translated to field selection as well.
+    case op if D.findProperty(op).isDefined => false
+    // all others are fine
+    case _ => true
   }
 
 
