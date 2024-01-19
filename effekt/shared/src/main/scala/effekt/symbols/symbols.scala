@@ -278,9 +278,7 @@ enum BlockTypeConstructor extends BlockTypeSymbol {
 export BlockTypeConstructor.*
 
 
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
-  val bparams = List.empty[BlockParam]
-
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
   def annotatedResult: Option[ValueType] = Some(resultType)
   def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)

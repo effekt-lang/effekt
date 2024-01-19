@@ -7,7 +7,7 @@ package typer
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
-import effekt.symbols.{BlockType, Capture, *}
+import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
@@ -154,9 +154,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Select(receiver, field) =>
         checkOverloadedFunctionCall(c, field, Nil, List(receiver), Nil, expected)
 
-      case c @ source.Do(effect, op, targs, vargs) =>
+      case c @ source.Do(effect, op, targs, vargs, bargs) =>
         // (1) first check the call
-        val Result(tpe, effs) = checkOverloadedFunctionCall(c, op, targs map { _.resolve }, vargs, Nil, expected)
+        val Result(tpe, effs) = checkOverloadedFunctionCall(c, op, targs map { _.resolve }, vargs, bargs, expected)
         // (2) now we need to find a capability as the receiver of this effect operation
         // (2a) compute substitution for inferred type arguments
         val typeArgs = Context.annotatedTypeArgs(c)
@@ -330,8 +330,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       clauses foreach Context.withFocus {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
-          // TODO
-          assert(bparams.isEmpty, "Block parameters currently not supported for operations")
+          if (!bparams.isEmpty)
+              Context.error("Block parameters are bound by resume and not the effect operation itself")
+
           val declaration = d.definition
 
           val declaredType = Context.lookupFunctionType(declaration)
@@ -361,7 +362,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           //
           // TODO we need to do something with bidirectional effects and region checking here.
           //  probably change instantiation to also take capture args.
-          val (rigids, crigids, df @ FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
+          val (rigids, crigids, df @ FunctionType(tps, cps, vps, bps, tpe, otherEffs)) =
             Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
           // (3) check parameters
@@ -369,11 +370,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but ${op.name} expects ${vps.size}.")
 
           (vparams zip vps).foreach {
-            case (param, decl) =>
-              val sym = param.symbol
-              val annotType = sym.tpe
-              annotType.foreach { t => matchDeclared(t, decl, param) }
-              Context.bind(sym, annotType.getOrElse(decl))
+            case (vparam, declValueType) =>
+              val sym = vparam.symbol
+              val annotValueType = sym.tpe
+              annotValueType.foreach(matchDeclared(_, declValueType, vparam))
+              Context.bind(sym, annotValueType.getOrElse(declValueType))
           }
 
           // distinguish between handler operation or object operation (which does not capture a cont.)

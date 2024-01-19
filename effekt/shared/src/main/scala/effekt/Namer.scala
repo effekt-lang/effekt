@@ -284,7 +284,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
       val effectSym = Context.resolveType(id).asControlEffect
       effectSym.operations = operations.map {
-        case source.Operation(id, tparams, params, ret) =>
+        case source.Operation(id, tparams, vparams, bparams, ret) =>
           val name = Context.nameFor(id)
 
           Context scoped {
@@ -297,8 +297,10 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
-
-            val op = Operation(name, effectSym.tparams ++ tps, params map { p => resolve(p) }, result, effects, effectSym)
+            
+            val resVparams = vparams map resolve
+            val resBparams = bparams map resolve
+            val op = Operation(name, effectSym.tparams ++ tps, resVparams, resBparams, result, effects, effectSym)
             Context.define(id, op)
             op
           }
@@ -446,10 +448,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveAll(vargs)
       resolveAll(bargs)
 
-    case source.Do(effect, target, targs, vargs) =>
+    case source.Do(effect, target, targs, vargs, bargs) =>
       Context.resolveEffectCall(effect map resolve, target)
       targs foreach resolve
       resolveAll(vargs)
+      resolveAll(bargs)
 
     case source.Call(target, targs, vargs, bargs) =>
       Context.focusing(target) {

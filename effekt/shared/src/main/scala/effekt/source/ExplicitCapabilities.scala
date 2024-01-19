@@ -39,8 +39,9 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   override def expr(using Context) = {
 
     // an effect call -- translate to method call on the inferred capability
-    case c @ Do(effect, id, targs, vargs) =>
-      val transformedValueArgs = vargs.map { a => rewrite(a) }
+    case c @ Do(effect, id, targs, vargs, bargs) =>
+      val transformedValueArgs = vargs.map(rewrite)
+      val transformedBlockArgs = bargs.map(rewrite)
 
       // the receiver of this effect operation call
       val receiver = Context.annotation(Annotations.CapabilityReceiver, c)
@@ -55,7 +56,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       // construct the member selection on the capability as receiver
-      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
+      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
 
     // the function is a field, desugar to select
     case c @ Call(fun: IdTarget, targs, List(receiver), Nil) if fun.definition.isInstanceOf[Field] =>
