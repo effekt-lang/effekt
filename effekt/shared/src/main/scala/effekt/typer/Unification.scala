@@ -256,7 +256,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), ctx)
   }
 
-  def mergeCaptures(cs: List[Captures], ctx: ErrorContext): CaptUnificationVar =
+  def mergeCaptures(cs: List[Captures], ctx: ErrorContext): Captures =
     val (concrete, variables) = cs.partitionMap {
       case CaptureSet(xs) => Left(xs)
       case x: CaptUnificationVar => Right(x)
@@ -266,7 +266,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    /**
    * Should create a fresh unification variable bounded by the given captures
    */
-  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], ctx: ErrorContext): CaptUnificationVar =
+  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], ctx: ErrorContext): Captures =
+    // do not introduce a unification variable if there are ONLY concrete bounds
+    if (variableBounds.isEmpty) return CaptureSet(concreteBounds)
+
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
     ctx.polarity match {
       case Covariant =>
@@ -320,7 +323,7 @@ trait TypeInstantiator { self: Unification =>
           capt.captures
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
-    if (contained.isEmpty) return c;
+    if (contained.isEmpty) return CaptureSet(concreteCapture)
 
     val remaining = (concreteCapture -- captureParams).toList
 

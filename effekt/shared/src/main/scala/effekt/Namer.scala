@@ -288,18 +288,22 @@ object Namer extends Phase[Parsed, NameResolved] {
           val name = Context.nameFor(id)
 
           Context scoped {
-            // the parameters of the effect are in scope
+            // the parameters of the interface are in scope
             effectSym.tparams.foreach { p => Context.bind(p) }
 
             val tps = tparams map resolve
+
+            val resVparams = vparams map resolve
+            val resBparams = bparams map resolve
+
+            // bring capture names in scope that are introduced by blockparameters
+            resBparams.map { b => Context.bind(b.capture) }
 
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
-            
-            val resVparams = vparams map resolve
-            val resBparams = bparams map resolve
+
             val op = Operation(name, effectSym.tparams ++ tps, resVparams, resBparams, result, effects, effectSym)
             Context.define(id, op)
             op
