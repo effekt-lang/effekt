@@ -1,1 +1,11 @@
-{"capabilities":{"textDocumentSync":1,"hoverProvider":true,"definitionProvider":true,"referencesProvider":true,"documentSymbolProvider":true,"codeActionProvider":true,"documentFormattingProvider":true}}
+{
+	"capabilities": {
+		"textDocumentSync": 1,
+		"hoverProvider": true,
+		"definitionProvider": true,
+		"referencesProvider": true,
+		"documentSymbolProvider": true,
+		"codeActionProvider": true,
+		"documentFormattingProvider": true
+	}
+}
