@@ -412,8 +412,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     (accessExpr <~ `match` ~/ `{`) ~/ (many(clause) <~ `}`) ^^ Match.apply
 
   lazy val doExpr: P[Term] =
-    `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ~ maybeBlockArgs ^^ {
-      case op ~ targs ~ vargs ~ bargs => Do(None, op, targs, vargs, bargs)
+    `do` ~/> idRef ~ arguments ^^ {
+      case op ~ (targs ~ vargs ~ bargs) => Do(None, op, targs, vargs, bargs)
     }
 
   lazy val handleExpr: P[Term] =

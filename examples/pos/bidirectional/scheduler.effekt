@@ -36,7 +36,7 @@ def scheduler { prog: => Unit / Process } = region this {
 def main() = {
   println("Example 1")
   scheduler {
-    do fork() {
+    do fork {
       println("hello 1")
       do yield()
       println(1)
