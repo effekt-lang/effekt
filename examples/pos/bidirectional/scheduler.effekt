@@ -1,0 +1,56 @@
+import immutable/dequeue
+import immutable/option
+
+
+interface Process {
+  def yield(): Unit
+  def exit(): Nothing
+  def fork { p: () => Unit }: Unit
+}
+
+def scheduler { prog: => Unit / Process } = region this {
+  var queue: Dequeue[() => Unit at {this, prog}] in this = emptyQueue();
+
+  def run(): Unit = queue.popBack match {
+    case None() => ()
+    case Some((k, q)) =>
+      queue = q
+      k();
+      run()
+  }
+  try { prog() } with Process {
+    def yield() = {
+      queue = queue.pushFront(fun() { resume(()) })
+    }
+    def fork() = {
+      queue = queue
+        .pushFront(fun() { resume { {prog: () => Unit} => prog() } })
+        .pushFront(fun() { resume { {prog: () => Unit} => () } })
+    }
+    def exit() = ()
+  }
+
+  run()
+}
+
+def main() = {
+  println("Example 1")
+  scheduler {
+    do fork() {
+      println("hello 1")
+      do yield()
+      println(1)
+      do yield()
+      println(2)
+      do exit()
+      println(3)
+    }
+    println("hello 2")
+    do yield()
+    println(4)
+    do yield()
+    println(5)
+    do yield()
+    println(6)
+  }
+}
