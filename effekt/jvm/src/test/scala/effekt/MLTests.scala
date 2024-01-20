@@ -70,8 +70,7 @@ class MLTests extends EffektTests {
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
     examplesDir / "pos" / "triples.effekt",
-    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
-    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
+    examplesDir / "pos" / "bidirectional",
 
     // mutual recursion
     examplesDir / "pos" / "mutualrecursion.effekt",
