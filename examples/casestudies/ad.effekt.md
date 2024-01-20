@@ -30,7 +30,7 @@ embedded DSL.
 ```
 def mathExp(d: Double): Double = exp(d)
 
-effect AD[Num] {
+interface AD[Num] {
   def num(x: Double): Num
   def add(x: Num, y: Num): Num
   def mul(x: Num, y: Num): Num

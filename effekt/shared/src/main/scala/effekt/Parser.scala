@@ -121,13 +121,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
+    | `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~/> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
 
   lazy val effectOp: P[Operation] =
-    idDef ~ maybeTypeParams ~ valueParams ~ maybeBlockParams ~/ (`:` ~/> effectful) ^^ Operation.apply
+    idDef ~ params ~ (`:` ~> effectful) ^^ {
+      case id ~ (tps ~ vps ~ bps) ~ ret => Operation(id, tps, vps, bps, ret)
+    }
 
   lazy val externDef: P[Def] =
     ( externType
@@ -180,6 +182,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | maybeTypeParams ~ valueParams ~ success(List.empty[BlockParam])
     | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
+    )
+
+  lazy val operationParams: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+    ( maybeTypeParams ~ valueParamsOpt ~ blockParams
+    | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
+    | failure("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
     )
 
   lazy val blockParams: P[List[BlockParam]] =
@@ -435,9 +444,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ maybeBlockParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
-      case id ~ tparams ~ vparams ~ bparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
+    (`def` ~/> idRef) ~ operationParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+      case id ~ (tparams ~ vparams ~ bparams) ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
     }
+
+
 
   lazy val clause: P[MatchClause] =
     `case` ~/> pattern ~ (`=>` ~/> stmts) ^^ MatchClause.apply

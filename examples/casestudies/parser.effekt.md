@@ -22,7 +22,7 @@ import text/string
 Parsers can be expressed by using the lexer effect and process the token stream. To model different alternatives in the grammar, we use the following effect for non-determinism:
 
 ```
-effect Nondet {
+interface Nondet {
   def alt(): Boolean
   def fail[A](msg: String): A
 }

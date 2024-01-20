@@ -81,7 +81,7 @@ effect Layout = { Indent, DefaultIndent, Flow }
 Before we look at examples on how to use the `Layout` effect, we introduce yet another effect to
 emit the layouted documents:
 ```
-effect Emit {
+interface Emit {
   def emitText(content: String): Unit
   def emitNewline(): Unit
 }
@@ -164,7 +164,7 @@ horizontally or vertically. However, often we want to mark _choice points_ and t
 by trying out the different choices until a layout fits the screen width. To express these
 choices, we thus add the following `LayoutChoice` effect:
 ```
-effect LayoutChoice {
+interface LayoutChoice {
   def choice(): Direction
   def fail[A](): A
 }

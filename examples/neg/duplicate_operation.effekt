@@ -1,7 +1,7 @@
 module examples/pos/duplicate_operation
 
 // TODO If we move `State` below `state` then it is not resolved
-effect State {
+interface State {
     def get(): Int
     def set(n: Int): Unit
 }

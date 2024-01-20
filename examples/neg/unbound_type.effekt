@@ -8,7 +8,7 @@ import immutable/option
 effect EOS[A](): A
 effect LexerError[A](msg: String, pos: Position): A
 
-effect Lexer {
+interface Lexer {
   def peek(): Option[Token]
   def next(): Token
 }

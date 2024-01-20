@@ -1,4 +1,4 @@
-effect Get {
+interface Get {
   def get(): Int
 }
 

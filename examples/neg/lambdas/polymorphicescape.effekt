@@ -1,4 +1,4 @@
-effect State[T] {
+interface State[T] {
   def get(): T
   def put[S](n: T, x: S): S
 }

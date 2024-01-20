@@ -3,7 +3,7 @@ interface Choose {
 }
 
 def amb = new Choose {
-  def choose() {f: () => Unit } {g: () => Unit } = {
+  def choose {f: () => Unit } {g: () => Unit } = {
     println("first");
     f();
     println("second");

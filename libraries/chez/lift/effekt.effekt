@@ -183,7 +183,7 @@ def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
 
 // Control Flow
 // ============
-effect Control {
+interface Control {
   def break(): Unit
   def continue(): Unit
 }

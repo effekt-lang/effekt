@@ -144,7 +144,7 @@ However, there is a better way to express this: Using effects.
 We define the speaker effect to refer to the contextual speaker of the sentence.
 
 ```
-effect Speaker {
+interface Speaker {
   def speaker(): Person
 }
 def me() = do speaker()

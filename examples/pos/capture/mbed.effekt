@@ -51,7 +51,7 @@ def assertNonblocking(f: ISR): Unit = f()
 
 def wait(time: Time): Unit = { performBlocking() }
 
-effect Loop[T] {
+interface Loop[T] {
   def break(t: T): Unit
   def continue(): Unit
 }

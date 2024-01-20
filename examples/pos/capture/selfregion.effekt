@@ -20,7 +20,7 @@ def ex3() = region this {
   println(x + x)
 }
 
-effect Yield { def yield(): Unit }
+interface Yield { def yield(): Unit }
 
 def ex4() = {
   // should not backtrack

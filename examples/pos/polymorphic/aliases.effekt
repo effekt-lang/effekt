@@ -1,5 +1,5 @@
-effect Foo[A] { def foo(): A }
-effect Bar[B] { def bar(): B }
+interface Foo[A] { def foo(): A }
+interface Bar[B] { def bar(): B }
 
 effect Both[A] = { Foo[A], Bar[A] }
 

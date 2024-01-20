@@ -8,7 +8,7 @@ module examples/pos/multieffects
 //
 
 
-effect Exc {
+interface Exc {
     def raise[A](): A
 }
 

@@ -1,4 +1,4 @@
-effect Foo[A] {
+interface Foo[A] {
   def get[B](b: B): (A, B)
 }
 

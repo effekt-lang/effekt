@@ -36,7 +36,7 @@ the original text of the token and its position.
 ## The Lexer Effect
 Next, we define the interface to the lexer as an effect signature.
 ```
-effect Lexer {
+interface Lexer {
   def peek(): Option[Token]
   def next(): Token
 }
