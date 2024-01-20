@@ -1,13 +1,24 @@
 extern interface Cap[U, V]
 
+// purposefully not pure to trigger a bug
+extern io def cap[U, V](): Cap[U, V] at {} = "42"
+
 interface Foo[S] {
-  def op[A]() {f: Cap[S, A]}: Cap[S, A] at {} / { Exception[A] }
+  def op[A]() {f: Cap[S, A]}: Cap[S, A] at {f} / { Exception[S] }
 }
 
-def main() =
-  try { () } with Foo[Int] {
-    def op[B]() = {
-      val k = resume;
+def main() = {
+  // Here hides a bug with the capture set inference. Try changing `val` to `def`
+  // and observe a type error ("not allowed {io}")
+  val myCap = cap[Int, String]()
+  try {
+    report[Int] {
+      val res: Cap[Int, String] at {} = do op() { myCap };
       ()
     }
+  } with Foo[Int] {
+    def op[B]() = {
+      resume { {g: Cap[Int, B]} => do raise(42, "") }
+    }
   }
+}
