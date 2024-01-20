@@ -375,11 +375,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
               (vparams zip vps).foreach {
-                case (vparam, declValueType) =>
-                  val sym = vparam.symbol
-                  val annotValueType = sym.tpe
-                  annotValueType.foreach(matchDeclared(_, declValueType, vparam))
-                  Context.bind(sym, annotValueType.getOrElse(declValueType))
+                case (param, declaredType) =>
+                  val sym = param.symbol
+                  val annotatedType = sym.tpe
+                  annotatedType.foreach(matchDeclared(_, declaredType, param))
+                  Context.bind(sym, annotatedType.getOrElse(declaredType))
+              }
+
+              (bparams zip bps zip cparamsForBlocks).foreach {
+                case ((param, declaredType), capture) =>
+                  val sym = param.symbol
+                  val annotatedType = sym.tpe
+                  matchDeclared(annotatedType, declaredType, param)
+                  Context.bind(sym, annotatedType, CaptureSet(capture))
               }
 
               // these capabilities are later introduced as parameters in capability passing
@@ -408,11 +416,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
               (vparams zip vps).foreach {
-                case (vparam, declValueType) =>
-                  val sym = vparam.symbol
-                  val annotValueType = sym.tpe
-                  annotValueType.foreach(matchDeclared(_, declValueType, vparam))
-                  Context.bind(sym, annotValueType.getOrElse(declValueType))
+                case (param, declaredType) =>
+                  val sym = param.symbol
+                  val annotatedType = sym.tpe
+                  annotatedType.foreach(matchDeclared(_, declaredType, param))
+                  Context.bind(sym, annotatedType.getOrElse(declaredType))
               }
 
               // (4) synthesize type of continuation
