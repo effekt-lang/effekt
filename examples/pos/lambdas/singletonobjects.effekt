@@ -1,0 +1,7 @@
+effect Operation(n: Int): Int
+
+def main() = {
+  def add = new Operation { n => n + 1 };
+
+  println(add.Operation(1))
+}
