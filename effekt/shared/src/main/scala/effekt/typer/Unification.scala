@@ -186,27 +186,19 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ---------------------------
 
   /**
-   * Instantiate a typescheme with fresh, rigid type variables
-   *
-   * i.e. `[T1, T2, C] (T1, T1) {sigma} => T2` becomes `(?T1, ?T1){} => ?T2[C !-> ?C]`
+   * Instantiate a typescheme with provided type and capture arguments.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[Captures], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): FunctionType = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    val typeRigids =
-      if (targs.size == tparams.size) targs
-      else tparams map { t => ValueTypeRef(fresh(t, position)) }
+    assert(targs.size == tparams.size)
+    assert(cargs.size == cparams.size)
 
-    if (cparams.size != (bparams.size + eff.canonical.size)) {
-      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
-    }
+    assert(cparams.size == (bparams.size + eff.canonical.size),
+      pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}")
 
-    val captRigids =
-      if (cargs.size == cparams.size) cargs
-      else cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
-
-    given Instantiation = Instantiation((tparams zip typeRigids).toMap, (cparams zip captRigids).toMap)
+    given Instantiation = Instantiation((tparams zip targs).toMap, (cparams zip cargs).toMap)
 
     val substitutedVparams = vparams map instantiate
     val substitutedBparams = bparams map instantiate
@@ -214,8 +206,22 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
     val substitutedEffects = instantiate(eff)
 
-    val fun: FunctionType = FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
-    (typeRigids, captRigids, fun)
+    FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
+  }
+
+  /**
+   * Instantiate a typescheme with fresh, rigid type variables
+   *
+   * i.e. `[T1, T2, C] (T1, T1) {sigma} => T2` becomes `(?T1, ?T1){} => ?T2[C !-> ?C]`
+   */
+  def instantiateFresh(tpe: FunctionType): (List[ValueType], List[Captures], FunctionType) = {
+    val position = C.focus
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+
+    val typeRigids = tparams map { t => ValueTypeRef(fresh(t, position)) }
+    val captRigids = cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
+
+    (typeRigids, captRigids, instantiate(tpe, typeRigids, captRigids))
   }
 
 

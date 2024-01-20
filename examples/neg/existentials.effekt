@@ -2,6 +2,14 @@ effect Foo[A] {
   def get[B](b: B): (A, B)
 }
 
+def wrongTypes() = {
+  try {
+    do get[Int, String]("hello");
+    println("Test")
+  } with Foo[Int] {
+    def get[C](c: Boolean) = { resume((42, c)) }
+  }
+}
 
 def notEnoughTypeParams() = {
   try {
@@ -9,15 +17,5 @@ def notEnoughTypeParams() = {
     println("Test")
   } with Foo[Int] {
     def get(c: Boolean) = { resume((42, c)) }
-  }
-}
-
-
-def wrongTypes() = {
-  try {
-    do get[Int, String]("hello");
-    println("Test")
-  } with Foo[Int] {
-    def get[C](c: Boolean) = { resume((42, c)) }
   }
 }

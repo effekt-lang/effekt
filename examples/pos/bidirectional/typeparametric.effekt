@@ -1,0 +1,13 @@
+extern interface Cap[U, V]
+
+interface Foo[S] {
+  def op[A]() {f: Cap[S, A]}: Cap[S, A] at {} / { Exception[A] }
+}
+
+def main() =
+  try { () } with Foo[Int] {
+    def op[B]() = {
+      val k = resume;
+      ()
+    }
+  }

@@ -331,11 +331,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       clauses foreach Context.withFocus {
         case d @ source.OpClause(op, tparams, vparams, bparams, retAnnotation, body, resume) =>
 
-          val capturesContinuation = continuationDetails.isDefined
-
-          if (bparams.nonEmpty)
-            Context.error("Block parameters are bound by resume and not the effect operation itself")
-
           retAnnotation.foreach {
             case Effectful(otherTpe, otherEffs2) =>
               // if there is a return type annotation from the user, report an error
@@ -344,109 +339,86 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.abort(pretty"Unexpected type annotation on operation ${op}.")
           }
 
-          val originalDeclaration = Context.lookupFunctionType(d.definition)
+          val declaredOperation = interface.operations.find(o => o.name.name == op.name).getOrElse {
+            Context.abort(pretty"Operation ${op.name} not defined in ${interface.name}.")
+          }
+          val declaredType = Context.lookupFunctionType(d.definition)
 
-          //
-          // [[ declaredType ]] drops the block parameters for effect handlers since they are bound by the continuation,
-          // so in the above example this would be:
-          //
-          //   FunctionType(Nil, List(@exc), Nil, List(), tau, List((TExc, @exc)), Nil)
-          //
-          // What might become a problem is that `tau` still mentions `@f` free.
-          val declaredType = originalDeclaration
-          //
-          //            if (capturesContinuation)
-          //              // effect handler: block parameters are bound by the continuation, not the operation
-          //              originalDeclaration.copy(
-          //                cparams = originalDeclaration.cparams.drop(originalDeclaration.bparams.size),
-          //                bparams = Nil)
-          //            else
-          //              // object: the signature stays the same
-          //              originalDeclaration
-
-          // Create fresh type parameters for existentials.
           //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
           // The parameters C, D, ... are existentials
           val existentials: List[ValueType] = tparams.map {
             tparam => ValueTypeRef(tparam.symbol.asTypeParam)
           }
 
-          val expectedTypeParams = declaredType.tparams.size - targs.size
+          def assertArity(kind: String, got: Int, expected: Int): Unit =
+            if (got != expected)
+              Context.abort(pretty"Number of ${kind} (${got}) does not match declaration of '${op.name}', which expects ${expected}.")
 
-          if (existentials.size != expectedTypeParams)
-            Context.error(pretty"Number of type parameters (${existentials.size}) does not match declaration of ${op.name} ($expectedTypeParams).")
+          assertArity("type parameters", existentials.size, declaredType.tparams.size - targs.size)
+          assertArity("value parameters", vparams.size, declaredType.vparams.size)
 
           val canonicalEffects = declaredType.effects.canonical
 
-          // Create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
-          // of bidirectional effects and capture polymorphism (still has to be tested).
-          //
-          // These parameters need to be bound later in [[ CapabilityPassing ]]
-          // TODO maybe introduce the blockparameters here already?
-          val cparamsForEffects = canonicalEffects.map { tpe => CaptureParam(tpe.name) }
-
-          // Instantiate block type of effect operation
-          //
-          // Bidirectional example:
-          //
-          //   effect Bidirectional { def op() {f: sigma}: tau / {Exc} }
-          //
-          // where op has
-          //
-          //   FunctionType(Nil, List(@f, @exc), Nil, List(sigma), tau, List((TExc, @exc)), Nil)
-          //
-          // in general @exc or @f could occur in tau.
-          val (rigids, crigids, df @ FunctionType(Nil, Nil, vps, bps, tpe, otherEffs)) =
-            Context.instantiate(declaredType, targs ++ existentials, cparamsForEffects.map(cap => CaptureSet(cap))) : @unchecked
-
-          def isBidirectional = otherEffs.nonEmpty || originalDeclaration.bparams.nonEmpty
-
-          // (3) check parameters
-          if (vps.size != vparams.size)
-            Context.abort(s"Wrong number of value arguments, given ${vparams.size}, but ${op.name} expects ${vps.size}.")
-
-          (vparams zip vps).foreach {
-            case (vparam, declValueType) =>
-              val sym = vparam.symbol
-              val annotValueType = sym.tpe
-              annotValueType.foreach(matchDeclared(_, declValueType, vparam))
-              Context.bind(sym, annotValueType.getOrElse(declValueType))
-          }
 
           // distinguish between handler operation or object operation (which does not capture a cont.)
           val Result(_, effs) = continuationDetails match {
             // normal object: no continuation there
             case None =>
-              val capabilities = otherEffs.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
-              //val captParams = capabilities map { p => p.capture }
-              // TODO associate term-level capabilties with type-level capture (cparams)
-              (capabilities zip cparamsForEffects).foreach {
-                case (cap, cparam) =>
-                  ()
-              }
-              // val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
-              // TODO apply captSubst (maybe)
 
-              // TODO why is this necessary, again?
-              //Context.bind(Context.symbolOf(op).asBlockSymbol, BlockType.FunctionType(Nil, cparamsForEffects, vps, Nil, tpe, otherEffs))
+              val cparamsForBlocks = bparams.map { p => p.symbol.capture }
+              // will be introduced as capabilities in a later phase
+              val cparamsForEffects = canonicalEffects.map { tpe => CaptureParam(tpe.name) }
+              val cparams = cparamsForBlocks ++ cparamsForEffects
+
+              // substitute actual type parameter and capture parameters for declared ones
+              val FunctionType(Nil, Nil, vps, bps, tpe, effs) =
+                Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
+
+              (vparams zip vps).foreach {
+                case (vparam, declValueType) =>
+                  val sym = vparam.symbol
+                  val annotValueType = sym.tpe
+                  annotValueType.foreach(matchDeclared(_, declValueType, vparam))
+                  Context.bind(sym, annotValueType.getOrElse(declValueType))
+              }
+
+              // these capabilities are later introduced as parameters in capability passing
+              val capabilities = (effs.canonical zip cparamsForEffects).map {
+                case (tpe, capt) => Context.freshCapabilityFor(tpe, CaptureSet(capt))
+              }
+
               val Result(bodyType, bodyEffs) = Context.bindingCapabilities(d, capabilities) {
                 body checkAgainst tpe
               }
-              Result(bodyType, bodyEffs -- otherEffs)
-
-
+              Result(bodyType, bodyEffs -- effs)
 
             // handler implementation: we have a continuation
             case Some(ret, continuationCapt) =>
+
+              if (bparams.nonEmpty)
+                Context.error("Block parameters are bound by resume and not the effect operation itself")
+
+              def isBidirectional = canonicalEffects.nonEmpty || declaredType.bparams.nonEmpty
+
+              val cparamsForBlocks = declaredOperation.bparams.map { p => CaptureParam(p.name) } // use the original name
+              val cparamsForEffects = canonicalEffects.map { tpe => CaptureParam(tpe.name) } // use the type name
+              val cparams = cparamsForBlocks ++ cparamsForEffects
+
+              val FunctionType(Nil, Nil, vps, bps, tpe, effs) =
+                Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
+
+              (vparams zip vps).foreach {
+                case (vparam, declValueType) =>
+                  val sym = vparam.symbol
+                  val annotValueType = sym.tpe
+                  annotValueType.foreach(matchDeclared(_, declValueType, vparam))
+                  Context.bind(sym, annotValueType.getOrElse(declValueType))
+              }
+
               // (4) synthesize type of continuation
               val resumeType = if (isBidirectional) {
                 // resume { {f} => e }
-
-                // add blockparameters and their captures to resume
-                val cparams = originalDeclaration.cparams.dropRight(cparamsForEffects.size) ++ cparamsForEffects
-                val bparams = originalDeclaration.bparams // the TYPES still need to be substituted in bparams...
-
-                val resumeType = FunctionType(Nil, cparams, Nil, bparams, tpe, otherEffs)
+                val resumeType = FunctionType(Nil, cparams, Nil, bps, tpe, effs)
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
                 FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
               } else {
@@ -540,7 +512,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil, Nil)
+      val (trigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiateFresh(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       matchPattern(sc, ret, p)
@@ -1110,7 +1082,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   )(using Context, Captures): Result[ValueType] = {
 
     if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-      Context.abort(s"Wrong number of type arguments ${targs.size}")
+      Context.abort(s"Wrong number of type arguments, given ${targs.size}, but ${name} expects ${funTpe.tparams.size}.")
 
     if (vargs.size != funTpe.vparams.size)
       Context.error(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
@@ -1120,7 +1092,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs, Nil)
+    val (typeVar, captVar, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiateFresh(funTpe)
+
+    // provided type arguments flow into the fresh unification variables (i.e., Int <: ?A)
+    if (targs.nonEmpty) (targs zip typeVar).foreach { case (targ, tvar) => matchExpected(tvar, targ) }
 
     // (2) check return type
     expected.foreach { expected => matchExpected(ret, expected) }
@@ -1132,7 +1107,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       effs = effs ++ eff
     }
 
-    (bps zip bargs zip captArgs) foreach { case ((tpe, expr), capt) =>
+    (bps zip bargs zip captVar) foreach { case ((tpe, expr), capt) =>
       usingCapture(capt)
       given Captures = capt
       val Result(t, eff) = checkExprAsBlock(expr, Some(tpe))
@@ -1144,7 +1119,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     effs = effs ++ retEffs
 
     // annotate call node with inferred type arguments
-    Context.annotateTypeArgs(call, typeArgs)
+    Context.annotateTypeArgs(call, typeVar)
 
     // Annotate the call target tree with the additional capabilities
     // We need to establish the canonical ordering of capabilities.
@@ -1158,7 +1133,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // with A := Int and B := Int requires us to pass two capabilities.
     val capabilities = Context.provideCapabilities(call, retEffs.canonical.map(Context.unification.apply))
 
-    val captParams = captArgs.drop(bargs.size)
+    val captParams = captVar.drop(bargs.size)
     (captParams zip capabilities) foreach { case (param, cap) =>
       flowsInto(CaptureSet(cap.capture), param)
     }
@@ -1338,7 +1313,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using this)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, without, requireSubregionWithout }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {
@@ -1396,6 +1371,11 @@ trait TyperOps extends ContextOps { self: Context =>
 //      override def synthetic = true
 //    }
     bind(param, tpe)
+    param
+
+  private [typer] def freshCapabilityFor(tpe: InterfaceType, capture: CaptureSet): symbols.BlockParam =
+    val param = freshCapabilityFor(tpe)
+    bind(param, capture)
     param
 
   private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] =

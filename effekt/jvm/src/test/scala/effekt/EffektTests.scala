@@ -47,29 +47,38 @@ trait EffektTests extends munit.FunSuite {
       case Right(value) => included.foreach(runPositiveTestsIn)
     }
 
-  def runPositiveTestsIn(dir: File): Unit = //describe(dir.getName) {
-    dir.listFiles.foreach {
-      case f if f.isDirectory && !ignored.contains(f) =>
-        runPositiveTestsIn(f)
-      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
-        val path = f.getParentFile
-        val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
+  def runPositiveTestsIn(dirOrFile: File): Unit =
+    if (dirOrFile.isFile)
+      runPositiveTest(dirOrFile)
+    else if (dirOrFile.isDirectory)
+      dirOrFile.listFiles.foreach {
+        case f if f.isDirectory && !ignored.contains(f) =>
+          runPositiveTestsIn(f)
+        case f =>
+          runPositiveTest(f)
+      }
 
-        val checkfile = path / (baseName + ".check")
+  def isEffektFile(f: File) = f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md")
 
-        if (!checkfile.exists()) {
-          sys error s"Missing checkfile for ${f.getPath}"
-        }
-
-        if (ignored.contains(f)) {
-          test(f.getName.ignore) { () }
-        } else {
-          val contents = IO.read(checkfile)
-          runTestFor(f, contents)
-        }
-
-      case _ => ()
+  def runPositiveTest(f: File): Unit = {
+    if !isEffektFile(f) then return;
+    if ignored.contains(f) then {
+      test(f.getName.ignore) { () }
+      return;
     }
+
+    val path = f.getParentFile
+    val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
+
+    val checkfile = path / (baseName + ".check")
+
+    if (!checkfile.exists()) {
+      sys error s"Missing checkfile for ${f.getPath}"
+    }
+
+    val contents = IO.read(checkfile)
+    runTestFor(f, contents)
+  }
 
   runTests()
 }

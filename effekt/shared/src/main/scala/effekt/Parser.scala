@@ -435,8 +435,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
-      case id ~ tparams ~ vparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, Nil, ret, body, resume)
+    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ maybeBlockParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+      case id ~ tparams ~ vparams ~ bparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
     }
 
   lazy val clause: P[MatchClause] =
