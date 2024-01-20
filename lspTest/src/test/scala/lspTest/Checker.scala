@@ -1,46 +1,76 @@
 package lspTest
 
+import scala.collection.mutable.HashMap
 import scala.scalajs.js
 import typings.node.fsMod
 import utest._
 
 object Checker {
   // This must not necessarily be the same as Tests.scala's testDir since we might run lspTest on all examples
-  def checkDir = "lspTest/tests"
+  val checkDir = "lspTest/tests"
+
+  // Overwrite .check files with test results
+  // TODO: add CLI flag for this
+  val overwriteResults = false
+
+  def toCheckPath(testPath: String, subDir: String) =
+    val basename = testPath.split('/').last
+    s"$checkDir/$subDir/$basename"
 
   def objEqual(a: js.Any, b: js.Any) =
     js.JSON.stringify(a) == js.JSON.stringify(b)
 
-  def compareWithFile(value: js.Object, path: String) = {
-    val reference = js.JSON.parse(fsMod.readFileSync(path).toString.strip)
+  def compareWithFile(value: js.Object, path: String) =
+    val check = js.JSON.parse(fsMod.readFileSync(s"${path}.check.json").toString.strip)
+    assert(objEqual(check, value))
 
-    // TODO: overwrite file if flag is given
-    assert(objEqual(reference, value))
-  }
+  val checkCache = HashMap[String, js.Dynamic]()
+  def readChecks(path: String) = 
+    val file = s"${path}.check.json"
+    if (!fsMod.existsSync(file)) js.Object().asInstanceOf[js.Dynamic]
+    else checkCache.getOrElseUpdate(path, js.JSON.parse(fsMod.readFileSync(file).toString.strip))
 
-  def getReferences(path: String) = 
-    js.JSON.parse(fsMod.readFileSync(s"${path}.check.json").toString.strip) // TODO: cache per path
+  def writeChecks(path: String, checks: js.Dynamic) = 
+    val pretty = js.JSON.stringify(checks, (_, b: js.Any) => b, "\t")
+    fsMod.writeFileSync(s"${path}.check.json", pretty)
 
   def checkStats(name: String, result: js.Object) =
-    compareWithFile(result, s"${checkDir}/stats/${name}.check.json")
+    val path  = toCheckPath(name, "stats")
+    if (overwriteResults) writeChecks(path, result.asInstanceOf[js.Dynamic])
+    compareWithFile(result, path)
 
-  def checkSample(request: String, path: String, result: js.Object) = {
-    val allReferences = getReferences(path)
-    val reference = allReferences.selectDynamic(request)
+  def checkSample(request: String, testPath: String, result: js.Object) =
+    val path = toCheckPath(testPath, "samples")
+    val allChecks = readChecks(path)
+    if (overwriteResults) allChecks.updateDynamic(request)(result)
+    val check = allChecks.selectDynamic(request)
+    assert(objEqual(check, result))
 
-    // TODO: overwrite file if flag is given
-    assert(objEqual(reference, result))
-  }
+  def checkContextualSample(request: String, context: js.Object, testPath: String, result: js.Object) = {
+    val path = toCheckPath(testPath, "samples")
 
-  def checkContextualSample(request: String, context: js.Object, path: String, result: js.Object) = {
-    val contextualReferences = getReferences(path).selectDynamic(request).asInstanceOf[js.Array[js.Dynamic]]
-    val maybeReference = contextualReferences.find { obj => objEqual(obj.selectDynamic("context"), context) }
-    assert(maybeReference.isDefined)
+    var allChecks = readChecks(path)
+    var contextualChecks = allChecks.selectDynamic(request).asInstanceOf[js.Array[js.Dynamic]]
+    if (contextualChecks == js.undefined) contextualChecks = js.Array()
 
-    // TODO: overwrite file if flag is given
-    maybeReference.map { reference =>
-      val referenceResult = reference.selectDynamic("result")
-      assert(objEqual(referenceResult, result))
+    var index = contextualChecks.indexWhere { obj => objEqual(obj.context, context) }
+
+    if (overwriteResults) {
+      if (index == -1) {
+        val updated = js.Object().asInstanceOf[js.Dynamic]
+        updated.updateDynamic("context")(context)
+        updated.updateDynamic("result")(result)
+        contextualChecks.push(updated)
+        index = contextualChecks.length - 1
+      } else {
+        contextualChecks(index).updateDynamic("result")(result)
+      }
+      allChecks.updateDynamic(request)(contextualChecks)
+      writeChecks(path, allChecks)
     }
+
+    assert(index != -1)
+    val checkResult = contextualChecks(index).selectDynamic("result")
+    assert(objEqual(checkResult, result))
   }
 }
