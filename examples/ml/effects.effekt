@@ -1,4 +1,4 @@
-effect Lexer {
+interface Lexer {
   def peek(): Option[String]
   def next(s1: String, s2: String): String
   def bail(): Nothing

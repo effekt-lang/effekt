@@ -1,6 +1,6 @@
-effect Exc { def raise(): Unit }
-effect Get { def get(): Unit }
-effect Yield { def yield(): Unit }
+interface Exc { def raise(): Unit }
+interface Get { def get(): Unit }
+interface Yield { def yield(): Unit }
 
 def main() = {
   val f1: () => Unit / { Exc, Get } at {} = fun() { () };

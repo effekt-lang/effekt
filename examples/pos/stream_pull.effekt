@@ -7,7 +7,7 @@ effect Done() : Int
 
 effect Read() : Int
 
-effect State {
+interface State {
   def get() : Int
   def put(n : Int) : Unit
 }

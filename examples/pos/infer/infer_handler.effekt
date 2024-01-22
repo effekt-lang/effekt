@@ -1,5 +1,5 @@
-effect Exc { def foo(): Unit }
-effect Get {
+interface Exc { def foo(): Unit }
+interface Get {
   def get(): Int
 }
 

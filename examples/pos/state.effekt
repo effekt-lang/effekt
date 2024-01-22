@@ -1,5 +1,5 @@
-effect Amb { def flip(): Boolean }
-effect Yield { def yield(): Unit }
+interface Amb { def flip(): Boolean }
+interface Yield { def yield(): Unit }
 
 def ex1() = try {
   var x = 1;

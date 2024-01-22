@@ -1,0 +1,48 @@
+import immutable/list
+
+interface Eff {
+    def eff(): Unit
+}
+
+interface Get[A] {
+    def get(): A
+}
+
+def t1() = {
+    Cons("16", try {
+        val x = try {
+            eff()
+            1 + get[Int]()
+        } with Eff {
+            def eff() = resume(())
+        } on suspend {
+            println("inner suspend"); get[Int]()
+        } on resume {
+            _ => println("inner resume"); get[Int](); ()
+        } on return { 
+            x => show(x + get[Int]())
+        };
+        x ++ show(get[Int]())
+    } with Get[Int] {
+        def get() = resume(1)
+    } on suspend {
+        println("outer suspend")
+    } on resume {
+        _ => println("outer resume")
+    } on return {
+        x => [x ++ "2"]
+    })
+}
+
+def h { prog: () => Unit / Eff }: Unit = {
+    try {
+        prog()
+    } with Eff {
+        def eff() = resume(())
+    }
+}
+
+
+def main() = {
+    println(t1())
+}

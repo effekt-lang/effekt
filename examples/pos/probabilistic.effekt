@@ -34,7 +34,7 @@ type Var {
 
 type Ref { MkRef(n: Int) }
 
-effect Heap {
+interface Heap {
   def empty(v: Var): Ref
   def get(r: Ref): Var
   def put(r: Ref, v: Var): Unit

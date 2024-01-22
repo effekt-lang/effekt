@@ -1,4 +1,4 @@
-effect Eff { def use(): Unit }
+interface Eff { def use(): Unit }
 def myModule { eff : Eff } = region this {
 
   def outer = this;

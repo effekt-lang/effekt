@@ -4,7 +4,7 @@ import unsafe/cont
 import immutable/dequeue
 import immutable/option
 
-effect Process {
+interface Process {
     def fork(): Boolean
     def exit(): Unit
     def suspend(): Unit

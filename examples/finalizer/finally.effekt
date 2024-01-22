@@ -1,0 +1,51 @@
+interface Get[A] {
+    def get(): A
+}
+
+effect Eff(): Unit
+
+def t1() =
+    try {
+        get[Int]()
+    } with Get[Int] {
+        def get() = resume(1)
+    } finally {
+        2
+    }
+
+type Socket = Int
+
+interface Net {
+    def openSocket(port: Int): Socket
+    def closeSocket(port: Int): Unit
+    // ...
+}
+
+def t2(port: Int) { prog: Int => Unit / Net }: Unit =
+    try {
+        try {
+            prog(port)
+        } on return { _ =>
+            closeSocket(port)
+        }
+    } with Net {
+        def openSocket(p) = {
+            println("opening...")
+            // ...
+            resume(1)
+        }
+        def closeSocket(p) = {
+            println("closing...")
+            // ...
+            resume(())
+        }
+    }
+
+def main() = {
+    println(t1())
+    t2(8080) { port => 
+        val s = openSocket(port);
+        ()
+    };
+    ()
+}

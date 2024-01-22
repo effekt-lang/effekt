@@ -5,11 +5,11 @@ type Option[A] {
   Absent()
 }
 
-effect Iterate[A] {
+interface Iterate[A] {
   def emit(element: A): Unit
 }
 
-effect Reduce[A] {
+interface Reduce[A] {
   def consume(): Option[A]
 }
 

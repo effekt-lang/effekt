@@ -1,0 +1,41 @@
+interface Eff {
+    def eff(): Unit
+}
+
+effect Eff1 {
+    def eff1(): Unit
+}
+
+def t1() =
+    try {
+        1 + try {
+            eff1();
+            eff()
+        } with Eff {
+            def eff() = {
+                eff1();
+                resume(())
+            }
+        } on resume {
+            _ => println("inner resume " ++ show(eff1()))
+        } on suspend {
+            println("inner suspend " ++ show(eff1()))
+        } on return {
+            _ => eff1(); 1
+        }
+    } with Eff1 {
+        def eff1() = resume(())
+    }
+
+def t2() = {
+    try {
+        1 + 1
+    } on return { x =>
+        x + 1
+    }
+}
+
+def main() = {
+    println(t1())
+    println(t2())
+}

@@ -2,10 +2,10 @@ type TokenKind { Number(); Ident(); Punct(); Space() }
 
 record Token(kind: TokenKind, text: String)
 
-effect Nondet {
+interface Nondet {
   def fail[A](msg: String): A
 }
-effect Lexer {
+interface Lexer {
   def next(): Token
 }
 

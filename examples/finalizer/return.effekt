@@ -1,0 +1,65 @@
+import immutable/list
+
+interface Get[A] {
+    def get(): A
+}
+
+interface Eff {
+    def eff(): Unit
+}
+
+def t1() =
+    try {
+        1 + get()
+    } with Get[Int] {
+        def get() = resume(1)
+    } on return {
+        x => x + 1
+    }
+
+def t2() =
+    Cons(1, try {
+        get[Int]()
+    } with Get[Int] {
+        def get() = resume(2)
+    } on return {
+        x => [x]
+    })
+
+
+def t3() =
+    "12" ++ try {
+        get[Int]()
+    } with Get[Int] {
+        def get() = resume(34)
+    } on return {
+        x => show(x)
+    }
+
+def t4() = {
+    try {
+        try {
+            eff();
+            1 + get()
+        } with Get[Int] {
+            def get() = resume(1)
+        } on suspend {
+            println("suspending.." ++ show(get[Int]()));
+        } on resume { _ => 
+            println("resuming..." ++ show(get[Int]()));
+        } on return {
+            x => x + get()
+        }
+    } with Get[Int] {
+        def get() = resume(2)
+    } with Eff {
+        def eff() = resume(())
+    }
+}
+
+def main() = {
+    println(t1());
+    println(t2());
+    println(t3());
+    println(t4())
+}

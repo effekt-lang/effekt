@@ -9,7 +9,7 @@ def count[A](l: List[A]): Int = l match {
 def higherRankBlockArg { f: [A](A){ A => A } => A }: Unit =
     println(f(42) { a => a })
 
-effect Eff[A] {
+interface Eff[A] {
     def eff(a: A): Unit
 }
 

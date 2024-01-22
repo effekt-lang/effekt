@@ -1,4 +1,4 @@
-effect Get[A] {
+interface Get[A] {
   def get(): A
 }
 

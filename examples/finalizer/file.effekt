@@ -1,0 +1,48 @@
+import immutable/option
+extern include "file.js"
+extern type Number
+
+// A file descriptor is represented as an integer in js
+type FileDescriptor = Number
+
+extern io def openf(path: String, mode: String): FileDescriptor =
+    "fs.openSync(path, mode)"
+
+extern io def closef(fd: FileDescriptor): Unit =
+    "function() { fs.closeSync(fd); return $effekt.unit }()"
+
+extern io def sizef(fd: FileDescriptor): Int =
+    "function() { try { return fs.fstatSync(fd).size; } catch (err) { console.error(err); return -1; } }()"
+
+extern io def isValidf(fd: FileDescriptor): Boolean =
+    "function() { try { fs.fstatSync(fd); return true; } catch(err) { return false; } }()"
+
+interface Exc[A] {
+    def throw(msg: String): A
+}
+
+def doFileIO(path: String, mode: String) { g: FileDescriptor => Unit / { Exc[Unit] } }: Unit / {} = {
+    try {
+        println("opening...");
+        var fd = do openf(path, mode);
+        try {
+            g(fd);
+        } on resume { _ =>
+            println("opening...");
+            fd = openf(path, mode);
+        } finally {
+            println("closing...");
+            closef(fd); 
+        }
+    } with Exc[Unit] {
+        def throw(msg) = { println(msg); resume(()); resume(()) }
+    }
+}
+
+def main() = {
+    // with open(".gitignore", "r") as fd:
+    //     ...
+    with fd = doFileIO("README.md", "r") 
+    throw[Unit]("-- warning --");
+    println(sizef(fd))
+}

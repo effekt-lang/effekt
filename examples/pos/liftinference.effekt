@@ -1,6 +1,6 @@
 // these are tests for liftinference.
 
-effect Foo {
+interface Foo {
   def foo(): Int
   def bar(): String
 }

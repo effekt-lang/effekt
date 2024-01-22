@@ -1,0 +1,98 @@
+import immutable/option
+import immutable/list
+
+interface FileIO {
+    def open(): Unit
+    def close(): Unit
+    def read(): Int
+}
+
+effect Peek(): Int
+
+interface Exc {
+    def throw(msg: String): Unit
+}
+
+interface Flip { def flip(): Boolean }
+
+def t1() = {
+    try {
+        do open();
+        try {
+            do Peek()
+        } with Peek {
+            do read(); resume(42)
+        } on resume {
+            _ => do open();
+        } finally {
+            do close();
+        }
+    } with FileIO {
+        def open() = resume(println("opening"))
+        def close() = resume(println("closing"))
+        def read() = { println("reading"); resume(42) }
+    }
+}
+
+def t1Unsafe() = {
+    try {
+        do open();
+        try {
+            do Peek()
+        } with Peek {
+            do throw("error")
+        } on resume {
+            _ => do open();
+        } finally {
+            do close();
+        }
+    } with FileIO {
+        def open() = resume(println("opening"))
+        def close() = resume(println("closing"))
+        def read() = { println("reading"); resume(42) }
+    }
+}
+
+def t2() { f: () => Unit / Peek } = {
+    try {
+        var x = 40;
+        try {
+            f();
+        } on suspend {
+            x = 42;
+        }
+    } with Peek {
+        resume(42)
+    }
+        
+}
+
+def withExc[A] { f: () => A / Exc }: Option[A] =
+    try {
+        f()
+    } with Exc {
+        def throw(msg) = { println(msg); None() }
+    } on return {
+        x => Some(x)
+    }
+
+def t3 {f: () => Int / Flip } =
+    try {
+        [f()] //: () -> Int / Flip
+    } with Flip {
+        def flip() = {
+            val x: List[Int] = resume(true);
+            val y: List[Int] = resume(false); 
+            append(x)(y)
+        }
+    }
+
+
+
+def main() = {
+    //t1();
+    //t2() { println(x); do Peek(); println(x) }
+    //println(t3 { if(do flip()) { 42 } else { 84 } })
+    println(withExc { () => t1() })
+    println(withExc { () => t1Unsafe() })
+}
