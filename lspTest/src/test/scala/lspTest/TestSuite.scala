@@ -94,6 +94,10 @@ object LspTestSuite extends TestSuite with SequentialExecutor {
       }
     }
 
+    test("Check unhandled notifications") {
+      assert(client.notifications.isEmpty)
+    }
+
     test("Exit client") {
       client.exit().transform {
         case Success(_) => {
