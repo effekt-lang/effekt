@@ -22,12 +22,12 @@ def scheduler { prog: => Unit / Process } = region this {
     def yield() = {
       queue = queue.pushFront(fun() { resume(()) })
     }
-    def fork() = {
+    def fork() /* {{() => Unit} => Unit} => Unit */ = {
       queue = queue
-        .pushFront(fun() { resume { {prog: () => Unit} => prog() } })
+        .pushFront(fun() { resume { {prog: () => Unit} => prog() /* FIX do abort() */ } })
         .pushFront(fun() { resume { {prog: () => Unit} => () } })
     }
-    def exit() = ()
+    def exit() /* Nothing => Unit */ = ()
   }
 
   run()
@@ -42,7 +42,7 @@ def main() = {
       println(1)
       do yield()
       println(2)
-      do exit()
+      do exit() // FIX this is crucial since fork is not implemented correctly
       println(3)
     }
     println("hello 2")
