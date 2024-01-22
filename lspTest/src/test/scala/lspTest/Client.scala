@@ -1,10 +1,11 @@
 package lspTest
 
+import scala.collection.mutable.{HashMap,ListBuffer}
+import scala.concurrent.{ExecutionContext, Promise, Future}
 import scala.scalajs.js
-import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
 import org.scalablytyped.runtime.StObject
 import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
+import typings.vscodeJsonrpc.libCommonMessagesMod.NotificationMessage
 import typings.vscodeLanguageserverProtocol.anon.Name
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import typings.vscodeLanguageserverProtocol.libCommonProtocolMod._
@@ -24,15 +25,31 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
     .setWindowUndefined
     .setWorkspaceUndefined
 
+  var notifications: HashMap[String, Promise[NotificationMessage]] = HashMap()
+
+  def waitForNotification(method: String) =
+    notifications.getOrElseUpdate(method, Promise()).future.flatMap { notification =>
+      notifications.remove(method)
+      Future.successful(notification)
+    }
+
   def initialize() = {
+    connection.onUnhandledNotification { notification =>
+      notifications.get(notification.method) match {
+        case Some(promise: Promise[NotificationMessage]) => promise.success(notification)
+        case None => notifications(notification.method) = Promise().success(notification)
+      }
+    }
+
     val params = _InitializeParams(capabilities)
       .setClientInfo(Name("LSP testing client"))
       .setLocaleUndefined
       .setRootPathNull
       .setRootUriNull
-      .setInitializationOptionsUndefined
       .setTraceUndefined
       .setWorkDoneTokenUndefined
+      // TODO: also test showIR and showTree settings
+      .setInitializationOptions(js.JSON.parse("{\"showIR\": \"none\", \"showTree\": false}"))
 
     // (1) send initialization request
     connection.sendRequest("initialize", params).toFuture.flatMap { (result: InitializeResult[js.Any]) =>
