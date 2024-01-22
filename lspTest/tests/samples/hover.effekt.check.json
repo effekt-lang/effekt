@@ -186,5 +186,13 @@
 			},
 			"detail": "Effect operation"
 		}
-	]
+	],
+	"publishDiagnostics": {
+		"jsonrpc": "2.0",
+		"method": "textDocument/publishDiagnostics",
+		"params": {
+			"uri": "file:///lspTest/tests/samples/hover.effekt",
+			"diagnostics": []
+		}
+	}
 }
