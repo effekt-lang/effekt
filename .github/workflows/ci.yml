@@ -90,6 +90,9 @@ jobs:
     - name: Run tests
       run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
 
+    - name: Run lspTest tests
+      run: sbt lspTest/test
+
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
 
