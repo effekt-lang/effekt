@@ -45,8 +45,11 @@ jobs:
       with:
         node-version: '12.x'
 
-    - name: Run tests
+    - name: Run effekt tests
       run: sbt clean test
+
+    - name: Run lspTest tests
+      run: sbt lspTest/test
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
