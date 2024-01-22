@@ -14,7 +14,7 @@ trait SequentialExecutor extends framework.Executor {
   var futureChain: Future[Any] = Future { "root" }
 
   override def utestWrap(path: Seq[String], runBody: => Future[Any])(implicit ec: ExecutionContext): Future[Any] = {
-    futureChain = futureChain.flatMap { _ => runBody }
+    futureChain = futureChain.transformWith { _ => runBody }
     futureChain
   }
 }
