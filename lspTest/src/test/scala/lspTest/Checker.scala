@@ -3,7 +3,6 @@ package lspTest
 import scala.collection.mutable.HashMap
 import scala.scalajs.js
 import typings.node.fsMod
-import utest._
 
 object Checker {
   // This must not necessarily be the same as Tests.scala's testDir since we might run lspTest on all examples
@@ -17,12 +16,35 @@ object Checker {
     val basename = testPath.split('/').last
     s"$checkDir/$subDir/$basename"
 
+  // Objects need to be compared by structure since the ordering is not always deterministic
+  def objEqualStructure(a: js.Any, b: js.Any): Boolean =
+    (a, b) match {
+      case (a: js.Array[_], b: js.Array[_]) => 
+        a.length == b.length && a.forall { sa =>
+          b.exists { sb => objEqualStructure(sa.asInstanceOf[js.Any], sb.asInstanceOf[js.Any]) }
+        }
+      case (a: js.Object, b: js.Object) =>
+        js.Object.keys(a).sameElements(js.Object.keys(b)) &&
+        js.Object.keys(a).forall(key =>
+          objEqualStructure(a.asInstanceOf[js.Dynamic].selectDynamic(key), b.asInstanceOf[js.Dynamic].selectDynamic(key)))
+      case _ => a == b
+    }
+
   def objEqual(a: js.Any, b: js.Any) =
-    js.JSON.stringify(a) == js.JSON.stringify(b)
+    js.typeOf(a) == "undefined" && js.typeOf(b) == "undefined" ||
+    js.typeOf(a) != "undefined" && js.typeOf(b) != "undefined" &&
+    objEqualStructure(a, b)
+
+  def objError(a: js.Any, b: js.Any) =
+    if js.typeOf(a) == "undefined" || js.typeOf(b) == "undefined" then "a or b is undefined"
+    else s"\nexpected ${js.JSON.stringify(a)}\ngot ${js.JSON.stringify(b)}"
+  
+  def assertObjEqual(a: js.Any, b: js.Any) =
+    assert(objEqual(a, b), objError(a, b))
 
   def compareWithFile(value: js.Object, path: String) =
     val check = js.JSON.parse(fsMod.readFileSync(s"${path}.check.json").toString.strip)
-    assert(objEqual(check, value))
+    assertObjEqual(check, value)
 
   val checkCache = HashMap[String, js.Dynamic]()
   def readChecks(path: String) = 
@@ -44,7 +66,7 @@ object Checker {
     val allChecks = readChecks(path)
     if (overwriteResults) allChecks.updateDynamic(request)(result)
     val check = allChecks.selectDynamic(request)
-    assert(objEqual(check, result))
+    assertObjEqual(check, result)
 
   def checkContextualSample(request: String, context: js.Object, testPath: String, result: js.Object) = {
     val path = toCheckPath(testPath, "samples")
@@ -69,8 +91,8 @@ object Checker {
       writeChecks(path, allChecks)
     }
 
-    assert(index != -1)
+    utest.assert(index != -1)
     val checkResult = contextualChecks(index).selectDynamic("result")
-    assert(objEqual(checkResult, result))
+    assertObjEqual(checkResult, result)
   }
 }

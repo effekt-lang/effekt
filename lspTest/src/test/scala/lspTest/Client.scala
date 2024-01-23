@@ -1,6 +1,6 @@
 package lspTest
 
-import scala.collection.mutable.{HashMap,ListBuffer}
+import scala.collection.mutable.{HashMap}
 import scala.concurrent.{ExecutionContext, Promise, Future}
 import scala.scalajs.js
 import org.scalablytyped.runtime.StObject
@@ -25,20 +25,39 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
     .setWindowUndefined
     .setWorkspaceUndefined
 
-  var notifications: HashMap[String, Promise[NotificationMessage]] = HashMap()
+  val diagnostics = HashMap[String, Promise[NotificationMessage]]()
 
-  def waitForNotification(method: String) =
-    notifications.getOrElseUpdate(method, Promise()).future.flatMap { notification =>
-      notifications.remove(method)
-      Future.successful(notification)
-    }
+  // this is rather complex logic but is needed to prevent race conditions,
+  // since relevant notifications may arrive before or after calling this function
+  def waitForDiagnostics(file: String) =
+    val uri = toURI(file)
+    diagnostics.get(uri) match
+      case None => {
+        val promise = Promise[NotificationMessage]()
+        diagnostics(uri) = promise
+        promise.future.flatMap { notification =>
+          diagnostics.remove(uri)
+          Future.successful(notification)
+        }
+      }
+      case Some(promise) => {
+        diagnostics.remove(uri)
+        promise.future.flatMap { notification =>
+          Future.successful(notification)
+        }
+      }
 
   def initialize() = {
     connection.onUnhandledNotification { notification =>
-      notifications.get(notification.method) match {
-        case Some(promise: Promise[NotificationMessage]) => promise.success(notification)
-        case None => notifications(notification.method) = Promise().success(notification)
-      }
+      notification.method match
+        case "textDocument/publishDiagnostics" => {
+          val uri = notification.params.asInstanceOf[PublishDiagnosticsParams].uri
+          diagnostics.get(uri) match {
+            case Some(promise: Promise[NotificationMessage]) => promise.success(notification)
+            case None => diagnostics(uri) = Promise().success(notification)
+          }
+        }
+        case _ => assert(false, "unexpected notification")
     }
 
     val params = _InitializeParams(capabilities)
@@ -56,11 +75,7 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
       // (2) on success, send initialized notification
       connection.sendNotification(InitializedNotification.`type`, StObject().asInstanceOf[InitializedParams]).toFuture.flatMap { _ =>
         Future.successful(result)
-      } recoverWith {
-        case error => Future.failed(error)
       }
-    } recoverWith {
-      case error => Future.failed(error)
     }
   }
 
