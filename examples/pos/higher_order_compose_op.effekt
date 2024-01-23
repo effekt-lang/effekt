@@ -1,0 +1,28 @@
+interface Compose {
+    def compose[A, B, C, D, E](f: A => B at {}, g: B => C at {}) {h: C => D} {j: D => E}: A => E at {h, j}
+}
+
+def impl: Compose = new Compose {
+    def compose[F, G, H, I, J](w, x) {y: H => I} {z: I => J} =
+        box { a => z(y(x(w(a)))) }
+}
+
+def handler[A] {prog: () => A / Compose} =
+    try {
+        prog()
+    } with Compose { 
+        def compose[F, G, H, I, J](w, x) = resume { {y: H => I} {z: I => J} =>
+            box { a => z(y(x(w(a)))) }
+        }
+    }
+
+def main() = {
+    val a: Int => Int at {} = box { x => x + 1 }
+    val b: Int => String at {} = box { x => "4" ++ show(x) }
+    val c: String => Int at {io} = box { x => println(x); 0 }
+    def d(x: Int): Int = x + 1
+    val f = handler { do compose[Int, Int, String, Int, Int](a, b) {c} {d} }
+    val g = impl.compose(a, b) {c} {d}
+    println(f(1))
+    println(g(1))
+}

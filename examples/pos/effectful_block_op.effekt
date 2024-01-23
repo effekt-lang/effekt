@@ -1,0 +1,25 @@
+effect Exc[A](): A
+effect Hof { f: () => Int / Exc }: Int
+
+def main() = {
+    val x = 
+        try {
+            try {
+                do Hof {
+                    do Exc[Int]()
+                    1
+                }
+            } with exc: Exc[Int] {
+                println("inner handler")
+                2
+            } with Hof {
+                resume { { f: () => Int / Exc } =>
+                    f()
+                }
+            }
+        } with Exc[Int] {
+            println("outer handler")
+            3
+        }
+    println(x)
+}
