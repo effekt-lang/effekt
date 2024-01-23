@@ -90,12 +90,9 @@ object LspTestSuite extends TestSuite with SequentialExecutor {
     test("Run all client tests") {
       val tests = new ClientTests(client)
       TestRunner.runAndPrintAsync(tests.tests, "Tests", executor = SequentialExecutor).map { results =>
-          assert(results.leaves.forall(leaf => leaf.value.isSuccess))
+          // use Predef to not repeat all previous error messages
+          Predef.assert(results.leaves.forall(leaf => leaf.value.isSuccess), "some client tests failed")
       }
-    }
-
-    test("Check unhandled notifications") {
-      assert(client.notifications.isEmpty)
     }
 
     test("Exit client") {

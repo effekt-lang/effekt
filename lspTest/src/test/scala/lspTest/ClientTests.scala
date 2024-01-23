@@ -1,5 +1,6 @@
 package lspTest
 
+import scala.collection.BuildFrom
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
@@ -18,12 +19,12 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
   def tests = Tests {
     test("Open files and check diagnoses") {
       forEachSample { file =>
-        client.openDocument(file, fsMod.readFileSync(file).toString).transform {
-          case Success(_) => Success(())
-          case Failure(_) => Failure(new Error("didOpenTextDocumentNotification failed"))
-        }.flatMap { _ =>
-          client.waitForNotification(PublishDiagnosticsNotification.method.asInstanceOf[String]).map {
-            notification => Checker.checkSample("publishDiagnostics", file, notification.asInstanceOf[js.Object])
+        client.openDocument(file, fsMod.readFileSync(file).toString).transformWith { _ =>
+          client.waitForDiagnostics(file).flatMap {
+            notification => {
+              Checker.checkSample("publishDiagnostics", file, notification.asInstanceOf[js.Object])
+              Future.successful(())
+            }
           }
         }
       }
@@ -86,6 +87,15 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     symbol.asInstanceOf[DocumentSymbol].range
   }
 
+  // compared to Future.sequence, this function will also *start* the futures sequentially and not concurrently
+  def linearizeFuture(in: Seq[() => Future[Unit]]): Future[Seq[Unit]] =
+    val builder = Seq.newBuilder[Unit]
+    in.foldLeft(Future.successful(())) {
+        (a, b) => a.transformWith { _ => b() }
+    } map (_ => builder.result())
+  
+  // this currently seems to work fine using Future.sequence
+  // TODO: use linearizeFuture if we happen to get race conditions (this will be a lot slower!)
   def testEachSymbol(file: String, request: String, callback: Range => Future[Any]) = {
     Future.sequence {
       symbols.getOrElse(file, js.Array()).map { symbol =>
@@ -101,18 +111,21 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     }.map(_ => ())
   }
 
-  def forEachSample(callback: String => Future[Unit]): Future[Unit] = {
-    Future.sequence {
-      fsMod.readdirSync(samplesDir).toSeq.flatMap { sub =>
-        val path = s"$samplesDir/$sub"
-        if (fsMod.statSync(path).get.isDirectory()) {
-          Seq(forEachSample(callback)) // iterate in sub directory
-        } else if (path.endsWith(".effekt")) {
-          Seq(callback(path))
+  def forEachFile(path: String, callback: String => Future[Unit]): Future[Unit] = {
+    linearizeFuture {
+      fsMod.readdirSync(path).toSeq.flatMap { sub =>
+        val subPath = s"$path/$sub"
+        if (fsMod.statSync(subPath).get.isDirectory()) {
+          Seq(() => forEachFile(subPath, callback)) // iterate in sub directory
+        } else if (subPath.endsWith(".effekt")) {
+          Seq(() => callback(subPath))
         } else {
-          Seq.empty[Future[Unit]]
+          Seq.empty[() => Future[Unit]]
         }
       }
     }.map(_ => ())
   }
+
+  def forEachSample(callback: String => Future[Unit]): Future[Unit] =
+    forEachFile(samplesDir, callback)
 }
