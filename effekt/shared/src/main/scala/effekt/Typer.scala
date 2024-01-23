@@ -364,6 +364,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val Result(_, effs) = continuationDetails match {
             // normal object: no continuation there
             case None =>
+              // block parameters are to be bound by the definition itself instead of by resume when using handlers
+              assertArity("block parameters", bparams.size, declaredType.bparams.size)
 
               val cparamsForBlocks = bparams.map { p => p.symbol.capture }
               // will be introduced as capabilities in a later phase
