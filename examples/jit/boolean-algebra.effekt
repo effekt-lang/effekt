@@ -1,0 +1,16 @@
+// Jonathan Frech, 2022-08-08, 2022-08-10
+
+
+def p(b: Boolean): Unit = {
+  if (b) { println(1) } else { println(0) }
+}
+
+def main() = {
+    val literal_false = 0 == 1
+    val literal_true = 0 == 0
+
+    p(literal_true == literal_false)
+    p(literal_false == (literal_true == literal_false))
+    p((literal_false == (literal_true == literal_false)) == literal_true)
+    p(((literal_false == (literal_true == literal_false)) == literal_true) == literal_false)
+}

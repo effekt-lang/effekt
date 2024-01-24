@@ -78,6 +78,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case BitCast(result, operand, tpe) =>
       s"${localName(result)} = bitcast ${show(operand)} to ${show(tpe)}"
 
+    // TODO: Require `operand0` to be of integer type. It is currently hackily typed dependent on its right operand's type which ought to be a constant.
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
     case Add(result, LocalReference(t1, n1), LocalReference(t2, n2)) =>

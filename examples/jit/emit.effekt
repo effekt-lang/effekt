@@ -1,0 +1,19 @@
+effect Emit {
+    def emit(a: Int): Unit
+ }
+
+def run(): Unit / Emit = {
+    do emit(2)
+    do emit(3)
+}
+
+def main(): Unit = {
+  try {
+    run()
+  } with Emit {
+    def emit(a) = {
+        println(a)
+        resume(())
+    }
+  }
+}

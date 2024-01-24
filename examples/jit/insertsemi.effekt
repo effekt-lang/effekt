@@ -1,0 +1,43 @@
+module parser_error
+
+
+def noSemis(n: Int) = {
+  def bar() = { () }
+  val x = 3
+  println(3)
+}
+
+def trailing(n: Int) = {
+  def bar() = { () }
+  val x = 3
+  println(3);
+}
+
+def trailingInt(n: Int): Int = {
+  3;
+}
+
+def semiAfterDef(n: Int) = {
+  def bar() = { () };
+  val x = 3
+  x
+}
+
+def semiAfterType(n: Int) = {
+  type X = Int;
+  val x: X = 3
+  x
+}
+
+def multiLineParen() = {
+  val x = 3
+  noSemis(
+    5
+  )
+  println(3)
+}
+
+def main() = {
+    val x = 4
+    println(x + 1)
+}

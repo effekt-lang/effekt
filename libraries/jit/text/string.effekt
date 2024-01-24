@@ -1,0 +1,109 @@
+module text/string
+
+import immutable/option
+import immutable/list
+
+extern pure def length(s: String): Int = "length(String): Int"
+extern pure def substring(s: String, start: Int, end: Int): String = "substring(String, Int, Int): String"
+extern pure def unsafeCharAt(s: String, i: Int): String = "unsafeCharAt(String, Int): String"
+
+def repeat(s: String, n: Int): String = {
+    def rec(n: Int, acc: String): String = {
+        if (n == 0) {
+            acc
+        } else {
+            rec(n-1, acc ++ s)
+        }
+    }
+    if (n < 0) {
+        panic("Negative parameter to repeat(String, Int)")
+    }
+    rec(n, "")
+}
+def charAt(str: String, i: Int): Option[String] = {
+    if ( i < 0 || i >= length(str)) {
+        None()
+    } else {
+        Some(unsafeCharAt(str, i))
+    }
+}
+
+def startsWith(str: String, prefix: String): Boolean = {
+    if (length(str) < length(prefix)) {
+        false
+    } else {
+        substring(str, 0, length(prefix)) == prefix
+    }
+}
+def map(str: String){ f: String => String }: String = {
+    def rec(i: Int, acc: String): String = {
+        if (i < length(str)) {
+            rec(i+1, acc ++ f(unsafeCharAt(str, i)))
+        } else acc
+    }
+    rec(0, "")
+}
+def map[A](str: String){ f: String => A }: List[A] = {
+    def rec(i: Int): List[A] = {
+        if (i < length(str)) {
+            Cons(f(unsafeCharAt(str, i)), rec(i+1))
+        } else Nil()
+    }
+    rec(0)
+}
+def indexOf(str: String, start: Int, substr: String): Option[Int] = {
+    if(length(str) - start < length(substr)) {
+        None()
+    } else if(substring(str, start, start + length(substr)) == substr) {
+        Some(start)
+    } else {
+        indexOf(str, start + 1, substr)
+    }
+}
+def split(str: String, sep: String): List[String] = {
+    def rec(startcheck: Int, startcopy: Int): List[String] = {
+        if (length(str) < startcheck + length(sep)) {
+            Cons(substring(str, startcopy, length(str)), Nil())
+        } else {
+            if(substring(str, startcheck, startcheck + length(sep)) == sep) {
+                Cons(substring(str, startcopy, startcheck), 
+                     rec(startcheck + length(sep), startcheck + length(sep)))
+            } else {
+                rec(startcheck + 1, startcopy)
+            }
+        }
+    }
+    if (sep == "") {
+        map(str){ c => c }
+    } else { 
+        rec(0,0) 
+    }
+}
+
+def show(s: String): String =
+ "\x22" ++ map(s){ c =>
+   if(c == "\x22") {
+    "\\\x22"
+   } else if (c == "\\") {
+    "\\\\"
+   } else c
+ } ++ "\x22"
+
+
+extern pure def unsafeRead(s: String): Int = "read(String): Int"
+extern pure def unsafeRead(s: String): Double = "read(String): Double"
+extern pure def unsafeRead(s: String): Boolean = "read(String): Boolean"
+
+def read(s: String): Option[Int] = unsafeToOption{ () => unsafeRead(s) }
+def read(s: String): Option[Double] = unsafeToOption{ () => unsafeRead(s) }
+def read(s: String): Option[Boolean] = unsafeToOption{ () => unsafeRead(s) }
+def toInt(s: String): Option[Int] = read(s)
+def toDouble(s: String): Option[Double] = read(s)
+def toBoolean(s: String): Option[Boolean] = read(s)
+
+// Byte arrays
+extern type Bytes
+extern pure def bytes(s: String): Bytes = "bytes(String): Bytes"
+extern pure def length(b: Bytes): Int = "length(Bytes): Int"
+// TODO make safe (using unsafe/internal or unsafeToOption)
+extern pure def index(b: Bytes, i: Int): Int = "unsafeIndex(Bytes, Int): Int"

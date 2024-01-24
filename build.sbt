@@ -10,6 +10,7 @@ lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.
 lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
+lazy val downloadJITBinary = taskKey[Unit]("Downloads the current JIT binaries to bin")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 
 lazy val effektVersion = "0.2.1"
@@ -134,6 +135,56 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       IO.append(binary, IO.readBytes(jarfile))
     },
 
+    downloadJITBinary := {
+      import scala.util.matching.Regex
+      val log = sbt.Keys.streams.value.log
+
+      // determine OS and architecture
+      var arch = ""
+      var os = ""
+      Process("uname -m").!(sys.process.ProcessLogger({x => arch=x}))
+      Process("uname -s").!(sys.process.ProcessLogger({x => os=x}))
+
+      // Try downloading binary
+      log.info("Downloading binary for %s-%s".format(arch,os))
+      val bindir =  (ThisBuild / baseDirectory).value / "bin" / ("%s-%s".format(arch,os))
+      val binname = bindir / "rpyeffect-jit"
+
+      // Give (hopefully) useful error messages
+      val ghEC = try {
+        Process("gh release download -R effekt-lang/jitting-effects latest -p rpyeffect-jit-%s-%s".format(arch, os)).!
+      } catch {
+        case e: java.io.IOException => {
+          if(e.getCause.isInstanceOf[java.io.IOException]
+            && "error=2,.*".r.findPrefixMatchOf(e.getCause.getMessage).isDefined) {
+            2
+          } else throw e
+        }
+      }
+      if (ghEC != 0) {
+        ghEC match {
+          case 2 => {
+            log.warn("Downloading the JIT binary requires the `gh` cli tool (see cli.github.com) " +
+              " and is only possible for members of the effekt-lang GitHub org as of now.")
+          }
+          case 4 => {
+            log.warn("As of now, the JIT binary is only available for members of the effekt-lang github org. ")
+            log.warn("Downloading it requires a GitHub personal access token in GH_TOKEN. " +
+              "Alternatively, run `gh auth login` first.")
+          }
+          case _ => {
+            log.warn("Download failed (error=%d).".format(ghEC))
+            log.warn("Note that downloading the jit binary is currently only possible for members of the effekt-lang" +
+              "GitHub org.")
+          }
+        }
+      } else {
+        Process("mkdir -p " + bindir).!
+        Process("mv rpyeffect-jit-%s-%s ".format(arch,os) + binname).!
+        Process("chmod +x " + binname).!
+      }
+    },
+
     deploy := {
       generateLicenses.value
       updateVersions.value
@@ -142,6 +193,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     install := {
       assembleBinary.value
+      downloadJITBinary.value
 
       Process(s"${npm.value} pack").!!
       Process(s"${npm.value} install -g effekt-${effektVersion}.tgz").!!

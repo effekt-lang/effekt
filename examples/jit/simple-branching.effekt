@@ -1,0 +1,9 @@
+// Jonathan Frech, 2022-08-03, 2022-08-08
+
+
+def main() = {
+    if (1 == 2) { println(1) } else { println(0) }
+    if (3 == 3) { println(1) } else { println(0) }
+    if (5 == 3) { println(1) } else { println(0) }
+    if (0 == 1) { println(1) } else { println(0) }
+}
