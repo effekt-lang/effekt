@@ -54,11 +54,10 @@ trait Runner[Executable] {
   /**
    * Runs the executable (e.g. the main file) by calling the build function.
    */
-  def eval(executable: Executable)(using Context): Unit = {
+  def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
-    val exitCode = Process(execFile).!<
-    if(exitCode != 0) {
-      Context.error(s"Process exited with exit code ${exitCode}.")
+    Process(execFile).lazyLines.foreach{ line =>
+      C.config.output().emitln(line)
     }
   }
 
