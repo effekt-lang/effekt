@@ -1,1 +1,3 @@
-Not allowed {Greet$capability}
+[error] examples/neg/obj_bidir_boxed.effekt:21:9: Not allowed {Greet$capability}
+        box { x =>
+        ^
