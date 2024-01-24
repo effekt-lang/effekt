@@ -56,8 +56,22 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
-    Process(execFile).lazyLines.foreach{ line =>
-      C.config.output().emitln(line)
+
+    val exitCode = Process(execFile).run(new ProcessLogger {
+
+      override def out(s: => String): Unit = {
+        C.config.output().emitln(s)
+        System.out.flush()
+      }
+
+      override def err(s: => String): Unit = System.err.println(s)
+
+      override def buffer[T](f: => T): T = f
+
+    }, connectInput = true).exitValue()
+
+    if(exitCode != 0) {
+      C.error(s"Process exited with non-zero exit code ${exitCode}.")
     }
   }
 
