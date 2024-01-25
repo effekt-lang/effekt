@@ -15,5 +15,4 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.4.6")
 addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.11.1")
 
 // for the lsp server tests
-addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.14.0")
 addSbtPlugin("org.scalablytyped.converter" % "sbt-converter" % "1.0.0-beta43")

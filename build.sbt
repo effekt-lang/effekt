@@ -192,9 +192,9 @@ lazy val lspTest = project
   .enablePlugins(ScalablyTypedConverterPlugin)
   .settings(commonSettings)
   .settings(
-    Test / npmDependencies ++= Seq(
-      "@types/node" -> "^20.10.6",
-      "vscode-languageserver-protocol" -> "^3.17.5",
+    Compile / npmDependencies ++= Seq(
+     "@types/node" -> "20.11.5",
+     "vscode-languageserver-protocol" -> "3.17.5",
     ),
     Global / stQuiet := true,
     Test / parallelExecution := false,
