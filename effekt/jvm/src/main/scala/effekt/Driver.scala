@@ -42,7 +42,20 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     } else if (config.server()) {
       super.run(config)
     } else for (filename <- config.filenames()) {
-      compileFile(filename, config)
+      compileFile(discoverFile(filename), config)
+    }
+
+  /**
+   * If the file does not exit, try adding .effekt or .effekt.md
+   */
+  def discoverFile(filename: String): String =
+    def exists(f: String): Option[String] =
+      if file(f).exists then Some(f) else None
+
+    exists(filename) orElse
+    exists(filename + ".effekt") orElse
+    exists(filename + ".effekt.md") getOrElse {
+      context.abort(s"${filename} (No such file)")
     }
 
   override def createConfig(args: Seq[String]) =
@@ -84,7 +97,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         // we are in one of three exclusive modes: LSPServer, Compile, Run
         if (config.server()) { compiler.runMiddleend(src) }
         else if (config.interpret()) { compile() foreach runner.eval }
-        else if (config.build()) { compile() foreach runner.build }  
+        else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
     }
   } catch {
@@ -100,7 +113,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // report messages
     report(source, C.messaging.buffer, config)
-    
+
     // exit with non-zero code if not in repl/server mode and messaging buffer contains errors
     if (config.exitOnError() && C.messaging.hasErrors)
       sys.exit(1)
