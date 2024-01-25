@@ -10,7 +10,7 @@ import effekt.util.messages.EffektError
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, CompletionItem, CompletionItemKind, InsertTextFormat, SymbolKind, ExecuteCommandParams }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -132,7 +132,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
-
     context.compiler.runFrontend(source)(using context)
 
     val documentSymbols = for {
@@ -151,6 +150,14 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       refs = context.distinctReferencesTo(sym)
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
+
+  override def getCompletion(position: Position): Option[Vector[CompletionItem]] = {
+    val test = CompletionItem()
+    test.setLabel("test")
+    test.setKind(CompletionItemKind.Text)
+    test.setInsertTextFormat(InsertTextFormat.PlainText)
+    Some(Vector(test))
+  }
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
