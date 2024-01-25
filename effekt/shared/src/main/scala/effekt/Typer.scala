@@ -1173,30 +1173,68 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //</editor-fold>
 
-  //<editor-fold desc="Helpers and Extension Methods">
+  //<editor-fold desc="Helpers to register subcapturing constraints">
 
-  def currentCapture(using current: Captures) = current
+  /**
+   * The current capture / region / scope for which we collect constraints.
+   *
+   * Functions [[usingCapture]] and [[usingCaptureWithout]] implicitly look
+   * up this scope and have their arguments flow into the current Capture.
+   *
+   * Function [[flowingInto]] sets the current capture.
+   *
+   * Example illustrating the interaction:
+   *
+   * {{{
+   *   val inferredCapture: Captures = ???
+   *   flowingInto(inferredCapture) {
+   *     // inferredCapture is now the current capture
+   *     assert(currentCapture == inferredCapture)
+   *
+   *     // other flows into inferredCapture (i.e. other <: inferredCapture)
+   *     usingCapture(other)
+   *   }
+   * }}}
+   */
+  def currentCapture(using current: Captures): Captures = current
 
+  /**
+   * Sets the [[currentCapture]] in a given scope.
+   */
+  def flowingInto[T](c: Captures)(prog: Captures ?=> T): T = prog(using c)
+
+  /**
+   * Requires that [[c]] is included in the [[currentCapture]] (i.e. [[c]] <: [[currentCapture]])
+   */
   def usingCapture(c: Captures)(using C: Context, current: Captures): Unit =
     C.requireSubregion(c, current)
 
+  /**
+   * Requires that [[c]] - [[filter]] is included in the [[currentCapture]] (i.e. ([[c]] - [[filter]]) <: [[currentCapture]])
+   */
   def usingCaptureWithout(c: Captures)(filter: List[Capture])(using C: Context, current: Captures): Unit =
     flowsIntoWithout(c, current)(filter)
 
+  /**
+   * Requires that [[from]] is included in [[to]] (i.e. [[from]] <: [[to]])
+   */
   def flowsInto(from: Captures, to: Captures)(using C: Context): Unit =
     C.requireSubregion(from, to)
 
+  /**
+   * Requires that [[from]] - [[filter]] is included in the [[to]] (i.e. ([[from]] - [[filter]]) <: [[to]])
+   */
   def flowsIntoWithout(from: Captures, to: Captures)(filter: List[Capture])(using C: Context): Unit =
     C.requireSubregionWithout(from, to, filter)
 
-  def flowingInto[T](c: Captures)(prog: Captures ?=> T): T = prog(using c)
+  //</editor-fold>
 
+  //<editor-fold desc="Other helpers and Extension Methods">
   def matchDeclared(got: BlockType, declared: BlockType, param: source.Param)(using Context): Unit =
     Context.at(param) {
       Context.requireSubtype(got, declared,
         ErrorContext.Declaration(param, Context.unification(declared), Context.unification(got)))
     }
-
   def matchDeclared(got: ValueType, declared: ValueType, param: source.Param)(using Context): Unit =
     Context.at(param) {
       Context.requireSubtype(got, declared,
