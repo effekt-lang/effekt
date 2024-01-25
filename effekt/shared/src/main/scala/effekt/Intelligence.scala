@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.{ Annotations, Context }
 import effekt.source.{ FunDef, ModuleDecl, Tree }
-import kiama.util.{ Position, Source }
+import kiama.util.{ Position, Positions, Source }
 
 trait Intelligence {
 
@@ -79,6 +79,21 @@ trait Intelligence {
     case a: Anon         => Some(a.decl)
     case u => C.definitionTreeOption(u)
   }
+
+  // TODO: Move this somewhere else or find better solution
+  class KeywordSymbol(val keyword: String) extends Symbol { val name = Name.local(keyword) }
+
+  def getPrefixSymbols(prefix: String, position: Position)(implicit C: Context): Option[Vector[Symbol]] = {
+    val keywords = EffektLexers(new Positions).keywordStrings.filter { _.startsWith(prefix) }.map { keyword =>
+      KeywordSymbol(keyword)
+    }
+    Some(keywords.toVector)
+  }
+
+  def getCompletionsAt(position: Position)(implicit C: Context): Option[Vector[Symbol]] = for {
+    prefix <- position.optWord
+    syms <- getPrefixSymbols(prefix, position)
+  } yield syms
 
   // For now, only show the first call target
   def resolveCallTarget(sym: Symbol): Symbol = sym match {

@@ -151,13 +151,14 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
 
-  override def getCompletion(position: Position): Option[Vector[CompletionItem]] = {
-    val test = CompletionItem()
-    test.setLabel("test")
-    test.setKind(CompletionItemKind.Text)
-    test.setInsertTextFormat(InsertTextFormat.PlainText)
-    Some(Vector(test))
-  }
+  override def getCompletion(position: Position): Option[Vector[CompletionItem]] = for {
+    syms <- getCompletionsAt(position)(context)
+    items <- Some(syms.map { sym =>
+      val item = CompletionItem(sym.name.name)
+      item.setKind(getCompletionKind(sym))
+      item
+    })
+  } yield items
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
@@ -182,6 +183,24 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         Some(SymbolKind.Variable)
       case _ =>
         None
+    }
+
+  def getCompletionKind(sym: Symbol): CompletionItemKind =
+    sym match {
+      case _: Module =>
+        CompletionItemKind.Module
+      case _: Interface | _: ExternInterface =>
+        CompletionItemKind.Interface
+      case _: DataType | _: ExternType | _: TypeAlias =>
+        CompletionItemKind.Enum
+      case _: Callable =>
+        CompletionItemKind.Method
+      case _: Param | _: ValBinder | _: VarBinder =>
+        CompletionItemKind.Variable
+      case _: KeywordSymbol =>
+        CompletionItemKind.Keyword
+      case _ =>
+        CompletionItemKind.Text
     }
 
   override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
