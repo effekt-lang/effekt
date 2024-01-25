@@ -197,6 +197,8 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         CompletionItemKind.Method
       case _: Param | _: ValBinder | _: VarBinder =>
         CompletionItemKind.Variable
+      case _: TypeSymbol =>
+        CompletionItemKind.TypeParameter
       case _: KeywordSymbol =>
         CompletionItemKind.Keyword
       case _ =>

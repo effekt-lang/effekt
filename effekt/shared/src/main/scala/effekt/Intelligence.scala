@@ -83,16 +83,21 @@ trait Intelligence {
   // TODO: Move this somewhere else or find better solution
   class KeywordSymbol(val keyword: String) extends Symbol { val name = Name.local(keyword) }
 
-  def getPrefixSymbols(prefix: String, position: Position)(implicit C: Context): Option[Vector[Symbol]] = {
-    val keywords = EffektLexers(new Positions).keywordStrings.filter { _.startsWith(prefix) }.map { keyword =>
-      KeywordSymbol(keyword)
-    }
-    Some(keywords.toVector)
+  // TODO: Make this depend on context
+  def getPrefixSymbols(prefix: String)(implicit C: Context): Option[Vector[Symbol]] = {
+    def filter(it: Iterable[String]) = it.filter { _.startsWith(prefix) }
+
+    val keywords = filter(EffektLexers(new Positions).keywordStrings).map { keyword => KeywordSymbol(keyword) }
+    val builtinTypes = filter(builtins.rootTypes.keys).map { key => builtins.rootTypes.get(key).get }
+    val builtinTerms = filter(builtins.rootTerms.keys).map { key => builtins.rootTerms.get(key).get }
+    val builtinCaptures = filter(builtins.rootCaptures.keys).map { key => builtins.rootCaptures.get(key).get }
+
+    Some((keywords ++ builtinTypes ++ builtinTerms ++ builtinCaptures).toVector)
   }
 
   def getCompletionsAt(position: Position)(implicit C: Context): Option[Vector[Symbol]] = for {
     prefix <- position.optWord
-    syms <- getPrefixSymbols(prefix, position)
+    syms <- getPrefixSymbols(prefix)
   } yield syms
 
   // For now, only show the first call target
