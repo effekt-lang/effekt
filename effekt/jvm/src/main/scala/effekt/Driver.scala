@@ -41,8 +41,11 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     // TODO: remove dynamic dispatch here and consider replacing inheritance by composition.
     } else if (config.server()) {
       super.run(config)
-    } else for (filename <- config.filenames()) {
+    } else for (filename <- config.filenames()) try {
       compileFile(discoverFile(filename), config)
+    } catch {
+      case e: java.io.FileNotFoundException =>
+        config.output().emitln(e.getMessage)
     }
 
   /**
@@ -55,7 +58,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     exists(filename) orElse
     exists(filename + ".effekt") orElse
     exists(filename + ".effekt.md") getOrElse {
-      context.abort(s"${filename} (No such file)")
+      throw new java.io.FileNotFoundException(s"${filename} (No such file or directory)")
     }
 
   override def createConfig(args: Seq[String]) =
