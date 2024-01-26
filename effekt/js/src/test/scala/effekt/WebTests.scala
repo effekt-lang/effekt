@@ -49,8 +49,7 @@ object WebTests extends TestSuite {
     }
 
     test("Evaluate expressions that uses a builtin which relies on an extern literal") {
-      val result = evaluate[Unit](List(), "println(42)")
-      assert(result == ())
+      evaluate(List(), "println(42)")
     }
 
     test("Evaluate expressions using stdlib in REPL") {

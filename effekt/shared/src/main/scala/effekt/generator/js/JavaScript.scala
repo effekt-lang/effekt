@@ -46,7 +46,7 @@ class JavaScript extends Compiler[String] {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      val doc = pretty(TransformerMonadic.compile(input, mainSymbol).commonjs)
+      val doc = pretty(TransformerMonadicWhole.compile(input, mainSymbol).commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -54,7 +54,7 @@ class JavaScript extends Compiler[String] {
   // -----------------------------------
   lazy val Separate:  Phase[Source, (CoreTransformed, Module)] =
     allToCore(Core) map { in =>
-        (in.main, TransformerMonadic.compileSeparate(in))
+      (in.main, TransformerMonadicSeparate.compileSeparate(in))
     }
 
   private def pretty(stmts: List[js.Stmt]): Document =

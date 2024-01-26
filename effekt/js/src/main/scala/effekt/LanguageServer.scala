@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.generator.js.TransformerMonadic
+import effekt.generator.js.TransformerMonadicSeparate
 import effekt.lifted.LiftInference
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
@@ -190,7 +190,7 @@ class LanguageServer extends Intelligence {
   }
 
   private def path(m: symbols.Module)(using C: Context): String =
-    (C.config.outputPath() / TransformerMonadic.jsModuleFile(m.path)).unixPath
+    (C.config.outputPath() / TransformerMonadicSeparate.jsModuleFile(m.path)).unixPath
 }
 
 @JSExportTopLevel("effekt")
