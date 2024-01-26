@@ -270,7 +270,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
-    // FunDef and EffDef have already been resolved as part of the module declaration
+    // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       val sym = f.symbol
       Context scoped {
