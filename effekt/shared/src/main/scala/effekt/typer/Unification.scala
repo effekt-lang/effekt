@@ -192,8 +192,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    assert(targs.size == tparams.size)
-    assert(cargs.size == cparams.size)
+    assert(targs.size == tparams.size,
+      pp"Type argument and parameter size mismatch: ${targs.size} vs ${tparams.size} ($targs, $tparams)")
+    assert(cargs.size == cparams.size,
+      pp"Capture arguments and parameter size mismatch: ${cargs.size} vs ${cparams.size} ($cargs, $cparams)")
 
     assert(cparams.size == (bparams.size + eff.canonical.size),
       pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}")
