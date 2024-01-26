@@ -185,6 +185,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         None
     }
 
+  // for custom icons and intelligence of autocomplete
   def getCompletionKind(sym: Symbol): CompletionItemKind =
     sym match {
       case _: Module =>
@@ -201,6 +202,8 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         CompletionItemKind.TypeParameter
       case _: KeywordSymbol =>
         CompletionItemKind.Keyword
+      case _: ASTSymbol =>
+        CompletionItemKind.Property // TODO
       case _ =>
         CompletionItemKind.Text
     }
