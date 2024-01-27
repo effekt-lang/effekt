@@ -10,6 +10,7 @@ import effekt.util.messages.EffektError
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
+import scala.collection.mutable.HashMap
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, CompletionItem, CompletionItemKind, InsertTextFormat, SymbolKind, ExecuteCommandParams }
 
 /**
@@ -151,14 +152,28 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
 
+  val completedSymbols = HashMap[Int, Symbol]() // TODO: should there be a global index for this?
   override def getCompletion(position: Position): Option[Vector[CompletionItem]] = for {
     syms <- getCompletionsAt(position)(context)
-    items <- Some(syms.map { sym =>
+    items = syms.map { sym =>
+      completedSymbols(sym.id) = sym
       val item = CompletionItem(sym.name.name)
       item.setKind(getCompletionKind(sym))
+      item.setData(sym.id.toString)
       item
-    })
+    }
   } yield items
+
+  override def resolveCompletion(item: CompletionItem): Option[CompletionItem] = for {
+    sym <- completedSymbols.get(item.getData.toString.tail.init.toInt) // TODO: gson hack
+    detail <- getInfoOf(sym)(context)
+    description <- detail.description
+    newItem = CompletionItem(item.getLabel)
+    _ = newItem.setKind(item.getKind)
+    _ = newItem.setData(sym.id)
+    _ = newItem.setDetail(detail.header)
+    _ = newItem.setDocumentation(description)
+  } yield newItem
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
