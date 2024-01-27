@@ -126,7 +126,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
+    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~/> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
@@ -424,7 +424,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val implementation: P[Implementation] =
-    ( interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
+    ( interfaceType ~ (`{` ~/> many(defClause) <~ `}`) ^^ {
       case effect ~ clauses =>
         Implementation(effect, clauses)
       }

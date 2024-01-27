@@ -1,0 +1,17 @@
+effect Foo[A](x: A): A
+
+interface Bar {
+  def op[B](b: B): Unit
+}
+
+def bar = new Bar {
+  def op[Int](n) = () // WARN shadows
+}
+
+def main(): Int =
+  try {
+    //...
+    0
+  } with Foo[Int] { // WARN shadows
+    (x: Int) => 12
+  }
