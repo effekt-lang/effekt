@@ -95,7 +95,7 @@ trait EffektTests extends munit.FunSuite {
     val messaging = new PlainMessaging
     val messageWithFormat = messages.map { msg => (msg, messaging.formatContent(msg)) }
 
-    assert(messages.nonEmpty)
+    assert(messages.nonEmpty, s"File ${f} is supposed to report at least one error.")
 
     val rx = """//\s*(ERROR|WARN)\s*(.*)$""".r
 
