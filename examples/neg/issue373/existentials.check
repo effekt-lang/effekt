@@ -1,0 +1,6 @@
+[error] examples/neg/issue373/existentials.effekt:7:46: Expected Int but got String.
+  with eff: Eff[Int] { def op[C](x) = resume(x ++ "") }
+                                             ^^^^^^^
+[error] examples/neg/issue373/existentials.effekt:7:46: Expected String but got C.
+  with eff: Eff[Int] { def op[C](x) = resume(x ++ "") }
+                                             ^

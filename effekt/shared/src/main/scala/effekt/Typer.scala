@@ -950,13 +950,41 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
 
-    val interface = recvTpe.asInterfaceType.typeConstructor
+    val interface = recvTpe.asInterfaceType
     // filter out operations that do not fit the receiver
-    val candidates = methods.filter(op => op.interface == interface)
+    val candidates = methods.filter(op => op.interface == interface.typeConstructor)
 
     val (successes, errors) = tryEach(candidates) { op =>
       val (funTpe, capture) = findFunctionTypeFor(op)
-      checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
+
+      // 1) check arity of explicitly provided type arguments
+
+      if (targs.nonEmpty && targs.size != funTpe.tparams.size)
+        Context.abort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
+
+      // 2)
+      // args present: check prefix against receiver
+      (targs zip interface.args).foreach { case (manual, inferred) =>
+        matchExpected(inferred, manual)
+      }
+
+      // args missing: synthesize args from receiver and unification variables (e.g. [Int, String, ?A, ?B])
+      def fillInTypeArguments(tparams: List[TypeParam], interfaceArgs: List[ValueType]): List[ValueType] =
+        (tparams, interfaceArgs) match {
+          // we have an argument, provided by the interface: use it
+          case (param :: params, arg :: args) => arg :: fillInTypeArguments(params, args)
+          // we don't have an argument, create fresh unification variable
+          case (param :: params, Nil) => ValueTypeRef(Context.freshTypeVar(param, call)) :: fillInTypeArguments(params, Nil)
+          case (Nil, _) => Nil
+        }
+
+      val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams, interface.args)
+
+      // TODO maybe type checking all calls should have a similar structure like above:
+      //   1. make up and annotate unification variables, if no type arguments are there
+      //   2. type check call with either existing or made up type arguments
+
+      checkCallTo(call, op.name.name, funTpe, synthTargs, vargs, bargs, expected)
     }
     resolveOverload(id, List(successes), errors)
   }
@@ -1341,7 +1369,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using this)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, without, requireSubregionWithout }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, freshTypeVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {

@@ -49,7 +49,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Creating fresh unification variables
   // ------------------------------------
-  def fresh(underlying: TypeVar.TypeParam, call: source.Tree): UnificationVar = scope match {
+  def freshTypeVar(underlying: TypeVar.TypeParam, call: source.Tree): UnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
       val x = new UnificationVar(underlying, call)
@@ -200,7 +200,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
     val typeRigids =
       if (targs.size == tparams.size) targs
-      else tparams map { t => ValueTypeRef(fresh(t, position)) }
+      else tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
 
     if (cparams.size != (bparams.size + eff.canonical.size)) {
       sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
