@@ -293,7 +293,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
       val effectSym = Context.resolveType(id).asControlEffect
       effectSym.operations = operations.map {
-        case source.Operation(id, tparams, params, ret) =>
+        case op @ source.Operation(id, tparams, params, ret) => Context.at(op) {
           val name = Context.nameFor(id)
 
           Context scoped {
@@ -311,6 +311,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.define(id, op)
             op
           }
+        }
       }
       if (isEffect) effectSym.operations.foreach { op => Context.bind(op) }
 
@@ -383,7 +384,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
-        case source.OpClause(op, tparams, params, ret, body, resumeId) =>
+        case clause @ source.OpClause(op, tparams, params, ret, body, resumeId) => Context.at(clause) {
 
           // try to find the operation in the handled effect:
           eff.operations.find { o => o.name.toString == op.name } map { opSym =>
@@ -398,6 +399,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
           }
+        }
       }
 
     case source.MatchClause(pattern, body) =>
@@ -662,7 +664,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))
 
-  def resolve(capt: source.CaptureSet)(using Context): CaptureSet = {
+  def resolve(capt: source.CaptureSet)(using Context): CaptureSet = Context.at(capt) {
     val captResolved = CaptureSet(capt.captures.map { Context.resolveCapture }.toSet)
     Context.annotateResolvedCapture(capt)(captResolved)
     captResolved
@@ -671,7 +673,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
-  def resolve(id: Id)(using Context): TypeParam = {
+  def resolve(id: Id)(using Context): TypeParam = Context.at(id) {
     val sym: TypeParam = TypeParam(Name.local(id))
     Context.define(id, sym)
     sym
