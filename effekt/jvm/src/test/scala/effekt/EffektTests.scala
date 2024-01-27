@@ -22,7 +22,9 @@ trait EffektTests extends munit.FunSuite {
   def ignored: List[File] = List()
 
   // Folders to discover and run tests in
-  def included: List[File] = List()
+  def positives: List[File] = List()
+
+  def negatives: List[File] = List()
 
   def runTestFor(input: File, expected: String): Unit =
     test(input.getPath + s" (${backendName})") {
@@ -44,10 +46,18 @@ trait EffektTests extends munit.FunSuite {
   def runTests() =
     Backend.backend(backendName).runner.checkSetup() match {
       case Left(msg) => test(s"${this.getClass.getName}: ${msg}".ignore) { () }
-      case Right(value) => included.foreach(runPositiveTestsIn)
+      case Right(value) =>
+        negatives.foreach(runPositiveTestsIn)
+        positives.foreach(runPositiveTestsIn)
     }
 
-  def runPositiveTestsIn(dir: File): Unit = //describe(dir.getName) {
+  def runPositiveTestsIn(dir: File): Unit =
+    foreachFileIn(dir) {
+      case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
+      case (f, Some(expected)) => runTestFor(f, expected)
+    }
+
+  def foreachFileIn(dir: File)(test: (File, Option[String]) => Unit): Unit = //describe(dir.getName) {
     dir.listFiles.foreach {
       case f if f.isDirectory && !ignored.contains(f) =>
         runPositiveTestsIn(f)
@@ -55,19 +65,14 @@ trait EffektTests extends munit.FunSuite {
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
 
-        val checkfile = path / (baseName + ".check")
-
-        if (!checkfile.exists()) {
-          sys error s"Missing checkfile for ${f.getPath}"
-        }
-
         if (ignored.contains(f)) {
-          test(f.getName.ignore) { () }
+          ignored.contains(f)
         } else {
-          val contents = IO.read(checkfile)
-          runTestFor(f, contents)
-        }
+          val checkfile = path / (baseName + ".check")
+          val expected = if checkfile.exists() then Some(IO.read(checkfile)) else None
 
+          test(f, expected)
+        }
       case _ => ()
     }
 

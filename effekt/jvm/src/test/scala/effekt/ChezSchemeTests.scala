@@ -9,7 +9,7 @@ import scala.language.implicitConversions
 
 abstract class ChezSchemeTests extends EffektTests {
 
-  override def included: List[File] = List(
+  override def positives: List[File] = List(
     examplesDir / "pos",
     examplesDir / "casestudies",
     examplesDir / "chez",
