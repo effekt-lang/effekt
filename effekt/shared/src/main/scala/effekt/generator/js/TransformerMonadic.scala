@@ -25,7 +25,7 @@ object TransformerMonadicWhole extends TransformerMonadic {
    * In whole-program, however, we should only export those symbols that we have not inlined away, already.
    */
   override def shouldExport(id: Id)(using D: DeclarationContext): Boolean =
-    super.shouldExport(id) && D.findExternDef(id).forall { d => !canInline(d) }
+    D.findExternDef(id).forall { d => !canInline(d) }
 
   /**
    * We only inline non-control effecting externs without block parameters
