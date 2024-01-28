@@ -1,0 +1,3 @@
+
+effect Emit[A](x: A): Unit
+def emit[A](x: A): Unit / Emit[A] = do Emit[A](x) // ERROR Wrong number of type arguments

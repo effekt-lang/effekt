@@ -643,7 +643,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves an interface type, potentially with effect aliases on the top level
    */
   def resolveWithAliases(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
-    tpe match {
+    val resolved: List[InterfaceType] = tpe match {
       case source.BlockTypeRef(id, args) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
           if (tparams.size != args.size) {
@@ -656,6 +656,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         case _ => Context.abort("Expected an interface type.")
       }
     }
+    resolved.foreach(kinds.wellformed)
+    resolved
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =

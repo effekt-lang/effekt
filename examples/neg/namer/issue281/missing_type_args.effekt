@@ -1,0 +1,7 @@
+effect Eff[A] {
+  def use(): A
+}
+
+def foo(): Int / Eff = 42 // ERROR Wrong number of type arguments
+
+def main() = ()
