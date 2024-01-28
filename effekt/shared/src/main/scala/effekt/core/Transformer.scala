@@ -21,14 +21,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = tree
-    val exports = mod.terms.flatMap {
-      case (name, syms) => syms.collect {
-        // TODO export valuebinders properly
-        case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
-        case sym: ValBinder => sym
-      }
-    }.toList
-
+    val exports = transform(mod.terms)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
     val definitions = toplevelDeclarations.collect { case d: Definition => d }
@@ -112,6 +105,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
   }
+
+  /**
+   * In core, we only export value binders and proper functions
+   */
+  def transform(exports: Map[String, Set[TermSymbol]]): List[Id] = exports.flatMap {
+    case (name, syms) => syms.collect {
+      case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
+      case sym: ValBinder => sym
+    }
+  }.toList
 
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
     core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType))))

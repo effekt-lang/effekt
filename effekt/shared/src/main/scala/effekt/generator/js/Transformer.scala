@@ -20,7 +20,7 @@ trait Transformer {
 
   def run(body: js.Expr): js.Stmt
 
-  def shouldExport(sym: Symbol)(using D: DeclarationContext): Boolean = sym match {
+  def shouldExport(id: Id)(using D: DeclarationContext): Boolean = id match {
     // do not export fields, since they are no defined functions
     case fld if D.findField(fld).isDefined => false
     // do not export effect operations, since they are translated to field selection as well.

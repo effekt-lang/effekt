@@ -92,7 +92,7 @@ object TransformerMonadicSeparate extends TransformerMonadic {
         js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
     }
 
-    val provided = module.terms.values.flatten.toList.distinct
+    val provided = mainModuleDecl.exports
     val exports = allMains.lastOption.toList ++ provided.collect {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }

@@ -37,9 +37,13 @@ object WebTests extends TestSuite {
         mod.module
       }
 
-    def evaluate[A](imports: List[String], content: String) = {
-      server.writeFile("interactive.effekt", imports.map(i => s"import $i").mkString("\n") + s"\n\ndef main() = ${content}")
+    def evaluate[A](imports: List[String], content: String) =
+      run[A](imports, s"\n\ndef main() = { ${content} }\n")
+
+    def run[A](imports: List[String], content: String) = {
+      server.writeFile("interactive.effekt", imports.map(i => s"import $i").mkString("\n") + s"\n\n${content}")
       val mainFile = server.compileFile("interactive.effekt")
+
       load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]
     }
 
@@ -69,6 +73,18 @@ object WebTests extends TestSuite {
     test("Load file with multiline extern strings") {
       val result = evaluate[Int](List("immutable/list", "mutable/heap"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
+    }
+
+    test("Extern resources on website") {
+      val result = run[String](Nil,
+        """interface Greet { }
+          |
+          |extern resource my_resource : Greet
+          |
+          |def main() = "hello"
+          |""".stripMargin)
+
+      assert(result == "hello")
     }
   }
 }
