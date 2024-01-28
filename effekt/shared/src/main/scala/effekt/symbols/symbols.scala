@@ -46,6 +46,10 @@ case class Module(
   private var _types: Map[String, TypeSymbol] = _
   def types = _types
 
+  private var _captures: Map[String, Capture] = _
+  def captures = _captures
+
+
   private var _imports: List[Module] = _
   def imports = _imports
 
@@ -70,11 +74,13 @@ case class Module(
   def exports(
     imports: List[Module],
     terms: Map[String, Set[TermSymbol]],
-    types: Map[String, TypeSymbol]
+    types: Map[String, TypeSymbol],
+    captures: Map[String, Capture],
   ): this.type = {
     _imports = imports
     _terms = terms
     _types = types
+    _captures = captures
     this
   }
 }
