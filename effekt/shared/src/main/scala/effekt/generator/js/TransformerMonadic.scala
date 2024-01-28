@@ -25,7 +25,7 @@ object TransformerMonadicWhole extends TransformerMonadic {
    * In whole-program, however, we should only export those symbols that we have not inlined away, already.
    */
   override def shouldExport(id: Id)(using D: DeclarationContext): Boolean =
-    super.shouldExport(id) && D.findExternDef(id).forall { d => !canInline(d) }
+    D.findExternDef(id).forall { d => !canInline(d) }
 
   /**
    * We only inline non-control effecting externs without block parameters
@@ -92,7 +92,7 @@ object TransformerMonadicSeparate extends TransformerMonadic {
         js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
     }
 
-    val provided = module.terms.values.flatten.toList.distinct
+    val provided = mainModuleDecl.exports
     val exports = allMains.lastOption.toList ++ provided.collect {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }

@@ -128,13 +128,10 @@ trait EffektTests extends munit.FunSuite {
 
     assert(messages.nonEmpty)
 
-  def foreachFileIn(dirs: List[File])(test: (File, Option[String]) => Unit): Unit =
-    dirs.foreach(foreachFileIn(_)(test))
-
-  def foreachFileIn(dir: File)(test: (File, Option[String]) => Unit): Unit = //describe(dir.getName) {
-    dir.listFiles.foreach {
+  def foreachFileIn(file: File)(test: (File, Option[String]) => Unit): Unit =
+    file match {
       case f if f.isDirectory && !ignored.contains(f) =>
-        foreachFileIn(f)(test)
+        f.listFiles.foreach(foreachFileIn(_)(test))
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
