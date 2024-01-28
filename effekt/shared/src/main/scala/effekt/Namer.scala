@@ -44,7 +44,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     def processDependency(path: String) =
       val modImport = Context.moduleOf(path)
-      scope.defineAll(modImport.terms, modImport.types, Map.empty)
+      scope.defineAll(modImport.terms, modImport.types, modImport.captures)
       modImport
 
     // process the prelude (but don't if we are processing the prelude already)
@@ -70,7 +70,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // We only want to import each dependency once.
     val allImports = (processedPreludes ++ imports).distinct
-    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap)
+    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap, scope.captures.toMap)
     decl
   }
 
