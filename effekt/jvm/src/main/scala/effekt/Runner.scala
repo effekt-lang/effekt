@@ -70,7 +70,7 @@ trait Runner[Executable] {
 
     }, connectInput = true).exitValue()
 
-    if(exitCode != 0) {
+    if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
     }
   }
