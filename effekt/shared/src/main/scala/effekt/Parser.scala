@@ -235,7 +235,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ {
       case (tps, vps, bps) ~ body => BlockLiteral(tps, vps, bps, body) : BlockLiteral
     }
-    | `{` ~> some(clause) <~ `}` ^^ { cs =>
+    | `{` ~> some(matchClause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
@@ -318,9 +318,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
-     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
-       case p ~ sc ~ body =>
-        Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
+     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
+       case p ~ guards ~ sc ~ body =>
+        Return(Match(sc, List(MatchClause(p, guards, body)))) withPositionOf p
      }
 
   lazy val typeAliasDef: P[Def] =
@@ -402,7 +402,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val matchExpr: P[Term] =
-    (accessExpr <~ `match` ~/ `{`) ~/ (many(clause) <~ `}`) ^^ Match.apply
+    (accessExpr <~ `match` ~/ `{`) ~/ (many(matchClause) <~ `}`) ^^ Match.apply
 
   lazy val doExpr: P[Term] =
     `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {
@@ -441,15 +441,20 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       case id ~ tparams ~ vparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, ret, body, resume)
     }
 
-  lazy val clause: P[MatchClause] =
-    `case` ~/> pattern ~ (`=>` ~/> stmts) ^^ MatchClause.apply
+  lazy val matchClause: P[MatchClause] =
+    `case` ~/> matchPattern ~ many(`and` ~> matchGuard) ~ (`=>` ~/> stmts) ^^ MatchClause.apply
 
-  lazy val pattern: P[MatchPattern] =
+  lazy val matchGuard: P[MatchGuard] =
+    ( expr ~ (`is` ~/> matchPattern) ^^ MatchGuard.PatternGuard.apply
+    | expr ^^ MatchGuard.BooleanGuard.apply
+    )
+
+  lazy val matchPattern: P[MatchPattern] =
     ( "_" ^^^ IgnorePattern()
     | literals ^^ { l => LiteralPattern(l) }
-    | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern.apply
+    | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
-    | `(` ~> pattern ~ (some(`,` ~> pattern) <~ `)`) ^^ { case f ~ r =>
+    | `(` ~> matchPattern ~ (some(`,` ~> matchPattern) <~ `)`) ^^ { case f ~ r =>
         TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
@@ -800,6 +805,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `region` = keyword("region")
   lazy val `resource` = keyword("resource")
   lazy val `new` = keyword("new")
+  lazy val `and` = keyword("and")
+  lazy val `is` = keyword("is")
 
   def keywordStrings: List[String] = List(
     "def", "let", "val", "var", "true", "false", "else", "type",

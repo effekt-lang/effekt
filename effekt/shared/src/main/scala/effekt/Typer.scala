@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{ Annotation, Annotations, Context, ContextOps }
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -285,9 +285,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var resEff = effs
 
         val tpes = clauses.map {
-          case source.MatchClause(p, body) =>
-            // (3) infer types for all clauses
+          case source.MatchClause(p, guards, body) =>
+            // (3) infer types for pattern
             Context.bind(checkPattern(tpe, p))
+            // infer types for guards
+            guards.foreach { g =>
+              val Result(bindings, guardEffs) = checkGuard(g)
+              Context.bind(bindings)
+              resEff = resEff ++ guardEffs
+            }
+
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
             resEff = resEff ++ clEff
             clTpe
@@ -482,7 +489,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //</editor-fold>
 
   //<editor-fold desc="pattern matching">
-
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
@@ -521,6 +527,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       bindings
   } match { case res => Context.annotateInferredType(pattern, sc); res }
+
+  def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {
+    case MatchGuard.BooleanGuard(condition) =>
+      val Result(tpe, effs) = checkExpr(condition, Some(TBoolean))
+      Result(Map.empty, effs)
+    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+      val Result(tpe, effs) = checkExpr(scrutinee, None)
+      Result(checkPattern(tpe, pattern), effs)
+  }
 
   //</editor-fold>
 

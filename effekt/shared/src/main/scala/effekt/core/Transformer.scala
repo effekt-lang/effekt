@@ -591,6 +591,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   // Uses the bind effect to bind the right hand sides of clauses!
   private def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause = {
+
+    assert(clause.guards.isEmpty, "Guards not yet implemented in pattern-matching compiler")
+
     def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
       case p @ source.AnyPattern(id) => List(p.symbol)
       case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)

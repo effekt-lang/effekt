@@ -397,7 +397,18 @@ case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], re
 // Pattern Matching
 // ----------------
 
-case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
+case class MatchClause(pattern: MatchPattern, guards: List[MatchGuard], body: Stmt) extends Tree
+
+enum MatchGuard extends Tree {
+
+  case BooleanGuard(condition: Term)
+
+  /**
+   * i.e. <EXPR> is <PATTERN>
+   */
+  case PatternGuard(scrutinee: Term, pattern: MatchPattern)
+}
+export MatchGuard.*
 
 enum MatchPattern extends Tree {
 
@@ -423,7 +434,16 @@ enum MatchPattern extends Tree {
   case IgnorePattern()
 
   /**
+   * A pattern which matches on different alternatives
+   *
+   *   case Red | Green => ...
+   */
+  //case OrPattern(alternatives: List[MatchPattern])
+
+  /**
    * A pattern that matches a single literal value
+   *
+   * DEPRECATED
    */
   case LiteralPattern(l: Literal)
 }

@@ -198,8 +198,13 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {
-    case MatchClause(pattern, body) =>
-      MatchClause(pattern, rewrite(body))
+    case MatchClause(pattern, guards, body) =>
+      MatchClause(pattern, guards.map(rewrite), rewrite(body))
+  }
+
+  def rewrite(g: MatchGuard)(using Context): MatchGuard = g match {
+    case BooleanGuard(condition) => BooleanGuard(rewriteAsExpr(condition))
+    case PatternGuard(scrutinee, pattern) => PatternGuard(rewriteAsExpr(scrutinee), pattern)
   }
 
   /**
