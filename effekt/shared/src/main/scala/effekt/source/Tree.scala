@@ -315,7 +315,7 @@ enum Term extends Tree {
   // Control Flow
   case If(cond: Term, thn: Stmt, els: Stmt)
   case While(cond: Term, block: Stmt)
-  case Match(scrutinee: Term, clauses: List[MatchClause])
+  case Match(scrutinee: Term, clauses: List[MatchClause], default: Option[Stmt])
 
   /**
    * Handling effects

@@ -243,7 +243,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
-        Return(Match(Var(IdRef(name)), cs)))
+        Return(Match(Var(IdRef(name)), cs, None)))
       res withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) : BlockLiteral }
@@ -318,9 +318,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
-     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
-       case p ~ guards ~ sc ~ body =>
-        Return(Match(sc, List(MatchClause(p, guards, body)))) withPositionOf p
+     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;` ~> stmts) ^^ {
+       case p ~ guards ~ sc ~ default ~ body =>
+        Return(Match(sc, List(MatchClause(p, guards, body)), default)) withPositionOf p
      }
 
   lazy val typeAliasDef: P[Def] =
@@ -402,7 +402,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val matchExpr: P[Term] =
-    (accessExpr <~ `match` ~/ `{`) ~/ (many(matchClause) <~ `}`) ^^ Match.apply
+    (accessExpr <~ `match` ~/ `{`) ~/ (many(matchClause) <~ `}`) ~/ (`else` ~/> stmt).? ^^ Match.apply
 
   lazy val doExpr: P[Term] =
     `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {
@@ -443,6 +443,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val matchClause: P[MatchClause] =
     `case` ~/> matchPattern ~ many(`and` ~> matchGuard) ~ (`=>` ~/> stmts) ^^ MatchClause.apply
+
 
   lazy val matchGuard: P[MatchGuard] =
     ( expr ~ (`is` ~/> matchPattern) ^^ MatchGuard.PatternGuard.apply

@@ -276,7 +276,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
-      case tree @ source.Match(sc, clauses) =>
+      case tree @ source.Match(sc, clauses, default) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
@@ -298,6 +298,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
             resEff = resEff ++ clEff
             clTpe
+        } ++ default.map { body =>
+          val Result(defaultTpe, defaultEff) = Context in { checkStmt(body, expected) }
+          resEff = resEff ++ defaultEff
+          defaultTpe
         }
 
         // Clauses could in general be empty if there are no constructors

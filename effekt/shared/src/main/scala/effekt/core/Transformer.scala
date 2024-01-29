@@ -359,7 +359,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       Context.bind(loopCall)
 
-    case source.Match(sc, cs) =>
+    case source.Match(sc, cs, default) =>
+      assert(default.isEmpty, "Not supported yet")
+
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
       val clauses = cs.map(c => preprocess(scrutinee, c))
