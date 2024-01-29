@@ -100,12 +100,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe)     => Result(tpe, Pure)
 
-      case source.If(cond, thn, els) =>
-        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+      case source.If(guards, thn, els) =>
+        val Result((), guardEffs) = checkGuards(guards)
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)
+        Result(Context.join(thnTpe, elsTpe), guardEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, body) =>
         val Result(_, condEffs) = cond checkAgainst TBoolean
@@ -289,14 +289,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // (3) infer types for pattern
             Context.bind(checkPattern(tpe, p))
             // infer types for guards
-            guards.foreach { g =>
-              val Result(bindings, guardEffs) = checkGuard(g)
-              Context.bind(bindings)
-              resEff = resEff ++ guardEffs
-            }
-
+            val Result((), guardEffs) = checkGuards(guards)
+            // check body of the clause
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
-            resEff = resEff ++ clEff
+
+            resEff = resEff ++ clEff ++ guardEffs
             clTpe
         } ++ default.map { body =>
           val Result(defaultTpe, defaultEff) = Context in { checkStmt(body, expected) }
@@ -316,6 +313,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
       case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
     }
+
+  // Sideeffect: binds names in the current scope
+  def checkGuards(guards: List[MatchGuard])(using Context, Captures): Result[Unit] =
+    var effs = ConcreteEffects.empty
+    guards foreach { g =>
+      val Result(bindings, guardEffs) = checkGuard(g)
+      Context.bind(bindings)
+      effs = effs ++ guardEffs
+    }
+    Result((), effs)
+
 
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).

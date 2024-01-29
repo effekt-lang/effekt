@@ -344,9 +344,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
-    case source.If(cond, thn, els) =>
-      resolveGeneric(cond);
-      Context scoped { resolveGeneric(thn) }
+    case source.If(guards, thn, els) =>
+      Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
       Context scoped { resolveGeneric(els) }
 
     case source.While(cond, block) =>
@@ -406,12 +405,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context scoped {
         // variables bound by patterns are available in the guards.
         ps.foreach { Context.bind }
-        val ps2 = guards.flatMap { g =>
-          val xs = resolve(g)
-          // guards can refer to variables bound by precending guards
-          xs.foreach { Context.bind }
-          xs
-        }
+        guards.foreach { resolve }
 
         // wellformedness: only linear patterns
         var names: Set[Name] = Set.empty
@@ -568,11 +562,12 @@ object Namer extends Phase[Parsed, NameResolved] {
       patterns.flatMap { resolve }
   }
 
-  def resolve(p: source.MatchGuard)(using Context): List[ValueParam] = p match {
-    case MatchGuard.BooleanGuard(condition) => resolveGeneric(condition); Nil
+  def resolve(p: source.MatchGuard)(using Context): Unit = p match {
+    case MatchGuard.BooleanGuard(condition) => resolveGeneric(condition)
     case MatchGuard.PatternGuard(scrutinee, pattern) =>
       resolveGeneric(scrutinee)
-      resolve(pattern)
+      val ps = resolve(pattern)
+      ps.foreach { Context.bind }
   }
 
   /**

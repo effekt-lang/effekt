@@ -450,6 +450,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | expr ^^ MatchGuard.BooleanGuard.apply
     )
 
+  lazy val matchGuards: P[List[MatchGuard]] =
+    someSep(matchGuard, `and`)
+
   lazy val matchPattern: P[MatchPattern] =
     ( "_" ^^^ IgnorePattern()
     | literals ^^ { l => LiteralPattern(l) }
@@ -467,7 +470,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idRef ~ (`=` ~> expr) ^^ Assign.apply
 
   lazy val ifExpr: P[Term] =
-    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If.apply
+    `if` ~/> (`(` ~/> matchGuards <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If.apply
 
   lazy val whileExpr: P[Term] =
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While.apply

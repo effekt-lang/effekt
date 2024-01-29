@@ -6,7 +6,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
-import effekt.source.{ MatchPattern, Term }
+import effekt.source.{ MatchGuard, MatchPattern, Term }
 import effekt.symbols.Binder.{ RegBinder, VarBinder }
 import effekt.typer.Substitutions
 
@@ -329,9 +329,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.BlockLiteral(tps, vps, bps, body) =>
       transformBox(tree)
 
-    case source.If(cond, thn, els) =>
+    case source.If(List(MatchGuard.BooleanGuard(cond)), thn, els) =>
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
+
+    case _: source.If => ???
 
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }

@@ -313,7 +313,7 @@ enum Term extends Tree {
   case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
-  case If(cond: Term, thn: Stmt, els: Stmt)
+  case If(cond: List[MatchGuard], thn: Stmt, els: Stmt)
   case While(cond: Term, block: Stmt)
   case Match(scrutinee: Term, clauses: List[MatchClause], default: Option[Stmt])
 

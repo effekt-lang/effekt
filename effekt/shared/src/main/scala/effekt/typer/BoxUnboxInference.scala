@@ -62,8 +62,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case Assign(id, expr) =>
       Assign(id, rewriteAsExpr(expr))
 
-    case If(cond, thn, els) =>
-      If(rewriteAsExpr(cond), rewrite(thn), rewrite(els))
+    case If(guards, thn, els) =>
+      If(guards.map(rewrite), rewrite(thn), rewrite(els))
 
     case While(cond, body) =>
       While(rewriteAsExpr(cond), rewrite(body))
