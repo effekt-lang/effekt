@@ -338,7 +338,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
-    case source.While(cond, body) =>
+    case source.While(List(MatchGuard.BooleanGuard(cond)), body, None) =>
       val loopName = TmpBlock()
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
       val loopCapt = transform(Context.inferredCapture(body))
@@ -360,6 +360,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
       Context.bind(loopCall)
+
+    case _: source.While => ???
 
     case source.Match(sc, cs, default) =>
       assert(default.isEmpty, "Not supported yet")

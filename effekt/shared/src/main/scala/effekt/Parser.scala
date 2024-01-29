@@ -473,7 +473,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `if` ~/> (`(` ~/> matchGuards <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If.apply
 
   lazy val whileExpr: P[Term] =
-    `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While.apply
+    `while` ~/> (`(` ~/> matchGuards <~ `)`) ~/ stmt ~ (`else` ~/> stmt).? ^^ While.apply
 
   lazy val primExpr: P[Term] =
     variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`

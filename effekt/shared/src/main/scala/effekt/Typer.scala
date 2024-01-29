@@ -107,10 +107,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(Context.join(thnTpe, elsTpe), guardEffs ++ thnEffs ++ elsEffs)
 
-      case source.While(cond, body) =>
-        val Result(_, condEffs) = cond checkAgainst TBoolean
-        val Result(_, bodyEffs) = body checkAgainst TUnit
-        Result(TUnit, condEffs ++ bodyEffs)
+      case source.While(guards, body, default) =>
+        val Result((), guardEffs) = checkGuards(guards)
+        val expectedType = if default.isDefined then expected else Some(TUnit)
+        val Result(bodyTpe, bodyEffs) = checkStmt(body, expectedType)
+        val Result(defaultTpe, defaultEffs) = default.map { s =>
+          checkStmt(s, expectedType)
+        }.getOrElse(Result(TUnit, ConcreteEffects.empty))
+
+        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs)
 
       case source.Var(id) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {

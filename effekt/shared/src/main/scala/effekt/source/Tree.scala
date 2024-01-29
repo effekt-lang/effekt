@@ -313,8 +313,8 @@ enum Term extends Tree {
   case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
-  case If(cond: List[MatchGuard], thn: Stmt, els: Stmt)
-  case While(cond: Term, block: Stmt)
+  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
+  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt])
   case Match(scrutinee: Term, clauses: List[MatchClause], default: Option[Stmt])
 
   /**
@@ -666,6 +666,7 @@ object Tree {
     def rewrite(i: Implementation)(using Context): Implementation = structuralVisit(i)
     def rewrite(h: OpClause)(using Context): OpClause = structuralVisit(h)
     def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
+    def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
 
     /**
@@ -728,6 +729,7 @@ object Tree {
     def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
+    def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
 
     def query(t: Template[Term])(using Context, Ctx): Res =
       combineAll(t.args.map(query))
