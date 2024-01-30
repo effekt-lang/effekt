@@ -349,7 +349,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context scoped { resolveGeneric(els) }
 
     case source.While(guards, block, default) =>
-      Context scoped { Context scoped { guards.foreach(resolve) }; resolveGeneric(block) }
+      Context scoped { guards.foreach(resolve); resolveGeneric(block) }
       Context scoped { default foreach resolveGeneric }
 
     case source.BlockStmt(block) =>

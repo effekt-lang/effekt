@@ -340,30 +340,31 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
-    case source.While(List(MatchGuard.BooleanGuard(cond)), body, None) =>
+    case source.While(guards, body, default) =>
       val loopName = TmpBlock()
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
+
+      // TODO double check: probably we are forgetting the capture of the guards!
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
+      val thenBranch = Stmt.Val(TmpValue(), transform(body), loopCall)
+      val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
+
+      val thenClause = preprocess(Nil, guards, thenBranch)
+      val elseClause = preprocess(List(), Nil, elseBranch)
+
       val loop = Block.BlockLit(Nil, Nil, Nil, Nil,
-        insertBindings {
-          Stmt.If(transformAsPure(cond),
-            Stmt.Val(TmpValue(), transform(body), loopCall),
-            Return(Literal((), core.Type.TUnit)))
-        }
-      )
+        PatternMatchingCompiler.compile(List(thenClause, elseClause)))
 
       Context.bind(loopName, loop)
 
-      // captures???
-      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
-        Context.warning(pp"Condition to while loop is pure, which might not be intended.")
-      }
+      // TODO renable
+      //      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
+      //        Context.warning(pp"Condition to while loop is pure, which might not be intended.")
+      //      }
 
       Context.bind(loopCall)
-
-    case _: source.While => ???
 
     case source.Match(sc, cs, default) =>
       assert(default.isEmpty, "Not supported yet")
@@ -487,61 +488,64 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     })
   }
 
-  // Uses the bind effect to bind the right hand sides of clauses!
-  def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause = clause match {
-    case source.MatchClause(pattern, guards, body) =>
+  def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause =
+    preprocess(List((sc, clause.pattern)), clause.guards, transform(clause.body))
 
-      import PatternMatchingCompiler.*
+  def preprocess(patterns: List[(ValueVar, source.MatchPattern)], guards: List[source.MatchGuard], body: core.Stmt)(using Context): Clause = {
+    import PatternMatchingCompiler.*
 
-      def boundInPattern(p: source.MatchPattern): List[core.ValueParam] = p match {
-        case p @ source.AnyPattern(id) => List(ValueParam(p.symbol))
-        case source.TagPattern(id, patterns) => patterns.flatMap(boundInPattern)
-        case source.OrPattern(patterns) => patterns.flatMap(boundInPattern).distinct
-        case _: source.LiteralPattern | _: source.IgnorePattern => Nil
-      }
-      def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
-        case MatchGuard.BooleanGuard(condition) => Nil
-        case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
-      }
+    def boundInPattern(p: source.MatchPattern): List[core.ValueParam] = p match {
+      case p @ source.AnyPattern(id) => List(ValueParam(p.symbol))
+      case source.TagPattern(id, patterns) => patterns.flatMap(boundInPattern)
+      case source.OrPattern(patterns) => patterns.flatMap(boundInPattern).distinct
+      case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+    }
+    def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
+      case MatchGuard.BooleanGuard(condition) => Nil
+      case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
+    }
 
-      // create joinpoint
-      val params = boundInPattern(pattern) ++ guards.flatMap(boundInGuard)
-      val joinpoint = Context.bind(TmpBlock(), BlockLit(Nil, Nil, params, Nil, transform(body)))
+    // create joinpoint
+    val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
+    val joinpoint = Context.bind(TmpBlock(), BlockLit(Nil, Nil, params, Nil, body))
 
-      def transformPattern(p: source.MatchPattern): Pattern = p match {
-        case source.AnyPattern(id) =>
-          Pattern.Any(id.symbol)
-        case source.TagPattern(id, patterns) =>
-          Pattern.Tag(id.symbol, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
-        case source.IgnorePattern() =>
-          Pattern.Ignore()
-        case source.LiteralPattern(lit, equals) =>
-          Context.abort("Not supported yet")
-        case source.OrPattern(patterns) =>
-          Context.abort("Not supported yet")
-      }
+    def transformPattern(p: source.MatchPattern): Pattern = p match {
+      case source.AnyPattern(id) =>
+        Pattern.Any(id.symbol)
+      case source.TagPattern(id, patterns) =>
+        Pattern.Tag(id.symbol, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
+      case source.IgnorePattern() =>
+        Pattern.Ignore()
+      case source.LiteralPattern(lit, equals) =>
+        Context.abort("Not supported yet")
+      case source.OrPattern(patterns) =>
+        Context.abort("Not supported yet")
+    }
 
-      def transformGuard(p: source.MatchGuard): List[Condition] =
-        val (cond, bindings) = Context.withBindings {
-          p match {
-            case MatchGuard.BooleanGuard(condition) =>
-              Condition.Predicate(transformAsPure(condition))
-            case MatchGuard.PatternGuard(scrutinee, pattern) =>
-              val x = transformAsPure(scrutinee) match {
-                case x : Pure.ValueVar => x
-                case _ => Context.panic("Should not happen")
-              }
-              Condition.Patterns(Map(x -> transformPattern(pattern)))
-          }
+    def transformGuard(p: source.MatchGuard): List[Condition] =
+      val (cond, bindings) = Context.withBindings {
+        p match {
+          case MatchGuard.BooleanGuard(condition) =>
+            Condition.Predicate(transformAsPure(condition))
+          case MatchGuard.PatternGuard(scrutinee, pattern) =>
+            val x = transformAsPure(scrutinee) match {
+              case x : Pure.ValueVar => x
+              case _ => Context.panic("Should not happen")
+            }
+            Condition.Patterns(Map(x -> transformPattern(pattern)))
         }
-        bindings.toList.map {
-          case Binding.Val(name, binding) => Condition.Val(name, binding)
-          case Binding.Let(name, binding) => Condition.Let(name, binding)
-          case Binding.Def(name, binding) => Context.panic("Should not happen")
-        } :+ cond
+      }
+      bindings.toList.map {
+        case Binding.Val(name, binding) => Condition.Val(name, binding)
+        case Binding.Let(name, binding) => Condition.Let(name, binding)
+        case Binding.Def(name, binding) => Context.panic("Should not happen")
+      } :+ cond
 
-      Clause(Condition.Patterns(Map(sc -> transformPattern(pattern))) :: guards.flatMap(transformGuard),
-        joinpoint, params.map(p => core.ValueVar(p.id, p.tpe)))
+    val transformedPatterns = patterns.map { case (sc, p) => sc -> transformPattern(p) }.toMap
+    val transformedGuards   = guards.flatMap(transformGuard)
+    val conditions = if transformedPatterns.isEmpty then transformedGuards else Condition.Patterns(transformedPatterns) :: guards.flatMap(transformGuard)
+
+    Clause(conditions, joinpoint, params.map(p => core.ValueVar(p.id, p.tpe)))
   }
 
   /**
