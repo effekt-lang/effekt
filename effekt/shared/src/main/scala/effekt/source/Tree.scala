@@ -438,14 +438,12 @@ enum MatchPattern extends Tree {
    *
    *   case Red | Green => ...
    */
-  //case OrPattern(alternatives: List[MatchPattern])
+  case OrPattern(alternatives: List[MatchPattern])
 
   /**
    * A pattern that matches a single literal value
-   *
-   * DEPRECATED
    */
-  case LiteralPattern(l: Literal)
+  case LiteralPattern(l: Literal, equals: IdRef = IdRef("infixEq"))
 }
 export MatchPattern.*
 

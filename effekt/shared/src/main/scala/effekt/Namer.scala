@@ -547,7 +547,9 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolve(p: source.MatchPattern)(using Context): List[ValueParam] = p match {
     case source.IgnorePattern()     => Nil
-    case source.LiteralPattern(lit) => Nil
+    case source.LiteralPattern(lit, equals) =>
+       Context.resolveFunctionCalltarget(equals)
+       Nil
     case source.AnyPattern(id) =>
       val p = ValueParam(Name.local(id), None)
       Context.assignSymbol(id, p)
@@ -560,6 +562,11 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       patterns.flatMap { resolve }
+    case source.OrPattern(patterns) =>
+      val paramsLists = patterns.map { resolve }
+      def namesBoundBy(ps: List[ValueParam]): Set[Name] = ps.map(_.name).toSet
+      val commonNames = paramsLists.map(namesBoundBy).reduce(_ intersect _)
+      paramsLists.head.filter(commonNames contains _.name)
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {

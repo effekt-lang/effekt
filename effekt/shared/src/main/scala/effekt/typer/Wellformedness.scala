@@ -150,7 +150,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     val initialClauses: List[Clause] = cls.map { c => c.pattern match {
       case _: AnyPattern | _: IgnorePattern => Clause(Map.empty, c)
       case t: TagPattern => Clause(Map(Trace.Root -> t), c)
-      case _: LiteralPattern => Context.abort("Literal patterns not supported at the moment.")
+      case _: LiteralPattern | _: OrPattern => Clause(Map.empty, c) // Context.abort("Literal patterns not supported at the moment.")
     }}
 
 

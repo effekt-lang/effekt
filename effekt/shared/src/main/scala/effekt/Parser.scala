@@ -454,6 +454,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     someSep(matchGuard, `and`)
 
   lazy val matchPattern: P[MatchPattern] =
+    ( basicMatchPattern ~ (`|` ~/> someSep(basicMatchPattern, `|`)) ^^ { case first ~ rest => OrPattern(first :: rest) }
+    | basicMatchPattern
+    )
+
+  lazy val basicMatchPattern: P[MatchPattern] =
     ( "_" ^^^ IgnorePattern()
     | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
@@ -775,6 +780,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `<{` = literal("<{")
   lazy val `}>` = literal("}>")
   lazy val `!` = literal("!")
+  lazy val `|` = literal("|")
 
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
