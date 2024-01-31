@@ -547,9 +547,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolve(p: source.MatchPattern)(using Context): List[ValueParam] = p match {
     case source.IgnorePattern()     => Nil
-    case source.LiteralPattern(lit, equals) =>
-       Context.resolveFunctionCalltarget(equals)
-       Nil
+    case source.LiteralPattern(lit) => Nil
     case source.AnyPattern(id) =>
       val p = ValueParam(Name.local(id), None)
       Context.assignSymbol(id, p)

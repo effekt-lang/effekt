@@ -21,7 +21,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Context.initTransformerState()
     Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
 
-  def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = {
+  def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree
     val exports = transform(mod.terms)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
@@ -533,6 +533,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.BooleanGuard(condition) => Nil
       case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
     }
+    def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
+      Context.module.findPrelude.terms("infixEq") collect {
+        case sym: Callable => (sym, sym.toType)
+      } collectFirst {
+        // specialized version
+        case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
+          (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
+        // generic version
+        case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
+            if t1 == tparam && t2 == tparam =>
+          (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
+      } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
     // create joinpoint
     val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
@@ -545,8 +557,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Tag(id.symbol, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
       case source.IgnorePattern() =>
         Pattern.Ignore()
-      case source.LiteralPattern(lit, equals) =>
-        Context.abort("Not supported yet")
+      case source.LiteralPattern(source.Literal(value, tpe)) =>
+        Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
       case source.OrPattern(patterns) =>
         Context.abort("Not supported yet")
     }

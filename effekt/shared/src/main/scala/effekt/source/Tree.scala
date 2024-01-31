@@ -443,7 +443,7 @@ enum MatchPattern extends Tree {
   /**
    * A pattern that matches a single literal value
    */
-  case LiteralPattern(l: Literal, equals: IdRef = IdRef("infixEq"))
+  case LiteralPattern(l: Literal)
 }
 export MatchPattern.*
 

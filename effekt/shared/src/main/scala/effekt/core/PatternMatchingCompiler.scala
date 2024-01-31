@@ -38,8 +38,8 @@ object PatternMatchingCompiler {
     case Tag(id: Id, patterns: List[(Pattern, ValueType)])
     case Ignore()
     case Any(id: Id)
-    //      case OrPattern(patterns: List[Pattern])
-    //      case LiteralPattern()
+    case Or(patterns: List[Pattern])
+    case Literal(l: core.Literal, equals: (core.Pure, core.Pure) => core.Pure)
   }
 
   /**
@@ -80,26 +80,66 @@ object PatternMatchingCompiler {
 
 
     // (2) Choose the variable to split on (we use it implicitly in the following)
-    val splitVar: ValueVar = branchingHeuristic(remainingPatterns)
+    val splitVar: ValueVar = branchingHeuristic(remainingPatterns, normalizedClauses)
 
     object Split {
-      def unapply(c: List[Condition]): Option[(Pattern.Tag, Map[ValueVar, Pattern], List[Condition])] = c match {
+      def unapply(c: List[Condition]): Option[(Pattern, Map[ValueVar, Pattern], List[Condition])] = c match {
         case Condition.Patterns(patterns) :: rest => patterns.get(splitVar).collect {
-          case p: Pattern.Tag => (p, patterns - splitVar, rest)
+          case p => (p, patterns - splitVar, rest)
         }
         case _ => None
       }
     }
 
-    def matchesOn(c: Clause): Option[Pattern.Tag] = c match {
-      case Clause(Split(p, _, _), _, _) => Some(p)
-      case _ => None
+    // (3a) Match on a literal
+    remainingPatterns(splitVar) match {
+      case Pattern.Literal(lit, equals) =>
+
+        // the different literal values that we match on
+        val variants: List[core.Literal] = normalizedClauses.collect {
+          case Clause(Split(Pattern.Literal(lit, _), _, _), _, _) => lit
+        }.distinct
+
+        val clausesFor = collection.mutable.Map.empty[core.Literal, List[Clause]]
+        def addClause(c: core.Literal, cl: Clause): Unit =
+          val clauses = clausesFor.getOrElse(c, List.empty)
+          clausesFor.update(c, clauses :+ cl)
+
+        var defaults = List.empty[Clause]
+        def addDefault(cl: Clause): Unit =
+          defaults = defaults :+ cl
+
+        normalizedClauses.foreach {
+          case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, args) =>
+            addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, args))
+
+          case c =>
+            // Clauses that don't match on that var are duplicated.
+            // So we want to choose our branching heuristic to minimize this
+            addDefault(c)
+            // THIS ONE IS NOT LINEAR
+            variants.foreach { v => addClause(v, c) }
+        }
+
+        // (4) assemble syntax tree for the pattern match
+        return variants.foldRight(compile(defaults)) {
+          case (lit, elsStmt) =>
+            val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
+            core.If(equals(splitVar, lit), thnStmt, elsStmt)
+        }
+      case Pattern.Or(patterns) => ???
+      case _ => ()
     }
+
+
+    // (3b) Match on a data type constructor
 
     // (3) separate clauses into those that require a pattern match and those that require a predicate or other things
 
     // collect all variants that are mentioned in the clauses
-    def variants: List[Id] = normalizedClauses.flatMap(matchesOn).map(_.id).distinct
+    val variants: List[Id] = normalizedClauses.collect {
+      case Clause(Split(p: Pattern.Tag, _, _), _, _) => p.id
+    }.distinct
 
     val clausesFor = collection.mutable.Map.empty[Id, List[Clause]]
     def addClause(c: Id, cl: Clause): Unit =
@@ -122,8 +162,10 @@ object PatternMatchingCompiler {
     normalizedClauses.foreach {
       case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
         val fieldVars = fieldVarsFor(constructor, patternsAndTypes.map(_._2))
-        val nestedMatches = fieldVars.zip(patternsAndTypes.map(_._1))
-        addClause(constructor, Clause(Condition.Patterns(restPatterns ++ nestedMatches) :: restConds, label, args))
+        val nestedMatches = fieldVars.zip(patternsAndTypes.map(_._1)).toMap
+        addClause(constructor,
+          // it is important to add nested matches first, since they might include substitutions for the rest.
+          Clause(Condition.Patterns(nestedMatches) :: Condition.Patterns(restPatterns) :: restConds, label, args))
 
       case c =>
         // Clauses that don't match on that var are duplicated.
@@ -150,7 +192,10 @@ object PatternMatchingCompiler {
   /**
    * TODO implement
    */
-  def branchingHeuristic(patterns: Map[ValueVar, Pattern]): ValueVar = patterns.head._1
+  def branchingHeuristic(patterns: Map[ValueVar, Pattern], clauses: List[Clause]): ValueVar =
+    patterns.keys.maxBy(v => clauses.count {
+      case Clause(ps, _, _) => ps.contains(v)
+    })
 
   /**
    * Substitutes AnyPattern and removes wildcards.
@@ -195,6 +240,7 @@ object PatternMatchingCompiler {
         val additionalSubst = substituted.collect { case (sc, Pattern.Any(id)) => id -> sc }
         val filtered = substituted.collect {
           case (sc, p: Pattern.Tag) => sc -> p
+          case (sc, p: Pattern.Literal) => sc -> p
         }
         normalize(patterns ++ filtered, rest, substitution ++ additionalSubst)
 
@@ -237,7 +283,7 @@ object PatternMatchingCompiler {
     case Pattern.Tag(id, patterns) => util.show(id) + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
     case Pattern.Ignore() => "_"
     case Pattern.Any(id) => util.show(id)
-    //      case source.OrPattern(patterns) => patterns.map(show).mkString(", ")
-    //      case source.LiteralPattern(lit, show) => lit.value.toString
+    case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
+    case Pattern.Literal(lit, equals) => util.show(lit.value)
   }
 }

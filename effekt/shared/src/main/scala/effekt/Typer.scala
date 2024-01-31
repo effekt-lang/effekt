@@ -509,8 +509,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
-    case p @ source.LiteralPattern(lit, equals) =>
-      // checkOverloadedFunctionCall(source.Call(equals.symbol.asInstanceOf, Nil, List(lit, lit), Nil), equals, Nil, List(lit, lit), Nil, Some(TBoolean))
+    case p @ source.LiteralPattern(lit) =>
       Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(p))
       Map.empty
     case p @ source.OrPattern(patterns) =>
