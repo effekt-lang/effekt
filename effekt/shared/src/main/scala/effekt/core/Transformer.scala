@@ -360,7 +360,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val thenBranch = Stmt.Val(TmpValue(), transform(body), loopCall)
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
-      val body = guards match {
+      val loopBody = guards match {
         case List(MatchGuard.BooleanGuard(cond)) =>
           insertBindings { core.If(transformAsPure(cond), thenBranch, elseBranch) }
         case _ =>
@@ -369,7 +369,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           PatternMatchingCompiler.compile(List(thenClause, elseClause))
       }
 
-      Context.bind(loopName, Block.BlockLit(Nil, Nil, Nil, Nil, body))
+      Context.bind(loopName, Block.BlockLit(Nil, Nil, Nil, Nil, loopBody))
 
       // TODO renable
       //      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
