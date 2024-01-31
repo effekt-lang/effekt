@@ -1,0 +1,12 @@
+import immutable/option
+
+def main() = {
+  var curr = Some(10)
+  while (curr is Some(i)) {
+    println(i);
+    if (i > 0)
+      curr = Some(i - 1)
+    else
+      curr = None()
+  }
+}

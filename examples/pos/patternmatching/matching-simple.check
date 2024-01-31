@@ -1,0 +1,17 @@
+hello
+world
+world
+---
+2
+3
+4
+5
+[warning] examples/pos/patternmatching/matching-simple.effekt:9:3: Unreachable case.
+  case y and y == 1 => 2
+  ^
+[warning] examples/pos/patternmatching/matching-simple.effekt:10:3: Unreachable case.
+  case z and z == 2 => 3
+  ^
+[warning] examples/pos/patternmatching/matching-simple.effekt:11:3: Unreachable case.
+  case a and a == 3 => 4
+  ^

@@ -7,7 +7,7 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{ MatchGuard, MatchPattern, Term }
+import effekt.source.{ MatchGuard, MatchPattern }
 import effekt.symbols.Binder.{ RegBinder, VarBinder }
 import effekt.typer.Substitutions
 import effekt.util.messages.ErrorReporter
@@ -335,7 +335,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
 
-    case _: source.If => ???
+    case source.If(guards, thn, els) =>
+      val thnClause = preprocess(Nil, guards, transform(thn))
+      val elsClause = preprocess(Nil, Nil, transform(els))
+      Context.bind(PatternMatchingCompiler.compile(List(thnClause, elsClause)))
+
+    //    case i @ source.If(guards, thn, els) =>
+    //      val compiled = collectClauses(i)
+    //        .map(PatternMatchingCompiler.compile)
+    //        .getOrElse(Context.panic("Should not happen"))
+    //      Context.bind(compiled)
 
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
@@ -351,13 +360,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val thenBranch = Stmt.Val(TmpValue(), transform(body), loopCall)
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
-      val thenClause = preprocess(Nil, guards, thenBranch)
-      val elseClause = preprocess(List(), Nil, elseBranch)
+      val body = guards match {
+        case List(MatchGuard.BooleanGuard(cond)) =>
+          insertBindings { core.If(transformAsPure(cond), thenBranch, elseBranch) }
+        case _ =>
+          val thenClause = preprocess(Nil, guards, thenBranch)
+          val elseClause = preprocess(Nil, Nil, elseBranch)
+          PatternMatchingCompiler.compile(List(thenClause, elseClause))
+      }
 
-      val loop = Block.BlockLit(Nil, Nil, Nil, Nil,
-        PatternMatchingCompiler.compile(List(thenClause, elseClause)))
-
-      Context.bind(loopName, loop)
+      Context.bind(loopName, Block.BlockLit(Nil, Nil, Nil, Nil, body))
 
       // TODO renable
       //      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
@@ -367,12 +379,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(loopCall)
 
     case source.Match(sc, cs, default) =>
-      assert(default.isEmpty, "Not supported yet")
-
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
       val clauses = cs.map(c => preprocess(scrutinee, c))
-      val compiledMatch = Context.at(tree) { PatternMatchingCompiler.compile(clauses) }
+      val defaultClause = default.map(stmt => preprocess(Nil, Nil, transform(stmt))).toList
+      val compiledMatch = Context.at(tree) { PatternMatchingCompiler.compile(clauses ++ defaultClause) }
       Context.bind(compiledMatch)
 
     case source.TryHandle(prog, handlers) =>
@@ -453,6 +464,24 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.Do(effect, id, targs, vargs) =>
       Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
+  }
+
+  /**
+   * Aims to flatten sequenced ifs into a single match
+   */
+  def collectClauses(term: source.Term)(using Context): Option[List[Clause]] = term match {
+    case source.If(guards, thn, els) =>
+      val thenClause = preprocess(Nil, guards, transform(thn))
+      val elseClauses = collectClauses(els) match {
+        case Some(clauses) => clauses
+        case None => List(preprocess(Nil, Nil, transform(els)))
+      }
+      Some(thenClause :: elseClauses)
+    case _ => None
+  }
+  def collectClauses(stmt: source.Stmt)(using Context): Option[List[Clause]] = stmt match {
+    case source.Stmt.Return(d) => collectClauses(d)
+    case _ => None
   }
 
   /**

@@ -1,0 +1,11 @@
+red
+id
+yellow
+id
+green
+[warning] examples/pos/patternmatching/matching-io.effekt:17:3: Unreachable case.
+  case Green() => println("green")
+  ^
+[warning] examples/pos/patternmatching/matching-io.effekt:18:3: Unreachable case.
+  case _ => ()
+  ^
