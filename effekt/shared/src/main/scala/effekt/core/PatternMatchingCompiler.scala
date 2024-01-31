@@ -35,6 +35,14 @@ import scala.collection.mutable
  *
  * Here, we compile conditions to be evaluated left-to-right.
  *
+ * In general, [[ core.Transformer.preprocess ]] takes a source pattern match and translates
+ * it into an internal representation (defined below, [[ Clause ]], [[ Condition ]], etc.).
+ * This internal representation is designed to have all information readily available to
+ * immediately generate the [[ core.Stmt ]] corresponding to the compiled pattern.
+ *
+ * This way, we can also write [[ core.PatternMatchingTests ]] independent of a concrete source
+ * pattern.
+ *
  * @see https://github.com/effekt-lang/effekt/issues/383
  */
 object PatternMatchingCompiler {
