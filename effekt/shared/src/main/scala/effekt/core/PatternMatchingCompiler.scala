@@ -6,15 +6,37 @@ import effekt.core.substitutions.Substitution
 import effekt.symbols.TmpValue
 import effekt.util.messages.ErrorReporter
 
-// Pattern Matching Compiler
-// -------------------------
-// The implementation of the match compiler follows closely the short paper:
-//   Jules Jacobs
-//   How to compile pattern matching
-//   https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
-//
-// There also is a more advanced Rust implementation that we could look at:
-//   https://gitlab.com/yorickpeterse/pattern-matching-in-rust/-/tree/main/jacobs2021
+import scala.collection.mutable
+
+
+/**
+ * Pattern Matching Compiler
+ * -------------------------
+ * The implementation of the match compiler follows closely the short paper:
+ *
+ *   Jules Jacobs
+ *   How to compile pattern matching
+ *   https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
+ &
+ * A match is represented as a list of [[ Clause ]]s, e.g.
+ *
+ *    case a is Some(x) => j1(x)
+ *    case a is None    => j2()
+ *
+ * Each clause represents one disjunct. That is, one of the clauses needs to match. We compile them
+ * to match in order (from top-to-bottom).
+ *
+ * We generalize Jacob's original draft, by also supporting literal patterns, multiple guards,
+ * and evaluating expressions.
+ *
+ * That is, one clause is the conjunction of multiple [[ Condition ]]s, e.g.:
+ *
+ *    case a is Some(x); val tmp = comp(x); pred(tmp)? => j(x, tmp)
+ *
+ * Here, we compile conditions to be evaluated left-to-right.
+ *
+ * @see https://github.com/effekt-lang/effekt/issues/383
+ */
 object PatternMatchingCompiler {
 
   /**
@@ -45,153 +67,138 @@ object PatternMatchingCompiler {
   /**
    * The match compiler works with
    * - a sequence of clauses that represent alternatives (disjunction)
-   * - each sequence contains a list of patterns that all have to match (conjunction).
+   * - each sequence contains a list of conditions that all have to match (conjunction).
    */
   def compile(clauses: List[Clause])(using ErrorReporter): core.Stmt = {
     // matching on void will result in this case
     if (clauses.isEmpty) return core.Hole()
 
-    val normalizedClauses = clauses.map(normalize)
+    // (0) normalize clauses
+    val normalized @ (headClause :: remainingClauses) = clauses.map(normalize) : @unchecked
 
-    def jumpToBranch(target: BlockVar, vargs: List[ValueVar]) =
-      core.App(target, Nil, vargs, Nil)
-
-    val Clause(conditions, target, args) = normalizedClauses.head
-
-    // (1) Check the first clause to be matched
-    val Condition.Patterns(remainingPatterns) :: rest = conditions match {
-      // The top-most clause already matches successfully
-      case Nil =>
-        return jumpToBranch(target, args)
-      // We need to perform a computation
-      case Condition.Val(x, binding) :: rest =>
-        return core.Val(x, binding, compile(Clause(rest, target, args) :: normalizedClauses.tail))
-      // We need to perform a computation
-      case Condition.Let(x, binding) :: rest =>
-        return core.Let(x, binding, compile(Clause(rest, target, args) :: normalizedClauses.tail))
-      // We need to check a predicate
-      case Condition.Predicate(pred) :: rest =>
+    // (1) Check the first clause to be matched (we can immediately handle non-pattern cases)
+    val patterns = headClause match {
+      // - The top-most clause already matches successfully
+      case Clause(Nil, target, args) =>
+        return core.App(target, Nil, args, Nil)
+      // - We need to perform a computation
+      case Clause(Condition.Val(x, binding) :: rest, target, args) =>
+        return core.Val(x, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      // - We need to perform a computation
+      case Clause(Condition.Let(x, binding) :: rest, target, args) =>
+        return core.Let(x, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      // - We need to check a predicate
+      case Clause(Condition.Predicate(pred) :: rest, target, args) =>
         return core.If(pred,
-          compile(Clause(rest, target, args) :: normalizedClauses.tail),
-          compile(normalizedClauses.tail)
+          compile(Clause(rest, target, args) :: remainingClauses),
+          compile(remainingClauses)
         )
-      case p :: rest => p :: rest
-    } : @unchecked
+      case Clause(Condition.Patterns(patterns) :: rest, target, args) =>
+        patterns
+    }
 
-
-    // (2) Choose the variable to split on (we use it implicitly in the following)
-    val splitVar: ValueVar = branchingHeuristic(remainingPatterns, normalizedClauses)
+    // (2) Choose the variable to split on
+    val scrutinee: ValueVar = branchingHeuristic(patterns, normalized)
 
     object Split {
-      def unapply(c: List[Condition]): Option[(Pattern, Map[ValueVar, Pattern], List[Condition])] = c match {
-        case Condition.Patterns(patterns) :: rest => patterns.get(splitVar).collect {
-          case p => (p, patterns - splitVar, rest)
+      def unapply(c: List[Condition]): Option[(Pattern, Map[ValueVar, Pattern], List[Condition])] =
+        c match {
+          case Condition.Patterns(patterns) :: rest =>
+            patterns.get(scrutinee).map { p => (p, patterns - scrutinee, rest) }
+          case _ => None
         }
-        case _ => None
-      }
     }
 
     // (3a) Match on a literal
-    remainingPatterns(splitVar) match {
-      case Pattern.Literal(lit, equals) =>
+    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure) = {
+      // the different literal values that we match on
+      val variants: List[core.Literal] = normalized.collect {
+        case Clause(Split(Pattern.Literal(lit, _), _, _), _, _) => lit
+      }.distinct
 
-        // the different literal values that we match on
-        val variants: List[core.Literal] = normalizedClauses.collect {
-          case Clause(Split(Pattern.Literal(lit, _), _, _), _, _) => lit
-        }.distinct
+      // for each literal, we collect the clauses that match it correctly
+      val clausesFor = mutable.Map.empty[core.Literal, List[Clause]]
+      def addClause(c: core.Literal, cl: Clause): Unit =
+        clausesFor.update(c, clausesFor.getOrElse(c, List.empty) :+ cl)
 
-        val clausesFor = collection.mutable.Map.empty[core.Literal, List[Clause]]
-        def addClause(c: core.Literal, cl: Clause): Unit =
-          val clauses = clausesFor.getOrElse(c, List.empty)
-          clausesFor.update(c, clauses :+ cl)
+      // default clauses always match with respect to the current scrutinee
+      var defaults = List.empty[Clause]
+      def addDefault(cl: Clause): Unit =
+        defaults = defaults :+ cl
 
-        var defaults = List.empty[Clause]
-        def addDefault(cl: Clause): Unit =
-          defaults = defaults :+ cl
+      normalized.foreach {
+        case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, args) =>
+          addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, args))
+        case c =>
+          addDefault(c)
+          variants.foreach { v => addClause(v, c) }
+      }
 
-        normalizedClauses.foreach {
-          case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, args) =>
-            addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, args))
-
-          case c =>
-            // Clauses that don't match on that var are duplicated.
-            // So we want to choose our branching heuristic to minimize this
-            addDefault(c)
-            // THIS ONE IS NOT LINEAR
-            variants.foreach { v => addClause(v, c) }
-        }
-
-        // (4) assemble syntax tree for the pattern match
-        return variants.foldRight(compile(defaults)) {
-          case (lit, elsStmt) =>
-            val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
-            core.If(equals(splitVar, lit), thnStmt, elsStmt)
-        }
-      case Pattern.Or(patterns) => ???
-      case _ => ()
+      // (4) assemble syntax tree for the pattern match
+      variants.foldRight(compile(defaults)) {
+        case (lit, elsStmt) =>
+          val thnStmt = compile(clausesFor.getOrElse(lit, Nil))
+          core.If(equals(scrutinee, lit), thnStmt, elsStmt)
+      }
     }
-
 
     // (3b) Match on a data type constructor
+    def splitOnTag() = {
+      // collect all variants that are mentioned in the clauses
+      val variants: List[Id] = normalized.collect {
+        case Clause(Split(p: Pattern.Tag, _, _), _, _) => p.id
+      }.distinct
 
-    // (3) separate clauses into those that require a pattern match and those that require a predicate or other things
+      // for each tag, we collect the clauses that match it correctly
+      val clausesFor = mutable.Map.empty[Id, List[Clause]]
+      def addClause(c: Id, cl: Clause): Unit =
+        clausesFor.update(c, clausesFor.getOrElse(c, List.empty) :+ cl)
 
-    // collect all variants that are mentioned in the clauses
-    val variants: List[Id] = normalizedClauses.collect {
-      case Clause(Split(p: Pattern.Tag, _, _), _, _) => p.id
-    }.distinct
+      // default clauses always match with respect to the current scrutinee
+      var defaults = List.empty[Clause]
+      def addDefault(cl: Clause): Unit =
+        defaults = defaults :+ cl
 
-    val clausesFor = collection.mutable.Map.empty[Id, List[Clause]]
-    def addClause(c: Id, cl: Clause): Unit =
-      val clauses = clausesFor.getOrElse(c, List.empty)
-      clausesFor.update(c, clauses :+ cl)
+      // used to make up new scrutinees
+      val varsFor = mutable.Map.empty[Id, List[ValueVar]]
+      def fieldVarsFor(constructor: Id, fieldTypes: List[ValueType]): List[ValueVar] =
+        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue(), tpe) })
 
-    var defaults = List.empty[Clause]
-    def addDefault(cl: Clause): Unit =
-      defaults = defaults :+ cl
+      normalized.foreach {
+        case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
+          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.map { case (pat, tpe) => tpe })
+          val nestedMatches = fieldVars.zip(patternsAndTypes.map { case (pat, tpe) => pat }).toMap
+          addClause(constructor,
+            // it is important to add nested matches first, since they might include substitutions for the rest.
+            Clause(Condition.Patterns(nestedMatches) :: Condition.Patterns(restPatterns) :: restConds, label, args))
 
-    // used to make up new scrutinees
-    var varsFor: Map[Id, List[ValueVar]] = Map.empty
-    def fieldVarsFor(constructor: Id, fieldTypes: List[ValueType]): List[ValueVar] =
-      varsFor.getOrElse(constructor, {
-        val newVars: List[ValueVar] = fieldTypes.map { tpe => ValueVar(TmpValue(), tpe) }
-        varsFor = varsFor.updated(constructor, newVars)
-        newVars
-      })
+        case c =>
+          // Clauses that don't match on that var are duplicated.
+          // So we want to choose our branching heuristic to minimize this
+          addDefault(c)
+          // here we duplicate clauses!
+          variants.foreach { v => addClause(v, c) }
+      }
 
-    normalizedClauses.foreach {
-      case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
-        val fieldVars = fieldVarsFor(constructor, patternsAndTypes.map(_._2))
-        val nestedMatches = fieldVars.zip(patternsAndTypes.map(_._1)).toMap
-        addClause(constructor,
-          // it is important to add nested matches first, since they might include substitutions for the rest.
-          Clause(Condition.Patterns(nestedMatches) :: Condition.Patterns(restPatterns) :: restConds, label, args))
+      // (4) assemble syntax tree for the pattern match
+      val branches = variants.map { v =>
+        val body = compile(clausesFor.getOrElse(v, Nil))
+        val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
+        val blockLit: BlockLit = BlockLit(Nil, Nil, params, Nil, body)
+        (v, blockLit)
+      }
 
-      case c =>
-        // Clauses that don't match on that var are duplicated.
-        // So we want to choose our branching heuristic to minimize this
-        addDefault(c)
-        // THIS ONE IS NOT LINEAR
-        variants.foreach { v => addClause(v, c) }
+      val default = if defaults.isEmpty then None else Some(compile(defaults))
+      core.Match(scrutinee, branches, default)
     }
 
-
-    // (4) assemble syntax tree for the pattern match
-    val branches = variants.map { v =>
-      val body = compile(clausesFor.getOrElse(v, Nil))
-      val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
-      val blockLit: BlockLit = BlockLit(Nil, Nil, params, Nil, body)
-      (v, blockLit)
+    patterns(scrutinee) match {
+      case Pattern.Literal(lit, equals) => splitOnLiteral(lit, equals)
+      case p: Pattern.Tag => splitOnTag()
+      case _ => ???
     }
-
-    val default = if defaults.isEmpty then None else Some(compile(defaults))
-    core.Match(splitVar, branches, default)
   }
 
-
-  /**
-   * TODO implement
-   */
   def branchingHeuristic(patterns: Map[ValueVar, Pattern], clauses: List[Clause]): ValueVar =
     patterns.keys.maxBy(v => clauses.count {
       case Clause(ps, _, _) => ps.contains(v)
@@ -263,6 +270,7 @@ object PatternMatchingCompiler {
         (prefix(patterns, Nil), substitution)
     }
   }
+
 
   // For development and debugging
   // -----------------------------
