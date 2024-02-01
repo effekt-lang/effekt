@@ -4,11 +4,11 @@ interface Time { def now(): Int }
 
 // console and time are "global" -- that is, module wide capabilities
 def globalCapabilities { console: Console } { time: Time }: Unit = {
-    def parallel(f: () => Unit at {}, g: () => Unit at {}): Unit = ()
-    parallel(
-        box { () => () },
-        box { () => time.now(); console.println("world!")  } // ERROR Not allowed {time, console}
-    )
+  def parallel(f: () => Unit at {}, g: () => Unit at {}): Unit = ()
+  parallel(
+      box { () => () },
+      box { () => time.now(); console.println("world!")  } // ERROR Not allowed {time, console}
+  )
 }
 
 def run[T] { prog : {Console} {Time} => T }: T =

@@ -1,20 +1,20 @@
 interface Exc { def throw(msg: String): Unit }
-interface Console { def println[A](a: A): Unit }
+interface MyConsole { def myprintln[A](a: A): Unit }
 interface Time { def now(): Int }
 interface Stopwatch { def elapsed(): Int }
 
 // console and time are "global" -- that is, module wide capabilities
-def globalCapabilities { console: Console } { time: Time }: Unit = {
-  def sayTime() = console.println("The current time is: " ++ show(time.now()))
+def globalCapabilities { console: MyConsole } { time: Time }: Unit = {
+  def sayTime() = console.myprintln("The current time is: " ++ show(time.now()))
 
   // other blocks closing only over console or time
-  def sayHello() = console.println("Hello!")
+  def sayHello() = console.myprintln("Hello!")
   def currentTime() = time.now()
 
   def repeat(n: Int) { f: () => Unit }: Unit =
   	if (n == 0) { () } else { f(); repeat(n - 1) {f} }
 
-  repeat(3) { () => console.println("Hello!") };
+  repeat(3) { () => console.myprintln("Hello!") };
   repeat(3) { () => sayTime() };
 
   def parallel(f: () => Unit at {}, g: () => Unit at {}): Unit = ()
@@ -40,17 +40,17 @@ def globalCapabilities { console: Console } { time: Time }: Unit = {
   ()
 }
 
-def localCapabilities { console: Console } { time: Time }: Unit =
+def localCapabilities { console: MyConsole } { time: Time }: Unit =
   try {
-  	console.println("hello")
+  	console.myprintln("hello")
   	exc.throw("world")
-  	console.println("done")
+  	console.myprintln("done")
   } with exc: Exc {
-  	def throw(msg) = { console.println(msg ++ "!") }
+  	def throw(msg) = { console.myprintln(msg ++ "!") }
   }
 
-def effectHandlers { console: Console } { time: Time }: Unit = {
-  def report(t: Int) = console.println(show(t) ++ "ms") 
+def effectHandlers { console: MyConsole } { time: Time }: Unit = {
+  def report(t: Int) = console.myprintln(show(t) ++ "ms") 
   val before = time.now();
 
   try {
@@ -66,12 +66,12 @@ def effectHandlers { console: Console } { time: Time }: Unit = {
   }
 }
 
-def run[T] { prog : {Console} {Time} => T }: T = {
+def run[T] { prog : {MyConsole} {Time} => T }: T = {
 	var i = 0
     try {
         prog {console} {time}
-    } with console: Console {
-        def println[A](msg) = { println(msg); resume(()) }
+    } with console: MyConsole {
+        def myprintln[A](msg) = { println[A](msg); resume(()) }
     } with time: Time {
         def now() = { 
 			i = i + 1

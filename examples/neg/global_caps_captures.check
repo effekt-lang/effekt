@@ -1,3 +1,4 @@
-[error] examples/neg/global_caps_captures.effekt:10:9: Not allowed {time, console}
-        box { () => time.now(); console.println("world!")  } // ERROR Not allowed {time, console}
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/global_caps_captures.effekt:10:7: Not allowed {time, console}
+      box { () => time.now(); console.println("world!")  } // ERROR Not allowed {time, console}
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
