@@ -33,6 +33,7 @@ class MLTests extends EffektTests {
     // And: unknown problem with evidence monomorphization
     examplesDir / "ml" / "probabilistic.effekt",
 
+    examplesDir / "pos" / "object",
     // Tests with box
     examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
