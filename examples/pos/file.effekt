@@ -1,0 +1,19 @@
+interface FileHandle { def readByte(pos: Int): Int }
+
+def withFile[T](path: String) { prog: {FileHandle} => T }: T =
+  try { prog {fh} } with fh: FileHandle {
+    def readByte(pos) = resume(pos + 42) 
+  }
+
+def fileExample() = {
+  withFile("A.txt") { {fileA: FileHandle} =>
+    val offsetReader : Int => Int at {fileA} =
+      withFile("B.txt") { {fileB: FileHandle} =>
+        val offset = fileB.readByte(0);
+        return box { (pos: Int) => fileA.readByte(pos + offset) }
+      };
+    offsetReader(10)
+  }
+}
+
+def main() = println(fileExample())
