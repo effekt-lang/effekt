@@ -1,4 +1,4 @@
-effect Exc[A](): A
+effect Exc(): Unit
 effect Hof { f: () => Int / Exc }: Int
 
 def main() = {
@@ -6,10 +6,10 @@ def main() = {
         try {
             try {
                 do Hof {
-                    do Exc[Int]()
+                    do Exc()
                     1
                 }
-            } with exc: Exc[Int] {
+            } with exc: Exc {
                 println("inner handler")
                 2
             } with Hof {
@@ -17,7 +17,7 @@ def main() = {
                     f()
                 }
             }
-        } with Exc[Int] {
+        } with Exc {
             println("outer handler")
             3
         }

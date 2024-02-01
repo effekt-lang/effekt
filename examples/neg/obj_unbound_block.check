@@ -1,3 +1,0 @@
-[error] examples/neg/obj_unbound_block.effekt:3:21: Number of block parameters (0) does not match declaration of 'Eff', which expects 2.
-def impl: Eff = new Eff { (a: Int) =>
-                    ^^^
