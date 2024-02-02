@@ -6,12 +6,12 @@ world
 3
 4
 5
-[warning] examples/pos/patternmatching/matching-literals.effekt:9:3: Unreachable case.
-  case 1 => 2
-  ^
-[warning] examples/pos/patternmatching/matching-literals.effekt:10:3: Unreachable case.
-  case 2 => 3
-  ^
-[warning] examples/pos/patternmatching/matching-literals.effekt:11:3: Unreachable case.
-  case 3 => 4
-  ^
+---
+2
+3
+---
+2
+---
+2
+4
+4

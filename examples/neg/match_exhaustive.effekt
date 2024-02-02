@@ -1,0 +1,25 @@
+extern type FFI
+
+def guard(): Boolean = false
+
+def foo(t: Option[Int]) =
+  t match {
+    case Some(n) and n > 0 => n - 1 // ERROR Non exhaustive pattern
+    case None() => 0
+  }
+
+def ex1(opt: Option[String]) = opt match { // ERROR missing case for None
+  case _ and guard() and opt is Some(voo) => voo // ERROR Non exhaustive pattern
+  case None() => "world"
+}
+
+def unknownMatch(e: FFI) = e match {} // ERROR Non exhaustive pattern
+
+def ex2(n: Int) = n match { // ERROR Non exhaustive pattern
+  case 1 => 2
+  case 2 => 3
+  case 3 => 4
+}
+
+
+def main() = ()

@@ -374,7 +374,7 @@ object normal {
       case Pure.Make(dataType, ctorTag, vargs) =>
         clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
           .map(body => app(body, Nil, vargs, Nil))
-          .orElse { default }.getOrElse { sys error "Should not happen" }
+          .orElse { default }.getOrElse { sys error "Pattern not exhaustive. This should not happen" }
       case other =>
         Match(scrutinee, clauses, default)
     }

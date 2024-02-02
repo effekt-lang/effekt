@@ -19,7 +19,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def run(input: Typechecked)(using Context) =
     val Typechecked(source, tree, mod) = input
     Context.initTransformerState()
-    Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
+
+    if (Context.messaging.hasErrors) {
+      None
+    } else {
+      Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
+    }
+
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree

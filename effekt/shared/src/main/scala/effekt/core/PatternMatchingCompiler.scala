@@ -43,6 +43,8 @@ import scala.collection.mutable
  * This way, we can also write [[ core.PatternMatchingTests ]] independent of a concrete source
  * pattern.
  *
+ * TODO test matching on the same scrutinee multiple times in a row Maps are the wrong datatype to represent disjunctions
+ *
  * @see https://github.com/effekt-lang/effekt/issues/383
  */
 object PatternMatchingCompiler {
