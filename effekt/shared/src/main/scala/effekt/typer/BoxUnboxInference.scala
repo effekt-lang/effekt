@@ -62,14 +62,14 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case Assign(id, expr) =>
       Assign(id, rewriteAsExpr(expr))
 
-    case If(cond, thn, els) =>
-      If(rewriteAsExpr(cond), rewrite(thn), rewrite(els))
+    case If(guards, thn, els) =>
+      If(guards.map(rewrite), rewrite(thn), rewrite(els))
 
-    case While(cond, body) =>
-      While(rewriteAsExpr(cond), rewrite(body))
+    case While(guards, body, default) =>
+      While(guards.map(rewrite), rewrite(body), default.map(rewrite))
 
-    case Match(sc, clauses) =>
-      Match(rewriteAsExpr(sc), clauses.map(rewrite))
+    case Match(sc, clauses, default) =>
+      Match(rewriteAsExpr(sc), clauses.map(rewrite), default.map(rewrite))
 
     case s @ Select(recv, name) if s.definition.isInstanceOf[Field] =>
       Select(rewriteAsExpr(recv), name)
@@ -198,8 +198,13 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {
-    case MatchClause(pattern, body) =>
-      MatchClause(pattern, rewrite(body))
+    case MatchClause(pattern, guards, body) =>
+      MatchClause(pattern, guards.map(rewrite), rewrite(body))
+  }
+
+  def rewrite(g: MatchGuard)(using Context): MatchGuard = g match {
+    case BooleanGuard(condition) => BooleanGuard(rewriteAsExpr(condition))
+    case PatternGuard(scrutinee, pattern) => PatternGuard(rewriteAsExpr(scrutinee), pattern)
   }
 
   /**

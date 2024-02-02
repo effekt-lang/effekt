@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{ Annotation, Annotations, Context, ContextOps }
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -100,17 +100,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe)     => Result(tpe, Pure)
 
-      case source.If(cond, thn, els) =>
-        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+      case source.If(guards, thn, els) =>
+        val Result((), guardEffs) = checkGuards(guards)
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)
+        Result(Context.join(thnTpe, elsTpe), guardEffs ++ thnEffs ++ elsEffs)
 
-      case source.While(cond, body) =>
-        val Result(_, condEffs) = cond checkAgainst TBoolean
-        val Result(_, bodyEffs) = body checkAgainst TUnit
-        Result(TUnit, condEffs ++ bodyEffs)
+      case source.While(guards, body, default) =>
+        val Result((), guardEffs) = checkGuards(guards)
+        val expectedType = if default.isDefined then expected else Some(TUnit)
+        val Result(bodyTpe, bodyEffs) = checkStmt(body, expectedType)
+        val Result(defaultTpe, defaultEffs) = default.map { s =>
+          checkStmt(s, expectedType)
+        }.getOrElse(Result(TUnit, ConcreteEffects.empty))
+
+        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs)
 
       case source.Var(id) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {
@@ -276,7 +281,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
-      case tree @ source.Match(sc, clauses) =>
+      case tree @ source.Match(sc, clauses, default) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
@@ -285,12 +290,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var resEff = effs
 
         val tpes = clauses.map {
-          case source.MatchClause(p, body) =>
-            // (3) infer types for all clauses
+          case source.MatchClause(p, guards, body) =>
+            // (3) infer types for pattern
             Context.bind(checkPattern(tpe, p))
+            // infer types for guards
+            val Result((), guardEffs) = checkGuards(guards)
+            // check body of the clause
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
-            resEff = resEff ++ clEff
+
+            resEff = resEff ++ clEff ++ guardEffs
             clTpe
+        } ++ default.map { body =>
+          val Result(defaultTpe, defaultEff) = Context in { checkStmt(body, expected) }
+          resEff = resEff ++ defaultEff
+          defaultTpe
         }
 
         // Clauses could in general be empty if there are no constructors
@@ -305,6 +318,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
       case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
     }
+
+  // Sideeffect: binds names in the current scope
+  def checkGuards(guards: List[MatchGuard])(using Context, Captures): Result[Unit] =
+    var effs = ConcreteEffects.empty
+    guards foreach { g =>
+      val Result(bindings, guardEffs) = checkGuard(g)
+      Context.bind(bindings)
+      effs = effs ++ guardEffs
+    }
+    Result((), effs)
+
 
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
@@ -482,13 +506,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //</editor-fold>
 
   //<editor-fold desc="pattern matching">
-
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
-    case p @ source.LiteralPattern(lit) => Context.abort("Matching literals is not supported at the moment.")
-      //      lit.checkAgainst(sc)
-      //      Map.empty
+    case p @ source.LiteralPattern(lit) =>
+      Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(p))
+      Map.empty
     case p @ source.TagPattern(id, patterns) =>
 
       // symbol of the constructor we match against
@@ -521,6 +544,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       bindings
   } match { case res => Context.annotateInferredType(pattern, sc); res }
+
+  def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {
+    case MatchGuard.BooleanGuard(condition) =>
+      val Result(tpe, effs) = checkExpr(condition, Some(TBoolean))
+      Result(Map.empty, effs)
+    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+      val Result(tpe, effs) = checkExpr(scrutinee, None)
+      Result(checkPattern(tpe, pattern), effs)
+  }
 
   //</editor-fold>
 

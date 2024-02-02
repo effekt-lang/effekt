@@ -1,0 +1,27 @@
+import immutable/option
+
+type TrafficLight {
+  Red()
+  Yellow()
+  Green()
+}
+
+def id(a: TrafficLight): TrafficLight = {
+  println("id")
+  a
+}
+
+def showLight(curr: TrafficLight) =
+  if (curr is Red()) {
+    println("red")
+  } else if (id(curr) is Yellow()) {
+    println("yellow")
+  } else if (curr is Green()) {
+    println("green")
+  } else { () }
+
+def main() = {
+  showLight(Red())
+  showLight(Yellow())
+  showLight(Green())
+}

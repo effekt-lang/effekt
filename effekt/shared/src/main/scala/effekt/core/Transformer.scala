@@ -6,9 +6,11 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
-import effekt.source.{ MatchPattern, Term }
+import effekt.core.PatternMatchingCompiler.Clause
+import effekt.source.{ MatchGuard, MatchPattern }
 import effekt.symbols.Binder.{ RegBinder, VarBinder }
 import effekt.typer.Substitutions
+import effekt.util.messages.ErrorReporter
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -17,9 +19,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def run(input: Typechecked)(using Context) =
     val Typechecked(source, tree, mod) = input
     Context.initTransformerState()
-    Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
 
-  def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = {
+    if (Context.messaging.hasErrors) {
+      None
+    } else {
+      Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
+    }
+
+
+  def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree
     val exports = transform(mod.terms)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
@@ -329,41 +337,59 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.BlockLiteral(tps, vps, bps, body) =>
       transformBox(tree)
 
-    case source.If(cond, thn, els) =>
+    case source.If(List(MatchGuard.BooleanGuard(cond)), thn, els) =>
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
+
+    case source.If(guards, thn, els) =>
+      val thnClause = preprocess(Nil, guards, transform(thn))
+      val elsClause = preprocess(Nil, Nil, transform(els))
+      Context.bind(PatternMatchingCompiler.compile(List(thnClause, elsClause)))
+
+    //    case i @ source.If(guards, thn, els) =>
+    //      val compiled = collectClauses(i)
+    //        .map(PatternMatchingCompiler.compile)
+    //        .getOrElse(Context.panic("Should not happen"))
+    //      Context.bind(compiled)
 
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
-    case source.While(cond, body) =>
+    case source.While(guards, body, default) =>
       val loopName = TmpBlock()
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
+
+      // TODO double check: probably we are forgetting the capture of the guards!
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
-      val loop = Block.BlockLit(Nil, Nil, Nil, Nil,
-        insertBindings {
-          Stmt.If(transformAsPure(cond),
-            Stmt.Val(TmpValue(), transform(body), loopCall),
-            Return(Literal((), core.Type.TUnit)))
-        }
-      )
+      val thenBranch = Stmt.Val(TmpValue(), transform(body), loopCall)
+      val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
-      Context.bind(loopName, loop)
-
-      // captures???
-      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
-        Context.warning(pp"Condition to while loop is pure, which might not be intended.")
+      val loopBody = guards match {
+        case List(MatchGuard.BooleanGuard(cond)) =>
+          insertBindings { core.If(transformAsPure(cond), thenBranch, elseBranch) }
+        case _ =>
+          val thenClause = preprocess(Nil, guards, thenBranch)
+          val elseClause = preprocess(Nil, Nil, elseBranch)
+          PatternMatchingCompiler.compile(List(thenClause, elseClause))
       }
+
+      Context.bind(loopName, Block.BlockLit(Nil, Nil, Nil, Nil, loopBody))
+
+      // TODO renable
+      //      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
+      //        Context.warning(pp"Condition to while loop is pure, which might not be intended.")
+      //      }
 
       Context.bind(loopCall)
 
-    case source.Match(sc, cs) =>
+    case source.Match(sc, cs, default) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
       val clauses = cs.map(c => preprocess(scrutinee, c))
-      val compiledMatch = Context.at(tree) { compileMatch(clauses) }
+      val defaultClause = default.map(stmt => preprocess(Nil, Nil, transform(stmt))).toList
+      val compiledMatch = Context.at(tree) { PatternMatchingCompiler.compile(clauses ++ defaultClause) }
       Context.bind(compiledMatch)
 
     case source.TryHandle(prog, handlers) =>
@@ -447,6 +473,24 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   /**
+   * Aims to flatten sequenced ifs into a single match
+   */
+  def collectClauses(term: source.Term)(using Context): Option[List[Clause]] = term match {
+    case source.If(guards, thn, els) =>
+      val thenClause = preprocess(Nil, guards, transform(thn))
+      val elseClauses = collectClauses(els) match {
+        case Some(clauses) => clauses
+        case None => List(preprocess(Nil, Nil, transform(els)))
+      }
+      Some(thenClause :: elseClauses)
+    case _ => None
+  }
+  def collectClauses(stmt: source.Stmt)(using Context): Option[List[Clause]] = stmt match {
+    case source.Stmt.Return(d) => collectClauses(d)
+    case _ => None
+  }
+
+  /**
    * Establishes a canonical ordering of methods by using
    * the order in which they are declared in the signature (like with handlers)
    */
@@ -479,6 +523,74 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     })
   }
 
+  def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause =
+    preprocess(List((sc, clause.pattern)), clause.guards, transform(clause.body))
+
+  def preprocess(patterns: List[(ValueVar, source.MatchPattern)], guards: List[source.MatchGuard], body: core.Stmt)(using Context): Clause = {
+    import PatternMatchingCompiler.*
+
+    def boundInPattern(p: source.MatchPattern): List[core.ValueParam] = p match {
+      case p @ source.AnyPattern(id) => List(ValueParam(p.symbol))
+      case source.TagPattern(id, patterns) => patterns.flatMap(boundInPattern)
+      case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+    }
+    def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
+      case MatchGuard.BooleanGuard(condition) => Nil
+      case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
+    }
+    def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
+      Context.module.findPrelude.terms("infixEq") collect {
+        case sym: Callable => (sym, sym.toType)
+      } collectFirst {
+        // specialized version
+        case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
+          (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
+        // generic version
+        case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
+            if t1 == tparam && t2 == tparam =>
+          (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
+      } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
+
+    // create joinpoint
+    val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
+    val joinpoint = Context.bind(TmpBlock(), BlockLit(Nil, Nil, params, Nil, body))
+
+    def transformPattern(p: source.MatchPattern): Pattern = p match {
+      case source.AnyPattern(id) =>
+        Pattern.Any(id.symbol)
+      case source.TagPattern(id, patterns) =>
+        Pattern.Tag(id.symbol, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
+      case source.IgnorePattern() =>
+        Pattern.Ignore()
+      case source.LiteralPattern(source.Literal(value, tpe)) =>
+        Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
+    }
+
+    def transformGuard(p: source.MatchGuard): List[Condition] =
+      val (cond, bindings) = Context.withBindings {
+        p match {
+          case MatchGuard.BooleanGuard(condition) =>
+            Condition.Predicate(transformAsPure(condition))
+          case MatchGuard.PatternGuard(scrutinee, pattern) =>
+            val x = transformAsPure(scrutinee) match {
+              case x : Pure.ValueVar => x
+              case _ => Context.panic("Should not happen")
+            }
+            Condition.Patterns(Map(x -> transformPattern(pattern)))
+        }
+      }
+      bindings.toList.map {
+        case Binding.Val(name, binding) => Condition.Val(name, binding)
+        case Binding.Let(name, binding) => Condition.Let(name, binding)
+        case Binding.Def(name, binding) => Context.panic("Should not happen")
+      } :+ cond
+
+    val transformedPatterns = patterns.map { case (sc, p) => sc -> transformPattern(p) }.toMap
+    val transformedGuards   = guards.flatMap(transformGuard)
+    val conditions = if transformedPatterns.isEmpty then transformedGuards else Condition.Patterns(transformedPatterns) :: guards.flatMap(transformGuard)
+
+    Clause(conditions, joinpoint, params.map(p => core.ValueVar(p.id, p.tpe)))
+  }
 
   /**
    * Computes the block type the selected symbol.
@@ -574,129 +686,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case CaptUnificationVar(role) => Context.panic(pp"$capt should be a concrete capture set in this phase.")
     case CaptureSet(captures) => captures.map(x => x: Symbol) // that is really a noop...
   }
-
-
-  // Match Compiler
-  // --------------
-  // The implementation of the match compiler follows closely the short paper:
-  //   Jules Jacob
-  //   How to compile pattern matching
-  //   https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
-  //
-  // There also is a more advanced Rust implementation that we could look at:
-  //   https://gitlab.com/yorickpeterse/pattern-matching-in-rust/-/tree/main/jacobs2021
-
-  // case pats => label(args...)
-  private case class Clause(patterns: Map[ValueVar, source.MatchPattern], label: BlockVar, args: List[ValueVar])
-
-  // Uses the bind effect to bind the right hand sides of clauses!
-  private def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause = {
-    def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
-      case p @ source.AnyPattern(id) => List(p.symbol)
-      case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)
-      case _ => Nil
-    }
-    val params = boundVars(clause.pattern).map { p => (p, transform(Context.valueTypeOf(p))) }
-    val body = transform(clause.body)
-    val blockLit = BlockLit(Nil, Nil, params.map(core.ValueParam.apply), Nil, body)
-
-    val joinpoint = Context.bind(TmpBlock(), blockLit)
-    Clause(Map(sc -> clause.pattern), joinpoint, params.map(core.ValueVar.apply))
-  }
-
-  /**
-   * The match compiler works with
-   * - a sequence of clauses that represent alternatives (disjunction)
-   * - each sequence contains a list of patterns that all have to match (conjunction).
-   */
-  private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
-
-    // matching on void will result in this case
-    if (clauses.isEmpty) return core.Hole()
-
-    val normalizedClauses = clauses.map(normalize)
-
-    def jumpToBranch(target: BlockVar, vargs: List[ValueVar]) =
-      core.App(target, Nil, vargs, Nil)
-
-    // (1) Check whether we are already successful
-    val Clause(patterns, target, args) = normalizedClauses.head
-    if (patterns.isEmpty) { return jumpToBranch(target, args) }
-
-    def branchingHeuristic =
-      patterns.keys.maxBy(v => normalizedClauses.count {
-        case Clause(ps, _, _) => ps.contains(v)
-      })
-
-    // (2) Choose the variable to split on
-    val splitVar = branchingHeuristic
-
-    def mentionedVariants = normalizedClauses
-      .flatMap(_.patterns.get(splitVar))
-      .collect { case p : source.TagPattern => p.definition }
-
-    val variants = mentionedVariants.distinct
-
-    val clausesFor = collection.mutable.Map.empty[Constructor, Vector[Clause]]
-    var defaults = Vector.empty[Clause]
-
-    def addClause(c: Constructor, cl: Clause): Unit =
-      val clauses = clausesFor.getOrElse(c, Vector.empty)
-      clausesFor.update(c, clauses :+ cl)
-
-    def addDefault(cl: Clause): Unit =
-      defaults = defaults :+ cl
-
-    var varsFor: Map[Constructor, List[core.ValueVar]] = Map.empty
-    def fieldVarsFor(c: Constructor, pats: List[MatchPattern]): List[core.ValueVar] =
-      varsFor.getOrElse(c, {
-        val newVars: List[core.ValueVar] = pats.map { pat =>
-          core.ValueVar(TmpValue(), transform(Context.inferredTypeOf(pat)))
-        }
-        varsFor = varsFor.updated(c, newVars)
-        newVars
-      })
-
-    normalizedClauses.foreach {
-      case c @ Clause(patterns, target, args) => patterns.get(splitVar) match {
-        case Some(p @ source.TagPattern(id, ps)) =>
-          val constructor = p.definition
-          val fieldVars = fieldVarsFor(constructor, ps)
-          addClause(constructor, Clause(patterns - splitVar ++ fieldVars.zip(ps), target, args))
-        case Some(_) => Context.panic("Should not happen")
-        case None =>
-          // Clauses that don't match on that var are duplicated.
-          // So we want to choose our branching heuristic to minimize this
-          addDefault(c)
-          // THIS ONE IS NOT LINEAR
-          variants.foreach { v => addClause(v, c) }
-      }
-    }
-
-    val branches = variants.toList.map { v =>
-      val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
-      val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
-      val blockLit: BlockLit = BlockLit(Nil, Nil, params, Nil, body)
-      (v, blockLit)
-    }
-
-    val default = if defaults.isEmpty then None else Some(compileMatch(defaults))
-
-    core.Match(splitVar, branches, default)
-  }
-
-  /**
-   * Substitutes IdPatterns and removes wildcards (and literal patterns -- which are already ruled out by Typer);
-   * only TagPatterns are left.
-   */
-  private def normalize(clause: Clause)(using Context): Clause = {
-    val Clause(patterns, target, args) = clause
-    val substitution = patterns.collect { case (v, source.AnyPattern(id)) => id.symbol -> v }
-    val tagPatterns = patterns.collect { case (v, p: source.TagPattern) => v -> p }
-
-    Clause(tagPatterns, target, args.map(v => substitution.getOrElse(v.id, v)))
-  }
-
 
   // Helpers
   // -------

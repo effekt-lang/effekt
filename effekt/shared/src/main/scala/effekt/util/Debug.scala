@@ -7,6 +7,8 @@ import effekt.symbols.TypePrinter
 lazy val showGeneric: PartialFunction[Any, String] = {
   case l: List[_] =>
     l.map(show).mkString("List(", ", ", ")")
+  case o: Option[_] =>
+    o.map(show).mkString("Option(", ", ", ")")
   case other => other.toString
 }
 

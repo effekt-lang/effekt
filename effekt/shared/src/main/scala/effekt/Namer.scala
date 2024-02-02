@@ -7,10 +7,9 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
-
 import scopes.*
 
 /**
@@ -345,14 +344,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
-    case source.If(cond, thn, els) =>
-      resolveGeneric(cond);
-      Context scoped { resolveGeneric(thn) }
+    case source.If(guards, thn, els) =>
+      Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
       Context scoped { resolveGeneric(els) }
 
-    case source.While(cond, block) =>
-      resolveGeneric(cond);
-      Context scoped { resolveGeneric(block) }
+    case source.While(guards, block, default) =>
+      Context scoped { guards.foreach(resolve); resolveGeneric(block) }
+      Context scoped { default foreach resolveGeneric }
 
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
@@ -402,27 +400,29 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
 
-    case source.MatchClause(pattern, body) =>
+    case source.MatchClause(pattern, guards, body) =>
       val ps = resolve(pattern)
+      Context scoped {
+        // variables bound by patterns are available in the guards.
+        ps.foreach { Context.bind }
+        guards.foreach { resolve }
 
-      // wellformedness: only linear patterns
-      var names: Set[Name] = Set.empty
-      ps foreach { p =>
-        if (names contains p.name)
-          Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
+        // wellformedness: only linear patterns
+        var names: Set[Name] = Set.empty
+        ps foreach { p =>
+          if (names contains p.name)
+            Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
 
-        val cs = Context.allConstructorsFor(p.name.name)
-        if (cs.nonEmpty) {
-          Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+          val cs = Context.allConstructorsFor(p.name.name)
+          if (cs.nonEmpty) {
+            Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+          }
+          names = names + p.name
         }
 
-        names = names + p.name
-      }
-
-
-      Context scoped {
-        ps.foreach { Context.bind }
-        resolveGeneric(body)
+        Context scoped {
+          resolveGeneric(body)
+        }
       }
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
@@ -560,6 +560,14 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       patterns.flatMap { resolve }
+  }
+
+  def resolve(p: source.MatchGuard)(using Context): Unit = p match {
+    case MatchGuard.BooleanGuard(condition) => resolveGeneric(condition)
+    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+      resolveGeneric(scrutinee)
+      val ps = resolve(pattern)
+      ps.foreach { Context.bind }
   }
 
   /**

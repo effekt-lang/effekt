@@ -322,11 +322,11 @@ object CoreParsers {
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.program, input)
 
-  def statement(input: String, names: Map[String, Id] = Map.empty): ParseResult[Stmt] =
+  def statement(input: String, names: Names): ParseResult[Stmt] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.stmt, input)
 
-  def definition(input: String, names: Map[String, Id] = Map.empty): ParseResult[Definition] =
+  def definition(input: String, names: Names): ParseResult[Definition] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.definition, input)
 }

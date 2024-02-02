@@ -1,0 +1,9 @@
+import immutable/option
+
+def ex1(opt: Option[Int]) = opt match {
+  case Some(v) => "hello"
+  case _ => "default"
+  case None() => "world"
+}
+
+def main() = println(ex1(None()))

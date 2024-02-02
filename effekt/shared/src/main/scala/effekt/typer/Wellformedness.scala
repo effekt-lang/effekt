@@ -4,8 +4,10 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{ Def, ExprTarget, IdTarget, MatchPattern, Tree }
+import effekt.source.{ Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
 import effekt.source.Tree.{ Query, Visit }
+
+import scala.collection.mutable
 
 class WFContext(var effectsInScope: List[Interface]) {
   def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
@@ -107,12 +109,14 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
       scoped { query(body) }
 
-    case tree @ source.Match(scrutinee, clauses) => Context.at(tree) {
-      val tpe = Context.inferredTypeOf(scrutinee)
-      checkExhaustive(tpe, clauses)
+    case tree @ source.Match(scrutinee, clauses, default) => Context.at(tree) {
+      // TODO copy annotations from default to synthesized defaultClause (in particular positions)
+      val defaultClause = default.toList.map(body => source.MatchClause(source.IgnorePattern(), Nil, body))
+      ExhaustivityChecker.checkExhaustive(scrutinee, clauses ++ defaultClause)
 
       query(scrutinee)
       clauses foreach { cl => scoped { query(cl) }}
+      default foreach query
     }
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
@@ -128,103 +132,6 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
      */
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       WF.addEffect(d.symbol)
-  }
-
-  /**
-   * TODO exhaustivity check should be constructive:
-   * - non exhaustive pattern match should generate a list of patterns, so the IDE can insert them
-   * - redundant cases should generate a list of cases that can be deleted.
-   */
-  def checkExhaustive(scrutinee: ValueType, cls: List[source.MatchClause])(using Context): Unit = {
-
-    import source.MatchPattern.*
-
-    case class Clause(patterns: Map[Trace, TagPattern], tree: source.MatchClause)
-
-    enum Trace {
-      case Root
-      case Child(c: Constructor, field: Symbol, outer: Trace)
-    }
-
-    val initialClauses: List[Clause] = cls.map { c => c.pattern match {
-      case _: AnyPattern | _: IgnorePattern => Clause(Map.empty, c)
-      case t: TagPattern => Clause(Map(Trace.Root -> t), c)
-      case _: LiteralPattern => Context.abort("Literal patterns not supported at the moment.")
-    }}
-
-
-    object redundant {
-      def use(cl: source.MatchClause): Unit = redundantClauses = redundantClauses - hashClause(cl)
-      def get: List[source.MatchClause] = redundantClauses.map(_._2).toList
-
-      private var redundantClauses: Set[(Int, source.MatchClause)] = cls.map(hashClause).toSet
-      private def hashClause(cl: source.MatchClause): (Int, source.MatchClause) = (System.identityHashCode(cl), cl)
-    }
-
-    object missing {
-      var missingCases: List[(Constructor, Trace)] = Nil
-      def add(trace: Trace, c: Constructor) = missingCases = (c, trace) :: missingCases
-      def get: List[(Constructor, Trace)] = missingCases
-    }
-
-    def splitType(trace: Trace, scrutinee: ValueType, clauses: List[Clause]): Unit = {
-      val tpe = scrutinee match {
-        case ValueType.ValueTypeApp(t, _) => t
-        // TODO maybe report error here???
-        case _ => return // missing.add(trace);
-      }
-      split(trace, tpe, clauses)
-    }
-
-    def split(trace: Trace, scrutinee: TypeConstructor, clauses: List[Clause]): Unit = {
-      val constructors = scrutinee match {
-        case t: TypeConstructor.DataType => t.constructors
-        case t: TypeConstructor.Record => List(t.constructor)
-        case _ => return // missing.add(trace);
-      }
-
-      def splitOn(c: Constructor): List[Clause] = clauses.flatMap {
-        case cl @ Clause(patterns, tree) => patterns.get(trace) match {
-          // Only keep clause if it matches on the same constructor
-          case Some(t) if t.definition == c =>
-            val fieldPatterns = (c.fields zip t.patterns).collect {
-              case (field, t: TagPattern) => (Trace.Child(c, field, trace) -> t)
-            }
-            Some(Clause(patterns - trace ++ fieldPatterns.toMap, tree))
-
-          // wrong constructor
-          case Some(_) => None
-
-          // not matching on this path, so it is a valid clause
-          case None => Some(cl)
-        }
-      }
-
-      constructors.foreach { c => splitOn(c) match {
-        case Nil => missing.add(trace, c)
-        case cl :: rest => work(cl, rest)
-      }}
-    }
-
-    def work(next: Clause, rest: List[Clause]): Unit = next.patterns.headOption match {
-      // Successful match
-      case None => redundant.use(next.tree)
-
-      // Work to do
-      case Some((nextTrace, nextConstructor)) =>
-        val tpe = nextConstructor.definition.tpe
-        split(nextTrace, tpe, next :: rest)
-    }
-
-    splitType(Trace.Root, scrutinee, initialClauses)
-
-    redundant.get.foreach { p =>
-      Context.at(p) { Context.warning(pp"Unreachable case.") }
-    }
-
-    missing.get.foreach { (ctor, trace) =>
-      Context.error(pp"Non exhaustive pattern matching, missing case for ${ ctor }")
-    }
   }
 
   override def scoped(action: => Unit)(using C: Context, ctx: WFContext): Unit = {
