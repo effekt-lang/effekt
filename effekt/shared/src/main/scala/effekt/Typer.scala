@@ -535,7 +535,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       var bindings = Map.empty[Symbol, ValueType]
 
       if (patterns.size != vps.size)
-          Context.error(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
+          Context.abort(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
 
       (patterns zip vps) foreach {
         case (pat, par: ValueType) =>
