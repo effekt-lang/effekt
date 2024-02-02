@@ -17,7 +17,7 @@ class JIT() extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
-  def extension = ".rpyeffect"
+  def extension = ".mcore.json"
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }

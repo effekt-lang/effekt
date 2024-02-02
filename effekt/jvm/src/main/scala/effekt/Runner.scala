@@ -362,7 +362,8 @@ object JITRunner extends Runner[String] {
     "%s-%s".format(arch, os)
   }
 
-  def findAsmJar(): Either[String, effekt.util.paths.File] = ???
+  def findAsmBinary(): Either[String, effekt.util.paths.File] =
+    Right(file("../../effect-jit/rpyeffect-asm/target/universal/stage/bin/rpyeffectasm")) // TODO FIXME hardcoded for now
 
   /**
    * Tries to find the path to the JIT binary. Proceeds in the following order:
@@ -400,16 +401,16 @@ object JITRunner extends Runner[String] {
       return Right(jarPath / binaryName)
     }
 
-     Left("Cannot find path to the JIT binary")
+    Right(file(s"../../effect-jit/rpyeffect-jit/out/bin/${platform}/rpyeffect-jit")) // FIXME TODO hardcoded for now // Left("Cannot find path to the JIT binary")
   }
 
   override def checkSetup(): Either[String, Unit] = {
     findJITBinary(platform).flatMap{ jitBinaryPath =>
         if canRunExecutable(jitBinaryPath.unixPath, "--check") then Right(())
-        else Left("Cannot run jit executable file at %s.".format(jitBinaryPath.unixPath))
-    }.flatMap{ _ => findAsmJar() }.flatMap { asmJarPath =>
-      if canRunExecutable(???, "--check") then Right(())
-      else Left("Cannot run asm jar at %s.".format(asmJarPath.unixPath))
+        else Left("Cannot run jit executable file at %s.".format(jitBinaryPath.canonicalPath))
+    }.flatMap{ _ => findAsmBinary() }.flatMap { asmBinPath =>
+      if canRunExecutable(asmBinPath.canonicalPath, "--check") then Right(())
+      else Left("Cannot run asm at %s.".format(asmBinPath.unixPath))
     }
   }
 
@@ -417,12 +418,12 @@ object JITRunner extends Runner[String] {
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".mcore.json")).unixPath
 
-    val asmJar = findAsmJar().getOrElse{ C.abort("Cannot find rpyeffect-asm.") }
-    //val jitBinary = findJITBinary(platform).getOrElse{ C.abort("Cannot find JIT binary.") }
+    val asmBinary = findAsmBinary().getOrElse{ C.abort("Cannot find rpyeffect-asm.") }
+    val jitBinary = findJITBinary(platform).getOrElse{ C.abort("Cannot find JIT binary.") }
     // TODO check that jitBinary is on PATH and warn otherwise (and use exe:<jitBinary>)
 
     val executableFile = basePath
-    exec(??? /* rpyeffect-asm */, "--from", "mcore-json", "--to", "exe", "--output", executableFile)
+    exec(asmBinary.unixPath, "--from", "mcore-json", "--to", s"exe:${jitBinary}", (out / path).canonicalPath, executableFile)
     executableFile
   }
 
@@ -439,3 +440,4 @@ object JITRunner extends Runner[String] {
     }
   }
 }
+
