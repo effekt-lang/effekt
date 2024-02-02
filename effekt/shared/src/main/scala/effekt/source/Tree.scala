@@ -434,13 +434,6 @@ enum MatchPattern extends Tree {
   case IgnorePattern()
 
   /**
-   * A pattern which matches on different alternatives
-   *
-   *   case Red | Green => ...
-   */
-  case OrPattern(alternatives: List[MatchPattern])
-
-  /**
    * A pattern that matches a single literal value
    */
   case LiteralPattern(l: Literal)

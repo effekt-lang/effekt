@@ -560,11 +560,6 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       patterns.flatMap { resolve }
-    case source.OrPattern(patterns) =>
-      val paramsLists = patterns.map { resolve }
-      def namesBoundBy(ps: List[ValueParam]): Set[Name] = ps.map(_.name).toSet
-      val commonNames = paramsLists.map(namesBoundBy).reduce(_ intersect _)
-      paramsLists.head.filter(commonNames contains _.name)
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {

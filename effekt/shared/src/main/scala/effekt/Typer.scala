@@ -512,23 +512,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case p @ source.LiteralPattern(lit) =>
       Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(p))
       Map.empty
-    case p @ source.OrPattern(patterns) =>
-      // TODO implement, check that all bindings have compatible types.
-      var typeForName: Map[Name, List[ValueType]] = Map.empty
-
-      patterns.flatMap { p =>
-        val bindings = checkPattern(sc, p)
-        bindings.foreach { case (sym, tpe) =>
-          val name = sym.name
-          val typesSoFar = typeForName.getOrElse(name, List())
-          typeForName = typeForName.updated(name, tpe :: typesSoFar)
-        }
-        bindings
-      }
-      // TODO rebind all symbols to the JOIN
-      typeForName.foreach { case (name, tpes) => Context.join(tpes: _*) }
-      // TODO return rebound symbols
-      Map.empty
     case p @ source.TagPattern(id, patterns) =>
 
       // symbol of the constructor we match against

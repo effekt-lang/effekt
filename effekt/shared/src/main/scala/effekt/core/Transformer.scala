@@ -532,7 +532,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     def boundInPattern(p: source.MatchPattern): List[core.ValueParam] = p match {
       case p @ source.AnyPattern(id) => List(ValueParam(p.symbol))
       case source.TagPattern(id, patterns) => patterns.flatMap(boundInPattern)
-      case source.OrPattern(patterns) => patterns.flatMap(boundInPattern).distinct
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
     }
     def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
@@ -565,8 +564,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Ignore()
       case source.LiteralPattern(source.Literal(value, tpe)) =>
         Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
-      case source.OrPattern(patterns) =>
-        Context.abort("Not supported yet")
     }
 
     def transformGuard(p: source.MatchGuard): List[Condition] =

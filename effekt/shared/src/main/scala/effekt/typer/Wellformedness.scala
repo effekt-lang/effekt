@@ -202,7 +202,6 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       case IgnorePattern() => Pattern.Any()
       case p @ TagPattern(id, patterns) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
       case LiteralPattern(lit) => Pattern.Literal(lit.value, lit.tpe)
-      case _: OrPattern => ???
     }
     def preprocessGuard(g: source.MatchGuard): Condition = g match {
       case MatchGuard.BooleanGuard(condition) =>
