@@ -5,7 +5,7 @@ package jit
 import effekt.context.Context
 import effekt.symbols.{BlockSymbol, Symbol, ValueSymbol}
 
-type Id = Symbol
+type Id = core.Id
 case class Clause(params: List[LhsOperand], body: Term) extends Tree
 
 sealed trait Tree
@@ -59,9 +59,9 @@ case class DOp(tag: Term, op: Id, args: List[Term], k: Clause, rtpe: Type) exten
 case class Primitive(name: String, args: List[Term], returns: List[LhsOperand], rest: Term) extends Term
 
 enum Literal extends Term {
-  case Int(value: Int)
-  case Double(value: Double)
-  case String(value: String)
+  case Int(value: scala.Int)
+  case Double(value: scala.Double)
+  case String(value: java.lang.String)
   case NullLabel
   case Unit
 

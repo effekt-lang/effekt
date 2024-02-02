@@ -41,7 +41,8 @@ class JIT() extends Compiler[String] {
   // ------------------------
   // Source => Core => JIT
   lazy val Compile = allToCore(Core) andThen Aggregate map {
-    case CoreTransformed(source, tree, mod, core) => ???
+    case CoreTransformed(source, tree, mod, core) =>
+      (mod, jit.Transformer.transform(core, mod))
   }
 
   lazy val Core = Phase.cached("core") {
@@ -55,9 +56,9 @@ class JIT() extends Compiler[String] {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) map { c => c.main }
     val afterJIT = afterCore map {
-      case prog =>
+       core =>
         // we don't print declarations here.
-        ???
+        jit.Transformer.transform(core.core, core.mod)
     }
   }
 
