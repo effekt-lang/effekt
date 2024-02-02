@@ -37,15 +37,23 @@ object WebTests extends TestSuite {
         mod.module
       }
 
-    def evaluate[A](imports: List[String], content: String) = {
-      server.writeFile("interactive.effekt", imports.map(i => s"import $i").mkString("\n") + s"\n\ndef main() = ${content}")
+    def evaluate[A](imports: List[String], content: String) =
+      run[A](imports, s"\n\ndef main() = { ${content} }\n")
+
+    def run[A](imports: List[String], content: String) = {
+      server.writeFile("interactive.effekt", imports.map(i => s"import $i").mkString("\n") + s"\n\n${content}")
       val mainFile = server.compileFile("interactive.effekt")
+
       load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]
     }
 
     test("Evaluate simple expressions in REPL") {
       val result = evaluate[Int](List(), "1 + 2")
       assert(result == 3)
+    }
+
+    test("Evaluate expressions that uses a builtin which relies on an extern literal") {
+      evaluate(List(), "println(42)")
     }
 
     test("Evaluate expressions using stdlib in REPL") {
@@ -60,6 +68,23 @@ object WebTests extends TestSuite {
       val result = server.showCore("test.effekt")
 
       assert(result.contains("infixAdd"))
+    }
+
+    test("Load file with multiline extern strings") {
+      val result = evaluate[Int](List("immutable/list", "mutable/heap"), "Cons(1, Cons(2, Nil())).size")
+      assert(result == 2)
+    }
+
+    test("Extern resources on website") {
+      val result = run[String](Nil,
+        """interface Greet { }
+          |
+          |extern resource my_resource : Greet
+          |
+          |def main() = "hello"
+          |""".stripMargin)
+
+      assert(result == "hello")
     }
   }
 }

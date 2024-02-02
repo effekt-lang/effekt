@@ -10,7 +10,7 @@ class MLTests extends EffektTests {
 
   def backendName: String = "ml"
 
-  override lazy val included: List[File] = List(
+  override lazy val positives: List[File] = List(
     examplesDir / "ml",
     examplesDir / "benchmarks",
     examplesDir / "pos",

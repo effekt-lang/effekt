@@ -10,17 +10,17 @@ def locally[R] { f: => R }: R = f()
 // String ops
 // ==========
 extern pure def infixConcat(s1: String, s2: String): String =
-  "(string-append s1 s2)"
+  "(string-append ${s1} ${s2})"
 
 // TODO implement
 extern pure def show[R](value: R): String =
-  "(show_impl value)"
+  "(show_impl ${value})"
 
 extern io def println[R](r: R): Unit =
-  "(println_impl r)"
+  "(println_impl ${r})"
 
 extern io def error[R](msg: String): R =
-  "(raise msg)"
+  "(raise ${msg})"
 
 extern io def random(): Double =
   "(random 1.0)"
@@ -28,58 +28,58 @@ extern io def random(): Double =
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(+ x y)"
+  "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(* x y)"
+  "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(floor (/ x y))"
+  "(floor (/ ${x} ${y}))"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(- x y)"
+  "(- ${x} ${y})"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(modulo x y)"
+  "(modulo ${x} ${y})"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(+ x y)"
+  "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(* x y)"
+  "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(/ x y)"
+  "(/ ${x} ${y})"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(- x y)"
+  "(- ${x} ${y})"
 
 extern pure def cos(x: Double): Double =
-  "(cos x)"
+  "(cos ${x})"
 
 extern pure def sin(x: Double): Double =
-  "(sin x)"
+  "(sin ${x})"
 
 extern pure def atan(x: Double): Double =
-  "(atan x)"
+  "(atan ${x})"
 
 extern pure def tan(x: Double): Double =
-  "(tan x)"
+  "(tan ${x})"
 
 extern pure def sqrt(x: Double): Double =
-  "(sqrt x)"
+  "(sqrt ${x})"
 
 extern pure def square(x: Double): Double =
-  "(* x x)"
+  "(* x ${x})"
 
 extern pure def log(x: Double): Double =
-  "(log x)"
+  "(log ${x})"
 
 extern pure def log1p(x: Double): Double =
-  "(log (+ x 1))"
+  "(log (+ ${x} 1))"
 
 extern pure def exp(x: Double): Double =
-  "(exp x)"
+  "(exp ${x})"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
@@ -88,10 +88,10 @@ extern pure def _pi(): Double =
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "(round d)"
+  "(round ${d})"
 
 extern pure def toDouble(d: Int): Double =
-  "d"
+  "${d}"
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -102,50 +102,50 @@ def max(n: Int, m: Int): Int =
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Boolean =
-  "(equal_impl x y)"
+  "(equal_impl ${x} ${y})"
 
 extern pure def infixNeq[R](x: R, y: R): Boolean =
-  "(not (equal_impl x y))"
+  "(not (equal_impl ${x} ${y}))"
 
 extern pure def infixLt(x: Int, y: Int): Boolean =
-  "(< x y)"
+  "(< ${x} ${y})"
 
 extern pure def infixLte(x: Int, y: Int): Boolean =
-  "(<= x y)"
+  "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Int, y: Int): Boolean =
-  "(> x y)"
+  "(> ${x} ${y})"
 
 extern pure def infixGte(x: Int, y: Int): Boolean =
-  "(>= x y)"
+  "(>= ${x} ${y})"
 
 extern pure def infixLt(x: Double, y: Double): Boolean =
-  "(< x y)"
+  "(< ${x} ${y})"
 
 extern pure def infixLte(x: Double, y: Double): Boolean =
-  "(<= x y)"
+  "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Double, y: Double): Boolean =
-  "(> x y)"
+  "(> ${x} ${y})"
 
 extern pure def infixGte(x: Double, y: Double): Boolean =
-  "(>= x y)"
+  "(>= ${x} ${y})"
 
 // Boolean ops
 // ===========
 // for now those are considered eager
 extern pure def not(b: Boolean): Boolean =
-  "(not b)"
+  "(not ${b})"
 
 extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-  "(or x y)"
+  "(or ${x} ${y})"
 
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-  "(and x y)"
+  "(and ${x} ${y})"
 
 // Should only be used internally since values in Effekt should not be undefined
 extern pure def isUndefined[A](value: A): Boolean =
-  "(eq? value #f)"
+  "(eq? ${value} #f)"
 
 // Pairs
 // =====
@@ -159,7 +159,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "(raise msg)"
+  "(raise ${msg})"
 
 interface Exception[E] {
   def raise[A](exception: E, msg: String): A
@@ -213,4 +213,4 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // ============
 // should only be used with pure blocks
 extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit =
-  "(delayed (display (measure (lambda () (run ((block here)))) warmup iterations)))"
+  "(delayed (display (measure (lambda () (run ((${box block} here)))) ${warmup} ${iterations})))"

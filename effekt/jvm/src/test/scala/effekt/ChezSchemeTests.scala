@@ -9,7 +9,7 @@ import scala.language.implicitConversions
 
 abstract class ChezSchemeTests extends EffektTests {
 
-  override def included: List[File] = List(
+  override def positives: List[File] = List(
     examplesDir / "pos",
     examplesDir / "casestudies",
     examplesDir / "chez",
@@ -73,7 +73,6 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
   def backendName = "chez-lift"
 
   override def ignored: List[File] = super.ignored ++ List(
-    // global mutable state is not yet supported
 
     // regions are not yet supported
     examplesDir / "benchmarks" / "generator.effekt",
@@ -82,6 +81,6 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
 
     // known issues:
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
-    examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidence, which it does not need
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt", // ffi is passed evidence, which it does not need
   )
 }

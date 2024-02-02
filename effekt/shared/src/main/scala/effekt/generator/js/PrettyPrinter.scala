@@ -2,6 +2,7 @@ package effekt
 package generator
 package js
 
+import effekt.util.intercalate
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -81,11 +82,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   // some helpers
 
   val emptyline: Doc = line <> line
-
-  def intercalate[A](a : List[A], b : List[A]): List[A] = a match {
-    case first :: rest => first :: intercalate(b, rest)
-    case _             => b
-  }
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 

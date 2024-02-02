@@ -4,45 +4,121 @@ package js
 
 import effekt.context.Context
 import effekt.context.assertions.*
-import effekt.core.{given, *}
+import effekt.core.{ Block, *, given }
 import effekt.util.paths.*
 import effekt.{ Compiled, CoreTransformed, symbols }
-import effekt.symbols.{ Symbol, Module, Wildcard }
-
+import effekt.symbols.{ Module, Symbol, Wildcard }
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 import scala.language.implicitConversions
 
-object TransformerMonadic extends Transformer {
+/**
+ * Used by the REPL and compiler
+ */
+object TransformerMonadicWhole extends TransformerMonadic {
+
+  /**
+   * Exports are used in separate compilation (on the website), since they cannot be inlined [[inlineExtern]].
+   *
+   * In whole-program, however, we should only export those symbols that we have not inlined away, already.
+   */
+  override def shouldExport(id: Id)(using D: DeclarationContext): Boolean =
+    D.findExternDef(id).forall { d => !canInline(d) }
+
+  /**
+   * We only inline non-control effecting externs without block parameters
+   */
+  override def canInline(f: Extern): Boolean = f match {
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+      val hasBlockParameters = bparams.nonEmpty
+      val isControlEffecting = annotatedCapture contains symbols.builtins.ControlCapability.capture
+      !hasBlockParameters && !isControlEffecting
+    case Extern.Include(contents) => false
+  }
+
+  /**
+   * Entrypoint used by the compiler to compile whole programs
+   */
+  def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
+    val exports = List(js.Export(JSName("main"), js.Lambda(Nil, run(js.Call(nameRef(mainSymbol), Nil)))))
+
+    val moduleDecl = input.core
+
+    given DeclarationContext = new DeclarationContext(moduleDecl.declarations, moduleDecl.externs)
+
+    toJS(moduleDecl, Nil, exports)
+}
+
+/**
+ * Used by the website
+ */
+object TransformerMonadicSeparate extends TransformerMonadic {
+
+  override def canInline(f: Extern): Boolean = false
+
+  /**
+   * Entrypoint used by the LSP server to show the compiled output AND used by
+   * the website.
+   */
+  def compileSeparate(input: AllTransformed)(using Context): js.Module = {
+    val module = input.main.mod
+    val mainModuleDecl = input.main.core
+
+    val allDeclarations = input.dependencies.foldLeft(mainModuleDecl.declarations) {
+      case (decls, dependency) => decls ++ dependency.core.declarations
+    }
+
+    val allExterns = input.dependencies.foldLeft(mainModuleDecl.externs) {
+      case (externs, dependency) => externs ++ dependency.core.externs
+    }
+
+    given D: DeclarationContext = new DeclarationContext(allDeclarations, allExterns)
+
+    // also search all mains and use last one (shadowing), if any.
+    val allMains = mainModuleDecl.exports.collect {
+      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
+    }
+
+    val required = usedImports(input.main)
+
+    // this is mostly to import $effekt
+    val dependencies = module.dependencies.map {
+      d => js.Import.All(JSName(jsModuleName(d.path)), jsModuleFile(d.path))
+    }
+    val imports = dependencies ++ required.toList.map {
+      case (mod, syms) =>
+        js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
+    }
+
+    val provided = mainModuleDecl.exports
+    val exports = allMains.lastOption.toList ++ provided.collect {
+      case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
+    }
+
+    toJS(mainModuleDecl, imports, exports)
+  }
+}
+
+trait TransformerMonadic extends Transformer {
 
   // return BODY.run()
   def run(body: js.Expr): js.Stmt =
     js.Return(js.Call(js.Member(body, JSName("run")), Nil))
 
-  def transformModule(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module =
-    toJS(module, imports, exports)
-
   def toJS(p: Param): JSName = nameDef(p.id)
 
-  // For externs, do not sanitize anything. We assume the programmer
-  // knows what they are doing.
-  def externParams(p: Param)(using C: Context): JSName = {
-    val name = p.id.name.name
-    if (reserved contains name) {
-      C.warning(s"Identifier '${name}' is used in an extern function, but is a JS reserved keyword.")
-    }
-    JSName(name)
-  }
-
-  def toJS(e: core.Extern)(using Context): js.Stmt = e match {
+  def toJS(e: core.Extern)(using DeclarationContext, Context): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
+      js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
   }
+
+  def toJS(t: Template[Pure])(using DeclarationContext, Context): js.Expr =
+    js.RawExpr(t.strings, t.args.map(toJS))
 
   def toJS(b: core.Block)(using DeclarationContext, Context): js.Expr = b match {
     case BlockVar(v, _, _) =>
@@ -56,13 +132,60 @@ object TransformerMonadic extends Transformer {
     case New(handler) => toJS(handler)
   }
 
-  def toJS(expr: core.Expr)(using DeclarationContext, Context): js.Expr = expr match {
+  /**
+   * Inlining behavior is controlled by overwriting [[canInline]]
+   */
+  def inlineExtern(args: List[Pure], params: List[ValueParam], template: Template[Pure])(using Context, DeclarationContext): js.Expr =
+    import core.substitutions.*
+    val valueSubstitutions = (params zip args).map { case (param, pure) => param.id -> pure }.toMap
+    given Substitution = Substitution(Map.empty, Map.empty, valueSubstitutions, Map.empty)
+
+    js.RawExpr(template.strings, template.args.map(substitute).map(toJS))
+
+  def canInline(f: core.Block.BlockVar)(using C: Context, D: DeclarationContext): Boolean =
+    canInline(D.getExternDef(f.id))
+
+  /**
+   * Inlining externs differs between separate and whole program compilation.
+   *
+   * - When compiling whole-program, we inline extern defs.
+   *
+   * - When compiling separate, we do **not** inline extern defs, since:
+   *
+   *     extern """function foo() {}"""
+   *     extern pure def myFoo(): Unit = "foo()"
+   *
+   *     // other module
+   *     def main() = myFoo()
+   *
+   *   would lead to
+   *     { main: function() { foo() } }
+   *
+   *   in the other module, where `foo` is not bound (see PR #374)
+   */
+  def canInline(f: Extern): Boolean
+
+
+  def toJS(expr: core.Expr)(using D: DeclarationContext, C: Context): js.Expr = expr match {
     case Literal((), _) => $effekt.field("unit")
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
-    case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
-    case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
+
+    case DirectApp(f: core.Block.BlockVar, targs, vargs, Nil) if canInline(f) =>
+      val extern = D.getExternDef(f.id)
+      inlineExtern(vargs, extern.vparams, extern.body)
+
+    case DirectApp(f, targs, vargs, bargs) =>
+      js.Call(toJS(f), vargs.map(toJS) ++ bargs.map(toJS))
+
+    case PureApp(f: core.Block.BlockVar, targs, vargs) if canInline(f) =>
+      val extern = D.getExternDef(f.id)
+      inlineExtern(vargs, extern.vparams, extern.body)
+
+    case PureApp(f, targs, vargs) =>
+      js.Call(toJS(f), vargs.map(toJS))
+
     case Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
@@ -110,13 +233,14 @@ object TransformerMonadic extends Transformer {
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
-    val externs = module.externs.map(toJS)
+    val externs = module.externs.collect {
+      case d if !canInline(d) => toJS(d)
+    }
     val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
     val state   = generateStateAccessors
     js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
-
 
   /**
    * Translate the statement to a javascript expression in a monadic expression context.

@@ -50,9 +50,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> body <> "\""
+      "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> toDoc(body) <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
+
+  // TODO implement
+  def toDoc(t: Template[Expr]): Doc =
+    hsep(t.args.map(toDoc), comma)
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v, _) => v.name.toString

@@ -21,8 +21,9 @@ enum Expr {
   // e.g. (<EXPR> <EXPR>)
   case Call(callee: Expr, arguments: List[Expr])
 
-  // e.g. (display "foo")
-  case RawExpr(raw: String)
+  // e.g. "" <EXPR> " + " <EXPR>
+  //   raw scheme splices, always start with a prefix string, then interleaved with arguments
+  case RawExpr(raw: List[String], args: List[Expr])
 
   // e.g. 42 (represented as Scala string "42") and inserted verbatim
   case RawValue(raw: String)
@@ -52,6 +53,8 @@ enum Expr {
   case Handler(constructorName: ChezName, operations: List[Operation])
 }
 export Expr.*
+
+def RawExpr(str: String): chez.Expr = Expr.RawExpr(List(str), Nil)
 
 enum Def {
   // e.g. (define x 42)
@@ -83,7 +86,7 @@ def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](che
   case (p, body) => chez.Lambda(List(p), body)
 }
 
-def unit = chez.Expr.RawExpr("'()")
+def unit = chez.Expr.RawValue("'()")
 
 implicit def autoVar(n: ChezName): Expr = Variable(n)
 

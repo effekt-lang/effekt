@@ -4,3 +4,4 @@
 [error] examples/neg/existentials.effekt:10:44: Expected C but got Boolean.
     def get[C](c: Boolean) = { resume((42, c)) }
                                            ^
+

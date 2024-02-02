@@ -1,0 +1,6 @@
+module examples/pos/imports/resources
+
+extern interface R
+extern resource r: R
+
+def main() = ()

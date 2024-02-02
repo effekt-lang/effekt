@@ -26,7 +26,10 @@ object scopes {
      */
     def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol
 
-    def lookupType(key: String)(implicit C: Context): TypeSymbol
+    def lookupType(key: String)(implicit C: Context): TypeSymbol =
+      lookupTypeOption(key).getOrElse(C.abort(s"Could not resolve type ${key}"))
+
+    def lookupTypeOption(key: String)(implicit C: Context): Option[TypeSymbol]
 
     def lookupCapture(key: String)(implicit C: Context): Capture
 
@@ -59,6 +62,10 @@ object scopes {
     }
 
     def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
+      lookupTypeOption(key).foreach { shadowed =>
+        if sym.isInstanceOf[TypeVar] && !shadowed.isInstanceOf[TypeVar] then
+          C.warning(pp"Type parameter ${key} shadows outer definition of ${sym}")
+      }
       types.update(key, sym)
 
     def define(key: String, capt: Capture)(implicit C: Context): Unit =
@@ -89,8 +96,7 @@ object scopes {
     def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
       C.abort(s"Could not resolve term ${key}")
 
-    def lookupType(key: String)(implicit C: Context): TypeSymbol =
-      C.abort(s"Could not resolve type ${key}")
+    def lookupTypeOption(key: String)(implicit C: Context): Option[TypeSymbol] = None
 
     def lookupFirst(key: String)(implicit C: Context): Symbol =
       C.abort(s"Could not resolve ${key}")
@@ -128,7 +134,7 @@ object scopes {
       (terms.get(key).map(_.toList), types.get(key)) match {
         case (Some(List(t)), None) => t
         case (None, Some(t)) => t
-        // give precendence to the type level effect, if an equally named effect op is in scope
+        // give precedence to the type level effect, if an equally named effect op is in scope
         case (Some(List(t1: Operation)), Some(t2: Interface)) => t2
         case (Some(t1), Some(t2)) =>
           C.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
@@ -136,8 +142,8 @@ object scopes {
         case _            => C.abort(s"Ambiguous reference to ${key}.")
       }
 
-    def lookupType(key: String)(implicit C: Context): TypeSymbol =
-      types.getOrElse(key, parent.lookupType(key))
+    def lookupTypeOption(key: String)(implicit C: Context): Option[TypeSymbol] =
+      types.get(key) orElse parent.lookupTypeOption(key)
 
     def lookupCapture(key: String)(implicit C: Context): Capture =
       captures.getOrElse(key, parent.lookupCapture(key))

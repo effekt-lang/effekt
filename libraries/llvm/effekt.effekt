@@ -62,20 +62,20 @@ extern pure def infixConcat(s: String, z: String): String = """
 
 // integer arithmetic
 
-extern pure def infixAdd(x: Int, y: Int): Int = "%z = add  %Int %x, %y ret %Int %z"
-extern pure def infixSub(x: Int, y: Int): Int = "%z = sub  %Int %x, %y ret %Int %z"
-extern pure def infixMul(x: Int, y: Int): Int = "%z = mul  %Int %x, %y ret %Int %z"
-extern pure def infixDiv(x: Int, y: Int): Int = "%z = sdiv %Int %x, %y ret %Int %z"
+extern pure def infixAdd(x: Int, y: Int): Int = "%z = add  %Int ${x}, ${y} ret %Int %z"
+extern pure def infixSub(x: Int, y: Int): Int = "%z = sub  %Int ${x}, ${y} ret %Int %z"
+extern pure def infixMul(x: Int, y: Int): Int = "%z = mul  %Int ${x}, ${y} ret %Int %z"
+extern pure def infixDiv(x: Int, y: Int): Int = "%z = sdiv %Int ${x}, ${y} ret %Int %z"
 
-extern pure def mod     (x: Int, y: Int): Int = "%z = srem %Int %x, %y ret %Int %z"
+extern pure def mod     (x: Int, y: Int): Int = "%z = srem %Int ${x}, ${y} ret %Int %z"
 
 
 // floating-point arithmetic
 
-extern pure def infixAdd(x: Double, y: Double): Double = "%z = fadd %Double %x, %y ret %Double %z"
-extern pure def infixSub(x: Double, y: Double): Double = "%z = fsub %Double %x, %y ret %Double %z"
-extern pure def infixMul(x: Double, y: Double): Double = "%z = fmul %Double %x, %y ret %Double %z"
-extern pure def infixDiv(x: Double, y: Double): Double = "%z = fdiv %Double %x, %y ret %Double %z"
+extern pure def infixAdd(x: Double, y: Double): Double = "%z = fadd %Double ${x}, ${y} ret %Double %z"
+extern pure def infixSub(x: Double, y: Double): Double = "%z = fsub %Double ${x}, ${y} ret %Double %z"
+extern pure def infixMul(x: Double, y: Double): Double = "%z = fmul %Double ${x}, ${y} ret %Double %z"
+extern pure def infixDiv(x: Double, y: Double): Double = "%z = fdiv %Double ${x}, ${y} ret %Double %z"
 
 
 // ordering on signed integers

@@ -1,0 +1,10 @@
+extern interface Cap
+
+// purposefully not pure to trigger a bug
+extern io def cap(): Cap at {} = "42"
+
+def main() = {
+  def myCap = cap()
+  val unboxed: Cap at {} = myCap;
+  ()
+}

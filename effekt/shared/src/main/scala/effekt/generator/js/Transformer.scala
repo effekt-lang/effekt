@@ -18,66 +18,9 @@ import scala.collection.mutable
  */
 trait Transformer {
 
-  def transformModule(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module
-
   def run(body: js.Expr): js.Stmt
 
-  /**
-   * Entrypoint used by the compiler to compile whole programs
-   */
-  def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
-    val exports = List(js.Export(JSName("main"), js.Lambda(Nil, run(js.Call(nameRef(mainSymbol), Nil)))))
-
-    val moduleDecl = input.core
-    given DeclarationContext = new DeclarationContext(moduleDecl.declarations)
-    transformModule(moduleDecl, Nil, exports)
-
-  /**
-   * Entrypoint used by the LSP server to show the compiled output AND used by
-   * the website.
-   */
-  def compileSeparate(input: AllTransformed)(using Context) = {
-    val module = input.main.mod
-
-    val allDeclarations = input.dependencies.foldLeft(input.main.core.declarations) {
-      case (decls, dependency) => decls ++ dependency.core.declarations
-    }
-
-    given D: DeclarationContext = new DeclarationContext(allDeclarations)
-
-    def shouldExport(sym: Symbol) = sym match {
-      // do not export fields, since they are no defined functions
-      case fld if D.findField(fld).isDefined => false
-      // do not export effect operations, since they are translated to field selection as well.
-      case op if D.findProperty(op).isDefined => false
-      // all others are fine
-      case _ => true
-    }
-
-    // also search all mains and use last one (shadowing), if any.
-    val allMains = input.main.core.exports.collect {
-      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
-    }
-
-    val required = usedImports(input.main)
-
-    // this is mostly to import $effekt
-    val dependencies = module.dependencies.map {
-      d => js.Import.All(JSName(jsModuleName(d.path)), jsModuleFile(d.path))
-    }
-    val imports = dependencies ++ required.toList.map {
-      case (mod, syms) =>
-        js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
-    }
-
-    val provided = module.terms.values.flatten.toList.distinct
-    val exports = allMains.lastOption.toList ++ provided.collect {
-      case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
-    }
-
-    transformModule(input.main.core, imports, exports)
-  }
-
+  def shouldExport(id: Id)(using D: DeclarationContext): Boolean = true
 
   // Representation of Data / Codata
   // ----

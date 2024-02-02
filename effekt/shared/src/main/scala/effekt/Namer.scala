@@ -44,7 +44,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     def processDependency(path: String) =
       val modImport = Context.moduleOf(path)
-      scope.defineAll(modImport.terms, modImport.types, Map.empty)
+      scope.defineAll(modImport.terms, modImport.types, modImport.captures)
       modImport
 
     // process the prelude (but don't if we are processing the prelude already)
@@ -70,7 +70,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // We only want to import each dependency once.
     val allImports = (processedPreludes ++ imports).distinct
-    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap)
+    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap, scope.captures.toMap)
     decl
   }
 
@@ -270,7 +270,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
-    // FunDef and EffDef have already been resolved as part of the module declaration
+    // FunDef and InterfaceDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       val sym = f.symbol
       Context scoped {
@@ -281,10 +281,19 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) =>
+      val sym = f.symbol
+      Context scoped {
+        sym.tparams.foreach { p => Context.bind(p) }
+        Context.bindValues(sym.vparams)
+        Context.bindBlocks(sym.bparams)
+        body.args.foreach(resolveGeneric)
+      }
+
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
       val effectSym = Context.resolveType(id).asControlEffect
       effectSym.operations = operations.map {
-        case source.Operation(id, tparams, vparams, bparams, ret) =>
+        case op @ source.Operation(id, tparams, vparams, bparams, ret) => Context.at(op) {
           val name = Context.nameFor(id)
 
           Context scoped {
@@ -308,6 +317,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.define(id, op)
             op
           }
+        }
       }
       if (isEffect) effectSym.operations.foreach { op => Context.bind(op) }
 
@@ -338,7 +348,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
-    case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
@@ -381,7 +390,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
-        case source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) =>
+        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
 
           // try to find the operation in the handled effect:
           eff.operations.find { o => o.name.toString == op.name } map { opSym =>
@@ -398,6 +407,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
           }
+        }
       }
 
     case source.MatchClause(pattern, body) =>
@@ -642,7 +652,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves an interface type, potentially with effect aliases on the top level
    */
   def resolveWithAliases(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
-    tpe match {
+    val resolved: List[InterfaceType] = tpe match {
       case source.BlockTypeRef(id, args) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
           if (tparams.size != args.size) {
@@ -655,6 +665,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         case _ => Context.abort("Expected an interface type.")
       }
     }
+    resolved.foreach(kinds.wellformed)
+    resolved
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
@@ -663,7 +675,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))
 
-  def resolve(capt: source.CaptureSet)(using Context): CaptureSet = {
+  def resolve(capt: source.CaptureSet)(using Context): CaptureSet = Context.at(capt) {
     val captResolved = CaptureSet(capt.captures.map { Context.resolveCapture }.toSet)
     Context.annotateResolvedCapture(capt)(captResolved)
     captResolved
@@ -672,7 +684,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
-  def resolve(id: Id)(using Context): TypeParam = {
+  def resolve(id: Id)(using Context): TypeParam = Context.at(id) {
     val sym: TypeParam = TypeParam(Name.local(id))
     Context.define(id, sym)
     sym

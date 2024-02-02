@@ -46,6 +46,10 @@ case class Module(
   private var _types: Map[String, TypeSymbol] = _
   def types = _types
 
+  private var _captures: Map[String, Capture] = _
+  def captures = _captures
+
+
   private var _imports: List[Module] = _
   def imports = _imports
 
@@ -70,11 +74,13 @@ case class Module(
   def exports(
     imports: List[Module],
     terms: Map[String, Set[TermSymbol]],
-    types: Map[String, TypeSymbol]
+    types: Map[String, TypeSymbol],
+    captures: Map[String, Capture],
   ): this.type = {
     _imports = imports
     _terms = terms
     _types = types
+    _captures = captures
     this
   }
 }
@@ -361,6 +367,17 @@ case class CaptureSet(captures: Set[Capture]) extends Captures {
   def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
   def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
+
+  def pureOrIO: Boolean = captures.forall { c =>
+    def isIO = c == builtins.IOCapability.capture
+    // mutable state is now in CPS and not considered IO anymore.
+    def isMutableState = c.isInstanceOf[LexicalRegion]
+    def isResource = c.isInstanceOf[Resource]
+    def isControl = c == builtins.ControlCapability.capture
+    !(isControl || isMutableState) && (isIO || isResource)
+  }
+
+  def pure: Boolean = captures.isEmpty
 }
 object CaptureSet {
   def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
@@ -379,7 +396,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  body: String = ""
+  body: Template[source.Term]
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
