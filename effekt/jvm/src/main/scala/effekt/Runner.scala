@@ -418,10 +418,11 @@ object JITRunner extends Runner[String] {
     val basePath = (out / path.stripSuffix(".mcore.json")).unixPath
 
     val asmJar = findAsmJar().getOrElse{ C.abort("Cannot find rpyeffect-asm.") }
-    val jitBinary = findJITBinary(platform).getOrElse{ C.abort("Cannot find JIT binary.") }
+    //val jitBinary = findJITBinary(platform).getOrElse{ C.abort("Cannot find JIT binary.") }
+    // TODO check that jitBinary is on PATH and warn otherwise (and use exe:<jitBinary>)
 
     val executableFile = basePath
-    exec(???, ???)
+    exec(??? /* rpyeffect-asm */, "--from", "mcore-json", "--to", "exe", "--output", executableFile)
     executableFile
   }
 

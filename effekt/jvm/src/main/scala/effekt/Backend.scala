@@ -32,5 +32,6 @@ object Backend {
     case "chez-monadic" => Backend("chez-monadic", chez.ChezSchemeMonadic(), ChezMonadicRunner)
     case "chez-callcc"  => Backend("chez-callcc", chez.ChezSchemeCallCC(), ChezCallCCRunner)
     case "llvm"         => Backend("llvm", llvm.LLVM(), LLVMRunner)
+    case "jit"          => Backend("jit", jit.JIT(), JITRunner)
   }
 }
