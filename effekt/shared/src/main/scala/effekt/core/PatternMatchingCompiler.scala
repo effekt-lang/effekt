@@ -45,6 +45,11 @@ import scala.collection.mutable
  *
  * TODO test matching on the same scrutinee multiple times in a row Maps are the wrong datatype to represent disjunctions
  *
+ * While exhaustivity checking could be integrated in the compiler, we decided to have a separate implementation
+ * in [[ effekt.typer.ExhaustivityChecker ]], which is run during the [[ effekt.typer.Wellformedness ]] phase.
+ *
+ * Changes here need to be synchronized with the checker, sadly.
+ *
  * @see https://github.com/effekt-lang/effekt/issues/383
  */
 object PatternMatchingCompiler {
