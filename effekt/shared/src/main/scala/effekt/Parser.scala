@@ -57,7 +57,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Names
    */
   lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
-  lazy val idRef: P[IdRef] = ident ^^ IdRef.apply
+  lazy val idRef: P[IdRef] = ident ^^ { name => IdRef(Nil, name) }
 
   /**
    * Main entry point
@@ -168,7 +168,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
-    | success(CaptureSet(List(IdRef("io"))))
+    | success(CaptureSet(List(IdRef(List("effekt"), "io"))))
     )
 
   lazy val externInclude: P[Def] =
@@ -243,7 +243,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
-        Return(Match(Var(IdRef(name)), cs, None)))
+        Return(Match(Var(IdRef(Nil, name)), cs, None)))
       res withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) : BlockLiteral }
@@ -430,7 +430,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       }
     | idRef ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
       case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
-        val synthesizedId = IdRef(id.name)
+        val synthesizedId = IdRef(Nil, id.name)
         val interface = BlockTypeRef(id, Nil) withPositionOf id
         Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf id))
       }
@@ -459,7 +459,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
     | `(` ~> matchPattern ~ (some(`,` ~> matchPattern) <~ `)`) ^^ { case f ~ r =>
-        TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
+        TagPattern(IdRef(List("effekt"), s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
 
@@ -512,13 +512,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef("Nil")), Nil, Nil, Nil)
+    Call(IdTarget(IdRef(List("effekt"), "Nil")), Nil, Nil, Nil)
 
   private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef("Cons")), Nil, List(el, rest), Nil)
+    Call(IdTarget(IdRef(List("effekt"), "Cons")), Nil, List(el, rest), Nil)
 
   private def TupleTree(args: List[Term]): Term =
-    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, args, Nil)
+    Call(IdTarget(IdRef(List("effekt"), s"Tuple${args.size}")), Nil, args, Nil)
 
   /**
    * Types and Effects
@@ -581,7 +581,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   // === AST Helpers ===
 
   private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
-     Call(IdTarget(IdRef(opName(op))), Nil, List(lhs, rhs), Nil)
+     Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
   private def opName(op: String): String = op match {
     case "||" => "infixOr"
@@ -600,7 +600,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    ValueTypeRef(IdRef(s"Tuple${tps.size}"), tps)
+    ValueTypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
 
   /**
    * Automatic Semicolon Insertion
