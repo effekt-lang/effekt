@@ -1,0 +1,7 @@
+interface Eff[A] {
+  def op[B](x: B): A
+}
+
+def main() =
+  try { println(eff.op("hello")) }
+  with eff: Eff[Int] { def op[C](x) = resume(x ++ "") }

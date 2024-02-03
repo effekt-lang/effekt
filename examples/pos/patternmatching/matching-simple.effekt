@@ -1,0 +1,25 @@
+import immutable/option
+
+def ex1(opt: Option[Int]) = opt match {
+  case Some(v) and v > 0 and v <= 10 => "hello"
+  case _ => "world"
+}
+
+def ex2(n: Int) = n match {
+  case y and y == 1 => 2
+  case z and z == 2 => 3
+  case a and a == 3 => 4
+} else {
+  5
+}
+
+def main() = {
+  println(ex1(Some(7)))
+  println(ex1(Some(42)))
+  println(ex1(None()))
+  println("---")
+  println(ex2(1))
+  println(ex2(2))
+  println(ex2(3))
+  println(ex2(42))
+}

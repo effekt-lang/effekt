@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
+import effekt.source.{ AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -100,17 +100,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe)     => Result(tpe, Pure)
 
-      case source.If(cond, thn, els) =>
-        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+      case source.If(guards, thn, els) =>
+        val Result((), guardEffs) = checkGuards(guards)
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)
+        Result(Context.join(thnTpe, elsTpe), guardEffs ++ thnEffs ++ elsEffs)
 
-      case source.While(cond, body) =>
-        val Result(_, condEffs) = cond checkAgainst TBoolean
-        val Result(_, bodyEffs) = body checkAgainst TUnit
-        Result(TUnit, condEffs ++ bodyEffs)
+      case source.While(guards, body, default) =>
+        val Result((), guardEffs) = checkGuards(guards)
+        val expectedType = if default.isDefined then expected else Some(TUnit)
+        val Result(bodyTpe, bodyEffs) = checkStmt(body, expectedType)
+        val Result(defaultTpe, defaultEffs) = default.map { s =>
+          checkStmt(s, expectedType)
+        }.getOrElse(Result(TUnit, ConcreteEffects.empty))
+
+        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs)
 
       case source.Var(id) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {
@@ -276,7 +281,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
-      case tree @ source.Match(sc, clauses) =>
+      case tree @ source.Match(sc, clauses, default) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
@@ -285,12 +290,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var resEff = effs
 
         val tpes = clauses.map {
-          case source.MatchClause(p, body) =>
-            // (3) infer types for all clauses
+          case source.MatchClause(p, guards, body) =>
+            // (3) infer types for pattern
             Context.bind(checkPattern(tpe, p))
+            // infer types for guards
+            val Result((), guardEffs) = checkGuards(guards)
+            // check body of the clause
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
-            resEff = resEff ++ clEff
+
+            resEff = resEff ++ clEff ++ guardEffs
             clTpe
+        } ++ default.map { body =>
+          val Result(defaultTpe, defaultEff) = Context in { checkStmt(body, expected) }
+          resEff = resEff ++ defaultEff
+          defaultTpe
         }
 
         // Clauses could in general be empty if there are no constructors
@@ -305,6 +318,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
       case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
     }
+
+  // Sideeffect: binds names in the current scope
+  def checkGuards(guards: List[MatchGuard])(using Context, Captures): Result[Unit] =
+    var effs = ConcreteEffects.empty
+    guards foreach { g =>
+      val Result(bindings, guardEffs) = checkGuard(g)
+      Context.bind(bindings)
+      effs = effs ++ guardEffs
+    }
+    Result((), effs)
+
 
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
@@ -509,13 +533,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //</editor-fold>
 
   //<editor-fold desc="pattern matching">
-
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
-    case p @ source.LiteralPattern(lit) => Context.abort("Matching literals is not supported at the moment.")
-      //      lit.checkAgainst(sc)
-      //      Map.empty
+    case p @ source.LiteralPattern(lit) =>
+      Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(p))
+      Map.empty
     case p @ source.TagPattern(id, patterns) =>
 
       // symbol of the constructor we match against
@@ -539,7 +562,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       var bindings = Map.empty[Symbol, ValueType]
 
       if (patterns.size != vps.size)
-          Context.error(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
+          Context.abort(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
 
       (patterns zip vps) foreach {
         case (pat, par: ValueType) =>
@@ -548,6 +571,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       bindings
   } match { case res => Context.annotateInferredType(pattern, sc); res }
+
+  def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {
+    case MatchGuard.BooleanGuard(condition) =>
+      val Result(tpe, effs) = checkExpr(condition, Some(TBoolean))
+      Result(Map.empty, effs)
+    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+      val Result(tpe, effs) = checkExpr(scrutinee, None)
+      Result(checkPattern(tpe, pattern), effs)
+  }
 
   //</editor-fold>
 
@@ -977,13 +1009,41 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
 
-    val interface = recvTpe.asInterfaceType.typeConstructor
+    val interface = recvTpe.asInterfaceType
     // filter out operations that do not fit the receiver
-    val candidates = methods.filter(op => op.interface == interface)
+    val candidates = methods.filter(op => op.interface == interface.typeConstructor)
 
     val (successes, errors) = tryEach(candidates) { op =>
       val (funTpe, capture) = findFunctionTypeFor(op)
-      checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
+
+      // 1) check arity of explicitly provided type arguments
+
+      if (targs.nonEmpty && targs.size != funTpe.tparams.size)
+        Context.abort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
+
+      // 2)
+      // args present: check prefix against receiver
+      (targs zip interface.args).foreach { case (manual, inferred) =>
+        matchExpected(inferred, manual)
+      }
+
+      // args missing: synthesize args from receiver and unification variables (e.g. [Int, String, ?A, ?B])
+      def fillInTypeArguments(tparams: List[TypeParam], interfaceArgs: List[ValueType]): List[ValueType] =
+        (tparams, interfaceArgs) match {
+          // we have an argument, provided by the interface: use it
+          case (param :: params, arg :: args) => arg :: fillInTypeArguments(params, args)
+          // we don't have an argument, create fresh unification variable
+          case (param :: params, Nil) => ValueTypeRef(Context.freshTypeVar(param, call)) :: fillInTypeArguments(params, Nil)
+          case (Nil, _) => Nil
+        }
+
+      val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams, interface.args)
+
+      // TODO maybe type checking all calls should have a similar structure like above:
+      //   1. make up and annotate unification variables, if no type arguments are there
+      //   2. type check call with either existing or made up type arguments
+
+      checkCallTo(call, op.name.name, funTpe, synthTargs, vargs, bargs, expected)
     }
     resolveOverload(id, List(successes), errors)
   }
@@ -1370,7 +1430,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using this)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshCaptVar, without, requireSubregionWithout }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshTypeVar, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {

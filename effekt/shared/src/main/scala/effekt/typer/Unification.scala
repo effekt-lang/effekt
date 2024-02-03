@@ -49,7 +49,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Creating fresh unification variables
   // ------------------------------------
-  def fresh(underlying: TypeVar.TypeParam, call: source.Tree): UnificationVar = scope match {
+  def freshTypeVar(underlying: TypeVar.TypeParam, call: source.Tree): UnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
       val x = new UnificationVar(underlying, call)
@@ -196,7 +196,6 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       pp"Type argument and parameter size mismatch: ${targs.size} vs ${tparams.size} ($targs, $tparams)")
     assert(cargs.size == cparams.size,
       pp"Capture arguments and parameter size mismatch: ${cargs.size} vs ${cparams.size} ($cargs, $cparams)")
-
     assert(cparams.size == (bparams.size + eff.canonical.size),
       pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}")
 
@@ -220,7 +219,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    val typeRigids = tparams map { t => ValueTypeRef(fresh(t, position)) }
+    val typeRigids = tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
     val captRigids = cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
 
     (typeRigids, captRigids, instantiate(tpe, typeRigids, captRigids))

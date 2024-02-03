@@ -37,6 +37,7 @@ object builtins {
   val TopSymbol = ExternType(name("Any"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
+  // should this be a datatype, not an extern type?
   val BottomSymbol = ExternType(name("Nothing"), Nil)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
