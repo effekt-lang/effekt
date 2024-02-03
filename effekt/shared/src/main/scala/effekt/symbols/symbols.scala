@@ -189,7 +189,7 @@ export Binder.*
  *
  * Refined by typer.
  */
-case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
+case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol { val name = Name.local("overloaded") }
 
 /**
  * Introduced by Transformer

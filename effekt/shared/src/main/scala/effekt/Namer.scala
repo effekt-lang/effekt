@@ -810,9 +810,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve function ${id.name}")
     }
-
-    // TODO does local name make sense here?
-    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
   }
 
   /**
@@ -836,7 +834,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
           abort(pretty"Cannot find a function named `${id}`.")
         }
-        assignSymbol(id, CallTarget(Name.local(id), blocks))
+        assignSymbol(id, CallTarget(blocks))
     }
   }
 
@@ -889,7 +887,7 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pretty"Cannot resolve field access ${id}")
     }
 
-    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
   }
 
   /**
@@ -909,7 +907,7 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pretty"Cannot resolve effect operation ${id}")
     }
 
-    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
   }
 
   /**

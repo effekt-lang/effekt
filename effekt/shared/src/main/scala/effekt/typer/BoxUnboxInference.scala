@@ -89,7 +89,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
       val syms = m.definition match {
         // an overloaded call target
-        case symbols.CallTarget(name, syms) => syms.flatten
+        case symbols.CallTarget(syms) => syms.flatten
         case s => C.panic(s"Not a valid method or function: ${id.name}")
       }
 
