@@ -165,7 +165,7 @@ def elaborate(m: ModuleDecl)(using T: TransformationContext): ModuleDecl = {
   val extns = m.externs.map(elaborate)
 
   val additionalDecls = T.interfaces.values.toList
-  ModuleDecl(m.path, m.imports, decls ++ additionalDecls, extns, defns, m.exports)
+  ModuleDecl(m.path, m.includes, decls ++ additionalDecls, extns, defns, m.exports)
 }
 
 def elaborate(e: Extern)(using T: TransformationContext): Extern = e match {

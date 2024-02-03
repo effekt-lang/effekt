@@ -63,7 +63,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Main entry point
    */
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(toplevel) ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(includeDecl) ~ many(toplevel) ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -72,14 +72,14 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | defaultModulePath
     )
 
-  lazy val importDecl: P[Import] =
-    `import` ~/> moduleName ^^ Import.apply
+  lazy val includeDecl: P[Include] =
+    `import` ~/> moduleName ^^ Include.apply
 
 
   /**
    * For the REPL
    */
-  lazy val repl: P[Tree] = toplevel | expr | importDecl
+  lazy val repl: P[Tree] = toplevel | expr | includeDecl
 
   lazy val toplevel: P[Def] =
     ( valDef
@@ -776,6 +776,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `}>` = literal("}>")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
+  lazy val pathSep = literal("::")
 
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")

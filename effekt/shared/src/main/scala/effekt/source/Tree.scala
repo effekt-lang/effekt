@@ -21,7 +21,7 @@ import effekt.symbols.Symbol
  *     │  │─ [[ Reference ]]
  *     │
  *     │─ [[ ModuleDecl ]]
- *     │─ [[ Import ]]
+ *     │─ [[ Include ]]
  *     │─ [[ Stmt ]]
  *     │  │─ [[ DefStmt ]]
  *     │  │─ [[ ExprStmt ]]
@@ -131,8 +131,8 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
-case class Import(path: String) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class Include(path: String) extends Tree
 
 /**
  * Parameters and arguments

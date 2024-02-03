@@ -50,12 +50,12 @@ case class Module(
   def captures = _captures
 
 
-  private var _imports: List[Module] = _
-  def imports = _imports
+  private var _includes: List[Module] = _
+  def includes = _includes
 
   // a topological ordering of all transitive dependencies
   // this is the order in which the modules need to be compiled / loaded
-  lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
+  lazy val dependencies: List[Module] = includes.flatMap { im => im.dependencies :+ im }.distinct
 
   // toplevel declared effects
   def effects: List[Interface] = types.values.toList.collect {
@@ -72,12 +72,12 @@ case class Module(
    * again. It is the same, since the source and AST did not change.
    */
   def exports(
-    imports: List[Module],
+    includes: List[Module],
     terms: Map[String, Set[TermSymbol]],
     types: Map[String, TypeSymbol],
     captures: Map[String, Capture],
   ): this.type = {
-    _imports = imports
+    _includes = includes
     _terms = terms
     _types = types
     _captures = captures

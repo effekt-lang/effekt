@@ -84,8 +84,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(decl: ModuleDecl)(using PContext): ModuleDecl = decl match {
-    case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-      ModuleDecl(path, imports, declarations map transform, externs map transform, definitions map transform, exports)
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions map transform, exports)
   }
 
   def transform(declaration: Declaration)(using PContext): Declaration = declaration match {

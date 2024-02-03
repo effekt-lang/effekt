@@ -13,7 +13,7 @@ sealed trait Tree
  */
 case class ModuleDecl(
   path: String,
-  imports: List[String],
+  includes: List[String],
   decls: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],

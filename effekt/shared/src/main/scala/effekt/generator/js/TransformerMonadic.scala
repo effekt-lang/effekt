@@ -81,7 +81,7 @@ object TransformerMonadicSeparate extends TransformerMonadic {
       case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
     }
 
-    val required = usedImports(input.main)
+    val required = usedIncludes(input.main)
 
     // this is mostly to import $effekt
     val dependencies = module.dependencies.map {

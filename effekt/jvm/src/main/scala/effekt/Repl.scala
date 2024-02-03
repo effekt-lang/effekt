@@ -100,7 +100,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     def status(config: EffektConfig): Unit = {
       import symbols._
 
-      module.imports.foreach { im =>
+      module.includes.foreach { im =>
         outputCode(s"import ${im.path}", config)
       }
       output.emitln("")
@@ -151,7 +151,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         Some(config)
 
       case Command(":imports", _) =>
-        output.emitln(module.imports.map { i => i.path }.mkString("\n"))
+        output.emitln(module.includes.map { i => i.path }.mkString("\n"))
         Some(config)
 
       case Command(":help", _) | Command(":h", _) =>
@@ -183,8 +183,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     case e: Term =>
       runCompiler(source, module.makeEval(e), config)
 
-    case i: Import =>
-      val extendedImports = module + i
+    case i: Include =>
+      val extendedIncludes = module + i
       val output = config.output()
 
       context.setup(config)
@@ -209,7 +209,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
                 outputCode(DeclPrinter(sym), config)
             }
         }
-        module = extendedImports
+        module = extendedIncludes
       }
 
     case d: Def =>
@@ -292,16 +292,16 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    */
   case class ReplModule(
     definitions: List[Def],
-    imports: List[Import]
+    includes: List[Include]
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
       val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
       copy(definitions = otherDefs :+ d)
     }
-    def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
+    def +(i: Include) = copy(includes = includes.filterNot { _.path == i.path } :+ i)
 
-    def contains(im: Import) = imports.exists { other => im.path == other.path }
+    def contains(im: Include) = includes.exists { other => im.path == other.path }
 
     /**
      * Create a module declaration using the given expression as body of main
@@ -310,7 +310,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       val body = Return(expr)
 
-      ModuleDecl("interactive", imports,
+      ModuleDecl("interactive", includes,
         definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,
           body))
     }

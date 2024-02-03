@@ -42,9 +42,9 @@ object Namer extends Phase[Parsed, NameResolved] {
     var scope: Scope = toplevel(builtins.rootTerms, builtins.rootTypes, builtins.rootCaptures)
 
     def processDependency(path: String) =
-      val modImport = Context.moduleOf(path)
-      scope.defineAll(modImport.terms, modImport.types, modImport.captures)
-      modImport
+      val included = Context.moduleOf(path)
+      scope.defineAll(included.terms, included.types, included.captures)
+      included
 
     // process the prelude (but don't if we are processing the prelude already)
     val preludes = Context.config.prelude()
@@ -54,9 +54,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       preludes.map(processDependency)
     } else { Nil }
 
-    // process all imports, updating the terms and types in scope
-    val imports = decl.imports collect {
-      case im @ source.Import(path) =>
+    // process all includes, updating the terms and types in scope
+    val includes = decl.includes collect {
+      case im @ source.Include(path) =>
         Context.at(im) { processDependency(path) }
     }
 
@@ -68,8 +68,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     resolveGeneric(decl)
 
     // We only want to import each dependency once.
-    val allImports = (processedPreludes ++ imports).distinct
-    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap, scope.captures.toMap)
+    val allIncludes = (processedPreludes ++ includes).distinct
+    Context.module.exports(allIncludes, scope.terms.toMap, scope.types.toMap, scope.captures.toMap)
     decl
   }
 
@@ -214,7 +214,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
+    case source.ModuleDecl(path, includes, decls) =>
       decls foreach { preresolve }
       resolveAll(decls)
 

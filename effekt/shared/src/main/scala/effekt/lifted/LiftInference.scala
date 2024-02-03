@@ -26,7 +26,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(mod: core.ModuleDecl)(using Environment, ErrorReporter): ModuleDecl = {
     val env = pretransform(mod.definitions)
     val definitions = mod.definitions.map(d => transform(d)(using env, ErrorReporter))
-    ModuleDecl(mod.path, mod.imports, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
+    ModuleDecl(mod.path, mod.includes, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
   }
 
   def transform(declaration: core.Declaration): lifted.Declaration = declaration match {
