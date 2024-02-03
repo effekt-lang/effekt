@@ -6,18 +6,14 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
-
-import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
+import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
 import effekt.util.{ AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
 
 import scala.sys.process.Process
-
-import java.io.IOException
 
 /**
  * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
@@ -84,11 +80,16 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         // we are in one of three exclusive modes: LSPServer, Compile, Run
         if (config.server()) { compiler.runMiddleend(src) }
         else if (config.interpret()) { compile() foreach runner.eval }
-        else if (config.build()) { compile() foreach runner.build }  
+        else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
     }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
+    case e @ CompilerPanic(msg) =>
+      context.report(msg)
+      e.getStackTrace.foreach { line =>
+        context.info("  at " + line)
+      }
   } finally {
     // This reports error messages
     afterCompilation(source, config)(context)
@@ -100,7 +101,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // report messages
     report(source, C.messaging.buffer, config)
-    
+
     // exit with non-zero code if not in repl/server mode and messaging buffer contains errors
     if (config.exitOnError() && C.messaging.hasErrors)
       sys.exit(1)
