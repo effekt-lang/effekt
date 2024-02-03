@@ -103,9 +103,9 @@ case class IdDef(name: String) extends Id {
     copy
   }
 }
-case class IdRef(qualifiers: List[String], name: String) extends Id {
+case class IdRef(path: List[String], name: String) extends Id {
   def clone(using C: Context): Id = {
-    val copy = IdRef(qualifiers, name)
+    val copy = IdRef(path, name)
     C.positions.dupPos(this, copy)
     copy
   }

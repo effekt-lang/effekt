@@ -57,7 +57,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Names
    */
   lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
-  lazy val idRef: P[IdRef] = ident ^^ { name => IdRef(Nil, name) }
+  lazy val idRef: P[IdRef] = someSep(ident, pathSep) ^^ { ids => IdRef(ids.init, ids.last) }
+
 
   /**
    * Main entry point
