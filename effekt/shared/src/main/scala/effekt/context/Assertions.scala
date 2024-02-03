@@ -25,10 +25,6 @@ object assertions {
       case t: BlockParam => t
       case _ => reporter.abort("Expected a block parameter")
     }
-    def asControlEffect: Interface = s match {
-      case t: Interface => t
-      case _ => reporter.abort("Expected a user defined control effect")
-    }
     def asEffectOp: Operation = s match {
       case t: Operation => t
       case _ => reporter.abort("Expected an effect operation, but got " + s)

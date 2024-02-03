@@ -290,14 +290,15 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
-      val effectSym = Context.resolveType(id).asControlEffect
-      effectSym.operations = operations.map {
+      // symbol has already been introduced by the previous traversal
+      val interface = Context.symbolOf(id).asInterface
+      interface.operations = operations.map {
         case op @ source.Operation(id, tparams, params, ret) => Context.at(op) {
           val name = Context.nameFor(id)
 
           Context scoped {
             // the parameters of the effect are in scope
-            effectSym.tparams.foreach { p => Context.bind(p) }
+            interface.tparams.foreach { p => Context.bind(p) }
 
             val tps = tparams map resolve
 
@@ -306,13 +307,13 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = Operation(name, effectSym.tparams ++ tps, params map { p => resolve(p) }, result, effects, effectSym)
+            val op = Operation(name, interface.tparams ++ tps, params map { p => resolve(p) }, result, effects, interface)
             Context.define(id, op)
             op
           }
         }
       }
-      if (isEffect) effectSym.operations.foreach { op => Context.bind(op) }
+      if (isEffect) interface.operations.foreach { op => Context.bind(op) }
 
     case source.TypeDef(id, tparams, tpe) => ()
     case source.EffectDef(id, tparams, effs)       => ()
@@ -481,7 +482,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case tpe: source.FunctionType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id: Id                   => Context.resolveTerm(id)
+    case id: IdRef                => Context.resolveTerm(id)
 
     case other                    => resolveAll(other)
   }
@@ -782,7 +783,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Tries to find a _unique_ term symbol in the current scope under name id.
    * Stores a binding in the symbol table
    */
-  private[namer] def resolveTerm(id: Id): TermSymbol = at(id) {
+  private[namer] def resolveTerm(id: IdRef): TermSymbol = at(id) {
     val sym = scope.lookupFirstTerm(id.name)
     assignSymbol(id, sym)
     sym
@@ -793,7 +794,7 @@ trait NamerOps extends ContextOps { Context: Context =>
       case c: Constructor => c
     }
 
-  private[namer] def resolveAny(id: Id): Symbol = at(id) {
+  private[namer] def resolveAny(id: IdRef): Symbol = at(id) {
     val sym = scope.lookupFirst(id.name)
     assignSymbol(id, sym)
     sym
@@ -802,7 +803,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded call target
    */
-  private[namer] def resolveMethodCalltarget(id: Id): Unit = at(id) {
+  private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
 
     val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[BlockSymbol])
 
@@ -817,7 +818,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded field access
    */
-  private[namer] def resolveFunctionCalltarget(id: Id): Unit = at(id) {
+  private[namer] def resolveFunctionCalltarget(id: IdRef): Unit = at(id) {
     val candidates = scope.lookupOverloaded(id.name, term => !term.isInstanceOf[Operation])
 
     resolveFunctionCalltarget(id, candidates) match {
@@ -849,7 +850,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * 2) If the tighest scope contains blocks, then we will ignore all values
    *    and resolve to an overloaded target.
    */
-  private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
+  private def resolveFunctionCalltarget(id: IdRef, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
     def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[RefBinder]
@@ -881,7 +882,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded field access
    */
-  private[namer] def resolveSelect(id: Id): Unit = at(id) {
+  private[namer] def resolveSelect(id: IdRef): Unit = at(id) {
     val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[Field])
 
     if (syms.isEmpty) {
@@ -894,7 +895,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded call to an effect
    */
-  private[namer] def resolveEffectCall(eff: Option[InterfaceType], id: Id): Unit = at(id) {
+  private[namer] def resolveEffectCall(eff: Option[InterfaceType], id: IdRef): Unit = at(id) {
 
     val syms = eff match {
       case Some(tpe) =>
@@ -914,18 +915,18 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Variables have to be resolved uniquely
    */
-  private[namer] def resolveVar(id: Id): TermSymbol = resolveTerm(id) match {
+  private[namer] def resolveVar(id: IdRef): TermSymbol = resolveTerm(id) match {
     case b: BlockParam => b // abort("Blocks have to be fully applied and can't be used as values.")
     case other         => other
   }
 
-  private[namer] def resolveType(id: Id): TypeSymbol = at(id) {
+  private[namer] def resolveType(id: IdRef): TypeSymbol = at(id) {
     val sym = scope.lookupType(id.name)
     assignSymbol(id, sym)
     sym
   }
 
-  private[namer] def resolveCapture(id: Id): Capture = at(id) {
+  private[namer] def resolveCapture(id: IdRef): Capture = at(id) {
     val sym = scope.lookupCapture(id.name)
     assignSymbol(id, sym)
     sym
