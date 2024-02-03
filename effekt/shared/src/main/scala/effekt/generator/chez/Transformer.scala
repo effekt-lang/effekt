@@ -4,10 +4,10 @@ package chez
 
 import effekt.context.Context
 import effekt.core.*
-import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
+import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
 import effekt.util.paths.*
-
 import kiama.output.PrettyPrinterTypes.Document
+import util.messages.{ INTERNAL_ERROR, NOT_SUPPORTED }
 
 import scala.language.implicitConversions
 
@@ -105,8 +105,14 @@ trait Transformer {
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.interface.name)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, tps, cps, vps, bps, resume, body) =>
-            chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
+          case Operation(op, tps, cps, vps, bps, Some(resume), body) =>
+            resume.tpe match {
+              case BlockType.Function(tparams, cparams, Nil, bparams, result) =>
+                NOT_SUPPORTED(s"Bidirectional handlers are not support by the Chez backends (encountered when translating the handler for ${names.name})")
+              case _ => ()
+            }
+            chez.Operation(nameDef(op), vps.map(p => nameDef(p.id)), nameDef(resume.id), toChezExpr(body))
+          case _ => INTERNAL_ERROR("Handler operations should have a continuation argument")
         })
       }
       chez.Handle(handlers, toChez(body))
