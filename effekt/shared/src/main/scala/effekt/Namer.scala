@@ -10,7 +10,7 @@ import effekt.typer.Substitutions
 import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
-import scopes.*
+import effekt.symbols.scopes.*
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -39,11 +39,14 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
-    var scope: Scope = toplevel(builtins.rootTerms, builtins.rootTypes, builtins.rootCaptures)
+    val moduleName = Context.module.name
+    val scope = scopes.toplevel(moduleName.prefix :+ moduleName.name, builtins.rootBindings)
 
-    def processDependency(path: String) =
+    Context.initNamerstate(scope)
+
+    def importDependency(path: String) =
       val included = Context.moduleOf(path)
-      scope.defineAll(included.terms, included.types, included.captures)
+      scope.importAll(included.exports)
       included
 
     // process the prelude (but don't if we are processing the prelude already)
@@ -51,25 +54,21 @@ object Namer extends Phase[Parsed, NameResolved] {
     val isPrelude = preludes.contains(decl.path)
 
     val processedPreludes = if (!isPrelude) {
-      preludes.map(processDependency)
+      preludes.map(importDependency)
     } else { Nil }
 
     // process all includes, updating the terms and types in scope
     val includes = decl.includes collect {
       case im @ source.Include(path) =>
-        Context.at(im) { processDependency(path) }
+        Context.at(im) { importDependency(path) }
     }
-
-    // create new scope for the current module
-    scope = scope.enterGlobal
-
-    Context.initNamerstate(scope)
 
     resolveGeneric(decl)
 
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct
-    Context.module.exports(allIncludes, scope.terms.toMap, scope.types.toMap, scope.captures.toMap)
+
+    Context.module.exports(allIncludes, scope.exports)
     decl
   }
 
@@ -214,9 +213,9 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, includes, decls) =>
-      decls foreach { preresolve }
-      resolveAll(decls)
+    case source.ModuleDecl(path, includes, definitions) =>
+      definitions foreach { preresolve }
+      resolveAll(definitions)
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
@@ -706,12 +705,13 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * The state of the namer phase
    */
-  private var scope: Scope = scopes.EmptyScope()
+  private var scope: Scoping = _
 
-  private[namer] def initNamerstate(s: Scope): Unit = scope = s
+  private[namer] def initNamerstate(s: Scoping): Unit = scope = s
 
   /**
-   * Override the dynamically scoped `in` to also reset namer state
+   * Override the dynamically scoped `in` to also reset namer state.
+   * This is important since dependencies are resolved in a stack-like manner.
    */
   override def in[T](block: => T): T = {
     val before = scope
@@ -722,9 +722,9 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def nameFor(id: Id): Name = nameFor(id.name)
 
-  private[namer] def nameFor(id: String): Name = {
-    if (scope.isGlobal) Name.qualified(id, module)
-    else Name.local(id)
+  private[namer] def nameFor(id: String): Name = scope.path match {
+    case Some(path) => QualifiedName(path, id)
+    case None => LocalName(id)
   }
 
   // TODO we only want to add a seed to a name under the following conditions:
@@ -900,7 +900,7 @@ trait NamerOps extends ContextOps { Context: Context =>
         val interface = tpe.typeConstructor.asInterface
         val operations = interface.operations.filter { op => op.name.name == id.name }
         if (operations.isEmpty) Nil else List(operations.toSet)
-      case None => scope.lookupEffectOp(id.name)
+      case None => scope.lookupOperation(id.name)
     }
 
     if (syms.isEmpty) {
@@ -931,7 +931,6 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def scoped[R](block: => R): R = Context in {
-    scope = scope.enterLocal
-    block
+    scope.scoped { block }
   }
 }

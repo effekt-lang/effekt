@@ -33,21 +33,19 @@ case class Module(
   source: Source
 ) extends Symbol {
 
-  val name = {
+  val name: QualifiedName = {
     val segments = decl.path.split("/")
     QualifiedName(segments.tail.toList, segments.head)
   }
 
   def path = decl.path
 
-  private var _terms: Map[String, Set[TermSymbol]] = _
-  def terms = _terms
+  private var _exports: Bindings = _
+  def exports: Bindings = _exports
 
-  private var _types: Map[String, TypeSymbol] = _
-  def types = _types
-
-  private var _captures: Map[String, Capture] = _
-  def captures = _captures
+  def terms = exports.terms
+  def types = exports.types
+  def captures = exports.captures
 
 
   private var _includes: List[Module] = _
@@ -73,14 +71,10 @@ case class Module(
    */
   def exports(
     includes: List[Module],
-    terms: Map[String, Set[TermSymbol]],
-    types: Map[String, TypeSymbol],
-    captures: Map[String, Capture],
+    exports: Bindings
   ): this.type = {
     _includes = includes
-    _terms = terms
-    _types = types
-    _captures = captures
+    _exports = exports
     this
   }
 }
@@ -189,7 +183,7 @@ export Binder.*
  *
  * Refined by typer.
  */
-case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol { val name = Name.local("overloaded") }
+case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol { val name = NoName }
 
 /**
  * Introduced by Transformer

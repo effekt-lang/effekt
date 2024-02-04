@@ -57,7 +57,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Names
    */
   lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
-  lazy val idRef: P[IdRef] = someSep(ident, pathSep) ^^ { ids => IdRef(ids.init, ids.last) }
+  lazy val idRef: P[IdRef] = identRef ^^ { path =>
+    val ids = path.split("::").toList
+    IdRef(ids.init, ids.last)
+  }
 
 
   /**
@@ -752,9 +755,15 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
   lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
+  lazy val qualifiedName = "%s(::%s)*\\b".format(name, name).r
 
   lazy val ident =
     (not(anyKeyword) ~> name
+    | failure("Expected an identifier")
+    )
+
+  lazy val identRef =
+    (not(anyKeyword) ~> qualifiedName
     | failure("Expected an identifier")
     )
 
@@ -777,7 +786,6 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `}>` = literal("}>")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
-  lazy val pathSep = literal("::")
 
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")

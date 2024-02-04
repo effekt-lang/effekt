@@ -1,10 +1,10 @@
 [error] examples/neg/typealias.effekt:35:32: Cannot typecheck call.
 There are multiple overloads, which all fail to check:
 
-Possible overload: effekt.infixAdd of type (Int, Int) => Int
+Possible overload: effekt::infixAdd of type (Int, Int) => Int
   Expected String but got Int.
 
-Possible overload: effekt.infixAdd$1 of type (Double, Double) => Double
+Possible overload: effekt::infixAdd$1 of type (Double, Double) => Double
   Expected String but got Double.
   Expected Double but got Int.
   Expected Double but got Int.
