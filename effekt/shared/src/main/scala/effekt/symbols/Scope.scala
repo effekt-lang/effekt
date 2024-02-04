@@ -13,25 +13,10 @@ object Bindings {
   def empty: Bindings = Bindings(Map.empty, Map.empty, Map.empty, Map.empty)
 }
 
-// TODO add visibily like the following
-//
-//case class Bindings[F[_]](
-//  terms: Map[String, Set[F[TermSymbol]]], // terms can be overloaded
-//  types: Map[String, F[TypeSymbol]],
-//  captures: Map[String, F[Capture]],
-//  namespaces: Map[String, Bindings[F]]
-//)
-//
-//enum Visibility[T] {
-//  case Public(binding: T)
-//  case Private(binding: T)
-//
-//  def binding: T
-//}
-
 object scopes {
 
   enum Scope { self =>
+
     /**
      * The toplevel global scope ("project scope")
      */
@@ -41,14 +26,6 @@ object scopes {
      * A scope introducing a new namespace
      */
     case Named(name: String, var bindings: Bindings, outer: Scope)
-
-    // The following would be more flexible, but is difficult to implement with a
-    // two-pass (preresolve, resolve) process.
-    //
-    //    /**
-    //     * A scope introduced by importing bindings
-    //     */
-    //    case Imports(imports: Bindings, var bindings: Bindings, outer: Scope)
 
     /**
      * A local scope introduced by functions, blocks, etc.
@@ -60,22 +37,6 @@ object scopes {
      */
     def bindings: Bindings
     def bindings_=(b: Bindings): Unit
-
-    //    def iterator: Iterator[Scope] = new Iterator[Scope] {
-    //      var curr: Option[Scope] = Some(self)
-    //      override def hasNext: Boolean = curr.isDefined
-    //      override def next(): Scope =
-    //        curr.get match {
-    //          case s @ Scope.Global(bindings, exports) =>
-    //            curr = None; s
-    //          case s @ Scope.Named(name, bindings, exports, outer) =>
-    //            curr = Some(outer); s
-    //          case s @ Scope.Imports(imports, bindings, outer) =>
-    //            curr = Some(outer); s
-    //          case s @ Scope.Local(bindings, outer) =>
-    //            curr = Some(outer); s
-    //        }
-    //    }
   }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
