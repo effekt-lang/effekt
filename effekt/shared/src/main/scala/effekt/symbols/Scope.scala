@@ -123,7 +123,8 @@ object scopes {
 
       def qualified(path: List[String], bindings: Bindings): List[T] = path match {
         case Nil => select(bindings) :: Nil
-        case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap(qualified(rest, _))
+        case pathSegment :: rest =>
+          bindings.namespaces.get(pathSegment).toList.flatMap(qualified(rest, _))
       }
 
       scope match {

@@ -95,6 +95,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | dataDef
     | recordDef
     | externDef
+    | toplevelNamespaceDef
     | `var` ~> failure("Mutable variable declarations are currently not supported on the toplevel.")
     | failure("Expected a top-level definition")
     )
@@ -109,6 +110,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     // aliases are allowed, since they are fully resolved during name checking
     | typeAliasDef
     | effectAliasDef
+    | namespaceDef
     | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
         failure(s"Only supported on the toplevel: ${kw} declaration.")
       }
@@ -338,6 +340,12 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val recordDef: P[Def] =
     `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef.apply
+
+  lazy val toplevelNamespaceDef: P[Def] =
+    `namespace` ~/> idDef ~ (`{` ~/> many(toplevel) <~ `}`) ^^ NamespaceDef.apply
+
+  lazy val namespaceDef: P[Def] =
+    `namespace` ~/> idDef ~ (`{` ~/> many(definition) <~ `}`) ^^ NamespaceDef.apply
 
   lazy val constructor: P[Constructor] =
     idDef ~ valueParams ^^ Constructor.apply
@@ -822,12 +830,13 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `new` = keyword("new")
   lazy val `and` = keyword("and")
   lazy val `is` = keyword("is")
+  lazy val `namespace` = keyword("namespace")
 
   def keywordStrings: List[String] = List(
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource"
+    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
   )
 
   def keyword(kw: String): Parser[String] =

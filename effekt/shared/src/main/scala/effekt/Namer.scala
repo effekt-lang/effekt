@@ -89,6 +89,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RegDef(id, annot, region, binding) =>
       ()
 
+    case source.NamespaceDef(id, definitions) =>
+      Context.namespace(id.name) {
+        definitions.foreach(preresolve)
+      }
+
     // allow recursive definitions of objects
     case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses))) =>
       val tpe = Context.at(interface) { resolve(interface) }
@@ -315,6 +320,11 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       if (isEffect) interface.operations.foreach { op => Context.bind(op) }
+
+    case source.NamespaceDef(id, definitions) =>
+      Context.namespace(id.name) {
+        definitions.foreach(resolveGeneric)
+      }
 
     case source.TypeDef(id, tparams, tpe) => ()
     case source.EffectDef(id, tparams, effs)       => ()
@@ -939,5 +949,9 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def scoped[R](block: => R): R = Context in {
     scope.scoped { block }
+  }
+
+  private[namer] def namespace[R](name: String)(block: => R): R = Context in {
+    scope.namespace(name) { block }
   }
 }

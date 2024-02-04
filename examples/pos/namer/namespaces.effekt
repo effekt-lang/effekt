@@ -1,0 +1,16 @@
+namespace internals {
+  def add(n: Int, m: Int) = nested::helper(n, m)
+
+  namespace nested {
+    def before() = nested::increment(1)
+    def increment(n: Int): Int = internals::add(n, 1)
+    def incrementAlternative(n: Int) = internals::nested::increment(n)
+
+    def helper(n: Int, m: Int): Int = n + m
+  }
+}
+
+def main() = {
+  println(internals::nested::increment(7))
+  println(internals::nested::incrementAlternative(8))
+}

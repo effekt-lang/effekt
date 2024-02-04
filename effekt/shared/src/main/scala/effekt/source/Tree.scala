@@ -175,6 +175,9 @@ enum Def extends Definition {
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+
+  case NamespaceDef(id: IdDef, definitions: List[Def])
+
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
   case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
