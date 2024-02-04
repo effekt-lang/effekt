@@ -38,6 +38,8 @@ case class Module(
     QualifiedName(segments.tail.toList, segments.head)
   }
 
+  val namespace = name.prefix :+ name.name
+
   def path = decl.path
 
   private var _exports: Bindings = _

@@ -93,5 +93,8 @@ object builtins {
     "global" -> globalRegion.capture
   )
 
-  val rootBindings = Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures, Map.empty)
+  lazy val rootBindings: Bindings =
+    Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures,
+      Map("effekt" -> Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures, Map.empty)))
+
 }

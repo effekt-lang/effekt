@@ -516,10 +516,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef(List("effekt"), "Nil")), Nil, Nil, Nil)
+    Call(IdTarget(IdRef(List(), "Nil")), Nil, Nil, Nil)
 
   private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef(List("effekt"), "Cons")), Nil, List(el, rest), Nil)
+    Call(IdTarget(IdRef(List(), "Cons")), Nil, List(el, rest), Nil)
 
   private def TupleTree(args: List[Term]): Term =
     Call(IdTarget(IdRef(List("effekt"), s"Tuple${args.size}")), Nil, args, Nil)

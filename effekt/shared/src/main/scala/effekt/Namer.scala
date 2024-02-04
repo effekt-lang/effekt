@@ -39,13 +39,15 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
-    val moduleName = Context.module.name
-    val scope = scopes.toplevel(moduleName.prefix :+ moduleName.name, builtins.rootBindings)
+    val scope = scopes.toplevel(Context.module.namespace, builtins.rootBindings)
 
     Context.initNamerstate(scope)
 
-    def importDependency(path: String) =
-      val included = Context.moduleOf(path)
+    def importDependency(filePath: String) =
+      val included = Context.moduleOf(filePath)
+      // include "effekt.effekt" as effekt
+      scope.importAs(included.exports, included.namespace)
+      // import effekt::*
       scope.importAll(included.exports)
       included
 
@@ -413,7 +415,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           if (names contains p.name)
             Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
 
-          val cs = Context.allConstructorsFor(p.name.name)
+          val cs = Context.allConstructorsFor(p.name)
           if (cs.nonEmpty) {
             Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
           }
@@ -784,18 +786,23 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Stores a binding in the symbol table
    */
   private[namer] def resolveTerm(id: IdRef): TermSymbol = at(id) {
-    val sym = scope.lookupFirstTerm(id.name)
+    val sym = scope.lookupFirstTerm(id.path, id.name)
     assignSymbol(id, sym)
     sym
   }
 
-  private[namer] def allConstructorsFor(name: String): Set[Constructor] =
-    scope.allTermsFor(name).collect {
+  private[namer] def allConstructorsFor(name: Name): Set[Constructor] = name match {
+    case NoName => panic("Constructor needs to be named")
+    case LocalName(name) => scope.allTermsFor(Nil, name).collect {
       case c: Constructor => c
     }
+    case QualifiedName(prefix, name) => scope.allTermsFor(prefix, name).collect {
+      case c: Constructor => c
+    }
+  }
 
   private[namer] def resolveAny(id: IdRef): Symbol = at(id) {
-    val sym = scope.lookupFirst(id.name)
+    val sym = scope.lookupFirst(id.path, id.name)
     assignSymbol(id, sym)
     sym
   }
@@ -805,7 +812,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
 
-    val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[BlockSymbol])
+    val syms = scope.lookupOverloaded(id.path, id.name, term => term.isInstanceOf[BlockSymbol])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve function ${id.name}")
@@ -817,14 +824,14 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveFunctionCalltarget(id: IdRef): Unit = at(id) {
-    val candidates = scope.lookupOverloaded(id.name, term => !term.isInstanceOf[Operation])
+    val candidates = scope.lookupOverloaded(id.path, id.name, term => !term.isInstanceOf[Operation])
 
     resolveFunctionCalltarget(id, candidates) match {
       case Left(value) =>
         assignSymbol(id, value)
       case Right(blocks) =>
         if (blocks.isEmpty) {
-          val allSyms = scope.lookupOverloaded(id.name, term => true).flatten
+          val allSyms = scope.lookupOverloaded(id.path, id.name, term => true).flatten
 
           if (allSyms.exists { case o: Operation => true; case _ => false })
             info(pretty"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
@@ -881,7 +888,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveSelect(id: IdRef): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[Field])
+    val syms = scope.lookupOverloaded(id.path, id.name, term => term.isInstanceOf[Field])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve field access ${id}")
@@ -900,7 +907,7 @@ trait NamerOps extends ContextOps { Context: Context =>
         val interface = tpe.typeConstructor.asInterface
         val operations = interface.operations.filter { op => op.name.name == id.name }
         if (operations.isEmpty) Nil else List(operations.toSet)
-      case None => scope.lookupOperation(id.name)
+      case None => scope.lookupOperation(id.path, id.name)
     }
 
     if (syms.isEmpty) {
@@ -919,13 +926,13 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def resolveType(id: IdRef): TypeSymbol = at(id) {
-    val sym = scope.lookupType(id.name)
+    val sym = scope.lookupType(id.path, id.name)
     assignSymbol(id, sym)
     sym
   }
 
   private[namer] def resolveCapture(id: IdRef): Capture = at(id) {
-    val sym = scope.lookupCapture(id.name)
+    val sym = scope.lookupCapture(id.path, id.name)
     assignSymbol(id, sym)
     sym
   }

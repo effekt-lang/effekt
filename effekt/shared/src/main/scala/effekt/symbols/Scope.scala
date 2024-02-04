@@ -79,6 +79,14 @@ object scopes {
   }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
+    def importAs(imports: Bindings, path: List[String])(using E: ErrorReporter): Unit =
+      def go(path: List[String]): Bindings = path match {
+        case pathSeg :: rest => Bindings(Map.empty, Map.empty, Map.empty, Map(pathSeg -> go(rest)))
+        case Nil => imports
+      }
+      importAll(go(path))
+
+
     def importAll(imports: Bindings)(using E: ErrorReporter): Unit = scope match {
       case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
 
@@ -90,27 +98,42 @@ object scopes {
          s.imports = merge(oldImports, imports)
     }
 
+
     /**
      * Defines the scoping rules by searching with [[ search ]] in an
      * inside-out manner through all nested scopes.
      */
-    private def first[T](scope: Scope)(select: Bindings => Option[T]): Option[T] = scope match {
-      case Scope.Global(imports, bindings) =>
-        select(bindings) orElse select(imports)
-      case Scope.Named(name, bindings, outer) =>
-        select(bindings) orElse first(outer)(select)
-      case Scope.Local(imports, bindings, outer) =>
-        select(bindings) orElse select(imports) orElse first(outer)(select)
-    }
+    private def first[T](path: List[String], scope: Scope)(select: Bindings => Option[T]): Option[T] =
 
-    private def all[T](scope: Scope)(select: Bindings => T): List[T] = scope match {
-      case Scope.Global(imports, bindings) =>
-        select(bindings) :: select(imports) :: Nil
-      case Scope.Named(name, bindings, outer) =>
-        select(bindings) :: all(outer)(select)
-      case Scope.Local(imports, bindings, outer) =>
-        select(bindings) :: select(imports) :: all(outer)(select)
-    }
+      def qualified(path: List[String], bindings: Bindings): Option[T] = path match {
+        case Nil => select(bindings)
+        case pathSegment :: rest => bindings.namespaces.get(pathSegment).flatMap(qualified(rest, _))
+      }
+
+      scope match {
+        case Scope.Global(imports, bindings) =>
+          qualified(path, bindings) orElse qualified(path, imports)
+        case Scope.Named(name, bindings, outer) =>
+          qualified(path, bindings) orElse first(path, outer)(select)
+        case Scope.Local(imports, bindings, outer) =>
+          qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
+      }
+
+    private def all[T](path: List[String], scope: Scope)(select: Bindings => T): List[T] =
+
+      def qualified(path: List[String], bindings: Bindings): List[T] = path match {
+        case Nil => select(bindings) :: Nil
+        case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap(qualified(rest, _))
+      }
+
+      scope match {
+        case Scope.Global(imports, bindings) =>
+          qualified(path, bindings) ++ qualified(path, imports)
+        case Scope.Named(name, bindings, outer) =>
+          qualified(path, bindings) ++ all(path, outer)(select)
+        case Scope.Local(imports, bindings, outer) =>
+          qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
+      }
 
     /**
      * Searches the nested scopes to find the first term.
@@ -118,87 +141,89 @@ object scopes {
      *   - there are multiple matching terms in the same scope
      *   - there a no matching terms at all
      */
-    def lookupFirstTerm(key: String)(using E: ErrorReporter): TermSymbol =
-      lookupFirstTermOption(key) getOrElse { E.abort(s"Could not resolve term ${key}") }
+    def lookupFirstTerm(path: List[String], name: String)(using E: ErrorReporter): TermSymbol =
+      lookupFirstTermOption(path, name) getOrElse { E.abort(s"Could not resolve term ${name}") }
 
-    def lookupFirstTermOption(key: String)(using E: ErrorReporter): Option[TermSymbol] =
-      first(scope) { _.terms.get(key).map { syms =>
-        if (syms.size > 1) E.abort(s"Ambiguous reference to ${key}")
+    def lookupFirstTermOption(path: List[String], name: String)(using E: ErrorReporter): Option[TermSymbol] =
+      first(path, scope) { _.terms.get(name).map { syms =>
+        if (syms.size > 1) E.abort(s"Ambiguous reference to ${name}")
         else syms.head
       }}
 
-    def lookupType(key: String)(using E: ErrorReporter): TypeSymbol =
-      lookupTypeOption(key) getOrElse { E.abort(s"Could not resolve type ${key}") }
+    def lookupType(path: List[String], name: String)(using E: ErrorReporter): TypeSymbol =
+      lookupTypeOption(path, name) getOrElse { E.abort(s"Could not resolve type ${name}") }
 
-    def lookupTypeOption(key: String)(using E: ErrorReporter): Option[TypeSymbol] =
-      first(scope) { _.types.get(key) }
+    def lookupTypeOption(path: List[String], name: String)(using E: ErrorReporter): Option[TypeSymbol] =
+      first(path, scope) { _.types.get(name) }
 
-    def lookupCapture(key: String)(using E: ErrorReporter): Capture =
-      first(scope) { _.captures.get(key) } getOrElse E.abort(s"Could not resolve capture ${key}")
+    def lookupCapture(path: List[String], name: String)(using E: ErrorReporter): Capture =
+      first(path, scope) { _.captures.get(name) } getOrElse E.abort(s"Could not resolve capture ${name}")
 
-    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
-      all(scope) { _.terms.getOrElse(key, Set.empty).filter(filter) }
+    def lookupOverloaded(path: List[String], name: String, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
+      all(path, scope) { _.terms.getOrElse(name, Set.empty).filter(filter) }
 
-    def lookupOperation(key: String)(using ErrorReporter): List[Set[Operation]] =
-      all(scope) { _.terms.getOrElse(key, Set.empty).collect {
+    def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
+      all(path, scope) { _.terms.getOrElse(name, Set.empty).collect {
         case o: Operation => o
       }}
 
     // can be a term OR a type symbol
-    def lookupFirst(key: String)(using E: ErrorReporter): Symbol =
-      lookupFirstOption(key) getOrElse { E.abort(s"Could not resolve ${key}") }
+    def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =
+      lookupFirstOption(path, name) getOrElse { E.abort(s"Could not resolve ${name}") }
 
-    def lookupFirstOption(key: String)(using E: ErrorReporter): Option[Symbol] =
-      first(scope) {
+    def lookupFirstOption(path: List[String], name: String)(using E: ErrorReporter): Option[Symbol] =
+      first(path, scope) {
         case Bindings(terms, types, captures, namespaces) =>
-          (terms.get(key).map(_.toList), types.get(key)) match {
+          (terms.get(name).map(_.toList), types.get(name)) match {
             case (Some(List(t)), None) => Some(t)
             case (None, Some(t)) => Some(t)
             // give precedence to the type level effect, if an equally named effect op is in scope
             case (Some(List(t1: Operation)), Some(t2: Interface)) => Some(t2)
             case (Some(t1), Some(t2)) =>
-              E.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
+              E.abort(s"Ambiguous reference to ${name}. Can refer to a term or a type.")
             case (None, None) => None
-            case _            => E.abort(s"Ambiguous reference to ${key}.")
+            case _            => E.abort(s"Ambiguous reference to ${name}.")
           }
       }
 
-    def currentTermsFor(key: String): Set[TermSymbol] =
-      scope.bindings.terms.getOrElse(key, Set.empty)
+    def currentTermsFor(name: String): Set[TermSymbol] =
+      scope.bindings.terms.getOrElse(name, Set.empty)
 
-    def allTermsFor(key: String): Set[TermSymbol] =
-      all(scope) { _.terms.getOrElse(key, Set.empty) }.flatten.toSet
+    def allTermsFor(path: List[String], name: String): Set[TermSymbol] =
+      all(path, scope) { _.terms.getOrElse(name, Set.empty) }.flatten.toSet
 
-    def define(key: String, sym: TermSymbol)(using E: ErrorReporter): Unit = {
+    def define(name: String, sym: TermSymbol)(using E: ErrorReporter): Unit = {
       val bindings = scope.bindings
-      val termsInScope = currentTermsFor(key)
+      val termsInScope = currentTermsFor(name)
       sym match {
         case v: ValueSymbol =>
           if (termsInScope.exists(_.isInstanceOf[BlockSymbol])) {
-            E.abort(s"Value ${key} has the same name as a block definition in the same scope, which is not allowed.")
+            E.abort(s"Value ${name} has the same name as a block definition in the same scope, which is not allowed.")
           }
         case b: BlockSymbol =>
           if (termsInScope.exists(_.isInstanceOf[ValueSymbol])) {
-            E.abort(s"Block ${key} has the same name as a value definition in the same scope, which is not allowed.")
+            E.abort(s"Block ${name} has the same name as a value definition in the same scope, which is not allowed.")
           }
       }
-      scope.bindings = bindings.copy(terms = bindings.terms.updated(key, termsInScope + sym))
+      scope.bindings = bindings.copy(terms = bindings.terms.updated(name, termsInScope + sym))
     }
 
-    def define(key: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
+    def define(name: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
       val bindings = scope.bindings
-      lookupTypeOption(key).foreach { shadowed =>
+      lookupTypeOption(Nil, name).foreach { shadowed =>
         if sym.isInstanceOf[TypeVar] && !shadowed.isInstanceOf[TypeVar] then
-          E.warning(pp"Type parameter ${key} shadows outer definition of ${sym}")
+          E.warning(pp"Type parameter ${name} shadows outer definition of ${sym}")
       }
-      scope.bindings = bindings.copy(types = bindings.types.updated(key, sym))
+      scope.bindings = bindings.copy(types = bindings.types.updated(name, sym))
 
-    def define(key: String, capt: Capture)(using ErrorReporter): Unit =
-      scope.bindings = scope.bindings.copy(captures = scope.bindings.captures.updated(key, capt))
+    def define(name: String, capt: Capture)(using ErrorReporter): Unit =
+      scope.bindings = scope.bindings.copy(captures = scope.bindings.captures.updated(name, capt))
 
     // TODO implement proper checks and merging behavior
     def merge(oldNamespaces: Map[String, Bindings], newNewspaces: Map[String, Bindings]): Map[String, Bindings] =
-      oldNamespaces ++ newNewspaces
+      var bindings = oldNamespaces
+      newNewspaces.foreach { case (k, v) => bindings = bindings.updated(k, merge(bindings.getOrElse(k, Bindings.empty), v)) }
+      bindings
 
     // TODO implement proper checks and merging behavior
     def merge(oldBindings: Bindings, newBindings: Bindings): Bindings = (oldBindings, newBindings) match {

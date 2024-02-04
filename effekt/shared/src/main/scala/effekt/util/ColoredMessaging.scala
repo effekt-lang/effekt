@@ -69,7 +69,8 @@ trait ColoredMessaging extends EffektMessaging {
     case ParseError(msg, range)               => msg
     case PlainTextError(msg, range, severity) => msg
     case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
-      case id: source.Id       => highlight(TypePrinter.show(id))
+      case id: source.IdDef    => highlight(TypePrinter.show(id))
+      case id: source.IdRef    => highlight(TypePrinter.show(id))
       case name: Name          => highlight(name.name)
       case t: symbols.Type     => highlight(TypePrinter.show(t))
       case t: Capture          => highlight(TypePrinter.show(t))
