@@ -97,14 +97,14 @@ sealed trait Id extends Tree {
   def clone(using C: Context): Id
 }
 case class IdDef(name: String) extends Id {
-  def clone(using C: Context): Id = {
+  def clone(using C: Context): IdDef = {
     val copy = IdDef(name)
     C.positions.dupPos(this, copy)
     copy
   }
 }
 case class IdRef(path: List[String], name: String) extends Id {
-  def clone(using C: Context): Id = {
+  def clone(using C: Context): IdRef = {
     val copy = IdRef(path, name)
     C.positions.dupPos(this, copy)
     copy

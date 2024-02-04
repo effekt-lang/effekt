@@ -104,7 +104,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
-      val uniqueId = Context.freshNameFor(id)
+      val uniqueId = Context.nameFor(id)
 
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
@@ -180,7 +180,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
 
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
-      val name = Context.freshNameFor(id)
+      val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
@@ -196,7 +196,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
 
     case source.ExternResource(id, tpe) =>
-      val name = Context.freshNameFor(id)
+      val name = Context.nameFor(id)
       val btpe = resolve(tpe)
       val sym = ExternResource(name, btpe)
       Context.define(id, sym)
@@ -334,7 +334,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val data = d.symbol
       data.constructors = ctors map {
         case source.Constructor(id, ps) =>
-          val name = Context.freshNameFor(id)
+          val name = Context.nameFor(id)
           val constructor = Constructor(name, data.tparams, null, data)
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
@@ -344,7 +344,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     // The record has been resolved as part of the preresolution step
     case d @ source.RecordDef(id, tparams, fs) =>
       val record = d.symbol
-      val name = Context.freshNameFor(id)
+      val name = Context.nameFor(id)
       val constructor = Constructor(name, record.tparams, null, record)
       // we define the constructor on a copy to avoid confusion with symbols
       Context.define(id.clone, constructor)
@@ -509,7 +509,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     (paramSyms zip params) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
-        val name = Context.freshNameFor(fieldId)
+        val name = Context.nameFor(fieldId)
         val fieldSym = Field(name, paramSym, constructor)
         Context.define(fieldId, fieldSym)
         fieldSym
@@ -732,23 +732,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     result
   }
 
-  private[namer] def nameFor(id: Id): Name = nameFor(id.name)
-
-  private[namer] def nameFor(id: String): Name = scope.path match {
-    case Some(path) => QualifiedName(path, id)
-    case None => LocalName(id)
-  }
-
-  // TODO we only want to add a seed to a name under the following conditions:
-  // - there is already another instance of that name in the same
-  //   namespace.
-  // - if it is not already fully qualified
-  private[namer] def freshNameFor(id: Id): Name = nameFor(freshTermName(id))
-
-  private[namer] def freshTermName(id: Id): String = {
-    val alreadyBound = scope.currentTermsFor(id.name).size
-    val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
-    id.name + seed
+  private[namer] def nameFor(id: IdDef): Name = scope.path match {
+    case Some(path) => QualifiedName(path, id.name)
+    case None => LocalName(id.name)
   }
 
   // Name Binding and Resolution
@@ -796,7 +782,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Stores a binding in the symbol table
    */
   private[namer] def resolveTerm(id: IdRef): TermSymbol = at(id) {
-    val sym = scope.lookupFirstTerm(id.path, id.name)
+    val sym = scope.lookupFirstTerm(id)
     assignSymbol(id, sym)
     sym
   }
@@ -822,7 +808,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
 
-    val syms = scope.lookupOverloaded(id.path, id.name, term => term.isInstanceOf[BlockSymbol])
+    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[BlockSymbol])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve function ${id.name}")
@@ -834,14 +820,14 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveFunctionCalltarget(id: IdRef): Unit = at(id) {
-    val candidates = scope.lookupOverloaded(id.path, id.name, term => !term.isInstanceOf[Operation])
+    val candidates = scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])
 
     resolveFunctionCalltarget(id, candidates) match {
       case Left(value) =>
         assignSymbol(id, value)
       case Right(blocks) =>
         if (blocks.isEmpty) {
-          val allSyms = scope.lookupOverloaded(id.path, id.name, term => true).flatten
+          val allSyms = scope.lookupOverloaded(id, term => true).flatten
 
           if (allSyms.exists { case o: Operation => true; case _ => false })
             info(pretty"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
@@ -898,7 +884,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveSelect(id: IdRef): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id.path, id.name, term => term.isInstanceOf[Field])
+    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[Field])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve field access ${id}")
@@ -936,13 +922,13 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def resolveType(id: IdRef): TypeSymbol = at(id) {
-    val sym = scope.lookupType(id.path, id.name)
+    val sym = scope.lookupType(id)
     assignSymbol(id, sym)
     sym
   }
 
   private[namer] def resolveCapture(id: IdRef): Capture = at(id) {
-    val sym = scope.lookupCapture(id.path, id.name)
+    val sym = scope.lookupCapture(id)
     assignSymbol(id, sym)
     sym
   }

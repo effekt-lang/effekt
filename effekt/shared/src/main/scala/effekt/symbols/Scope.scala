@@ -1,16 +1,64 @@
 package effekt
 package symbols
 
+import effekt.source.IdRef
 import effekt.util.messages.ErrorReporter
 
+import scala.collection.mutable
+
+/**
+ * An immutable container of bindings
+ */
 case class Bindings(
   terms: Map[String, Set[TermSymbol]], // terms can be overloaded
   types: Map[String, TypeSymbol],
   captures: Map[String, Capture],
   namespaces: Map[String, Bindings]
 )
+
 object Bindings {
   def empty: Bindings = Bindings(Map.empty, Map.empty, Map.empty, Map.empty)
+}
+
+/**
+ * A mutable container of bindings
+ */
+class Namespace(
+  var terms: mutable.Map[String, Set[TermSymbol]],
+  var types: mutable.Map[String, TypeSymbol],
+  var captures: mutable.Map[String, Capture],
+  var namespaces: mutable.Map[String, Namespace]
+) {
+  def importAll(other: Bindings): Unit = other match {
+    case Bindings(terms2, types2, captures2, namespaces2) =>
+      terms2.foreach { case (k, syms) => syms.foreach(addTerm(k, _)) }
+      types2.foreach { case (k, v) => setType(k, v) }
+      captures2.foreach { case (k, v) => setCapture(k, v) }
+      namespaces2.foreach { case (k, v) => getNamespace(k).importAll(v) }
+  }
+
+  def addTerm(name: String, sym: TermSymbol): Unit =
+    val before = terms.getOrElse(name, Set.empty)
+    terms.update(name, before + sym)
+  def setType(name: String, sym: TypeSymbol): Unit =
+    types.update(name, sym)
+  def setCapture(name: String, sym: Capture): Unit =
+    captures.update(name, sym)
+
+  def getNamespace(name: String): Namespace =
+    namespaces.getOrElseUpdate(name, Namespace.empty)
+
+  /**
+   * Convert to immutable bindings
+   */
+  def toBindings: Bindings = Bindings(
+    terms.toMap,
+    types.toMap,
+    captures.toMap,
+    namespaces.map { case (k, v) => k -> v.toBindings }.toMap)
+}
+object Namespace {
+  def empty: Namespace = Namespace(mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty)
 }
 
 object scopes {
@@ -20,55 +68,53 @@ object scopes {
     /**
      * The toplevel global scope ("project scope")
      */
-    case Global(var imports: Bindings, var bindings: Bindings)
+    case Global(imports: Namespace, bindings: Namespace)
 
     /**
      * A scope introducing a new namespace
      */
-    case Named(name: String, var bindings: Bindings, outer: Scope)
+    case Named(name: String, bindings: Namespace, outer: Scope)
 
     /**
      * A local scope introduced by functions, blocks, etc.
      */
-    case Local(var imports: Bindings, var bindings: Bindings, outer: Scope)
+    case Local(imports: Namespace, bindings: Namespace, outer: Scope)
 
     /**
-     * All scopes introduce bindings
+     * All scopes introduce (mutable) namespaces for their bindings
      */
-    def bindings: Bindings
-    def bindings_=(b: Bindings): Unit
+    def bindings: Namespace
+
+    def imports(using E: ErrorReporter): Namespace = this match {
+      case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
+      case s @ Scope.Global(imports, bindings) => imports
+      case s @ Scope.Local(imports, bindings, outer) => imports
+    }
   }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(imports: Bindings, path: List[String])(using E: ErrorReporter): Unit =
-      def go(path: List[String]): Bindings = path match {
-        case pathSeg :: rest => Bindings(Map.empty, Map.empty, Map.empty, Map(pathSeg -> go(rest)))
-        case Nil => imports
+      def go(path: List[String], in: Namespace): Unit = path match {
+        case pathSeg :: rest => go(rest, in.getNamespace(pathSeg))
+        case Nil => in.importAll(imports)
       }
-      importAll(go(path))
+      go(path, scope.imports)
 
-
-    def importAll(imports: Bindings)(using E: ErrorReporter): Unit = scope match {
-      case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
-
-      // TODO check shadowing etc. Also here concrete functions will *always* shadow imports,
-      //   regardless of the order of importing / defining.
-      case s @ Scope.Global(oldImports, bindings) =>
-         s.imports = merge(oldImports, imports)
-      case s @ Scope.Local(oldImports, bindings, outer) =>
-         s.imports = merge(oldImports, imports)
-    }
-
+    // TODO check shadowing etc. Also here concrete functions will *always* shadow imports,
+    //   regardless of the order of importing / defining.
+    def importAll(imports: Bindings)(using E: ErrorReporter): Unit = scope.imports.importAll(imports)
 
     /**
      * Defines the scoping rules by searching with [[ search ]] in an
      * inside-out manner through all nested scopes.
      */
-    private def first[T](path: List[String], scope: Scope)(select: Bindings => Option[T]): Option[T] =
+    private def first[T](path: List[String], scope: Scope)(select: Namespace => Option[T]): Option[T] =
 
-      def qualified(path: List[String], bindings: Bindings): Option[T] = path match {
+      def qualified(path: List[String], bindings: Namespace): Option[T] = path match {
         case Nil => select(bindings)
-        case pathSegment :: rest => bindings.namespaces.get(pathSegment).flatMap(qualified(rest, _))
+        case pathSegment :: rest => bindings.namespaces.get(pathSegment).flatMap {
+          namespace => qualified(rest, namespace)
+        }
       }
 
       scope match {
@@ -80,12 +126,13 @@ object scopes {
           qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
       }
 
-    private def all[T](path: List[String], scope: Scope)(select: Bindings => T): List[T] =
+    private def all[T](path: List[String], scope: Scope)(select: Namespace => T): List[T] =
 
-      def qualified(path: List[String], bindings: Bindings): List[T] = path match {
+      def qualified(path: List[String], bindings: Namespace): List[T] = path match {
         case Nil => select(bindings) :: Nil
-        case pathSegment :: rest =>
-          bindings.namespaces.get(pathSegment).toList.flatMap(qualified(rest, _))
+        case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap {
+          namespace => qualified(rest, namespace)
+        }
       }
 
       scope match {
@@ -103,26 +150,26 @@ object scopes {
      *   - there are multiple matching terms in the same scope
      *   - there a no matching terms at all
      */
-    def lookupFirstTerm(path: List[String], name: String)(using E: ErrorReporter): TermSymbol =
-      lookupFirstTermOption(path, name) getOrElse { E.abort(s"Could not resolve term ${name}") }
+    def lookupFirstTerm(id: IdRef)(using E: ErrorReporter): TermSymbol =
+      lookupFirstTermOption(id) getOrElse { E.abort(pp"Could not resolve term ${id}") }
 
-    def lookupFirstTermOption(path: List[String], name: String)(using E: ErrorReporter): Option[TermSymbol] =
-      first(path, scope) { _.terms.get(name).map { syms =>
-        if (syms.size > 1) E.abort(s"Ambiguous reference to ${name}")
+    def lookupFirstTermOption(id: IdRef)(using E: ErrorReporter): Option[TermSymbol] =
+      first(id.path, scope) { _.terms.get(id.name).map { syms =>
+        if (syms.size > 1) E.abort(pp"Ambiguous reference to ${id}")
         else syms.head
       }}
 
-    def lookupType(path: List[String], name: String)(using E: ErrorReporter): TypeSymbol =
-      lookupTypeOption(path, name) getOrElse { E.abort(s"Could not resolve type ${name}") }
+    def lookupType(id: IdRef)(using E: ErrorReporter): TypeSymbol =
+      lookupTypeOption(id.path, id.name) getOrElse { E.abort(pp"Could not resolve type ${id}") }
 
     def lookupTypeOption(path: List[String], name: String)(using E: ErrorReporter): Option[TypeSymbol] =
       first(path, scope) { _.types.get(name) }
 
-    def lookupCapture(path: List[String], name: String)(using E: ErrorReporter): Capture =
-      first(path, scope) { _.captures.get(name) } getOrElse E.abort(s"Could not resolve capture ${name}")
+    def lookupCapture(id: IdRef)(using E: ErrorReporter): Capture =
+      first(id.path, scope) { _.captures.get(id.name) } getOrElse E.abort(pp"Could not resolve capture ${id}")
 
-    def lookupOverloaded(path: List[String], name: String, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
-      all(path, scope) { _.terms.getOrElse(name, Set.empty).filter(filter) }
+    def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
+      all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
 
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
       all(path, scope) { _.terms.getOrElse(name, Set.empty).collect {
@@ -134,9 +181,8 @@ object scopes {
       lookupFirstOption(path, name) getOrElse { E.abort(s"Could not resolve ${name}") }
 
     def lookupFirstOption(path: List[String], name: String)(using E: ErrorReporter): Option[Symbol] =
-      first(path, scope) {
-        case Bindings(terms, types, captures, namespaces) =>
-          (terms.get(name).map(_.toList), types.get(name)) match {
+      first(path, scope) { bindings =>
+          (bindings.terms.get(name).map(_.toList), bindings.types.get(name)) match {
             case (Some(List(t)), None) => Some(t)
             case (None, Some(t)) => Some(t)
             // give precedence to the type level effect, if an equally named effect op is in scope
@@ -167,7 +213,7 @@ object scopes {
             E.abort(s"Block ${name} has the same name as a value definition in the same scope, which is not allowed.")
           }
       }
-      scope.bindings = bindings.copy(terms = bindings.terms.updated(name, termsInScope + sym))
+      bindings.addTerm(name, sym)
     }
 
     def define(name: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
@@ -176,43 +222,24 @@ object scopes {
         if sym.isInstanceOf[TypeVar] && !shadowed.isInstanceOf[TypeVar] then
           E.warning(pp"Type parameter ${name} shadows outer definition of ${sym}")
       }
-      scope.bindings = bindings.copy(types = bindings.types.updated(name, sym))
+      bindings.setType(name, sym)
 
     def define(name: String, capt: Capture)(using ErrorReporter): Unit =
-      scope.bindings = scope.bindings.copy(captures = scope.bindings.captures.updated(name, capt))
+      scope.bindings.setCapture(name, capt)
 
-    // TODO implement proper checks and merging behavior
-    def merge(oldNamespaces: Map[String, Bindings], newNewspaces: Map[String, Bindings]): Map[String, Bindings] =
-      var bindings = oldNamespaces
-      newNewspaces.foreach { case (k, v) => bindings = bindings.updated(k, merge(bindings.getOrElse(k, Bindings.empty), v)) }
-      bindings
-
-    // TODO implement proper checks and merging behavior
-    def merge(oldBindings: Bindings, newBindings: Bindings): Bindings = (oldBindings, newBindings) match {
-      case (Bindings(terms1, types1, captures1, namespaces1), Bindings(terms2, types2, captures2, namespaces2)) =>
-        var terms = terms1
-        terms2.foreach { case (k, v) => terms = terms.updated(k, terms.getOrElse(k, Set()) ++ v) }
-        Bindings(terms, types1 ++ types2, captures1 ++ captures2, merge(namespaces1, namespaces2))
-    }
-
-    def exports: Bindings = scope.bindings
+    def exports: Bindings = scope.bindings.toBindings
 
     def scoped[R](block: => R): R =
       val before = scope
-      scope = Scope.Local(Bindings.empty, Bindings.empty, before)
+      scope = Scope.Local(Namespace.empty, Namespace.empty, before)
       try { block } finally { scope = before }
-
 
     // (re-)enter the namespace
     def namespace[R](name: String)(block: => R): R =
       val before = scope
-      val bindings = before.bindings.namespaces.getOrElse(name, Bindings.empty)
-      val namespace = Scope.Named(name, bindings, before)
-      scope = namespace
-      try { block } finally {
-        before.bindings = before.bindings.copy(namespaces = before.bindings.namespaces.updated(name, namespace.bindings))
-        scope = before
-      }
+      val namespace = before.bindings.getNamespace(name)
+      scope = Scope.Named(name, namespace, before)
+      try { block } finally { scope = before }
 
     // returns the current path
     def path: Option[List[String]] =
@@ -228,5 +255,8 @@ object scopes {
       collect(scope)
   }
 
-  def toplevel(modulePath: List[String], prelude: Bindings): Scoping = Scoping(modulePath, Scope.Global(prelude, Bindings.empty))
+  def toplevel(modulePath: List[String], prelude: Bindings): Scoping =
+    val imports = Namespace.empty
+    imports.importAll(prelude)
+    Scoping(modulePath, Scope.Global(imports, Namespace.empty))
 }

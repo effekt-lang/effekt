@@ -90,7 +90,7 @@ trait ColoredMessaging extends EffektMessaging {
         case (sym, tpe) =>
           val name = fullname(sym.name)
           val padding = " " * (longestNameLength - name.size)
-          pp"- ${highlight(name)}:${padding}${tpe}"
+          pp"- ${highlight(name)}: ${padding}${tpe}"
       }
 
       mainMessage + "\n" + explanations.mkString("\n")
