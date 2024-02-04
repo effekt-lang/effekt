@@ -9,9 +9,11 @@ import typings.vscodeJsonrpc.libCommonMessagesMod.NotificationMessage
 import typings.vscodeLanguageserverProtocol.anon.Name
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import typings.vscodeLanguageserverProtocol.libCommonProtocolMod._
-import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
+import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, VersionedTextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
 import typings.vscodeLanguageserverTypes.mod.Position
 import typings.vscodeLanguageserverTypes.mod.ReferenceContext
+import typings.vscodeLanguageserverProtocol.mod.TextDocumentContentChangeEvent
+import typings.vscodeLanguageserverProtocol.anon.Text
 
 class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) {
   def toURI(file: String) = s"file:///$file"
@@ -92,6 +94,28 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
     )
     val params = DidOpenTextDocumentParams(document)
     connection.sendNotification(DidOpenTextDocumentNotification.`type`, params).toFuture
+  }
+
+  def changeDocument(file: String, content: String) = {
+    val params = DidChangeTextDocumentParams(
+      js.Array(Text(content)), // TODO: support/use ranges
+      VersionedTextDocumentIdentifier.create(toURI(file), 1)
+    )
+    connection.sendNotification(DidChangeTextDocumentNotification.`type`, params).toFuture
+  }
+
+  def saveDocument(file: String) = {
+    val params = DidSaveTextDocumentParams(
+      TextDocumentIdentifier.create(toURI(file))
+    )
+    connection.sendNotification(DidSaveTextDocumentNotification.`type`, params).toFuture
+  }
+
+  def closeDocument(file: String) = {
+    val params = DidCloseTextDocumentParams(
+      TextDocumentIdentifier.create(toURI(file))
+    )
+    connection.sendNotification(DidCloseTextDocumentNotification.`type`, params).toFuture
   }
 
   def requestDocumentSymbol(file: String) = {
