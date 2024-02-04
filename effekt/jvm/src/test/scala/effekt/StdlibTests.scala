@@ -7,11 +7,11 @@ import sbt.io.syntax.*
 import scala.language.implicitConversions
 
 abstract class StdlibTests extends EffektTests {
-  override lazy val included: List[File] = List(
+  override def positives: List[File] = List(
     examplesDir / "stdlib",
   )
 
-  override lazy val ignored: List[File] = List()
+  override def ignored: List[File] = List()
 }
 
 class StdlibJavaScriptTests extends StdlibTests {
@@ -29,7 +29,7 @@ class StdlibChezSchemeLiftTests extends StdlibTests {
 class StdlibMLTests extends StdlibTests {
   def backendName: String = "ml"
 
-  override lazy val ignored: List[File] = List(
+  override def ignored: List[File] = List(
     // For every function using `foreach`:
     // [error] Effect polymorphic recursion is not allowed. The following definition is effect polymorphic since unification variable X occurs in instantiation ...
     examplesDir / "stdlib" / "list" / "join.effekt",
@@ -39,7 +39,7 @@ class StdlibMLTests extends StdlibTests {
 class StdlibLLVMTests extends StdlibTests {
   def backendName: String = "llvm"
 
-  override lazy val ignored: List[File] = List(
+  override def ignored: List[File] = List(
     // For every function tested using `immutable/result`:
     // [error] Unsupported coercion from Exception47234[E48288] to Exception47234[OutOfBounds47515]
     examplesDir / "stdlib" / "list" / "get.effekt",
