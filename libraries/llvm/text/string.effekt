@@ -57,7 +57,7 @@ def indexOf(str: String, start: Int, substr: String): Option[Int] = {
 }
 // """ // fix some parsing bug for vscode syntax highlighting
 
-def show(s: String): String =
+def showQuoted(s: String): String =
  "\x22" ++ map(s){ c =>
    if(c == "\x22") {
     "\\\x22"
@@ -65,8 +65,8 @@ def show(s: String): String =
     "\\\\"
    } else c
  } ++ "\x22"
-def show(l: List[String]): String = showList(l){e => show(e)}
-def show(o: Option[String]): String = showOption(o){ e => show(e) }
+def showQuoted(l: List[String]): String = showList(l){e => showQuoted(e)}
+def showQuoted(o: Option[String]): String = showOption(o){ e => showQuoted(e) }
 
 def toInt(s: String): Option[Int] = {
   def go(i: Int, acc: Int): Int / Exception[RuntimeError] = {
@@ -93,7 +93,7 @@ def toInt(s: String): Option[Int] = {
     } else if(unsafeCharAt(s, i) == "9") {
       go(i + 1, 10 * acc + 9)
     } else {
-        raise("Not an integer")
+      raise("Not an integer")
     }
   }
   try {
@@ -105,7 +105,7 @@ def toInt(s: String): Option[Int] = {
         Some(go(0, 0))
     }
   } with Exception[RuntimeError] {
-    def raise[A](e: RuntimeError, msg: String) = {
+    def raise(e: RuntimeError, msg: String) = {
       None()
     }
   }

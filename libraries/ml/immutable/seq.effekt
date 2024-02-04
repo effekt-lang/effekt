@@ -245,12 +245,12 @@ def uncons[A](seq: Seq[A]): View[A] = seq match {
 }
 
 def head[A](seq: Seq[A]): A / Exception[NoSuchElement] = seq.uncons match {
-  case IsEmpty() => do raise(NoSuchElement(), "Calling `head` on empty sequence.")
+  case IsEmpty() => raise(NoSuchElement(), "Calling `head` on empty sequence.")
   case View(element, _) => element
 }
 
 def tail[A](seq: Seq[A]): Seq[A] / Exception[NoSuchElement] = seq.uncons match {
-  case IsEmpty() => do raise(NoSuchElement(), "Calling `tail` on empty sequence.")
+  case IsEmpty() => raise(NoSuchElement(), "Calling `tail` on empty sequence.")
   case View(element, rest) => rest
 }
 
@@ -471,7 +471,7 @@ def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
       }
   }
 
-  if (index >= seq.size) do raise(NoSuchElement(), "...")
+  if (index >= seq.size) raise(NoSuchElement(), "...")
   else seq match {
     case Empty() => <{ "Cannot happen!" }>
     case Single(v) => v // has to be the right one due to the check above
@@ -549,7 +549,7 @@ def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchEleme
       }
   }
 
-  if (index >= seq.size) do raise(NoSuchElement(), "...")
+  if (index >= seq.size) raise(NoSuchElement(), "...")
   else seq match {
     case Empty() => <{ "Cannot happen!" }>
     case Single(_) => Single(value) // has to be the right one due to the check above
@@ -774,7 +774,7 @@ def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOf
   }
 
   if (index < 0) {
-    do raise(IndexOutOfBounds(), "...")
+    raise(IndexOutOfBounds(), "...")
   } else if (index >= seq.size) {
     (seq, Empty())
   } else seq match {

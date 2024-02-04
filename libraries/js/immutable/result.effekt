@@ -11,7 +11,7 @@ type Result[A, E] {
 def result[A, E] { f: () => A / Exception[E] }: Result[A, E] = try {
   Success(f())
 } with Exception[E] {
-  def raise[A](exc, msg) = Error(exc, msg)
+  def raise(exc, msg) = Error(exc, msg)
 }
 
 /**
