@@ -77,6 +77,18 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     }
 
     // TODO: inferredCaptures command
+
+    test("Add newline to all files") {
+      forEachSample { file => client.changeDocument(file, fsMod.readFileSync(file).toString + "\n") }
+    }
+
+    test("Save files") {
+      forEachSample { file => client.closeDocument(file) }
+    }
+
+    test("Close files") {
+      forEachSample { file => client.closeDocument(file) }
+    }
   }
 
   def symbolToRange(symbol: DocumentSymbol | SymbolInformation) = {
