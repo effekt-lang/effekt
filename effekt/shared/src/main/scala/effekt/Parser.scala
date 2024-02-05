@@ -116,17 +116,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     // aliases are allowed, since they are fully resolved during name checking
     | typeAliasDef
     | effectAliasDef
+    | namespaceDef
     | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
         failure(s"Only supported on the toplevel: ${kw} declaration.")
       }
     | failure("Expected a definition")
-    )
-
-  lazy val definitions: P[List[Def]] =
-    ( `namespace` ~> idDef ~ (`{` ~/> definitions <~ `}`) ~ definitions  ^^ { case (id ~ defs ~ rest) => NamespaceDef(id, defs) :: rest }
-    | `namespace` ~> idDef ~/ definitions ^^ { case (id ~ defs) => List(NamespaceDef(id, defs)) }
-    | definition ~ definitions ^^ { case defn ~ defs => defn :: defs }
-    | success(Nil)
     )
 
   lazy val funDef: P[Def] =
@@ -353,11 +347,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val recordDef: P[Def] =
     `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef.apply
 
-  lazy val toplevelNamespaceDef: P[Def] =
-    `namespace` ~/> idDef ~ (`{` ~/> many(toplevel) <~ `}`) ^^ NamespaceDef.apply
-
   lazy val namespaceDef: P[Def] =
     `namespace` ~/> idDef ~ (`{` ~/> definitions <~ `}`) ^^ NamespaceDef.apply
+
+  lazy val definitions: P[List[Def]] =
+    ( `namespace` ~> idDef ~ (`{` ~/> definitions <~ `}`) ~ definitions  ^^ { case (id ~ defs ~ rest) => NamespaceDef(id, defs) :: rest }
+    | `namespace` ~> idDef ~/ definitions ^^ { case (id ~ defs) => List(NamespaceDef(id, defs)) }
+    | definition ~ definitions ^^ { case defn ~ defs => defn :: defs }
+    | success(Nil)
+    )
 
   lazy val constructor: P[Constructor] =
     idDef ~ valueParams ^^ Constructor.apply
