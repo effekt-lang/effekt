@@ -194,5 +194,68 @@
 			"uri": "file:///lspTest/tests/samples/hover.effekt",
 			"diagnostics": []
 		}
-	}
+	},
+	"hoverRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 0,
+					"character": 7
+				},
+				"end": {
+					"line": 0,
+					"character": 10
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 0,
+					"character": 11
+				},
+				"end": {
+					"line": 0,
+					"character": 14
+				}
+			},
+			"result": {
+				"contents": {
+					"kind": "markdown",
+					"value": "#### Value parameter\n```effekt\nmsg: String\n```\n"
+				}
+			}
+		}
+	],
+	"formattingRequest": [
+		{
+			"context": {
+				"start": {
+					"character": 0,
+					"line": 0
+				},
+				"end": {
+					"character": 0,
+					"line": 0
+				}
+			},
+			"result": null
+		}
+	],
+	"executeCommandInferredCaptures": [
+		{
+			"context": {
+				"start": {
+					"character": 0,
+					"line": 0
+				},
+				"end": {
+					"character": 0,
+					"line": 0
+				}
+			},
+			"result": null
+		}
+	]
 }

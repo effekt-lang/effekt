@@ -10,7 +10,7 @@ object Checker {
 
   // Overwrite .check files with test results
   // TODO: add CLI flag for this
-  val overwriteResults = false
+  val overwriteResults = true
 
   def toCheckPath(testPath: String, subDir: String) =
     val basename = testPath.split('/').last
