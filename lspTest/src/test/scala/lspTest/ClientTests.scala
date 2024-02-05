@@ -55,6 +55,8 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     test("Symbol code action") {
       forEachSample { file =>
         testEachSymbol(file, "codeActionRequest", range =>
+          // TODO: Infer captures here, when action is available
+          // TODO: Close hole here
           client.requestCodeAction(file, range.start, range.end)
         )
       }
@@ -76,7 +78,21 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
       }
     }
 
-    // TODO: inferredCaptures command
+    test("Format document") {
+      forEachSample { file =>
+        checkContextualSample(file, "formattingRequest", Range.create(Position(0, 0), Position(0, 0)), _ => {
+          client.requestFormatting(file, 2)
+        })
+      }
+    }
+
+    test("Execute inferredCaptures") {
+      forEachSample { file => 
+        checkContextualSample(file, "executeCommandInferredCaptures", Range.create(Position(0, 0), Position(0, 0)), _ => {
+          client.executeCommand(file, "inferredCaptures")
+        })
+      }
+    }
 
     test("Add newline to all files") {
       forEachSample { file => client.changeDocument(file, fsMod.readFileSync(file).toString + "\n") }
@@ -105,20 +121,23 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     in.foldLeft(Future.successful(())) {
         (a, b) => a.transformWith { _ => b() }
     } map (_ => builder.result())
+
+  def checkContextualSample(file: String, request: String, range: Range, callback: Range => Future[Any]) = {
+    callback(range).transform {
+      case Success(v) => {
+        Checker.checkContextualSample(request, range, file, v.asInstanceOf[js.Object])
+        Success(())
+      }
+      case Failure(_) => Failure(new Error(s"$request failed"))
+    }
+  }
   
   // this currently seems to work fine using Future.sequence
   // TODO: use linearizeFuture if we happen to get race conditions (this will be a lot slower!)
   def testEachSymbol(file: String, request: String, callback: Range => Future[Any]) = {
     Future.sequence {
       symbols.getOrElse(file, js.Array()).map { symbol =>
-        val range = symbolToRange(symbol)
-        callback(range).transform {
-          case Success(v) => {
-            Checker.checkContextualSample(request, range, file, v.asInstanceOf[js.Object])
-            Success(())
-          }
-          case Failure(_) => Failure(new Error(s"$request failed"))
-        }
+        checkContextualSample(file, request, symbolToRange(symbol), callback)
       }
     }.map(_ => ())
   }

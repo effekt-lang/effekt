@@ -6,14 +6,12 @@ import scala.scalajs.js
 import org.scalablytyped.runtime.StObject
 import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
 import typings.vscodeJsonrpc.libCommonMessagesMod.NotificationMessage
-import typings.vscodeLanguageserverProtocol.anon.Name
+import typings.vscodeLanguageserverProtocol.anon.{Name, Text}
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
 import typings.vscodeLanguageserverProtocol.libCommonProtocolMod._
 import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, VersionedTextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
 import typings.vscodeLanguageserverTypes.mod.Position
 import typings.vscodeLanguageserverTypes.mod.ReferenceContext
-import typings.vscodeLanguageserverProtocol.mod.TextDocumentContentChangeEvent
-import typings.vscodeLanguageserverProtocol.anon.Text
 
 class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) {
   def toURI(file: String) = s"file:///$file"
@@ -165,5 +163,14 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
       TextDocumentIdentifier.create(toURI(file))
     )
     connection.sendRequest(ReferencesRequest.`type`, params).toFuture
+  }
+
+  def executeCommand(file: String, command: String) = {
+    // kiama wants the first argument to be JSON with uri
+    val argument = js.JSON.parse(s"{\"uri\":\"${toURI(file)}\"}")
+
+    val params = ExecuteCommandParams(command)
+    params.setArguments(js.Array(argument))
+    connection.sendRequest(ExecuteCommandRequest.`type`, params).toFuture
   }
 }
