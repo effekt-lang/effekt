@@ -36,6 +36,7 @@ class MLTests extends EffektTests {
     // Tests with box
     examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
+    examplesDir / "pos" / "file.effekt",
     //    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "resources.effekt",

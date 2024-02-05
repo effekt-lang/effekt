@@ -77,6 +77,8 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
     examplesDir / "benchmarks" / "generator.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "selfregion.effekt",
+    // boxing is not (yet) supported for list-based backends
+    examplesDir / "pos" / "file.effekt",
 
     // known issues:
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
