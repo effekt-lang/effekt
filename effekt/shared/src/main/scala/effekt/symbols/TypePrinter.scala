@@ -16,7 +16,11 @@ object TypePrinter extends ParenPrettyPrinter {
   def show(id: source.IdDef): String = id.name
   def show(id: source.IdRef): String = (id.path :+ id.name).mkString("::")
 
-  def show(n: Name): String = n.name
+  def show(n: Name): String = n match {
+    case name: NoName.type  => name.name
+    case name: LocalName    => name.name
+    case name: QualifiedName => name.qualifiedName
+  }
   def show(t: Type): String = pretty(toDoc(t), 80).layout
   def show(t: Capture): String = pretty(toDoc(t), 80).layout
   def show(t: Captures): String = pretty(toDoc(t), 80).layout
@@ -26,7 +30,7 @@ object TypePrinter extends ParenPrettyPrinter {
   val show: PartialFunction[Any, String] = {
     case id: source.IdRef   => TypePrinter.show(id)
     case id: source.IdDef   => TypePrinter.show(id)
-    case name: Name         => name.name
+    case n: Name            => TypePrinter.show(n)
     case t: symbols.Type    => TypePrinter.show(t)
     case t: Capture         => TypePrinter.show(t)
     case t: Captures        => TypePrinter.show(t)

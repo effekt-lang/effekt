@@ -67,7 +67,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Main entry point
    */
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(includeDecl) ~ many(toplevel) ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(includeDecl) ~ toplevelDefs ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -95,9 +95,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | dataDef
     | recordDef
     | externDef
-    | toplevelNamespaceDef
-    | `var` ~> failure("Mutable variable declarations are currently not supported on the toplevel.")
+    | `var` ~/> failure("Mutable variable declarations are currently not supported on the toplevel.")
     | failure("Expected a top-level definition")
+    )
+
+  lazy val toplevelDefs: P[List[Def]] =
+    ( `namespace` ~> idDef ~ (`{` ~/> toplevelDefs <~ `}`) ~ toplevelDefs  ^^ { case (id ~ defs ~ rest) => NamespaceDef(id, defs) :: rest }
+    | `namespace` ~> idDef ~/ toplevelDefs ^^ { case (id ~ defs) => List(NamespaceDef(id, defs)) }
+    | toplevel ~ toplevelDefs ^^ { case defn ~ defs => defn :: defs }
+    | success(Nil)
     )
 
   /**
@@ -110,11 +116,17 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     // aliases are allowed, since they are fully resolved during name checking
     | typeAliasDef
     | effectAliasDef
-    | namespaceDef
     | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
         failure(s"Only supported on the toplevel: ${kw} declaration.")
       }
     | failure("Expected a definition")
+    )
+
+  lazy val definitions: P[List[Def]] =
+    ( `namespace` ~> idDef ~ (`{` ~/> definitions <~ `}`) ~ definitions  ^^ { case (id ~ defs ~ rest) => NamespaceDef(id, defs) :: rest }
+    | `namespace` ~> idDef ~/ definitions ^^ { case (id ~ defs) => List(NamespaceDef(id, defs)) }
+    | definition ~ definitions ^^ { case defn ~ defs => defn :: defs }
+    | success(Nil)
     )
 
   lazy val funDef: P[Def] =
@@ -345,7 +357,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `namespace` ~/> idDef ~ (`{` ~/> many(toplevel) <~ `}`) ^^ NamespaceDef.apply
 
   lazy val namespaceDef: P[Def] =
-    `namespace` ~/> idDef ~ (`{` ~/> many(definition) <~ `}`) ^^ NamespaceDef.apply
+    `namespace` ~/> idDef ~ (`{` ~/> definitions <~ `}`) ^^ NamespaceDef.apply
 
   lazy val constructor: P[Constructor] =
     idDef ~ valueParams ^^ Constructor.apply
