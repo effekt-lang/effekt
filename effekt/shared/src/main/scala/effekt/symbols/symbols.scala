@@ -34,8 +34,8 @@ case class Module(
 ) extends Symbol {
 
   val name: QualifiedName = {
-    val segments = decl.path.split("/")
-    QualifiedName(segments.tail.toList, segments.head)
+    val segments = decl.path.split("/").toList
+    QualifiedName(segments.init, segments.last)
   }
 
   val namespace = name.prefix :+ name.name
