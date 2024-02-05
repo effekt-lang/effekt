@@ -1,5 +1,5 @@
 interface Exc { def throw(msg: String): Unit }
-interface Console { def println[A](a: A): Unit }
+interface Console { def myprintln(msg: String): Unit }
 interface Time { def now(): Int }
 
 // console and time are "global" -- that is, module wide capabilities
@@ -7,7 +7,7 @@ def globalCapabilities { console: Console } { time: Time }: Unit = {
   def parallel(f: () => Unit at {}, g: () => Unit at {}): Unit = ()
   parallel(
       box { () => () },
-      box { () => time.now(); console.println("world!")  } // ERROR Not allowed {time, console}
+      box { () => time.now(); console.myprintln("world!")  } // ERROR Not allowed {time, console}
   )
 }
 
@@ -15,7 +15,7 @@ def run[T] { prog : {Console} {Time} => T }: T =
   try {
     prog {console} {time}
   } with console: Console {
-    def println[A](msg) = { println(msg); resume(()) }
+    def myprintln(msg) = { println(msg); resume(()) }
   } with time: Time {
     def now() = resume(timestamp())
   }
