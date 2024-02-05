@@ -218,6 +218,9 @@ object scopes {
 
     def define(name: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
       val bindings = scope.bindings
+      if bindings.types.isDefinedAt(name) then
+        E.error(pp"Type ${name} already defined in the current scope")
+
       lookupTypeOption(Nil, name).foreach { shadowed =>
         if sym.isInstanceOf[TypeVar] && !shadowed.isInstanceOf[TypeVar] then
           E.warning(pp"Type parameter ${name} shadows outer definition of ${sym}")
