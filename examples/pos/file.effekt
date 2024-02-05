@@ -10,7 +10,7 @@ def fileExample() = {
     val offsetReader : Int => Int at {fileA} =
       withFile("B.txt") { {fileB: FileHandle} =>
         val offset = fileB.readByte(0);
-        return box { (pos: Int) => fileA.readByte(pos + offset) }
+        box { (pos: Int) => fileA.readByte(pos + offset) }
       };
     offsetReader(10)
   }

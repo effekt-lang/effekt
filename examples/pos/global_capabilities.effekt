@@ -1,5 +1,5 @@
 interface Exc { def throw(msg: String): Unit }
-interface MyConsole { def myprintln[A](a: A): Unit }
+interface MyConsole { def myprintln(msg: String): Unit }
 interface Time { def now(): Int }
 interface Stopwatch { def elapsed(): Int }
 
@@ -71,7 +71,7 @@ def run[T] { prog : {MyConsole} {Time} => T }: T = {
     try {
         prog {console} {time}
     } with console: MyConsole {
-        def myprintln[A](msg) = { println[A](msg); resume(()) }
+        def myprintln(msg) = { println(msg); resume(()) }
     } with time: Time {
         def now() = { 
 			i = i + 1
