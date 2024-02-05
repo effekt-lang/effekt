@@ -56,14 +56,20 @@ trait ModuleDB { self: Context =>
    * Util to check whether main exists on the given module
    */
   def checkMain(mod: Module)(implicit C: Context): TermSymbol = C.at(mod.decl) {
-    val mains = mod.terms.getOrElse("main", Set())
+
+    // deep discovery of main: should be replaced by explicit @main annotation
+    def findMain(b: Bindings): Set[TermSymbol] =
+      b.terms.getOrElse("main", Set()) ++ b.namespaces.flatMap { case (_, b) => findMain(b) }
+
+    val mains = findMain(mod.exports)
 
     if (mains.isEmpty) {
       C.abort("No main function defined")
     }
 
     if (mains.size > 1) {
-      C.abort("Multiple main functions defined")
+      val names = mains.toList.map(sym => pp"${sym.name}").mkString(", ")
+      C.abort(pp"Multiple main functions defined: ${names}")
     }
 
     val main = mains.head

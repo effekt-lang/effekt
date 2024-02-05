@@ -57,13 +57,17 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Names
    */
   lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
-  lazy val idRef: P[IdRef] = ident ^^ IdRef.apply
+  lazy val idRef: P[IdRef] = identRef ^^ { path =>
+    val ids = path.split("::").toList
+    IdRef(ids.init, ids.last)
+  }
+
 
   /**
    * Main entry point
    */
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(toplevel) ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(includeDecl) ~ toplevelDefs ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -72,14 +76,14 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | defaultModulePath
     )
 
-  lazy val importDecl: P[Import] =
-    `import` ~/> moduleName ^^ Import.apply
+  lazy val includeDecl: P[Include] =
+    `import` ~/> moduleName ^^ Include.apply
 
 
   /**
    * For the REPL
    */
-  lazy val repl: P[Tree] = toplevel | expr | importDecl
+  lazy val repl: P[Tree] = toplevel | expr | includeDecl
 
   lazy val toplevel: P[Def] =
     ( valDef
@@ -91,8 +95,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | dataDef
     | recordDef
     | externDef
-    | `var` ~> failure("Mutable variable declarations are currently not supported on the toplevel.")
+    | `var` ~/> failure("Mutable variable declarations are currently not supported on the toplevel.")
     | failure("Expected a top-level definition")
+    )
+
+  lazy val toplevelDefs: P[List[Def]] =
+    ( `namespace` ~> idDef ~ (`{` ~/> toplevelDefs <~ `}`) ~ toplevelDefs  ^^ { case (id ~ defs ~ rest) => NamespaceDef(id, defs) :: rest }
+    | `namespace` ~> idDef ~/ toplevelDefs ^^ { case (id ~ defs) => List(NamespaceDef(id, defs)) }
+    | toplevel ~ toplevelDefs ^^ { case defn ~ defs => defn :: defs }
+    | success(Nil)
     )
 
   /**
@@ -105,6 +116,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     // aliases are allowed, since they are fully resolved during name checking
     | typeAliasDef
     | effectAliasDef
+    | namespaceDef
     | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
         failure(s"Only supported on the toplevel: ${kw} declaration.")
       }
@@ -169,7 +181,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
-    | success(CaptureSet(List(IdRef("io"))))
+    | success(CaptureSet(List(IdRef(List("effekt"), "io"))))
     )
 
   lazy val externInclude: P[Def] =
@@ -254,7 +266,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
-        Return(Match(Var(IdRef(name)), cs, None)))
+        Return(Match(Var(IdRef(Nil, name)), cs, None)))
       res withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) : BlockLiteral }
@@ -345,6 +357,16 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val recordDef: P[Def] =
     `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef.apply
+
+  lazy val namespaceDef: P[Def] =
+    `namespace` ~/> idDef ~ (`{` ~/> definitions <~ `}`) ^^ NamespaceDef.apply
+
+  lazy val definitions: P[List[Def]] =
+    ( `namespace` ~> idDef ~ (`{` ~/> definitions <~ `}`) ~ definitions  ^^ { case (id ~ defs ~ rest) => NamespaceDef(id, defs) :: rest }
+    | `namespace` ~> idDef ~/ definitions ^^ { case (id ~ defs) => List(NamespaceDef(id, defs)) }
+    | definition ~ definitions ^^ { case defn ~ defs => defn :: defs }
+    | success(Nil)
+    )
 
   lazy val constructor: P[Constructor] =
     idDef ~ valueParams ^^ Constructor.apply
@@ -441,7 +463,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       }
     | idRef ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
       case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, bparams, body) =>
-        val synthesizedId = IdRef(id.name)
+        val synthesizedId = IdRef(Nil, id.name)
         val interface = BlockTypeRef(id, Nil) withPositionOf id
         Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, bparams, None, body, resume) withPositionOf id))
       }
@@ -469,7 +491,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
     | `(` ~> matchPattern ~ (some(`,` ~> matchPattern) <~ `)`) ^^ { case f ~ r =>
-        TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
+        TagPattern(IdRef(List("effekt"), s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
 
@@ -521,13 +543,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef("Nil")), Nil, Nil, Nil)
+    Call(IdTarget(IdRef(List(), "Nil")), Nil, Nil, Nil)
 
   private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef("Cons")), Nil, List(el, rest), Nil)
+    Call(IdTarget(IdRef(List(), "Cons")), Nil, List(el, rest), Nil)
 
   private def TupleTree(args: List[Term]): Term =
-    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, args, Nil)
+    Call(IdTarget(IdRef(List("effekt"), s"Tuple${args.size}")), Nil, args, Nil)
 
   /**
    * Types and Effects
@@ -590,7 +612,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   // === AST Helpers ===
 
   private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
-     Call(IdTarget(IdRef(opName(op))), Nil, List(lhs, rhs), Nil)
+     Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
   private def opName(op: String): String = op match {
     case "||" => "infixOr"
@@ -609,7 +631,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    ValueTypeRef(IdRef(s"Tuple${tps.size}"), tps)
+    ValueTypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
 
   /**
    * Automatic Semicolon Insertion
@@ -760,9 +782,15 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
   lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
+  lazy val qualifiedName = "%s(::%s)*\\b".format(name, name).r
 
   lazy val ident =
     (not(anyKeyword) ~> name
+    | failure("Expected an identifier")
+    )
+
+  lazy val identRef =
+    (not(anyKeyword) ~> qualifiedName
     | failure("Expected an identifier")
     )
 
@@ -821,12 +849,13 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `new` = keyword("new")
   lazy val `and` = keyword("and")
   lazy val `is` = keyword("is")
+  lazy val `namespace` = keyword("namespace")
 
   def keywordStrings: List[String] = List(
     "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource"
+    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
   )
 
   def keyword(kw: String): Parser[String] =

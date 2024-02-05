@@ -1,0 +1,4 @@
+type Foo {}
+type Foo {} // ERROR
+
+def main() = ()

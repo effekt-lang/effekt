@@ -81,7 +81,7 @@ object Id {
  */
 case class ModuleDecl(
   path: String,
-  imports: List[String],
+  includes: List[String],
   declarations: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
@@ -535,8 +535,8 @@ object Tree {
 
     def rewrite(m: ModuleDecl): ModuleDecl =
       m match {
-        case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-          ModuleDecl(path, imports, declarations, externs, definitions.map(rewrite), exports)
+        case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+          ModuleDecl(path, includes, declarations, externs, definitions.map(rewrite), exports)
       }
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {

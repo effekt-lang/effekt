@@ -36,8 +36,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val externals = toplevelDeclarations.collect { case d: Extern => d }
     val declarations = toplevelDeclarations.collect { case d: Declaration => d }
 
-    // We use the imports on the symbol (since they include the prelude)
-    ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, definitions, exports)
+    // We use the includes on the symbol (since they include the prelude)
+    ModuleDecl(path, mod.includes.map { _.path }, declarations, externals, definitions, exports)
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Definition | Declaration | Extern] = d match {
@@ -115,6 +115,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
+
+    case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
   }
 
   /**
@@ -186,6 +188,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       // For now we forget about all of the following definitions in core:
       case d: source.Def.Alias => transform(rest)
+
+      case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
     }
   }
 

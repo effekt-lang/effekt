@@ -33,29 +33,29 @@ case class Module(
   source: Source
 ) extends Symbol {
 
-  val name = {
-    val segments = decl.path.split("/")
-    QualifiedName(segments.tail.toList, segments.head)
+  val name: QualifiedName = {
+    val segments = decl.path.split("/").toList
+    QualifiedName(segments.init, segments.last)
   }
+
+  val namespace = name.prefix :+ name.name
 
   def path = decl.path
 
-  private var _terms: Map[String, Set[TermSymbol]] = _
-  def terms = _terms
+  private var _exports: Bindings = _
+  def exports: Bindings = _exports
 
-  private var _types: Map[String, TypeSymbol] = _
-  def types = _types
-
-  private var _captures: Map[String, Capture] = _
-  def captures = _captures
+  def terms = exports.terms
+  def types = exports.types
+  def captures = exports.captures
 
 
-  private var _imports: List[Module] = _
-  def imports = _imports
+  private var _includes: List[Module] = _
+  def includes = _includes
 
   // a topological ordering of all transitive dependencies
   // this is the order in which the modules need to be compiled / loaded
-  lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
+  lazy val dependencies: List[Module] = includes.flatMap { im => im.dependencies :+ im }.distinct
 
   // toplevel declared effects
   def effects: List[Interface] = types.values.toList.collect {
@@ -72,15 +72,11 @@ case class Module(
    * again. It is the same, since the source and AST did not change.
    */
   def exports(
-    imports: List[Module],
-    terms: Map[String, Set[TermSymbol]],
-    types: Map[String, TypeSymbol],
-    captures: Map[String, Capture],
+    includes: List[Module],
+    exports: Bindings
   ): this.type = {
-    _imports = imports
-    _terms = terms
-    _types = types
-    _captures = captures
+    _includes = includes
+    _exports = exports
     this
   }
 }
@@ -189,7 +185,7 @@ export Binder.*
  *
  * Refined by typer.
  */
-case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
+case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol { val name = NoName }
 
 /**
  * Introduced by Transformer

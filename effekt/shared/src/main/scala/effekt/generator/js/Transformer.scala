@@ -130,7 +130,7 @@ trait Transformer {
    *
    * Necessary for generating the linker code (separate compilation for the web)
    */
-  def usedImports(input: CoreTransformed): Map[Module, Set[Symbol]] = {
+  def usedIncludes(input: CoreTransformed): Map[Module, Set[Symbol]] = {
     val dependencies = input.mod.dependencies
 
     // Create a mapping Termsymbol -> Module

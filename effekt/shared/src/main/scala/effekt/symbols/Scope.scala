@@ -1,22 +1,148 @@
 package effekt
 package symbols
 
-import effekt.context.Context
+import effekt.source.IdRef
+import effekt.util.messages.ErrorReporter
+
 import scala.collection.mutable
 
 /**
- * Something modeling a scope
- *
- * Scopes ares non-empty immutable linked lists storing mutable maps from symbols to T
+ * An immutable container of bindings
  */
+case class Bindings(
+  terms: Map[String, Set[TermSymbol]], // terms can be overloaded
+  types: Map[String, TypeSymbol],
+  captures: Map[String, Capture],
+  namespaces: Map[String, Bindings]
+)
+
+object Bindings {
+  def empty: Bindings = Bindings(Map.empty, Map.empty, Map.empty, Map.empty)
+}
+
+/**
+ * A mutable container of bindings
+ */
+class Namespace(
+  var terms: mutable.Map[String, Set[TermSymbol]],
+  var types: mutable.Map[String, TypeSymbol],
+  var captures: mutable.Map[String, Capture],
+  var namespaces: mutable.Map[String, Namespace]
+) {
+  def importAll(other: Bindings): Unit = other match {
+    case Bindings(terms2, types2, captures2, namespaces2) =>
+      terms2.foreach { case (k, syms) => syms.foreach(addTerm(k, _)) }
+      types2.foreach { case (k, v) => setType(k, v) }
+      captures2.foreach { case (k, v) => setCapture(k, v) }
+      namespaces2.foreach { case (k, v) => getNamespace(k).importAll(v) }
+  }
+
+  def addTerm(name: String, sym: TermSymbol): Unit =
+    val before = terms.getOrElse(name, Set.empty)
+    terms.update(name, before + sym)
+  def setType(name: String, sym: TypeSymbol): Unit =
+    types.update(name, sym)
+  def setCapture(name: String, sym: Capture): Unit =
+    captures.update(name, sym)
+
+  def getNamespace(name: String): Namespace =
+    namespaces.getOrElseUpdate(name, Namespace.empty)
+
+  /**
+   * Convert to immutable bindings
+   */
+  def toBindings: Bindings = Bindings(
+    terms.toMap,
+    types.toMap,
+    captures.toMap,
+    namespaces.map { case (k, v) => k -> v.toBindings }.toMap)
+}
+object Namespace {
+  def empty: Namespace = Namespace(mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty)
+}
+
 object scopes {
 
-  sealed trait Scope {
+  enum Scope { self =>
 
-    val terms: mutable.HashMap[String, Set[TermSymbol]] = mutable.HashMap.empty
-    val types: mutable.HashMap[String, TypeSymbol] = mutable.HashMap.empty
-    val captures: mutable.HashMap[String, Capture] = mutable.HashMap.empty
-    val effects: mutable.HashMap[String, Interface] = mutable.HashMap.empty
+    /**
+     * The toplevel global scope ("project scope")
+     */
+    case Global(imports: Namespace, bindings: Namespace)
+
+    /**
+     * A scope introducing a new namespace
+     */
+    case Named(name: String, bindings: Namespace, outer: Scope)
+
+    /**
+     * A local scope introduced by functions, blocks, etc.
+     */
+    case Local(imports: Namespace, bindings: Namespace, outer: Scope)
+
+    /**
+     * All scopes introduce (mutable) namespaces for their bindings
+     */
+    def bindings: Namespace
+
+    def imports(using E: ErrorReporter): Namespace = this match {
+      case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
+      case s @ Scope.Global(imports, bindings) => imports
+      case s @ Scope.Local(imports, bindings, outer) => imports
+    }
+  }
+
+  case class Scoping(modulePath: List[String], var scope: Scope) {
+    def importAs(imports: Bindings, path: List[String])(using E: ErrorReporter): Unit =
+      def go(path: List[String], in: Namespace): Unit = path match {
+        case pathSeg :: rest => go(rest, in.getNamespace(pathSeg))
+        case Nil => in.importAll(imports)
+      }
+      go(path, scope.imports)
+
+    // TODO check shadowing etc. Also here concrete functions will *always* shadow imports,
+    //   regardless of the order of importing / defining.
+    def importAll(imports: Bindings)(using E: ErrorReporter): Unit = scope.imports.importAll(imports)
+
+    /**
+     * Defines the scoping rules by searching with [[ search ]] in an
+     * inside-out manner through all nested scopes.
+     */
+    private def first[T](path: List[String], scope: Scope)(select: Namespace => Option[T]): Option[T] =
+
+      def qualified(path: List[String], bindings: Namespace): Option[T] = path match {
+        case Nil => select(bindings)
+        case pathSegment :: rest => bindings.namespaces.get(pathSegment).flatMap {
+          namespace => qualified(rest, namespace)
+        }
+      }
+
+      scope match {
+        case Scope.Global(imports, bindings) =>
+          qualified(path, bindings) orElse qualified(path, imports)
+        case Scope.Named(name, bindings, outer) =>
+          qualified(path, bindings) orElse first(path, outer)(select)
+        case Scope.Local(imports, bindings, outer) =>
+          qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
+      }
+
+    private def all[T](path: List[String], scope: Scope)(select: Namespace => T): List[T] =
+
+      def qualified(path: List[String], bindings: Namespace): List[T] = path match {
+        case Nil => select(bindings) :: Nil
+        case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap {
+          namespace => qualified(rest, namespace)
+        }
+      }
+
+      scope match {
+        case Scope.Global(imports, bindings) =>
+          qualified(path, bindings) ++ qualified(path, imports)
+        case Scope.Named(name, bindings, outer) =>
+          qualified(path, bindings) ++ all(path, outer)(select)
+        case Scope.Local(imports, bindings, outer) =>
+          qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
+      }
 
     /**
      * Searches the nested scopes to find the first term.
@@ -24,163 +150,116 @@ object scopes {
      *   - there are multiple matching terms in the same scope
      *   - there a no matching terms at all
      */
-    def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol
+    def lookupFirstTerm(id: IdRef)(using E: ErrorReporter): TermSymbol =
+      lookupFirstTermOption(id) getOrElse { E.abort(pp"Could not resolve term ${id}") }
 
-    def lookupType(key: String)(implicit C: Context): TypeSymbol =
-      lookupTypeOption(key).getOrElse(C.abort(s"Could not resolve type ${key}"))
+    def lookupFirstTermOption(id: IdRef)(using E: ErrorReporter): Option[TermSymbol] =
+      first(id.path, scope) { _.terms.get(id.name).map { syms =>
+        if (syms.size > 1) E.abort(pp"Ambiguous reference to ${id}")
+        else syms.head
+      }}
 
-    def lookupTypeOption(key: String)(implicit C: Context): Option[TypeSymbol]
+    def lookupType(id: IdRef)(using E: ErrorReporter): TypeSymbol =
+      lookupTypeOption(id.path, id.name) getOrElse { E.abort(pp"Could not resolve type ${id}") }
 
-    def lookupCapture(key: String)(implicit C: Context): Capture
+    def lookupTypeOption(path: List[String], name: String)(using E: ErrorReporter): Option[TypeSymbol] =
+      first(path, scope) { _.types.get(name) }
 
-    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(implicit C: Context): List[Set[TermSymbol]]
+    def lookupCapture(id: IdRef)(using E: ErrorReporter): Capture =
+      first(id.path, scope) { _.captures.get(id.name) } getOrElse E.abort(pp"Could not resolve capture ${id}")
 
-    def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]]
+    def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
+      all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
+
+    def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
+      all(path, scope) { _.terms.getOrElse(name, Set.empty).collect {
+        case o: Operation => o
+      }}
 
     // can be a term OR a type symbol
-    def lookupFirst(key: String)(implicit C: Context): Symbol
+    def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =
+      lookupFirstOption(path, name) getOrElse { E.abort(s"Could not resolve ${name}") }
 
-    def currentTermsFor(key: String): Set[TermSymbol] =
-      terms.getOrElse(key, Set.empty)
+    def lookupFirstOption(path: List[String], name: String)(using E: ErrorReporter): Option[Symbol] =
+      first(path, scope) { bindings =>
+          (bindings.terms.get(name).map(_.toList), bindings.types.get(name)) match {
+            case (Some(List(t)), None) => Some(t)
+            case (None, Some(t)) => Some(t)
+            // give precedence to the type level effect, if an equally named effect op is in scope
+            case (Some(List(t1: Operation)), Some(t2: Interface)) => Some(t2)
+            case (Some(t1), Some(t2)) =>
+              E.abort(s"Ambiguous reference to ${name}. Can refer to a term or a type.")
+            case (None, None) => None
+            case _            => E.abort(s"Ambiguous reference to ${name}.")
+          }
+      }
 
-    def allTermsFor(key: String): Set[TermSymbol]
+    def currentTermsFor(name: String): Set[TermSymbol] =
+      scope.bindings.terms.getOrElse(name, Set.empty)
 
-    // TODO add appropriate checks
-    def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
-      val bindings = terms.getOrElse(key, Set())
+    def allTermsFor(path: List[String], name: String): Set[TermSymbol] =
+      all(path, scope) { _.terms.getOrElse(name, Set.empty) }.flatten.toSet
+
+    def define(name: String, sym: TermSymbol)(using E: ErrorReporter): Unit = {
+      val bindings = scope.bindings
+      val termsInScope = currentTermsFor(name)
       sym match {
         case v: ValueSymbol =>
-          if (bindings.exists(_.isInstanceOf[BlockSymbol])) {
-            C.abort(s"Value ${key} has the same name as a block definition in the same scope, which is not allowed.")
+          if (termsInScope.exists(_.isInstanceOf[BlockSymbol])) {
+            E.abort(s"Value ${name} has the same name as a block definition in the same scope, which is not allowed.")
           }
         case b: BlockSymbol =>
-          if (bindings.exists(_.isInstanceOf[ValueSymbol])) {
-            C.abort(s"Block ${key} has the same name as a value definition in the same scope, which is not allowed.")
+          if (termsInScope.exists(_.isInstanceOf[ValueSymbol])) {
+            E.abort(s"Block ${name} has the same name as a value definition in the same scope, which is not allowed.")
           }
       }
-      terms.update(key, bindings + sym)
+      bindings.addTerm(name, sym)
     }
 
-    def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
-      lookupTypeOption(key).foreach { shadowed =>
+    def define(name: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
+      val bindings = scope.bindings
+      if bindings.types.isDefinedAt(name) then
+        E.error(pp"Type ${name} already defined in the current scope")
+
+      lookupTypeOption(Nil, name).foreach { shadowed =>
         if sym.isInstanceOf[TypeVar] && !shadowed.isInstanceOf[TypeVar] then
-          C.warning(pp"Type parameter ${key} shadows outer definition of ${sym}")
+          E.warning(pp"Type parameter ${name} shadows outer definition of ${sym}")
       }
-      types.update(key, sym)
+      bindings.setType(name, sym)
 
-    def define(key: String, capt: Capture)(implicit C: Context): Unit =
-      captures.update(key, capt)
+    def define(name: String, capt: Capture)(using ErrorReporter): Unit =
+      scope.bindings.setCapture(name, capt)
 
-    def enterLocal: Scope = LocalScope(this)
-    // TODO rename global to "static" scope
-    def enterGlobal(implicit C: Context): Scope = GlobalScope(this)
+    def exports: Bindings = scope.bindings.toBindings
 
-    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol], cps: Map[String, Capture])(implicit C: Context) = {
-      tms.foreach { case (n, syms) => syms.foreach { sym => define(n, sym) } }
-      tps.foreach { case (n, sym) => define(n, sym) }
-      cps.foreach { case (n, sym) => define(n, sym) }
-    }
+    def scoped[R](block: => R): R =
+      val before = scope
+      scope = Scope.Local(Namespace.empty, Namespace.empty, before)
+      try { block } finally { scope = before }
 
-    def enterGlobalWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol], cps: Map[String, Capture])(implicit C: Context) = {
-      val scope = GlobalScope(this)
-      scope.defineAll(tms, tps, cps)
-      scope
-    }
+    // (re-)enter the namespace
+    def namespace[R](name: String)(block: => R): R =
+      val before = scope
+      val namespace = before.bindings.getNamespace(name)
+      scope = Scope.Named(name, namespace, before)
+      try { block } finally { scope = before }
 
-    def leave(implicit C: Context): Scope
-
-    def isGlobal: Boolean = true
+    // returns the current path
+    def path: Option[List[String]] =
+      def collect(scope: Scope): Option[List[String]] = scope match {
+        case Scope.Global(imports, bindings) => Some(modulePath)
+        case Scope.Named(name, bindings, outer) => collect(outer) match {
+          case Some(path) => Some(path :+ name)
+          // name spaces also START a new path, if there hasn't been one, already
+          case None => Some(List(name))
+        }
+        case Scope.Local(imports, bindings, outer) => None
+      }
+      collect(scope)
   }
 
-  case class EmptyScope() extends Scope {
-    def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
-      C.abort(s"Could not resolve term ${key}")
-
-    def lookupTypeOption(key: String)(implicit C: Context): Option[TypeSymbol] = None
-
-    def lookupFirst(key: String)(implicit C: Context): Symbol =
-      C.abort(s"Could not resolve ${key}")
-
-    def lookupCapture(key: String)(implicit C: Context): Capture =
-      C.abort(s"Could not resolve capture ${key}")
-
-    // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
-    // the ambiguity. If it is nested, the first one that type checks should be chosen.
-    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(implicit C: Context): List[Set[TermSymbol]] =
-      Nil
-
-    def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]] =
-      Nil
-
-    def leave(implicit C: Context): Scope =
-      C.abort("Internal Compiler Error: Leaving top level scope")
-
-    def allTermsFor(key: String): Set[TermSymbol] = Set.empty
-  }
-
-  trait BlockScope extends Scope {
-
-    def parent: Scope
-
-    def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
-      terms.get(key).map { bindings =>
-        if (bindings.size > 1)
-          C.abort(s"Ambiguous reference to ${key}")
-        else
-          bindings.head
-      }.getOrElse { parent.lookupFirstTerm(key) }
-
-    def lookupFirst(key: String)(implicit C: Context): Symbol =
-      (terms.get(key).map(_.toList), types.get(key)) match {
-        case (Some(List(t)), None) => t
-        case (None, Some(t)) => t
-        // give precedence to the type level effect, if an equally named effect op is in scope
-        case (Some(List(t1: Operation)), Some(t2: Interface)) => t2
-        case (Some(t1), Some(t2)) =>
-          C.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
-        case (None, None) => parent.lookupFirst(key)
-        case _            => C.abort(s"Ambiguous reference to ${key}.")
-      }
-
-    def lookupTypeOption(key: String)(implicit C: Context): Option[TypeSymbol] =
-      types.get(key) orElse parent.lookupTypeOption(key)
-
-    def lookupCapture(key: String)(implicit C: Context): Capture =
-      captures.getOrElse(key, parent.lookupCapture(key))
-
-    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(implicit C: Context): List[Set[TermSymbol]] =
-      val termsInThisScope = terms.getOrElse(key, Set.empty).filter(filter)
-      if (termsInThisScope.isEmpty) {
-        parent.lookupOverloaded(key, filter)
-      } else {
-        termsInThisScope :: parent.lookupOverloaded(key, filter)
-      }
-
-    def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]] =
-      terms.get(key).map {
-        funs => funs.collect { case o: Operation => o } :: parent.lookupEffectOp(key)
-      }.getOrElse {
-        parent.lookupEffectOp(key)
-      }
-
-    def leave(implicit C: Context): Scope =
-      parent
-
-    def allTermsFor(key: String): Set[TermSymbol] = currentTermsFor(key) ++ parent.allTermsFor(key)
-
-    override def toString = s"BlockScope(${terms.keySet.mkString(", ")}) :: $parent"
-  }
-
-  case class LocalScope(parent: Scope) extends BlockScope {
-    override def enterGlobal(implicit C: Context): Scope =
-      C.abort("Cannot open a global scope inside a local scope")
-
-    override def isGlobal: Boolean = false
-  }
-
-  // A global namespace
-  case class GlobalScope(parent: Scope) extends BlockScope
-
-  def toplevel(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol], captures: Map[String, Capture])(implicit C: Context): Scope =
-    EmptyScope().enterGlobalWith(terms.map((k, v) => (k, Set(v))), types, captures)
+  def toplevel(modulePath: List[String], prelude: Bindings): Scoping =
+    val imports = Namespace.empty
+    imports.importAll(prelude)
+    Scoping(modulePath, Scope.Global(imports, Namespace.empty))
 }

@@ -10,7 +10,7 @@ import effekt.typer.Substitutions
 import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
-import scopes.*
+import effekt.symbols.scopes.*
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -39,37 +39,38 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
-    var scope: Scope = toplevel(builtins.rootTerms, builtins.rootTypes, builtins.rootCaptures)
+    val scope = scopes.toplevel(Context.module.namespace, builtins.rootBindings)
 
-    def processDependency(path: String) =
-      val modImport = Context.moduleOf(path)
-      scope.defineAll(modImport.terms, modImport.types, modImport.captures)
-      modImport
+    Context.initNamerstate(scope)
+
+    def importDependency(filePath: String) =
+      val included = Context.moduleOf(filePath)
+      // include "effekt.effekt" as effekt
+      scope.importAs(included.exports, included.namespace)
+      // import effekt::*
+      scope.importAll(included.exports)
+      included
 
     // process the prelude (but don't if we are processing the prelude already)
     val preludes = Context.config.prelude()
     val isPrelude = preludes.contains(decl.path)
 
     val processedPreludes = if (!isPrelude) {
-      preludes.map(processDependency)
+      preludes.map(importDependency)
     } else { Nil }
 
-    // process all imports, updating the terms and types in scope
-    val imports = decl.imports collect {
-      case im @ source.Import(path) =>
-        Context.at(im) { processDependency(path) }
+    // process all includes, updating the terms and types in scope
+    val includes = decl.includes collect {
+      case im @ source.Include(path) =>
+        Context.at(im) { importDependency(path) }
     }
-
-    // create new scope for the current module
-    scope = scope.enterGlobal
-
-    Context.initNamerstate(scope)
 
     resolveGeneric(decl)
 
     // We only want to import each dependency once.
-    val allImports = (processedPreludes ++ imports).distinct
-    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap, scope.captures.toMap)
+    val allIncludes = (processedPreludes ++ includes).distinct
+
+    Context.module.exports(allIncludes, scope.exports)
     decl
   }
 
@@ -88,6 +89,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RegDef(id, annot, region, binding) =>
       ()
 
+    case source.NamespaceDef(id, definitions) =>
+      Context.namespace(id.name) {
+        definitions.foreach(preresolve)
+      }
+
     // allow recursive definitions of objects
     case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses))) =>
       val tpe = Context.at(interface) { resolve(interface) }
@@ -98,7 +104,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
-      val uniqueId = Context.freshNameFor(id)
+      val uniqueId = Context.nameFor(id)
 
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
@@ -174,7 +180,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
 
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
-      val name = Context.freshNameFor(id)
+      val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
@@ -190,7 +196,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
 
     case source.ExternResource(id, tpe) =>
-      val name = Context.freshNameFor(id)
+      val name = Context.nameFor(id)
       val btpe = resolve(tpe)
       val sym = ExternResource(name, btpe)
       Context.define(id, sym)
@@ -214,9 +220,9 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { preresolve }
-      resolveAll(decls)
+    case source.ModuleDecl(path, includes, definitions) =>
+      definitions foreach { preresolve }
+      resolveAll(definitions)
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
@@ -290,14 +296,15 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
-      val effectSym = Context.resolveType(id).asControlEffect
-      effectSym.operations = operations.map {
+      // symbol has already been introduced by the previous traversal
+      val interface = Context.symbolOf(id).asInterface
+      interface.operations = operations.map {
         case op @ source.Operation(id, tparams, vparams, bparams, ret) => Context.at(op) {
           val name = Context.nameFor(id)
 
           Context scoped {
-            // the parameters of the interface are in scope
-            effectSym.tparams.foreach { p => Context.bind(p) }
+            // the parameters of the effect are in scope
+            interface.tparams.foreach { p => Context.bind(p) }
 
             val tps = tparams map resolve
 
@@ -312,13 +319,18 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = Operation(name, effectSym.tparams ++ tps, resVparams, resBparams, result, effects, effectSym)
+            val op = Operation(name, interface.tparams ++ tps, resVparams, resBparams, result, effects, interface)
             Context.define(id, op)
             op
           }
         }
       }
-      if (isEffect) effectSym.operations.foreach { op => Context.bind(op) }
+      if (isEffect) interface.operations.foreach { op => Context.bind(op) }
+
+    case source.NamespaceDef(id, definitions) =>
+      Context.namespace(id.name) {
+        definitions.foreach(resolveGeneric)
+      }
 
     case source.TypeDef(id, tparams, tpe) => ()
     case source.EffectDef(id, tparams, effs)       => ()
@@ -328,7 +340,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val data = d.symbol
       data.constructors = ctors map {
         case source.Constructor(id, ps) =>
-          val name = Context.freshNameFor(id)
+          val name = Context.nameFor(id)
           val constructor = Constructor(name, data.tparams, null, data)
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
@@ -338,7 +350,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     // The record has been resolved as part of the preresolution step
     case d @ source.RecordDef(id, tparams, fs) =>
       val record = d.symbol
-      val name = Context.freshNameFor(id)
+      val name = Context.nameFor(id)
       val constructor = Constructor(name, record.tparams, null, record)
       // we define the constructor on a copy to avoid confusion with symbols
       Context.define(id.clone, constructor)
@@ -421,7 +433,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           if (names contains p.name)
             Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
 
-          val cs = Context.allConstructorsFor(p.name.name)
+          val cs = Context.allConstructorsFor(p.name)
           if (cs.nonEmpty) {
             Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
           }
@@ -490,7 +502,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case tpe: source.FunctionType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id: Id                   => Context.resolveTerm(id)
+    case id: IdRef                => Context.resolveTerm(id)
 
     case other                    => resolveAll(other)
   }
@@ -506,7 +518,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     (paramSyms zip params) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
-        val name = Context.freshNameFor(fieldId)
+        val name = Context.nameFor(fieldId)
         val fieldSym = Field(name, paramSym, constructor)
         Context.define(fieldId, fieldSym)
         fieldSym
@@ -714,12 +726,13 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * The state of the namer phase
    */
-  private var scope: Scope = scopes.EmptyScope()
+  private var scope: Scoping = _
 
-  private[namer] def initNamerstate(s: Scope): Unit = scope = s
+  private[namer] def initNamerstate(s: Scoping): Unit = scope = s
 
   /**
-   * Override the dynamically scoped `in` to also reset namer state
+   * Override the dynamically scoped `in` to also reset namer state.
+   * This is important since dependencies are resolved in a stack-like manner.
    */
   override def in[T](block: => T): T = {
     val before = scope
@@ -728,23 +741,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     result
   }
 
-  private[namer] def nameFor(id: Id): Name = nameFor(id.name)
-
-  private[namer] def nameFor(id: String): Name = {
-    if (scope.isGlobal) Name.qualified(id, module)
-    else Name.local(id)
-  }
-
-  // TODO we only want to add a seed to a name under the following conditions:
-  // - there is already another instance of that name in the same
-  //   namespace.
-  // - if it is not already fully qualified
-  private[namer] def freshNameFor(id: Id): Name = nameFor(freshTermName(id))
-
-  private[namer] def freshTermName(id: Id): String = {
-    val alreadyBound = scope.currentTermsFor(id.name).size
-    val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
-    id.name + seed
+  private[namer] def nameFor(id: IdDef): Name = scope.path match {
+    case Some(path) => QualifiedName(path, id.name)
+    case None => LocalName(id.name)
   }
 
   // Name Binding and Resolution
@@ -791,19 +790,24 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Tries to find a _unique_ term symbol in the current scope under name id.
    * Stores a binding in the symbol table
    */
-  private[namer] def resolveTerm(id: Id): TermSymbol = at(id) {
-    val sym = scope.lookupFirstTerm(id.name)
+  private[namer] def resolveTerm(id: IdRef): TermSymbol = at(id) {
+    val sym = scope.lookupFirstTerm(id)
     assignSymbol(id, sym)
     sym
   }
 
-  private[namer] def allConstructorsFor(name: String): Set[Constructor] =
-    scope.allTermsFor(name).collect {
+  private[namer] def allConstructorsFor(name: Name): Set[Constructor] = name match {
+    case NoName => panic("Constructor needs to be named")
+    case LocalName(name) => scope.allTermsFor(Nil, name).collect {
       case c: Constructor => c
     }
+    case QualifiedName(prefix, name) => scope.allTermsFor(prefix, name).collect {
+      case c: Constructor => c
+    }
+  }
 
-  private[namer] def resolveAny(id: Id): Symbol = at(id) {
-    val sym = scope.lookupFirst(id.name)
+  private[namer] def resolveAny(id: IdRef): Symbol = at(id) {
+    val sym = scope.lookupFirst(id.path, id.name)
     assignSymbol(id, sym)
     sym
   }
@@ -811,30 +815,28 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded call target
    */
-  private[namer] def resolveMethodCalltarget(id: Id): Unit = at(id) {
+  private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
 
-    val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[BlockSymbol])
+    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[BlockSymbol])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve function ${id.name}")
     }
-
-    // TODO does local name make sense here?
-    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
   }
 
   /**
    * Resolves a potentially overloaded field access
    */
-  private[namer] def resolveFunctionCalltarget(id: Id): Unit = at(id) {
-    val candidates = scope.lookupOverloaded(id.name, term => !term.isInstanceOf[Operation])
+  private[namer] def resolveFunctionCalltarget(id: IdRef): Unit = at(id) {
+    val candidates = scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])
 
     resolveFunctionCalltarget(id, candidates) match {
       case Left(value) =>
         assignSymbol(id, value)
       case Right(blocks) =>
         if (blocks.isEmpty) {
-          val allSyms = scope.lookupOverloaded(id.name, term => true).flatten
+          val allSyms = scope.lookupOverloaded(id, term => true).flatten
 
           if (allSyms.exists { case o: Operation => true; case _ => false })
             info(pretty"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
@@ -844,7 +846,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
           abort(pretty"Cannot find a function named `${id}`.")
         }
-        assignSymbol(id, CallTarget(Name.local(id), blocks))
+        assignSymbol(id, CallTarget(blocks))
     }
   }
 
@@ -858,7 +860,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * 2) If the tighest scope contains blocks, then we will ignore all values
    *    and resolve to an overloaded target.
    */
-  private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
+  private def resolveFunctionCalltarget(id: IdRef, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
     def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[RefBinder]
@@ -890,58 +892,61 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded field access
    */
-  private[namer] def resolveSelect(id: Id): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[Field])
+  private[namer] def resolveSelect(id: IdRef): Unit = at(id) {
+    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[Field])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve field access ${id}")
     }
 
-    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
   }
 
   /**
    * Resolves a potentially overloaded call to an effect
    */
-  private[namer] def resolveEffectCall(eff: Option[InterfaceType], id: Id): Unit = at(id) {
+  private[namer] def resolveEffectCall(eff: Option[InterfaceType], id: IdRef): Unit = at(id) {
 
     val syms = eff match {
       case Some(tpe) =>
         val interface = tpe.typeConstructor.asInterface
         val operations = interface.operations.filter { op => op.name.name == id.name }
         if (operations.isEmpty) Nil else List(operations.toSet)
-      case None => scope.lookupEffectOp(id.name)
+      case None => scope.lookupOperation(id.path, id.name)
     }
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve effect operation ${id}")
     }
 
-    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
   }
 
   /**
    * Variables have to be resolved uniquely
    */
-  private[namer] def resolveVar(id: Id): TermSymbol = resolveTerm(id) match {
+  private[namer] def resolveVar(id: IdRef): TermSymbol = resolveTerm(id) match {
     case b: BlockParam => b // abort("Blocks have to be fully applied and can't be used as values.")
     case other         => other
   }
 
-  private[namer] def resolveType(id: Id): TypeSymbol = at(id) {
-    val sym = scope.lookupType(id.name)
+  private[namer] def resolveType(id: IdRef): TypeSymbol = at(id) {
+    val sym = scope.lookupType(id)
     assignSymbol(id, sym)
     sym
   }
 
-  private[namer] def resolveCapture(id: Id): Capture = at(id) {
-    val sym = scope.lookupCapture(id.name)
+  private[namer] def resolveCapture(id: IdRef): Capture = at(id) {
+    val sym = scope.lookupCapture(id)
     assignSymbol(id, sym)
     sym
   }
 
   private[namer] def scoped[R](block: => R): R = Context in {
-    scope = scope.enterLocal
-    block
+    scope.scoped { block }
+  }
+
+  private[namer] def namespace[R](name: String)(block: => R): R = Context in {
+    scope.namespace(name) { block }
   }
 }

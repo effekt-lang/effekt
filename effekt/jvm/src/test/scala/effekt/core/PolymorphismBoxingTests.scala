@@ -3,7 +3,7 @@ package effekt.core
 import effekt.{core, source, symbols}
 import effekt.context.Context
 import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
-import effekt.source.{IdDef, Import}
+import effekt.source.{IdDef, Include}
 import effekt.symbols.{Module, Name, TypeConstructor, TypeSymbol, ValueSymbol, ValueType}
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
@@ -28,7 +28,7 @@ abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(Polymorphi
   }.map { c => (c.name.name, c) }.toMap
 
   /** Make sure that the stdlib module is found, with the appropriate `Boxed`... definitions */
-  override val theSourceModule = new Module(source.ModuleDecl("test", List(Import("effekt")), List()), kiama.util.StringSource("", "test")) {
+  override val theSourceModule = new Module(source.ModuleDecl("test", List(Include("effekt")), List()), kiama.util.StringSource("", "test")) {
     override def findPrelude: Module = new Module(effekt.source.ModuleDecl("effekt", List(), List()), kiama.util.StringSource("", "effekt")) {
       override def types: Map[String, TypeSymbol] = boxtpes.collect[String, symbols.TypeSymbol]{
         case (k,t: symbols.TypeSymbol) => (k,t)
