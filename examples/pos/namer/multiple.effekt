@@ -1,0 +1,10 @@
+namespace outer {
+  def one() = 1
+}
+namespace outer {
+  def two() = one() + one()
+}
+
+def main() = {
+  println(outer::two())
+}

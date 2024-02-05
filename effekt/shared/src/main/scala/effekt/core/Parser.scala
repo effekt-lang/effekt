@@ -55,13 +55,13 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
    */
   lazy val program: P[ModuleDecl] =
     `module` ~/> moduleName ~
-      many(importDecl) ~
+      many(includeDecl) ~
       many(declaration) ~
       many(externDecl) ~
       many(definition) ~
       many(exportDecl) ^^ ModuleDecl.apply
 
-  lazy val importDecl: P[String] =
+  lazy val includeDecl: P[String] =
     `import` ~/> moduleName
 
 

@@ -84,8 +84,8 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   def apply(m: core.ModuleDecl): core.ModuleDecl =
     suffix = 0
     m match {
-      case core.ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-        core.ModuleDecl(path, imports, declarations, externs, definitions map rewrite, exports)
+      case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+        core.ModuleDecl(path, includes, declarations, externs, definitions map rewrite, exports)
     }
 
   def apply(s: Stmt): Stmt = {

@@ -1,0 +1,16 @@
+namespace outer {
+ type Outer { Constructor(n: Int) }
+
+  namespace inner {
+    type Inner { Constructor(n: Int) }
+
+    def consume(c: outer::inner::Inner) = c match {
+      case outer::inner::Constructor(x) => x + 1
+    }
+  }
+}
+
+
+def main() = {
+  println(outer::inner::consume(outer::inner::Constructor(42)))
+}

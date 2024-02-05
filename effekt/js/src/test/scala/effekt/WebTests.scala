@@ -37,11 +37,11 @@ object WebTests extends TestSuite {
         mod.module
       }
 
-    def evaluate[A](imports: List[String], content: String) =
-      run[A](imports, s"\n\ndef main() = { ${content} }\n")
+    def evaluate[A](includes: List[String], content: String) =
+      run[A](includes, s"\n\ndef main() = { ${content} }\n")
 
-    def run[A](imports: List[String], content: String) = {
-      server.writeFile("interactive.effekt", imports.map(i => s"import $i").mkString("\n") + s"\n\n${content}")
+    def run[A](includes: List[String], content: String) = {
+      server.writeFile("interactive.effekt", includes.map(i => s"import $i").mkString("\n") + s"\n\n${content}")
       val mainFile = server.compileFile("interactive.effekt")
 
       load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]

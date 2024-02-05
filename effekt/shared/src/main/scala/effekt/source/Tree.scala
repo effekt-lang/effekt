@@ -21,7 +21,7 @@ import effekt.symbols.Symbol
  *     │  │─ [[ Reference ]]
  *     │
  *     │─ [[ ModuleDecl ]]
- *     │─ [[ Import ]]
+ *     │─ [[ Include ]]
  *     │─ [[ Stmt ]]
  *     │  │─ [[ DefStmt ]]
  *     │  │─ [[ ExprStmt ]]
@@ -97,15 +97,15 @@ sealed trait Id extends Tree {
   def clone(using C: Context): Id
 }
 case class IdDef(name: String) extends Id {
-  def clone(using C: Context): Id = {
+  def clone(using C: Context): IdDef = {
     val copy = IdDef(name)
     C.positions.dupPos(this, copy)
     copy
   }
 }
-case class IdRef(name: String) extends Id {
-  def clone(using C: Context): Id = {
-    val copy = IdRef(name)
+case class IdRef(path: List[String], name: String) extends Id {
+  def clone(using C: Context): IdRef = {
+    val copy = IdRef(path, name)
     C.positions.dupPos(this, copy)
     copy
   }
@@ -131,8 +131,8 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
-case class Import(path: String) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class Include(path: String) extends Tree
 
 /**
  * Parameters and arguments
@@ -175,6 +175,9 @@ enum Def extends Definition {
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+
+  case NamespaceDef(id: IdDef, definitions: List[Def])
+
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
   case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
