@@ -774,7 +774,7 @@ def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOf
   }
 
   if (index < 0) {
-    raise(IndexOutOfBounds(), "...")
+    do raise(IndexOutOfBounds(), "...")
   } else if (index >= seq.size) {
     (seq, Empty())
   } else seq match {

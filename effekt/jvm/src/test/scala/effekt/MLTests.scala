@@ -114,6 +114,6 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
 
-    examplesDir / "pos" / "probabilistic.effekt"
+    examplesDir / "pos" / "probabilistic.effekt",
   )
 }
