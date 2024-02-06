@@ -46,7 +46,7 @@ jobs:
         node-version: '12.x'
 
     - name: Run effekt tests
-      run: sbt clean test
+      run: sbt clean effektJVM/test
 
     - name: Run lspTest tests
       run: sbt lspTest/test
