@@ -113,6 +113,8 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "liftinference.effekt",
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
+    // unkown issue - 'Mutual definitions are currently not supported by this backend'
+    examplesDir / "pos" / "patternmatching" / "matching-while.effekt",
 
     examplesDir / "pos" / "probabilistic.effekt",
   )
