@@ -12,7 +12,7 @@ import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, SymbolInformation,
 import utest._
 
 class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
-  def samplesDir = "lspTest/tests/samples"
+  def samplesDir = "examples/benchmarks"
 
   val symbols = HashMap[String, js.Array[DocumentSymbol | SymbolInformation]]()
 

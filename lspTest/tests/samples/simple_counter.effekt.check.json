@@ -1,0 +1,1985 @@
+{
+	"codeActionRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 25,
+					"character": 20
+				},
+				"end": {
+					"line": 25,
+					"character": 21
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 10,
+					"character": 10
+				},
+				"end": {
+					"line": 10,
+					"character": 11
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 19
+				},
+				"end": {
+					"line": 17,
+					"character": 20
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 7
+				},
+				"end": {
+					"line": 37,
+					"character": 12
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 20,
+					"character": 17
+				},
+				"end": {
+					"line": 20,
+					"character": 18
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 16
+				},
+				"end": {
+					"line": 6,
+					"character": 17
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 14
+				},
+				"end": {
+					"line": 34,
+					"character": 15
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 20,
+					"character": 6
+				},
+				"end": {
+					"line": 23,
+					"character": 6
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 11
+				},
+				"end": {
+					"line": 17,
+					"character": 12
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 12,
+					"character": 2
+				},
+				"end": {
+					"line": 14,
+					"character": 2
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 2
+				},
+				"end": {
+					"line": 28,
+					"character": 2
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 9
+				},
+				"end": {
+					"line": 14,
+					"character": 10
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 2
+				},
+				"end": {
+					"line": 17,
+					"character": 2
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 10,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 6
+				},
+				"end": {
+					"line": 6,
+					"character": 15
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 12,
+					"character": 10
+				},
+				"end": {
+					"line": 12,
+					"character": 11
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 38,
+					"character": 1
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 17
+				},
+				"end": {
+					"line": 14,
+					"character": 18
+				}
+			},
+			"result": []
+		}
+	],
+	"definitionRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 19
+				},
+				"end": {
+					"line": 17,
+					"character": 20
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 17,
+						"character": 19
+					},
+					"end": {
+						"line": 17,
+						"character": 20
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 10,
+					"character": 10
+				},
+				"end": {
+					"line": 10,
+					"character": 11
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 10,
+						"character": 10
+					},
+					"end": {
+						"line": 10,
+						"character": 11
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 11
+				},
+				"end": {
+					"line": 17,
+					"character": 12
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 17,
+						"character": 11
+					},
+					"end": {
+						"line": 17,
+						"character": 12
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 25,
+					"character": 20
+				},
+				"end": {
+					"line": 25,
+					"character": 21
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 25,
+						"character": 20
+					},
+					"end": {
+						"line": 25,
+						"character": 21
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 20,
+					"character": 6
+				},
+				"end": {
+					"line": 23,
+					"character": 6
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 16
+				},
+				"end": {
+					"line": 6,
+					"character": 17
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 6,
+						"character": 16
+					},
+					"end": {
+						"line": 6,
+						"character": 17
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 14
+				},
+				"end": {
+					"line": 34,
+					"character": 15
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 34,
+						"character": 14
+					},
+					"end": {
+						"line": 34,
+						"character": 15
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 20,
+					"character": 17
+				},
+				"end": {
+					"line": 20,
+					"character": 18
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 20,
+						"character": 17
+					},
+					"end": {
+						"line": 20,
+						"character": 18
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 7
+				},
+				"end": {
+					"line": 37,
+					"character": 12
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 37,
+						"character": 7
+					},
+					"end": {
+						"line": 37,
+						"character": 12
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 33,
+						"character": 12
+					},
+					"end": {
+						"line": 33,
+						"character": 13
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 12,
+					"character": 2
+				},
+				"end": {
+					"line": 14,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 2
+				},
+				"end": {
+					"line": 28,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 38,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 12,
+					"character": 10
+				},
+				"end": {
+					"line": 12,
+					"character": 11
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 12,
+						"character": 10
+					},
+					"end": {
+						"line": 12,
+						"character": 11
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 10,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 2
+				},
+				"end": {
+					"line": 17,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 9
+				},
+				"end": {
+					"line": 14,
+					"character": 10
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 14,
+						"character": 9
+					},
+					"end": {
+						"line": 14,
+						"character": 10
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 6
+				},
+				"end": {
+					"line": 6,
+					"character": 15
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 5,
+						"character": 7
+					},
+					"end": {
+						"line": 5,
+						"character": 16
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 17
+				},
+				"end": {
+					"line": 14,
+					"character": 18
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/simple_counter.effekt",
+				"range": {
+					"start": {
+						"line": 14,
+						"character": 17
+					},
+					"end": {
+						"line": 14,
+						"character": 18
+					}
+				}
+			}
+		}
+	],
+	"referencesRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 11
+				},
+				"end": {
+					"line": 17,
+					"character": 12
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 17,
+							"character": 11
+						},
+						"end": {
+							"line": 17,
+							"character": 12
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 19,
+							"character": 14
+						},
+						"end": {
+							"line": 19,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 18,
+							"character": 8
+						},
+						"end": {
+							"line": 18,
+							"character": 9
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 14
+				},
+				"end": {
+					"line": 34,
+					"character": 15
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 34,
+							"character": 14
+						},
+						"end": {
+							"line": 34,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 34,
+							"character": 34
+						},
+						"end": {
+							"line": 34,
+							"character": 35
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 20,
+					"character": 6
+				},
+				"end": {
+					"line": 23,
+					"character": 6
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 16
+				},
+				"end": {
+					"line": 6,
+					"character": 17
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 6,
+							"character": 16
+						},
+						"end": {
+							"line": 6,
+							"character": 17
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 7
+				},
+				"end": {
+					"line": 37,
+					"character": 12
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 37,
+							"character": 7
+						},
+						"end": {
+							"line": 37,
+							"character": 12
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 37,
+							"character": 75
+						},
+						"end": {
+							"line": 37,
+							"character": 80
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 25,
+					"character": 20
+				},
+				"end": {
+					"line": 25,
+					"character": 21
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 25,
+							"character": 20
+						},
+						"end": {
+							"line": 25,
+							"character": 21
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 25,
+							"character": 28
+						},
+						"end": {
+							"line": 25,
+							"character": 29
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 10,
+					"character": 10
+				},
+				"end": {
+					"line": 10,
+					"character": 11
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 10,
+							"character": 10
+						},
+						"end": {
+							"line": 10,
+							"character": 11
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 23,
+							"character": 13
+						},
+						"end": {
+							"line": 23,
+							"character": 14
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 20,
+					"character": 17
+				},
+				"end": {
+					"line": 20,
+					"character": 18
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 20,
+							"character": 17
+						},
+						"end": {
+							"line": 20,
+							"character": 18
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 22,
+							"character": 39
+						},
+						"end": {
+							"line": 22,
+							"character": 40
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 22,
+							"character": 28
+						},
+						"end": {
+							"line": 22,
+							"character": 29
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 21,
+							"character": 12
+						},
+						"end": {
+							"line": 21,
+							"character": 13
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 12,
+					"character": 2
+				},
+				"end": {
+					"line": 14,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 33,
+							"character": 12
+						},
+						"end": {
+							"line": 33,
+							"character": 13
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 35,
+							"character": 60
+						},
+						"end": {
+							"line": 35,
+							"character": 61
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 33,
+							"character": 31
+						},
+						"end": {
+							"line": 33,
+							"character": 32
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 19
+				},
+				"end": {
+					"line": 17,
+					"character": 20
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 17,
+							"character": 19
+						},
+						"end": {
+							"line": 17,
+							"character": 20
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 21,
+							"character": 22
+						},
+						"end": {
+							"line": 21,
+							"character": 23
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 18,
+							"character": 18
+						},
+						"end": {
+							"line": 18,
+							"character": 19
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 17,
+					"character": 2
+				},
+				"end": {
+					"line": 28,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 10,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 38,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 17
+				},
+				"end": {
+					"line": 14,
+					"character": 18
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 14,
+							"character": 17
+						},
+						"end": {
+							"line": 14,
+							"character": 18
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 15,
+							"character": 23
+						},
+						"end": {
+							"line": 15,
+							"character": 24
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 9
+				},
+				"end": {
+					"line": 14,
+					"character": 10
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 14,
+							"character": 9
+						},
+						"end": {
+							"line": 14,
+							"character": 10
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 15,
+							"character": 12
+						},
+						"end": {
+							"line": 15,
+							"character": 13
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 14,
+					"character": 2
+				},
+				"end": {
+					"line": 17,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 6
+				},
+				"end": {
+					"line": 6,
+					"character": 15
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 6,
+							"character": 6
+						},
+						"end": {
+							"line": 6,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 25,
+							"character": 6
+						},
+						"end": {
+							"line": 26,
+							"character": 4
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 22,
+							"character": 15
+						},
+						"end": {
+							"line": 22,
+							"character": 30
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 25,
+							"character": 6
+						},
+						"end": {
+							"line": 26,
+							"character": 4
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 22,
+							"character": 15
+						},
+						"end": {
+							"line": 22,
+							"character": 30
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 12,
+					"character": 10
+				},
+				"end": {
+					"line": 12,
+					"character": 11
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 12,
+							"character": 10
+						},
+						"end": {
+							"line": 12,
+							"character": 11
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 12,
+							"character": 47
+						},
+						"end": {
+							"line": 12,
+							"character": 48
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 12,
+							"character": 40
+						},
+						"end": {
+							"line": 12,
+							"character": 41
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/simple_counter.effekt",
+					"range": {
+						"start": {
+							"line": 12,
+							"character": 29
+						},
+						"end": {
+							"line": 12,
+							"character": 30
+						}
+					}
+				}
+			]
+		}
+	],
+	"formattingRequest": [
+		{
+			"context": {
+				"start": {
+					"character": 0,
+					"line": 0
+				},
+				"end": {
+					"character": 0,
+					"line": 0
+				}
+			},
+			"result": null
+		}
+	],
+	"executeCommandInferredCaptures": [
+		{
+			"context": {
+				"start": {
+					"character": 0,
+					"line": 0
+				},
+				"end": {
+					"character": 0,
+					"line": 0
+				}
+			},
+			"result": [
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/simple_counter.effekt",
+						"range": {
+							"start": {
+								"line": 31,
+								"character": 0
+							},
+							"end": {
+								"line": 31,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{io}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/simple_counter.effekt",
+						"range": {
+							"start": {
+								"line": 10,
+								"character": 0
+							},
+							"end": {
+								"line": 10,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/simple_counter.effekt",
+						"range": {
+							"start": {
+								"line": 17,
+								"character": 2
+							},
+							"end": {
+								"line": 17,
+								"character": 2
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/simple_counter.effekt",
+						"range": {
+							"start": {
+								"line": 20,
+								"character": 6
+							},
+							"end": {
+								"line": 20,
+								"character": 6
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/simple_counter.effekt",
+						"range": {
+							"start": {
+								"line": 14,
+								"character": 2
+							},
+							"end": {
+								"line": 14,
+								"character": 2
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/simple_counter.effekt",
+						"range": {
+							"start": {
+								"line": 12,
+								"character": 2
+							},
+							"end": {
+								"line": 12,
+								"character": 2
+							}
+						}
+					},
+					"captureText": "{}"
+				}
+			]
+		}
+	],
+	"publishDiagnostics": {
+		"jsonrpc": "2.0",
+		"method": "textDocument/publishDiagnostics",
+		"params": {
+			"uri": "file:///examples/benchmarks/simple_counter.effekt",
+			"diagnostics": []
+		}
+	},
+	"documentSymbolRequest": [
+		{
+			"name": "n",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 10,
+					"character": 10
+				},
+				"end": {
+					"line": 10,
+					"character": 11
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 10,
+					"character": 10
+				},
+				"end": {
+					"line": 10,
+					"character": 11
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "l",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 17,
+					"character": 11
+				},
+				"end": {
+					"line": 17,
+					"character": 12
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 17,
+					"character": 11
+				},
+				"end": {
+					"line": 17,
+					"character": 12
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "i",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 34,
+					"character": 14
+				},
+				"end": {
+					"line": 34,
+					"character": 15
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 34,
+					"character": 14
+				},
+				"end": {
+					"line": 34,
+					"character": 15
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "s",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 17,
+					"character": 19
+				},
+				"end": {
+					"line": 17,
+					"character": 20
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 17,
+					"character": 19
+				},
+				"end": {
+					"line": 17,
+					"character": 20
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "j",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 25,
+					"character": 20
+				},
+				"end": {
+					"line": 25,
+					"character": 21
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 25,
+					"character": 20
+				},
+				"end": {
+					"line": 25,
+					"character": 21
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "x",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "looper",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 20,
+					"character": 6
+				},
+				"end": {
+					"line": 23,
+					"character": 6
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 20,
+					"character": 10
+				},
+				"end": {
+					"line": 20,
+					"character": 16
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "i",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 20,
+					"character": 17
+				},
+				"end": {
+					"line": 20,
+					"character": 18
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 20,
+					"character": 17
+				},
+				"end": {
+					"line": 20,
+					"character": 18
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "other",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 37,
+					"character": 7
+				},
+				"end": {
+					"line": 37,
+					"character": 12
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 37,
+					"character": 7
+				},
+				"end": {
+					"line": 37,
+					"character": 12
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "j",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 6,
+					"character": 16
+				},
+				"end": {
+					"line": 6,
+					"character": 17
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 6,
+					"character": 16
+				},
+				"end": {
+					"line": 6,
+					"character": 17
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "abs",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 12,
+					"character": 2
+				},
+				"end": {
+					"line": 14,
+					"character": 2
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 12,
+					"character": 6
+				},
+				"end": {
+					"line": 12,
+					"character": 9
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "step",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 17,
+					"character": 2
+				},
+				"end": {
+					"line": 28,
+					"character": 2
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 17,
+					"character": 6
+				},
+				"end": {
+					"line": 17,
+					"character": 10
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "main",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 38,
+					"character": 1
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 31,
+					"character": 4
+				},
+				"end": {
+					"line": 31,
+					"character": 8
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "x",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 14,
+					"character": 9
+				},
+				"end": {
+					"line": 14,
+					"character": 10
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 14,
+					"character": 9
+				},
+				"end": {
+					"line": 14,
+					"character": 10
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "count",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 10,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 10,
+					"character": 4
+				},
+				"end": {
+					"line": 10,
+					"character": 9
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "y",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 14,
+					"character": 17
+				},
+				"end": {
+					"line": 14,
+					"character": 18
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 14,
+					"character": 17
+				},
+				"end": {
+					"line": 14,
+					"character": 18
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "op",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 14,
+					"character": 2
+				},
+				"end": {
+					"line": 17,
+					"character": 2
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 14,
+					"character": 6
+				},
+				"end": {
+					"line": 14,
+					"character": 8
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "increment",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 6,
+					"character": 6
+				},
+				"end": {
+					"line": 6,
+					"character": 15
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 6,
+					"character": 6
+				},
+				"end": {
+					"line": 6,
+					"character": 15
+				}
+			},
+			"detail": "Effect operation"
+		},
+		{
+			"name": "n",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 12,
+					"character": 10
+				},
+				"end": {
+					"line": 12,
+					"character": 11
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 12,
+					"character": 10
+				},
+				"end": {
+					"line": 12,
+					"character": 11
+				}
+			},
+			"detail": "Value parameter"
+		}
+	]
+}
