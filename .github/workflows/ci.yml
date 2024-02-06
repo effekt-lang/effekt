@@ -48,9 +48,6 @@ jobs:
     - name: Run effekt tests
       run: sbt clean effektJVM/test
 
-    - name: Run lspTest tests
-      run: sbt lspTest/test
-
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
 
@@ -59,3 +56,6 @@ jobs:
 
     - name: Run effekt binary
       run: effekt.sh --help
+
+    - name: Run lspTest tests
+      run: sbt lspTest/test
