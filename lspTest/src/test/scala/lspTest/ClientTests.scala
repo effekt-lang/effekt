@@ -55,8 +55,7 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
     test("Symbol code action") {
       forEachSample { file =>
         testEachSymbol(file, "codeActionRequest", range =>
-          // TODO: Infer captures here, when action is available
-          // TODO: Close hole here
+          // TODO: test code actions here (if we actually implement some)
           client.requestCodeAction(file, range.start, range.end)
         )
       }
@@ -108,11 +107,9 @@ class ClientTests(val client: Client)(implicit ec: ExecutionContext) {
   }
 
   def symbolToRange(symbol: DocumentSymbol | SymbolInformation) = {
-    // TODO: support SymbolInformation (instanceOf doesn't work on JS traits!)
-    // val range = symbol match
-    //   case s: DocumentSymbol => s.range
-    //   case s: SymbolInformation => s.location.range
-    symbol.asInstanceOf[DocumentSymbol].range
+    // unclean "Type matching" since JS traits can't be matched directly
+    if (symbol.hasOwnProperty("range")) symbol.asInstanceOf[DocumentSymbol].range
+    else symbol.asInstanceOf[SymbolInformation].location.range
   }
 
   // compared to Future.sequence, this function will also *start* the futures sequentially and not concurrently

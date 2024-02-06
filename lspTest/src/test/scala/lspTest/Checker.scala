@@ -9,8 +9,8 @@ object Checker {
   val checkDir = "lspTest/tests"
 
   // Overwrite .check files with test results
-  // TODO: add CLI flag for this
-  val overwriteResults = true
+  // TODO: this should be configurable, utest currently does not expose CLI arguments (#87)
+  val overwriteResults = false
 
   def toCheckPath(testPath: String, subDir: String) =
     val basename = testPath.split('/').last
