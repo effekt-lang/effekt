@@ -53,8 +53,8 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
         case "textDocument/publishDiagnostics" => {
           val uri = notification.params.asInstanceOf[PublishDiagnosticsParams].uri
           diagnostics.get(uri) match {
-            case Some(promise: Promise[NotificationMessage]) => promise.success(notification)
-            case None => diagnostics(uri) = Promise().success(notification)
+            case Some(promise: Promise[NotificationMessage]) if !promise.isCompleted => promise.success(notification)
+            case _ => diagnostics(uri) = Promise().success(notification)
           }
         }
         case _ => assert(false, "unexpected notification")
