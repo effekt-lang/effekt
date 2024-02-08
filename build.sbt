@@ -97,6 +97,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // Options to compile Effekt with native-image
     // -------------------------------------------
+    nativeImageVersion := "22.3.0",
     nativeImageOptions ++= Seq(
       "--no-fallback",
       "--initialize-at-build-time",
