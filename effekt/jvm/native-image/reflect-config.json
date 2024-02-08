@@ -52,6 +52,11 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"org.eclipse.lsp4j.ClientInfo",
+  "allDeclaredFields":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
   "name":"org.eclipse.lsp4j.CodeAction",
   "allDeclaredFields":true,
   "methods":[{"name":"<init>","parameterTypes":[] }]
@@ -623,5 +628,9 @@
   "name":"sun.misc.Unsafe",
   "allDeclaredFields":true,
   "methods":[{"name":"allocateInstance","parameterTypes":["java.lang.Class"] }]
+},
+{
+  "name":"jline.UnixTerminal",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 }
 ]
