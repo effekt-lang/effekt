@@ -156,14 +156,32 @@ object Transformer {
       jit.Load(jit.Var(id, jit.Ref(transform(annotatedTpe))))
     case core.Stmt.Put(id, annotatedCapt, value) =>
       jit.Store(jit.Var(id, jit.Ref(transform(core.Type.inferType(value)))), transform(value))
-    case core.Stmt.Try(body, handlers) =>
-      jit.Let(handlers.map{ i =>
-        jit.Definition(jit.Var(i.tpe.name, jit.Base.Label), jit.FreshLabel())
-      }, handlers.foldRight(transform(body)){ (i, b) =>
-        jit.DHandle(jit.HandlerType.Deep, jit.Var(i.tpe.name, jit.Base.Label),
-          Nil, // FIXME TODO just to make it compile programs, for now do not actually translate handlers
+    case core.Stmt.Try(core.BlockLit(tparams, cparams, vparams, bparams, body), handlers) =>
+      assert(vparams.isEmpty, "Only block parameters for body of Try")
+      val promptIds = cparams.map{ _ => TmpValue() }
+      val tBody = transform(body)
+      jit.LetRec(promptIds.map{ x =>
+        jit.Definition(jit.Var(x, jit.Base.Label), jit.FreshLabel())
+      } ++ (cparams zip promptIds zip handlers).map{ case ((c, p), h) =>
+        jit.Definition(jit.Var(c, Codata(c, h.operations.map {
+          case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+            jit.Method(name, (((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams)).map(_.tpe), jit.Top) // TODO
+        })), jit.New(c, h.operations.map {
+          case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+            val args = (((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams))
+            val r = jit.Var(TmpValue(), jit.Top)
+            (name, jit.Clause(args, jit.DOp(jit.Var(p, jit.Base.Label), name, args, jit.Clause(List(r), r), jit.Top)))
+        }))
+      }, handlers.zip(promptIds).foldRight(tBody){ case ((core.Implementation(itpe, ops), id), b) =>
+        jit.DHandle(jit.HandlerType.Deep, jit.Var(id, jit.Base.Label),
+          ops.map{ case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+            val params = ((resume.toList ++ vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams)
+            (name, jit.Clause(params,
+              transform(body)))
+          },
           None, b)
       })
+    case core.Stmt.Try(body, handlers) => ???
     case core.Stmt.Hole() => jit.Primitive("hole", Nil, Nil, jit.Literal.Unit)
   }
   def transform(d: core.Definition)(using core.DeclarationContext, ErrorReporter): jit.Definition = d match {
