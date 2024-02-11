@@ -121,7 +121,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         case Success(e: Term, _) =>
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
-            val mainSym = mod.terms("main").head
+            val mainSym = mod.exports.terms("main").head
             val mainTpe = context.functionTypeOf(mainSym)
             output.emitln(pp"${mainTpe.result}")
           }
@@ -197,12 +197,12 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       runParsingFrontend(src, config) { cu =>
         output.emitln(s"Successfully imported ${i.path}\n")
         output.emitln(s"Imported Types\n==============")
-        cu.types.toList.sortBy { case (n, _) => n }.collect {
+        cu.exports.types.toList.sortBy { case (n, _) => n }.collect {
           case (name, sym) if !sym.isSynthetic =>
             outputCode(DeclPrinter(sym), config)
         }
         output.emitln(s"\nImported Functions\n==================")
-        cu.terms.toList.sortBy { case (n, _) => n }.foreach {
+        cu.exports.terms.toList.sortBy { case (n, _) => n }.foreach {
           case (name, syms) =>
             syms.collect {
               case sym if !sym.isSynthetic =>
