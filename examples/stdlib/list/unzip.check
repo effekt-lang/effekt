@@ -1,0 +1,2 @@
+Cons(1, Cons(2, Cons(3, Nil())))
+Cons(100, Cons(200, Cons(300, Nil())))

@@ -166,25 +166,25 @@ extern io def panic[R](msg: String): R =
   "(raise ${msg})"
 
 effect Exception[E] {
-  def raise[A](exception: E, msg: String): A
+  def raise(exception: E, msg: String): Nothing
 }
 record RuntimeError()
 
-def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
+def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
+def raise[A, E](exception: E, msg: String): A / Exception[E] = do raise(exception, msg) match {}
 
 // converts exceptions of (static) type E to an uncatchable panic that aborts the program
 def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise[A](exception, msg) = panic(msg) }
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
 
 // reports exceptions of (static) type E to the console
 def report[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise[A](exception, msg) = println(msg) }
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
 
 // ignores exceptions of (static) type E
 // TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
 def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise[A](exception, msg) = () }
-
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
 
 // Control Flow
 // ============

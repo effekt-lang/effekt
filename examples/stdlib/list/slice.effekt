@@ -1,0 +1,12 @@
+module examples/pos/list/slice
+
+import immutable/list
+
+def main() = {
+  // synchronized with doctest in `slice`
+  println([1, 2, 3, 4, 5, 6].slice(1, 4))
+  println([1, 2, 3, 4, 5, 6].slice(1, 2))
+  println([1, 2, 3, 4, 5, 6].slice(1, 1))
+  println([1, 2, 3, 4, 5, 6].slice(4, 1))
+  println([1, 2, 3, 4, 5, 6].slice(-100, 100))
+}

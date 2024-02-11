@@ -12,7 +12,6 @@ class LLVMTests extends EffektTests {
 
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
-    examplesDir / "pos" / "list",
   )
 
   /**
@@ -102,5 +101,8 @@ class LLVMTests extends EffektTests {
   override lazy val ignored: List[File] = List(
     // Issue #207
     examplesDir / "llvm" / "polymorphism_blockparams.effekt",
+
+    // See PR #355
+    examplesDir / "llvm" / "string_toint.effekt",
   )
 }

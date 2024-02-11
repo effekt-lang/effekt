@@ -1,0 +1,3 @@
+Nil()
+Cons(42, Nil())
+Cons(0, Cons(0, Cons(0, Cons(0, Cons(0, Nil())))))
