@@ -576,10 +576,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           case MatchGuard.BooleanGuard(condition) =>
             Condition.Predicate(transformAsPure(condition))
           case MatchGuard.PatternGuard(scrutinee, pattern) =>
-            val x = transformAsPure(scrutinee) match {
-              case x : Pure.ValueVar => x
-              case _ => Context.panic("Should not happen")
-            }
+            val x = Context.bind(transformAsPure(scrutinee))
             Condition.Patterns(Map(x -> transformPattern(pattern)))
         }
       }
@@ -761,15 +758,16 @@ trait TransformerOps extends ContextOps { Context: Context =>
     ValueVar(x, s.tpe)
   }
 
-  private[core] def bind(e: Expr): ValueVar = {
+  private[core] def bind(e: Expr): ValueVar = e match {
+    case x: ValueVar => x
+    case e =>
+      // create a fresh symbol and assign the type
+      val x = TmpValue()
 
-    // create a fresh symbol and assign the type
-    val x = TmpValue()
+      val binding = Binding.Let(x, e)
+      bindings += binding
 
-    val binding = Binding.Let(x, e)
-    bindings += binding
-
-    ValueVar(x, e.tpe)
+      ValueVar(x, e.tpe)
   }
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {
