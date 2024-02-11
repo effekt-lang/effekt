@@ -7,7 +7,7 @@ import effekt.context.assertions.*
 import effekt.core.{ *, given }
 import effekt.core.Variables
 import effekt.core.Variables.{ all, bound, free }
-import effekt.symbols.{ Module, Symbol, Wildcard }
+import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
 
 import scala.collection.mutable
 
@@ -130,17 +130,19 @@ trait Transformer {
    *
    * Necessary for generating the linker code (separate compilation for the web)
    */
-  def usedIncludes(input: CoreTransformed): Map[Module, Set[Symbol]] = {
+  def usedIncludes(input: CoreTransformed): Map[Module, Set[Id]] = {
     val dependencies = input.mod.dependencies
 
     // Create a mapping Termsymbol -> Module
-    val publicDependencySymbols = dependencies.flatMap {
-      m => m.terms.values.flatten.map(sym => (sym : Symbol) -> m)
-    }.toMap
+    def definedIn(m: Module, b: Bindings): Map[Id, Module] =
+      b.terms.values.flatten.map { sym => (sym : Id) -> m }.toMap ++
+        b.namespaces.values.flatMap(bs => definedIn(m, bs))
 
-    var usedFrom: Map[Module, Set[Symbol]] = Map.empty
+    val publicDependencySymbols = dependencies.flatMap(m => definedIn(m, m.exports)).toMap
 
-    def register(m: Module, sym: Symbol) = {
+    var usedFrom: Map[Module, Set[Id]] = Map.empty
+
+    def register(m: Module, sym: Id) = {
       val before = usedFrom.getOrElse(m, Set.empty)
       usedFrom = usedFrom.updated(m, before + sym)
     }
