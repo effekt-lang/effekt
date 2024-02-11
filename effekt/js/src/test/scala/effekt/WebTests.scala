@@ -75,6 +75,15 @@ object WebTests extends TestSuite {
       assert(result == 2)
     }
 
+    test("Exporting functions from a namespace") {
+      server.writeFile("foo.effekt",
+        """ namespace foo { def bar() = 42 }
+          |""".stripMargin)
+
+      val result = evaluate[Int](List("foo"), "foo::bar()")
+      assert(result == 42)
+    }
+
     test("Extern resources on website") {
       val result = run[String](Nil,
         """interface Greet { }
