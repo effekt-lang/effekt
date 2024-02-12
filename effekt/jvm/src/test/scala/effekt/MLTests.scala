@@ -115,5 +115,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "multiline_extern_definition.effekt",
 
     examplesDir / "pos" / "probabilistic.effekt",
+
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
   )
 }
