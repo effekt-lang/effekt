@@ -5,6 +5,10 @@ import immutable/option
 // A mutable array, backed by a sml array.
 extern type Array[T]
 
+//TODO initialize with size
+def emptyArray[T](size: Int) : Array[T] = 
+    emptyArray()
+
 extern pure def emptyArray[T](): Array[T] =
     "Array.fromList []"
 
