@@ -12,6 +12,10 @@ def emptyArray[T](size: Int) : Array[T] =
 extern pure def emptyArray[T](): Array[T] =
     "Array.fromList []"
 
+def fill[T](size: Int, default: T): Array[T] = {
+    return array[T](size, default);
+}
+
 extern pure def array[T](initialSize: Int, init: T): Array[T] =
   "Array.array (${initialSize}, ${init})"
 
