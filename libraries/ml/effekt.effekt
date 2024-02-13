@@ -23,6 +23,9 @@ extern io def random(): Double =
 extern io def timestamp(): Int =
   "IntInf.toInt ((Time.toMilliseconds (Time.now ())) - mlStartTime)"
 
+extern pure def currentTimeNanos(): Int = 
+  "Time.toNanoseconds (Time.now ())"
+
 // String ops
 // ==========
 extern pure def show(value: Int): String =
