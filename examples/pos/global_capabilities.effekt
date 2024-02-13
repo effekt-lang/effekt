@@ -1,0 +1,87 @@
+interface Exc { def throw(msg: String): Unit }
+interface MyConsole { def myprintln(msg: String): Unit }
+interface Time { def now(): Int }
+interface Stopwatch { def elapsed(): Int }
+
+// console and time are "global" -- that is, module wide capabilities
+def globalCapabilities { console: MyConsole } { time: Time }: Unit = {
+  def sayTime() = console.myprintln("The current time is: " ++ show(time.now()))
+
+  // other blocks closing only over console or time
+  def sayHello() = console.myprintln("Hello!")
+  def currentTime() = time.now()
+
+  def repeat(n: Int) { f: () => Unit }: Unit =
+  	if (n == 0) { () } else { f(); repeat(n - 1) {f} }
+
+  repeat(3) { () => console.myprintln("Hello!") };
+  repeat(3) { () => sayTime() };
+
+  def parallel(f: () => Unit at {}, g: () => Unit at {}): Unit = ()
+
+  val firstClassInfer = box { () => sayTime() };
+
+  def sayTimeThrice(): Unit = repeat(3) { () => sayTime() }
+
+  def repeater { f: () => Unit }: (Int) => Unit at { f } =
+  box { (n: Int) => repeat(n) {f} }
+
+  val repeatTime = repeater { sayTime };
+
+  // some more variants illustrating closure and capability sets
+  val b = sayTime;
+
+  val n = repeater { () => sayTime() };
+  val n1 = repeater { sayTime };
+  val b2 : () => Unit at {console, time} = box { () => (unbox n)(3) };
+  val b3 = n(3);
+  val b4 = box { () => n(3) };
+  val r = repeater { b };
+  ()
+}
+
+def localCapabilities { console: MyConsole } { time: Time }: Unit =
+  try {
+  	console.myprintln("hello")
+  	exc.throw("world")
+  	console.myprintln("done")
+  } with exc: Exc {
+  	def throw(msg) = { console.myprintln(msg ++ "!") }
+  }
+
+def effectHandlers { console: MyConsole } { time: Time }: Unit = {
+  def report(t: Int) = console.myprintln(show(t) ++ "ms") 
+  val before = time.now();
+
+  try {
+    report(watch.elapsed());
+    report(watch.elapsed());
+    report(watch.elapsed())
+  } with watch: Stopwatch {
+    def elapsed() = {
+      // we can observe the capture of `resume` by boxing it:
+      val k = box resume;
+      resume(time.now() - before)
+    }
+  }
+}
+
+def run[T] { prog : {MyConsole} {Time} => T }: T = {
+	var i = 0
+    try {
+        prog {console} {time}
+    } with console: MyConsole {
+        def myprintln(msg) = { println(msg); resume(()) }
+    } with time: Time {
+        def now() = { 
+			i = i + 1
+			resume(i)
+		}
+    }
+}
+
+def main() = {
+	run { globalCapabilities }
+	run { localCapabilities }
+    run { effectHandlers }
+}
