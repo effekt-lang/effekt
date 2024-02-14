@@ -1,0 +1,10 @@
+module examples/pos/list/deleteat
+
+import immutable/list
+
+def main() = {
+  // synchronized with doctest in `deleteAt`
+  println([1, 2, 3, 4].deleteAt(1))
+  println([1, 2, 3, 4].deleteAt(-1))
+  println([1, 2, 3, 4].deleteAt(10))
+}

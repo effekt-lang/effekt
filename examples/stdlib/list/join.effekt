@@ -1,0 +1,11 @@
+module examples/pos/list/join
+
+import immutable/list
+
+def main() = {
+  // synchronized with doctest in `join`
+  println([[1, 2, 3], [4, 5], [6]].join())
+  println([Nil[Int]()].join())
+  println([[100], [200, 300], [400]].join([1, 2, 3]))
+  println([Nil[Int]()].join([1, 2, 3]))
+}

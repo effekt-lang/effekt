@@ -4,9 +4,9 @@ package core
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 import effekt.symbols
-import effekt.symbols.{TmpBlock, TmpValue}
-import effekt.{CoreTransformed, Phase}
-import effekt.symbols.builtins.TState
+import effekt.symbols.{ TmpBlock, TmpValue }
+import effekt.{ CoreTransformed, Phase }
+import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TState, TUnit }
 
 import scala.annotation.targetName
 
@@ -39,21 +39,15 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    * @return a [[Boxer]] that describes how to box values of that type
    */
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
-    case ValueType.Data(name, List()) if symbols.builtins.rootTypes.values.exists(_ == name) =>
-      if(!Context.module.findPrelude.types.contains("Boxed" + name)) {
-        Context.abort(s"Primitive ${name} is used as type parameter but Boxed${name} is not defined.")
-      }
-      Context.module.findPrelude.types("Boxed" + name) match {
-        case tpeCns @ symbols.TypeConstructor.Record(_, List(), cns @ symbols.Constructor(_, List(), List(field), _)) =>
-          Boxer(ValueType.Data(tpeCns,List()), cns, field)
-        case tpeCns @ symbols.TypeConstructor.DataType(_, List(), List(cns @ symbols.Constructor(_, List(), List(field), _))) =>
-          Boxer(ValueType.Data(tpeCns,List()), cns, field)
-        case _ =>
-          Context.abort(s"No appropriate Boxed${name} type, but ${name} used as type parameter.")
-      }
+    case core.Type.TInt     => PContext.boxer("Int")
+    case core.Type.TBoolean => PContext.boxer("Boolean")
+    case core.Type.TDouble  => PContext.boxer("Double")
+    case core.Type.TUnit    => PContext.boxer("Unit")
+    // Do strings need to be boxed? Really?
+    case core.Type.TString  => PContext.boxer("String")
   }
 
-  class PContext(val declarations: List[Declaration])(using val context: Context){
+  class PContext(val declarations: List[Declaration])(using val Context: Context){
     def findDeclarations(id: Id): List[Declaration] = {
       declarations.filter(_.id == id)
     }
@@ -64,15 +58,36 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case _ => None
       }
       if (decls.length != 1) {
-        context.abort(s"No unique declaration for ${id}. Options: \n" +
+        Context.abort(s"No unique declaration for ${id}. Options: \n" +
           (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n"))
       } else {
         decls.head
       }
     }
+
+    lazy val prelude = Context.module.findPrelude
+
+    /**
+     * Finds the corresponding boxer for a primitive type.
+     *
+     * @param name The name of the [[ValueType]]
+     * @return a [[Boxer]] that describes how to box values of that type
+     */
+    def boxer(name: String): Boxer = prelude.types.get("Boxed" + name) match {
+      case Some(value) => value match {
+        case tpeCns @ symbols.TypeConstructor.Record(_, List(), cns @ symbols.Constructor(_, List(), List(field), _)) =>
+          Boxer(ValueType.Data(tpeCns, List()), cns, field)
+        case tpeCns @ symbols.TypeConstructor.DataType(_, List(), List(cns @ symbols.Constructor(_, List(), List(field), _))) =>
+          Boxer(ValueType.Data(tpeCns, List()), cns, field)
+        case _ =>
+          Context.abort(s"No appropriate Boxed${name} type, but ${name} used as type parameter.")
+      }
+      case None =>
+        Context.abort(s"Primitive ${name} is used as type parameter but Boxed${name} is not defined.")
+    }
   }
   def PContext(using ctx: PContext): PContext = ctx
-  implicit def Context(using ctx: PContext): Context = ctx.context
+  implicit def Context(using ctx: PContext): Context = ctx.Context
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {

@@ -55,6 +55,6 @@ def main() = {
   arrayToListAndBack(emptyArray)
 
   println("nonempty array")
-  val array = build(3) { i => i + 1 } // Array(1, 2, 3)
+  val array: Array[Int] = build(3) { i => i + 1 } // Array(1, 2, 3)
   arrayToListAndBack(array)
 }

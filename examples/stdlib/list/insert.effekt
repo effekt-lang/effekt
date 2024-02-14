@@ -1,0 +1,12 @@
+module examples/pos/list/insert
+
+import immutable/list
+
+def main() = {
+  // synchronized with doctest in `insert`
+  println([1, 2, 3].insert(-1, 0))
+  println([1, 2, 3].insert(0, 0))
+  println([1, 2, 3].insert(1, 0))
+  println([1, 2, 3].insert(3, 0))
+  println([1, 2, 3].insert(10, 0))
+}

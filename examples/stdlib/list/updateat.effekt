@@ -1,0 +1,9 @@
+module examples/pos/list/updateat
+
+import immutable/list
+
+def main() = {
+  // synchronized with doctest in `updateAt`
+  println([1, 2, 3].updateAt(1) { n => n + 100 })
+  println([1, 2, 3].updateAt(10) { n => n + 100 })
+}

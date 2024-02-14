@@ -29,7 +29,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree
-    val exports = transform(mod.terms)
+    val exports = transform(mod.exports)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
     val definitions = toplevelDeclarations.collect { case d: Definition => d }
@@ -122,12 +122,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   /**
    * In core, we only export value binders and proper functions
    */
-  def transform(exports: Map[String, Set[TermSymbol]]): List[Id] = exports.flatMap {
+  def transform(exports: Bindings): List[Id] = exports.terms.flatMap {
     case (name, syms) => syms.collect {
       case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
       case sym: ValBinder => sym
     }
-  }.toList
+  }.toList ++ exports.namespaces.values.flatMap(transform)
 
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
     core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType))))
@@ -545,7 +545,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
     }
     def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
-      Context.module.findPrelude.terms("infixEq") collect {
+      Context.module.findPrelude.exports.terms("infixEq") collect {
         case sym: Callable => (sym, sym.toType)
       } collectFirst {
         // specialized version
@@ -578,10 +578,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           case MatchGuard.BooleanGuard(condition) =>
             Condition.Predicate(transformAsPure(condition))
           case MatchGuard.PatternGuard(scrutinee, pattern) =>
-            val x = transformAsPure(scrutinee) match {
-              case x : Pure.ValueVar => x
-              case _ => Context.panic("Should not happen")
-            }
+            val x = Context.bind(transformAsPure(scrutinee))
             Condition.Patterns(Map(x -> transformPattern(pattern)))
         }
       }
@@ -764,15 +761,16 @@ trait TransformerOps extends ContextOps { Context: Context =>
     ValueVar(x, s.tpe)
   }
 
-  private[core] def bind(e: Expr): ValueVar = {
+  private[core] def bind(e: Expr): ValueVar = e match {
+    case x: ValueVar => x
+    case e =>
+      // create a fresh symbol and assign the type
+      val x = TmpValue()
 
-    // create a fresh symbol and assign the type
-    val x = TmpValue()
+      val binding = Binding.Let(x, e)
+      bindings += binding
 
-    val binding = Binding.Let(x, e)
-    bindings += binding
-
-    ValueVar(x, e.tpe)
+      ValueVar(x, e.tpe)
   }
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {
