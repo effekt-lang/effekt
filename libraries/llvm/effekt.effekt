@@ -204,6 +204,24 @@ record RuntimeError()
 
 def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
 
+extern pure def panic(msg: String) : Unit =
+    "call void @llvm.trap()"
+
+extern pure def currentTimeNanos() : Int = 
+"declare i32 @clock_gettime(i32, ptr)
+
+define i64 @current_time_nanos() {
+  %1 = alloca { i64, i64 }
+  %2 = call i32 @clock_gettime(i32 0, ptr %1)
+  %3 = load i64, ptr %1
+  %4 = mul nsw i64 %3, 1000000000
+  %5 = getelementptr inbounds { i64, i64 }, ptr %1, i64 0, i32 1
+  %6 = load i64, ptr %5
+  %7 = add nsw i64 %4, %6
+  ret i64 %7
+}
+"
+
 // reports exceptions of (static) type E to the console
 def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = println(msg) }
