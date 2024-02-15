@@ -281,3 +281,8 @@ def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
   run(warmup, false)
   run(iterations, true)
 }
+
+extern pure def xor(a: Int, b: Int): Int = "(${a} ^ ${b})"
+
+extern pure def lshift(a: Int, b: Int): Int = "(${a} << ${b})"
+
