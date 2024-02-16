@@ -152,28 +152,20 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
 
-  val completedSymbols = HashMap[Int, Symbol]() // TODO: should there be a global index for this?
   override def getCompletion(position: Position): Option[Vector[CompletionItem]] = for {
     syms <- getCompletionsAt(position)(context)
     items = syms.map { sym =>
-      completedSymbols(sym.id) = sym
       val item = CompletionItem(sym.name.name)
+      val maybeDetail = getInfoOf(sym)(context)
       item.setKind(getCompletionKind(sym))
       item.setData(sym.id.toString)
+      maybeDetail.map { detail =>
+        item.setDetail(detail.header)
+        item.setDocumentation(detail.description.getOrElse(""))
+      }
       item
     }
   } yield items
-
-  override def resolveCompletion(item: CompletionItem): Option[CompletionItem] = for {
-    sym <- completedSymbols.get(item.getData.toString.tail.init.toInt) // TODO: gson hack
-    detail <- getInfoOf(sym)(context)
-    description <- detail.description
-    newItem = CompletionItem(item.getLabel)
-    _ = newItem.setKind(item.getKind)
-    _ = newItem.setData(sym.id)
-    _ = newItem.setDetail(detail.header)
-    _ = newItem.setDocumentation(description)
-  } yield newItem
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
