@@ -109,8 +109,10 @@ trait Intelligence {
   }
 
   def getCompletionsAt(position: Position)(implicit C: Context): Option[Vector[Symbol]] = for {
-    prefix <- position.optWord
-    syms <- getCompletableSymbols(position, prefix)
+    line <- position.source.optLineContents(position.line)
+    beforeCaret = line.take(position.column - 1)
+    word = beforeCaret.drop(beforeCaret.lastIndexOf(" ") + 1)
+    syms <- getCompletableSymbols(position, word)
   } yield syms
 
   // For now, only show the first call target
