@@ -3,120 +3,616 @@ module immutable/list
 import effekt
 import immutable/option
 
+// Used as a type for `Exception` in functions which expect a nonempty list.
 record EmptyList()
 
+// Used as a type for `Exception` in functions where an index can be out of bounds.
+record OutOfBounds()
+
+// Immutable linked list for finite sequences of elements.
 type List[A] {
   Nil();
   Cons(head: A, tail: List[A])
 }
 
-def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
-  var remainder = l
-  while(not(remainder.isEmpty)) {
-    remainder match {
-      case Nil() => ()
-      case Cons(a, as) => f(a); remainder = as
+// Create an empty list.
+//
+// O(1)
+def empty[A](): List[A] = Nil()
+
+// Create a list with one element.
+//
+// O(1)
+def singleton[A](x: A): List[A] = Cons(x, Nil())
+
+// Create a list of length `size` where all elements are `default`.
+//
+// O(size)
+def fill[A](size: Int, default: A): List[A] = {
+  build(size) { i => default }
+}
+
+// Create a list from a function `index` of given `size`.
+//
+// O(size)
+def build[A](size: Int) { index: Int => A }: List[A] = {
+  var result = empty()
+  each(0, size) { i =>
+    result = Cons(index(i), result)
+  }
+  result.reverse
+}
+
+// Check if list is empty.
+//
+// O(1)
+def isEmpty[A](l: List[A]): Boolean = l match {
+  case Nil() => true
+  case Cons(a, rest) => false
+}
+
+// Check if list is nonempty.
+//
+// O(1)
+def nonEmpty[A](l: List[A]): Boolean = l match {
+  case Nil() => false
+  case Cons(a, rest) => true
+}
+
+// Return the first element of a given list.
+// Throws a `EmptyList` exception if it's empty.
+//
+// O(1)
+def head[A](l: List[A]): A / Exception[EmptyList] = l match {
+  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+  case Cons(a, rest) => a
+}
+
+// Return all elements of a given list except the first element.
+// Throws a `EmptyList` exception if it's empty.
+//
+// O(1)
+def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
+  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+  case Cons(a, rest) => rest
+}
+
+// Return the first element of a given list.
+// Returns `None()` if it's empty.
+//
+// O(1)
+def headOption[A](l: List[A]): Option[A] = l match {
+  case Nil() => None()
+  case Cons(a, rest) => Some(a)
+}
+
+// Get the value at given index.
+//
+// O(N)
+def get[A](list: List[A], index: Int): A / Exception[OutOfBounds] = {
+  def go(list: List[A], i: Int): A / Exception[OutOfBounds] = {
+    list match {
+      case Nil() => do raise(OutOfBounds(), "Trying to get an element outside the bounds of a list")
+      case Cons(x, xs) =>
+        if (i == 0) {
+          x
+        } else {
+          go(xs, i - 1)
+        }
     }
+  }
+
+  go(list, index)
+}
+
+// Traverse a list, applying the given action on every element.
+//
+// O(N)
+def foreach[A](l: List[A]) { f: A => Unit / Control } : Unit = {
+  var remainder = l
+  loop {
+    if (not(remainder.isEmpty)) {
+      remainder match {
+        case Nil() => ()
+        case Cons(a, as) =>
+          remainder = as
+          f(a)
+      }
+    } else { do break() }
   }
 }
 
-def foreachIndex[T](list: List[T]){ f: (Int, T) => Unit}: Unit = {
-  def worker[T](list: List[T], i: Int){ f: (Int, T) => Unit}: Unit = {
-    list match {
-      case Nil() => ();
-      case Cons(head, tail) => f(i, head); worker(tail, i+1){f}
-
-    }
-  };
-  worker(list,0){f};
+// Traverse a list, applying the given action on every element and its (zero-based) index.
+//
+// O(N)
+def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit / Control }: Unit = {
+  var remainder = list
+  var i = -1
+  loop {
+    if (not(remainder.isEmpty)) {
+      remainder match {
+        case Nil() => ()
+        case Cons(a, as) =>
+          remainder = as
+          i = i + 1
+          f(i, a)
+      }
+    } else { do break() }
+  }
 }
 
+// Map a function `f` over elements in a given list.
+//
+// O(N)
 def map[A, B](l: List[A]) { f: A => B } : List[B] = {
   var acc = Nil[B]()
   l.foreach { el => acc = Cons(f(el), acc) }
   acc.reverse
 }
 
+// Map a function `f` over elements in a given list,
+// keeping only the elements for which the function returned `Some(...)`,
+// discarding the elements for which the function returned `None()`.
+//
+// O(N)
+def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
+  var acc = Nil[B]()
+  l.foreach { a =>
+    val optB = f(a)
+    optB match {
+      case None() => ();
+      case Some(b) => acc = Cons(b, acc);
+    }
+  }
+  acc.reverse
+}
+
+// Map a function `f` over elements in a given list and concatenate the results.
+//
+// O(N)
+def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
+  var acc = Nil[B]()
+  l.foreach { a =>
+    val bs = f(a)
+    acc = acc.append(bs)
+  }
+  acc
+}
+
+// Check if predicate is true for all elements of the given list.
+//
+// O(N)
+def all[A](list: List[A]) { predicate: A => Boolean }: Boolean = {
+  list match {
+    case Cons(x, xs) => predicate(x) && all(xs) { predicate }
+    case Nil() => true
+  }
+}
+
+// Check if predicate is true for at least one element of the given list.
+//
+// O(N)
+def any[A](list: List[A]) { predicate: A => Boolean }: Boolean = {
+  list match {
+    case Cons(x, xs) => predicate(x) || any(xs) { predicate }
+    case Nil() => false
+  }
+}
+
+// Sum the elements of the list.
+//
+// O(N)
+def sum(list: List[Int]): Int = {
+  var n = 0;
+  list.foreach { x => n = n + x };
+  n
+}
+
+// Calculate the size of the list.
+//
+// O(N)
 def size[A](l: List[A]): Int = {
   var n = 0;
   l.foreach { _ => n = n + 1 };
   n
 }
 
+// Reverse the list.
+//
+// O(N)
 def reverse[A](l: List[A]): List[A] = {
   var res = Nil[A]()
   l.foreach { el => res = Cons(el, res) }
   res
 }
 
-// [1,2,3].reverseOnto([4,5,6])
+// Reverse a list `l` and append `other` to it.
+//
+// Example:
+// ```
+// > [1,2,3].reverseOnto([4,5,6])
 // [3,2,1,4,5,6]
+// ```
+//
+// O(|l|)
 def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
   case Nil() => other
   case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
 }
 
-// [1,2,3].append([4,5,6])
-// [3,2,1].reverseOnto([4,5,6])
+// Concatenate list `l` with list `other`:
+//
+// Example:
+// ```
+// > [1,2,3].append([4,5,6])
 // [1,2,3,4,5,6]
+// ```
+//
+// O(N)
 def append[A](l: List[A], other: List[A]): List[A] =
   l.reverse.reverseOnto(other)
 
-// gracefully fails
+// Flatten a list of lists into a single list.
+//
+// Examples:
+// ```
+// > [[1, 2, 3], [4, 5], [6]].join()
+// [1, 2, 3, 4, 5, 6]
+//
+// > [[]].join()
+// []
+// ```
+//
+// O(N)
+def join[A](lists: List[List[A]]): List[A] = {
+  var acc: List[A] = Nil()
+  lists.foreach { list =>
+    acc = acc.append(list)
+  }
+  acc
+}
+
+// Flatten a list of lists into a single list,
+// putting the `between` list in between each list in the input.
+//
+// Examples:
+// ```
+// > [[100], [200, 300], [400]].join([1, 2, 3])
+// [100, 1, 2, 3, 200, 300, 1, 2, 3, 400]
+//
+// > [[]].join([1, 2, 3])
+// []
+// ```
+//
+// O(N)
+def join[A](lists: List[List[A]], between: List[A]): List[A] = {
+  lists match {
+    case Nil() => Nil()
+    case Cons(firstList, restOfLists) =>
+      firstList.append(
+        restOfLists.flatMap { list => between.append(list)}
+      )
+  }
+}
+
+// Take the first `n` elements of a given list.
+//
+// Examples:
+// ```
+// > [1, 2, 3].take(2)
+// [1, 2]
+//
+// > [1, 2, 3].take(0)
+// []
+//
+// > [1, 2, 3].take(3)
+// [1, 2, 3]
+//
+// > [1, 2, 3].take(5)
+// [1, 2, 3]
+//
+// > [1, 2, 3].take(-1)
+// []
+// ```
+//
+// O(n)
 def take[A](l: List[A], n: Int): List[A] =
-  if (n == 0) {
+  if (n <= 0) {
     Nil()
   } else l match {
     case Nil() => Nil()
     case Cons(a, rest) => Cons(a, rest.take(n - 1))
   }
 
+// Drop the first `n` elements of a given list.
+//
+// Examples:
+// ```
+// > [1, 2, 3].drop(2)
+// [3]
+//
+// > [1, 2, 3].drop(0)
+// [1, 2, 3]
+//
+// > [1, 2, 3].drop(3)
+// []
+//
+// > [1, 2, 3].drop(5)
+// []
+//
+// > [1, 2, 3].drop(-1)
+// [1, 2, 3]
+// ```
+//
+// O(n)
 def drop[A](l: List[A], n: Int): List[A] =
-  if (n == 0) {
+  if (n <= 0) {
     l
   } else l match {
     case Nil() => Nil()
     case Cons(a, rest) => rest.drop(n - 1)
   }
 
-def isEmpty[A](l: List[A]): Boolean = l match {
-  case Nil() => true
-  case Cons(a, rest) => false
+// Return a slice of a given list from the starting index (inclusive)
+// to the given end index (exclusive).
+//
+// Examples:
+// ```
+// > [1, 2, 3, 4, 5, 6].slice(1, 4)
+// [2, 3, 4]
+//
+// > [1, 2, 3, 4, 5, 6].slice(1, 2)
+// [2]
+//
+// > [1, 2, 3, 4, 5, 6].slice(1, 1)
+// []
+//
+// > [1, 2, 3, 4, 5, 6].slice(4, 1)
+// []
+//
+// > [1, 2, 3, 4, 5, 6].slice(-100, 100)
+// [1, 2, 3, 4, 5, 6]
+// ```
+//
+// O(N)
+def slice[A](list: List[A], start: Int, stopExclusive: Int): List[A] = {
+  val prefix = list.drop(start)
+  val length = stopExclusive - start
+  prefix.take(length)
 }
 
-def nonEmpty[A](l: List[A]): Boolean = l match {
-  case Nil() => false
-  case Cons(a, rest) => true
+// Split the list at given index.
+//
+// Law: `val (l, r) = list.splitAt(i); l.append(r) === list`
+//
+// O(N)
+def splitAt[A](list: List[A], index: Int): (List[A], List[A]) = {
+  (list.take(index), list.drop(index))
 }
 
-def head[A](l: List[A]): A / Exception[EmptyList] = l match {
-  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
-  case Cons(a, rest) => a
+// Update the element at given index in the list using the `update` function.
+// Returns the original list if the index is out of bounds.
+//
+// See: `modifyAt`
+// Examples:
+// ```
+// > [1, 2, 3].updateAt(1) { n => n + 100 }
+// [1, 102, 3]
+//
+// > [1, 2, 3].updateAt(10) { n => n + 100 }
+// [1, 2, 3]
+// ```
+//
+// O(N)
+def updateAt[A](list: List[A], index: Int) { update: A => A }: List[A] = {
+  list.splitAt(index) match {
+    case (left, Cons(x, right)) =>
+      left.append(Cons(update(x), right))
+    case _ => list
+  }
 }
 
-def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
-  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
-  case Cons(a, rest) => rest
+// Modify the element at given index in the list using the `update` function.
+// Throws `OutOfBounds` if the index is out of bounds.
+//
+// See: `updateAt`
+// Examples:
+// ```
+// > [1, 2, 3].modifyAt(1) { n => n + 100 }
+// Some([1, 102, 3])
+//
+// > [1, 2, 3].modifyAt(10) { n => n + 100 }
+// None()
+// ```
+//
+// O(N)
+def modifyAt[A](list: List[A], index: Int) { update: A => A }: List[A] / Exception[OutOfBounds] = {
+  list.splitAt(index) match {
+    case (left, Cons(x, right)) =>
+      left.append(Cons(update(x), right))
+    case _ => do raise(OutOfBounds(), "Trying to modify an element outside the bounds of a list")
+  }
 }
 
-def headOption[A](l: List[A]): Option[A] = l match {
-  case Nil() => None()
-  case Cons(a, rest) => Some(a)
+// Delete the element at given index in the list.
+//
+// Example:
+// ```
+// > [1, 2, 3, 4].deleteAt(1)
+// [1, 3, 4]
+//
+// > [1, 2, 3, 4].deleteAt(-1)
+// [1, 2, 3, 4]
+//
+// > [1, 2, 3, 4].deleteAt(10)
+// [1, 2, 3, 4]
+// ```
+//
+// O(N)
+def deleteAt[A](list: List[A], index: Int): List[A] = {
+  val left = list.slice(0, index)
+  val right = list.slice(index + 1, list.size())
+  left.append(right)
 }
 
-// elements that satisfy the predicate go into the left list
+// Add an element at given index in the list.
+//
+// Examples:
+// ```
+// > [1, 2, 3].insert(-1, 0)
+// [0, 1, 2, 3]
+//
+// > [1, 2, 3].insert(0, 0)
+// [0, 1, 2, 3]
+//
+// > [1, 2, 3].insert(1, 0)
+// [1, 0, 2, 3]
+//
+// > [1, 2, 3].insert(3, 0)
+// [1, 2, 3, 0]
+//
+// > [1, 2, 3].insert(10, 0)
+// [1, 2, 3, 0]
+// ```
+//
+// O(N)
+def insert[A](list: List[A], index: Int, x: A): List[A] = {
+  val (left, right) = list.splitAt(index)
+  left.append(Cons(x, right))
+}
+
+// Replace an element at given index in the list.
+// Returns the original list when the index is out of bounds.
+//
+// Examples:
+// ```
+// > [1, 2, 3].replace(0, 42)
+// [42, 2, 3]
+//
+// > [1, 2, 3].replace(-1, 42)
+// [1, 2, 3]
+//
+// > [1, 2, 3].replace(10, 42)
+// [1, 2, 3]
+// ```
+//
+// O(N)
+def replace[A](list: List[A], index: Int, x: A): List[A] = {
+  if (index < 0 || index >= list.size()) {
+    list
+  } else {
+    val left = list.take(index)
+    val right = list.drop(index + 1)
+    left.append(Cons(x, right))
+  }
+}
+
+// Produce a list of pairs from a pair of lists.
+// The length of the result is the minimum of lengths of the two lists.
+//
+// Examples:
+// ```
+// > zip([1, 2, 3], [100, 200, 300])
+// [(1, 100), (2, 200), (3, 300)]
+//
+// > zip([1, 2, 3], Nil[Int]())
+// []
+//
+// > zip(Nil[Int](), [1, 2, 3])
+// []
+//
+// > zip([1, 2, 3], [42])
+// [(1, 42)]
+// ```
+//
+// O(N)
+def zip[A, B](left: List[A], right: List[B]): List[(A, B)] = {
+  def go(acc: List[(A, B)], left: List[A], right: List[B]): List[(A, B)] = {
+    (left, right) match {
+      case (Cons(a, as), Cons(b, bs)) =>
+        val pair = (a, b)
+        val newAcc = Cons(pair, acc)
+        go(newAcc, as, bs)
+      case _ => acc.reverse
+    }
+  }
+  go(Nil(), left, right)
+}
+
+// Combine two lists with the given function.
+// The length of the result is the minimum of lengths of the two lists.
+//
+// Examples:
+// ```
+// > zipWith([1, 2, 3], [100, 200, 300]) { (a, b) => a + b }
+// [101, 202, 303]
+//
+// > zipWith([1, 2, 3], Nil[Int]()) { (a, b) => a + b }
+// []
+//
+// > zipWith(Nil[Int](), [1, 2, 3]) { (a, b) => a + b }
+// []
+//
+// > zipWith([1, 2, 3], [42]) { (a, b) => a + b }
+// [43]
+// ```
+//
+// O(N)
+def zipWith[A, B, C](left: List[A], right: List[B]) { combine : (A, B) => C }: List[C] = {
+  def go(acc: List[C], left: List[A], right: List[B]): List[C] = {
+    (left, right) match {
+      case (Cons(a, as), Cons(b, bs)) =>
+        val result = combine(a, b)
+        val newAcc = Cons(result, acc)
+        go(newAcc, as, bs)
+      case _ => acc.reverse
+    }
+  }
+  go(Nil(), left, right)
+}
+
+// Produce a pair of lists from a list of pairs.
+//
+// Examples:
+// ```
+// > [(1, 100), (2, 200), (3, 300)].unzip()
+// ([1, 2, 3], [100, 200, 300])
+// ```
+//
+// O(N)
+def unzip[A, B](pairs: List[(A, B)]): (List[A], List[B]) = {
+  pairs match {
+    case Nil() => (Nil(), Nil())
+    case Cons((l, r), rest) =>
+      val (left, right) = rest.unzip();
+      (Cons(l, left), Cons(r, right))
+  }
+}
+
+// Partition a given list into two lists.
+// The left list contains the elements that satsify the predicate,
+// the right list contains the elements that do not.
+//
+// O(N)
 def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
   var lefts: List[A] = Nil()
   var rights: List[A] = Nil()
   l.foreach { el =>
-    if (pred(el)) { lefts = Cons(el, lefts) }
-    else { rights = Cons(el, rights) }
-  };
+    if (pred(el)) {
+      lefts = Cons(el, lefts)
+    } else {
+      rights = Cons(el, rights)
+    }
+  }
 
   (lefts.reverse, rights.reverse)
 }
 
-// this implementation is not stacksafe!
+// Sort a list using a given comparison function.
+//
+// Note: this implementation is not stacksafe!
+//
+// O(N log N)
 def sortBy[A](l: List[A]) { compare: (A, A) => Boolean }: List[A] =
   l match {
     case Nil() => Nil()
@@ -129,3 +625,19 @@ def sortBy[A](l: List[A]) { compare: (A, A) => Boolean }: List[A] =
 
 def sort(l: List[Int]): List[Int] = l.sortBy { (a, b) => a < b }
 def sort(l: List[Double]): List[Double] = l.sortBy { (a, b) => a < b }
+
+// Check if a list is sorted according to the given comparison function.
+//
+// O(N)
+def isSortedBy[A](list: List[A]) { compare: (A, A) => Boolean }: Boolean = {
+  def go(list: List[A]): Boolean = {
+    list match {
+      case Nil() => true
+      case Cons(x, Nil()) => true
+      case Cons(x, Cons(y, rest)) =>
+        val next = Cons(y, rest) // Future work: Replace this by an @-pattern!
+        compare(x, y) && go(next)
+    }
+  }
+  go(list)
+}

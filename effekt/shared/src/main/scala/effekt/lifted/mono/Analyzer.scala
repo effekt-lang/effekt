@@ -322,6 +322,7 @@ def analyze(e: Expr)(using C: ErrorReporter, F: FlowAnalysis): Unit = e match {
   // this also means we do not need to bind externs and constructors (at the moment).
   // TODO what is with control externs?
   case Expr.PureApp(b, targs, args) => args.foreach(analyze)
+  case Expr.Make(data, tag, args) => args.foreach(analyze)
 
   case Expr.Select(target, field, annotatedType) => analyze(target)
   case Expr.Box(b) => analyze(b)

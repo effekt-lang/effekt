@@ -4,11 +4,11 @@ interface Assertion {
   def assert(condition: Boolean, msg: String): Unit
 }
 
-def assertTrue(condition: Boolean) =
-  do assert(condition, "Assertion failed")
-
 def assertTrue(condition: Boolean, msg: String) =
   do assert(condition, msg)
+
+def assertTrue(condition: Boolean) =
+  do assert(condition, "Assertion failed")
 
 def assertFalse(condition: Boolean, msg: String) =
   do assert(not(condition), msg)
@@ -16,6 +16,12 @@ def assertFalse(condition: Boolean, msg: String) =
 def assertFalse(condition: Boolean) =
   do assert(not(condition), "Assertion failed")
 
+def assertEqual[A](obtained: A, expected: A, msg: String) =
+  do assert(obtained == expected, msg)
+
+// Note: every other backend uses a generic `show` instead
+def assertEqual[A](obtained: A, expected: A) { show : A => String } =
+  do assert(obtained == expected, "Obtained: " ++ show(obtained) ++ "\n but expected:" ++ show(expected))
 
 interface Test {
   def success(name: String): Unit
@@ -27,8 +33,7 @@ def test(name: String) { body: => Unit / Assertion } =
     def assert(condition, msg) = if (condition) resume(()) else do failure(name, msg)
   }
 
-
-def suite(name: String) { body: => Unit / Test } = {
+def suite(name: String) { body: => Unit / Test }: Boolean = {
   println("Running suite: " ++ name);
   var failed = 0
   var passed = 0
@@ -47,7 +52,9 @@ def suite(name: String) { body: => Unit / Test } = {
   }
   if (failed > 0) {
     println(ANSI_RED ++ "Some tests failed (" ++ passed.show ++ " passed, " ++ failed.show ++ " failed)" ++ ANSI_RESET)
+    false
   } else {
     println(ANSI_GREEN ++ "All tests passed (" ++ passed.show ++ " passed)" ++ ANSI_RESET)
+    true
   }
 }

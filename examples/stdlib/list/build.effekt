@@ -1,0 +1,14 @@
+module examples/pos/list/build
+
+import immutable/list
+
+def main() = {
+  val empty: List[String] = build(0) { i => "Hello" }
+  println(empty)
+
+  val single: List[Int] = build(1) { i => 42 }
+  println(single)
+
+  val iota: List[Int] = build(5) { i => i }
+  println(iota)
+}

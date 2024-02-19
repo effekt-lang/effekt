@@ -26,7 +26,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(mod: core.ModuleDecl)(using Environment, ErrorReporter): ModuleDecl = {
     val env = pretransform(mod.definitions)
     val definitions = mod.definitions.map(d => transform(d)(using env, ErrorReporter))
-    ModuleDecl(mod.path, mod.imports, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
+    ModuleDecl(mod.path, mod.includes, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
   }
 
   def transform(declaration: core.Declaration): lifted.Declaration = declaration match {
@@ -106,7 +106,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       val eparams = bps map {
         case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
       }
-      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), body)
+      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
+        Template(body.strings, body.args.map(transform)))
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
   }
@@ -233,8 +234,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.ValueVar(sym, tpe) =>
       ValueVar(sym, transform(tpe))
 
-    case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
+    case core.PureApp(b, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs.map(transform), args map transform)
+
+    case core.Make(data, tag, args: List[core.Expr]) =>
+      Make(transform(data).asInstanceOf, tag, args map transform)
 
     case core.Select(target, field, tpe) =>
       Select(transform(target), field, transform(tpe))

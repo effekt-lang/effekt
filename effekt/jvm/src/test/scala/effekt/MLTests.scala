@@ -10,7 +10,7 @@ class MLTests extends EffektTests {
 
   def backendName: String = "ml"
 
-  override lazy val included: List[File] = List(
+  override lazy val positives: List[File] = List(
     examplesDir / "ml",
     examplesDir / "benchmarks",
     examplesDir / "pos",
@@ -36,6 +36,7 @@ class MLTests extends EffektTests {
     // Tests with box
     examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
+    examplesDir / "pos" / "file.effekt",
     //    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "resources.effekt",
@@ -77,13 +78,14 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "mutualrecursion.effekt",
 
     // heap
-    examplesDir / "casestudies" / "ad.md",
+    examplesDir / "casestudies" / "ad.effekt..md",
 
     // regex
-    examplesDir / "casestudies" / "anf.md",
-    examplesDir / "casestudies" / "lexer.md",
-    examplesDir / "casestudies" / "parser.md",
-    examplesDir / "casestudies" / "prettyprinter.md",
+    examplesDir / "casestudies" / "anf.effekt.md",
+    examplesDir / "casestudies" / "lexer.effekt.md",
+    examplesDir / "casestudies" / "parser.effekt.md",
+    examplesDir / "casestudies" / "prettyprinter.effekt.md",
+    examplesDir / "benchmarks" / "pretty.effekt",
     examplesDir / "pos" / "simpleparser.effekt",
 
     // cont
@@ -93,6 +95,8 @@ class MLTests extends EffektTests {
     // array api
     examplesDir / "pos" / "raytracer.effekt",
     examplesDir / "pos" / "issue319.effekt",
+    examplesDir / "pos" / "array" / "list_conversion.effekt",
+    examplesDir / "pos" / "array" / "sum.effekt",
 
     // async
     examplesDir / "pos" / "io" / "async_file_io.effekt",
@@ -102,8 +106,8 @@ class MLTests extends EffektTests {
 
     // Unclear issue
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
-    examplesDir / "casestudies" / "buildsystem.md",
-    examplesDir / "casestudies" / "naturalisticdsls.md",
+    examplesDir / "casestudies" / "buildsystem.effekt.md",
+    examplesDir / "casestudies" / "naturalisticdsls.effekt.md",
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
     examplesDir / "pos" / "emptymatch.effekt",

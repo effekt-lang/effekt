@@ -20,7 +20,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
     case ModuleDecl(path, imports, defs) =>
-      ModuleDecl(path, imports, defs.map(rewrite))
+      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces))
   }
 
   /**
@@ -62,14 +62,14 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case Assign(id, expr) =>
       Assign(id, rewriteAsExpr(expr))
 
-    case If(cond, thn, els) =>
-      If(rewriteAsExpr(cond), rewrite(thn), rewrite(els))
+    case If(guards, thn, els) =>
+      If(guards.map(rewrite), rewrite(thn), rewrite(els))
 
-    case While(cond, body) =>
-      While(rewriteAsExpr(cond), rewrite(body))
+    case While(guards, body, default) =>
+      While(guards.map(rewrite), rewrite(body), default.map(rewrite))
 
-    case Match(sc, clauses) =>
-      Match(rewriteAsExpr(sc), clauses.map(rewrite))
+    case Match(sc, clauses, default) =>
+      Match(rewriteAsExpr(sc), clauses.map(rewrite), default.map(rewrite))
 
     case s @ Select(recv, name) if s.definition.isInstanceOf[Field] =>
       Select(rewriteAsExpr(recv), name)
@@ -89,7 +89,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
       val syms = m.definition match {
         // an overloaded call target
-        case symbols.CallTarget(name, syms) => syms.flatten
+        case symbols.CallTarget(syms) => syms.flatten
         case s => C.panic(s"Not a valid method or function: ${id.name}")
       }
 
@@ -129,6 +129,11 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     }
   }
 
+  def flattenNamespaces(t: Def)(using C: Context): List[Def] = t match {
+    case Def.NamespaceDef(name, defs) => defs.flatMap(flattenNamespaces)
+    case d => List(rewrite(d))
+  }
+
   def rewrite(t: Def)(using C: Context): Def = visit(t) {
 
     case FunDef(id, tparams, vparams, bparams, ret, body) =>
@@ -166,11 +171,13 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case d: ExternResource => d
     case d: ExternInterface => d
     case d: ExternInclude  => d
+
+    case d: NamespaceDef => Context.panic("Should have been removed by flattenNamespaces")
   }
 
   def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
     case DefStmt(d, rest) =>
-      DefStmt(rewrite(d), rewrite(rest))
+      flattenNamespaces(d).foldRight(rewrite(rest)) { case (d, rest) => DefStmt(d, rest) }
 
     case ExprStmt(e, rest) =>
       ExprStmt(rewriteAsExpr(e), rewrite(rest))
@@ -198,8 +205,13 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {
-    case MatchClause(pattern, body) =>
-      MatchClause(pattern, rewrite(body))
+    case MatchClause(pattern, guards, body) =>
+      MatchClause(pattern, guards.map(rewrite), rewrite(body))
+  }
+
+  def rewrite(g: MatchGuard)(using Context): MatchGuard = g match {
+    case BooleanGuard(condition) => BooleanGuard(rewriteAsExpr(condition))
+    case PatternGuard(scrutinee, pattern) => PatternGuard(rewriteAsExpr(scrutinee), pattern)
   }
 
   /**

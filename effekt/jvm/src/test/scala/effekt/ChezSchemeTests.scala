@@ -9,7 +9,7 @@ import scala.language.implicitConversions
 
 abstract class ChezSchemeTests extends EffektTests {
 
-  override def included: List[File] = List(
+  override def positives: List[File] = List(
     examplesDir / "pos",
     examplesDir / "casestudies",
     examplesDir / "chez",
@@ -34,11 +34,18 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "propagators.effekt",
 
     // the number representations differ in JS and Chez
-    examplesDir / "casestudies" / "ad.md",
+    examplesDir / "casestudies" / "ad.effekt.md",
 
     // in the CallCC variant, we cannot have toplevel vals at the moment (their bindings need to be wrapped in `(run (thunk ...))`
     // see comment on commit 61492d9
-    examplesDir / "casestudies" / "anf.md",
+    examplesDir / "casestudies" / "anf.effekt.md",
+
+    // indexOf and lastIndexOf are not implemented in text/string
+    examplesDir / "pos" / "string" / "indexOf.effekt",
+
+    // missing array-related functions & methods
+    examplesDir / "pos" / "array" / "list_conversion.effekt",
+    examplesDir / "pos" / "array" / "sum.effekt",
 
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",
@@ -65,15 +72,16 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
   def backendName = "chez-lift"
 
   override def ignored: List[File] = super.ignored ++ List(
-    // global mutable state is not yet supported
 
     // regions are not yet supported
     examplesDir / "benchmarks" / "generator.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "selfregion.effekt",
+    // boxing is not (yet) supported for lift-based backends
+    examplesDir / "pos" / "file.effekt",
 
     // known issues:
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
-    examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidence, which it does not need
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt", // ffi is passed evidence, which it does not need
   )
 }

@@ -151,6 +151,7 @@ object Type {
     case Expr.Run(s) => s.tpe
     case Expr.ValueVar(id, tpe) => tpe
     case Expr.Literal(value, tpe) => tpe
+    case Expr.Make(data, tag, args) => data
     case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs).result
     case Expr.Select(target, field, annotatedType) => annotatedType
     case Expr.Box(block) => ValueType.Boxed(block.tpe)

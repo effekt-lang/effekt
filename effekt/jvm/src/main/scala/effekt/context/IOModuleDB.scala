@@ -28,7 +28,7 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     // ATTENTION modulePath can contain non-platform dependent path separators
 
     def effektFile(include: File) = include / (modulePath + ".effekt")
-    def mdFile(include: File) = include / (modulePath + ".md")
+    def mdFile(include: File) = include / (modulePath + ".effekt.md")
 
     config.includes().collectFirst {
       case p if effektFile(p).exists => FileSource(effektFile(p).toString)

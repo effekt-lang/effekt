@@ -17,7 +17,7 @@ object builtins {
   // defined in the prelude
   lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
 
-  private def name(s: String) = Name.qualified(s, prelude)
+  private def name(s: String) = QualifiedName(List("effekt"), s)
 
   val UnitSymbol = ExternType(name("Unit"), Nil)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
@@ -37,6 +37,7 @@ object builtins {
   val TopSymbol = ExternType(name("Any"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
+  // should this be a datatype, not an extern type?
   val BottomSymbol = ExternType(name("Nothing"), Nil)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
@@ -91,4 +92,9 @@ object builtins {
     "control" -> ControlCapability.capture,
     "global" -> globalRegion.capture
   )
+
+  lazy val rootBindings: Bindings =
+    Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures,
+      Map("effekt" -> Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures, Map.empty)))
+
 }

@@ -126,6 +126,16 @@ trait Compiler[Executable] {
     }
 
   /**
+   * Used by the server to typecheck, report type errors and show
+   * captures at boxes and definitions 
+   */
+  def runMiddleend(source: Source)(using Context): Option[Module] =
+    (Frontend andThen Middleend)(source).map { res => 
+      validate(res.source, res.mod)
+      res.mod
+    }
+
+  /**
    * Called after running the frontend from editor services.
    *
    * Can be overridden to implement backend specific checks (exclude certain

@@ -3,51 +3,67 @@ module mutable/array
 import immutable/option
 import immutable/list
 
-// A mutable array, backed by a JavaScript array.
+// A mutable 0-based indexed array, backed by a JavaScript array.
 extern type Array[T]
 
 def emptyArray[T](): Array[T] = emptyArray(0)
 
-//initialize array with default values
-def arrayFromValue[T](size: Int, default: T) : Array[T] = {
+// Creates a new Array of size `size` filled with the value `default`
+def fill[T](size: Int, default: T): Array[T] = {
   val arr = emptyArray[T](size)
-  each(0,arr.size()){ i=> put(arr, i, default)}
+  each(0, arr.size()) { i =>
+    put(arr, i, default)
+  }
   return arr;
 }
 
-def arrayFromLoop[T](size: Int) { index: Int => T}: Array[T] = {
+// Builds a new Array of size `size` from a computation `index` which gets an index
+// and returns a value that will be on that position in the resulting array
+def build[T](size: Int) { index: Int => T }: Array[T] = {
   val arr = emptyArray[T](size)
-  each(0,arr.size()){ i=> put(arr, i, index(i))}
+  each(0, arr.size()) { i =>
+    put(arr, i, index(i))
+  }
   return arr
 }
 
-def arrayFromList[T](list: List[T]): Array[T] = {
+// Converts a List `list` to an Array
+def fromList[T](list: List[T]): Array[T] = {
   val listSize = list.size();
   val arr = emptyArray(listSize);
 
-  foreachIndex(list){(i, head) => put(arr, i, head)}
+  foreachIndex(list) { (i, head) =>
+    put(arr, i, head)
+  }
   return arr;
 }
 
-
-
 extern pure def emptyArray[T](initialSize: Int): Array[T] =
-  "(new Array(initialSize))"
+  "(new Array(${initialSize}))"
 
 def get[T](arr: Array[T], index: Int): Option[T] =
   arr.unsafeGet(index).undefinedToOption
 
 extern pure def size[T](arr: Array[T]): Int =
-  "arr.length"
+  "${arr}.length"
 
 extern io def unsafeGet[T](arr: Array[T], index: Int): T =
-  "arr[index]"
+  "${arr}[${index}]"
+
+extern """
+function put(arr, index, value) {
+  arr[index] = value;
+  return $effekt.unit
+}
+"""
 
 extern io def put[T](arr: Array[T], index: Int, value: T): Unit =
-  "(function() { arr[index] = value; return $effekt.unit })()"
+  "put(${arr}, ${index}, ${value})"
 
 extern pure def copy[T](arr: Array[T]): Array[T] =
-  "[...arr]"
+  "[...${arr}]"
+
+// Utility functions:
 
 def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
@@ -57,4 +73,26 @@ def toList[T](arr: Array[T]): List[T] = {
     i = i - 1
   }
   l
+}
+
+def foreach[T](arr: Array[T]){ action: T => Unit / Control }: Unit = {
+  each(0, arr.size) { i =>
+    val x: T = arr.unsafeGet(i)
+    action(x)
+  }
+}
+
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit / Control }: Unit = {
+  each(0, arr.size) { i =>
+    val x: T = arr.unsafeGet(i)
+    action(i, x)
+  }
+}
+
+def sum(list: Array[Int]): Int = {
+  var acc = 0
+  list.foreach { x =>
+    acc = acc + x
+  }
+  acc
 }

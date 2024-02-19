@@ -8,16 +8,13 @@ def locally[R] { f: => R }: R = f()
 
 // Side effecting ops
 // ==================
-extern io def println(value: Int): Unit =
-  """print ((show'int value) ^ "\n")"""
-extern io def println(value: Unit): Unit =
-  """print ((show'unit value) ^ "\n")"""
-extern io def println(value: Double): Unit =
-  """print ((show'real value) ^ "\n")"""
-extern io def println(value: String): Unit =
-  """print ((show'string value) ^ "\n")"""
-extern io def println(value: Boolean): Unit =
-  """print ((show'bool value) ^ "\n")"""
+def println(value: Int): Unit = println(value.show)
+def println(value: Unit): Unit = println(value.show)
+def println(value: Double): Unit = println(value.show)
+def println(value: Boolean): Unit = println(value.show)
+
+def println(value: String): Unit = print(value ++ "\n")
+extern io def print(value: String): Unit = "print ${value}"
 
 extern io def random(): Double =
   "mlRandomReal ()"
@@ -29,77 +26,83 @@ extern io def timestamp(): Int =
 // String ops
 // ==========
 extern pure def show(value: Int): String =
-  "show'int value"
+  "show'int ${value}"
 extern pure def show(value: Unit): String =
-  "show'unit value"
+  "show'unit ${value}"
 extern pure def show(value: Double): String =
-  "show'real value"
+  "show'real ${value}"
 extern pure def show(value: String): String =
-  "show'string value"
+  "show'string ${value}"
 extern pure def show(value: Boolean): String =
-  "show'bool value"
+  "show'bool ${value}"
 
 extern pure def infixConcat(s1: String, s2: String): String =
-  "s1 ^ s2"
+  "${s1} ^ ${s2}"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(x: int) + y"
+  "(${x}: int) + ${y}"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(x: int) * y"
+  "(${x}: int) * ${y}"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(x: int) div y"
+  "(${x}: int) div ${y}"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(x: int) - y"
+  "(${x}: int) - ${y}"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(x: int) mod y"
+  "(${x}: int) mod ${y}"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(x: real) + y"
+  "(${x}: real) + ${y}"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(x: real) * y"
+  "(${x}: real) * ${y}"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(x: real) - y"
+  "(${x}: real) - ${y}"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(x: real) / y"
+  "(${x}: real) / ${y}"
+
+def min(n: Int, m: Int): Int =
+    if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+    if (n > m) n else m
 
 // trig
 // ====
 
 extern pure def cos(x: Double): Double =
-  "Math.cos x"
+  "Math.cos ${x}"
 
 extern pure def sin(x: Double): Double =
-  "Math.sin x"
+  "Math.sin ${x}"
 
 extern pure def atan(x: Double): Double =
-  "Math.atan x"
+  "Math.atan ${x}"
 
 extern pure def tan(x: Double): Double =
-  "Math.tan x"
+  "Math.tan ${x}"
 
 extern pure def sqrt(x: Double): Double =
-  "Math.sqrt x"
+  "Math.sqrt ${x}"
 
 extern pure def square(x: Double): Double =
-  "(x: real) * x"
+  "(${x}: real) * ${x}"
 
 extern pure def log(x: Double): Double =
-  "Math.ln x"
+  "Math.ln ${x}"
 
 extern pure def log1p(x: Double): Double =
-  "Math.ln (x + 1.0)"
+  "Math.ln (${x} + 1.0)"
 
 extern pure def exp(x: Double): Double =
-  "Math.exp x"
+  "Math.exp ${x}"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
@@ -108,72 +111,72 @@ extern pure def _pi(): Double =
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "Real.round d"
+  "Real.round ${d}"
 
 extern pure def toDouble(d: Int): Double =
-  "Real.fromInt d"
+  "Real.fromInt ${d}"
 
 extern pure def floor(d: Double): Int =
-  "Real.floor d"
+  "Real.floor ${d}"
 
 extern pure def ceil(d: Double): Int =
-  "Real.ceil d"
+  "Real.ceil ${d}"
 
 
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Boolean =
-  "x = y"
+  "${x} = ${y}"
 
 extern pure def infixNeq[R](x: R, y: R): Boolean =
-  "not (x = y)"
+  "not (${x} = ${y})"
 
 extern pure def infixLt(x: Int, y: Int): Boolean =
-  "(x: int) < y"
+  "(${x}: int) < ${y}"
 
 extern pure def infixLte(x: Int, y: Int): Boolean =
-  "(x: int) <= y"
+  "(${x}: int) <= ${y}"
 
 extern pure def infixGt(x: Int, y: Int): Boolean =
-  "(x: int) > y"
+  "(${x}: int) > ${y}"
 
 extern pure def infixGte(x: Int, y: Int): Boolean =
-  "(x: int) >= y"
+  "(${x}: int) >= ${y}"
 
 extern pure def infixLt(x: Double, y: Double): Boolean =
-  "(x: real) < y"
+  "(${x}: real) < ${y}"
 
 extern pure def infixLte(x: Double, y: Double): Boolean =
-  "(x: real) <= y"
+  "(${x}: real) <= ${y}"
 
 extern pure def infixGt(x: Double, y: Double): Boolean =
-  "(x: real) > y"
+  "(${x}: real) > ${y}"
 
 extern pure def infixGte(x: Double, y: Double): Boolean =
-  "(x: real) >= y"
+  "(${x}: real) >= ${y}"
 
 extern pure def infixLt(x: String, y: String): Boolean =
-  "(x: string) < y"
+  "(${x}: string) < ${y}"
 
 extern pure def infixLte(x: String, y: String): Boolean =
-  "(x: string) <= y"
+  "(${x}: string) <= ${y}"
 
 extern pure def infixGt(x: String, y: String): Boolean =
-  "(x: string) > y"
+  "(${x}: string) > ${y}"
 
 extern pure def infixGte(x: String, y: String): Boolean =
-  "(x: string) >= y"
+  "(${x}: string) >= ${y}"
 
 // Boolean ops
 // ===========
 extern pure def not(b: Boolean): Boolean =
-  "not b"
+  "not ${b}"
 
 extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-  "x orelse y"
+  "${x} orelse ${y}"
 
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-  "x andalso y"
+  "${x} andalso ${y}"
 
 // Pairs
 // =====
@@ -187,7 +190,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "raise Fail msg"
+  "raise Fail ${msg}"
 
 effect Exception[E] {
   def raise(exception: E, msg: String): Nothing
@@ -206,6 +209,7 @@ def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
 
 // ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
 def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
 

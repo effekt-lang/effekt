@@ -200,12 +200,15 @@ object TransformerLift {
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
-          case p => Some(ChezName(p.id.name.name)) },
-          chez.RawExpr(body)))
+          case p => Some(nameDef(p.id)) },
+          toChez(body)))
 
     case Extern.Include(contents) =>
       RawDef(contents)
   }
+
+  def toChez(t: Template[lifted.Expr]): chez.Expr =
+    chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
     case Definition.Def(id, block) =>
@@ -287,7 +290,7 @@ object TransformerLift {
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
     case ValueVar(id, _)  => chez.Variable(nameRef(id))
-
+    case Make(data, tag, args) => chez.Call(nameRef(tag), args map toChez)
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
       case e: Expr  => toChez(e)
       case b: Block => toChez(b)

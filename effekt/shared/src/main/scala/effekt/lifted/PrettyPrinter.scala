@@ -21,10 +21,17 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(defs: List[Definition]): String =
     pretty(toDoc(defs), 60).layout
 
+  val show: PartialFunction[Any, String] = {
+    case m: ModuleDecl => format(m).layout
+    case d: Definition  => format(List(d))
+    case s: Stmt       => format(s)
+    case x: Id         => x.show
+  }
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
-    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
+    "module" <+> m.path <> emptyline <> vsep(m.includes.map { im => "import" <+> im }, line) <>
       emptyline <> vcat(m.externs.map(toDoc)) <>
       emptyline <> vcat(m.decls.map(toDoc)) <>
       emptyline <> toDoc(m.definitions)
@@ -43,9 +50,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> body <> "\""
+      "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> toDoc(body) <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
+
+  // TODO implement
+  def toDoc(t: Template[Expr]): Doc =
+    hsep(t.args.map(toDoc), comma)
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v, _) => v.name.toString
@@ -66,6 +77,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(s: String, _)   => "\"" + s + "\""
     case l: Literal              => l.value.toString
     case ValueVar(id, _)         => id.name.toString
+
+    case Make(data, tag, args) =>
+      "make" <+> toDoc(data) <+> toDoc(tag) <> parens(hsep(args map argToDoc, comma))
 
     case PureApp(b, targs, args) =>
       val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))

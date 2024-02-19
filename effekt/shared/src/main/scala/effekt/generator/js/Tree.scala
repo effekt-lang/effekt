@@ -2,11 +2,18 @@ package effekt
 package generator
 package js
 
+import scala.collection.immutable.{ AbstractSeq, LinearSeq }
+
 // TODO choose appropriate representation and apply conversions
 case class JSName(name: String)
 
-val $effekt = Variable(JSName("$effekt"))
-def builtin(name: String, args: Expr*): js.Expr = js.MethodCall($effekt, JSName(name), args: _*)
+object $effekt {
+  val namespace = Variable(JSName("$effekt"))
+  def field(name: String): js.Expr =
+    js.Member(namespace, JSName(name))
+  def call(name: String, args: js.Expr*): js.Expr =
+    js.MethodCall(namespace, JSName(name), args: _*)
+}
 
 enum Import {
   // import * as <name> from "<file>";
@@ -86,8 +93,12 @@ enum Expr {
   // e.g. <EXPR>(<EXPR>)
   case Call(callee: Expr, arguments: List[Expr])
 
-  // e.g. 42 (represented as Scala string "42") and inserted verbatim
-  case RawExpr(raw: String)
+  // e.g. new <EXPR>(<EXPR>)
+  case New(callee: Expr, arguments: List[Expr])
+
+  // e.g. "" <EXPR> " + " <EXPR>
+  //   raw JS splices, always start with a prefix string, then interleaved with arguments
+  case RawExpr(raw: List[String], args: List[Expr])
 
   // e.g. (<EXPR> ? <EXPR> : <EXPR>)
   case IfExpr(cond: Expr, thn: Expr, els: Expr)
@@ -108,6 +119,13 @@ enum Expr {
   case Variable(name: JSName)
 }
 export Expr.*
+
+def RawExpr(str: String): js.Expr = Expr.RawExpr(List(str), Nil)
+
+implicit class JavaScriptInterpolator(private val sc: StringContext) extends AnyVal {
+  def js(args: Expr*): Expr = RawExpr(sc.parts.toList, args.toList)
+}
+
 
 enum Pattern {
   case Variable(name: JSName)
@@ -141,6 +159,11 @@ enum Stmt {
 
   // e.g. function <NAME>(x, y) { <STMT>* }
   case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
+
+  // e.g. class <NAME> {
+  //        <NAME>(x, y) { <STMT>* }...
+  //      }
+  case Class(name: JSName, methods: List[Stmt.Function])
 
   // e.g. if (<EXPR>) { <STMT> } else { <STMT> }
   case If(cond: Expr, thn: Stmt, els: Stmt)
@@ -203,13 +226,15 @@ object monadic {
 
   def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
   def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)
-  def Handle(handlers: List[Expr], body: Expr): Control = js.Call(Builtin("handle", js.ArrayLiteral(handlers)), List(body))
+  def Handle(body: Expr): Control = Builtin("handleMonadic", body)
 
-  def Builtin(name: String, args: Expr*): Control = js.MethodCall($effekt, JSName(name), args: _*)
+  def Builtin(name: String, args: Expr*): Control = $effekt.call(name, args: _*)
 
   def Lambda(params: List[JSName], stmts: List[Stmt], ret: Control): Expr =
     js.Lambda(params, js.Block(stmts :+ js.Return(ret)))
 
   def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: Control): Stmt =
     js.Function(name, params, stmts :+ js.Return(ret))
+
+  def asExpr(c: Control): Expr = c
 }

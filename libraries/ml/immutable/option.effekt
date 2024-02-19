@@ -35,7 +35,19 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
   case Some(v) => f(v)
 }
 
-def show[A](o: Option[A]) { showA: A => String }: String = o match {
+// =========================================
+// `show` / `println` overloads for options:
+// =========================================
+
+// for now define some common cases; TODO better solution
+def show[A](o: Option[A]){ showA: A => String }: String = o match {
   case None() => "None()"
   case Some(v) => "Some(" ++ showA(v) ++ ")"
 }
+def show(o: Option[Int]): String = show(o){ e => show(e) }
+def show(o: Option[Double]): String = show(o){ e => show(e) }
+def show(o: Option[Boolean]): String = show(o){ e => show(e) }
+
+def println(o: Option[Int]): Unit = println(show(o))
+def println(o: Option[Double]): Unit = println(show(o))
+def println(o: Option[Boolean]): Unit = println(show(o))

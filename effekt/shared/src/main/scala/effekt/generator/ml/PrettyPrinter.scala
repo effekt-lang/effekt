@@ -2,12 +2,12 @@ package effekt
 package generator
 package ml
 
+import effekt.util.intercalate
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 
-/// fillip wadler (prettier pretty printer)
 object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
@@ -88,13 +88,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(expr: Expr): Doc = expr match {
     case Expr.Call(callee, args) =>
-      val call = toDoc(callee) <@> argList(args, toDoc)
-      parens(group(nest(call)))
-    case Expr.RawValue(raw) =>
-      string(raw)
-    case Expr.RawExpr(raw) =>
-      val expr = string(raw)
-      parens(expr)
+      parens(group(nest(toDoc(callee) <@> argList(args, toDoc))))
+    case Expr.RawValue(raw) => string(raw)
+    case Expr.RawExpr(strings, args) => hcat(intercalate(strings.map(string), args.map(toDoc)))
     case Expr.Let(binding :: Nil, body) =>
       val let =
         "let" <+> group(toDoc(binding)) <>

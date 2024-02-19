@@ -64,6 +64,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true
   )
 
+  val exitOnError: ScallopOption[Boolean] = toggle(
+    "exit-on-error",
+    descrYes = "Exit with non-zero exit code on error",
+    default = Some(!repl() && !server()),
+    noshort = true
+  )
+
   /**
    * Tries to find the path to the standard library. Proceeds in the following
    * order:
@@ -120,6 +127,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def requiresCompilation(): Boolean = !server()
 
   def interpret(): Boolean = !server() && !compile() && !build()
+
+  def repl(): Boolean = filenames().isEmpty && !server() && !compile()
 
   validateFilesIsDirectory(includePath)
 

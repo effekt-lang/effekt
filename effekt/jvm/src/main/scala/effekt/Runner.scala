@@ -54,8 +54,25 @@ trait Runner[Executable] {
   /**
    * Runs the executable (e.g. the main file) by calling the build function.
    */
-  def eval(executable: Executable)(using Context): Unit =
-    exec(build(executable))
+  def eval(executable: Executable)(using C: Context): Unit = {
+    val execFile = build(executable)
+
+    val exitCode = Process(execFile).run(new ProcessLogger {
+
+      override def out(s: => String): Unit = {
+        C.config.output().emitln(s)
+      }
+
+      override def err(s: => String): Unit = System.err.println(s)
+
+      override def buffer[T](f: => T): T = f
+
+    }, connectInput = true).exitValue()
+
+    if (exitCode != 0) {
+      C.error(s"Process exited with non-zero exit code ${exitCode}.")
+    }
+  }
 
   def canRunExecutable(command: String*): Boolean =
     try {

@@ -14,11 +14,14 @@ class JavaScriptTests extends EffektTests {
 
   def backendName = "js"
 
-  override def included: List[File] = List(
+  override def positives: List[File] = List(
     examplesDir / "pos",
-    examplesDir / "neg",
     examplesDir / "casestudies",
     examplesDir / "benchmarks"
+  )
+
+  override def negatives: List[File] = List(
+    examplesDir / "neg"
   )
 
   override def ignored: List[File] = List(
@@ -47,7 +50,7 @@ object TestUtils {
   def generateCheckFilesIn(dir: File, regenerateAll: Boolean): Unit = {
     dir.listFiles.foreach {
       case f if f.isDirectory && !ignored.contains(f) => generateCheckFilesIn(f, regenerateAll)
-      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
+      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
         val checkfile = path / (baseName + ".check")

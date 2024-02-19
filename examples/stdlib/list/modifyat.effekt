@@ -1,0 +1,17 @@
+module examples/pos/list/modifyat
+
+import immutable/option
+import immutable/list
+import immutable/result
+
+// used to circumvent missing universal `show` & `println` on some backends
+def printResultOfList(l: Result[List[Int], OutOfBounds]): Unit = l match {
+  case Error(err, msg) => println("Error(" ++ msg ++ ")")
+  case Success(value) => println("Success(" ++ show(value) ++ ")")
+}
+
+def main() = {
+  // synchronized with doctest in `modifyAt`
+  printResultOfList(result[List[Int], OutOfBounds] { [1, 2, 3].modifyAt(1) { n => n + 100 } })
+  printResultOfList(result[List[Int], OutOfBounds] { [1, 2, 3].modifyAt(10) { n => n + 100 } })
+}

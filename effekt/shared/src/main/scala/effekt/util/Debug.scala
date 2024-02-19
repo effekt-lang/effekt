@@ -4,12 +4,20 @@ package util
 import effekt.symbols.TypePrinter
 
 
-val showGeneric: PartialFunction[Any, String] = {
+lazy val showGeneric: PartialFunction[Any, String] = {
+  case l: List[_] =>
+    l.map(show).mkString("List(", ", ", ")")
+  case o: Option[_] =>
+    o.map(show).mkString("Option(", ", ", ")")
   case other => other.toString
 }
 
-val show: PartialFunction[Any, String] =
-  TypePrinter.show orElse core.PrettyPrinter.show orElse showGeneric
+lazy val show: PartialFunction[Any, String] =
+  TypePrinter.show orElse
+    core.PrettyPrinter.show orElse
+    lifted.PrettyPrinter.show orElse
+    generator.js.PrettyPrinter.show orElse
+    showGeneric
 
 inline def debug[A](inline value: A): A =
   ${ debugMacros.debugCode('value) }

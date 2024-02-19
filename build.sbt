@@ -1,15 +1,16 @@
 import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
+import benchmarks._
 
 // additional targets that can be used in sbt
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
 lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 lazy val install = taskKey[Unit]("Installs the current version locally")
+lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
-
 
 lazy val effektVersion = "0.2.1"
 
@@ -119,6 +120,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "licenses",
 
+    // cli flag so sbt doesn't crash when effekt does
+    addCommandAlias("run", "runMain effekt.Server --noexit-on-error"),
 
     assembleBinary := {
       val jarfile = assembly.value
@@ -158,9 +161,21 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     },
     generateDocumentation := TreeDocs.replacer.value,
     Compile / sourceGenerators += versionGenerator.taskValue,
-    Compile / sourceGenerators += TreeDocs.generator.taskValue
+    Compile / sourceGenerators += TreeDocs.generator.taskValue,
+
+    collectBenchmarks := benchmarks.collect.value,
+    buildBenchmarks   := benchmarks.build.value,
+    bench             := benchmarks.measure.value
   )
   .jsSettings(
+
+    assembleJS := {
+      (Compile / clean).value
+      (Compile / compile).value
+      val jsFile = (Compile / fullOptJS).value.data
+      val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
+      IO.copyFile(jsFile, outputFile)
+    },
 
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
@@ -220,8 +235,8 @@ lazy val stdLibGenerator = Def.task {
 
     val virtuals = resources.get.map { file =>
       val filename = file.relativeTo(baseDir).get
-      val content = IO.read(file).replaceAllLiterally("$", "$$")
-      s"""file(raw\"\"\"$filename\"\"\").write(raw\"\"\"$content\"\"\")"""
+      val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
+      s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
     }
 
     val scalaCode =
@@ -230,6 +245,9 @@ package effekt.util
 import effekt.util.paths._
 
 object Resources {
+
+  def loadIntoFile(filename: String, contents: String): Unit =
+    file(filename).write(contents.replace("!!!MULTILINEMARKER!!!", "\\"\\"\\""))
 
   def load() = {
 ${virtuals.mkString("\n\n")}

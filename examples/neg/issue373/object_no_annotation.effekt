@@ -1,0 +1,9 @@
+interface Eff[A] {
+  def op(x: A): A
+}
+
+def eff = new Eff[Int] {
+  def op(x) = x / 1
+}
+
+def main() = println(eff.op("hello"))

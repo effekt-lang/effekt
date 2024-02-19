@@ -13,7 +13,7 @@ sealed trait Tree
  */
 case class ModuleDecl(
   path: String,
-  imports: List[String],
+  includes: List[String],
   decls: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
@@ -51,7 +51,7 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: Template[Expr])
   case Include(contents: String)
 }
 
@@ -75,6 +75,8 @@ enum Expr extends Argument {
 
   // invariant, block b is known to be pure; does not take evidence, does not use IO resources.
   case PureApp(b: Block, targs: List[ValueType], args: List[Argument])
+
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
   case Select(target: Expr, field: Id, annotatedType: ValueType)
   case Box(b: Block)
 
@@ -183,7 +185,7 @@ class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def ++(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.merged(o.vars){ case ((leftId -> leftParam), (rightId -> rightParam)) =>
-      assert(leftParam == rightParam, "Same id occurs free with different types.")
+      assert(leftParam == rightParam, s"Same id occurs free with different types: ${leftParam} !== ${rightParam}.")
       (leftId -> leftParam)
     })
   }
@@ -253,6 +255,7 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
 def freeVariables(expr: Expr): FreeVariables = expr match {
   case ValueVar(id, tpe) => FreeVariables(ValueParam(id, tpe))
   case Literal(value, tpe) => FreeVariables.empty
+  case Make(data, tag, args) => args.map(freeVariables).combineFV
   case PureApp(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...

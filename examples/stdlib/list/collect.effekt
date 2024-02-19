@@ -1,0 +1,15 @@
+module examples/pos/list/collect
+
+import immutable/option
+import immutable/list
+
+def main() = {
+  val empty = Nil[Int]()
+  empty.collect { x => Some(x) }.foreach { x => println(x) }
+
+  val l = [1, 2, 3, 4]
+  l.collect { x => if (x > 2) { Some(x * 10) } else { None() } }.foreach { x => println(x) }
+
+  val optList = [Some(1), None(), Some(2), None(), Some(3), Some(4), None()]
+  optList.collect { x => x }.foreach { x => println(x) }
+}

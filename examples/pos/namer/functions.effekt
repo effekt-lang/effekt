@@ -1,0 +1,14 @@
+def somefunction() = {
+
+  namespace nested {
+    def go() =
+      immutable::list::Cons("hello", Nil())
+  }
+
+  nested::go()
+}
+
+def main() = somefunction() match {
+  case immutable::list::Cons(msg, _) => println(msg)
+  case _ => ()
+}

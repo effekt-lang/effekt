@@ -21,7 +21,7 @@ import effekt.symbols.Symbol
  *     │  │─ [[ Reference ]]
  *     │
  *     │─ [[ ModuleDecl ]]
- *     │─ [[ Import ]]
+ *     │─ [[ Include ]]
  *     │─ [[ Stmt ]]
  *     │  │─ [[ DefStmt ]]
  *     │  │─ [[ ExprStmt ]]
@@ -97,15 +97,15 @@ sealed trait Id extends Tree {
   def clone(using C: Context): Id
 }
 case class IdDef(name: String) extends Id {
-  def clone(using C: Context): Id = {
+  def clone(using C: Context): IdDef = {
     val copy = IdDef(name)
     C.positions.dupPos(this, copy)
     copy
   }
 }
-case class IdRef(name: String) extends Id {
-  def clone(using C: Context): Id = {
-    val copy = IdRef(name)
+case class IdRef(path: List[String], name: String) extends Id {
+  def clone(using C: Context): IdRef = {
+    val copy = IdRef(path, name)
     C.positions.dupPos(this, copy)
     copy
   }
@@ -131,8 +131,8 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
-case class Import(path: String) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class Include(path: String) extends Tree
 
 /**
  * Parameters and arguments
@@ -175,6 +175,9 @@ enum Def extends Definition {
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+
+  case NamespaceDef(id: IdDef, definitions: List[Def])
+
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
   case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
@@ -194,7 +197,7 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
+  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: Template[Term]) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -313,9 +316,9 @@ enum Term extends Tree {
   case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
-  case If(cond: Term, thn: Stmt, els: Stmt)
-  case While(cond: Term, block: Stmt)
-  case Match(scrutinee: Term, clauses: List[MatchClause])
+  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
+  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt])
+  case Match(scrutinee: Term, clauses: List[MatchClause], default: Option[Stmt])
 
   /**
    * Handling effects
@@ -397,7 +400,18 @@ case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], re
 // Pattern Matching
 // ----------------
 
-case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
+case class MatchClause(pattern: MatchPattern, guards: List[MatchGuard], body: Stmt) extends Tree
+
+enum MatchGuard extends Tree {
+
+  case BooleanGuard(condition: Term)
+
+  /**
+   * i.e. <EXPR> is <PATTERN>
+   */
+  case PatternGuard(scrutinee: Term, pattern: MatchPattern)
+}
+export MatchGuard.*
 
 enum MatchPattern extends Tree {
 
@@ -646,6 +660,7 @@ object Tree {
     def rewrite(i: Implementation)(using Context): Implementation = structuralVisit(i)
     def rewrite(h: OpClause)(using Context): OpClause = structuralVisit(h)
     def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
+    def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
 
     /**
@@ -708,6 +723,11 @@ object Tree {
     def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
+    def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
+
+    def query(t: Template[Term])(using Context, Ctx): Res =
+      combineAll(t.args.map(query))
+
 
     inline def structuralQuery[T <: Tree](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Context, Ctx): Res =
       visit(el) { t =>

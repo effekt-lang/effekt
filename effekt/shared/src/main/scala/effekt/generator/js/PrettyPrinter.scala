@@ -2,6 +2,7 @@ package effekt
 package generator
 package js
 
+import effekt.util.intercalate
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -16,9 +17,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(stmts: List[Stmt]): Document =
     pretty(vsep(stmts map toDoc, line))
 
+  val show: PartialFunction[Any, String] = {
+    case m: js.Module  => format(m.stmts).layout
+  }
+
   def toDoc(expr: Expr): Doc = expr match {
     case Call(callee, args)           => toDocParens(callee) <> parens(args map toDoc)
-    case RawExpr(raw)                 => string(raw)
+    case New(callee, args)            => "new" <+> toDocParens(callee) <> parens(args map toDoc)
+    case RawExpr(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDoc)))
     case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
     case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
@@ -46,6 +52,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Destruct(ids, expr)           => "const" <+> braces(hsep(ids.map(toDoc), comma)) <+> "=" <+> toDoc(expr) <> ";"
     case Assign(target, expr)          => toDoc(target) <+> "=" <+> toDoc(expr) <> ";"
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)
+    case Class(name, methods)          => "class" <+> toDoc(name) <+> jsBlock(methods.map(jsMethod))
+    case If(cond, thn, Block(Nil))     => "if" <+> parens(toDoc(cond)) <+> toDoc(thn)
     case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
     case Try(prog, id, handler, Nil)   => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
     case Try(prog, id, handler, fin)    => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc)) <+> "finally" <+> jsBlock(fin.map(toDoc))
@@ -59,6 +67,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
       case (tag, stmts) => "case" <+> toDoc(tag) <> ":" <+> nested(stmts map toDoc)
     } ++ default.toList.map { stmts => "default:" <+> nested(stmts map toDoc) })
+  }
+
+  def jsMethod(c: js.Function): Doc = c match {
+    case js.Function(name, params, stmts) =>
+      toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts.map(toDoc))
   }
 
   def toDoc(pattern: Pattern): Doc = pattern match {

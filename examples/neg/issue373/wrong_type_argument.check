@@ -1,0 +1,6 @@
+[error] examples/neg/issue373/wrong_type_argument.effekt:6:17: Expected Boolean but got Int.
+  try { println(eff.op[Boolean]("hello")) }
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/issue373/wrong_type_argument.effekt:6:33: Expected Boolean but got String.
+  try { println(eff.op[Boolean]("hello")) }
+                                ^^^^^^^

@@ -18,7 +18,6 @@ object Transformer {
 
   def transform(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Program = {
     val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main) : @unchecked
-
     C.using(module = main.mod) {
       transform(mainSymbol, liftedMain);
     }
@@ -48,7 +47,7 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, tps, params, ret, body) =>
+    case lifted.Extern.Def(name, tps, params, ret, Template(strings, args)) =>
       val transformedParams = params.flatMap {
         case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -56,7 +55,10 @@ object Transformer {
         case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       noteBlockParams(name, params map transform, List.empty)
-      Extern(transform(name), transformedParams, transform(ret), body)
+      Extern(transform(name), transformedParams, transform(ret), Template(strings, args map {
+        case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
+        case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
+      }))
 
     case lifted.Extern.Include(contents) =>
       Include(contents)
@@ -394,7 +396,7 @@ object Transformer {
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>
-      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+      if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val variable = Variable(freshName("x"), transform(tpe.result))
       transform(args).flatMap { values =>
@@ -403,12 +405,10 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName, tpe: lifted.BlockType.Function), targs, args)
-    if DeclarationContext.findConstructor(blockName).isDefined =>
-      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-      val variable = Variable(freshName("x"), transform(tpe.result));
-      val tag = DeclarationContext.getConstructorTag(blockName)
+    case lifted.Make(data, constructor, args) =>
+      val variable = Variable(freshName("x"), transform(data));
+      val tag = DeclarationContext.getConstructorTag(constructor)
 
       transform(args).flatMap { values =>
         Binding { k =>
@@ -416,8 +416,7 @@ object Transformer {
         }
       }
 
-    case lifted.Select(target, field, tpe)
-    if DeclarationContext.findField(field).isDefined =>
+    case lifted.Select(target, field, tpe) if DeclarationContext.findField(field).isDefined =>
       // TODO all of this can go away, if we desugar records in the translation to core!
       val fields = DeclarationContext.getField(field).constructor.fields
       val fieldIndex = fields.indexWhere(_.id == field)

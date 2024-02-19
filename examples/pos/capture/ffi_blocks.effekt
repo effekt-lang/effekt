@@ -1,5 +1,5 @@
 interface Foo {}
-extern io def something {f: Foo}: Int = "f"
+extern io def something {f: Foo}: Int = "${box f}"
 extern io def createFoo(): Foo at {global} = "42"
 
 def main() = {

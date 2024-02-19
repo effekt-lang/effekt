@@ -47,9 +47,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
-    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }) <> emptyline <>
+    "module" <+> m.path <> emptyline <> vsep(m.includes.map { im => "import" <+> im }) <> emptyline <>
+      vsep(m.externs.map(toDoc)) <>
+      emptyline <>
       vsep(m.declarations.map(toDoc)) <>
-      emptyline <> toDoc(m.definitions)
+      emptyline <>
+      toDoc(m.definitions)
   }
 
   def toDoc(definitions: List[Definition]): Doc =
@@ -57,9 +60,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> "\"" <> body <> "\""
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> toDoc(body)
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
+
+  def toDoc(t: Template[Pure]): Doc =
+    /// TODO
+    hsep(t.args.map(toDoc), comma)
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(id, _, _) => toDoc(id)
@@ -71,8 +78,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
-  def toDoc(p: ValueParam): Doc = p.id.name.toString <> ":" <+> toDoc(p.tpe)
-  def toDoc(p: BlockParam): Doc = braces(p.id.name.toString)
+  def toDoc(p: ValueParam): Doc = toDoc(p.id) <> ":" <+> toDoc(p.tpe)
+  def toDoc(p: BlockParam): Doc = braces(toDoc(p.id))
 
   //def toDoc(n: Name): Doc = n.toString
 
@@ -84,7 +91,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(value, _)         => value.toString
     case ValueVar(id, _)           => toDoc(id)
 
-    case PureApp(b, targs, vargs)   => toDoc(b) <> argsToDoc(targs, vargs, Nil)
+    case PureApp(b, targs, vargs)  => toDoc(b) <> argsToDoc(targs, vargs, Nil)
+    case Make(data, tag, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(Nil, vargs, Nil)
     case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Select(b, field, tpe) => toDoc(b) <> "." <> toDoc(field)
