@@ -186,31 +186,20 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ---------------------------
 
   /**
-   * Instantiate a typescheme with fresh, rigid type variables
-   *
-   * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-   *
-   * Also returns the list of effects in canonical ordering, after dealiasing.
-   *
-   * TODO also create capture unification variables for (inferred) capability arguments.
+   * Instantiate a typescheme with provided type and capture arguments.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[Captures], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): FunctionType = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    val typeRigids =
-      if (targs.size == tparams.size) targs
-      else tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
+    assert(targs.size == tparams.size,
+      pp"Type argument and parameter size mismatch: ${targs.size} vs ${tparams.size} ($targs, $tparams)")
+    assert(cargs.size == cparams.size,
+      pp"Capture arguments and parameter size mismatch: ${cargs.size} vs ${cparams.size} ($cargs, $cparams)")
+    assert(cparams.size == (bparams.size + eff.canonical.size),
+      pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}")
 
-    if (cparams.size != (bparams.size + eff.canonical.size)) {
-      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
-    }
-
-    val captRigids =
-      if (cargs.size == cparams.size) cargs
-      else cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
-
-    given Instantiation = Instantiation((tparams zip typeRigids).toMap, (cparams zip captRigids).toMap)
+    given Instantiation = Instantiation((tparams zip targs).toMap, (cparams zip cargs).toMap)
 
     val substitutedVparams = vparams map instantiate
     val substitutedBparams = bparams map instantiate
@@ -218,8 +207,22 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
     val substitutedEffects = instantiate(eff)
 
-    val fun: FunctionType = FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
-    (typeRigids, captRigids, fun)
+    FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
+  }
+
+  /**
+   * Instantiate a typescheme with fresh, rigid type variables
+   *
+   * i.e. `[T1, T2, C] (T1, T1) {sigma} => T2` becomes `(?T1, ?T1){} => ?T2[C !-> ?C]`
+   */
+  def instantiateFresh(tpe: FunctionType): (List[ValueType], List[Captures], FunctionType) = {
+    val position = C.focus
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+
+    val typeRigids = tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
+    val captRigids = cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
+
+    (typeRigids, captRigids, instantiate(tpe, typeRigids, captRigids))
   }
 
 
@@ -254,7 +257,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), ctx)
   }
 
-  def mergeCaptures(cs: List[Captures], ctx: ErrorContext): CaptUnificationVar =
+  def mergeCaptures(cs: List[Captures], ctx: ErrorContext): Captures =
     val (concrete, variables) = cs.partitionMap {
       case CaptureSet(xs) => Left(xs)
       case x: CaptUnificationVar => Right(x)
@@ -264,7 +267,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    /**
    * Should create a fresh unification variable bounded by the given captures
    */
-  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], ctx: ErrorContext): CaptUnificationVar =
+  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], ctx: ErrorContext): Captures =
+    // do not introduce a unification variable if there are ONLY concrete bounds
+    if (variableBounds.isEmpty) return CaptureSet(concreteBounds)
+
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
     ctx.polarity match {
       case Covariant =>
@@ -318,7 +324,7 @@ trait TypeInstantiator { self: Unification =>
           capt.captures
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
-    if (contained.isEmpty) return c;
+    if (contained.isEmpty) return CaptureSet(concreteCapture)
 
     val remaining = (concreteCapture -- captureParams).toList
 

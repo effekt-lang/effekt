@@ -8,7 +8,7 @@ def abs(n: Int): Int = if (n < 0) 0 - n else n
 def max(n: Int, m: Int): Int = if (n > m) n else m
 
 
-effect Choose {
+interface Choose {
   def choose(): Boolean
 }
 

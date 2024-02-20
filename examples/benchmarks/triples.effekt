@@ -5,11 +5,11 @@ import text/string
 
 record Triple(a: Int, b: Int, c: Int)
 
-effect Flip {
+interface Flip {
   def flip(): Boolean
 }
 
-effect Fail {
+interface Fail {
   def fail(): Nothing
 }
 

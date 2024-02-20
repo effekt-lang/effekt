@@ -1,4 +1,4 @@
-effect Eff[A] {
+interface Eff[A] {
   def use(): A
 }
 

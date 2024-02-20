@@ -165,7 +165,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 extern io def panic[R](msg: String): R =
   "(raise ${msg})"
 
-effect Exception[E] {
+interface Exception[E] {
   def raise(exception: E, msg: String): Nothing
 }
 record RuntimeError()
@@ -188,7 +188,7 @@ def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
 
 // Control Flow
 // ============
-effect Control {
+interface Control {
   def break(): Unit
   def continue(): Unit
 }

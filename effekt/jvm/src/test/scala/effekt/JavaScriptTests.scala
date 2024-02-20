@@ -17,7 +17,7 @@ class JavaScriptTests extends EffektTests {
   override def positives: List[File] = List(
     examplesDir / "pos",
     examplesDir / "casestudies",
-    examplesDir / "benchmarks"
+    examplesDir / "benchmarks",
   )
 
   override def negatives: List[File] = List(

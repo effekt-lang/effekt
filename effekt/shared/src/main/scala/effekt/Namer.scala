@@ -299,7 +299,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       // symbol has already been introduced by the previous traversal
       val interface = Context.symbolOf(id).asInterface
       interface.operations = operations.map {
-        case op @ source.Operation(id, tparams, params, ret) => Context.at(op) {
+        case op @ source.Operation(id, tparams, vparams, bparams, ret) => Context.at(op) {
           val name = Context.nameFor(id)
 
           Context scoped {
@@ -308,12 +308,18 @@ object Namer extends Phase[Parsed, NameResolved] {
 
             val tps = tparams map resolve
 
+            val resVparams = vparams map resolve
+            val resBparams = bparams map resolve
+
+            // bring capture names in scope that are introduced by blockparameters
+            resBparams.map { b => Context.bind(b.capture) }
+
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = Operation(name, interface.tparams ++ tps, params map { p => resolve(p) }, result, effects, interface)
+            val op = Operation(name, interface.tparams ++ tps, resVparams, resBparams, result, effects, interface)
             Context.define(id, op)
             op
           }
@@ -394,7 +400,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
-        case clause @ source.OpClause(op, tparams, params, ret, body, resumeId) => Context.at(clause) {
+        case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
 
           // try to find the operation in the handled effect:
           eff.operations.find { o => o.name.toString == op.name } map { opSym =>
@@ -404,8 +410,10 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
           Context scoped {
             val tps = tparams.map(resolve)
-            val vps = params.map(resolve)
+            val vps = vparams.map(resolve)
+            val bps = bparams.map(resolve)
             Context.bindValues(vps)
+            Context.bindBlocks(bps)
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
           }
@@ -466,10 +474,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveAll(vargs)
       resolveAll(bargs)
 
-    case source.Do(effect, target, targs, vargs) =>
+    case source.Do(effect, target, targs, vargs, bargs) =>
       Context.resolveEffectCall(effect map resolve, target)
       targs foreach resolve
       resolveAll(vargs)
+      resolveAll(bargs)
 
     case source.Call(target, targs, vargs, bargs) =>
       Context.focusing(target) {

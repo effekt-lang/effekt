@@ -4,7 +4,7 @@ import immutable/list
 
 // specialized to Int, since ATM type parameters on effects are not
 // yet implemented.
-effect Yield {
+interface Yield {
     // uppercase, since yield is still a keyword.
     def Yield(value: Int): Unit / { Replace, Behead }
 }

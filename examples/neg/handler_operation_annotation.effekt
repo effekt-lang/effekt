@@ -1,4 +1,4 @@
-effect Reader { def read(): String }
+interface Reader { def read(): String }
 
 def main() = {
   try {

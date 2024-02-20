@@ -24,21 +24,24 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   val phaseName = "explicit-capabilities"
 
-  def run(input: Typechecked)(using C: Context) = Some(input.copy(tree = rewrite(input.tree)))
+  def run(input: Typechecked)(using C: Context) =
+    val x = rewrite(input.tree)
+
+    Some(input.copy(tree = x))
 
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
-
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
   }
 
   override def expr(using Context) = {
 
     // an effect call -- translate to method call on the inferred capability
-    case c @ Do(effect, id, targs, vargs) =>
-      val transformedValueArgs = vargs.map { a => rewrite(a) }
+    case c @ Do(effect, id, targs, vargs, bargs) =>
+      val transformedValueArgs = vargs.map(rewrite)
+      val transformedBlockArgs = bargs.map(rewrite)
 
       // the receiver of this effect operation call
       val receiver = Context.annotation(Annotations.CapabilityReceiver, c)
@@ -53,7 +56,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       // construct the member selection on the capability as receiver
-      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
+      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
 
     // the function is a field, desugar to select
     case c @ Call(fun: IdTarget, targs, List(receiver), Nil) if fun.definition.isInstanceOf[Field] =>
@@ -103,6 +106,20 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       }
 
       TryHandle(body, hs)
+
+    case n @ source.New(impl @ Implementation(interface, clauses)) => {
+      val cs = clauses map {
+        case op @ OpClause(id, tparams, vparams, bparams, ret, body, resume) => {
+          val capabilities = Context.annotation(Annotations.BoundCapabilities, op)
+          val capabilityParams = capabilities.map(definitionFor)
+          OpClause(id, tparams, vparams, bparams ++ capabilityParams, ret, rewrite(body), resume)
+        }
+      }
+      val newImpl = Implementation(interface, cs)
+      val tree = source.New(newImpl)
+      Context.copyAnnotations(impl, newImpl)
+      tree
+    }
 
     case b @ source.BlockLiteral(tps, vps, bps, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)

@@ -144,7 +144,7 @@ However, there is a better way to express this: Using effects.
 We define the speaker effect to refer to the contextual speaker of the sentence.
 
 ```
-effect Speaker {
+interface Speaker {
   def speaker(): Person
 }
 def me() = do speaker()
@@ -210,7 +210,7 @@ which can be used to model universal quantification ([Maršík and Amblard, 2016
 
 Instead of modeling `scope` directly as an effect, here we treat quantification as the effect:
 ```
-effect Quantification {
+interface Quantification {
   def quantify(who: Predicate): Person
 }
 def every(who: Predicate) = do quantify(who)

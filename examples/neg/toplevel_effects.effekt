@@ -1,4 +1,4 @@
-effect Console {
+interface Console {
   def println(msg: String): Unit
 }
 

@@ -1,0 +1,13 @@
+record EmptyIterator()
+
+interface Iterator {
+  def next(): Int / { Exception[EmptyIterator] }
+}
+
+def empty = new Iterator {
+  def next() = do raise(EmptyIterator(), "No elements left")
+}
+
+def main() = report[EmptyIterator] {
+  println(empty.next())
+}

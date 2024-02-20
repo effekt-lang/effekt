@@ -91,10 +91,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Implementation(interface, clauses) =>
       Implementation(transform(interface), clauses.map {
         case core.Operation(op, tps, cps, vps, bps, Some(resume), body) =>
+          assert(bps.isEmpty, "Should have been moved to the continuation by core.Transformer")
           val ev = EvidenceSymbol()
-          Operation(op, BlockLit(tps, Param.EvidenceParam(ev) :: (vps ++ bps).map(transform),
-            // TODO what about evidence for resume?
-            Stmt.Shift(Evidence(List(Lift.Var(ev))), Block.BlockLit(Nil, List(transform(resume)), transform(body)))))
+          Operation(op, BlockLit(tps, Param.EvidenceParam(ev) :: vps.map(transform),
+            Stmt.Shift(Evidence(List(Lift.Var(ev))),
+              Block.BlockLit(Nil, List(transform(resume)), transform(body)))))
         case core.Operation(op, tps, cps, vps, bps, None, body) =>
           Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, cps, vps, bps, body)))
       })

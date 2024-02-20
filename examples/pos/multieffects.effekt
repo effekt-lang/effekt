@@ -8,14 +8,14 @@ module examples/pos/multieffects
 //
 
 
-effect Exc {
+interface Exc {
     def raise[A](): A
 }
 
 effect Exception[A](msg: String): A
 
 // TODO If we move `State` below `state` then it is not resolved
-effect State {
+interface State {
     def get(): Int
     def set(n: Int): Unit
 }

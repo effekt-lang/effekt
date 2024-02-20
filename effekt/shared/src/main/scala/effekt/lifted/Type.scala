@@ -2,6 +2,7 @@ package effekt
 package lifted
 
 import effekt.symbols.builtins
+import effekt.util.messages.INTERNAL_ERROR
 
 
 /**
@@ -138,10 +139,17 @@ object Type {
     case Stmt.Reset(body) => body.tpe
     case Stmt.Region(body) => body.returnType
 
+    case Stmt.Shift(ev, BlockLit(tparams, List(BlockParam(kid, tpe)), body)) => tpe match {
+      // shift { {k: tau => ???} => ... } : tau
+      case BlockType.Function(_, _, List(tpe), _, _) => tpe
+      // shift { {k: {{Exc} => tau} => ???} => ... } : tau
+      case BlockType.Function(_, _, _, List(BlockType.Function(_, _, _, _, tpe)), _) => tpe
+      case _ =>
+        INTERNAL_ERROR("Should not happen: the continuation takes either one value or a function that returns a value")
+    }
+
     case Stmt.Shift(ev, body) =>
-      // the annotated argument type on resume is our return type here
-      val Some(tpe: BlockType.Function) = body.params.collectFirst { case b: Param.BlockParam => b.tpe }: @unchecked
-      tpe.vparams.head
+      INTERNAL_ERROR("Should not happen: shift takes exactly one block literal")
 
     case Stmt.Hole() => TBottom
   }

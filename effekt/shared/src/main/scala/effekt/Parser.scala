@@ -138,14 +138,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~/> effectOp)  <~ `}`) ^^ {
+    | `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~/> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
 
   lazy val effectOp: P[Operation] =
-    idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> effectful) ^^ Operation.apply
-
+    idDef ~ params ~ (`:` ~> effectful) ^^ {
+      case id ~ (tps ~ vps ~ bps) ~ ret => Operation(id, tps, vps, bps, ret)
+    }
 
   lazy val externDef: P[Def] =
     ( externType
@@ -199,8 +200,18 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
+  lazy val operationParams: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+    ( maybeTypeParams ~ valueParamsOpt ~ blockParams
+    | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
+    | failure("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
+    )
+
   lazy val blockParams: P[List[BlockParam]] =
     some(`{` ~/> blockParam <~ `}`)
+
+  lazy val maybeBlockParams: P[List[BlockParam]] =
+    blockParams.? ^^ { bs => bs getOrElse Nil }
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
@@ -427,8 +438,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     (accessExpr <~ `match` ~/ `{`) ~/ (many(matchClause) <~ `}`) ~/ (`else` ~/> stmt).? ^^ Match.apply
 
   lazy val doExpr: P[Term] =
-    `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {
-      case op ~ targs ~ vargs => Do(None, op, targs, vargs)
+    `do` ~/> idRef ~ arguments ^^ {
+      case op ~ (targs ~ vargs ~ bargs) => Do(None, op, targs, vargs, bargs)
     }
 
   lazy val handleExpr: P[Term] =
@@ -451,21 +462,20 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         Implementation(effect, clauses)
       }
     | idRef ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
+      case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, bparams, body) =>
         val synthesizedId = IdRef(Nil, id.name)
         val interface = BlockTypeRef(id, Nil) withPositionOf id
-        Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf id))
+        Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, bparams, None, body, resume) withPositionOf id))
       }
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
-      case id ~ tparams ~ vparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, ret, body, resume)
+    (`def` ~/> idRef) ~ operationParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+      case id ~ (tparams ~ vparams ~ bparams) ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
     }
 
   lazy val matchClause: P[MatchClause] =
     `case` ~/> matchPattern ~ many(`and` ~> matchGuard) ~ (`=>` ~/> stmts) ^^ MatchClause.apply
-
 
   lazy val matchGuard: P[MatchGuard] =
     ( expr ~ (`is` ~/> matchPattern) ^^ MatchGuard.PatternGuard.apply
@@ -486,7 +496,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
-
 
   lazy val assignExpr: P[Term] =
     idRef ~ (`=` ~> expr) ^^ Assign.apply

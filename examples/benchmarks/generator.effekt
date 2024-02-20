@@ -3,7 +3,7 @@ import immutable/option
 import text/string
 import io/args
 
-effect Yield {
+interface Yield {
   def yield(num: Int): Unit
 }
 

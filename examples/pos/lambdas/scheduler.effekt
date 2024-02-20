@@ -3,7 +3,7 @@ module examples/pos/lambdas/scheduler
 import immutable/dequeue
 import immutable/option
 
-effect Proc {
+interface Proc {
   def yield(): Unit
   def fork(): Boolean
   def exit(): Unit

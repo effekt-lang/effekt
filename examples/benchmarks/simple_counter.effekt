@@ -3,7 +3,7 @@ import immutable/option
 import text/string
 import io/args
 
-effect Increment {
+interface Increment {
   def increment(j: Int): Unit
 }
 

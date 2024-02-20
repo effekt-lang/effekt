@@ -16,7 +16,7 @@ import mutable/heap
 type Cell[T] = HeapRef[(Option[T], List[Cont[T, Unit]])]
 
 // A net of propagators
-effect Net {
+interface Net {
   def unknown[R](): Cell[R]
   def make[R](value: R): Cell[R]
 

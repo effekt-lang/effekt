@@ -18,6 +18,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
+  def format(b: Block): String =
+    pretty(toDoc(b), 60).layout
+
+  def format(e: Expr): String =
+    pretty(toDoc(e), 60).layout
+
   def format(defs: List[Definition]): String =
     pretty(toDoc(defs), 60).layout
 
@@ -25,6 +31,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case m: ModuleDecl => format(m).layout
     case d: Definition  => format(List(d))
     case s: Stmt       => format(s)
+    case b: Block      => format(b)
+    case e: Expr      => format(e)
     case x: Id         => x.show
   }
 
