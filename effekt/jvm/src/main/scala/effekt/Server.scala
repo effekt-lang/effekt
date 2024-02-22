@@ -10,7 +10,7 @@ import effekt.util.messages.EffektError
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, SymbolTag, ExecuteCommandParams }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -132,18 +132,26 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
+    context.compiler.runMiddleend(source)(using context).map { module =>
+      val documentIncludes = for {
+        include <- module.includes.toVector.map(_.path)
+        range = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
+      } yield new DocumentSymbol("Import", SymbolKind.File, range, range, include.toString)
 
-    context.compiler.runFrontend(source)(using context)
+      val documentSymbols = for {
+        sym <- context.sourceSymbolsFor(module.source).toVector
+        if !sym.isSynthetic
+        id <- context.definitionTreeOption(sym)
+        decl <- getSourceTreeFor(sym)
+        kind <- getSymbolKind(sym)
+        tpe = module.types.get(sym.name.name) match {
+          case Some(t) => t.toString()
+          case None => "?"
+        }
+      } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), tpe)
 
-    val documentSymbols = for {
-      sym <- context.sourceSymbolsFor(source).toVector
-      if !sym.isSynthetic
-      id <- context.definitionTreeOption(sym)
-      decl <- getSourceTreeFor(sym)
-      kind <- getSymbolKind(sym)
-      detail <- getInfoOf(sym)(context)
-    } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header)
-    Some(documentSymbols)
+      documentIncludes ++ documentSymbols
+    }
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
