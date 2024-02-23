@@ -12,6 +12,8 @@ import kiama.output.PrettyPrinterTypes.Document
 
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, SymbolTag, ExecuteCommandParams }
 
+import scala.jdk.CollectionConverters._
+
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
  *     |
@@ -133,24 +135,28 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
     context.compiler.runMiddleend(source)(using context).map { module =>
+      val topRange = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
+      val root = DocumentSymbol(module.namespace.head, SymbolKind.Namespace, topRange, topRange)
+
       val documentIncludes = for {
-        include <- module.includes.toVector.map(_.path)
-        range = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
-      } yield new DocumentSymbol("Import", SymbolKind.File, range, range, include.toString)
+        include <- module.includes.toList
+        children <- getSymbols(include.source)
+      } yield new DocumentSymbol("Import", SymbolKind.File, topRange, topRange, include.path, children.asJava)
 
       val documentSymbols = for {
-        sym <- context.sourceSymbolsFor(module.source).toVector
+        sym <- context.sourceSymbolsFor(module.source).toList
         if !sym.isSynthetic
         id <- context.definitionTreeOption(sym)
         decl <- getSourceTreeFor(sym)
         kind <- getSymbolKind(sym)
-        tpe = module.types.get(sym.name.name) match {
+        tpe = module.types.get(sym.name.name) match { // TODO: get types within modules
           case Some(t) => t.toString()
           case None => "?"
         }
       } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), tpe)
 
-      documentIncludes ++ documentSymbols
+      root.setChildren((documentIncludes ++ documentSymbols).asJava)
+      Vector(root)
     }
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
