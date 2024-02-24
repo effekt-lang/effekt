@@ -80,18 +80,16 @@ trait Intelligence {
     case u => C.definitionTreeOption(u)
   }
 
-  // TODO: Move this somewhere else or find better solution
-  class KeywordSymbol(val keyword: String) extends Symbol { val name = Name.local(keyword) }
-  class ASTSymbol(val sym: String) extends Symbol { val name = Name.local(sym) }
+  type CompletionSuggestion = Either[Symbol, (String, String)]
 
-  def getCompletableSymbols(position: Position, prefix: String)(implicit C: Context): Option[Vector[Symbol]] = {
+  def getCompletableItems(position: Position, prefix: String)(implicit C: Context): Option[Vector[CompletionSuggestion]] = {
     def isPrefix(s: String) = s.startsWith(prefix) // TODO: add more filters (e.g. Levenshtein distance?)
     def filter(it: Iterable[String]) = it.filter(isPrefix)
 
-    val keywords = filter(EffektLexers(new Positions).keywordStrings).map { keyword => KeywordSymbol(keyword) }
-    val builtinTypes = filter(builtins.rootTypes.keys).map { key => builtins.rootTypes.get(key).get }
-    val builtinTerms = filter(builtins.rootTerms.keys).map { key => builtins.rootTerms.get(key).get }
-    val builtinCaptures = filter(builtins.rootCaptures.keys).map { key => builtins.rootCaptures.get(key).get }
+    val keywords = filter(EffektLexers(new Positions).keywordStrings).map { keyword => Right(keyword, "Keyword") }
+    val builtinTypes = filter(builtins.rootTypes.keys).map { key => Left(builtins.rootTypes.get(key).get) }
+    val builtinTerms = filter(builtins.rootTerms.keys).map { key => Left(builtins.rootTerms.get(key).get) }
+    val builtinCaptures = filter(builtins.rootCaptures.keys).map { key => Left(builtins.rootCaptures.get(key).get) }
 
     // TODO: only return symbols within scope of current position and include library symbols
     // "dumb" function for now to just get all symbols in AST recursively
@@ -102,17 +100,17 @@ trait Intelligence {
     }.distinct
 
     val allSymbols = C.compiler.getAST(position.source) match
-      case Some(ast) => getAllSymbols(ast).map { s => ASTSymbol(s) }
+      case Some(ast) => getAllSymbols(ast).map { s => Right(s, "Symbol in scope") }
       case None => List()
 
     Some((keywords ++ builtinTypes ++ builtinTerms ++ builtinCaptures ++ allSymbols).toVector)
   }
 
-  def getCompletionsAt(position: Position)(implicit C: Context): Option[Vector[Symbol]] = for {
+  def getCompletionsAt(position: Position)(implicit C: Context): Option[Vector[CompletionSuggestion]] = for {
     line <- position.source.optLineContents(position.line)
     beforeCaret = line.take(position.column - 1)
     word = beforeCaret.drop(beforeCaret.lastIndexOf(" ") + 1)
-    syms <- getCompletableSymbols(position, word)
+    syms <- getCompletableItems(position, word)
   } yield syms
 
   // For now, only show the first call target

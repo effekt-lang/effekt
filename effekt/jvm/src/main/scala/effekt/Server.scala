@@ -153,17 +153,21 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     } yield allRefs.toVector
 
   override def getCompletion(position: Position): Option[Vector[CompletionItem]] = for {
-    syms <- getCompletionsAt(position)(context)
-    items = syms.map { sym =>
-      val item = CompletionItem(sym.name.name)
-      val maybeDetail = getInfoOf(sym)(context)
-      item.setKind(getCompletionKind(sym))
-      item.setData(sym.id.toString)
-      maybeDetail.map { detail =>
-        item.setDetail(detail.header)
-        item.setDocumentation(detail.description.getOrElse(""))
-      }
-      item
+    suggestions <- getCompletionsAt(position)(context)
+    items = suggestions.map {
+      case Left(sym) =>
+        val item = CompletionItem(sym.name.name)
+        item.setKind(getCompletionKind(sym))
+        getInfoOf(sym)(context).map { detail =>
+          item.setDetail(detail.header)
+          item.setDocumentation(detail.description.getOrElse(""))
+        }
+        item
+      case Right(name, detail) =>
+        val item = CompletionItem(name)
+        item.setKind(CompletionItemKind.Keyword)
+        item.setDetail(detail)
+        item
     }
   } yield items
 
@@ -207,10 +211,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         CompletionItemKind.Variable
       case _: TypeSymbol =>
         CompletionItemKind.TypeParameter
-      case _: KeywordSymbol =>
-        CompletionItemKind.Keyword
-      case _: ASTSymbol =>
-        CompletionItemKind.Property // TODO
       case _ =>
         CompletionItemKind.Text
     }
