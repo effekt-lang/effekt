@@ -134,23 +134,23 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
-    context.compiler.runMiddleend(source)(using context).map { module =>
-      val topRange = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
-      val root = DocumentSymbol(module.namespace.head, SymbolKind.Namespace, topRange, topRange)
+    context.compiler.runFrontend(source)(using context).map { module =>
+      val fileStart = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
+      val root = DocumentSymbol(module.namespace.head, SymbolKind.Namespace, fileStart, fileStart)
 
       val documentIncludes = for {
-        include <- module.includes.toList
+        include <- module.includes
         children <- getSymbols(include.source)
-      } yield new DocumentSymbol("Import", SymbolKind.File, topRange, topRange, include.path, children.asJava)
+      } yield new DocumentSymbol("Import", SymbolKind.File, fileStart, fileStart, include.path, children.asJava)
 
       val documentSymbols = for {
-        sym <- context.sourceSymbolsFor(module.source).toList
+        sym  <- context.sourceSymbolsFor(module.source).toList
         if !sym.isSynthetic
-        id <- context.definitionTreeOption(sym)
+        id   <- context.definitionTreeOption(sym)
         decl <- getSourceTreeFor(sym)
         kind <- getSymbolKind(sym)
-        tpe = module.types.get(sym.name.name) match { // TODO: get types within modules
-          case Some(t) => t.toString()
+        tpe  = context.typeOption(sym) match {
+          case Some(value) => TypePrinter.show(value)
           case None => "?"
         }
       } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), tpe)
