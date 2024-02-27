@@ -150,14 +150,21 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         decl <- getSourceTreeFor(sym)
         kind <- getSymbolKind(sym)
         tpe  = context.typeOption(sym) match {
-          case Some(value) => TypePrinter.show(value)
-          case None => "?"
+          case Some(tpe) => showSymbol(sym, tpe)
+          case None => ""
         }
       } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), tpe)
 
       root.setChildren((documentIncludes ++ documentSymbols).asJava)
       Vector(root)
     }
+
+  private def showSymbol(s: Symbol, tpe: Type): String = (s, tpe) match {
+    case (s: Callable, tpe: BlockType.FunctionType) => DeclPrinter.format(tpe)
+    case (_, tpe) => TypePrinter.show(tpe)
+  }
+
+
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
