@@ -82,6 +82,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         else if (config.interpret()) { compile() foreach runner.eval }
         else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
+        Context.showTimes()
     }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)

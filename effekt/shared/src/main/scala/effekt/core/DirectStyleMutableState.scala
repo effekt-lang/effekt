@@ -24,7 +24,7 @@ object DirectStyleMutableState extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) =>
-      val direct = directStyle.rewrite(core)
+      val direct = Context.timed(phaseName, source.name)(directStyle.rewrite(core))
       Some(CoreTransformed(source, tree, mod, direct))
   }
 

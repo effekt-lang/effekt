@@ -11,7 +11,9 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
       case CoreTransformed(source, tree, mod, core) =>
-        Some(CoreTransformed(source, tree, mod, optimize(Context.checkMain(mod), core)))
+        val term = Context.checkMain(mod)
+        val optimized = Context.timed(phaseName, source.name)(optimize(term, core))
+        Some(CoreTransformed(source, tree, mod, optimized))
     }
 
   def optimize(mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =

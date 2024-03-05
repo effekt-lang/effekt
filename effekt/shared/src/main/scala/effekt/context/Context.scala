@@ -6,6 +6,7 @@ import effekt.typer.TyperOps
 import effekt.core.TransformerOps
 import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, EffektMessages }
+import effekt.util.Timers
 import effekt.symbols.Module
 
 import kiama.util.Positions
@@ -40,7 +41,8 @@ abstract class Context(val positions: Positions)
     extends NamerOps
     with TyperOps
     with ModuleDB
-    with TransformerOps {
+    with TransformerOps
+    with Timers {
 
   // bring the context itself in scope
   implicit val context: Context = this

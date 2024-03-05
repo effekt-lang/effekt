@@ -49,33 +49,35 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       Context.initTyperstate()
 
-      Context in {
-        Context.withUnificationScope {
-          // No captures are allowed on the toplevel
-          flowingInto(CaptureSet()) {
-            // bring builtins into scope
-            builtins.rootTerms.values.foreach {
-              case term: BlockParam =>
-                Context.bind(term, term.tpe)
-                Context.bind(term, CaptureSet(term.capture))
-              case term: ExternResource =>
-                Context.bind(term, term.tpe)
-                Context.bind(term, CaptureSet(term.capture))
-              case term: Callable =>
-                Context.bind(term, term.toType)
-              case term => Context.panic(s"Cannot bind builtin term: ${term}")
-            }
+      Context.timed(phaseName, source.name) {
+        Context in {
+          Context.withUnificationScope {
+            // No captures are allowed on the toplevel
+            flowingInto(CaptureSet()) {
+              // bring builtins into scope
+              builtins.rootTerms.values.foreach {
+                case term: BlockParam =>
+                  Context.bind(term, term.tpe)
+                  Context.bind(term, CaptureSet(term.capture))
+                case term: ExternResource =>
+                  Context.bind(term, term.tpe)
+                  Context.bind(term, CaptureSet(term.capture))
+                case term: Callable =>
+                  Context.bind(term, term.toType)
+                case term => Context.panic(s"Cannot bind builtin term: ${term}")
+              }
 
-            // We split the type-checking of definitions into "pre-check" and "check"
-            // to allow mutually recursive defs
-            tree.defs.foreach { d => precheckDef(d) }
-            tree.defs.foreach { d =>
-              val Result(_, effs) = synthDef(d)
-              val unhandled = effs.toEffects
-              if (unhandled.nonEmpty)
-                Context.at(d) {
-                  Context.error(pretty"Unhandled effects ${unhandled}")
-                }
+              // We split the type-checking of definitions into "pre-check" and "check"
+              // to allow mutually recursive defs
+              tree.defs.foreach { d => precheckDef(d) }
+              tree.defs.foreach { d =>
+                val Result(_, effs) = synthDef(d)
+                val unhandled = effs.toEffects
+                if (unhandled.nonEmpty)
+                  Context.at(d) {
+                    Context.error(pretty"Unhandled effects ${unhandled}")
+                  }
+              }
             }
           }
         }
@@ -1219,7 +1221,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Result(ret, effs)
   }
 
-  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, EffektMessages)]) = {
+  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, EffektMessages)]) = Context.timed("overload-resolution", Context.module.source.name) {
     val stateBefore = Context.backupTyperstate()
     val results = inputs.map {
       case input =>

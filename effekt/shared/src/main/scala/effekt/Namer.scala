@@ -34,11 +34,12 @@ object Namer extends Phase[Parsed, NameResolved] {
   def run(input: Parsed)(using Context): Option[NameResolved] = {
     val Parsed(source, tree) = input
     val mod = Module(tree, source)
-    Context.using(module = mod, focus = tree) { resolve(tree) }
+    Context.using(module = mod, focus = tree) { resolve(mod) }
     Some(NameResolved(source, tree, mod))
   }
 
-  def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
+  def resolve(mod: Module)(using Context): ModuleDecl = {
+    val Module(decl, src) = mod
     val scope = scopes.toplevel(Context.module.namespace, builtins.rootBindings)
 
     Context.initNamerstate(scope)
@@ -65,7 +66,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.at(im) { importDependency(path) }
     }
 
-    resolveGeneric(decl)
+    Context.timed(phaseName, src.name)(resolveGeneric(decl))
 
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct

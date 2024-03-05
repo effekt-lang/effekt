@@ -23,7 +23,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     if (Context.messaging.hasErrors) {
       None
     } else {
-      Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
+      val transformed = Context.timed(phaseName, source.name)(transform(mod, tree))
+      Some(CoreTransformed(source, tree, mod, transformed))
     }
 
 

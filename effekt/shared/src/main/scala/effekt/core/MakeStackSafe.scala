@@ -21,7 +21,7 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) =>
-      val safe = stacksafe.rewrite(core)
+      val safe = Context.timed(phaseName, source.name)(stacksafe.rewrite(core))
       Some(CoreTransformed(source, tree, mod, safe))
   }
 
