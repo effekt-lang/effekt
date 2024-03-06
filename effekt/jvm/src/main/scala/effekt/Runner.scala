@@ -239,3 +239,30 @@ object MLRunner extends Runner[String] {
       "-output", executable, buildFile)
     executable
 }
+
+object HVMRunner extends Runner[String] {
+  val extension = "hvm"
+
+  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def includes(path: File): List[File] = List(path / ".." / "common")
+
+  def checkSetup(): Either[String, Unit] =
+    if canRunExecutable("hvm", "--help") then Right(())
+    else Left("Cannot find hvm. This is required to use the HVM backend.")
+
+  /**
+   * Creates an executable bash script besides the given `.hvm` file ([[path]])
+   * and returns the resulting absolute path.
+   */
+  def build(path: String)(using C: Context): String =
+    val out = C.config.outputPath().getAbsolutePath
+    val hvmFilePath = (out / path).unixPath
+    val bashScriptPath = hvmFilePath.stripSuffix(s".$extension")
+    val bashScript = s"#!/bin/bash\nhvm --script $hvmFilePath"
+    IO.createFile(bashScriptPath, bashScript, true)
+    bashScriptPath
+    
+    
+  def standardLibraryPath(root: File): File = root / "libraries" / "hvm"
+
+}
