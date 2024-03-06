@@ -252,6 +252,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       val sym = VarBinder(Context.nameFor(id), tpe, d)
       Context.define(id, sym)
+      Context.bind(sym.capture)
 
     // allocation into a region
     case d @ source.RegDef(id, annot, region, binding) =>
