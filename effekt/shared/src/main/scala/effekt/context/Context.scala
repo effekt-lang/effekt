@@ -47,6 +47,8 @@ abstract class Context(val positions: Positions)
   // bring the context itself in scope
   implicit val context: Context = this
 
+  var timersActive: Boolean = false
+
   // the currently processed module
   var module: Module = _
 
@@ -67,6 +69,7 @@ abstract class Context(val positions: Positions)
   def setup(cfg: EffektConfig): Unit = {
     messaging.clear()
     _config = cfg
+    timersActive = cfg.trace.isSupplied
   }
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {

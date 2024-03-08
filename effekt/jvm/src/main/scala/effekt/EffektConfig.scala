@@ -22,6 +22,14 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     default = Some(false)
   )
 
+  val trace: ScallopOption[String] = choice(
+    choices = Seq("text", "json", "csv"),
+    name = "trace",
+    descr = "Trace the time spent in each compilation phase.",
+    default = Some("text"),
+    required = false
+  )
+
   val outputPath: ScallopOption[File] = opt[File](
     "out",
     descr = "Path to write generated files to (defaults to ./out)",

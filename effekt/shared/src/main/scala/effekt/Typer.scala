@@ -1221,7 +1221,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Result(ret, effs)
   }
 
-  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, EffektMessages)]) = Context.timed("overload-resolution", Context.module.source.name) {
+  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, EffektMessages)]) = {
     val stateBefore = Context.backupTyperstate()
     val results = inputs.map {
       case input =>

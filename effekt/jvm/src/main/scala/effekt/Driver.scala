@@ -82,7 +82,6 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         else if (config.interpret()) { compile() foreach runner.eval }
         else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
-        Context.showTimes()
     }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
@@ -100,6 +99,8 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode
    */
   def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    // display tracing information if text is given as output format
+    if (config.trace.isSupplied) config.trace.foreach(s => if (s == "text") C.info(C.timesToString()))
     // report messages
     report(source, C.messaging.buffer, config)
 
