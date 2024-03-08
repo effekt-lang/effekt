@@ -10,10 +10,10 @@ case class Timed(name: String, time: Double)
  */
 trait Timers {
   /** Saves measured times under a "category" (e.g. "parser" - a phase name) together with a unique
-   * identifier, e.g., a filename. This is meant to be append only. 
+   * identifier, e.g., a filename. This is meant to be append only.
    */
   val times: mutable.LinkedHashMap[String, mutable.ListBuffer[Timed]] = mutable.LinkedHashMap.empty
-  
+
   /** Whether the `timed` function is NOP or actual takes and saves the time. */
   var timersActive: Boolean
 
@@ -47,14 +47,14 @@ trait Timers {
       for (Timed(id, time) <- ts) {
         val id1 = if (id.isEmpty) "<repl>" else id
         buffer ++= s"${" ".repeat(4)}"
-        buffer ++= s"$id1: ${time}%.2f ms\n"
+        buffer ++= f"$id1: ${time}%.2f ms\n"
       }
       buffer ++= s"\n${" ".repeat(4)}"
       buffer ++= f"${UNDERLINED}Total$RESET: $totalsubtime%.2f ms\n"
       buffer ++= " ".repeat(4)
-      buffer ++= s"${UNDERLINED}Percentage$RESET: ${(totalsubtime / totalTimeSpent)}%.2f %\n\n"
+      buffer ++= f"${UNDERLINED}Percentage$RESET: ${(totalsubtime / totalTimeSpent) * 100}%.2f %%\n\n"
     }
-    buffer ++= s"$BOLD${totalTimeSpent} ms$RESET\n"
+    buffer ++= f"$BOLD${totalTimeSpent}%.2f ms$RESET\n"
     buffer.toString()
   }
 

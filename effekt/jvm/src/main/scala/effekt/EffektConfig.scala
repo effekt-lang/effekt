@@ -23,7 +23,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   val trace: ScallopOption[String] = choice(
-    choices = Seq("text", "json", "csv"),
+    choices = Seq("text", "json"),
     name = "trace",
     descr = "Trace the time spent in each compilation phase.",
     default = Some("text"),

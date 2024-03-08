@@ -91,16 +91,26 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         context.info("  at " + line)
       }
   } finally {
+    outputTracing(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
+  }
+  
+  def outputTracing(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (config.trace.isSupplied) config.trace.toOption foreach {
+      case "json" =>
+        val out = config.outputPath().getAbsolutePath
+        val name = s"${source.name.split("/").last.stripSuffix(".effekt")}.json"
+        IO.createFile((out / name).unixPath, C.timesToJSON())
+      case "text" =>
+        C.info(C.timesToString())
+    }
   }
 
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode
    */
   def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    // display tracing information if text is given as output format
-    if (config.trace.isSupplied) config.trace.foreach(s => if (s == "text") C.info(C.timesToString()))
     // report messages
     report(source, C.messaging.buffer, config)
 
