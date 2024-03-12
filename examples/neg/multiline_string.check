@@ -1,0 +1,3 @@
+[[31merror[0m] multiline_string.effekt:1:20: ')' expected but '"' found
+[35mdef[0m main() = print("a
+                   ^
