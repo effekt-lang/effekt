@@ -529,8 +529,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val unit   = literal("()") ^^^ UnitLit()
   lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
   lazy val string =
-    ( multilineString ^^ { s => StringLit(s.replace("\n", "\\n").replace("\r", "\\r")) }
-    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1)) }
+    ( multilineString ^^ { s => StringLit(s.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")) }
+    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\t", "\\t")) }
     )
 
   lazy val boxedExpr: P[Term] =
