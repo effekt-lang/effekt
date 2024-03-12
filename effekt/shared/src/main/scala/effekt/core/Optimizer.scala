@@ -12,7 +12,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     input match {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.checkMain(mod)
-        val optimized = Context.timed(phaseName, source.name)(optimize(term, core))
+        val optimized = Context.timed(phaseName, source.name) { optimize(term, core) }
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 

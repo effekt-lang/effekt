@@ -21,7 +21,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   def run(input: Typechecked)(using C: Context) =
     // reset allCaptures since multiple runs of this phase may pollute it with outdated information
     allCaptures = Nil
-    Context.timed(phaseName, input.source.name)(annotate(input.tree, input.source))
+    Context.timed(phaseName, input.source.name) { annotate(input.tree, input.source) }
     Some(input)
 
   // We collect all captures while traversing the tree.

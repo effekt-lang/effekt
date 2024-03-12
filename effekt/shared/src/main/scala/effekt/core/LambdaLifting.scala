@@ -108,7 +108,7 @@ object LambdaLifting extends Phase[CoreTransformed, CoreTransformed] {
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
       case CoreTransformed(source, tree, mod, core) =>
-        val lifted = Context.timed(phaseName, source.name)(lift(core))
+        val lifted = Context.timed(phaseName, source.name) { lift(core) }
         Some(CoreTransformed(source, tree, mod, lifted))
     }
 

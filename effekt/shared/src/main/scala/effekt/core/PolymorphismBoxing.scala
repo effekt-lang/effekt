@@ -93,7 +93,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case CoreTransformed(source, tree, mod, core) => {
       implicit val pctx: PContext = new PContext(core.declarations)
       Context.module = mod
-      val transformed = Context.timed(phaseName, source.name)(transform(core))
+      val transformed = Context.timed(phaseName, source.name) { transform(core) }
       Some(CoreTransformed(source, tree, mod, transformed))
     }
   }

@@ -66,7 +66,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.at(im) { importDependency(path) }
     }
 
-    Context.timed(phaseName, src.name)(resolveGeneric(decl))
+    Context.timed(phaseName, src.name) { resolveGeneric(decl) }
 
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct

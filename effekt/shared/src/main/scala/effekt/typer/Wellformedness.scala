@@ -28,7 +28,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
   def run(input: Typechecked)(using C: Context) =
     val Typechecked(source, tree, mod) = input
-    C.timed(phaseName, source.name)(check(mod, tree))
+    C.timed(phaseName, source.name) { check(mod, tree) }
 
     if (Context.messaging.hasErrors) { None }
     else { Some(input) }
