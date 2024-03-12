@@ -69,7 +69,9 @@ abstract class Context(val positions: Positions)
   def setup(cfg: EffektConfig): Unit = {
     messaging.clear()
     _config = cfg
-    timersActive = cfg.trace.isSupplied
+    // No timings are captured in server mode to keep the memory footprint small. Since the server is run continuously,
+    // the memory claimed by the timing information would increase continuously.
+    timersActive = cfg.trace.isSupplied && !cfg.server()
   }
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {

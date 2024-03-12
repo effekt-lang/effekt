@@ -91,14 +91,19 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         context.info("  at " + line)
       }
   } finally {
-    outputTracing(source, config)(context)
+    outputTimes(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
   }
-  
-  def outputTracing(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    if (config.trace.isSupplied) config.trace.toOption foreach {
+
+  /**
+   * Outputs the timing information captured in [[effekt.util.Timers]] by [[effekt.context.Context]]. Either a JSON file
+   * is written to disk or a plain text message is written to stdout.
+   */
+  def outputTimes(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (C.timersActive) config.trace.toOption foreach {
       case "json" =>
+        // extract source filename and write to given output path
         val out = config.outputPath().getAbsolutePath
         val name = s"${source.name.split("/").last.stripSuffix(".effekt")}.json"
         IO.createFile((out / name).unixPath, C.timesToJSON())
