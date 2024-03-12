@@ -26,7 +26,6 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     choices = Seq("text", "json"),
     name = "trace",
     descr = "Trace the time spent in each compilation phase.",
-    default = Some("text"),
     required = false
   )
 

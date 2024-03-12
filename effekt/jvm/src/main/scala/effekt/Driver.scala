@@ -68,13 +68,16 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     C.backend match {
 
       case Backend(name, compiler, runner) =>
-        def compile() = compiler.compile(src) map {
-          case (outputFiles, exec) =>
-            outputFiles.foreach {
-              case (filename, doc) =>
-                saveOutput(filename, doc)
-            }
-            exec
+        // measure the total compilation time here
+        def compile() = C.timed("total", source.name) {
+          compiler.compile(src) map {
+            case (outputFiles, exec) =>
+              outputFiles.foreach {
+                case (filename, doc) =>
+                  saveOutput(filename, doc)
+              }
+              exec
+          }
         }
 
         // we are in one of three exclusive modes: LSPServer, Compile, Run

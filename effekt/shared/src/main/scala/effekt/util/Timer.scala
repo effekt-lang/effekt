@@ -9,13 +9,16 @@ case class Timed(name: String, time: Double)
  * The result is saved in map under a specified category with a unique identifier.
  */
 trait Timers {
-  /** Saves measured times under a "category" (e.g. "parser" - a phase name) together with a unique
+  /** 
+   * Saves measured times under a "category" (e.g. "parser" - a phase name) together with a unique
    * identifier, e.g., a filename. This is meant to be append only.
    */
   val times: mutable.LinkedHashMap[String, mutable.ListBuffer[Timed]] = mutable.LinkedHashMap.empty
 
   /** Whether the `timed` function is NOP or actual takes and saves the time. */
   var timersActive: Boolean
+  
+  def totalTime: Option[Double] = times.get("total").map(_.head.time)
 
   /**
    * Time the execution of `f` and save the result in the times database under the "category" `timerName`
@@ -28,7 +31,9 @@ trait Timers {
     res
   }
 
-  /// Convenience function for timing the execution of a given function.
+  /**
+   * Convenience function for timing the execution of a given function. 
+   */
   private def timed[A](f: => A): (A, Double) = {
     val start = System.nanoTime()
     val res = f
@@ -38,11 +43,13 @@ trait Timers {
 
   def timesToString(): String = {
     val buffer = StringBuilder()
-    val totalTimeSpent = times.foldLeft(0d) { (acc, values) =>
-      acc + values._2.foldLeft(0d)((acc, timed) => acc + timed.time)
+    val totalTimeSpent = totalTime.getOrElse {
+      times.foldLeft(0d) { (acc, values) =>
+        acc + values._2.foldLeft(0d)((acc, timed) => acc + timed.time)
+      }
     }
     for (((name, ts), i) <- times.zipWithIndex) {
-      buffer ++= s"$UNDERLINED$BOLD$i. $name$RESET:\n"
+      buffer ++= s"$UNDERLINED$BOLD${i + 1}. $name$RESET:\n"
       val totalsubtime = ts.foldLeft(0d)((acc, timed) => acc + timed.time)
       for (Timed(id, time) <- ts) {
         val id1 = if (id.isEmpty) "<repl>" else id
