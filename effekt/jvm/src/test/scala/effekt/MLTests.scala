@@ -118,5 +118,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "patternmatching" / "matching-while.effekt",
 
     examplesDir / "pos" / "probabilistic.effekt",
+
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
   )
 }

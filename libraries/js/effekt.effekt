@@ -127,6 +127,30 @@ extern pure def infixEq[R](x: R, y: R): Boolean =
 extern pure def infixNeq[R](x: R, y: R): Boolean =
   "!equals$impl(${x}, ${y})"
 
+// Result of comparison between two objects according to some order:
+//
+// - `Less()` means that the first object is *before* the first in the order,
+// - `Equal()` means that the two objects are the same in the order,
+// - and `Greater()` means that the second object is *before* the first in the order.
+type Ordering {
+   Less();
+   Equal();
+   Greater()
+ }
+
+ extern pure def genericCompareImpl[R](x: R, y: R): Int =
+   "compare$impl(${x}, ${y})"
+
+ // Compares two values of the same type, returning an `Ordering`.
+ def genericCompare[R](x: R, y: R): Ordering = {
+   genericCompareImpl(x, y) match {
+    case -1 => Less()
+    case 0 => Equal()
+    case 1 => Greater()
+    case _ => <{ "Impossible: JS comparison returned invalid value!" }>
+   }
+ }
+
 extern pure def infixLt(x: Int, y: Int): Boolean =
   "(${x} < ${y})"
 

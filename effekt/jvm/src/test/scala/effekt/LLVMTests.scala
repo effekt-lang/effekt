@@ -88,6 +88,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "state.effekt",
     examplesDir / "pos" / "bug1.effekt",
 
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
 
     // whole folders
     examplesDir / "pos" / "bidirectional",
