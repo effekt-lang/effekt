@@ -1,4 +1,6 @@
 import immutable/list
+import text/string
+import io/args
 
 def vfix(lst: List[List[=> (Int => Int at {}) at {}] => (Int => Int at {}) at {}]): List[=> (Int => Int at {}) at {}] = {
     lst.map { el => box { () => el(vfix(lst)) } }
@@ -42,8 +44,15 @@ def f3(fs: List[=> (Int => Int at {}) at {}]) =
 
 def mod3(x: Int): Int = first(vfix([f1,f2,f3]))()(x)
 
-def main() = {
-    println(mod3(999))
-    println(mod3(1000))
-    println(mod3(1001))
+def calculate(x: Int) = {
+    return [mod3(x), mod3(x + 1), mod3(x + 2)]
+}
+
+def main() = commandLineArgs() match {
+  case Nil() => println(calculate(999))
+  case Cons(x, Nil()) => toInt(x) match {
+    case Some(i) => println(calculate(i))
+    case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "'")
+  }
+  case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }
