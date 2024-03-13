@@ -8,36 +8,78 @@ import scala.language.implicitConversions
  * This file defines the syntax of HVM as it is the image of our translation.
  */
 
- enum Term {
-    case Var(name: String)
-    case Dup(nam0: String, nam1: String, expr: List[Term],body: List[Term])
-    case Sup(val0: Term, val1: Term)
-    case Let(name: String, expr: Term, body: Term)
-    case Lam(name: String, body: Term)
-    case App(func: Term, argm: Term)
-    case Ctr(name: String, args: List[Term])
-    case U6O(numb: Long)
-    case F6O(numb: Long)
-    case Op2(oper: Oper, val0: Term, val1: Term)
- }
- export Term.*
+ 
+case class Rule(pats: List[Pattern], body: Term)
 
- enum Oper {
-    case Add
-    case Sub
-    case Mul
-    case Div
-    case Mod
-    case And
-    case Or
-    case Xor
-    case Shl
-    case Shr
-    case Lte
-    case Ltn
-    case Eql
-    case Gte
-    case Gtn
-    case Neq
- }
-  export Oper.*
+enum Tag {
+   case Stringd(String: String) 
+   case Numeric(value: Int)
+   case Auto 
+   case Static
+}
+
+
+enum Op {
+   case Add  
+   case Sub 
+   case Mul 
+   case Div 
+   case Mod 
+   case Eq 
+   case Ne 
+   case Lt 
+   case Gt 
+   case Lte 
+   case Gte 
+   case And 
+   case Or 
+   case Xor 
+   case Shl 
+   case Shr 
+}
+
+enum NumCtr {
+   case  Num(value: Long)
+   case  Succ(value: Long, String: Option[Option[String]])
+}
+
+
+enum Term {
+   case  Lam(tag: Tag, nam: Option[String], bod: Term)
+   case  Var(nam: String)
+   case  Chn(tag: Tag, nam: Option[String], bod: Term)
+   case  Lnk(nam: String)
+   case  Let(pat: Pattern, value: Term, nxt: Term)
+   case  App(tag: Tag, fun: Term, arg: Term)
+   case  Tup(els: List[Term])
+   case  Dup(tag: Tag, bnd: List[Option[String]], value: Term, nxt: Term)
+   case  Sup(tag: Tag, els: List[Term])
+   case  Num(value: Long)
+   case  Str(value: String)
+   case  Lst(els: List[Term])
+   case  Opx(op: Op, fst: Term, snd: Term)
+   case  Mat(args: List[Term], rules: List[Rule])
+   case  Ref(nam: String)
+   case  Era
+   case  Err
+}
+export Term.*
+
+
+enum Pattern {
+   case Var(String: Option[String])
+   case Ctr(String: String, patterns: List[Pattern])
+   case NumPattern(numCtr: NumCtr)
+   case TupPattern(patterns: List[Pattern])
+   case LstPattern(patterns: List[Pattern])
+   case StrPattern(value: String)
+}
+
+
+enum Type {
+   case Any
+   case TupType(size: Int)
+   case NumType
+   case NumSuccType(value: Long)
+   case AdtType(String: String)
+}
