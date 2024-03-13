@@ -33,5 +33,6 @@ object Backend {
     case "chez-lift"    => Backend("chez-lift", chez.ChezSchemeLift(), ChezLiftRunner)
     case "llvm"         => Backend("llvm", llvm.LLVM(), LLVMRunner)
     case "ml"           => Backend("ml", ml.ML(), MLRunner)
+    case "hvm"          => Backend("hvm", hvm.Hvm(), HVMRunner)
   }
 }

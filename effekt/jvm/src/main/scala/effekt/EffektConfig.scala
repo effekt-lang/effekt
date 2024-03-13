@@ -43,7 +43,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   val backend: ScallopOption[Backend[_]] = choice(
-    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
+    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml", "hvm"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
