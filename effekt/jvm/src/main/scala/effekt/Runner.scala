@@ -243,7 +243,7 @@ object MLRunner extends Runner[String] {
 object HVMRunner extends Runner[String] {
   val extension = "hvm"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def prelude: List[String] = List("effekt")
   override def includes(path: File): List[File] = List(path / ".." / "common")
 
   def checkSetup(): Either[String, Unit] =
