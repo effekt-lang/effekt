@@ -80,7 +80,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
   )
   .settings(commonSettings)
   .dependsOn(kiama)
-  // .enablePlugins(NativeImagePlugin)
+  .enablePlugins(NativeImagePlugin)
   .jvmSettings(
     libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
 
@@ -96,19 +96,18 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // disable tests for assembly to speed up build
     assembly / test := {},
 
-
     // Options to compile Effekt with native-image
     // -------------------------------------------
-    //    nativeImageOptions ++= Seq(
-    //      "--no-fallback",
-    //      "--initialize-at-build-time",
-    //      "--report-unsupported-elements-at-runtime",
-    //      "-H:+ReportExceptionStackTraces",
-    //      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
-    //      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
-    //      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
-    //    ),
-
+    nativeImageVersion := "22.3.0",
+    nativeImageOptions ++= Seq(
+      "--no-fallback",
+      "--initialize-at-build-time",
+      "--report-unsupported-elements-at-runtime",
+      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json",
+      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
+      "-H:+ReportExceptionStackTraces",
+      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
+    ),
 
     // Assembling one big jar-file and packaging it
     // --------------------------------------------
@@ -187,7 +186,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
-
 
 lazy val platform = Def.task {
   val platformString = System.getProperty("os.name").toLowerCase
