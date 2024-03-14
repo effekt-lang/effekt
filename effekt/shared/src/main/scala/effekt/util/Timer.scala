@@ -1,6 +1,7 @@
 package effekt.util
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.io.AnsiColor.*
 case class Timed(name: String, time: Double)
 
@@ -9,7 +10,7 @@ case class Timed(name: String, time: Double)
  * The result is saved in map under a specified category with a unique identifier.
  */
 trait Timers {
-  /** 
+  /**
    * Saves measured times under a "category" (e.g. "parser" - a phase name) together with a unique
    * identifier, e.g., a filename. This is meant to be append only.
    */
@@ -17,7 +18,7 @@ trait Timers {
 
   /** Whether the `timed` function is NOP or actual takes and saves the time. */
   var timersActive: Boolean
-  
+
   def totalTime: Option[Double] = times.get("total").map(_.head.time)
 
   /**
@@ -32,7 +33,7 @@ trait Timers {
   }
 
   /**
-   * Convenience function for timing the execution of a given function. 
+   * Convenience function for timing the execution of a given function.
    */
   private def timed[A](f: => A): (A, Double) = {
     val start = System.nanoTime()
@@ -42,40 +43,35 @@ trait Timers {
   }
 
   def timesToString(): String = {
-    val buffer = StringBuilder()
+    val spacetab = " ".repeat(4)
     val totalTimeSpent = totalTime.getOrElse {
       times.foldLeft(0d) { (acc, values) =>
         acc + values._2.foldLeft(0d)((acc, timed) => acc + timed.time)
       }
     }
-    for (((name, ts), i) <- times.zipWithIndex) {
-      buffer ++= s"$UNDERLINED$BOLD${i + 1}. $name$RESET:\n"
+    times.zipWithIndex.map { case ((name, ts), i) =>
       val totalsubtime = ts.foldLeft(0d)((acc, timed) => acc + timed.time)
-      for (Timed(id, time) <- ts) {
-        val id1 = if (id.isEmpty) "<repl>" else id
-        buffer ++= s"${" ".repeat(4)}"
-        buffer ++= f"$id1: ${time}%.2f ms\n"
-      }
-      buffer ++= s"\n${" ".repeat(4)}"
-      buffer ++= f"${UNDERLINED}Total$RESET: $totalsubtime%.2f ms\n"
-      buffer ++= " ".repeat(4)
-      buffer ++= f"${UNDERLINED}Percentage$RESET: ${(totalsubtime / totalTimeSpent) * 100}%.2f %%\n\n"
-    }
-    buffer ++= f"$BOLD${totalTimeSpent}%.2f ms$RESET\n"
-    buffer.toString()
+      val subs = ts.map { case Timed(subname, time) =>
+        val subname1 = if (subname.isEmpty) "<repl>" else subname
+        f"$subname1: ${time}%.2f ms"
+      }.mkString(spacetab, s",\n$spacetab", "")
+      f"""$UNDERLINED$BOLD${i + 1}. $name$RESET:
+         |$subs
+         |$spacetab${UNDERLINED}Total$RESET: $totalsubtime%.2f ms
+         |$spacetab${UNDERLINED}Percentage$RESET: ${(totalsubtime / totalTimeSpent) * 100}%.2f %%
+         |""".stripMargin
+    }.mkString("")
   }
 
   def timesToJSON(): String = {
-    val buffer = StringBuilder("{\n")
-    for ((name, ts) <- times) {
-      buffer ++= s"${" ".repeat(4)}\"$name\": {\n"
-      for (Timed(name, time) <- ts) {
-        val name1 = if (name.isEmpty) "<repl>" else name
-        buffer ++= s"${" ".repeat(8)}\"$name1\": $time,\n"
-      }
-      buffer ++= s"${" ".repeat(4)}},\n"
-    }
-    buffer ++= "}"
-    buffer.toString()
+    val spacetab = " ".repeat(4)
+    val entries = times.map { (name, ts) =>
+      val subs = ts.map { case Timed(subname, time) =>
+        val subname1 = if (subname.isEmpty) "<repl>" else subname
+        f"\"$subname1\": $time%.2f"
+      }.mkString(spacetab.repeat(2), s",\n${spacetab.repeat(2)}", "")
+      s"$spacetab\"$name\": {\n$subs\n$spacetab}"
+    }.mkString(",\n")
+    s"{\n$entries\n}\n"
   }
 }
