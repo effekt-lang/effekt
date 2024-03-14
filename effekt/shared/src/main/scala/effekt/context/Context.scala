@@ -71,7 +71,7 @@ abstract class Context(val positions: Positions)
     _config = cfg
     // No timings are captured in server mode to keep the memory footprint small. Since the server is run continuously,
     // the memory claimed by the timing information would increase continuously.
-    timersActive = cfg.trace.isSupplied && !cfg.server()
+    timersActive = cfg.timed()
   }
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {

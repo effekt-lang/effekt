@@ -22,10 +22,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     default = Some(false)
   )
 
-  val trace: ScallopOption[String] = choice(
+  val time: ScallopOption[String] = choice(
     choices = Seq("text", "json"),
-    name = "trace",
-    descr = "Trace the time spent in each compilation phase.",
+    name = "time",
+    descr = "Measure the time spent in each compilation phase.",
     required = false
   )
 
@@ -136,6 +136,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def interpret(): Boolean = !server() && !compile() && !build()
 
   def repl(): Boolean = filenames().isEmpty && !server() && !compile()
+  
+  def timed(): Boolean = time.isSupplied && !server()
 
   validateFilesIsDirectory(includePath)
 

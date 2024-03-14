@@ -104,7 +104,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    * is written to disk or a plain text message is written to stdout.
    */
   def outputTimes(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    if (C.timersActive) config.trace.toOption foreach {
+    if (C.timersActive) config.time.toOption foreach {
       case "json" =>
         // extract source filename and write to given output path
         val out = config.outputPath().getAbsolutePath
