@@ -449,6 +449,13 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
 
+  def typeOption(s: Symbol): Option[Type] = s match {
+    case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
+    case s: BlockSymbol => annotationOption(Annotations.BlockType, s)
+    case _ => None
+  }
+
+
 
   // Symbols
   // -------
