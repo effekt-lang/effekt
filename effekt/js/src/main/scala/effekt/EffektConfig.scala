@@ -17,4 +17,6 @@ trait EffektConfig {
   def requiresLift(): Boolean = false
 
   def prelude() = List("effekt")
+  
+  def timed() = false
 }

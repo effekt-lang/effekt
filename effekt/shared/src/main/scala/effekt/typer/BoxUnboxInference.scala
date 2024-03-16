@@ -11,7 +11,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   val phaseName = "box-unbox"
 
   def run(input: NameResolved)(using Context) = {
-    val transformedTree = rewrite(input.tree)
+    val transformedTree = Context.timed(phaseName, input.source.name) { rewrite(input.tree) }
 
     if (Context.messaging.hasErrors) { None }
     else { Some(input.copy(tree = transformedTree)) }

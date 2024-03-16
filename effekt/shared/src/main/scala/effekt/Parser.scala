@@ -30,7 +30,7 @@ object Parser extends Phase[Source, Parsed] {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
       //println(s"parsing ${source.name}")
-      parser.parse(source)
+      Context.timed(phaseName, source.name) { parser.parse(source) }
   } map { tree => Parsed(source, tree) }
 }
 
