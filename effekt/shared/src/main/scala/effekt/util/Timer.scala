@@ -17,9 +17,19 @@ trait Timers {
   val times: mutable.LinkedHashMap[String, mutable.ListBuffer[Timed]] = mutable.LinkedHashMap.empty
 
   /** Whether the `timed` function is NOP or actual takes and saves the time. */
-  var timersActive: Boolean
+  var timersActive: Boolean = true
 
-  def totalTime: Option[Double] = times.get("total").map(_.head.time)
+  def totalTime: Double = 
+    times.get("total").map(_.head.time).getOrElse {
+      times.foldLeft(0d) { (acc, values) =>
+        acc + values._2.foldLeft(0d)((acc, timed) => acc + timed.time)
+      }
+    }
+    
+  def clearTimers(active: Boolean): Unit = {
+    times.clear()
+    timersActive = active
+  }
 
   /**
    * Time the execution of `f` and save the result in the times database under the "category" `timerName`
@@ -44,11 +54,6 @@ trait Timers {
 
   def timesToString(): String = {
     val spacetab = " ".repeat(4)
-    val totalTimeSpent = totalTime.getOrElse {
-      times.foldLeft(0d) { (acc, values) =>
-        acc + values._2.foldLeft(0d)((acc, timed) => acc + timed.time)
-      }
-    }
     times.zipWithIndex.map { case ((name, ts), i) =>
       val totalsubtime = ts.foldLeft(0d)((acc, timed) => acc + timed.time)
       val subs = ts.map { case Timed(subname, time) =>
@@ -58,7 +63,7 @@ trait Timers {
       f"""$UNDERLINED$BOLD${i + 1}. $name$RESET:
          |$subs
          |$spacetab${UNDERLINED}Total$RESET: $totalsubtime%.2f ms
-         |$spacetab${UNDERLINED}Percentage$RESET: ${(totalsubtime / totalTimeSpent) * 100}%.2f %%
+         |$spacetab${UNDERLINED}Percentage$RESET: ${(totalsubtime / totalTime) * 100}%.2f %%
          |""".stripMargin
     }.mkString("")
   }

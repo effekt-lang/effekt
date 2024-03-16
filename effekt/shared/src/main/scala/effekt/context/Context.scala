@@ -47,8 +47,6 @@ abstract class Context(val positions: Positions)
   // bring the context itself in scope
   implicit val context: Context = this
 
-  var timersActive: Boolean = false
-
   // the currently processed module
   var module: Module = _
 
@@ -68,10 +66,10 @@ abstract class Context(val positions: Positions)
    */
   def setup(cfg: EffektConfig): Unit = {
     messaging.clear()
-    _config = cfg
     // No timings are captured in server mode to keep the memory footprint small. Since the server is run continuously,
     // the memory claimed by the timing information would increase continuously.
-    timersActive = cfg.timed()
+    clearTimers(cfg.timed())
+    _config = cfg
   }
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
