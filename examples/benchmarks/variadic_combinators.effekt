@@ -1,7 +1,9 @@
 import immutable/list
+import immutable/option
 import text/string
 import io/args
 
+// TODO: map uses `var` and therefore fails in ML with "Effect polymorphic recursion is not allowed."
 def vfix(lst: List[List[=> (Int => Int at {}) at {}] => (Int => Int at {}) at {}]): List[=> (Int => Int at {}) at {}] = {
     lst.map { el => box { () => el(vfix(lst)) } }
 }
@@ -52,7 +54,7 @@ def main() = commandLineArgs() match {
   case Nil() => println(calculate(999))
   case Cons(x, Nil()) => toInt(x) match {
     case Some(i) => println(calculate(i))
-    case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "'")
+    case _ => println("Unexpected non-integer(s) '" ++ x ++ "'")
   }
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }
