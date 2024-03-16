@@ -1,4 +1,4 @@
 def main() = println("""a
-    b
+    "b"
 	c
 d""")
