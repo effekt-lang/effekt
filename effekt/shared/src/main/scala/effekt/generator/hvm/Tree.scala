@@ -8,15 +8,19 @@ import scala.language.implicitConversions
  * This file defines the syntax of HVM as it is the image of our translation.
  */
 
+ //Book, Definition, Adt and Adtencoding missing
+
  
 case class Rule(pats: List[Pattern], body: Term)
 
+
 enum Tag {
-   case Stringd(String: String) 
+   case Name(name: String) 
    case Numeric(value: Int)
    case Auto 
    case Static
 }
+export Tag.*
 
 
 enum Op {
@@ -37,11 +41,13 @@ enum Op {
    case Shl 
    case Shr 
 }
+export Op.*
 
 enum NumCtr {
    case  Num(value: Long)
-   case  Succ(value: Long, String: Option[Option[String]])
-}
+   case  Succ(value: Long, name: Option[Option[String]])
+} 
+
 
 
 enum Term {
@@ -67,13 +73,15 @@ export Term.*
 
 
 enum Pattern {
-   case Var(String: Option[String])
-   case Ctr(String: String, patterns: List[Pattern])
+   case VarPattern(name: Option[String])
+   case Ctr(name: String, patterns: List[Pattern])
    case NumPattern(numCtr: NumCtr)
    case TupPattern(patterns: List[Pattern])
    case LstPattern(patterns: List[Pattern])
-   case StrPattern(value: String)
+   case StrPattern(string: String)
 }
+
+export Pattern.*
 
 
 enum Type {
