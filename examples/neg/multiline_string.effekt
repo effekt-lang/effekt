@@ -1,2 +1,2 @@
-def main() = print("a
+def main() = println("a
 b")
