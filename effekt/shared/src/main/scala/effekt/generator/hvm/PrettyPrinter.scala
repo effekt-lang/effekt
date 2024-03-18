@@ -34,7 +34,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case Str(value)                 => string(value)
       case Lst(els)                   => brackets(folddoc((els map toDoc), (x, y) => x <> String(",") <+> y))
       case Opx(op, fst, snd)          => parens(toDoc(op) <+> toDoc(fst) <+> toDoc(snd))
-      case Mat(args, rules)           => string("match") <+> hsep((args map toDoc), string(",")) <+> brackets(string("wrong"))
+      case Mat(args, rules)           => string("match") <+> hsep((args map toDoc), string(",")) <+> braces(hsep((rules map ((x)=>hsep(x.pats map toDoc)<>string(":")<+>toDoc(x.body))), string("; ")))
       case Era                        => string("*")
       case Err                        => string("<Invalid>")
   }
