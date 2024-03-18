@@ -8,10 +8,12 @@ import scala.language.implicitConversions
  * This file defines the syntax of HVM as it is the image of our translation.
  */
 
- //Book, Definition, Adt and Adtencoding missing
+ //Book, Adt and Adtencoding missing
 
  
 case class Rule(pats: List[Pattern], body: Term)
+
+case class Definition(name: String, rules: List[Rule], builtin: Boolean)
 
 
 enum Tag {

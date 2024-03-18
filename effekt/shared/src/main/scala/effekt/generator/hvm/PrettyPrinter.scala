@@ -6,12 +6,7 @@ import effekt.util.intercalate
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 
-import scala.language.implicitConversions
-import java.util.Optional
-import effekt.util.AnsiHighlight.string
-import effekt.source.Named
-import effekt.util.AnsiHighlight.string
-import effekt.core.normal.valDef
+
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -78,7 +73,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case NumPattern(numCtr)     => toDoc(numCtr)
     case TupPattern(patterns)   => parens(folddoc(patterns map toDoc, (x, y) => x <> String(",") <+> y))
     case LstPattern(patterns)   => brackets(folddoc(patterns map toDoc, (x, y) => x <> String(",") <+> y))
-    case StrPattern(value)      => string("""""""")<>string(value)<>string("""""""")
+    case StrPattern(value)      => string(""""""")<>string(value)<>string(""""""")
   }
 
   def toDoc(numCtr: NumCtr) : Doc = numCtr match {
@@ -87,6 +82,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case NumCtr.Succ(value, Some(None))        => string(value.toString())<>string("+*")
     case NumCtr.Succ(value, Some(Some(name)))  => string(value.toString())<>string("+")<>string(name)
   }
+
+  //helper function to pretty print Definition
+  def toDoc(rule: Rule, name: String) : Doc =
+    parens(string(name)<+>hsep(rule.pats map toDoc))<+>string("=")<+>toDoc(rule.body)
+
+
+  def toDoc(definition: Definition) : Doc =
+    vsep(definition.rules map ((x)=>toDoc(x, definition.name)))
 
 
 
