@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -57,7 +57,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // bring builtins into scope
               builtins.rootTerms.values.foreach {
                 case term: BlockParam =>
-                  Context.bind(term, term.tpe)
+                  Context.bind(term, term.tpe.get)
                   Context.bind(term, CaptureSet(term.capture))
                 case term: ExternResource =>
                   Context.bind(term, term.tpe)
@@ -214,7 +214,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
           val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
-          Context.bind(capability, capability.tpe, CaptureSet(capability.capture))
+          val tpe = capability.tpe.getOrElse { Context.abort("Block type annotation required")}
+          Context.bind(capability, tpe, CaptureSet(capability.capture))
           capability
         }
 
@@ -246,7 +247,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (4) Wellformedness checks
         val handlerFor = providedCapabilities.map { cap =>
           // all effects have to be concrete at this point in time
-          val concreteEffect = Context.unification(cap.tpe.asInterfaceType)
+          val concreteEffect = Context.unification(cap.tpe.get.asInterfaceType)
           (concreteEffect, cap)
         }
 
@@ -416,8 +417,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 case ((param, declaredType), capture) =>
                   val sym = param.symbol
                   val annotatedType = sym.tpe
-                  matchDeclared(annotatedType, declaredType, param)
-                  Context.bind(sym, annotatedType, CaptureSet(capture))
+                  annotatedType.foreach { matchDeclared(_, declaredType, param) }
+                  Context.bind(sym, annotatedType.getOrElse(declaredType), CaptureSet(capture))
               }
 
               // these capabilities are later introduced as parameters in capability passing
@@ -891,10 +892,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
           val got = sym.tpe
-          matchDeclared(got, adjusted, param)
+          matchDeclared(got.get, adjusted, param)
           // bind types to check body
-          Context.bind(param.symbol, got, CaptureSet(sym.capture))
-          got
+          Context.bind(param.symbol, got.get, CaptureSet(sym.capture))
+          got.get
       }
 
       // (4) Bind capabilities for all effects "handled" by this function
@@ -937,7 +938,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
       val bps = bparams.map { p =>
         val param = p.symbol
-        val tpe = param.tpe
+        val tpe = param.tpe.get
         Context.bind(param, tpe)
         tpe
       }
@@ -1451,7 +1452,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
     bindCapabilities(binder, caps)
-    capabilityScope = BindSome(binder, caps.map { c => c.tpe.asInterfaceType -> c }.toMap, capabilityScope)
+    capabilityScope = BindSome(binder, caps.map { c => c.tpe.get.asInterfaceType -> c }.toMap, capabilityScope)
     val result = f
     capabilityScope = capabilityScope.parent
     result
@@ -1459,7 +1460,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
-      assertConcrete(cap.tpe.asInterfaceType)
+      assertConcrete(cap.tpe.get.asInterfaceType)
       positions.dupPos(binder, cap)
       cap
     }
@@ -1484,7 +1485,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val capName = tpe.name.rename(_ + "$capability")
-    val param: BlockParam = BlockParam(capName, tpe)
+    val param: BlockParam = BlockParam(capName, Some(tpe))
     // TODO FIXME -- generated capabilities need to be ignored in LSP!
 //     {
 //      override def synthetic = true
@@ -1566,7 +1567,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
-    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s @ BlockParam(name, tpe) => bind(s, tpe.get, CaptureSet(p.capture))
     case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s : VarBinder => bind(s, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
