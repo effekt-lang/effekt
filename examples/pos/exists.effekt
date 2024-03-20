@@ -15,14 +15,5 @@ def test1() = {
   combineAndPrint(stringBox)
 }
 
-// def test2extruding() = {
-//   val intBox = Op(1, box { (x, y) => x + y });
-
-//   val x = intBox match {
-//     case Op(el, combine) => el
-//   }
-//   x + 2 // ERROR Cannot typecheck
-// }
-
 
 def main() = test1()
