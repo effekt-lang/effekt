@@ -546,21 +546,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // symbol of the constructor we match against
       val sym: Constructor = p.definition
 
+      val universals   = sym.tparams.take(sym.tpe.tparams.size)
+      val existentials = sym.tparams.drop(sym.tpe.tparams.size)
+
+      // create fresh unification variables
+      val freshUniversals   = universals.map { t => Context.freshTypeVar(t, pattern) }
+      // create fresh **bound** variables
+      val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name) }
+
+      val targs = (freshUniversals ++ freshExistentials).map { t => ValueTypeRef(t) }
+
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (trigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiateFresh(sym.toType)
+      val FunctionType(_, _, vps, _, ret, _) = Context.instantiate(sym.toType, targs, Nil)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       matchPattern(sc, ret, p)
 
-      // (6) check for existential type variables
-      // at the moment we do not allow existential type parameters on constructors, so this is not necessary.
-      //      val skolems = Context.skolems(rigids)
-      //      if (skolems.nonEmpty) {
-      //        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
-      //      }
-
-      // (8) check nested patterns
+      // (6) check nested patterns
       var bindings = Map.empty[Symbol, ValueType]
 
       if (patterns.size != vps.size)
