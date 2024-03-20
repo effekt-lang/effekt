@@ -15,5 +15,25 @@ def test1() = {
   combineAndPrint(stringBox)
 }
 
+def test2() = {
+  val intBox = Op(1, box { (x, y) => x + y });
+  val stringBox = Op("hello!", box { (x, y) => x ++ y });
 
-def main() = test1()
+  def repack(op: Exists): Exists = op match {
+    case Op(el, combine) => Op(el, combine)
+  }
+
+  def combineAndPrint(op: Exists): Unit = op match {
+    case Op(el, combine) => println(combine(el, el))
+  }
+
+  combineAndPrint(repack(intBox))
+  combineAndPrint(repack(stringBox))
+}
+
+
+
+def main() = {
+  test1();
+  test2()
+}
