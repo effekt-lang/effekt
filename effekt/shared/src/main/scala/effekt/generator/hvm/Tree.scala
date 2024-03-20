@@ -3,6 +3,7 @@ package generator
 package hvm
 
 import scala.language.implicitConversions
+import scala.collection.mutable.{Map => MutableMap}
 
 /**
  * This file defines the syntax of HVM as it is the image of our translation.
@@ -15,6 +16,35 @@ case class Rule(pats: List[Pattern], body: Term)
 
 case class Definition(name: String, rules: List[Rule], builtin: Boolean)
 
+
+type Adts = MutableMap[Name, Adt]
+
+type Constructors = MutableMap[String, String]
+case class Adt(
+
+  ctrs: MutableMap[Name, List[String]],
+
+  builtin: Boolean
+)
+
+enum AdtEncoding {
+  case Scott
+  case TaggedScott
+
+  def default: AdtEncoding = TaggedScott
+}
+
+// Define the Book class
+case class Book(
+  // The function definitions
+  defs: MutableMap[Name, Definition],
+  // The algebraic datatypes defined by the program
+  adts: Adts,
+  // To which type does each constructor belong to
+  ctrs: Constructors,
+  // A custom or default "main" entrypoint
+  entrypoint: Option[Name]
+)
 
 enum Tag {
    case Name(name: String) 

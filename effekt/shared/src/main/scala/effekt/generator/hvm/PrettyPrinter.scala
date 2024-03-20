@@ -91,6 +91,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(definition: Definition) : Doc =
     vsep(definition.rules map ((x)=>toDoc(x, definition.name)))
 
-
+  def toDoc(book: Book) : Doc =
+    vsep((book.defs.values.toList map toDoc), linebreak)
 
 }
