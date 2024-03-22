@@ -47,10 +47,23 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, bodies: List[(FeatureFlag, Template[Variable])])
+  case Extern(name: String, parameters: Environment, returnType: Type, bodies: List[ExternBody])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*
+
+case class ExternBody(featureFlag: FeatureFlag, contents: Template[Variable])
+extension(self: List[ExternBody]) {
+  def forFeatureFlags(flags: List[String]): Option[Template[Variable]] = flags match {
+    case Nil => None
+    case flag :: other =>
+      self.collectFirst {
+        case ExternBody(featureFlag, contents) if featureFlag.matches(flag) => contents
+      } orElse {
+        self.forFeatureFlags(other)
+      }
+  }
+}
 
 
 /**

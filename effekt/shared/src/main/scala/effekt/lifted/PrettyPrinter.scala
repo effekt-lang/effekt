@@ -60,7 +60,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tparams, params, ret, bodies) =>
       "extern def" <+> toDoc(id.name) <> signature(tparams, params, ret) <+> "=" <+> "\"" <> vsep(bodies map {
-        (ff, body) => toDoc(ff) <> toDoc(body)
+        case ExternBody(ff, body) => toDoc(ff) <> toDoc(body)
       }) <> "\""
     case Extern.Include(ff, contents) => emptyDoc // right now, do not print includes.
   }

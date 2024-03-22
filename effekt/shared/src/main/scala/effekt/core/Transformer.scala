@@ -108,7 +108,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           case p: Pure => p: Pure
           case _ => Context.abort("Spliced arguments need to be pure expressions.")
         }
-        (ff, Template(body.strings, args))
+        ExternBody(ff, Template(body.strings, args))
       }
       List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBodies))
 
