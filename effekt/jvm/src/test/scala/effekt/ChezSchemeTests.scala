@@ -23,6 +23,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "ml",
 
     examplesDir / "pos" / "arrays.effekt",
+    examplesDir / "pos" / "issue319.effekt",
     examplesDir / "pos" / "maps.effekt",
 
     // bidirectional effects are not yet supported in our Chez backend
@@ -33,11 +34,18 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "propagators.effekt",
 
     // the number representations differ in JS and Chez
-    examplesDir / "casestudies" / "ad.md",
+    examplesDir / "casestudies" / "ad.effekt.md",
 
     // in the CallCC variant, we cannot have toplevel vals at the moment (their bindings need to be wrapped in `(run (thunk ...))`
     // see comment on commit 61492d9
-    examplesDir / "casestudies" / "anf.md",
+    examplesDir / "casestudies" / "anf.effekt.md",
+
+    // indexOf and lastIndexOf are not implemented in text/string
+    examplesDir / "pos" / "string" / "indexOf.effekt",
+
+    // missing array-related functions & methods
+    examplesDir / "pos" / "array" / "list_conversion.effekt",
+    examplesDir / "pos" / "array" / "sum.effekt",
 
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",
@@ -64,8 +72,14 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
   def backendName = "chez-lift"
 
   override def ignored: List[File] = super.ignored ++ List(
+
+    // regions are not yet supported
+    examplesDir / "benchmarks" / "generator.effekt",
+    examplesDir / "pos" / "capture" / "regions.effekt",
+    examplesDir / "pos" / "capture" / "selfregion.effekt",
+
     // known issues:
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
-    examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidecen, which it does not need
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt", // ffi is passed evidence, which it does not need
   )
 }

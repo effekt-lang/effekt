@@ -3,10 +3,10 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.lifted.LiftInference
+import effekt.lifted.{ LiftInference, Monomorphize }
+
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-
 
 class ChezSchemeLift extends Compiler[String] {
 
@@ -49,8 +49,6 @@ class ChezSchemeLift extends Compiler[String] {
   }
 
   // The Compilation Pipeline for VSCode
-  // -----------------------------------
-    // The Compilation Pipeline for VSCode
   // -----------------------------------
   object steps {
     // intermediate steps for VSCode

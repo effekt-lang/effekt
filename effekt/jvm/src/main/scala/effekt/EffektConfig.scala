@@ -12,8 +12,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val compile: ScallopOption[Boolean] = toggle(
     "compile",
-    descrYes = "Compile the Effekt program",
-    descrNo = "Run the effekt program in the interpreter",
+    descrYes = "Compile the Effekt program to the backend specific representation",
+    default = Some(false)
+  )
+
+  val build: ScallopOption[Boolean] = toggle(
+    "build",
+    descrYes = "Compile the Effekt program and build a backend specific executable",
     default = Some(false)
   )
 
@@ -47,8 +52,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
-    descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",
-    default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "12")),
+    descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 15)",
+    default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "15")),
     noshort = true
   )
 
@@ -56,6 +61,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     "prelude",
     descr = "Modules to be automatically imported in every file.",
     default = None,
+    noshort = true
+  )
+
+  val exitOnError: ScallopOption[Boolean] = toggle(
+    "exit-on-error",
+    descrYes = "Exit with non-zero exit code on error",
+    default = Some(!repl() && !server()),
     noshort = true
   )
 
@@ -114,10 +126,12 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   def requiresCompilation(): Boolean = !server()
 
-  def interpret(): Boolean = !server() && !compile()
+  def interpret(): Boolean = !server() && !compile() && !build()
+
+  def repl(): Boolean = filenames().isEmpty && !server() && !compile()
 
   validateFilesIsDirectory(includePath)
 
-  // force some other configs manually to intialize them when compiling with native-image
+  // force some other configs manually to initialize them when compiling with native-image
   server; output; filenames
 }

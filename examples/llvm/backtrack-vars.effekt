@@ -1,0 +1,22 @@
+effect E(): Unit
+
+def main() = {
+    region r  {
+        try {
+            var inner = 0
+            var outer in r = 0
+
+            do E()
+
+            inner = inner + 1
+            println(inner)
+
+            outer = outer + 1
+            println(outer)
+
+        } with E {
+            resume(())
+            resume(())
+        }
+    }
+}

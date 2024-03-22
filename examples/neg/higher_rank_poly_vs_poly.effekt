@@ -1,0 +1,9 @@
+def len[A](l: List[A]) { f: List[A] => Int }: Int =
+    f(l)
+
+def count[A](l: List[A]): Int = l match {
+    case Nil() => 0
+    case Cons(x, xs) => 1 + count(xs)
+}
+
+def main() = len([1, 2, 3]){ count }

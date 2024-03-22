@@ -1,11 +1,11 @@
 package effekt
 
-import effekt.PhaseResult.{ CoreLifted, CoreTransformed }
+import effekt.PhaseResult.{ AllTransformed, CoreLifted, CoreTransformed }
 import effekt.context.Context
-import effekt.core.{ DirectStyleMutableState, Transformer, Optimizer }
+import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ExplicitRegions, ModuleDecl }
+import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
 import effekt.util.messages.FatalPhaseError
@@ -126,6 +126,16 @@ trait Compiler[Executable] {
     }
 
   /**
+   * Used by the server to typecheck, report type errors and show
+   * captures at boxes and definitions 
+   */
+  def runMiddleend(source: Source)(using Context): Option[Module] =
+    (Frontend andThen Middleend)(source).map { res => 
+      validate(res.source, res.mod)
+      res.mod
+    }
+
+  /**
    * Called after running the frontend from editor services.
    *
    * Can be overridden to implement backend specific checks (exclude certain
@@ -230,16 +240,27 @@ trait Compiler[Executable] {
      */
     AnnotateCaptures andThen
     /**
-     * Introduces explicit regions for functions and mutable state
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    ExplicitRegions andThen
-    /**
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
      */
     Transformer
   }
+
+  /**
+   * Maps the phase over all core modules (dependencies and the main module)
+   */
+  def all(phase: Phase[CoreTransformed, CoreTransformed]): Phase[AllTransformed, AllTransformed] =
+    new Phase[AllTransformed, AllTransformed] {
+      val phaseName = s"all-${phase.phaseName}"
+
+      def run(input: AllTransformed)(using Context) = for {
+        main <- phase(input.main)
+        dependencies <- input.dependencies.foldRight[Option[List[CoreTransformed]]](Some(Nil)) {
+          case (dep, Some(deps)) => phase(dep).map(_ :: deps)
+          case (_, _) => None
+        }
+      } yield AllTransformed(input.source, main, dependencies)
+    }
 
   def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
     val phaseName = "core-dependencies"

@@ -152,6 +152,7 @@ export Param.*
  *   ─ [[ Def ]]
  *     │─ [[ FunDef ]]
  *     │─ [[ ValDef ]]
+ *     │─ [[ RegDef ]]
  *     │─ [[ VarDef ]]
  *     │─ [[ DefDef ]]
  *     │─ [[ InterfaceDef ]]
@@ -171,7 +172,8 @@ enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
@@ -192,7 +194,7 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: Captures, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
+  case ExternDef(capture: Captures, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: Template[Term]) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -339,7 +341,7 @@ export Term.*
 // -------------------------------
 
 def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
+def IntLit(value: Long): Literal = Literal(value, symbols.builtins.TInt)
 def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
 def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
 def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
@@ -483,7 +485,7 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: EffectsOrVar)
+  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: EffectsOrVar)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
   case BlockTypeWildcard
 }
@@ -516,7 +518,7 @@ object Named {
 
   type Params = ValueParam | BlockParam
   type Externs = ExternDef | ExternResource | ExternInterface | ExternType
-  type Defs = FunDef | ValDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
+  type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
   type Types = ValueTypeRef | BlockTypeRef
@@ -529,6 +531,7 @@ object Named {
     case FunDef       => symbols.UserFunction
     case ValDef       => symbols.Binder.ValBinder // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
     case VarDef       => symbols.Binder.VarBinder
+    case RegDef       => symbols.Binder.RegBinder
     case DefDef       => symbols.Binder.DefBinder
     case InterfaceDef => symbols.BlockTypeConstructor.Interface
     case DataDef      => symbols.TypeConstructor.DataType
@@ -560,7 +563,7 @@ object Named {
 
     // Vars
     case Var    => symbols.TermSymbol
-    case Assign => symbols.Binder.VarBinder
+    case Assign => symbols.RefBinder
 
     // CallLike
     case Do         => symbols.Operation
@@ -714,6 +717,10 @@ object Tree {
     def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
+
+    def query(t: Template[Term])(using Context, Ctx): Res =
+      combineAll(t.args.map(query))
+
 
     inline def structuralQuery[T <: Tree](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Context, Ctx): Res =
       visit(el) { t =>

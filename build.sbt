@@ -1,17 +1,18 @@
 import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
+import benchmarks._
 
 // additional targets that can be used in sbt
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
 lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 lazy val install = taskKey[Unit]("Installs the current version locally")
+lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 
-
-lazy val effektVersion = "0.2.0"
+lazy val effektVersion = "0.2.1"
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -19,7 +20,8 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "3.2.0",
+  scalaVersion := "3.3.1",
+  semanticdbEnabled := true,
   scalacOptions ++= Seq(
     "-encoding", "utf8",
     "-deprecation",
@@ -27,6 +29,9 @@ lazy val commonSettings = Seq(
     // "-Xlint",
     // "-Xcheck-macros",
     "-Xfatal-warnings",
+    // we can use scalafix's organize imports once the next Scala version is out.
+    // https://github.com/scalacenter/scalafix/pull/1800
+    // "-Wunused:imports",
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
@@ -86,7 +91,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
     // show duration of the tests
-    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
+    Test / testOptions += Tests.Argument(TestFrameworks.MUnit, "-oD"),
 
     // disable tests for assembly to speed up build
     assembly / test := {},
@@ -116,6 +121,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "licenses",
 
+    // cli flag so sbt doesn't crash when effekt does
+    addCommandAlias("run", "runMain effekt.Server --noexit-on-error"),
 
     assembleBinary := {
       val jarfile = assembly.value
@@ -155,10 +162,27 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     },
     generateDocumentation := TreeDocs.replacer.value,
     Compile / sourceGenerators += versionGenerator.taskValue,
-    Compile / sourceGenerators += TreeDocs.generator.taskValue
+    Compile / sourceGenerators += TreeDocs.generator.taskValue,
+
+    collectBenchmarks := benchmarks.collect.value,
+    buildBenchmarks   := benchmarks.build.value,
+    bench             := benchmarks.measure.value
   )
   .jsSettings(
+
+    assembleJS := {
+      (Compile / clean).value
+      (Compile / compile).value
+      val jsFile = (Compile / fullOptJS).value.data
+      val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
+      IO.copyFile(jsFile, outputFile)
+    },
+
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
+
+    testFrameworks += new TestFramework("utest.runner.Framework"),
 
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
@@ -213,8 +237,8 @@ lazy val stdLibGenerator = Def.task {
 
     val virtuals = resources.get.map { file =>
       val filename = file.relativeTo(baseDir).get
-      val content = IO.read(file).replaceAllLiterally("$", "$$")
-      s"""file(raw\"\"\"$filename\"\"\").write(raw\"\"\"$content\"\"\")"""
+      val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
+      s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
     }
 
     val scalaCode =
@@ -223,6 +247,9 @@ package effekt.util
 import effekt.util.paths._
 
 object Resources {
+
+  def loadIntoFile(filename: String, contents: String): Unit =
+    file(filename).write(contents.replace("!!!MULTILINEMARKER!!!", "\\"\\"\\""))
 
   def load() = {
 ${virtuals.mkString("\n\n")}

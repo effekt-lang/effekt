@@ -9,7 +9,7 @@ trait Intelligence {
   import effekt.symbols._
   import builtins.TState
 
-  type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
+  type EffektTree = kiama.relation.Tree[AnyRef & Product, ModuleDecl]
 
   case class SymbolInfo(
     symbol: Symbol,
@@ -39,8 +39,9 @@ trait Intelligence {
   def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
     decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
+    allTrees = tree.nodes.collect { case t: Tree => t }
     pos = C.positions
-    trees = pos.findNodesContaining(tree.nodes, position)
+    trees = pos.findNodesContaining(allTrees, position)
     nodes = trees.sortWith {
       (t1, t2) =>
         val p1s = pos.getStart(t1).get
@@ -76,16 +77,12 @@ trait Intelligence {
     case u: Binder       => Some(u.decl)
     case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
-    case s: SelfParam => s.tree match {
-      case d: source.Def => Some(d.id)
-      case _             => Some(s.tree)
-    }
     case u => C.definitionTreeOption(u)
   }
 
   // For now, only show the first call target
   def resolveCallTarget(sym: Symbol): Symbol = sym match {
-    case t: CallTarget => t.symbols.flatten.head
+    case t: CallTarget => t.symbols.flatten.headOption.getOrElse(sym)
     case s             => s
   }
 
@@ -204,27 +201,6 @@ trait Intelligence {
 
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
-    case s: SelfParam =>
-
-      val ex =
-        s"""|Each function definition and handler implicitly introduces a
-            |a local region to allocate mutable variables into.
-            |
-            |The region a variable is allocated into not only affects its lifetime, but
-            |also its backtracking behavior in combination with continuation capture and
-            |resumption.
-            |""".stripMargin
-
-      SymbolInfo(s, "Self region", None, Some(ex))
-
-    case c: ValueParam =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value parameter", signature, None)
-
-    case c: ValBinder =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value binder", signature, None)
-
     case c: VarBinder =>
       val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
 
@@ -239,6 +215,24 @@ trait Intelligence {
          """.stripMargin
 
       SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
+
+    case s: RegBinder =>
+
+      val ex =
+        pp"""|The region a variable is allocated into (${s.region}) not only affects its lifetime, but
+             |also its backtracking behavior in combination with continuation capture and
+             |resumption.
+             |""".stripMargin
+
+      SymbolInfo(s, "Variable in region", None, Some(ex))
+
+    case c: ValueParam =>
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Value parameter", signature, None)
+
+    case c: ValBinder =>
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Value binder", signature, None)
 
     case c: DefBinder =>
       val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }

@@ -1,7 +1,10 @@
-type Foo { A() }
+type Mono { ConstructMono(n: Int) }
+type Poly[A] { ConstructPoly(a: A) }
 
-def hof{ a : () => Foo }: Foo = a()
+def hofMono { f : (Int) => Mono }: Mono = f(42)
+def hofPoly { f : [A](A) => Poly[A] }: Poly[Int] = f(42)
 
 def main() = {
-   hof{A}
+   hofMono {ConstructMono};
+   hofPoly {ConstructPoly}
 }

@@ -1,23 +1,21 @@
 module effekt
 
 // Runtime
+// TODO split runtime into monadic and direct
 extern include "effekt_runtime.js"
 
 // Builtins
 extern include "effekt_builtins.js"
-
-// Pattern Matching
-extern include "effekt_matching.js"
 
 def locally[R] { f: => R }: R = f()
 
 // Side effecting ops
 // ==================
 extern io def println[R](value: R): Unit =
-  "println$impl(value)"
+  "println$impl(${value})"
 
 extern io def inspect[R](value: R): Unit =
-  "console.log(value)"
+  "console.log(${value})"
 
 extern io def random(): Double =
   "Math.random()"
@@ -29,73 +27,73 @@ extern io def timestamp(): Int =
 // ====================
 // the following type is defined in builtins.scala
 // interface Ref[T] { def get(): T; def put(t: T): Unit }
-extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = "r.fresh(t)"
-extern io def freshGlobal[T](t: T): Ref[T] at {global} = "$effekt.fresh(t)"
+extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = "r.fresh(${t})"
+extern io def freshGlobal[T](t: T): Ref[T] at {global} = "$effekt.fresh(${t})"
 
 // String ops
 // ==========
 extern pure def show[R](value: R): String =
-  "show$impl(value)"
+  "show$impl(${value})"
 
 extern pure def infixConcat(s1: String, s2: String): String =
-  "s1 + s2"
+  "${s1} + ${s2}"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(x + y)"
+  "(${x} + ${y})"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(x * y)"
+  "(${x} * ${y})"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "Math.floor(x / y)"
+  "Math.floor(${x} / ${y})"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(x - y)"
+  "(${x} - ${y})"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(x % y)"
+  "(${x} % ${y})"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(x + y)"
+  "(${x} + ${y})"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(x * y)"
+  "(${x} * ${y})"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(x - y)"
+  "(${x} - ${y})"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(x / y)"
+  "(${x} / ${y})"
 
 
 extern pure def cos(x: Double): Double =
-  "Math.cos(x)"
+  "Math.cos(${x})"
 
 extern pure def sin(x: Double): Double =
-  "Math.sin(x)"
+  "Math.sin(${x})"
 
 extern pure def atan(x: Double): Double =
-  "Math.atan(x)"
+  "Math.atan(${x})"
 
 extern pure def tan(x: Double): Double =
-  "Math.tan(x)"
+  "Math.tan(${x})"
 
 extern pure def sqrt(x: Double): Double =
-  "Math.sqrt(x)"
+  "Math.sqrt(${x})"
 
 extern pure def square(x: Double): Double =
-  "(x * x)"
+  "(${x} * ${x})"
 
 extern pure def log(x: Double): Double =
-  "Math.log(x)"
+  "Math.log(${x})"
 
 extern pure def log1p(x: Double): Double =
-  "Math.log1p(x)"
+  "Math.log1p(${x})"
 
 extern pure def exp(x: Double): Double =
-  "Math.exp(x)"
+  "Math.exp(${x})"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
@@ -104,73 +102,78 @@ extern pure def _pi(): Double =
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "Math.round(d)"
+  "Math.round(${d})"
 
 extern pure def toDouble(d: Int): Double =
-  "d"
+  "${d}"
 
 extern pure def floor(d: Double): Int =
-  "Math.floor(d)"
+  "Math.floor(${d})"
 
 extern pure def ceil(d: Double): Int =
-  "Math.ceil(d)"
+  "Math.ceil(${d})"
 
+def min(n: Int, m: Int): Int =
+    if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+    if (n > m) n else m
 
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Boolean =
-  "equals$impl(x, y)"
+  "equals$impl(${x}, ${y})"
 
 extern pure def infixNeq[R](x: R, y: R): Boolean =
-  "!equals$impl(x, y)"
+  "!equals$impl(${x}, ${y})"
 
 extern pure def infixLt(x: Int, y: Int): Boolean =
-  "x < y"
+  "(${x} < ${y})"
 
 extern pure def infixLte(x: Int, y: Int): Boolean =
-  "x <= y"
+  "(${x} <= ${y})"
 
 extern pure def infixGt(x: Int, y: Int): Boolean =
-  "x > y"
+  "(${x} > ${y})"
 
 extern pure def infixGte(x: Int, y: Int): Boolean =
-  "x >= y"
+  "(${x} >= ${y})"
 
 extern pure def infixLt(x: Double, y: Double): Boolean =
-  "x < y"
+  "(${x} < ${y})"
 
 extern pure def infixLte(x: Double, y: Double): Boolean =
-  "x <= y"
+  "(${x} <= ${y})"
 
 extern pure def infixGt(x: Double, y: Double): Boolean =
-  "x > y"
+  "(${x} > ${y})"
 
 extern pure def infixGte(x: Double, y: Double): Boolean =
-  "x >= y"
+  "(${x} >= ${y})"
 
 extern pure def infixLt(x: String, y: String): Boolean =
-  "x < y"
+  "(${x} < ${y})"
 
 extern pure def infixLte(x: String, y: String): Boolean =
-  "x <= y"
+  "(${x} <= ${y})"
 
 extern pure def infixGt(x: String, y: String): Boolean =
-  "x > y"
+  "(${x} > ${y})"
 
 extern pure def infixGte(x: String, y: String): Boolean =
-  "x >= y"
+  "(${x} >= ${y})"
 
 // Boolean ops
 // ===========
 // for now those are considered eager
 extern pure def not(b: Boolean): Boolean =
-  "!b"
+  "!${b}"
 
 extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-  "x || y"
+  "(${x} || ${y})"
 
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-  "x && y"
+  "(${x} && ${y})"
 
 // Undefined and Null
 // ==================
@@ -178,11 +181,11 @@ extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
 
 // Is something an undefined JavaScript value?
 extern pure def isUndefined[A](value: A): Boolean =
-  "value === undefined"
+  "(${value} === undefined)"
 
 // Is something a JavaScript null value?
 extern pure def isNull[A](value: A): Boolean =
-  "value === null"
+  "(${value} === null)"
 
 // Pairs
 // =====
@@ -197,7 +200,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "(function() { throw msg })()"
+  "(function() { throw ${msg} })()"
 
 effect Exception[E] {
   def raise[A](exception: E, msg: String): A
@@ -221,16 +224,31 @@ def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
 
 // Control Flow
 // ============
-def each(start: Int, end: Int) { action: (Int) => Unit } = {
+effect Control {
+  def break(): Unit
+  def continue(): Unit
+}
+
+def loop { f: () => Unit / Control }: Unit = try {
+  def go(): Unit = { f(); go() }
+  go()
+} with Control {
+  def break() = ()
+  def continue() = loop { f }
+}
+
+/**
+ * Calls provided action repeatedly. `start` is inclusive, `end` is not.
+ */
+def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
   var i = start;
-  while (i < end) {
-      action(i)
-      i = i + 1
+  loop {
+    if (i < end) { val el = i; i = i + 1; action(el) }
+    else { do break() }
   }
 }
 
-def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
-
+def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
 
 
 // Benchmarking
@@ -239,10 +257,10 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 // Current time in nanoseconds
 // TODO use a better timer
 extern control def currentTimeNanos(): Int =
-  "$effekt.delayed(() => new Date().getTime() * 1000)"
+  "$effekt.delayed(() => new Date().getTime() * 1000000)"
 
 extern io def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
-  "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
+  "(function() { window.setTimeout(() => ${callback}().run(), ${timeout}); return $effekt.unit; })()"
 
 // runs the block and returns the time in nanoseconds
 def timed { block: => Unit }: Int = {

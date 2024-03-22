@@ -17,4 +17,13 @@ def main() = {
     println(show(get(arr, 4)));
     put(arr, 4, "foo");
     println(show(get(arr, 4)))
+
+    val arrWithVals = fill(4, "Hello World");
+    println(arrWithVals)
+
+    val arrByF = build(5){ i => i };
+    println(arrByF);
+
+    var arrByList = fromList([1, 5, 17]);
+    println(arrByList)
 }

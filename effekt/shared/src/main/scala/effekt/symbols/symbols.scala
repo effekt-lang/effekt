@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{Def, DefDef, FunDef, ModuleDecl, ValDef, VarDef}
+import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef, RegDef }
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -79,23 +79,30 @@ case class Module(
   }
 }
 
+/**
+ * A binder of references (type Ref[T]), can be a local variable
+ * or a region allocation.
+ */
+sealed trait RefBinder extends BlockSymbol
+
 sealed trait Param extends TermSymbol
 case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSymbol
 
-enum TrackedParam(val name: Name) extends Param, BlockSymbol {
 
-  case BlockParam(n: Name, tpe: BlockType) extends TrackedParam(n)
-  case ResumeParam(module: Module) extends TrackedParam(Name.local("resume"))
-  case SelfParam(tree: source.Tree) extends TrackedParam(Name.local("this"))
-  case ExternResource(n: Name, tpe: BlockType) extends TrackedParam(n)
-
+sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
   lazy val capture: Capture = this match {
     case b: BlockParam => CaptureParam(b.name)
     case r: ResumeParam => ???
-    case s: SelfParam => LexicalRegion(name, s.tree)
+    case s: VarBinder => LexicalRegion(name, s.decl)
     case r: ExternResource => Resource(name)
   }
+}
+object TrackedParam {
+  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
+  case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
+  case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
+
 }
 export TrackedParam.*
 
@@ -106,16 +113,35 @@ trait Callable extends BlockSymbol {
   def bparams: List[BlockParam]
   def annotatedResult: Option[ValueType]
   def annotatedEffects: Option[EffectsOrRef]
+
+   // invariant: only works if ret is defined!
+  def toType: FunctionType = annotatedType.get
+
+  def toType(ret: ValueType, effects: EffectsOrRef, capabilityParams: List[Capture]): FunctionType =
+    val tps = tparams
+    val vps = vparams.map { p => p.tpe.get }
+    val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
+    FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
+
+  def annotatedType: Option[FunctionType] =
+    for {
+      ret <- annotatedResult;
+      effs <- annotatedEffects
+      effects = effs.distinct
+      // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
+      //   in the future namer needs to annotate the function with the capture parameters it introduced.
+      capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
+    } yield toType(ret, effects, capt)
 }
 
 case class UserFunction(
-                         name: Name,
-                         tparams: List[TypeParam],
-                         vparams: List[ValueParam],
-                         bparams: List[BlockParam],
-                         annotatedResult: Option[ValueType],
-                         annotatedEffects: Option[EffectsOrRef],
-                         decl: FunDef
+  name: Name,
+  tparams: List[TypeParam],
+  vparams: List[ValueParam],
+  bparams: List[BlockParam],
+  annotatedResult: Option[ValueType],
+  annotatedEffects: Option[EffectsOrRef],
+  decl: FunDef
 ) extends Callable
 
 /**
@@ -145,7 +171,8 @@ enum Binder extends TermSymbol {
   def decl: Def
 
   case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
-  case VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder, BlockSymbol
+  case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
+  case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
   case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
 export Binder.*
@@ -311,7 +338,7 @@ enum Capture extends CaptVar {
   case CaptureParam(name: Name)
 
   /**
-   * Self region of functions and handlers (they count in as `io` when considering direct style)
+   * Region of local mutable state (they count in as `control` when considering direct style)
    */
   case LexicalRegion(name: Name, tree: source.Tree)
 
@@ -338,6 +365,7 @@ object CaptUnificationVar {
   case class VariableInstantiation(underlying: Capture | CaptureSetWildcard, call: source.Tree) extends Role
   case class HandlerRegion(handler: source.TryHandle) extends Role
   case class RegionRegion(handler: source.Region) extends Role
+  case class VarRegion(definition: source.VarDef) extends Role
   case class FunctionRegion(fun: source.FunDef) extends Role
   case class BlockRegion(fun: source.DefDef) extends Role
   case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role
@@ -352,7 +380,10 @@ object CaptUnificationVar {
  * Capture Sets
  */
 
-sealed trait Captures
+sealed trait Captures {
+  def pureOrIO: Boolean = sys error "Can only check for purity on (concerte) CaptureSets"
+  def pure: Boolean = sys error "Can only check for purity on (concerte) CaptureSets"
+}
 
 case class CaptureSet(captures: Set[Capture]) extends Captures {
   // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
@@ -360,6 +391,17 @@ case class CaptureSet(captures: Set[Capture]) extends Captures {
   def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
   def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
+
+  override def pureOrIO: Boolean = captures.forall { c =>
+    def isIO = c == builtins.IOCapability.capture
+    // mutable state is now in CPS and not considered IO anymore.
+    def isMutableState = c.isInstanceOf[LexicalRegion]
+    def isResource = c.isInstanceOf[Resource]
+    def isControl = c == builtins.ControlCapability.capture
+    !(isControl || isMutableState) && (isIO || isResource)
+  }
+
+  override def pure: Boolean = captures.isEmpty
 }
 object CaptureSet {
   def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
@@ -375,14 +417,14 @@ case class CaptureSetWildcard(call: source.Tree) extends Captures, CaptVar {
  * FFI
  */
 case class ExternFunction(
-                           name: Name,
-                           tparams: List[TypeParam],
-                           vparams: List[ValueParam],
-                           bparams: List[BlockParam],
-                           result: ValueType,
-                           effects: EffectsOrRef,
-                           capture: Captures,
-                           body: String = ""
+  name: Name,
+  tparams: List[TypeParam],
+  vparams: List[ValueParam],
+  bparams: List[BlockParam],
+  result: ValueType,
+  effects: EffectsOrRef,
+  capture: Captures,
+  body: Template[source.Term]
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)

@@ -12,6 +12,7 @@ class LLVMTests extends EffektTests {
 
   override lazy val included: List[File] = List(
     examplesDir / "llvm",
+    examplesDir / "pos" / "list",
   )
 
   /**
@@ -99,9 +100,6 @@ class LLVMTests extends EffektTests {
   )
 
   override lazy val ignored: List[File] = List(
-    // computes the wrong results
-    examplesDir / "llvm" / "nested.effekt",
-
     // Issue #207
     examplesDir / "llvm" / "polymorphism_blockparams.effekt",
   )

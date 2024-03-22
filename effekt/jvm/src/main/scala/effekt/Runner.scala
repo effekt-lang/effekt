@@ -2,8 +2,9 @@ package effekt
 
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
-import effekt.util.paths.{ File, file }
+import effekt.util.paths.{File, file}
 import effekt.util.getOrElseAborting
+import kiama.util.IO
 
 /**
  * Interface used by [[Driver]] and [[EffektTests]] to run a compiled program.
@@ -46,14 +47,20 @@ trait Runner[Executable] {
   def checkSetup(): Either[String, Unit]
 
   /**
-   * Runs the executable (e.g. the main file).
+   * Builds a given executable and returns the resulting path to the executable.
    */
-  def eval(executable: Executable)(using Context): Unit
+  def build(executable: Executable)(using Context): String
+
+  /**
+   * Runs the executable (e.g. the main file) by calling the build function.
+   */
+  def eval(executable: Executable)(using Context): Unit =
+    exec(build(executable))
 
   def canRunExecutable(command: String*): Boolean =
     try {
       Process(command).run(ProcessIO(out => (), in => (), err => ())).exitValue() == 0
-    } catch { _ => false }
+    } catch { case _ => false }
 
   /**
    * Helper function to run an executable
@@ -93,11 +100,19 @@ object JSRunner extends Runner[String] {
     if canRunExecutable("node", "--version") then Right(())
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
 
-  def eval(path: String)(using C: Context): Unit =
-    val out = C.config.outputPath()
-    val jsFile = (out / path).unixPath
-    val jsScript = s"require('${jsFile}').main().run()"
-    exec("node", "--eval", jsScript)
+  /**
+   * Creates an executable `.js` file besides the given `.js` file ([[path]])
+   * and then returns the absolute path of the created executable.
+   */
+  def build(path: String)(using C: Context): String =
+    val out = C.config.outputPath().getAbsolutePath
+    val jsFilePath = (out / path).unixPath
+    // create "executable" using shebang besides the .js file
+    val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
+    val jsScript = s"require('${jsFilePath}').main()"
+    val shebang = "#!/usr/bin/env node"
+    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
+    jsScriptFilePath
 }
 
 trait ChezRunner extends Runner[String] {
@@ -110,10 +125,17 @@ trait ChezRunner extends Runner[String] {
     if canRunExecutable("scheme", "--help") then Right(())
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
-  def eval(path: String)(using C: Context): Unit =
-    val out = C.config.outputPath()
-    val chezFile = (out / path).unixPath
-    exec("scheme", "--script", chezFile)
+  /**
+   * Creates an executable bash script besides the given `.ss` file ([[path]])
+   * and returns the resulting absolute path.
+   */
+  def build(path: String)(using C: Context): String =
+    val out = C.config.outputPath().getAbsolutePath
+    val schemeFilePath = (out / path).unixPath
+    val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
+    val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
+    IO.createFile(bashScriptPath, bashScript, true)
+    bashScriptPath
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -135,8 +157,8 @@ object LLVMRunner extends Runner[String] {
   def standardLibraryPath(root: File): File = root / "libraries" / "llvm"
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
-  lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-12"), List("--version"))
-  lazy val optCmd = discoverExecutable(List("opt", "opt-15", "opt-12"), List("--version"))
+  lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
+  lazy val optCmd = discoverExecutable(List("opt", "opt-15", "opt-16"), List("--version"))
 
   def checkSetup(): Either[String, Unit] =
     gccCmd.getOrElseAborting { return Left("Cannot find gcc. This is required to use the LLVM backend.") }
@@ -150,7 +172,7 @@ object LLVMRunner extends Runner[String] {
    * Requires LLVM and GCC to be installed on the machine.
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
-  def eval(path: String)(using C: Context): Unit =
+  override def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
@@ -168,8 +190,7 @@ object LLVMRunner extends Runner[String] {
     val gccMainFile = (C.config.libPath / "main.c").unixPath
     val executableFile = basePath
     exec(gcc, gccMainFile, "-o", executableFile, objPath)
-
-    exec(executableFile)
+    executableFile
 }
 
 
@@ -187,17 +208,17 @@ object MLRunner extends Runner[String] {
     else Left("Cannot find mlton. This is required to use the ML backend.")
 
   /**
-   * Compile the LLVM source file (`<...>.ll`) to an executable
+   * Compile the MLton source file (`<...>.sml`) to an executable.
    *
-   * Requires LLVM and GCC to be installed on the machine.
-   * Assumes [[path]] has the format "SOMEPATH.ll".
+   * Requires the MLton compiler to be installed on the machine.
+   * Assumes [[path]] has the format "SOMEPATH.sml".
    */
-  def eval(path: String)(using C: Context): Unit =
+  override def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
     val buildFile = (out / "main.mlb").canonicalPath
     val executable = (out / "mlton-main").canonicalPath
     exec("mlton",
       "-default-type", "int64", // to avoid integer overflows
       "-output", executable, buildFile)
-    exec(executable)
+    executable
 }

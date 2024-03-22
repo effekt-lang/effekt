@@ -2,13 +2,18 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
-import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Range, Source, StringSource }
+import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
+import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
 import scala.language.implicitConversions
+
+/**
+ * String templates containing unquotes `${... : T}`
+ */
+case class Template[+T](strings: List[String], args: List[T])
 
 object Parser extends Phase[Source, Parsed] {
 
@@ -107,8 +112,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful).? ~ (`=` ~/> functionBody) ^^ {
-      case id ~ tparams ~ (vparams ~ bparams) ~ eff ~ body => FunDef(id, tparams, vparams, bparams, eff, body)
+    `def` ~/> idDef ~ params ~ (`:` ~> effectful).? ~ (`=` ~/> functionBody) ^^ {
+      case id ~ (tparams ~ vparams ~ bparams) ~ eff ~ body => FunDef(id, tparams, vparams, bparams, eff, body)
     }
 
   lazy val functionBody: P[Stmt] =
@@ -145,18 +150,17 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
-      case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
-        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
+      case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ body =>
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
     }
 
   lazy val externResource: P[Def] =
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
-
-  lazy val externBody: P[String] =
-    ( multilineString
-    | s"(?!${multi})\"([^\"\n]*)\"".r // single-line strings
+  lazy val externBody: P[Template[Term]] =
+    ( multilineString ^^ { s => Template(List(s), Nil) }
+    | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
@@ -177,10 +181,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   /**
    * Parameters
    */
-  lazy val params: P[List[ValueParam] ~ List[BlockParam]] =
-    ( valueParams ~ blockParams
-    | valueParams ~ success(List.empty[BlockParam])
-    | success(List.empty[ValueParam]) ~ blockParams
+  lazy val params: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+    ( maybeTypeParams ~ valueParams ~ blockParams
+    | maybeTypeParams ~ valueParams ~ success(List.empty[BlockParam])
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
@@ -229,7 +233,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case (vps, bps) ~ body => BlockLiteral(Nil, vps, bps, body) : BlockLiteral }
+    ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ {
+      case (tps, vps, bps) ~ body => BlockLiteral(tps, vps, bps, body) : BlockLiteral
+    }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
@@ -246,10 +252,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
 
-  lazy val lambdaParams: P[(List[ValueParam], List[BlockParam])] =
-    ( valueParamsOpt ^^ { ps => (ps, Nil) }
-    | idDef ^^ { id => (List(ValueParam(id, None) : ValueParam), Nil) }
-    | params ^^ { case vps ~ bps => (vps, bps) }
+  lazy val lambdaParams: P[(List[Id], List[ValueParam], List[BlockParam])] =
+    ( params ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
+    | valueParamsOpt ^^ { ps => (Nil, ps, Nil) }
+    | idDef ^^ { id => (Nil, List(ValueParam(id, None) : ValueParam), Nil) }
     )
 
   lazy val maybeValueArgs: P[List[Term]] =
@@ -302,7 +308,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val varDef: P[Def] =
     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`in` ~/> idRef).? ~ (`=` ~/> stmt) ^^ {
-      case id ~ tpe ~ reg ~ expr => VarDef(id, tpe, reg, expr)
+      case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
+      case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
     }
 
   lazy val defDef: P[Def] =
@@ -474,7 +481,11 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val literals: P[Literal] =
     double | int | bool | unit | string
 
-  lazy val int    = integerLiteral ^^ { n => IntLit(n.toInt) }
+  lazy val int    = integerLiteral.flatMap { n =>
+    try { val number = n.toLong;
+      success(IntLit(number).withPositionOf(n))
+    } catch { case e => failure("Not a 64bit integer literal.") }
+  }
   lazy val bool   = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit   = literal("()") ^^^ UnitLit()
   lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
@@ -511,6 +522,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | primValueType
     )
 
+  lazy val maybeValueTypes: P[List[ValueType]] =
+    (`(` ~> manySep(valueType, `,`) <~ `)`).? ^^ { vps => vps.getOrElse(Nil) }
+
   lazy val primValueType: P[ValueType] =
     ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
@@ -524,13 +538,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val blockType: P[BlockType] =
     ( literal("_") ^^^ source.BlockTypeWildcard
-    |  (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
-    |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
-    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
+    | maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
+      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+    }
+    | some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, Nil, tpes, ret, eff) }
+    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(Nil, List(t), Nil, ret, eff) }
     | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
-    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
+    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, Nil, ret, eff) }
     | failure("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
     )
 
@@ -624,6 +640,92 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     }
   }
 
+  /**
+   * Parses the contents of a string and searches for unquotes ${ ... }
+   *
+   * returns the list of unquotes and their respectively preceding string.
+   *
+   *     "   BEFORE   ${ x }   AFTER "
+   *      ^^^^^^^^^^^^  ^^^
+   *        prefix     unquote
+   */
+
+  import scala.collection.mutable
+  import scala.util.boundary
+  import scala.util.boundary.break
+  def templateString[T](contents: Parser[T]): Parser[Template[T]] =
+    Parser { in =>
+      boundary {
+        val content = in.source.content
+        val lastIndex = content.length
+        var pos = in.offset
+
+        // results
+        val strings = mutable.ListBuffer.empty[String]
+        val arguments = mutable.ListBuffer.empty[T]
+
+        // helpers
+        def eos: Boolean =
+          pos >= lastIndex
+
+        def unquoteStart: Boolean =
+          !eos && content.charAt(pos) == '$' && content.charAt(pos + 1) == '{'
+
+        def unquoteEnd: Boolean =
+          !eos && content.charAt(pos) == '}'
+
+        def skipUnquoteStart(): Unit =
+          pos = pos + 2
+
+        def skipUnquoteEnd(): Unit =
+          if (!eos && unquoteEnd) { pos = pos + 1 }
+          else break(kiama.parsing.Error("Expected '}' to close splice within string.", Input(in.source, pos)))
+
+        def quote: Boolean =
+          content.charAt(pos) == '"'
+
+        def whitespace: Boolean = {
+          val ch = content.charAt(pos)
+          ch == ' ' || ch == '\t' ||  ch == '\n' ||  ch == '\r'
+        }
+
+        def skipWhitespace(): Unit =
+          while (whitespace) { pos = pos + 1 }
+
+        def parseQuote(): Unit =
+          if (!eos && quote) { pos = pos + 1 }
+          else break(Failure("Expected \" to start a string", Input(in.source, pos)))
+
+        def parseStringPart(): Unit =
+          val before = pos
+          while (!eos && !quote && !unquoteStart) { pos = pos + 1 }
+          strings.append(content.substring(before, pos))
+
+        def parseUnquote(): Unit = {
+          skipUnquoteStart()
+          skipWhitespace()
+          contents(Input(in.source, pos)) match {
+            case Success(result, next) =>
+              arguments.append(result)
+              pos = next.offset
+            case error: NoSuccess => break(error)
+          }
+          skipWhitespace()
+          skipUnquoteEnd()
+        }
+
+
+        parseQuote()
+        parseStringPart()
+        while (unquoteStart) {
+          parseUnquote()
+          if (!quote) parseStringPart()
+        }
+        parseQuote()
+        Success(Template(strings.toList, arguments.toList), Input(in.source, pos))
+      }
+    }
+
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
@@ -713,7 +815,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   )
 
   def keyword(kw: String): Parser[String] =
-    (s"$kw(?!$nameRest)").r
+    regex((s"$kw(?!$nameRest)").r, kw)
 
   lazy val anyKeyword =
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
@@ -721,17 +823,19 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   /**
    * Whitespace Handling
    */
-  lazy val linebreak = """(\r\n|\n)""".r
-  lazy val singleline = """//[^\n]*(\n|\z)""".r
-  lazy val multiline = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
-  override val whitespace = rep("""\s+""".r | singleline | multiline)
+  lazy val linebreak      = """(\r\n|\n)""".r
+  lazy val singleline     = """//[^\n]*(\n|\z)""".r
+  lazy val multiline      = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
+  lazy val simplespace    = """\s+""".r
+
+  override val whitespace = rep(simplespace | singleline | multiline | failure("Expected whitespace"))
 
   /**
    * Literals
    */
-  lazy val integerLiteral = "([-+])?(0|[1-9][0-9]*)".r
-  lazy val doubleLiteral = "([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r
-  lazy val stringLiteral = """\"([^\"]*)\"""".r
+  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
+  lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
+  lazy val stringLiteral   = regex("""\"(\\.|[^\"])*\"""".r, "String literal")
 
   // Delimiter for multiline strings
   val multi = "\"\"\""

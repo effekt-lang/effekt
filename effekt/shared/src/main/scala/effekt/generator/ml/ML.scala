@@ -3,7 +3,8 @@ package generator
 package ml
 
 import effekt.context.Context
-import effekt.lifted.LiftInference
+import effekt.core.LambdaLifting
+import effekt.lifted.{ LiftInference, Monomorphize }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -50,7 +51,7 @@ class ML extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Lifted => ML
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen ToML map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen Monomorphize andThen ToML map {
     case (mainFile, prog) => (Map("main.mlb" -> buildFile(mainFile),  mainFile -> pretty(prog).layout), mainFile)
   }
 
@@ -70,8 +71,8 @@ class ML extends Compiler[String] {
   // -----------------------------------
   object steps {
     // intermediate steps for VSCode
-    val afterCore = allToCore(Core) map { c => c.main }
-    val afterLift = afterCore andThen LiftInference
+    val afterCore = allToCore(Core) andThen Aggregate andThen core.Optimizer
+    val afterLift = afterCore andThen LiftInference andThen Monomorphize
     val afterML = afterLift andThen ToML map { case (f, prog) => prog }
   }
 

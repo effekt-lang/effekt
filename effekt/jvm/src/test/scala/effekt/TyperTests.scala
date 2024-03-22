@@ -153,8 +153,8 @@ abstract class AbstractTyperTests extends munit.FunSuite {
           findSymbolIn(name,binding,acc)
         case source.DefDef(id, annot, binding) =>
           findSymbolIn(name,binding,acc)
-        case source.VarDef(id, _, reg, binding) =>
-          reg.foreach(findSymbolIn(name,_,acc));
+        case source.RegDef(id, _, reg, binding) =>
+          findSymbolIn(name,reg,acc);
           findSymbolIn(name,binding,acc)
         case source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
           ops.foreach{ o =>

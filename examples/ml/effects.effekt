@@ -1,7 +1,7 @@
 effect Lexer {
   def peek(): Option[String]
   def next(s1: String, s2: String): String
-  def bail[A](): A
+  def bail(): Nothing
 }
 
 def main() = {
@@ -13,7 +13,7 @@ def main() = {
     } with Lexer {
         def peek() = resume(Some("a"))
         def next(s1, s2) = resume(s1)
-        def bail[A]() = "bail"
+        def bail() = "bail"
     };
     println(s)
 }

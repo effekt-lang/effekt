@@ -36,7 +36,7 @@ object TransformerCallCC extends Transformer {
     chez.Let(List(Binding(param, binding)), body)
 
   def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", Variable(main))
+    chez.Builtin("run", chez.Variable(main))
 }
 
 trait Transformer {
@@ -46,6 +46,9 @@ trait Transformer {
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
 
   def runMain(main: ChezName): chez.Expr
+
+  def state(id: ChezName, init: chez.Expr, body: chez.Block): chez.Expr =
+    Builtin("state", init, chez.Lambda(List(id), body))
 
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
@@ -83,11 +86,20 @@ trait Transformer {
 
     case Hole() => chez.Builtin("hole")
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case Var(id, init, capt, body) =>
+      state(nameDef(id), toChez(init), toChez(body))
+
+    case Get(id, capt, tpe) =>
+      chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(id)))
+
+    case Put(id, capt, value) =>
+      chez.Call(chez.Call(nameRef(symbols.builtins.TState.put), nameRef(id)), toChez(value))
+
+    case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
 
-    case State(id, init, region, body) =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
+    case Alloc(id, init, region, body) =>
+      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", chez.Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
@@ -116,12 +128,15 @@ trait Transformer {
   def toChez(decl: core.Extern): chez.Def = decl match {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
-          chez.RawExpr(body)))
+        chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
+          toChez(body)))
 
     case Extern.Include(contents) =>
       RawDef(contents)
   }
+
+  def toChez(t: Template[core.Expr]): chez.Expr =
+    chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
     case Definition.Def(id, block) =>
@@ -161,12 +176,12 @@ trait Transformer {
 
   def toChez(block: Block): chez.Expr = block match {
     case BlockVar(id, _, _) =>
-      Variable(nameRef(id))
+      chez.Variable(nameRef(id))
 
     case b @ BlockLit(tps, cps, vps, bps, body) => toChez(b)
 
     case Member(b, field, tpe) =>
-      chez.Call(Variable(nameRef(field)), List(toChez(b)))
+      chez.Call(chez.Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) => toChez(e)
 
@@ -175,7 +190,7 @@ trait Transformer {
 
   def toChez(impl: Implementation): chez.Expr =
     val ChezName(name) = nameRef(impl.interface.name)
-    chez.Call(Variable(ChezName(name)), impl.operations.map(toChez))
+    chez.Call(chez.Variable(ChezName(name)), impl.operations.map(toChez))
 
   def toChez(op: Operation): chez.Expr = op match {
     case Operation(name, tps, cps, vps, bps, resume, body) =>
@@ -191,6 +206,7 @@ trait Transformer {
 
     case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
+    case Make(data, tag, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 
     case Select(b, field, _) =>
       chez.Call(nameRef(field), toChez(b))
@@ -214,10 +230,10 @@ trait Transformer {
     val value = ChezName("value")
 
     val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-      chez.Lambda(Nil, pure(chez.Builtin("unbox", Variable(ref)))))
+      chez.Lambda(Nil, pure(chez.Builtin("unbox", chez.Variable(ref)))))
 
     val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-      chez.Lambda(List(value), pure(chez.Builtin("set-box!", Variable(ref), Variable(value)))))
+      chez.Lambda(List(value), pure(chez.Builtin("set-box!", chez.Variable(ref), chez.Variable(value)))))
 
     List(getter, setter)
   }

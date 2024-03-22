@@ -42,6 +42,7 @@ object Type {
   val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
 
   val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
+  def TState(tpe: ValueType) = BlockType.Interface(builtins.TState.interface, List(tpe))
 
   /**
    * Function types are the only type constructor that we have subtyping on.
@@ -129,8 +130,12 @@ object Type {
       val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
       allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
 
-    case Stmt.State(id, init, region, ev, body) => body.tpe
+    case Stmt.Alloc(id, init, region, ev, body) => body.tpe
+    case Stmt.Var(init, body) => body.returnType
+    case Stmt.Get(ev, id, tpe) => tpe
+    case Stmt.Put(ev, id, value) => TUnit
     case Stmt.Try(body, handler) => body.returnType
+    case Stmt.Reset(body) => body.tpe
     case Stmt.Region(body) => body.returnType
 
     case Stmt.Shift(ev, body) =>
@@ -146,6 +151,7 @@ object Type {
     case Expr.Run(s) => s.tpe
     case Expr.ValueVar(id, tpe) => tpe
     case Expr.Literal(value, tpe) => tpe
+    case Expr.Make(data, tag, args) => data
     case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs).result
     case Expr.Select(target, field, annotatedType) => annotatedType
     case Expr.Box(block) => ValueType.Boxed(block.tpe)

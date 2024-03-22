@@ -45,7 +45,7 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, body: String)
+  case Extern(name: String, parameters: Environment, returnType: Type, body: Template[Variable])
   case Include(contents: String)
 }
 export Declaration.*
@@ -137,19 +137,19 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. Int x in r = 42; s
+  *  e.g. let x = allocate(42, ev); s
   */
-  case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
+  case Allocate(name: Variable, init: Variable, ev: Variable, rest: Statement)
 
   /**
-  * e.g. y = *x; s
+  * e.g. let y = load(x, ev); s
   */
-  case Load(name: Variable, ref: Variable, rest: Statement)
+  case Load(name: Variable, ref: Variable, ev: Variable, rest: Statement)
 
   /**
-  * e.g. *x = 42; s
+  * e.g. store(x, 42, ev); s
   */
-  case Store(ref: Variable, value: Variable, rest: Statement)
+  case Store(ref: Variable, value: Variable, ev: Variable, rest: Statement)
 
   /**
    * e.g. push { (x, ...) => s }; s
@@ -162,9 +162,9 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * e.g. let k = stack with region r { (x, ...) => s }; s
+   * e.g. let k = stack { (x, ...) => s }; s
    */
-  case NewStack(name: Variable, region: Variable, frame: Clause, rest: Statement)
+  case NewStack(name: Variable, frame: Clause, rest: Statement)
 
   /**
    * e.g. push k; s
@@ -191,7 +191,7 @@ enum Statement {
   /**
    * let x = 42; s
    */
-  case LiteralInt(name: Variable, value: Int, rest: Statement)
+  case LiteralInt(name: Variable, value: Long, rest: Statement)
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
@@ -216,7 +216,6 @@ enum Type {
   case Double()
   case String()
   case Reference(tpe: Type)
-  case Region()
 }
 export Type.{ Positive, Negative }
 

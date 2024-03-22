@@ -6,6 +6,7 @@ import effekt.context.Context
 import effekt.lifted.*
 import effekt.core.Id
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
+import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -91,7 +92,7 @@ object Transformer {
         val (noDependencies, rest) = todo.partition { d => (fvs(id(d)) -- emitted).isEmpty }
         if (noDependencies.isEmpty) {
           val mutuals = rest.map(id).mkString(", ")
-          C.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitinos could be mutually recursive: ${mutuals} ")
+          C.abort(s"Mutual definitions are currently not supported by this backend.\nThe following definitions could be mutually recursive: ${mutuals} ")
         } else go(rest, noDependencies ++ out, emitted ++ noDependencies.map(id).toSet)
     }
 
@@ -184,84 +185,154 @@ object Transformer {
 
   def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id.name)) }, RawExpr(body))
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
     case Extern.Include(contents) =>
       RawBind(contents)
   }
 
+  def toML(t: Template[lifted.Expr])(using TransformerContext): ml.Expr =
+    ml.RawExpr(t.strings, t.args.map(e => toML(e)))
+
   def toMLExpr(stmt: Stmt)(using C: TransformerContext): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
 
-    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), _, List(ev)) =>
-      CPS.pure(ml.Expr.Deref(ml.Variable(name(x))))
+    case lifted.Get(id, ev, tpe) =>
+      // ev (k => s => k s s)
+      CPS.lift(ev.lifts,
+        // TODO share the reified s
+        CPS.reflected { k => CPS.reflected { s => k(s.reify)(s) }})
 
-    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), _, List(ev, value)) =>
-      CPS.pure(ml.Expr.Assign(ml.Variable(name(x)), toML(value)))
+
+    case lifted.Put(id, ev, value) =>
+      // ev (k => s2 => k () value)
+      CPS.lift(ev.lifts,
+        CPS.reflected { k => CPS.reflected { s2 => k(ml.Consts.unitVal)(toML(value)) }})
 
     case lifted.App(b, targs, args) => CPS.inline { k =>
       ml.Expr.Call(toML(b), (args map toML) ++ List(k.reify))
     }
 
+    // As long as one of the two branches is known to be in CPS we "pull out" the
+    // static continuation.
+    // Then, the continuation is reified in order to generate a join-point.
     case lifted.If(cond, thn, els) =>
-      CPS.join { k =>
-        ml.If(toML(cond), toMLExpr(thn)(k), toMLExpr(els)(k))
-      }
+      CPS.reified(CPS.zip(toMLExpr(thn), toMLExpr(els)) { case (e1, e2) =>
+        CPS.reified {
+          ml.If(toML(cond), e1, e2)
+        }
+      }.reify())
 
     case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
-        CPS.inline { k =>
-          ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k))
-        }
+        toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
 
-    case lifted.Match(scrutinee, clauses, default) => CPS.join { k =>
-      def clauseToML(c: (Id, BlockLit)): ml.MatchClause = {
+    case lifted.Match(scrutinee, clauses, default) =>
+      def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {
         val (id, b) = c
         val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
         val pattern = ml.Pattern.Datatype(name(id), binders)
-        val body = toMLExpr(b.body)(k)
-        ml.MatchClause(pattern, body)
+        (pattern, toMLExpr(b.body))
       }
 
-      ml.Match(toML(scrutinee), clauses map clauseToML, default map { d => toMLExpr(d)(k) })
-    }
+      val (patterns, bodies) = clauses.map(clauseToML).unzip
+
+      // We eta-expand all computations (including the default clause).
+      val prog = CPS.zipAll(default.toList.map(toMLExpr) ++ bodies) {
+        // no default clause
+        case mlBodies if default.isEmpty =>
+          val mlClauses = (patterns zip mlBodies).map { ml.MatchClause.apply }
+          CPS.reified(ml.Match(toML(scrutinee), mlClauses, None))
+
+        case default :: mlBodies =>
+          val mlClauses = (patterns zip mlBodies).map { ml.MatchClause.apply }
+          CPS.reified(ml.Match(toML(scrutinee), mlClauses, Some(default)))
+
+        case _ => INTERNAL_ERROR("Cannot happen since default is non empty")
+      }
+
+      // create join points
+      CPS.reified(prog.reify())
 
     // TODO maybe don't drop the continuation here? Although, it is dead code.
-    case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
+    case lifted.Hole() => CPS.inline { k => ml.RawExpr("raise Hole") }
 
-    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(sortDefinitions(definitions).map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.reflected { k =>
+      // TODO couldn't it be that the definitions require the continuation?
+      //  Right now, the continuation is only passed to the body.
+      toMLExpr(body)(k).mapComputation { b => ml.mkLet(sortDefinitions(definitions).map(toML), b) }
+    }
 
-    case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
+    case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
-        ml.mkLet(List(bind), toMLExpr(body)(k))
+        ml.mkLet(List(bind), toMLExpr(body)(k).reify())
       }
 
-    case lifted.State(id, init, region, ev, body) =>
+    case lifted.Alloc(id, init, region, ev, body) =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
-        ml.mkLet(List(bind), toMLExpr(body)(k))
+        ml.mkLet(List(bind), toMLExpr(body)(k).reify())
       }
 
+    // Only used before monomorphization
+    // [[ state(init) { (ev, x) => stmt } ]]_k = [[ { ev => stmt } ]] LIFT_STATE (a => s => k a)
+    case Var(init, Block.BlockLit(_, List(ev, x), body)) =>
+      CPS.inline { k =>
+        // a => s => k a
+        val returnCont = Continuation.Static { a => CPS.reflected { s => k(a) } }
+
+        // m => k => s => m (a => k a s)
+        def lift = {
+          val m = freshName("m")
+          val k = freshName("k")
+          val a = freshName("a")
+          val s = freshName("s")
+          ml.Lambda(m)(ml.Lambda(k)(ml.Lambda(s)(
+            ml.Call(m)(ml.Lambda(a)(ml.Call(ml.Call(k)(a))(s))))))
+        }
+
+        ml.mkLet(List(Binding.ValBind(name(ev.id), lift)),
+          toMLExpr(body)(returnCont)(toML(init)).reify())
+      }
+    // after monomorphization
+    case Var(init, Block.BlockLit(_, List(x), body)) =>
+      CPS.reflected { k =>
+        // a => s => k a
+        val returnCont = Continuation.Static { a => CPS.reflected { s => k(a) } }
+        toMLExpr(body)(returnCont)(toML(init))
+      }
+    case v: Var => C.panic("The body of var is always a block lit with two arguments (evidence and block)")
+
+    // Only used before monomorphization
     case lifted.Try(body, handler) =>
       val args = ml.Consts.lift :: handler.map(toML)
-      CPS.inline { k =>
-        ml.Call(CPS.reset(ml.Call(toML(body))(args: _*)), List(k.reify))
+      CPS.reflected { k =>
+        CPS.reset(ml.Call(toML(body))(args: _*))(k)
       }
 
+    case Reset(body) =>
+      toMLExpr(body)(CPS.pure)
+
+    // non-monomorphized version (without the scoped resumptions requirement)
     // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
-    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
-      CPS.lift(ev.lifts, CPS.inline { k1 =>
-        val a = freshName("a")
-        val ev = freshName("ev")
-        mkLet(List(
-          ml.Binding.FunBind(toML(kparam), List(ml.Param.Named(ev), ml.Param.Named(a)),
-            ml.Call(ev)(ml.Call(k1.reify)(ml.Expr.Variable(a))))),
-          toMLExpr(body).reify())
-      })
+    //    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
+    //      CPS.lift(ev.lifts, CPS.inline { k1 =>
+    //        val a = freshName("a")
+    //        val ev = freshName("ev")
+    //        mkLet(List(
+    //          ml.Binding.FunBind(toML(kparam), List(ml.Param.Named(ev), ml.Param.Named(a)),
+    //            ml.Call(ev)(ml.Call(k1.reify)(ml.Expr.Variable(a))))),
+    //          toMLExpr(body).reify())
+    //      })
 
-    case Shift(_, _) => C.panic("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
+    // monomorphized version (with scoped resumptions requirement)
+    case Shift(ev, body) =>
+      CPS.lift(ev.lifts, CPS.reflected(CPS.reflect(toML(body))))
 
+    //    case Shift(_, _) => INTERNAL_ERROR("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
+
+    // Only used before monomorphization
     case Region(body) =>
       CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
   }
@@ -274,7 +345,13 @@ object Transformer {
     binding match {
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
-        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
+      case New(impl) =>
+        toML(impl) match {
+          case ml.Lambda(ps, body) =>
+            ml.FunBind(name(id), ps, body)
+          case other => ml.ValBind(name(id), other)
+        }
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
@@ -289,7 +366,7 @@ object Transformer {
   def toML(block: BlockLit)(using TransformerContext): ml.Lambda = block match {
     case BlockLit(tparams, params, body) =>
       val k = freshName("k")
-      ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
+      ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
   }
 
   def toML(block: Block)(using C: TransformerContext): ml.Expr = block match {
@@ -300,7 +377,7 @@ object Transformer {
       toML(b)
 
     case lifted.Member(b, field, annotatedType) =>
-      ml.Call(C.accessorCache(field))(toML(b))
+      ml.Call(C.accessorCache(field))(ml.Call(toML(b))())
 
     case lifted.Unbox(e) => toML(e) // not sound
 
@@ -309,7 +386,9 @@ object Transformer {
 
   def toML(impl: Implementation)(using TransformerContext): ml.Expr = impl match {
     case Implementation(interface, operations) =>
-      ml.Expr.Make(interfaceNameFor(operations.size), expsToTupleIsh(operations map toML))
+      ml.Lambda() {
+        ml.Expr.Make(interfaceNameFor(operations.size), expsToTupleIsh(operations map toML))
+      }
   }
 
   def toML(op: Operation)(using TransformerContext): ml.Expr = toML(op.implementation)
@@ -324,7 +403,7 @@ object Transformer {
   def toML(l: Lift): ml.Expr = l match {
     case Lift.Try() => Consts.lift
     case Lift.Var(x) => Variable(name(x))
-    case Lift.Reg() => effekt.util.messages.FIXME(Consts.lift, "Translate to proper lift on state")
+    case Lift.Reg() => Consts.lift
   }
 
   def toML(expr: Expr)(using C: TransformerContext): ml.Expr = expr match {
@@ -350,20 +429,16 @@ object Transformer {
       }
     case ValueVar(id, _) => ml.Variable(name(id))
 
+    case Make(data, tag, vargs) =>
+      ml.Expr.Make(name(tag), expsToTupleIsh(vargs map toML))
+
     case PureApp(b, _, args) =>
       val mlArgs = args map {
         case e: Expr => toML(e)
         case b: Block => toML(b)
         case e: Evidence => toML(e)
       }
-      b match {
-        // TODO do not use symbols here, but look up in module declaration
-        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _)), _) =>
-          ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
-        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _)), _) =>
-          ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
-        case _ => ml.Call(toML(b), mlArgs)
-      }
+      ml.Call(toML(b), mlArgs)
 
     case Select(b, field, _) =>
       ml.Call(name(field))(toML(b))
@@ -375,79 +450,142 @@ object Transformer {
 
   enum Continuation {
     case Dynamic(cont: ml.Expr)
-    case Static(cont: ml.Expr => ml.Expr)
+    case Static(cont: ml.Expr => CPS)
 
-    def apply(e: ml.Expr): ml.Expr = this match {
-      case Continuation.Dynamic(k) => ml.Call(k)(e)
+    // Apply this continuation to its argument
+    def apply(e: ml.Expr): CPS = this match {
+      case Continuation.Dynamic(k) => CPS.reified(ml.Call(k)(e))
       case Continuation.Static(k) => k(e)
     }
+
+    // Reify this continuation fully into an ML expression
     def reify: ml.Expr = this match {
       case Continuation.Dynamic(k) => k
       case Continuation.Static(k) =>
         val a = freshName("a")
-        ml.Lambda(ml.Param.Named(a))(k(ml.Variable(a)))
+        ml.Lambda(ml.Param.Named(a)) { k(ml.Variable(a)).reify() }
     }
-    def reflect: ml.Expr => ml.Expr = this match {
+
+    // Reflect one layer of this continuation
+    def reflect: ml.Expr => CPS = this match {
       case Continuation.Static(k) => k
-      case Continuation.Dynamic(k) => a => ml.Call(k)(a)
+      // here reflection could also be improved
+      case Continuation.Dynamic(k) => a => CPS.reified(ml.Call(k)(a))
     }
   }
 
-  class CPS(prog: Continuation => ml.Expr) {
-    def apply(k: Continuation): ml.Expr = prog(k)
-    def apply(k: ml.Expr): ml.Expr = prog(Continuation.Dynamic(k))
-    def apply(k: ml.Expr => ml.Expr): ml.Expr = prog(Continuation.Static(k))
 
-    def flatMap(f: ml.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
+  enum CPS {
+
+    case Reflected(prog: Continuation => CPS)
+    case Reified(prog: ml.Expr)
+
+    // TODO maybe differentiate between reflected control and state?
+    //    case class State(expr: ml.Expr)
+    //    case ReflectState(prog: State => CPS)
+
+    // "reset" this CPS term with the given continuation
+    def apply(k: Continuation): CPS = this match {
+      case CPS.Reflected(prog) => prog(k)
+      case CPS.Reified(prog) => CPS.reflect(prog)(k)
+    }
+    def apply(k: ml.Expr): CPS = apply(Continuation.Dynamic(k))
+    def apply(k: ml.Expr => CPS): CPS = apply(Continuation.Static(k))
+
+    def flatMap(f: ml.Expr => CPS): CPS = this match {
+      case Reflected(prog) => Reflected(k => prog(Continuation.Static(a => f(a)(k))))
+      case Reified(prog) => Reflected(k => CPS.reflect(prog)(Continuation.Static(a => f(a)(k))) )
+    }
+
     def map(f: ml.Expr => ml.Expr): CPS = flatMap(a => CPS.pure(f(a)))
-    def run: ml.Expr = prog(Continuation.Static(a => a))
-    def reify(): ml.Expr =
-      val k = freshName("k")
-      ml.Lambda(ml.Param.Named(k))(this.apply(Continuation.Dynamic(ml.Expr.Variable(k))))
+    def run: ml.Expr = apply(Continuation.Static(a => CPS.reified(a))).reify()
+
+    // Recursively reify this CPS computation into an ML expression
+    def reify(): ml.Expr  = this match {
+      case Reflected(prog) =>
+        val k = freshName("k")
+        ml.Lambda(ml.Param.Named(k))(prog(Continuation.Dynamic(ml.Expr.Variable(k))).reify())
+      case Reified(prog) => prog
+    }
+
+    // f(LAM k => BODY[k])   =  LAM k => f(BODY[k])
+    def mapComputation(f: ml.Expr => ml.Expr): CPS = flatMapComputation { e => CPS.Reified(f(e)) }
+
+    def flatMapComputation(f: ml.Expr => CPS): CPS = this match {
+      case CPS.Reflected(prog) => CPS.reflected { k => prog(k).flatMapComputation(f) }
+      case CPS.Reified(prog) => f(prog)
+    }
+
   }
 
   object CPS {
+    def reified(prog: ml.Expr): CPS = Reified(prog)
+    def reflected(prog: Continuation => CPS): CPS = Reflected(prog)
+    def inline(prog: Continuation => ml.Expr): CPS = Reflected(k => CPS.reified(prog(k)))
 
-    def inline(prog: Continuation => ml.Expr): CPS = CPS(prog)
-    def join(prog: Continuation => ml.Expr): CPS = CPS {
-      case k: Continuation.Dynamic => prog(k)
-      case k: Continuation.Static =>
-        val kName = freshName("k")
-        mkLet(List(ValBind(kName, k.reify)), prog(Continuation.Dynamic(ml.Variable(kName))))
+    // used for join points to distribute continuations to the outside (see if)
+    //  zip (LAM k => s) e f = LAM k => zip s[k] (e k.reify) f
+    //  zip e1 e2 f          = f e1 e2
+    def zip(c1: CPS, c2: CPS)(f: (ml.Expr, ml.Expr) => CPS): CPS = (c1, c2) match {
+      case (CPS.Reified(prog1), CPS.Reified(prog2)) => f(prog1, prog2)
+      case _ => CPS.reflected { k => zip(c1(k), c2(k))(f) }
     }
 
-    def reset(prog: ml.Expr): ml.Expr =
-      ml.Call(prog, List(pure))
+    // generalizing zip from two computations to many (used by match)
+    def zipAll(cs: List[CPS])(f: List[ml.Expr] => CPS): CPS =
+      if cs.forall {
+          case _: Reified => true
+          case _ => false
+        }
+      then f(cs.collect { case Reified(prog) => prog })
+      else CPS.reflected { k => zipAll(cs.map(_.apply(k)))(f) }
+
+    def reset(prog: ml.Expr): CPS =
+      reflect(prog)(pure)
 
     // fn a => fn k2 => k2(a)
-    def pure: ml.Expr =
-      val a = freshName("a")
-      val k2 = freshName("k2")
-      ml.Lambda(ml.Param.Named(a)) { ml.Lambda(ml.Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
+    def pure: Continuation =
+      Continuation.Static { a => CPS.reflected { k2 => k2(a) }}
 
-    def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
-
-    def reflect(e: ml.Expr): CPS =
-      CPS.join { k => ml.Call(e)(k.reify) }
+    // reflect one layer of CPS
+    def reflect(e: ml.Expr): Continuation => CPS = e match {
+      // (k => )
+      case ml.Expr.Lambda(List(ml.Param.Named(k)), body) =>
+        kValue => CPS.reified(utils.substituteTerms(body)(k -> kValue.reify))
+      case ml.Expr.Lambda(ml.Param.Named(k) :: ps, body) =>
+        kValue => CPS.reified(ml.Expr.Lambda(ps, utils.substituteTerms(body)(k -> kValue.reify)))
+      case e =>
+        k => CPS.reified(ml.Call(e)(k.reify))
+    }
 
     // [[ Try() ]] = m k1 k2 => m (fn a => k1 a k2);
     def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
 
-      // TODO implement lift for reg properly
-      case (Lift.Try() | Lift.Reg()) :: lifts =>
-        val k2 = freshName("k2")
-        lift(lifts, CPS.inline { k1 => ml.Lambda(ml.Param.Named(k2)) {
-          m.apply(a => ml.Call(k1.reify)(a, ml.Expr.Variable(k2)))
+      // [[ [Try :: evs](m) ]] = [[evs]](k1 => k2 => m(a => k1 a k2))
+      case Lift.Try() :: lifts =>
+        lift(lifts, CPS.reflected { k1 => CPS.reflected { k2 =>
+          m.apply(a => k1(a)(k2))
         }})
 
-      // [[ [ev :: evs](m) ]] = ev([[ [evs](m) ]])
+      // [[ [Try :: evs](m) ]] = [[evs]](k => s => m(a => k a s))
+      case Lift.Reg() :: lifts =>
+        lift(lifts, CPS.reflected { k => CPS.reflected { s =>
+          m.apply(a => k(a)(s))
+        }})
+
+      // [[ [ev :: evs](m) ]] = [[evs]]( [[ev]](m) )
       case Lift.Var(x) :: lifts =>
-        CPS.reflect(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
+        CPS.reified(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
 
       case Nil => m
     }
 
-    def runMain(main: MLName): ml.Expr = ml.Call(main)(id, id)
+    // TODO actually find main function and reflect body (passing static ID continuation)
+    def runMain(main: MLName): ml.Expr =
+      // when using monomorphization
+      ml.Call(main)(id)
+      // when not using monomorphization
+      // ml.Call(main)(id, id)
 
     def id =
       val a = MLName("a")

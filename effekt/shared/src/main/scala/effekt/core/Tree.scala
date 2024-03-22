@@ -25,6 +25,10 @@ import effekt.util.messages.INTERNAL_ERROR
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
  *     │
+ *     │─ [[ Definition ]]
+ *     │  │─ [[ Def ]]
+ *     │  │─ [[ Let ]]
+ *     │
  *     │─ [[ Expr ]]
  *     │  │─ [[ DirectApp ]]
  *     │  │─ [[ Run ]]
@@ -48,9 +52,12 @@ import effekt.util.messages.INTERNAL_ERROR
  *     │  │─ [[ App ]]
  *     │  │─ [[ If ]]
  *     │  │─ [[ Match ]]
- *     │  │─ [[ State ]]
- *     │  │─ [[ Try ]]
  *     │  │─ [[ Region ]]
+ *     │  │─ [[ Alloc ]]
+ *     │  │─ [[ Var ]]
+ *     │  │─ [[ Get ]]
+ *     │  │─ [[ Put ]]
+ *     │  │─ [[ Try ]]
  *     │  │─ [[ Hole ]]
  *     │
  *     │─ [[ Implementation ]]
@@ -100,12 +107,12 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: Template[Pure])
   case Include(contents: String)
 }
 
 
-enum Definition {
+enum Definition extends Tree {
   def id: Id
 
   case Def(id: Id, block: Block)
@@ -160,18 +167,33 @@ case class Run(s: Stmt) extends Expr
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
  *     │─ [[ PureApp ]]
+ *     │─ [[ Make ]]
  *     │─ [[ Select ]]
  *     │─ [[ Box ]]
  *
  * -------------------------------------------
  */
 enum Pure extends Expr {
+
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
 
-  // invariant, block b is pure.
+  /**
+   * Pure FFI calls. Invariant, block b is pure.
+   */
   case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+
+  /**
+   * Constructor calls
+   *
+   * Note: the structure mirrors interface implementation
+   */
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
+
+  /**
+   * Record Selection
+   */
   case Select(target: Pure, field: Id, annotatedType: ValueType)
 
   case Box(b: Block, annotatedCapture: Captures)
@@ -199,7 +221,6 @@ enum Block extends Tree {
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
-
   val tpe: BlockType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
@@ -209,7 +230,7 @@ enum Param extends Tree {
   def id: Id
 
   case ValueParam(id: Id, tpe: ValueType)
-  case BlockParam(id: Id, tpe: BlockType)
+  case BlockParam(id: Id, tpe: BlockType, capt: Captures)
 }
 export Param.*
 
@@ -225,9 +246,12 @@ export Param.*
  *     │─ [[ App ]]
  *     │─ [[ If ]]
  *     │─ [[ Match ]]
- *     │─ [[ State ]]
- *     │─ [[ Try ]]
  *     │─ [[ Region ]]
+ *     │─ [[ Alloc ]]
+ *     │─ [[ Var ]]
+ *     │─ [[ Get ]]
+ *     │─ [[ Put ]]
+ *     │─ [[ Try ]]
  *     │─ [[ Hole ]]
  *
  * -------------------------------------------
@@ -245,10 +269,19 @@ enum Stmt extends Tree {
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
-  // Effects
-  case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
-  case Try(body: Block, handlers: List[Implementation])
+  // (Type-monomorphic?) Regions
   case Region(body: Block)
+  case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // [[capture]] is a binding occurence.
+  // e.g. state(init) { [x]{x: Ref} => ... }
+  case Var(id: Id, init: Expr, capture: Id, body: Stmt)
+  case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
+  case Put(id: Id, annotatedCapt: Captures, value: Pure)
+
+  case Try(body: Block, handlers: List[Implementation])
+
 
   // Others
   case Hole()
@@ -257,6 +290,141 @@ enum Stmt extends Tree {
   val capt: Captures = Type.inferCapt(this)
 }
 export Stmt.*
+
+/**
+ * Smart constructors to establish some normal form
+ */
+object normal {
+
+  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+    (binding, body) match {
+
+      // [[ val x = STMT; return x ]] == STMT
+      case (_, Stmt.Return(Pure.ValueVar(other, _))) if other == id =>
+        binding
+
+      //  [[ val x = return EXPR; STMT ]] = [[ let x = EXPR; STMT ]]
+      //
+      // This opt is too good for JS: it blows the stack on
+      // recursive functions that are used to encode while...
+      //
+      // The solution to this problem is implemented in core.MakeStackSafe:
+      //   all recursive functions that could blow the stack are trivially wrapped
+      //   again, after optimizing.
+      case (Stmt.Return(expr), body) =>
+        scope(List(Definition.Let(id, expr)), body)
+
+      // here we are flattening scopes; be aware that this extends
+      // life-times of bindings!
+      //
+      // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
+      case (Stmt.Scope(definitions, binding), body) =>
+        scope(definitions, valDef(id, binding, body))
+
+      case _ => Stmt.Val(id, binding, body)
+    }
+
+  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
+  def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
+    case Stmt.Scope(others, body) => scope(definitions ++ others, body)
+    case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
+  }
+
+  // new { def f = BLOCK }.f  =  BLOCK
+  def member(b: Block, field: Id, annotatedTpe: BlockType): Block = b match {
+    case Block.New(impl) =>
+      val Operation(name, tps, cps, vps, bps, resume, body) =
+        impl.operations.find(op => op.name == field).getOrElse {
+          INTERNAL_ERROR("Should not happen")
+        }
+      assert(resume.isEmpty, "We do not inline effectful capabilities at that point")
+      BlockLit(tps, cps, vps, bps, body)
+    case _ => Block.Member(b, field, annotatedTpe)
+  }
+
+  // TODO perform record selection here, if known
+  def select(target: Pure, field: Id, annotatedType: ValueType): Pure =
+    Select(target, field, annotatedType)
+
+  def app(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
+    callee match {
+      case b : Block.BlockLit => reduce(b, targs, vargs, bargs)
+      case other => Stmt.App(callee, targs, vargs, bargs)
+    }
+
+  def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
+    Pure.Make(tpe, tag, vargs)
+
+  def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
+    callee match {
+      case b : Block.BlockLit =>
+        INTERNAL_ERROR(
+          """|This should not happen!
+             |User defined functions always have to be called with App, not PureApp.
+             |If this error does occur, this means this changed.
+             |Check `core.Transformer.makeFunctionCall` for details.
+             |""".stripMargin)
+      case other =>
+        Pure.PureApp(callee, targs, vargs)
+    }
+
+  // "match" is a keyword in Scala
+  def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
+    scrutinee match {
+      case Pure.Make(dataType, ctorTag, vargs) =>
+        clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
+          .map(body => app(body, Nil, vargs, Nil))
+          .orElse { default }.getOrElse { sys error "Should not happen" }
+      case other =>
+        Match(scrutinee, clauses, default)
+    }
+
+
+  def directApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
+    callee match {
+      case b : Block.BlockLit => run(reduce(b, targs, vargs, Nil))
+      case other => DirectApp(callee, targs, vargs, bargs)
+    }
+
+  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt = {
+
+    // Only bind if not already a variable!!!
+    var ids: Set[Id] = Set.empty
+    var bindings: List[Definition.Def] = Nil
+    var bvars: List[Block.BlockVar] = Nil
+
+    // (1) first bind
+    bargs foreach {
+      case x: Block.BlockVar => bvars = bvars :+ x
+      // introduce a binding
+      case block =>
+        val id = symbols.TmpBlock()
+        bindings = bindings :+ Definition.Def(id, block)
+        bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
+        ids += id
+    }
+
+    // (2) substitute
+    val body = substitutions.substitute(b, targs, vargs, bvars)
+
+    scope(bindings, body)
+  }
+
+  def run(s: Stmt): Expr = s match {
+    case Stmt.Return(expr) => expr
+    case _ => Run(s)
+  }
+
+  def box(b: Block, capt: Captures): Pure = b match {
+    case Block.Unbox(pure) => pure
+    case b => Box(b, capt)
+  }
+
+  def unbox(p: Pure): Block = p match {
+    case Pure.Box(b, _) => b
+    case p => Unbox(p)
+  }
+}
 
 /**
  * An instance of an interface, concretely implementing the operations.
@@ -296,19 +464,43 @@ object Tree {
     case leaf => ()
   }
 
-  class Query extends Structural {
-    def empty: Set[Id] = Set.empty
-    def combine(r1: Set[Id], r2: Set[Id]): Set[Id] = r1 ++ r2
+  trait Query[Ctx, Res] extends Structural {
 
-    def query(p: Pure): Set[Id] = queryStructurally(p, empty, combine)
-    def query(e: Expr): Set[Id] = queryStructurally(e, empty, combine)
-    def query(s: Stmt): Set[Id] = queryStructurally(s, empty, combine)
-    def query(b: Block): Set[Id] = queryStructurally(b, empty, combine)
-    def query(d: Definition): Set[Id] = queryStructurally(d, empty, combine)
-    def query(d: Implementation): Set[Id] = queryStructurally(d, empty, combine)
-    def query(d: Operation): Set[Id] = queryStructurally(d, empty, combine)
-    def query(matchClause: (Id, BlockLit)): Set[Id] = matchClause match {
-      case (id, lit) => query(lit)
+    def empty: Res
+    def combine: (r1: Res, r2: Res) => Res
+
+    def all[T](t: IterableOnce[T], f: T => Res): Res =
+      t.iterator.foldLeft(empty) { case (xs, t) => combine(f(t), xs) }
+
+    def pure(using Ctx): PartialFunction[Pure, Res] = PartialFunction.empty
+    def expr(using Ctx): PartialFunction[Expr, Res] = PartialFunction.empty
+    def stmt(using Ctx): PartialFunction[Stmt, Res] = PartialFunction.empty
+    def block(using Ctx): PartialFunction[Block, Res] = PartialFunction.empty
+    def defn(using Ctx): PartialFunction[Definition, Res] = PartialFunction.empty
+    def impl(using Ctx): PartialFunction[Implementation, Res] = PartialFunction.empty
+    def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
+    def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
+    def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
+
+    /**
+     * Hook that can be overridden to perform an action at every node in the tree
+     */
+    def visit[T](t: T)(visitor: Ctx ?=> T => Res)(using Ctx): Res = visitor(t)
+
+    inline def structuralQuery[T](el: T, pf: PartialFunction[T, Res])(using Ctx): Res = visit(el) { t =>
+      if pf.isDefinedAt(el) then pf.apply(el) else queryStructurally(t, empty, combine)
+    }
+
+    def query(p: Pure)(using Ctx): Res = structuralQuery(p, pure)
+    def query(e: Expr)(using Ctx): Res = structuralQuery(e, expr)
+    def query(s: Stmt)(using Ctx): Res = structuralQuery(s, stmt)
+    def query(b: Block)(using Ctx): Res = structuralQuery(b, block)
+    def query(d: Definition)(using Ctx): Res = structuralQuery(d, defn)
+    def query(d: Implementation)(using Ctx): Res = structuralQuery(d, impl)
+    def query(d: Operation)(using Ctx): Res = structuralQuery(d, operation)
+    def query(matchClause: (Id, BlockLit))(using Ctx): Res =
+      if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
+        case (id, lit) => query(lit)
     }
   }
 
@@ -334,6 +526,13 @@ object Tree {
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
+    def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
+    def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
+
+    def rewrite(t: BlockType): BlockType = rewriteStructurally(t)
+    def rewrite(t: BlockType.Interface): BlockType.Interface = rewriteStructurally(t)
+    def rewrite(capt: Captures): Captures = capt.map(rewrite)
+
     def rewrite(m: ModuleDecl): ModuleDecl =
       m match {
         case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
@@ -346,6 +545,102 @@ object Tree {
   }
 }
 
+enum Variable {
+  case Value(id: Id, tpe: core.ValueType)
+  case Block(id: Id, tpe: core.BlockType, capt: core.Captures)
+
+  def id: Id
+
+  // lookup and comparison should still be done per-id, not structurally
+  override def equals(other: Any): Boolean = other match {
+    case other: Variable => this.id == other.id
+    case _ => false
+  }
+  override def hashCode(): Int = id.hashCode
+}
+
+type Variables = Set[Variable]
+
+object Variables {
+
+  import core.Type.{TState, TRegion}
+
+  def value(id: Id, tpe: ValueType) = Set(Variable.Value(id, tpe))
+  def block(id: Id, tpe: BlockType, capt: Captures) = Set(Variable.Block(id, tpe, capt))
+  def empty: Variables = Set.empty
+
+  def free(e: Expr): Variables = e match {
+    case DirectApp(b, targs, vargs, bargs) => free(b) ++ all(vargs, free) ++ all(bargs, free)
+    case Run(s) => free(s)
+    case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
+    case Pure.Literal(value, annotatedType) => Variables.empty
+    case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
+    case Pure.Make(data, tag, vargs) => all(vargs, free)
+    case Pure.Select(target, field, annotatedType) => free(target)
+    case Pure.Box(b, annotatedCapture) => free(b)
+  }
+
+  def free(b: Block): Variables = b match {
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Variables.block(id, annotatedTpe, annotatedCapt)
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      free(body) -- all(vparams, bound) -- all(bparams, bound)
+
+    case Block.Member(block, field, annotatedTpe) => free(block)
+    case Block.Unbox(pure) => free(pure)
+    case Block.New(impl) => free(impl)
+  }
+
+  def free(d: Definition): Variables = d match {
+    case Definition.Def(id, block) => free(block)
+    case Definition.Let(id, binding) => free(binding)
+  }
+
+  def all[T](t: IterableOnce[T], f: T => Variables): Variables =
+    t.iterator.foldLeft(Variables.empty) { case (xs, t) => f(t) ++ xs }
+
+  def free(impl: Implementation): Variables = all(impl.operations, free)
+
+  def free(op: Operation): Variables = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      free(body) -- all(vparams, bound) -- all(bparams, bound) -- all(resume, bound)
+  }
+  def free(s: Stmt): Variables = s match {
+    // currently local functions cannot be mutually recursive
+    case Stmt.Scope(defs, body) =>
+      var stillFree = Variables.empty
+      var boundSoFar = Variables.empty
+      defs.foreach { d =>
+        stillFree = stillFree ++ (free(d) -- boundSoFar)
+        boundSoFar = boundSoFar ++ bound(d)
+      }
+      stillFree ++ (free(body) -- boundSoFar)
+
+    case Stmt.Return(expr) => free(expr)
+    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
+    case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
+    case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
+    case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
+      case (id, lit) => free(lit)
+    })
+    case Stmt.Region(body) => free(body)
+    // are mutable variables now block variables or not?
+    case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region, TRegion, Set(region)) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(region)))
+    case Stmt.Var(id, init, capture, body) => free(init) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(capture)))
+    case Stmt.Get(id, annotatedCapt, annotatedTpe) => Variables.block(id, core.Type.TState(annotatedTpe), annotatedCapt)
+    case Stmt.Put(id, annotatedCapt, value) => Variables.block(id, core.Type.TState(value.tpe), annotatedCapt)
+
+    case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
+    case Stmt.Hole() => Variables.empty
+  }
+
+  def bound(t: ValueParam): Variables = Variables.value(t.id, t.tpe)
+  def bound(t: BlockParam): Variables = Variables.block(t.id, t.tpe, t.capt)
+
+  def bound(d: Definition): Variables = d match {
+    case Definition.Def(id, block) => Variables.block(id, block.tpe, block.capt)
+    case Definition.Let(id, binding) => Variables.value(id, binding.tpe)
+  }
+}
 
 
 object substitutions {
@@ -427,14 +722,18 @@ object substitutions {
           case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])
         }, default.map(substitute))
 
-      case State(id, init, region, body) =>
-        val newRegion = subst.blocks.get(region) map {
-          case BlockVar(x, _, _) => x
-          case _ => INTERNAL_ERROR("Regions should always be variables")
-        } getOrElse region
-
-        State(id, substitute(init), newRegion,
+      case Alloc(id, init, region, body) =>
+        Alloc(id, substitute(init), substituteAsVar(region),
           substitute(body)(using subst shadowBlocks List(id)))
+
+      case Var(id, init, capture, body) =>
+        Var(id, substitute(init), capture, substitute(body)(using subst shadowBlocks List(id)))
+
+      case Get(id, capt, tpe) =>
+        Get(substituteAsVar(id), substitute(capt), substitute(tpe))
+
+      case Put(id, capt, value) =>
+        Put(substituteAsVar(id), substitute(capt), substitute(value))
 
       case Try(body, handlers) =>
         Try(substitute(body), handlers.map(substitute))
@@ -444,6 +743,12 @@ object substitutions {
 
       case h : Hole => h
     }
+
+  def substituteAsVar(id: Id)(using subst: Substitution): Id =
+    subst.blocks.get(id) map {
+      case BlockVar(x, _, _) => x
+      case _ => INTERNAL_ERROR("Regions should always be variables")
+    } getOrElse id
 
   def substitute(block: Block)(using subst: Substitution): Block =
     block match {
@@ -474,6 +779,9 @@ object substitutions {
 
       case Literal(value, annotatedType) =>
         Literal(value, substitute(annotatedType))
+
+      case Make(tpe, tag, vargs) =>
+        Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))
 
       case PureApp(b, targs, vargs) =>
         PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))
@@ -509,7 +817,7 @@ object substitutions {
 
   def substitute(param: Param.BlockParam)(using Substitution): Param.BlockParam =
     param match {
-      case Param.BlockParam(id, tpe) => Param.BlockParam(id, substitute(tpe))
+      case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, substitute(tpe), substitute(capt))
     }
 
   def substitute(tpe: ValueType)(using subst: Substitution): ValueType =

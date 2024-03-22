@@ -62,20 +62,20 @@ extern pure def infixConcat(s: String, z: String): String = """
 
 // integer arithmetic
 
-extern pure def infixAdd(x: Int, y: Int): Int = "%z = add  %Int %x, %y ret %Int %z"
-extern pure def infixSub(x: Int, y: Int): Int = "%z = sub  %Int %x, %y ret %Int %z"
-extern pure def infixMul(x: Int, y: Int): Int = "%z = mul  %Int %x, %y ret %Int %z"
-extern pure def infixDiv(x: Int, y: Int): Int = "%z = sdiv %Int %x, %y ret %Int %z"
+extern pure def infixAdd(x: Int, y: Int): Int = "%z = add  %Int ${x}, ${y} ret %Int %z"
+extern pure def infixSub(x: Int, y: Int): Int = "%z = sub  %Int ${x}, ${y} ret %Int %z"
+extern pure def infixMul(x: Int, y: Int): Int = "%z = mul  %Int ${x}, ${y} ret %Int %z"
+extern pure def infixDiv(x: Int, y: Int): Int = "%z = sdiv %Int ${x}, ${y} ret %Int %z"
 
-extern pure def mod     (x: Int, y: Int): Int = "%z = srem %Int %x, %y ret %Int %z"
+extern pure def mod     (x: Int, y: Int): Int = "%z = srem %Int ${x}, ${y} ret %Int %z"
 
 
 // floating-point arithmetic
 
-extern pure def infixAdd(x: Double, y: Double): Double = "%z = fadd %Double %x, %y ret %Double %z"
-extern pure def infixSub(x: Double, y: Double): Double = "%z = fsub %Double %x, %y ret %Double %z"
-extern pure def infixMul(x: Double, y: Double): Double = "%z = fmul %Double %x, %y ret %Double %z"
-extern pure def infixDiv(x: Double, y: Double): Double = "%z = fdiv %Double %x, %y ret %Double %z"
+extern pure def infixAdd(x: Double, y: Double): Double = "%z = fadd %Double ${x}, ${y} ret %Double %z"
+extern pure def infixSub(x: Double, y: Double): Double = "%z = fsub %Double ${x}, ${y} ret %Double %z"
+extern pure def infixMul(x: Double, y: Double): Double = "%z = fmul %Double ${x}, ${y} ret %Double %z"
+extern pure def infixDiv(x: Double, y: Double): Double = "%z = fdiv %Double ${x}, ${y} ret %Double %z"
 
 
 // ordering on signed integers
@@ -212,3 +212,31 @@ def report[E] { prog: => Unit / Exception[E] }: Unit =
 // TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
 def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = () }
+
+// Control Flow
+// ============
+effect Control {
+  def break(): Unit
+  def continue(): Unit
+}
+
+def loop { f: () => Unit / Control }: Unit = try {
+  def go(): Unit = { f(); go() }
+  go()
+} with Control {
+  def break() = ()
+  def continue() = loop { f }
+}
+
+/**
+ * Calls provided action repeatedly. `start` is inclusive, `end` is not.
+ */
+def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
+  var i = start;
+  loop {
+    if (i < end) { val el = i; i = i + 1; action(el) }
+    else { do break() }
+  }
+}
+
+def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }

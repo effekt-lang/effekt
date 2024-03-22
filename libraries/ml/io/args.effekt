@@ -21,18 +21,21 @@ extern type Args
 extern io def nativeArgs(): Args =
   "ref (CommandLine.arguments ())"
 
-// consumes the next arg if present
-extern io def nativeNext(a: Args): MLOption[String] =
-"""
-case !a of
+extern """
+fun nextArgument a =
+  case !a of
     [] => NONE |
-    x :: xs => (a := xs; SOME x)
+    x :: xs => (a := xs; SOME x);
 """
 
+// consumes the next arg if present
+extern io def nativeNext(a: Args): MLOption[String] =
+  "nextArgument ${a}"
+
 def commandLineArgs(): List[String] = {
-    def argsToRevList(a: Args, acc: List[String]): List[String] = toOption(nativeNext(a)) match {
-        case None() => acc
-        case Some(v) => argsToRevList(a, Cons(v, acc))
-    }
-    reverse(argsToRevList(nativeArgs(), Nil()))
+  def argsToRevList(a: Args, acc: List[String]): List[String] = toOption(nativeNext(a)) match {
+    case None() => acc
+    case Some(v) => argsToRevList(a, Cons(v, acc))
+  }
+  reverse(argsToRevList(nativeArgs(), Nil()))
 }

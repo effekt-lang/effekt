@@ -24,7 +24,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(using Environment, ErrorReporter): ModuleDecl = {
-    // TODO drop once we also ported lifted to use [[core.Definition]]
     val env = pretransform(mod.definitions)
     val definitions = mod.definitions.map(d => transform(d)(using env, ErrorReporter))
     ModuleDecl(mod.path, mod.imports, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
@@ -51,7 +50,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, transform(tpe))
-    case core.BlockParam(id, tpe) => BlockParam(id, transform(tpe))
+    case core.BlockParam(id, tpe, capt) => BlockParam(id, transform(tpe))
   }
 
   def transform(tpe: core.ValueType): lifted.ValueType = tpe match {
@@ -103,8 +102,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
     case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      // TODO what to do with cps?
-      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), body)
+      val self = Param.EvidenceParam(EvidenceSymbol()) // will never be used!
+      val eparams = bps map {
+        case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
+      }
+      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
+        Template(body.strings, body.args.map(transform)))
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
   }
@@ -113,7 +116,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Param.ValueParam(id, tpe) => lifted.Param.ValueParam(id, transform(tpe))
   }
   def transform(p: core.Param.BlockParam): lifted.Param.BlockParam = p match {
-    case core.Param.BlockParam(id, tpe) => lifted.Param.BlockParam(id, transform(tpe))
+    case core.Param.BlockParam(id, tpe, capt) => lifted.Param.BlockParam(id, transform(tpe))
   }
 
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
@@ -125,8 +128,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Stmt)(using Environment, ErrorReporter): Stmt = tree match {
     case core.Try(core.BlockLit(tparams, _, _, params, body), handler) =>
-
-      val tpe = body.tpe
 
       // (1) Transform handlers first in unchanged environment.
       val transformedHandler = handler.map { transform }
@@ -140,7 +141,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // introduce one evidence symbol per blockparam
       val transformedParams = params map {
-        case p @ core.BlockParam(id, tpe) =>
+        case p @ core.BlockParam(id, tpe, capt) =>
           environment = environment.bind(id)
           transform(p)
       }
@@ -163,7 +164,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // introduce one evidence symbol per blockparam
       val transformedParams = params map {
-        case p @ core.BlockParam(id, tpe) =>
+        case p @ core.BlockParam(id, tpe, capt) =>
           environment = environment.bind(id)
           transform(p)
       }
@@ -181,6 +182,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // adds evidence parameters for block arguments
       App(transform(b), targs.map(transform), (ev :: blockEv) ++ vargsT ++ bargsT)
 
+    case core.Get(id, capt, tpe) =>
+      Get(id, env.evidenceFor(id), transform(tpe))
+
+    case core.Put(id, capt, value) =>
+      Put(id, env.evidenceFor(id), transform(value))
+
     case core.Scope(definitions, rest) =>
       val env = pretransform(definitions)
       val body = transform(rest)(using env, ErrorReporter)
@@ -190,8 +197,21 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
 
-    case core.State(id, init, region, body) =>
-      State(id, transform(init), region, env.evidenceFor(region), transform(body))
+    case core.Var(id, init, capture, body) =>
+      val stateEvidence = EvidenceSymbol()
+      val environment = env.adapt(Lift.Var(stateEvidence)).bind(id)
+      val stateCapability = lifted.Param.BlockParam(id, lifted.Type.TState(transform(init.tpe)))
+      val transformedBody = transform(body)(using environment, ErrorReporter)
+
+      Var(transform(init), lifted.BlockLit(Nil, List(Param.EvidenceParam(stateEvidence), stateCapability),
+        transformedBody))
+
+    case core.Alloc(id, init, region, body) =>
+      // here the fresh cell uses the same evidence as the region it is allocated into
+      val environment = env.bind(id, env.evidenceFor(region).lifts)
+
+      Alloc(id, transform(init), region, env.evidenceFor(region),
+        transform(body)(using environment, ErrorReporter))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),
@@ -214,8 +234,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.ValueVar(sym, tpe) =>
       ValueVar(sym, transform(tpe))
 
-    case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
+    case core.PureApp(b, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs.map(transform), args map transform)
+
+    case core.Make(data, tag, args: List[core.Expr]) =>
+      Make(transform(data).asInstanceOf, tag, args map transform)
 
     case core.Select(target, field, tpe) =>
       Select(transform(target), field, transform(tpe))
@@ -249,7 +272,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // introduce one evidence symbol per blockparam
       val evidenceParams = bps map {
-        case core.BlockParam(id, tpe) =>
+        case core.BlockParam(id, tpe, capt) =>
           val ev = EvidenceSymbol()
           environment = environment.bind(id, Lift.Var(ev))
           Param.EvidenceParam(ev)

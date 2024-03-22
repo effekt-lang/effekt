@@ -6,13 +6,26 @@ import immutable/option
 //     str.unsafeCharAt(index).undefinedToOption
 
 extern pure def length(str: String): Int =
-  "(string-length str)"
+  "(string-length ${str})"
 
 extern pure def repeat(str: String, n: Int): String =
-  "(letrec ([repeat (lambda (n acc) (if (<= n 0) acc (repeat (- n 1) (string-append acc str))))]) (repeat n (list->string '())))"
+  "(letrec ([repeat (lambda (${n} acc) (if (<= ${n} 0) acc (repeat (- ${n} 1) (string-append acc ${str}))))]) (repeat ${n} (list->string '())))"
 
-extern pure def substring(str: String, from: Int): String =
-  "(substring str from (string-length str))"
+extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
+  "(substring ${str} ${from} ${to})"
+
+def substring(str: String, from: Int, to: Int): String = {
+  def clamp(lower: Int, x: Int, upper: Int) = max(lower, min(x, upper))
+
+  val len = str.length
+  val clampedTo = clamp(0, to, len)
+  val clampedFrom = clamp(0, from, to)
+
+  str.unsafeSubstring(clampedFrom, clampedTo)
+}
+
+def substring(str: String, from: Int): String =
+  str.substring(from, str.length)
 
 // extern pure def trim(str: String): String =
 //   "str.trim()"
@@ -25,4 +38,9 @@ def toInt(str: String): Option[Int] =
 
 // returns #f if not a number
 extern pure def unsafeToInt(str: String): Int =
-  "(string->number str)"
+  "(string->number ${str})"
+
+// ANSI escape codes
+val ANSI_GREEN = "\033[32m"
+val ANSI_RED = "\033[31m"
+val ANSI_RESET = "\033[0m"

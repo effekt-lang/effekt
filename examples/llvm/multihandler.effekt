@@ -4,9 +4,9 @@ effect Get(): Int
 effect Put(n: Int): Unit
 
 
-def withState(init: Int) { prog : => Unit / { Get, Put } } = {
+def withState(init: Int) { prog : => Unit / { Get, Put } } = region r {
 
-    var s = init;
+    var s in r = init;
 
     try { prog() }
     with Get { () => resume(s) }

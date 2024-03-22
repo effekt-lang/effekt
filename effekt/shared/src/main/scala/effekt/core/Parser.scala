@@ -31,8 +31,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
         None
     }
 
-  lazy val `run` = keyword("run")
-  lazy val `;`   = super.literal(";")
+  lazy val `run`  = keyword("run")
+  lazy val `;`    = super.literal(";")
+  lazy val `make` = keyword("make")
 
   /**
    * Literals
@@ -70,7 +71,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( `extern` ~> externBody ^^ Extern.Include.apply
     | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> externBody) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body)
+        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, Template(List(body), Nil))
     })
 
   lazy val externBody = stringLiteral | multilineString
@@ -115,10 +116,17 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
     | `try` ~> blockLit ~ many(`with` ~> implementation) ^^ Stmt.Try.apply
-    | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => State(id, init, region, body) }
+    | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
+    | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
     | `<>` ^^^ Hole()
     | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
+
+  lazy val stmts: P[Stmt] =
+    many(definition) ~ stmt ^^ {
+      case Nil ~ stmt => stmt
+      case defs ~ stmt => Stmt.Scope(defs, stmt)
+    }
 
   lazy val clause: P[(Id, BlockLit)] = (id <~ `:`) ~ blockLit ^^ { case id ~ cl => id -> cl }
 
@@ -147,6 +155,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( literal
     | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
+    | `make` ~> dataType ~ id ~ valueArgs ^^ Pure.Make.apply
     | block ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
     | failure("Expected a pure expression.")
     )
@@ -193,7 +202,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     )
 
   lazy val blockLit: P[Block.BlockLit] =
-    `{` ~> parameters ~ (`=>` ~/> stmt) <~ `}` ^^ {
+    `{` ~> parameters ~ (`=>` ~/> stmts) <~ `}` ^^ {
       case (tparams, cparams, vparams, bparams) ~ body =>
         Block.BlockLit(tparams, cparams, vparams, bparams, body) : Block.BlockLit
       }
@@ -233,14 +242,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // f@f2 : Exc
   lazy val trackedBlockParam: P[(Id, BlockParam)] =
     ( `{` ~> id ~ (`@` ~> id)  ~ (`:` ~> blockType) <~ `}` ^^ {
-        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe): Param.BlockParam)
+        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe, Set(capt)): Param.BlockParam)
       }
     // abbreviation: f : Exc .= f@f : Exc
     | blockParam ^^ { p => p.id -> p }
     )
 
   lazy val blockParam: P[BlockParam] =
-    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe): Param.BlockParam }
+    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe, Set(id)): Param.BlockParam }
 
 
   // Types
@@ -254,10 +263,13 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   lazy val primValueType: P[ValueType] =
     ( typeParam ^^ ValueType.Var.apply
-    | id ~ maybeTypeArgs ^^ ValueType.Data.apply
+    | dataType
     | `(` ~> valueType <~ `)`
     | failure("Expected a value type")
     )
+
+  lazy val dataType: P[ValueType.Data] =
+    id ~ maybeTypeArgs ^^ { case id ~ targs => ValueType.Data(id, targs) : ValueType.Data }
 
   lazy val blockType: P[BlockType] =
     ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ^^ {

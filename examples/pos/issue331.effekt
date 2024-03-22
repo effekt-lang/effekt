@@ -1,0 +1,16 @@
+def once { f: () => Unit }: Unit = f()
+
+def twice { next: () => Unit }: Unit = { next(); next() }
+
+def main() = {
+  def next(): Unit = println("step")
+
+  // NOTE: uncommenting the following line fixes the bug.
+  // next();
+
+  once { () =>
+    twice {next};
+    // NOTE: also removing this fixes the bug.
+    println("after")
+  }
+}

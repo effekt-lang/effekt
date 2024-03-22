@@ -51,7 +51,7 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: Template[Expr])
   case Include(contents: String)
 }
 
@@ -75,6 +75,8 @@ enum Expr extends Argument {
 
   // invariant, block b is known to be pure; does not take evidence, does not use IO resources.
   case PureApp(b: Block, targs: List[ValueType], args: List[Argument])
+
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
   case Select(target: Expr, field: Id, annotatedType: ValueType)
   case Box(b: Block)
 
@@ -119,12 +121,25 @@ enum Stmt extends Tree  {
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
-  case Try(body: Block, handler: List[Implementation])
+
+  // allocates into a (type-monomorphic?) region.
+  // e.g. var x in r = init; body
   case Region(body: Block)
+  case Alloc(id: Id, init: Expr, region: Id, ev: Evidence, body: Stmt)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // e.g. state(init) { (ev){x: Ref} => ... }
+  case Var(init: Expr, body: Block.BlockLit)
+  case Get(id: Id, ev: Evidence, annotatedTpe: ValueType)
+  case Put(id: Id, ev: Evidence, value: Expr)
+
+  case Try(body: Block, handler: List[Implementation])
+
+  // after evidence monomorphization -- does not pass evidence to body
+  case Reset(body: Stmt)
 
   // e.g. shift(ev) { {resume} => ... }
   case Shift(ev: Evidence, body: Block.BlockLit)
@@ -155,7 +170,7 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 enum Lift {
   case Var(ev: EvidenceSymbol)
   case Try()
-  case Reg()
+  case Reg() // used for local mutable state AND region based state
 }
 
 /**
@@ -170,7 +185,7 @@ class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def ++(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.merged(o.vars){ case ((leftId -> leftParam), (rightId -> rightParam)) =>
-      assert(leftParam == rightParam, "Same id occurs free with different types.")
+      assert(leftParam == rightParam, s"Same id occurs free with different types: ${leftParam} !== ${rightParam}.")
       (leftId -> leftParam)
     })
   }
@@ -224,11 +239,15 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
-  case State(id, init, region, ev, body) =>
+  case Alloc(id, init, region, ev, body) =>
     freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
+  case Var(init, body) => freeVariables(init) ++ freeVariables(body)
+  case Get(id, ev, tpe) => FreeVariables(BlockParam(id, lifted.Type.TState(tpe))) ++ freeVariables(ev)
+  case Put(id, ev, value) => FreeVariables(BlockParam(id, lifted.Type.TState(value.tpe))) ++ freeVariables(ev) ++ freeVariables(value)
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
+  case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }
@@ -236,6 +255,7 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
 def freeVariables(expr: Expr): FreeVariables = expr match {
   case ValueVar(id, tpe) => FreeVariables(ValueParam(id, tpe))
   case Literal(value, tpe) => FreeVariables.empty
+  case Make(data, tag, args) => args.map(freeVariables).combineFV
   case PureApp(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...

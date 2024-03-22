@@ -10,7 +10,7 @@ enum Definition {
   case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
   case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
-  case GlobalVariableArray(name: String, typ: Type, initializer: Operand) // initializer should be constant
+  case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
 }
 export Definition.*
 
@@ -48,7 +48,7 @@ case class Parameter(typ: Type, name: String)
 sealed trait Operand
 object Operand {
   case class LocalReference(tpe: Type, name: String) extends Operand
-  case class ConstantInt(n: Int) extends Operand
+  case class ConstantInt(n: Long) extends Operand
   case class ConstantDouble(x: Double) extends Operand
   case class ConstantAggregateZero(typ: Type) extends Operand
   case class ConstantGlobal(tpe: Type, name: String) extends Operand

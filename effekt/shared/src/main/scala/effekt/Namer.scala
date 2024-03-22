@@ -83,8 +83,17 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.ValDef(id, annot, binding) =>
       ()
 
-    case d @ source.VarDef(id, annot, region, binding) =>
+    case d @ source.VarDef(id, annot, binding) =>
       ()
+
+    case d @ source.RegDef(id, annot, region, binding) =>
+      ()
+
+    // allow recursive definitions of objects
+    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses))) =>
+      val tpe = Context.at(interface) { resolve(interface) }
+      val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
+      Context.define(id, sym)
 
     case d @ source.DefDef(id, annot, block) =>
       ()
@@ -230,19 +239,31 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
-    case d @ source.VarDef(id, annot, region, binding) =>
+
+    // Local mutable state
+    case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
-      val reg = region.map(Context.resolveTerm).getOrElse {
-        Context.getSelfRegion()
-      } match {
+
+      resolveGeneric(binding)
+      val sym = VarBinder(Context.nameFor(id), tpe, d)
+      Context.define(id, sym)
+
+    // allocation into a region
+    case d @ source.RegDef(id, annot, region, binding) =>
+      val tpe = annot.map(resolve)
+      val reg = Context.resolveTerm(region) match {
         case t: BlockSymbol => t
         case _ => Context.abort("Region needs to be a block.")
       }
 
       resolveGeneric(binding)
-      val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
+      val sym = RegBinder(Context.nameFor(id), tpe, reg, d)
 
       Context.define(id, sym)
+
+    // already has been preresolved (to enable recursive definitions)
+    case d @ source.DefDef(id, annot, source.New(impl)) =>
+      resolveGeneric(impl)
 
     case d @ source.DefDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
@@ -256,9 +277,17 @@ object Namer extends Phase[Parsed, NameResolved] {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        Context.bindSelfRegion(f)
 
         resolveGeneric(body)
+      }
+
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) =>
+      val sym = f.symbol
+      Context scoped {
+        sym.tparams.foreach { p => Context.bind(p) }
+        Context.bindValues(sym.vparams)
+        Context.bindBlocks(sym.bparams)
+        body.args.foreach(resolveGeneric)
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
@@ -312,7 +341,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
-    case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
@@ -340,8 +368,6 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
         }
 
-        Context.bindSelfRegion(tree)
-
         resolveGeneric(body)
       }
 
@@ -349,14 +375,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       val reg = BlockParam(Name.local(name.name), builtins.TRegion)
       Context.define(name, reg)
       Context scoped {
-        Context.bindSelfRegion(tree, reg)
         Context.bindBlock(reg)
         resolveGeneric(body)
       }
 
     case source.Implementation(interface, clauses) =>
-
-
       val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
@@ -368,9 +391,9 @@ object Namer extends Phase[Parsed, NameResolved] {
           } getOrElse {
             Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
           }
-          val tps = tparams.map(resolve)
-          val vps = params.map(resolve)
           Context scoped {
+            val tps = tparams.map(resolve)
+            val vps = params.map(resolve)
             Context.bindValues(vps)
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
@@ -408,7 +431,6 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         Context.bindValues(vps)
         Context.bindBlocks(bps)
-        Context.bindSelfRegion(f)
 
         resolveGeneric(stmt)
       }
@@ -447,7 +469,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Var(id) => Context.resolveVar(id)
 
     case source.Assign(id, expr) => Context.resolveVar(id) match {
-      case x: VarBinder => resolveGeneric(expr)
+      case _: VarBinder | _: RegBinder => resolveGeneric(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")
@@ -583,10 +605,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     /**
      * TODO share code with [[typer.Typer.makeFunctionType]]
      */
-    case source.FunctionType(vparams, bparams, ret, effects) => Context scoped {
-      // as soon as we have those kinds of params in source we need this
-      val tparams = List.empty[source.Id]
-
+    case source.FunctionType(tparams, vparams, bparams, ret, effects) => Context scoped {
       val tps = tparams.map(resolve)
       val vps = vparams.map(resolve)
 
@@ -749,18 +768,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     // bind the block parameter as a term
     params.foreach { bindBlock }
 
-  private[namer] def bindSelfRegion(tree: Tree): Unit = {
-    bindSelfRegion(tree, SelfParam(tree))
-  }
-
-  private[namer] def bindSelfRegion(tree: Tree, sym: TrackedParam): Unit = {
-    Context.bindBlock("this", sym)
-    Context.annotate(Annotations.SelfRegion, tree, sym)
-  }
-
-  private[namer] def getSelfRegion(): TermSymbol =
-    scope.lookupFirstTerm("this")
-
   private[namer] def bindBlock(p: TrackedParam) = {
     // bind the block parameter as a term
     bind(p)
@@ -845,8 +852,8 @@ trait NamerOps extends ContextOps { Context: Context =>
   private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
-    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[VarBinder]
-    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[VarBinder]
+    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[RefBinder]
+    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[RefBinder]
 
     candidates match {
       case Nil => Right(Nil)
