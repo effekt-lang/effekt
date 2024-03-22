@@ -150,21 +150,11 @@ extern pure def not(adt_p: Bool): Bool = """
     ret %Pos %adt_q
 """
 
-extern pure def infixOr(adt_p: Bool, adt_q: Bool): Bool = """
-    %p = extractvalue %Pos %adt_p, 0
-    %q = extractvalue %Pos %adt_q, 0
-    %r = or i64 %p, %q
-    %adt_r = insertvalue %Pos zeroinitializer, i64 %r, 0
-    ret %Pos %adt_r
-"""
+def infixOr { first:  () => Bool } { second: () => Bool }: Bool = 
+  if (first()) true else second()
 
-extern pure def infixAnd(adt_p: Bool, adt_q: Bool): Bool = """
-    %p = extractvalue %Pos %adt_p, 0
-    %q = extractvalue %Pos %adt_q, 0
-    %r = and i64 %p, %q
-    %adt_r = insertvalue %Pos zeroinitializer, i64 %r, 0
-    ret %Pos %adt_r
-"""
+def infixAnd { first:  () => Bool } { second: () => Bool }: Bool = 
+  if (first()) second() else false
 
 // show
 extern pure def show(i: Int): String = """
