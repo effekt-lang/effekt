@@ -1,10 +1,11 @@
 package effekt
 package lifted
 
+import effekt.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{FeatureFlag, Name, Wildcard, builtins}
+import effekt.symbols.{Name, Wildcard, builtins}
 
 object PrettyPrinter extends ParenPrettyPrinter {
 

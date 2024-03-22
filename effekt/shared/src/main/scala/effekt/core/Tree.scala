@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.symbols.FeatureFlag
+import effekt.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
 
