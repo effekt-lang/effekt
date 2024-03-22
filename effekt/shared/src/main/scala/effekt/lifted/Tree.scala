@@ -2,7 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ Constructor, Name, Symbol }
+import effekt.symbols.{Constructor, FeatureFlag, Name, Symbol}
 import scala.collection.immutable
 
 export effekt.core.Id
@@ -51,8 +51,8 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: Template[Expr])
-  case Include(contents: String)
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, bodies: List[(FeatureFlag, Template[Expr])])
+  case Include(featureFlag: FeatureFlag, contents: String)
 }
 
 enum Definition {

@@ -47,7 +47,7 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, tps, params, ret, Template(strings, args)) =>
+    case lifted.Extern.Def(name, tps, params, ret, bodies) =>
       val transformedParams = params.flatMap {
         case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -55,13 +55,16 @@ object Transformer {
         case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       noteDefinition(name, params map transform, Nil)
-      Extern(transform(name), transformedParams, transform(ret), Template(strings, args map {
-        case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
-        case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
-      }))
+      val tBodies = bodies.map {
+        case (ff, Template(strings, args)) => (ff, Template(strings, args map {
+          case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
+          case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
+        }))
+      }
+      Extern(transform(name), transformedParams, transform(ret), tBodies)
 
-    case lifted.Extern.Include(contents) =>
-      Include(contents)
+    case lifted.Extern.Include(ff, contents) =>
+      Include(ff, contents)
   }
 
   def transform(stmt: lifted.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =

@@ -99,19 +99,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           core.Property(op, btpe)
       }))
 
-    case f @ source.ExternDef(pure, id, _, vps, bps, _, body) =>
+    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      val args = body.args.map(transformAsExpr).map {
-        case p: Pure => p: Pure
-        case _ => Context.abort("Spliced arguments need to be pure expressions.")
+      val tBodies = bodies.map { (ff, body) =>
+        val args = body.args.map(transformAsExpr).map {
+          case p: Pure => p: Pure
+          case _ => Context.abort("Spliced arguments need to be pure expressions.")
+        }
+        (ff, Template(body.strings, args))
       }
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt),
-        Template(body.strings, args)))
+      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBodies))
 
-    case e @ source.ExternInclude(path, contents, _) =>
-      List(Extern.Include(contents.get))
+    case e @ source.ExternInclude(ff, path, contents, _) =>
+      List(Extern.Include(ff, contents.get))
 
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil

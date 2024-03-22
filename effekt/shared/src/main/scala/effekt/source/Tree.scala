@@ -2,7 +2,7 @@ package effekt
 package source
 
 import effekt.context.Context
-import effekt.symbols.Symbol
+import effekt.symbols.{FeatureFlag, Symbol}
 
 /**
  * Data type representing source program trees.
@@ -84,6 +84,8 @@ case object NoSource extends Tree
 
 // only used by the lexer
 case class Comment() extends Tree
+
+
 
 /**
  * We distinguish between identifiers corresponding to
@@ -197,7 +199,9 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: Template[Term]) extends Def
+  case ExternDef(capture: CaptureSet, id: IdDef,
+                 tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
+                 bodies: List[(FeatureFlag, Template[Term])]) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -209,7 +213,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -219,8 +223,6 @@ object Def {
   type Local = FunDef | ValDef | DefDef | Alias | VarDef
 }
 export Def.*
-
-
 
 
 /**

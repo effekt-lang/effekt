@@ -19,6 +19,8 @@ import scala.language.implicitConversions
  */
 object TransformerMonadicWhole extends TransformerMonadic {
 
+  override val jsFeatureFlags: List[String] = List("jsMonadic", "js")
+
   /**
    * Exports are used in separate compilation (on the website), since they cannot be inlined [[inlineExtern]].
    *
@@ -35,7 +37,8 @@ object TransformerMonadicWhole extends TransformerMonadic {
       val hasBlockParameters = bparams.nonEmpty
       val isControlEffecting = annotatedCapture contains symbols.builtins.ControlCapability.capture
       !hasBlockParameters && !isControlEffecting
-    case Extern.Include(contents) => false
+    case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) => false
+    case Extern.Include(ff, contents) => true // it's nothing anyway
   }
 
   /**
@@ -110,11 +113,14 @@ trait TransformerMonadic extends Transformer {
   def toJS(p: Param): JSName = nameDef(p.id)
 
   def toJS(e: core.Extern)(using DeclarationContext, Context): js.Stmt = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
+      val body = bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
       js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
       js.RawStmt(contents)
+
+    case Extern.Include(_, _) => js.RawStmt("") // ignore, not meant for us
   }
 
   def toJS(t: Template[Pure])(using DeclarationContext, Context): js.Expr =
@@ -174,14 +180,14 @@ trait TransformerMonadic extends Transformer {
 
     case DirectApp(f: core.Block.BlockVar, targs, vargs, Nil) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.body)
+      inlineExtern(vargs, extern.vparams, extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ })
 
     case DirectApp(f, targs, vargs, bargs) =>
       js.Call(toJS(f), vargs.map(toJS) ++ bargs.map(toJS))
 
     case PureApp(f: core.Block.BlockVar, targs, vargs) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.body)
+      inlineExtern(vargs, extern.vparams, extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TOOD insert hole */ })
 
     case PureApp(f, targs, vargs) =>
       js.Call(toJS(f), vargs.map(toJS))
