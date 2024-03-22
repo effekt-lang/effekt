@@ -54,8 +54,3 @@ object cps {
     }
 }
 
-def transform(stmt: lifted.Stmt): Term = stmt match {
-    case _  => ???
-}
-
-def transform(definition: lifted.Definition): Term = ???
