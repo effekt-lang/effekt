@@ -1,28 +1,275 @@
 module io/async
 
-extern include "async.js"
+import text/string
 
-extern type Promise[T]
+import immutable/dequeue
+import immutable/result
 
-interface AsyncIO {
-  def read(path: String): Promise[String]
+extern """
+const fs = require("fs")
+"""
+
+// Results
+// -------
+
+/**
+ * Represents the result of a potentially failing computation.
+ * It is the "reification" of the Exception[E] effect.
+ */
+type Result[A, E] {
+  Error(exception: E, msg: String);
+  Success(a: A)
+}
+
+/**
+ * Represent ("reify") the result of a potentially failing computation.
+ */
+def result[A, E] { f: () => A / Exception[E] }: Result[A, E] =
+  try { Success(f()) } with Exception[E] {
+    def raise(exc, msg) = Error(exc, msg)
+  }
+
+/**
+ * Extracts the value of a result, if available.
+ * It is the "reflecting" the result.
+ */
+def value[A, E](r: Result[A, E]): A / Exception[E] = r match {
+  case Success(a) => a
+  case Error(exc, msg) => do raise(exc, msg)
+}
+
+
+// References
+// ----------
+
+/**
+ * Global, mutable references
+ */
+extern type Ref[A]
+extern global def fresh[A](init: A): Ref[A] = "{ value: ${init} }"
+extern global def read[A](x: Ref[A]): A = "${x}.value"
+extern global def write[A](x: Ref[A], v: A): Unit = "(${x}.value = ${v})"
+
+
+// Channel1
+extern type Channel1[A] // = Ref[Maybe[Either[A, A => ()]]]
+
+extern """
+function fill(ch, a) {
+  const v = ch.value;
+  if (v === null) { ch.value = a }
+  else { v(a) }
+}
+function wait(ch, k) {
+  const v = ch.value;
+  if (v === null) { ch.value = k }
+  else { k(v) }
+}
+function fresh() { return { value: null } }
+"""
+
+extern {io} def fill[A](ch: Channel1[A], a: A): Unit = "fill(${ch}, ${a})"
+extern {io} def fresh[A](): Channel1[A] = "fresh()"
+extern {control} def wait[A](ch: Channel1[A]): A = "$effekt.callcc(k => wait(${ch}, k))"
+
+// Jona: This is more general: we do NOT want to capture the WHOLE stack.
+//   Also, this is now io and not control which is the RIGHT thing.
+extern {io} def wait[A](ch: Channel1[A], k: A => Unit at {io, global}): Unit = "wait(${ch}, el => (${k})(el).run())"
+
+extern """
+  function readFileChannel1(path) {
+    const ch = fresh();
+    fs.readFile(path, (err, data) => {
+      if (!!err) { throw err; }
+      else { fill(ch, data) }
+    });
+    return ch
+  }
+
+  function fork(k) {
+    const ch = fresh();
+    setTimeout(() => {
+      k().then(a => {
+        fill(ch, a);
+        return $effekt.pure($effekt.unit);
+      }).run();
+    }, 0);
+    return ch
+  }
+"""
+
+// https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382
+// https://nodejs.org/api/fs.html#fsreadfilepath-options-callback
+extern {io} def readFileChannel1(path: String): Channel1[String] =
+  "readFileChannel1(${path})"
+
+extern {io} def fork[A](k: () => A at {io, global, control}): Channel1[A] = "fork(${k})"
+
+
+extern io def setTimeout(millis: Int, prog: () => Unit at {global, io}): Unit =
+  "setTimeout(() => (${prog})().run(), ${millis})"
+
+
+// Asynchronous I/O
+// ----------------
+
+interface IO {
+  /**
+   * Runs the provided computation and conceptually waits until it completes by
+   * calling the writer-continuation.
+   *
+   * The provided writer-continuation should only ever be called ONCE.
+   * The computation is passed as a thunk in order to prevent accidental usage of
+   * other control effects that would violate the contract of calling the writer
+   * once.
+   *
+   * TODO better names!
+   */
+  def performIO[T](computation: (T => Unit at {io,global}) => Unit at {io,global}): T
+}
+
+// def withIO(program: => Unit / IO at {io, global}): Unit =
+//   try { program() } with IO {
+//     def performIO[T](computation) =
+//       computation(resume)
+//   }
+
+
+extern io def readFileCallbacks(path: String, onSuccess: String => Unit at {io, global}): Unit =
+  "fs.readFile(${path}, 'utf8', (err, res) => { if (!!err) { throw err } else { (${onSuccess})(res).run() } })"
+
+def readFile(path: String): String / IO =
+  do performIO[String](box { write =>
+    readFileCallbacks(path, write)
+  })
+
+
+def main2() = {
+  readFile("README.md")
+}
+
+
+
+interface Process {
+  def fork(p: Task[Unit]): Unit
+  def yield(): Unit
+  def exit(): Nothing
+}
+
+interface Promises {
+  def async[T](p: Task[T]): Promise[T]
   def await[T](p: Promise[T]): T
 }
 
-def asyncIO[R](p: () => R / AsyncIO at {io}): R = try {
-  p()
-} with AsyncIO {
-  def read(path) = resume(readPromise(path))
-  def await[T](p) = awaitPromise(p, resume)
+type Task[T] = () => T / { Process, IO, Promises } at {io, global}
+
+type PromiseState[T] {
+  Unresolved()
+  Resolved(value: T)
+  Awaited(callbacks: List[T => Unit at {io, global}])
 }
 
-def block[T](p: Promise[T]) = do await(p)
+type Promise[T] = Ref[PromiseState[T]]
 
-extern io def readPromise(path: String): Promise[String] =
-  "fsPromises.readFile(${path}, 'utf8')"
+def fresh[T](): Promise[T] = fresh(Unresolved())
 
-extern io def awaitPromise[T, R](p: Promise[T], cont: T => R at {io}): R =
-  "${p}.then(res => (${cont})(res).run())"
+def eventloop(prog: Task[Unit]) = {
 
-extern io def fork(process: () => Unit at {io}): Unit =
-  "setTimeout(() => (${process})().run(), 0)"
+  // TODO we need to replace this by a mutable queue
+  var queue: Dequeue[() => Unit at {global, io}] in global = emptyQueue();
+
+  var iterations in global = 0;
+
+  var openIOTasks in global = 0;
+
+  def run(): Unit = {
+    iterations = iterations + 1;
+    queue.popBack match {
+      case Some((k, q)) =>
+        queue = q;
+        setTimeout(0, box { k(); run() })
+      case None() and openIOTasks > 0 =>
+        // Busy waiting
+        // Using openIOTasks and busy waiting is mostly for instructive purposes.
+        // Instead, we could also make sure a call to `run()` is part of the captured continuation
+        // of the IO task to "wake up" the scheduler.
+        setTimeout(0, run)
+      case _ =>
+        println("leaving event loop after " ++ iterations.show ++ " iterations.")
+    }
+  }
+
+  def handle(p: Task[Unit]): Unit =
+    try { p() }
+    with Process {
+      def yield() = {
+        queue = queue.pushFront(fun() { resume(()) })
+      }
+
+      def fork(task) = {
+        queue = queue.pushFront(box { handle(task) })
+        resume(())
+      }
+
+      def exit() = {
+        ()
+      }
+    }
+    with IO {
+      def performIO[T](computation) = {
+        openIOTasks = openIOTasks + 1
+        computation(box { res => openIOTasks = openIOTasks - 1; resume(res) })
+      }
+    }
+    with Promises {
+      def async[T](task) = {
+
+        def resolve[T](p: Promise[T], v: T): Unit = p.read match {
+          case Unresolved() => p.write(Resolved(v))
+          case Resolved(v) => panic("Promise already resolved")
+          case Awaited(ks) =>
+            p.write(Resolved(v))
+            ks.foreach { k =>
+              queue = queue.pushBack(box { k(v) })
+            }
+        }
+
+        val promise: Promise[T] = fresh();
+        queue = queue.pushFront(box { handle(box { resolve(promise, task()) }) })
+        resume(promise)
+      }
+      def await[T](promise) = promise.read match {
+        case Unresolved() => promise.write(Awaited(Cons(resume, Nil())))
+        case Resolved(v) => resume(v)
+        case Awaited(ks) => promise.write(Awaited(Cons(resume, ks)))
+      }
+    }
+
+  // implement the concurrency / io actions (collecting tasks)
+  handle(prog);
+
+  // run the scheduler
+  run()
+}
+
+
+def myProgram() =
+  readFile("README.md")
+
+def otherProgram() =  {
+  val r1 = do async(box { myProgram() })
+  val r2 = do async(box { myProgram() })
+  println(do await(r1))
+  println(do await(r2))
+}
+
+
+
+def readFilePromise(path: String): Promise[String] / Promises = do async(box { readFile(path) })
+
+def main() = eventloop(box {
+  val p1 = readFilePromise("README.md")
+  val p2 = readFilePromise("package.json")
+
+  println("result: " ++ do await(p1).length.show ++ " and " ++ do await(p2).length.show)
+})
