@@ -92,11 +92,12 @@ enum FeatureFlag extends Tree {
   case NamedFeatureFlag(id: String)
   case Default
 
-  def matches(name: String): Boolean = this match {
+  def matches(name: String, matchDefault: Boolean = true): Boolean = this match {
     case NamedFeatureFlag(n) if n == name => true
-    case Default => true
+    case Default => matchDefault
     case _ => false
   }
+  def isDefault: Boolean = this == Default
 
   def matches(names: List[String]): Boolean = this match {
     case NamedFeatureFlag(n) if names.contains(n) => true
