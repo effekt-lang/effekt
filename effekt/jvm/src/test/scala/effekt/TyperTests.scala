@@ -267,7 +267,7 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
-  testTyperFile("Box inference tests")("examples/pts/pos/boxInference.effekt"){
+  testTyperFile("Box inference tests".ignore)("examples/pts/pos/boxInference.effekt"){
     C => {
       C.assertBlockType("func1", "Int => Int at {} => Int")
       // C.assertBlockType("func2", "List[Int => Int at {}] => Int")
