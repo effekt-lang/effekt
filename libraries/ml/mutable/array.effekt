@@ -6,10 +6,10 @@ import immutable/option
 extern type Array[T]
 
 extern pure def emptyArray[T](): Array[T] =
-    "Array.fromList []"
+    ml "Array.fromList []"
 
 extern pure def array[T](initialSize: Int, init: T): Array[T] =
-  "Array.array (${initialSize}, ${init})"
+  ml "Array.array (${initialSize}, ${init})"
 
 def get[T](arr: Array[T], index: Int): Option[T] = {
     val len = size(arr);
@@ -18,17 +18,17 @@ def get[T](arr: Array[T], index: Int): Option[T] = {
 }
 
 extern pure def size[T](arr: Array[T]): Int =
-    "Array.length ${arr}"
+    ml "Array.length ${arr}"
 
 extern pure def unsafeGet[T](arr: Array[T], index: Int): T =
-    "Array.sub (${arr}, ${index})"
+    ml "Array.sub (${arr}, ${index})"
 
 def put[T](arr: Array[T], index: Int, value: T): Unit =
     if (index < 0 || size(arr) <= index) ()
     else unsafeput(arr, index, value)
 
 extern io def unsafeput[T](arr: Array[T], index: Int, value: T): Unit =
-    "Array.update (${arr}, ${index}, ${value})"
+    ml "Array.update (${arr}, ${index}, ${value})"
 
 def copy[T](arr: Array[T]): Array[T] =
     get(arr, 0) match {
@@ -40,4 +40,4 @@ def copy[T](arr: Array[T]): Array[T] =
     }
 
 extern pure def copyInto[T](src: Array[T], dst: Array[T]): Unit =
-    "Array.copy {src = ${src}, dst = ${dst}, di = 0}"
+    ml "Array.copy {src = ${src}, dst = ${dst}, di = 0}"
