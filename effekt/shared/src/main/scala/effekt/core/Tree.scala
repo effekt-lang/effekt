@@ -129,14 +129,18 @@ enum Extern extends Tree {
   case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, bodies: List[ExternBody])
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-case class ExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends Tree
+sealed trait ExternBody extends Tree {
+  def featureFlag: FeatureFlag
+}
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: Expr) extends ExternBody
+}
 extension(self: List[ExternBody]) {
-  def forFeatureFlags(flags: List[String]): Option[Template[Pure]] = flags match {
+  def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
     case Nil => None
     case flag :: other =>
-      self.collectFirst{
-        case ExternBody(featureFlag, contents) if featureFlag.matches(flag) => contents
-      } orElse { self.forFeatureFlags(other) }
+      self.find( _.featureFlag.matches(flag) ) orElse { self.forFeatureFlags(other) }
   }
 }
 

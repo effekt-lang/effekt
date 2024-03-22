@@ -52,14 +52,18 @@ enum Declaration {
 }
 export Declaration.*
 
-case class ExternBody(featureFlag: FeatureFlag, contents: Template[Variable])
+sealed trait ExternBody {
+  def featureFlag: FeatureFlag
+}
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Variable]) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: Statement) extends ExternBody
+}
 extension(self: List[ExternBody]) {
-  def forFeatureFlags(flags: List[String]): Option[Template[Variable]] = flags match {
+  def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
     case Nil => None
     case flag :: other =>
-      self.collectFirst {
-        case ExternBody(featureFlag, contents) if featureFlag.matches(flag) => contents
-      } orElse {
+      self.find( _.featureFlag.matches(flag) ) orElse {
         self.forFeatureFlags(other)
       }
   }

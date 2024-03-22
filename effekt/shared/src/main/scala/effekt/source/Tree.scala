@@ -110,13 +110,18 @@ object FeatureFlag {
       case Nil => false
       case name :: other =>
         self.collectFirst {
-          case ExternBody(flag, a) if flag.matches(name) => a
+          case ExternBody.StringExternBody(flag, a) if flag.matches(name) => ()
+          case ExternBody.EffektExternBody(flag, a) if flag.matches(name) => ()
         }.isDefined || (self.supportedByFeatureFlags(other))
     }
   }
 }
 
-case class ExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends Tree
+sealed trait ExternBody extends Tree
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Term) extends ExternBody
+}
 
 
 /**

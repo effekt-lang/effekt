@@ -833,7 +833,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
 
-        bodies.foreach{ case source.ExternBody(ff, body) => body.args.foreach { arg => checkExpr(arg, None) } }
+        bodies.foreach{
+          case source.ExternBody.StringExternBody(ff, body) =>
+            body.args.foreach { arg => checkExpr(arg, None) }
+          case source.ExternBody.EffektExternBody(ff, body) =>
+            // FIXME this currently DOES NOT check effects or return type
+            checkExpr(body, None)
+        }
 
         Result((), Pure)
       }
