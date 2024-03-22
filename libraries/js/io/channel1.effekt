@@ -1,0 +1,55 @@
+
+module io/channel1
+
+/**
+ * A channel that needs to be written and read exactly once
+ */
+extern type Channel1[A] // = Ref[Maybe[Either[A, A => ()]]]
+
+extern """
+function fill(ch, a) {
+  const v = ch.value;
+  if (v === null) { ch.value = a }
+  else { v(a) }
+}
+function wait(ch, k) {
+  const v = ch.value;
+  if (v === null) { ch.value = k }
+  else { k(v) }
+}
+function fresh() { return { value: null } }
+"""
+
+extern {io} def fill[A](ch: Channel1[A], a: A): Unit = "fill(${ch}, ${a})"
+extern {io} def fresh[A](): Channel1[A] = "fresh()"
+extern {control} def wait[A](ch: Channel1[A]): A = "$effekt.callcc(k => wait(${ch}, k))"
+
+// Jona: This is more general: we do NOT want to capture the WHOLE stack.
+extern {io} def wait[A](ch: Channel1[A], k: A => Unit at {io, global}): Unit = "wait(${ch}, el => (${k})(el).run())"
+
+extern """
+  function readFileChannel1(path) {
+    const ch = fresh();
+    fs.readFile(path, (err, data) => {
+      if (!!err) { throw err; }
+      else { fill(ch, data) }
+    });
+    return ch
+  }
+
+  function fork(k) {
+    const ch = fresh();
+    setTimeout(() => {
+      k().then(a => {
+        fill(ch, a);
+        return $effekt.pure($effekt.unit);
+      }).run();
+    }, 0);
+    return ch
+  }
+"""
+
+extern {io} def readFileChannel1(path: String): Channel1[String] =
+  "readFileChannel1(${path})"
+
+extern {io} def fork[A](k: () => A at {io, global, control}): Channel1[A] = "fork(${k})"

@@ -11,64 +11,6 @@ const fs = require("fs")
 """
 
 
-// Channel1
-extern type Channel1[A] // = Ref[Maybe[Either[A, A => ()]]]
-
-extern """
-function fill(ch, a) {
-  const v = ch.value;
-  if (v === null) { ch.value = a }
-  else { v(a) }
-}
-function wait(ch, k) {
-  const v = ch.value;
-  if (v === null) { ch.value = k }
-  else { k(v) }
-}
-function fresh() { return { value: null } }
-"""
-
-extern {io} def fill[A](ch: Channel1[A], a: A): Unit = "fill(${ch}, ${a})"
-extern {io} def fresh[A](): Channel1[A] = "fresh()"
-extern {control} def wait[A](ch: Channel1[A]): A = "$effekt.callcc(k => wait(${ch}, k))"
-
-// Jona: This is more general: we do NOT want to capture the WHOLE stack.
-//   Also, this is now io and not control which is the RIGHT thing.
-extern {io} def wait[A](ch: Channel1[A], k: A => Unit at {io, global}): Unit = "wait(${ch}, el => (${k})(el).run())"
-
-extern """
-  function readFileChannel1(path) {
-    const ch = fresh();
-    fs.readFile(path, (err, data) => {
-      if (!!err) { throw err; }
-      else { fill(ch, data) }
-    });
-    return ch
-  }
-
-  function fork(k) {
-    const ch = fresh();
-    setTimeout(() => {
-      k().then(a => {
-        fill(ch, a);
-        return $effekt.pure($effekt.unit);
-      }).run();
-    }, 0);
-    return ch
-  }
-"""
-
-// https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382
-// https://nodejs.org/api/fs.html#fsreadfilepath-options-callback
-extern {io} def readFileChannel1(path: String): Channel1[String] =
-  "readFileChannel1(${path})"
-
-extern {io} def fork[A](k: () => A at {io, global, control}): Channel1[A] = "fork(${k})"
-
-
-extern io def setTimeout(millis: Int, prog: () => Unit at {global, io}): Unit =
-  "setTimeout(() => (${prog})().run(), ${millis})"
-
 
 // Asynchronous I/O
 // ----------------
@@ -87,28 +29,6 @@ interface IO {
    */
   def performIO[T](computation: (T => Unit at {io,global}) => Unit at {io,global}): T
 }
-
-// def withIO(program: => Unit / IO at {io, global}): Unit =
-//   try { program() } with IO {
-//     def performIO[T](computation) =
-//       computation(resume)
-//   }
-
-
-extern io def readFileCallbacks(path: String, onSuccess: String => Unit at {io, global}): Unit =
-  "fs.readFile(${path}, 'utf8', (err, res) => { if (!!err) { throw err } else { (${onSuccess})(res).run() } })"
-
-def readFile(path: String): String / IO =
-  do performIO[String](box { write =>
-    readFileCallbacks(path, write)
-  })
-
-
-def main2() = {
-  readFile("README.md")
-}
-
-
 
 interface Process {
   def fork(p: Task[Unit]): Unit
@@ -213,23 +133,32 @@ def eventloop(prog: Task[Unit]) = {
 }
 
 
-def myProgram() =
-  readFile("README.md")
+namespace files {
 
-def otherProgram() =  {
-  val r1 = do async(box { myProgram() })
-  val r2 = do async(box { myProgram() })
-  println(do await(r1))
-  println(do await(r2))
+  /**
+   * Reads a file at given path in a utf8 encoded string.
+   *
+   * Also see: <https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382>
+   * Also see: <https://nodejs.org/api/fs.html#fsreadfilepath-options-callback>
+   */
+  extern io def readFileCallbacks(path: String, onSuccess: String => Unit at {io, global}): Unit =
+    "fs.readFile(${path}, 'utf8', (err, res) => { if (!!err) { throw err } else { (${onSuccess})(res).run() } })"
+
+  def readFile(path: String): String / IO =
+    do performIO[String](box { write =>
+      readFileCallbacks(path, write)
+    })
+
+  def readFilePromise(path: String): Promise[String] / Promises = do async(box { readFile(path) })
 }
 
+extern io def setTimeout(millis: Int, prog: () => Unit at {global, io}): Unit =
+  "setTimeout(() => (${prog})().run(), ${millis})"
 
-
-def readFilePromise(path: String): Promise[String] / Promises = do async(box { readFile(path) })
 
 def main() = eventloop(box {
-  val p1 = readFilePromise("README.md")
-  val p2 = readFilePromise("package.json")
+  val p1 = files::readFilePromise("README.md")
+  val p2 = files::readFilePromise("package.json")
 
   println("result: " ++ do await(p1).length.show ++ " and " ++ do await(p2).length.show)
 })
