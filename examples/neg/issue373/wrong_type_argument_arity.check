@@ -1,3 +1,0 @@
-[error] examples/neg/issue373/wrong_type_argument_arity.effekt:6:17: Wrong number of type arguments, given 2 but expected 1
-  try { println(eff.op[Bool, Int]("hello")) }
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
