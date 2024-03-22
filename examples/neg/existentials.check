@@ -1,7 +1,7 @@
-[error] examples/neg/existentials.effekt:10:16: Type Boolean does not match the declared type C.
-    def get[C](c: Boolean) = { resume((42, c)) }
+[error] examples/neg/existentials.effekt:10:16: Type Bool does not match the declared type C.
+    def get[C](c: Bool) = { resume((42, c)) }
                ^^^^^^^^^^
-[error] examples/neg/existentials.effekt:10:44: Expected C but got Boolean.
-    def get[C](c: Boolean) = { resume((42, c)) }
+[error] examples/neg/existentials.effekt:10:44: Expected C but got Bool.
+    def get[C](c: Bool) = { resume((42, c)) }
                                            ^
 
