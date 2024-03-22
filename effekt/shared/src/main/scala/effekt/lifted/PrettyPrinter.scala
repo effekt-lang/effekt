@@ -1,7 +1,7 @@
 package effekt
 package lifted
 
-import effekt.FeatureFlag
+import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions

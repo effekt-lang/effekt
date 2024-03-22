@@ -1,7 +1,7 @@
 package effekt
 package machine
 
-import effekt.FeatureFlag
+import effekt.source.FeatureFlag
 
 /**
  * Variables stand for values
