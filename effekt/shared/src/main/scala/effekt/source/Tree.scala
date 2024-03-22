@@ -1,7 +1,6 @@
 package effekt
 package source
 
-import effekt.FeatureFlag
 import effekt.context.Context
 import effekt.symbols.Symbol
 
@@ -86,6 +85,43 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
+/**
+ * Used to mark externs for different backends
+ */
+enum FeatureFlag extends Tree {
+  case NamedFeatureFlag(id: String)
+  case Default
+
+  def matches(name: String): Boolean = this match {
+    case NamedFeatureFlag(n) if n == name => true
+    case Default => true
+    case _ => false
+  }
+
+  def matches(names: List[String]): Boolean = this match {
+    case NamedFeatureFlag(n) if names.contains(n) => true
+    case Default => true
+    case _ => false
+  }
+}
+object FeatureFlag {
+  extension[A](self: List[(FeatureFlag, A)]) {
+    def forFeatureFlag(name: String): Option[A] = {
+      self.collectFirst {
+        case (flag, a) if flag.matches(name) => a
+      }
+    }
+    def forFeatureFlags(names: List[String]): Option[A] = names match {
+      case Nil => None
+      case name :: other =>
+        self.collectFirst {
+          case (flag, a) if flag.matches(name) => a
+        } orElse (self.forFeatureFlags(other))
+    }
+  }
+}
+
+case class ExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends Tree
 
 
 /**
@@ -202,7 +238,7 @@ enum Def extends Definition {
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
-                 bodies: List[(FeatureFlag, Template[Term])]) extends Def
+                 bodies: List[ExternBody]) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -664,6 +700,7 @@ object Tree {
     def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
     def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
+    def rewrite(b: ExternBody)(using Context): source.ExternBody = structuralVisit(b)
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -726,6 +763,7 @@ object Tree {
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
+    def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)
 
     def query(t: Template[Term])(using Context, Ctx): Res =
       combineAll(t.args.map(query))

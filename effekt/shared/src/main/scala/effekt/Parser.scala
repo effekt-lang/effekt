@@ -174,7 +174,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> rep(featureFlag ~ externBody)) ^^ {
       case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ bodies =>
         ExternDef(pure, id, tparams, vparams, bparams, tpe,
-          bodies.map{ case ff ~ b => (ff, b) }.toList)
+          bodies.map{ case ff ~ b => ExternBody(ff, b) }.toList)
     }
 
   lazy val externResource: P[Def] =

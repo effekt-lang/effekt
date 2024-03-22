@@ -833,7 +833,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
 
-        bodies.foreach{ (ff, body) => body.args.foreach { arg => checkExpr(arg, None) } }
+        bodies.foreach{ case source.ExternBody(ff, body) => body.args.foreach { arg => checkExpr(arg, None) } }
 
         Result((), Pure)
       }

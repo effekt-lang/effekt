@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef, RegDef }
+import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -402,7 +402,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  bodies: List[(FeatureFlag, Template[source.Term])]
+  bodies: List[source.ExternBody]
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
