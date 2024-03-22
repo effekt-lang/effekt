@@ -99,6 +99,8 @@ sealed trait EffectsOrRef {
   lazy val canonical: List[InterfaceType]
 
   def distinct: EffectsOrRef
+
+  def asEffects: Option[Effects]
 }
 
 case class Effects(effects: List[BlockType.InterfaceType]) extends EffectsOrRef {
@@ -117,6 +119,8 @@ case class Effects(effects: List[BlockType.InterfaceType]) extends EffectsOrRef 
   override lazy val canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
 
   override def distinct: Effects = Effects(effects.distinct)
+
+  override def asEffects: Some[Effects] = Some(this)
 }
 object Effects {
 
@@ -146,6 +150,8 @@ case class EffectRef(evar: EffectVar) extends EffectsOrRef {
 
   override lazy val canonical: List[InterfaceType] = sys error(evar.name.toString + " occurred in an unexpected place")
   override def distinct: EffectRef = this
+
+  override def asEffects: None.type = None
 
   def name: Name = LocalName("EffectSetWildcard")
 }
