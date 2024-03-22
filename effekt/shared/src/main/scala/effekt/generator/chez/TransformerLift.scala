@@ -20,6 +20,8 @@ import scala.language.implicitConversions
  */
 object TransformerLift {
 
+  val chezFeatureFlags: List[String] = List("chezLift", "chez")
+
   def runMain(main: ChezName): chez.Expr =
     val monomorphized = false
     if (monomorphized) chez.Call(chez.Call(main), List(CPS.id))
@@ -196,15 +198,19 @@ object TransformerLift {
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {
-    case Extern.Def(id, tparams, params, ret, body) =>
+    case Extern.Def(id, tparams, params, ret, bodies) =>
+      val body = bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
           case p => Some(nameDef(p.id)) },
           toChez(body)))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>
       RawDef(contents)
+
+    case Extern.Include(_, _) =>
+      RawDef("") // ignore, not meant for us
   }
 
   def toChez(t: Template[lifted.Expr]): chez.Expr =

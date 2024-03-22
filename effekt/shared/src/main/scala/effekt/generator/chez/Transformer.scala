@@ -13,6 +13,8 @@ import scala.language.implicitConversions
 
 object TransformerMonadic extends Transformer {
 
+  val chezFeatureFlags: List[String] = List("chezMonadic", "chez")
+
   def run(expr: chez.Expr): chez.Expr =
     Builtin("run", expr)
 
@@ -28,6 +30,8 @@ object TransformerMonadic extends Transformer {
 
 object TransformerCallCC extends Transformer {
 
+  val chezFeatureFlags: List[String] = List("chezCallCC", "chez")
+
   def run(expr: chez.Expr): chez.Expr = expr
 
   def pure(expr: chez.Expr): chez.Expr = expr
@@ -40,6 +44,8 @@ object TransformerCallCC extends Transformer {
 }
 
 trait Transformer {
+
+  val chezFeatureFlags: List[String]
 
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
@@ -132,13 +138,16 @@ trait Transformer {
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, bodies) =>
+      val body = bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
           toChez(body)))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>
       RawDef(contents)
+
+    case Extern.Include(_, _) => RawDef("") // ignore, not meant for us
   }
 
   def toChez(t: Template[core.Expr]): chez.Expr =

@@ -180,7 +180,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -192,7 +192,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        ExternFunction(name, tps, vps, bps, tpe, eff, capt, body)
+        ExternFunction(name, tps, vps, bps, tpe, eff, capt, bodies)
       })
     }
 
@@ -203,10 +203,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
       Context.bindBlock(sym)
 
-    case d @ source.ExternInclude(path, Some(contents), _) =>
+    case d @ source.ExternInclude(ff, path, Some(contents), _) =>
       ()
 
-    case d @ source.ExternInclude(path, None, _) =>
+    case d @ source.ExternInclude(ff, path, None, _) =>
       d.contents = Some(Context.contentsOf(path).getOrElse {
         Context.abort(s"Missing include: ${path}")
       })
@@ -288,13 +288,13 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) =>
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        body.args.foreach(resolveGeneric)
+        bodies.foreach{ (ff, body) => body.args.foreach(resolveGeneric) }
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
@@ -364,7 +364,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
     case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(path, _, _) => ()
+    case source.ExternInclude(ff, path, _, _) => ()
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }

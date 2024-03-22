@@ -4,7 +4,7 @@ package core
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, Wildcard, builtins }
+import effekt.symbols.{FeatureFlag, Name, Wildcard, builtins}
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -59,9 +59,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> toDoc(body)
-    case Extern.Include(contents) => emptyDoc // right now, do not print includes.
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> vcat(bodies map {
+        case (ff, body) => toDoc(ff) <+> toDoc(body)
+      })
+    case Extern.Include(ff, contents) => emptyDoc // right now, do not print includes.
+  }
+
+  def toDoc(ff: FeatureFlag): Doc = ff match {
+    case FeatureFlag.NamedFeatureFlag(name) => name
+    case FeatureFlag.Default => "else"
   }
 
   def toDoc(t: Template[Pure]): Doc =

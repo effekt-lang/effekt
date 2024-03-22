@@ -123,10 +123,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(extern: Extern)(using PContext): Extern = extern match {
-    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
+    case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, bodies) =>
       Extern.Def(id, tparams, cparams, vparams map transform, bparams map transform, transform(ret),
-        annotatedCapture, Template(body.strings, body.args map transform))
-    case Extern.Include(contents) => Extern.Include(contents)
+        annotatedCapture, bodies map { (ff, body) => (ff, Template(body.strings, body.args map transform)) } )
+    case Extern.Include(ff, contents) => Extern.Include(ff, contents)
   }
 
   def transform(valueParam: Param.ValueParam)(using PContext): Param.ValueParam = valueParam match {

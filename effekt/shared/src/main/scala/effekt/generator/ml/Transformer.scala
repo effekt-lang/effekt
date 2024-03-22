@@ -16,6 +16,8 @@ import scala.collection.mutable
 
 object Transformer {
 
+  val mlFeatureFlags: List[String] = List("ml")
+
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
   def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(using C: Context): ml.Toplevel = {
@@ -184,10 +186,13 @@ object Transformer {
   }
 
   def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
-    case Extern.Def(id, tparams, params, ret, body) =>
+    case Extern.Def(id, tparams, params, ret, bodies) =>
+      val body = bodies.forFeatureFlags(mlFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ }
       ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) if ff.matches(mlFeatureFlags) =>
       RawBind(contents)
+    case Extern.Include(ff, contents) =>
+      RawBind("") // ignore, not meant for us
   }
 
   def toML(t: Template[lifted.Expr])(using TransformerContext): ml.Expr =

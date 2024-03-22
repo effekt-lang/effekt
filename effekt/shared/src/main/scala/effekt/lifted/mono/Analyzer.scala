@@ -121,7 +121,7 @@ def analyze(e: Extern)(using C: ErrorReporter, F: FlowAnalysis): Unit = e match 
     // externs do not receive evidence themselves -- maybe for their block params?
     //val ev: Evidences.FlowVar = Evidences.fresh(eps.size)
 
-  case Extern.Include(contents) => ()
+  case Extern.Include(ff, contents) => ()
 }
 
 def preanalyze(d: Definition)(using C: ErrorReporter, F: FlowAnalysis): Unit =

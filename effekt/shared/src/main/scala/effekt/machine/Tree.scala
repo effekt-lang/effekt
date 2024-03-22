@@ -1,6 +1,8 @@
 package effekt
 package machine
 
+import effekt.symbols.FeatureFlag
+
 /**
  * Variables stand for values
  */
@@ -45,8 +47,8 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, body: Template[Variable])
-  case Include(contents: String)
+  case Extern(name: String, parameters: Environment, returnType: Type, bodies: List[(FeatureFlag, Template[Variable])])
+  case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*
 

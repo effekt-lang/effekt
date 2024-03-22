@@ -2,6 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
+import effekt.symbols.FeatureFlag
 import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
 import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
@@ -148,6 +149,14 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       case id ~ (tps ~ vps ~ bps) ~ ret => Operation(id, tps, vps, bps, ret)
     }
 
+  lazy val featureFlag: P[FeatureFlag] =
+    ( "else" ^^ { _ => FeatureFlag.Default }
+    | opt(ident) ^^ {
+        case Some(flag) => FeatureFlag.NamedFeatureFlag(flag)
+        case None => FeatureFlag.Default // TODO deprecate
+      }
+    )
+
   lazy val externDef: P[Def] =
     ( externType
     | externInterface
@@ -163,9 +172,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
-      case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ body =>
-        ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> rep(featureFlag ~ externBody)) ^^ {
+      case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ bodies =>
+        ExternDef(pure, id, tparams, vparams, bparams, tpe,
+          bodies.map{ case ff ~ b => (ff, b) }.toList)
     }
 
   lazy val externResource: P[Def] =
@@ -185,8 +195,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val externInclude: P[Def] =
-    ( `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""), None) }
-    | `extern` ~> multilineString ^^ { contents => ExternInclude("", Some(contents)) }
+    ( `extern` ~> `include` ~/> featureFlag ~ """\"([^\"]*)\"""".r ^^ { case ff ~ s => ExternInclude(ff, s.stripPrefix("\"").stripSuffix("\""), None) }
+    | `extern` ~> featureFlag ~ multilineString ^^ { case ff ~ contents => ExternInclude(ff, "", Some(contents)) }
     )
 
 
