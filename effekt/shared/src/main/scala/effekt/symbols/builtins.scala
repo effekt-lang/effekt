@@ -82,9 +82,7 @@ object builtins {
   lazy val globalRegion = ExternResource(name("global"), TRegion)
 
   val rootTerms: Map[String, TermSymbol] = Map(
-    "global" -> globalRegion,
-    "get" -> TState.get,
-    "put" -> TState.put
+    "global" -> globalRegion
   )
 
   val rootCaptures: Map[String, Capture] = Map(
