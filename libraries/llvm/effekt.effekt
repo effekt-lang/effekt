@@ -26,7 +26,7 @@ extern io def println(n: Int): Unit = """
 """
 
 extern io def println(b: Bool): Unit = """
-    call void @c_io_println_Bool(%Pos %b)
+    call void @c_io_println_Boolean(%Pos %b)
     ret %Pos zeroinitializer ; Unit
 """
 
