@@ -1,2 +1,2 @@
-def main() = println("a
+def main() = println("a // ERROR ')' expected but '"' found
 b")
