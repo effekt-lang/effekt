@@ -7,15 +7,15 @@ import immutable/result
 def main() = {
   val empty: List[Int] = Nil()
 
-  println(result[Int, OutOfBounds] { get(empty, -1) }.toOption)
-  println(result[Int, OutOfBounds] { get(empty, 0) }.toOption)
-  println(result[Int, OutOfBounds] { get(empty, 1) }.toOption)
+  println(result[Int, OutOfBounds] { empty.get(-1) }.toOption)
+  println(result[Int, OutOfBounds] { empty.get(0) }.toOption)
+  println(result[Int, OutOfBounds] { empty.get(1) }.toOption)
 
   val list: List[Int] = [1, 2, 3, 4, 5]
 
-  println(result[Int, OutOfBounds] { get(list, -1) }.toOption)
-  println(result[Int, OutOfBounds] { get(list, 0) }.toOption)
-  println(result[Int, OutOfBounds] { get(list, 1) }.toOption)
-  println(result[Int, OutOfBounds] { get(list, 4) }.toOption)
-  println(result[Int, OutOfBounds] { get(list, 5) }.toOption)
+  println(result[Int, OutOfBounds] { list.get(-1) }.toOption)
+  println(result[Int, OutOfBounds] { list.get(0) }.toOption)
+  println(result[Int, OutOfBounds] { list.get(1) }.toOption)
+  println(result[Int, OutOfBounds] { list.get(4) }.toOption)
+  println(result[Int, OutOfBounds] { list.get(5) }.toOption)
 }
