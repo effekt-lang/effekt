@@ -15,6 +15,8 @@ class JavaScript extends Compiler[String] {
   // -----------------------------------------
   def extension = ".js"
 
+  override def supportedFeatureFlags: List[String] = TransformerMonadicWhole.jsFeatureFlags
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => None

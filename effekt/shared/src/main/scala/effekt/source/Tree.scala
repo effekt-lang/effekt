@@ -119,6 +119,15 @@ object FeatureFlag {
         } orElse (self.forFeatureFlags(other))
     }
   }
+  extension (self: List[ExternBody]) {
+    def supportedByFeatureFlags(names: List[String]): Boolean = names match {
+      case Nil => false
+      case name :: other =>
+        self.collectFirst {
+          case ExternBody(flag, a) if flag.matches(name) => a
+        }.isDefined || (self.supportedByFeatureFlags(other))
+    }
+  }
 }
 
 case class ExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends Tree
