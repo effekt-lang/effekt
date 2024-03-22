@@ -530,7 +530,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
   lazy val string = // we need to replace certain characters that would otherwise mess up the respective syntax emitted by the backends
     ( multilineString ^^ { s => StringLit(s.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")) }
-    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\\\n", " ").replace("\\\r\n", "").replace("\t", "\\t")) }
+    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\\\n", "").replace("\\\r\n", "").replace("\t", "\\t")) }
     )
 
   lazy val boxedExpr: P[Term] =
