@@ -24,8 +24,6 @@ interface IO {
    * The computation is passed as a thunk in order to prevent accidental usage of
    * other control effects that would violate the contract of calling the writer
    * once.
-   *
-   * TODO better names!
    */
   def performIO[T](computation: (T => Unit at {io,global}) => Unit at {io,global}): T
 }
@@ -41,7 +39,7 @@ interface Promises {
   def await[T](p: Promise[T]): T
 }
 
-type Task[T] = () => T / { Process, IO, Promises } at {io, global}
+type Task[T] = () => T / { IO, Process, Promises } at {io, global}
 
 type PromiseState[T] {
   Unresolved()
@@ -141,24 +139,66 @@ namespace files {
    * Also see: <https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382>
    * Also see: <https://nodejs.org/api/fs.html#fsreadfilepath-options-callback>
    */
-  extern io def readFileCallbacks(path: String, onSuccess: String => Unit at {io, global}): Unit =
+  extern io def readFileCallback(path: String, onSuccess: String => Unit at {io, global}): Unit =
     "fs.readFile(${path}, 'utf8', (err, res) => { if (!!err) { throw err } else { (${onSuccess})(res).run() } })"
 
   def readFile(path: String): String / IO =
     do performIO[String](box { write =>
-      readFileCallbacks(path, write)
+      readFileCallback(path, write)
     })
 
   def readFilePromise(path: String): Promise[String] / Promises = do async(box { readFile(path) })
 }
 
+namespace console {
+  extern """
+    const readline = require('node:readline');
+  """
+
+  interface Console {
+    def readline(): String / IO
+  }
+
+  namespace js {
+    extern type JSConsole
+    extern {io} def newConsole(): JSConsole =
+      """readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        })"""
+    extern {io} def close(console: JSConsole): Unit = "${console}.close()"
+    extern {io} def readlineCallback(console: JSConsole, k: String => Unit at {io, global}): Unit =
+      "${console}.question('', input => (${k})(input).run())"
+  }
+
+  def withConsole[R] { prog: => R / Console }: R = {
+    val c = js::newConsole()
+    try { val res = prog(); js::close(c); res } with Console {
+      def readline() = resume {
+        do performIO[String](box { write =>
+          js::readlineCallback(c, write)
+        })
+      }
+    }
+  }
+}
+
 extern io def setTimeout(millis: Int, prog: () => Unit at {global, io}): Unit =
   "setTimeout(() => (${prog})().run(), ${millis})"
 
+def countFile(): Int / IO = console::withConsole {
+  println("Please enter filename:")
+  val filename = do console::readline()
+  println("Now reading: " ++ filename)
+  files::readFile(filename).length
+}
 
 def main() = eventloop(box {
-  val p1 = files::readFilePromise("README.md")
-  val p2 = files::readFilePromise("package.json")
 
-  println("result: " ++ do await(p1).length.show ++ " and " ++ do await(p2).length.show)
+  val p1 = do async(box { countFile() })
+
+  println("Trying to read package.json")
+  val p2 = files::readFilePromise("package.json");
+
+  println("result: " ++ do await(p1).show ++ " and " ++ do await(p2).length.show)
 })
