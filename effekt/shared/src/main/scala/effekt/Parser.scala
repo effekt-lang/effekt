@@ -528,7 +528,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val bool   = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit   = literal("()") ^^^ UnitLit()
   lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
-  lazy val string = stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1)) }
+  lazy val string = // we need to replace certain characters that would otherwise mess up the respective syntax emitted by the backends
+    ( multilineString ^^ { s => StringLit(s.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")) }
+    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\\\n", "").replace("\\\r\n", "").replace("\t", "\\t")) }
+    )
 
   lazy val boxedExpr: P[Term] =
     `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
@@ -880,7 +883,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
    */
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
-  lazy val stringLiteral   = regex("""\"(\\.|[^\"])*\"""".r, "String literal")
+  lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
 
   // Delimiter for multiline strings
   val multi = "\"\"\""
