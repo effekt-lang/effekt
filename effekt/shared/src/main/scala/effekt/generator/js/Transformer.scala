@@ -95,7 +95,8 @@ trait Transformer {
     "window", "document", "alert", "console", "this"
   )
 
-  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
+  def jsEscape(name: String): String =
+    if (reserved contains name) "$" + name else name.replace("?", "").replace("!", "")
 
   def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 

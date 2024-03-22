@@ -369,7 +369,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val constructor: P[Constructor] =
-    idDef ~ valueParams ^^ Constructor.apply
+    idDef ~ maybeTypeParams ~ valueParams ^^ Constructor.apply
 
   /**
    * Expressions
@@ -779,10 +779,11 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   // === Lexing ===
 
   lazy val nameFirst = """[a-zA-Z_]""".r
-  lazy val nameRest = """[a-zA-Z0-9$_]""".r
-  lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
-  lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
-  lazy val qualifiedName = "%s(::%s)*\\b".format(name, name).r
+  lazy val nameRest = """[a-zA-Z0-9_!?$]""".r
+  lazy val nameBoundary = """(?!%s)""".format(nameRest).r
+  lazy val name = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
+  lazy val moduleName = "%s([/]%s)*%s".format(name, name, nameBoundary).r
+  lazy val qualifiedName = "%s(::%s)*%s".format(name, name, nameBoundary).r
 
   lazy val ident =
     (not(anyKeyword) ~> name

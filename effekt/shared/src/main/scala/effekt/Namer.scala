@@ -305,7 +305,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val name = Context.nameFor(id)
 
           Context scoped {
-            // the parameters of the effect are in scope
+            // the parameters of the interface are in scope
             interface.tparams.foreach { p => Context.bind(p) }
 
             val tps = tparams map resolve
@@ -341,9 +341,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DataDef(id, tparams, ctors) =>
       val data = d.symbol
       data.constructors = ctors map {
-        case source.Constructor(id, ps) =>
+        case source.Constructor(id, tparams, ps) =>
           val name = Context.nameFor(id)
-          val constructor = Constructor(name, data.tparams, null, data)
+          val tps = tparams map resolve
+
+          val constructor = Constructor(name, data.tparams ++ tps, null, data)
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
           constructor
@@ -511,13 +513,13 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   // TODO move away
   def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
-    val paramSyms = Context scoped {
+    val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
       params map resolve
     }
 
-    (paramSyms zip params) map {
+    (vps zip params) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
