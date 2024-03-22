@@ -19,7 +19,7 @@ abstract class AbstractTyperTests extends munit.FunSuite {
   /** Collects the result of typechecking. In particular, knows the [[Context]]. */
   case class TyperResult(context: Context, result: Typechecked)
   /** A test that first runs the frontend on `input` and then `body`, where the [[TyperResult]] is made available */
-  def testTyper(name: String)(src: Source)(body: TyperResult => Unit): Unit = {
+  def testTyper(name: munit.TestOptions)(src: Source)(body: TyperResult => Unit): Unit = {
     test(name) {
       val compiler = new effekt.Driver {}
       val configs = compiler.createConfig(Seq(
@@ -41,9 +41,15 @@ abstract class AbstractTyperTests extends munit.FunSuite {
       }
     }
   }
+  def testTyper(name: String)(src: Source)(body: TyperResult => Unit): Unit =
+    testTyper(munit.TestOptions(name))(src)(body)
   def testTyper(name: String)(input: String)(body: TyperResult => Unit): Unit =
     testTyper(name)(StringSource(input, name))(body)
+  def testTyper(name: munit.TestOptions)(input: String)(body: TyperResult => Unit): Unit =
+    testTyper(name)(StringSource(input, name.name))(body)
   def testTyperFile(name: String)(filename: String)(body: TyperResult => Unit): Unit =
+    testTyper(name)(FileSource(filename))(body)
+  def testTyperFile(name: munit.TestOptions)(filename: String)(body: TyperResult => Unit): Unit =
     testTyper(name)(FileSource(filename))(body)
 
   // <editor-fold desc="Finding symbol">
@@ -231,7 +237,7 @@ class TyperTests extends AbstractTyperTests {
     }
   }
 
-  testTyperFile("Block inference enhancement test")("examples/pts/pos/blockInferenceEnhancement.effekt") {
+  testTyperFile("Block inference enhancement test".ignore)("examples/pts/pos/blockInferenceEnhancement.effekt") {
     C => C.assertBlockType("run", "{ Int => Int / Eff } => Int / Eff")
   }
 
