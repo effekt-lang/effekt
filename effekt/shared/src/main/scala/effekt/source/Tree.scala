@@ -105,20 +105,6 @@ enum FeatureFlag extends Tree {
   }
 }
 object FeatureFlag {
-  extension[A](self: List[(FeatureFlag, A)]) {
-    def forFeatureFlag(name: String): Option[A] = {
-      self.collectFirst {
-        case (flag, a) if flag.matches(name) => a
-      }
-    }
-    def forFeatureFlags(names: List[String]): Option[A] = names match {
-      case Nil => None
-      case name :: other =>
-        self.collectFirst {
-          case (flag, a) if flag.matches(name) => a
-        } orElse (self.forFeatureFlags(other))
-    }
-  }
   extension (self: List[ExternBody]) {
     def supportedByFeatureFlags(names: List[String]): Boolean = names match {
       case Nil => false

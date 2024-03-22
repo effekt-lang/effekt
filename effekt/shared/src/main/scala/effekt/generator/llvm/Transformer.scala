@@ -3,6 +3,7 @@ package generator
 package llvm
 
 import effekt.machine
+import effekt.machine.forFeatureFlags
 import effekt.util.intercalate
 import effekt.machine.analysis.*
 

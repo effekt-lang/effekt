@@ -52,8 +52,20 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, bodies: List[(FeatureFlag, Template[Expr])])
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, bodies: List[ExternBody])
   case Include(featureFlag: FeatureFlag, contents: String)
+}
+case class ExternBody(featureFlag: FeatureFlag, body: Template[Expr])
+extension(self: List[ExternBody]) {
+  def forFeatureFlags(flags: List[String]): Option[Template[Expr]] = flags match {
+    case Nil => None
+    case flag :: other =>
+      self.collectFirst {
+        case ExternBody(featureFlag, contents) if featureFlag.matches(flag) => contents
+      } orElse {
+        self.forFeatureFlags(other)
+      }
+  }
 }
 
 enum Definition {
