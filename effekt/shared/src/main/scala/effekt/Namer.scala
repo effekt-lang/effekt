@@ -11,6 +11,7 @@ import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
+import effekt.source.FeatureFlag.supportedByFeatureFlags
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -192,6 +193,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
+
         ExternFunction(name, tps, vps, bps, tpe, eff, capt, bodies)
       })
     }
@@ -289,6 +291,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      if(!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
+        Context.warning(s"Extern definition ${id} is not supported by this backend.")
+      }
+
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }

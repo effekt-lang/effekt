@@ -14,6 +14,8 @@ class ChezSchemeLift extends Compiler[String] {
   // -----------------------------------------
   def extension = ".ss"
 
+  override def supportedFeatureFlags: List[String] = TransformerLift.chezFeatureFlags
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }

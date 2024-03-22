@@ -14,6 +14,9 @@ class ML extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".sml"
+
+  override def supportedFeatureFlags: List[String] = Transformer.mlFeatureFlags
+
   def buildFile(mainFile: String): String =
     s"""local
        |  (* import libraries *)

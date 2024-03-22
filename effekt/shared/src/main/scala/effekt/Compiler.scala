@@ -107,6 +107,8 @@ trait Compiler[Executable] {
 
   def extension: String
 
+  def supportedFeatureFlags: List[String]
+
   /**
    * Used by LSP server (Intelligence) to map positions to source trees
    */
