@@ -1,0 +1,19 @@
+module mutable/ref
+
+extern """
+function set$impl(ref, value) {
+  ref.value = value;
+  return $effekt.unit;
+}
+"""
+
+/**
+ * Global, mutable references
+ */
+extern type Ref[T]
+
+extern io def fresh[T](init: T): Ref[T] = "{ value: ${init} }"
+
+extern io def get[T](ref: Ref[T]): T = "${ref}.value"
+
+extern io def set[T](ref: Ref[T], value: T): Unit = "set$impl(${ref}, ${value})"
