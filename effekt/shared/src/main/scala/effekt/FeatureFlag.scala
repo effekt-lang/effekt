@@ -1,4 +1,4 @@
-package effekt.symbols
+package effekt
 
 enum FeatureFlag {
   case NamedFeatureFlag(id: String)

@@ -1,9 +1,9 @@
 package effekt
 package core
 
+import effekt.FeatureFlag
 import effekt.core.Param.ValueParam
 import effekt.source.NoSource
-import effekt.symbols.FeatureFlag
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Range, Source, StringSource }

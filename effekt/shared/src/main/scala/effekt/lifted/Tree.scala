@@ -1,8 +1,9 @@
 package effekt
 package lifted
 
+import effekt.FeatureFlag
 import effekt.context.Context
-import effekt.symbols.{Constructor, FeatureFlag, Name, Symbol}
+import effekt.symbols.{Constructor, Name, Symbol}
 import scala.collection.immutable
 
 export effekt.core.Id

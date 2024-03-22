@@ -1,8 +1,9 @@
 package effekt
 package source
 
+import effekt.FeatureFlag
 import effekt.context.Context
-import effekt.symbols.{FeatureFlag, Symbol}
+import effekt.symbols.Symbol
 
 /**
  * Data type representing source program trees.
