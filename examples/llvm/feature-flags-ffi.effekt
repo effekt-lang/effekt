@@ -1,0 +1,9 @@
+extern def backendName(): String =
+  js """ ("js") """
+  chez ("chez")
+  llvm ("llvm")
+  else ("unknown")
+
+def main() = {
+  println(backendName())
+}
