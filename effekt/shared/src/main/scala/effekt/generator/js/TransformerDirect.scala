@@ -89,8 +89,12 @@ object TransformerDirect extends Transformer {
 
   def toJS(e: core.Extern)(using TransformerContext): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      val body = bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
-      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(body))))
+      bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(body))))
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(body))))
+      }
 
     case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
       js.RawStmt(contents)

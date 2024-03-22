@@ -25,6 +25,7 @@ object Transformer {
       emit(Store(ConstantGlobal(PointerType(), "base"), LocalReference(spType, "sp")));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
+      declarations.map(transform)
       val terminator = transform(statement);
 
       val definitions = MC.definitions; MC.definitions = null;
@@ -33,7 +34,7 @@ object Transformer {
 
       val entryBlock = BasicBlock("entry", instructions, terminator)
       val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions :+ entryFunction
+      definitions :+ entryFunction
   }
 
   // context getters
@@ -41,13 +42,19 @@ object Transformer {
   private def FC(using FC: FunctionContext): FunctionContext = FC
   private def BC(using BC: BlockContext): BlockContext = BC
 
-  def transform(declaration: machine.Declaration): Definition =
+  def transform(declaration: machine.Declaration)(using ModuleContext): Unit =
     declaration match {
       case machine.Extern(functionName, parameters, returnType, bodies) =>
-        val body = bodies.forFeatureFlags(llvmFeatureFlags).getOrElse{ ??? /* TODO insert holes */ }
-        VerbatimFunction(transform(returnType), functionName, parameters.map {
-          case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-        }, transform(body))
+        bodies.forFeatureFlags(llvmFeatureFlags).getOrElse{ ??? /* TODO insert holes */ } match {
+          case machine.ExternBody.StringExternBody(_, body) =>
+            emit(VerbatimFunction(transform(returnType), functionName, parameters.map {
+              case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
+            }, transform(body)))
+          case machine.ExternBody.EffektExternBody(_, body) =>
+            defineFunction(functionName, parameters.map {
+              case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
+            }){ transform(body) }
+        }
       case machine.Include(ff, content) if ff.matches(llvmFeatureFlags) =>
         Verbatim(content)
       case machine.Include(ff, content) =>

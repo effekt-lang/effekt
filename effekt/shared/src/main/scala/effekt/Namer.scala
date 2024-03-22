@@ -300,7 +300,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        bodies.foreach { case source.ExternBody(ff, body) => body.args.foreach(resolveGeneric) }
+        bodies.foreach {
+          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolveGeneric)
+          case source.ExternBody.EffektExternBody(ff, body) => resolveGeneric(body)
+        }
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>

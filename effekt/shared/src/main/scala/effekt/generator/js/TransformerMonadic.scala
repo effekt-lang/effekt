@@ -114,8 +114,12 @@ trait TransformerMonadic extends Transformer {
 
   def toJS(e: core.Extern)(using DeclarationContext, Context): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      val body = bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
-      js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
+      bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
+      }
 
     case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
       js.RawStmt(contents)
@@ -180,14 +184,24 @@ trait TransformerMonadic extends Transformer {
 
     case DirectApp(f: core.Block.BlockVar, targs, vargs, Nil) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ })
+      extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          inlineExtern(vargs, extern.vparams, body)
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          toJS(body)
+      }
 
     case DirectApp(f, targs, vargs, bargs) =>
       js.Call(toJS(f), vargs.map(toJS) ++ bargs.map(toJS))
 
     case PureApp(f: core.Block.BlockVar, targs, vargs) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TOOD insert hole */ })
+      extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse { ??? /* TOOD insert hole */ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          inlineExtern(vargs, extern.vparams, body)
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          toJS(body)
+      }
 
     case PureApp(f, targs, vargs) =>
       js.Call(toJS(f), vargs.map(toJS))

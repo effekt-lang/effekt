@@ -126,7 +126,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, bodies) =>
       Extern.Def(id, tparams, cparams, vparams map transform, bparams map transform, transform(ret),
         annotatedCapture, bodies map {
-          case ExternBody(ff, body) => ExternBody(ff, Template(body.strings, body.args map transform))
+          case ExternBody.StringExternBody(ff, body) => ExternBody.StringExternBody(ff, Template(body.strings, body.args map transform))
+          case ExternBody.EffektExternBody(ff, body) => ExternBody.EffektExternBody(ff, transform(body))
         } )
     case Extern.Include(ff, contents) => Extern.Include(ff, contents)
   }

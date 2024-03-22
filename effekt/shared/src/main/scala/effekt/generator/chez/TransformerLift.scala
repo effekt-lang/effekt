@@ -199,12 +199,20 @@ object TransformerLift {
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {
     case Extern.Def(id, tparams, params, ret, bodies) =>
-      val body = bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
-      chez.Constant(nameDef(id),
-        chez.Lambda( params.flatMap {
-          case p: Param.EvidenceParam => None
-          case p => Some(nameDef(p.id)) },
-          toChez(body)))
+      bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          chez.Constant(nameDef(id),
+            chez.Lambda( params.flatMap {
+              case p: Param.EvidenceParam => None
+              case p => Some(nameDef(p.id)) },
+              toChez(body)))
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          chez.Constant(nameDef(id),
+            chez.Lambda( params.flatMap {
+              case p: Param.EvidenceParam => None
+              case p => Some(nameDef(p.id)) },
+              toChez(body)))
+      }
 
     case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>
       RawDef(contents)

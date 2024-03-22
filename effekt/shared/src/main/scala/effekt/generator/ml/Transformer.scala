@@ -187,8 +187,12 @@ object Transformer {
 
   def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, bodies) =>
-      val body = bodies.forFeatureFlags(mlFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ }
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+      bodies.forFeatureFlags(mlFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+      }
     case Extern.Include(ff, contents) if ff.matches(mlFeatureFlags) =>
       RawBind(contents)
     case Extern.Include(ff, contents) =>

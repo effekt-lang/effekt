@@ -139,10 +139,16 @@ trait Transformer {
 
   def toChez(decl: core.Extern): chez.Def = decl match {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, bodies) =>
-      val body = bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ }
-      chez.Constant(nameDef(id),
-        chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
-          toChez(body)))
+      bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
+        case ExternBody.StringExternBody(_, body) =>
+          chez.Constant(nameDef(id),
+            chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
+              toChez(body)))
+        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
+          chez.Constant(nameDef(id),
+            chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
+              toChez(body)))
+      }
 
     case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>
       RawDef(contents)
