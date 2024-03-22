@@ -322,7 +322,7 @@ class TyperTests extends AbstractTyperTests {
 
   testTyperFile("Parametric box tests")("examples/pts/pos/parametricBox.effekt") {
     C => {
-      C.assertValueType("boxed", "[A]A => Int at {}")
+      C.assertValueType("boxed", "[A](A) => Int at {}")
     }
   }
 
@@ -331,7 +331,7 @@ class TyperTests extends AbstractTyperTests {
   }
 
   testTyperFile("TypeParam tests")("examples/pts/pos/typeParameter.effekt") {
-    C => C.assertBlockType("id", "[A]A => A")
+    C => C.assertBlockType("id", "[A](A) => A")
   }
 
   testTyperFile("Value type tests")("examples/pts/pos/valueTypes.effekt"){

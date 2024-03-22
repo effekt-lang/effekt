@@ -1638,7 +1638,13 @@ trait TyperOps extends ContextOps { self: Context =>
      }
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
-    annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s)).getOrElse(abort(pretty"Cannot find type for ${s.name}."))
+    annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s))
+      .getOrElse {
+        if (s.name.name == "resume")
+          abort(pretty"Cannot find `resume`. Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?")
+        else
+          abort(pretty"Cannot find type for ${s.name}.")
+      }
 
   private[typer] def lookupCapture(s: BlockSymbol) =
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {

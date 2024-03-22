@@ -276,14 +276,14 @@ class Constraints(
     types.foreach {
       case x @ ValueUnificationVar(underlying, callTree) =>
         if (!valueTypeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
-          C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+          C.error(s"Cannot infer type argument ${underlying.getOrElse("(no underlying)")}, maybe consider annotating it?")
         }
     }
 
     blocks.foreach {
       case x @ BlockUnificationVar(underlying, callTree) =>
         if (!blockTypeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
-          C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+          C.error(s"Cannot infer type argument ${underlying.getOrElse("(no underlying)")}, maybe consider annotating it?")
         }
     }
 
