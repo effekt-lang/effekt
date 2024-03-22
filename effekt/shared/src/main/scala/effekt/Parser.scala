@@ -531,7 +531,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val string = stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1)) }
 
   lazy val boxedExpr: P[Term] =
-    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
+    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg | newExpr) ^^ { case capt ~ block => Box(capt, block) }
 
   lazy val lambdaExpr: P[Term] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
