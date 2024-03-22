@@ -138,9 +138,9 @@ object ExternBody {
 }
 extension(self: List[ExternBody]) {
   def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
-    case Nil => None
+    case Nil => self.find( _.featureFlag.isDefault )
     case flag :: other =>
-      self.find( _.featureFlag.matches(flag) ) orElse { self.forFeatureFlags(other) }
+      self.find( _.featureFlag.matches(flag, false) ) orElse { self.forFeatureFlags(other) }
   }
 }
 
