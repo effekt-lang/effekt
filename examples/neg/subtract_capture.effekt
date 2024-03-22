@@ -1,4 +1,4 @@
-interface Amb { def flip(): Boolean }
+interface Amb { def flip(): Bool }
 
 def ex1() =  {
 

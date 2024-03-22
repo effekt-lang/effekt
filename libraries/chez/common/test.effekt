@@ -1,19 +1,19 @@
 import text/string
 
 interface Assertion {
-  def assert(condition: Boolean, msg: String): Unit
+  def assert(condition: Bool, msg: String): Unit
 }
 
-def assertTrue(condition: Boolean, msg: String) =
+def assertTrue(condition: Bool, msg: String) =
   do assert(condition, msg)
 
-def assertTrue(condition: Boolean) =
+def assertTrue(condition: Bool) =
   do assert(condition, "Assertion failed")
 
-def assertFalse(condition: Boolean, msg: String) =
+def assertFalse(condition: Bool, msg: String) =
   do assert(not(condition), msg)
 
-def assertFalse(condition: Boolean) =
+def assertFalse(condition: Bool) =
   do assert(not(condition), "Assertion failed")
 
 def assertEqual[A](obtained: A, expected: A, msg: String) =
@@ -32,7 +32,7 @@ def test(name: String) { body: => Unit / Assertion } =
     def assert(condition, msg) = if (condition) resume(()) else do failure(name, msg)
   }
 
-def suite(name: String) { body: => Unit / Test }: Boolean = {
+def suite(name: String) { body: => Unit / Test }: Bool = {
   println("Running suite: " ++ name);
   var failed = 0
   var passed = 0

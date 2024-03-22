@@ -5,7 +5,7 @@ import immutable/option
 
 interface Proc {
   def yield(): Unit
-  def fork(): Boolean
+  def fork(): Bool
   def exit(): Unit
 }
 

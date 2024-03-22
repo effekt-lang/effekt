@@ -248,7 +248,7 @@ def surface(pos: Point, dir: Vector, scene: Scene, depth: Int, intersection: Int
   add3(lambertColor, reflectedColor, ambientColor)
 }
 
-def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
+def isLightVisible(pos: Point, scene: Scene, light: Point): Bool =
   intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
 
 

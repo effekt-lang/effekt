@@ -1,7 +1,7 @@
 type Cool[A] {
     CoolInt(i: Int)
     CoolString(s: String, s: String)
-    CoolBool(b: Boolean)
+    CoolBool(b: Bool)
     CoolDouble(d: Double)
     CoolC(a: A)
     CoolD()

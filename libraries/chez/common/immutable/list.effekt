@@ -46,7 +46,7 @@ def build[A](size: Int) { index: Int => A }: List[A] = {
 // Check if list is empty.
 //
 // O(1)
-def isEmpty[A](l: List[A]): Boolean = l match {
+def isEmpty[A](l: List[A]): Bool = l match {
   case Nil() => true
   case Cons(a, rest) => false
 }
@@ -54,7 +54,7 @@ def isEmpty[A](l: List[A]): Boolean = l match {
 // Check if list is nonempty.
 //
 // O(1)
-def nonEmpty[A](l: List[A]): Boolean = l match {
+def nonEmpty[A](l: List[A]): Bool = l match {
   case Nil() => false
   case Cons(a, rest) => true
 }
@@ -182,7 +182,7 @@ def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
 // Check if predicate is true for all elements of the given list.
 //
 // O(N)
-def all[A](list: List[A]) { predicate: A => Boolean }: Boolean = {
+def all[A](list: List[A]) { predicate: A => Bool }: Bool = {
   list match {
     case Cons(x, xs) => predicate(x) && all(xs) { predicate }
     case Nil() => true
@@ -192,7 +192,7 @@ def all[A](list: List[A]) { predicate: A => Boolean }: Boolean = {
 // Check if predicate is true for at least one element of the given list.
 //
 // O(N)
-def any[A](list: List[A]) { predicate: A => Boolean }: Boolean = {
+def any[A](list: List[A]) { predicate: A => Bool }: Bool = {
   list match {
     case Cons(x, xs) => predicate(x) || any(xs) { predicate }
     case Nil() => false
@@ -594,7 +594,7 @@ def unzip[A, B](pairs: List[(A, B)]): (List[A], List[B]) = {
 // the right list contains the elements that do not.
 //
 // O(N)
-def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
+def partition[A](l: List[A]) { pred: A => Bool }: (List[A], List[A]) = {
   var lefts: List[A] = Nil()
   var rights: List[A] = Nil()
   l.foreach { el =>
@@ -613,7 +613,7 @@ def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
 // Note: this implementation is not stacksafe!
 //
 // O(N log N)
-def sortBy[A](l: List[A]) { compare: (A, A) => Boolean }: List[A] =
+def sortBy[A](l: List[A]) { compare: (A, A) => Bool }: List[A] =
   l match {
     case Nil() => Nil()
     case Cons(pivot, rest) =>
@@ -629,8 +629,8 @@ def sort(l: List[Double]): List[Double] = l.sortBy { (a, b) => a < b }
 // Check if a list is sorted according to the given comparison function.
 //
 // O(N)
-def isSortedBy[A](list: List[A]) { compare: (A, A) => Boolean }: Boolean = {
-  def go(list: List[A]): Boolean = {
+def isSortedBy[A](list: List[A]) { compare: (A, A) => Bool }: Bool = {
+  def go(list: List[A]): Bool = {
     list match {
       case Nil() => true
       case Cons(x, Nil()) => true

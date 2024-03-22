@@ -7,7 +7,7 @@ def wrongTypes() = {
     do get[Int, String]("hello");
     println("Test")
   } with Foo[Int] {
-    def get[C](c: Boolean) = { resume((42, c)) }
+    def get[C](c: Bool) = { resume((42, c)) }
   }
 }
 
@@ -16,6 +16,6 @@ def notEnoughTypeParams() = {
     do get[Int, String]("hello");
     println("Test")
   } with Foo[Int] {
-    def get(c: Boolean) = { resume((42, c)) }
+    def get(c: Bool) = { resume((42, c)) }
   }
 }

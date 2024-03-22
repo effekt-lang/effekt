@@ -1,5 +1,5 @@
 effect Raise(msg: String): Unit
-effect Flip(): Boolean
+effect Flip(): Bool
 
 def main() = {
 

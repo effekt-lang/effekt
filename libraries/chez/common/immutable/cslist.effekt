@@ -10,7 +10,7 @@ extern pure def cons[A](el: A, rest: CSList[A]): CSList[A] =
 extern pure def nil[A](): CSList[A] =
   "(list)"
 
-extern pure def isEmpty[A](l: CSList[A]): Boolean =
+extern pure def isEmpty[A](l: CSList[A]): Bool =
   "(null? ${l})"
 
 // unsafe!

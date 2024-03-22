@@ -1,4 +1,4 @@
-def even?(n: Int): Boolean =
+def even?(n: Int): Bool =
   if (n == 0) true else not(even?(n - 1))
 
 def doIt!(msg: String): Unit = println(msg)

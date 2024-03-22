@@ -89,7 +89,7 @@ def pc  { prog: => Player / Move } = try { prog() } with Move { (p, n) =>
   }
 }
 
-effect Choose(): Boolean
+effect Choose(): Bool
 
 type List[A] {
   Nil();

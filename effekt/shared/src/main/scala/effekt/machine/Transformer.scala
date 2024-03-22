@@ -378,7 +378,7 @@ object Transformer {
       }
 
     case lifted.Literal(value: Boolean, _) =>
-      val variable = Variable(freshName("x"), Positive("Boolean"))
+      val variable = Variable(freshName("x"), Positive("Bool"))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
