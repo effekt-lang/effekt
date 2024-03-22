@@ -23,7 +23,7 @@ Parsers can be expressed by using the lexer effect and process the token stream.
 
 ```
 interface Nondet {
-  def alt(): Boolean
+  def alt(): Bool
   def fail[A](msg: String): A
 }
 
@@ -36,7 +36,7 @@ We start by the simplest one, which applies a predicate to the next element in t
 input stream and fails, if it does not match.
 
 ```
-def accept { p: Token => Boolean } : Token / Parser = {
+def accept { p: Token => Bool } : Token / Parser = {
   val got = do next();
   if (p(got)) got
   else do fail("Unexpected token " ++ show(got))
