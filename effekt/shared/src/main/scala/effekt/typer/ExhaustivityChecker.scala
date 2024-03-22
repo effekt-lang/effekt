@@ -292,7 +292,7 @@ object ExhaustivityChecker {
       // matched against.
       patterns.head match {
         case (sc, Pattern.Tag(constructor, ps)) =>
-          checkScrutinee(sc, constructor.returnType, head :: alternatives)
+          checkScrutinee(sc, constructor.appliedDatatype, head :: alternatives)
         case (sc, Pattern.Literal(lit, tpe)) =>
           checkScrutinee(sc, tpe, head :: alternatives)
         case (sc, Pattern.Any()) =>

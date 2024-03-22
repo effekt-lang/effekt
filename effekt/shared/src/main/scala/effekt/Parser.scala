@@ -369,7 +369,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val constructor: P[Constructor] =
-    idDef ~ valueParams ^^ Constructor.apply
+    idDef ~ maybeTypeParams ~ valueParams ^^ Constructor.apply
 
   /**
    * Expressions
