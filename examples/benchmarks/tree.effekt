@@ -9,7 +9,7 @@ def max(n: Int, m: Int): Int = if (n > m) n else m
 
 
 interface Choose {
-  def choose(): Boolean
+  def choose(): Bool
 }
 
 type Tree[A] {

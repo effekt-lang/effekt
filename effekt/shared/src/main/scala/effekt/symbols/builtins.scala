@@ -22,7 +22,7 @@ object builtins {
   val UnitSymbol = ExternType(name("Unit"), Nil)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val BooleanSymbol = ExternType(name("Boolean"), Nil)
+  val BooleanSymbol = ExternType(name("Bool"), Nil)
   val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
 
   val IntSymbol = ExternType(name("Int"), Nil)
@@ -68,7 +68,7 @@ object builtins {
 
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Unit" -> UnitSymbol,
-    "Boolean" -> BooleanSymbol,
+    "Bool" -> BooleanSymbol,
     "Int" -> IntSymbol,
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,

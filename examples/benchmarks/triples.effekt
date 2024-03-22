@@ -6,7 +6,7 @@ import text/string
 record Triple(a: Int, b: Int, c: Int)
 
 interface Flip {
-  def flip(): Boolean
+  def flip(): Bool
 }
 
 interface Fail {

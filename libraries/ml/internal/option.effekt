@@ -5,10 +5,10 @@ import immutable/option
 
 extern type MLOption[T]
 
-extern pure def isDefined[T](opt: MLOption[T]): Boolean =
+extern pure def isDefined[T](opt: MLOption[T]): Bool =
   "Option.isSome ${opt}"
 
-def isEmpty[T](opt: MLOption[T]): Boolean = not(opt.isDefined())
+def isEmpty[T](opt: MLOption[T]): Bool = not(opt.isDefined())
 
 extern pure def force[T](opt: MLOption[T]): T =
   "Option.valOf ${opt}"

@@ -11,7 +11,7 @@ def locally[R] { f: => R }: R = f()
 def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
-def println(value: Boolean): Unit = println(value.show)
+def println(value: Bool): Unit = println(value.show)
 
 def println(value: String): Unit = print(value ++ "\n")
 extern io def print(value: String): Unit = "print ${value}"
@@ -33,7 +33,7 @@ extern pure def show(value: Double): String =
   "show'real ${value}"
 extern pure def show(value: String): String =
   "show'string ${value}"
-extern pure def show(value: Boolean): String =
+extern pure def show(value: Bool): String =
   "show'bool ${value}"
 
 extern pure def infixConcat(s1: String, s2: String): String =
@@ -125,57 +125,57 @@ extern pure def ceil(d: Double): Int =
 
 // Comparison ops
 // ==============
-extern pure def infixEq[R](x: R, y: R): Boolean =
+extern pure def infixEq[R](x: R, y: R): Bool =
   "${x} = ${y}"
 
-extern pure def infixNeq[R](x: R, y: R): Boolean =
+extern pure def infixNeq[R](x: R, y: R): Bool =
   "not (${x} = ${y})"
 
-extern pure def infixLt(x: Int, y: Int): Boolean =
+extern pure def infixLt(x: Int, y: Int): Bool =
   "(${x}: int) < ${y}"
 
-extern pure def infixLte(x: Int, y: Int): Boolean =
+extern pure def infixLte(x: Int, y: Int): Bool =
   "(${x}: int) <= ${y}"
 
-extern pure def infixGt(x: Int, y: Int): Boolean =
+extern pure def infixGt(x: Int, y: Int): Bool =
   "(${x}: int) > ${y}"
 
-extern pure def infixGte(x: Int, y: Int): Boolean =
+extern pure def infixGte(x: Int, y: Int): Bool =
   "(${x}: int) >= ${y}"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
+extern pure def infixLt(x: Double, y: Double): Bool =
   "(${x}: real) < ${y}"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
+extern pure def infixLte(x: Double, y: Double): Bool =
   "(${x}: real) <= ${y}"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
+extern pure def infixGt(x: Double, y: Double): Bool =
   "(${x}: real) > ${y}"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
+extern pure def infixGte(x: Double, y: Double): Bool =
   "(${x}: real) >= ${y}"
 
-extern pure def infixLt(x: String, y: String): Boolean =
+extern pure def infixLt(x: String, y: String): Bool =
   "(${x}: string) < ${y}"
 
-extern pure def infixLte(x: String, y: String): Boolean =
+extern pure def infixLte(x: String, y: String): Bool =
   "(${x}: string) <= ${y}"
 
-extern pure def infixGt(x: String, y: String): Boolean =
+extern pure def infixGt(x: String, y: String): Bool =
   "(${x}: string) > ${y}"
 
-extern pure def infixGte(x: String, y: String): Boolean =
+extern pure def infixGte(x: String, y: String): Bool =
   "(${x}: string) >= ${y}"
 
-// Boolean ops
+// Bool ops
 // ===========
-extern pure def not(b: Boolean): Boolean =
+extern pure def not(b: Bool): Bool =
   "not ${b}"
 
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+extern pure def infixOr(x: Bool, y: Bool): Bool =
   "${x} orelse ${y}"
 
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+extern pure def infixAnd(x: Bool, y: Bool): Bool =
   "${x} andalso ${y}"
 
 // Pairs
@@ -255,7 +255,7 @@ def timed { block: => Unit }: Int = {
 }
 
 def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
-  def run(n: Int, report: Boolean): Unit = {
+  def run(n: Int, report: Bool): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };
       if (report) { println(time) } else { () };

@@ -25,8 +25,8 @@ extern io def println(n: Int): Unit = """
     ret %Pos zeroinitializer ; Unit
 """
 
-extern io def println(b: Boolean): Unit = """
-    call void @c_io_println_Boolean(%Pos %b)
+extern io def println(b: Bool): Unit = """
+    call void @c_io_println_Bool(%Pos %b)
     ret %Pos zeroinitializer ; Unit
 """
 
@@ -45,13 +45,13 @@ def println(u: Unit): Unit = println("unit")
 
 // strings
 
-extern pure def infixEq(x: String, y: String): Boolean = """
+extern pure def infixEq(x: String, y: String): Bool = """
     %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
     call void @c_buffer_refcount_decrement(%Pos %x)
     call void @c_buffer_refcount_decrement(%Pos %y)
     ret %Pos %res
 """
-def infixNeq(x: String, y: String): Boolean = not(x == y)
+def infixNeq(x: String, y: String): Bool = not(x == y)
 
 extern pure def infixConcat(s: String, z: String): String = """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s, %Pos %z)
@@ -80,42 +80,42 @@ extern pure def infixDiv(x: Double, y: Double): Double = "%z = fdiv %Double ${x}
 
 // ordering on signed integers
 
-extern pure def infixEq(x: Int, y: Int): Boolean = """
+extern pure def infixEq(x: Int, y: Int): Bool = """
     %z = icmp eq %Int %x, %y
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
 """
 
-extern pure def infixNeq(x: Int, y: Int): Boolean = """
+extern pure def infixNeq(x: Int, y: Int): Bool = """
     %z = icmp ne %Int %x, %y
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
 """
 
-extern pure def infixLt(x: Int, y: Int): Boolean = """
+extern pure def infixLt(x: Int, y: Int): Bool = """
     %z = icmp slt %Int %x, %y
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
 """
 
-extern pure def infixLte(x: Int, y: Int): Boolean = """
+extern pure def infixLte(x: Int, y: Int): Bool = """
     %z = icmp sle %Int %x, %y
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
 """
 
-extern pure def infixGt(x: Int, y: Int): Boolean = """
+extern pure def infixGt(x: Int, y: Int): Bool = """
     %z = icmp sgt %Int %x, %y
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
 """
 
-extern pure def infixGte(x: Int, y: Int): Boolean = """
+extern pure def infixGte(x: Int, y: Int): Bool = """
     %z = icmp sge %Int %x, %y
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
@@ -125,7 +125,7 @@ extern pure def infixGte(x: Int, y: Int): Boolean = """
 
 // boolean algebra
 
-extern pure def infixEq(x: Boolean, y: Boolean): Boolean = """
+extern pure def infixEq(x: Bool, y: Bool): Bool = """
     %slim_x = extractvalue %Pos %x, 0
     %slim_y = extractvalue %Pos %y, 0
     %slim_z = icmp eq i64 %slim_x, %slim_y
@@ -134,7 +134,7 @@ extern pure def infixEq(x: Boolean, y: Boolean): Boolean = """
     ret %Pos %adt_boolean
 """
 
-extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = """
+extern pure def infixNeq(x: Bool, y: Bool): Bool = """
     %slim_x = extractvalue %Pos %x, 0
     %slim_y = extractvalue %Pos %y, 0
     %slim_z = icmp ne i64 %slim_x, %slim_y
@@ -143,14 +143,14 @@ extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = """
     ret %Pos %adt_boolean
 """
 
-extern pure def not(adt_p: Boolean): Boolean = """
+extern pure def not(adt_p: Bool): Bool = """
     %p = extractvalue %Pos %adt_p, 0
     %q = xor i64 1, %p
     %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0
     ret %Pos %adt_q
 """
 
-extern pure def infixOr(adt_p: Boolean, adt_q: Boolean): Boolean = """
+extern pure def infixOr(adt_p: Bool, adt_q: Bool): Bool = """
     %p = extractvalue %Pos %adt_p, 0
     %q = extractvalue %Pos %adt_q, 0
     %r = or i64 %p, %q
@@ -158,7 +158,7 @@ extern pure def infixOr(adt_p: Boolean, adt_q: Boolean): Boolean = """
     ret %Pos %adt_r
 """
 
-extern pure def infixAnd(adt_p: Boolean, adt_q: Boolean): Boolean = """
+extern pure def infixAnd(adt_p: Bool, adt_q: Bool): Bool = """
     %p = extractvalue %Pos %adt_p, 0
     %q = extractvalue %Pos %adt_q, 0
     %r = and i64 %p, %q
@@ -175,7 +175,7 @@ extern pure def show(x: Double): String = """
    %z = call %Pos @c_buffer_show_Double(%Double %x)
    ret %Pos %z
  """
-def show(b: Boolean): String = {
+def show(b: Bool): String = {
     if(b) { "true" } else { "false" }
 }
 def show(u: Unit): String = { "unit" }
@@ -183,7 +183,7 @@ def show(u: Unit): String = { "unit" }
 // For boxing polymorphic values
 record BoxedUnit(unboxUnit: Unit)
 record BoxedInt(unboxInt: Int)
-record BoxedBoolean(unboxBoolean: Boolean)
+record BoxedBool(unboxBool: Bool)
 record BoxedDouble(unboxDouble: Double)
 record BoxedString(unboxString: String)
 

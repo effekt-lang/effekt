@@ -105,50 +105,50 @@ def max(n: Int, m: Int): Int =
 
 // Comparison ops
 // ==============
-extern pure def infixEq[R](x: R, y: R): Boolean =
+extern pure def infixEq[R](x: R, y: R): Bool =
   "(equal_impl ${x} ${y})"
 
-extern pure def infixNeq[R](x: R, y: R): Boolean =
+extern pure def infixNeq[R](x: R, y: R): Bool =
   "(not (equal_impl ${x} ${y}))"
 
-extern pure def infixLt(x: Int, y: Int): Boolean =
+extern pure def infixLt(x: Int, y: Int): Bool =
   "(< ${x} ${y})"
 
-extern pure def infixLte(x: Int, y: Int): Boolean =
+extern pure def infixLte(x: Int, y: Int): Bool =
   "(<= ${x} ${y})"
 
-extern pure def infixGt(x: Int, y: Int): Boolean =
+extern pure def infixGt(x: Int, y: Int): Bool =
   "(> ${x} ${y})"
 
-extern pure def infixGte(x: Int, y: Int): Boolean =
+extern pure def infixGte(x: Int, y: Int): Bool =
   "(>= ${x} ${y})"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
+extern pure def infixLt(x: Double, y: Double): Bool =
   "(< ${x} ${y})"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
+extern pure def infixLte(x: Double, y: Double): Bool =
   "(<= ${x} ${y})"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
+extern pure def infixGt(x: Double, y: Double): Bool =
   "(> ${x} ${y})"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
+extern pure def infixGte(x: Double, y: Double): Bool =
   "(>= ${x} ${y})"
 
-// Boolean ops
+// Bool ops
 // ===========
 // for now those are considered eager
-extern pure def not(b: Boolean): Boolean =
+extern pure def not(b: Bool): Bool =
   "(not ${b})"
 
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+extern pure def infixOr(x: Bool, y: Bool): Bool =
   "(or ${x} ${y})"
 
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+extern pure def infixAnd(x: Bool, y: Bool): Bool =
   "(and ${x} ${y})"
 
 // Should only be used internally since values in Effekt should not be undefined
-extern pure def isUndefined[A](value: A): Boolean =
+extern pure def isUndefined[A](value: A): Bool =
   "(eq? ${value} #f)"
 
 // Pairs

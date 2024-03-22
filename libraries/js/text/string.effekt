@@ -52,10 +52,10 @@ def lastIndexOf(str: String, sub: String): Option[Int] = {
 extern pure def unsafeIndexOf(str: String, sub: String): Int = "${str}.indexOf(${sub})"
 extern pure def unsafeLastIndexOf(str: String, sub: String): Int = "${str}.lastIndexOf(${sub})"
 
-extern pure def startsWith(str: String, prefix: String): Boolean =
+extern pure def startsWith(str: String, prefix: String): Bool =
   "${str}.startsWith(${prefix})"
 
-extern pure def endsWith(str: String, suffix: String): Boolean =
+extern pure def endsWith(str: String, suffix: String): Bool =
   "${str}.endsWith(${suffix})"
 
 // ANSI escape codes

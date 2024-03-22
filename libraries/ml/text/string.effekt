@@ -15,10 +15,10 @@ def charAt(str: String, index: Int): Option[String] =
 extern pure def length(str: String): Int =
     "String.size ${str}"
 
-extern pure def startsWith(str: String, prefix: String): Boolean =
+extern pure def startsWith(str: String, prefix: String): Bool =
     "String.isPrefix ${prefix} ${str}"
 
-extern pure def endsWith(str: String, suffix: String): Boolean =
+extern pure def endsWith(str: String, suffix: String): Bool =
     "String.isSuffix ${suffix} ${str}"
 
 // extern pure def repeat(str: String, n: Int): String =

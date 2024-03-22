@@ -20,8 +20,8 @@ type ISR = () => Unit at {in, out, io}
 def dontSleep { f: => Unit }: Unit = { blockDeepSleep(); f() }
 
 interface Output {
-  def set(n: Boolean): Unit
-  def get(): Boolean
+  def set(n: Bool): Unit
+  def get(): Bool
 }
 
 record Time(nanoseconds: Int)
@@ -68,7 +68,7 @@ def loop[T] { f: => Unit / Loop[T] }: T = {
 
 
 def DigitalOut(name: String) = new Output {
-  def set(n: Boolean) = useOut()
+  def set(n: Bool) = useOut()
   def get() = { useOut(); true }
 }
 
