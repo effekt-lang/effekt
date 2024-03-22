@@ -291,7 +291,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
-      if(!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
+      if (!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
         Context.warning(s"Extern definition ${id} is not supported by this backend.")
       }
 
@@ -300,7 +300,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        bodies.foreach{ case source.ExternBody(ff, body) => body.args.foreach(resolveGeneric) }
+        bodies.foreach { case source.ExternBody(ff, body) => body.args.foreach(resolveGeneric) }
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
