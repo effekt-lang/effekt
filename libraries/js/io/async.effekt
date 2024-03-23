@@ -6,11 +6,6 @@ import mutable/ref
 import immutable/dequeue
 import immutable/result
 
-extern """
-const fs = require("fs")
-"""
-
-
 
 // Asynchronous I/O
 // ----------------
@@ -133,6 +128,10 @@ def eventloop(prog: Task[Unit]) = {
 
 namespace files {
 
+  extern """
+    const fs = require("fs");
+  """
+
   /**
    * Reads a file at given path in a utf8 encoded string.
    *
@@ -148,6 +147,72 @@ namespace files {
     })
 
   def readFilePromise(path: String): Promise[String] / Promises = do async(box { readFile(path) })
+}
+
+namespace network {
+  extern """
+    const net = require('node:net');
+
+    function withServer(port, handler) {
+      const server = net.createServer((socket) => {
+        handler(socket)
+      })
+      server.listen(port)
+    }
+    function listen(server, port, host, listener) {
+      server.listen(port, host);
+      server.on('connection', listener);
+    }
+  """
+
+  extern type JSServer // = net.Server
+  extern type JSSocket // = net.Socket
+  extern io def jsServer(): JSServer = "net.createServer()"
+  extern io def jsListen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, global}): Unit = "listen(${server}, ${port}, ${host}, (socket) => (${listener})(socket).run())"
+
+  extern io def jsSend(socket: JSSocket, data: String, callback: () => Unit at {io, global}): Unit =
+    "${socket}.write(${data}, () => (${callback})().run())"
+
+  extern io def jsReceive(socket: JSSocket, callback: String => Unit at {io, global}): Unit =
+    "${socket}.once('data', (data) => (${callback})(data).run())"
+
+  interface Socket {
+    def send(message: String): Unit
+    def receive(): String
+  }
+
+  def server(host: String, port: Int, handler: () => Unit / Socket at {io, global}): Unit / { IO, Process } = {
+    val server = jsServer();
+    var connections: Dequeue[JSSocket] in global = emptyQueue()
+    server.jsListen(port, host, box { socket =>
+      connections = connections.pushFront(socket)
+    })
+    // TODO Instead of polling, we should use Channels
+    loop {
+      connections.popBack match {
+        case Some((socket, cs)) =>
+          connections = cs;
+          do fork(box {
+            try { handler() } with Socket {
+              def send(message) = jsSend(socket, message, box { resume(()) })
+              def receive() = jsReceive(socket, resume)
+            }
+          })
+        case None() => do yield()
+      }
+    }
+  }
+  // creates a simple echo server.
+  def example() = eventloop(box {
+    server("localhost", 8080, box {
+
+      loop {
+        val msg = do receive();
+        println("Got: " ++ msg)
+        do send(msg)
+      }
+    })
+  })
 }
 
 namespace console {
@@ -193,7 +258,10 @@ def countFile(): Int / IO = console::withConsole {
   files::readFile(filename).length
 }
 
-def main() = eventloop(box {
+
+def main() = network::example()
+
+def main2() = eventloop(box {
 
   val p1 = do async(box { countFile() })
 
