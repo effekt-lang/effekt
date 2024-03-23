@@ -181,7 +181,7 @@ namespace network {
     def receive(): String
   }
 
-  def server(host: String, port: Int, handler: () => Unit / Socket at {io, global}): Unit / { IO, Process } = {
+  def server(host: String, port: Int, handler: () => Unit / { Socket, IO, Process, Promises } at {io, global}): Unit / { Process, IO } = {
     val server = jsServer();
     var connections: Dequeue[JSSocket] in global = emptyQueue()
     server.jsListen(port, host, box { socket =>
@@ -194,8 +194,17 @@ namespace network {
           connections = cs;
           do fork(box {
             try { handler() } with Socket {
-              def send(message) = jsSend(socket, message, box { resume(()) })
-              def receive() = jsReceive(socket, resume)
+              def send(message) = {
+                do performIO[Unit](box { k =>
+                  jsSend(socket, message, box { k(()) })
+                });
+                resume(())
+              }
+              def receive() = {
+                resume(do performIO[String](box { k =>
+                  jsReceive(socket, k)
+                }))
+              }
             }
           })
         case None() => do yield()
