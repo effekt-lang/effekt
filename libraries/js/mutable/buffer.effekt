@@ -1,0 +1,128 @@
+module mutable/buffer
+
+import mutable/array
+
+// TODO (in Effekt compiler)
+// - [ ] fix allocating into actually global region
+// - [ ] fix exceptions on objects
+
+type BufferException {
+  BufferOverflow()
+  BufferUnderflow()
+}
+
+/**
+ * Elements represent fixed-size ring buffers (queues) where one can write
+ * elements to the head and read from the tail.
+ */
+interface Buffer[T] {
+  /**
+   * The remaining capacity
+   */
+  def capacity(): Int
+
+  /**
+   * Is this buffer full?
+   */
+  def full?(): Bool
+
+  /**
+   * Is this buffer empty?
+   */
+  def empty?(): Bool
+
+  /**
+   * Read an element from the tail of the buffer
+   */
+  def read(): T / Exception[BufferException]
+
+  /**
+   * Write an element to the head of the buffer
+   */
+  def write(el: T): Unit / Exception[BufferException]
+}
+
+def emptyBuffer[T](capacity: Int) {r: Region}: Buffer[T] at {r,io} = {
+  if (capacity == 1) refBuffer {r}
+  else arrayBuffer(capacity) {r}
+}
+def arrayBuffer[T](initialCapacity: Int) {r: Region}: Buffer[T] at {r,io} = {
+  // TODO actually allocate into region, then drop `io`.
+  val contents = emptyArray[T](initialCapacity)
+  var head in r = 0
+  var tail in r = 0
+
+  def size(): Int =
+    if (tail >= head) { tail - head }
+    else { initialCapacity - head + tail }
+
+  def capacity(): Int = initialCapacity - size()
+
+  def buffer = new Buffer[T] {
+    def capacity() = capacity()
+    def full?() = capacity() <= 0
+    def empty?() = size() <= 0
+    def read() = {
+      if (buffer.empty?) panic("Empty") //raise(BufferUnderflow())
+
+      val result: T = contents.get(head).getOrElse { <> };
+      head = mod(head + 1, initialCapacity)
+      result
+    }
+    def write(el: T) = {
+      if (buffer.full?) panic("Full") // raise(BufferOverflow())
+
+      contents.put(tail, el)
+      tail = mod(tail + 1, initialCapacity)
+    }
+  }
+  buffer
+}
+def refBuffer[T] {r: Region}: Buffer[T] at {r} = {
+  var content: Option[T] in r = None()
+  new Buffer[T] {
+    def capacity() = if (content.isEmpty) 1 else 0
+    def full?() = content.isDefined
+    def empty?() = isEmpty(content)
+    def read() = content match {
+      case Some(v) =>
+        content = None();
+        v
+      case None() =>
+        <> // do raise(BufferUnderflow(), "Cannot read element from buffer") }>
+    }
+    def write(el: T) = content match {
+      case Some(v) =>
+        <> // do raise(BufferOverflow(), "Cannot read element from buffer")
+      case None() =>
+        content = Some(el)
+    }
+  }
+}
+
+def main() = region global {
+
+  ignoring[BufferException] {
+    val b = emptyBuffer[Int](1) {global};
+    println(b.capacity);
+    println(b.full?);
+
+    b.write(17);
+    println(b.read());
+  }
+
+  ignoring[BufferException] {
+    val ringbuffer = emptyBuffer[Int](3) {global};
+    ringbuffer.write(1);
+    ringbuffer.write(2);
+    println(ringbuffer.read());
+    ringbuffer.write(3);
+    println(ringbuffer.read());
+    println(ringbuffer.read());
+    ringbuffer.write(4);
+    ringbuffer.write(5);
+    println(ringbuffer.read());
+    println(ringbuffer.read());
+  }
+
+}
