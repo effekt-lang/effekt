@@ -6,10 +6,7 @@ import mutable/array
 // - [ ] fix allocating into actually global region
 // - [ ] fix exceptions on objects
 
-type BufferException {
-  BufferOverflow()
-  BufferUnderflow()
-}
+record BufferOverflow()
 
 /**
  * Elements represent fixed-size ring buffers (queues) where one can write
@@ -34,12 +31,12 @@ interface Buffer[T] {
   /**
    * Read an element from the tail of the buffer
    */
-  def read(): T / Exception[BufferException]
+  def read(): Option[T]
 
   /**
    * Write an element to the head of the buffer
    */
-  def write(el: T): Unit / Exception[BufferException]
+  def write(el: T): Unit / Exception[BufferOverflow]
 }
 
 def emptyBuffer[T](capacity: Int) {r: Region}: Buffer[T] at {r,io} = {
@@ -63,11 +60,12 @@ def arrayBuffer[T](initialCapacity: Int) {r: Region}: Buffer[T] at {r,io} = {
     def full?() = capacity() <= 0
     def empty?() = size() <= 0
     def read() = {
-      if (buffer.empty?) panic("Empty") //raise(BufferUnderflow())
-
-      val result: T = contents.get(head).getOrElse { <> };
-      head = mod(head + 1, initialCapacity)
-      result
+      if (buffer.empty?) None()
+      else {
+        val result: T = contents.get(head).getOrElse { <> };
+        head = mod(head + 1, initialCapacity)
+        Some(result)
+      }
     }
     def write(el: T) = {
       if (buffer.full?) panic("Full") // raise(BufferOverflow())
@@ -84,13 +82,7 @@ def refBuffer[T] {r: Region}: Buffer[T] at {r} = {
     def capacity() = if (content.isEmpty) 1 else 0
     def full?() = content.isDefined
     def empty?() = isEmpty(content)
-    def read() = content match {
-      case Some(v) =>
-        content = None();
-        v
-      case None() =>
-        <> // do raise(BufferUnderflow(), "Cannot read element from buffer") }>
-    }
+    def read() = content
     def write(el: T) = content match {
       case Some(v) =>
         <> // do raise(BufferOverflow(), "Cannot read element from buffer")
@@ -102,7 +94,7 @@ def refBuffer[T] {r: Region}: Buffer[T] at {r} = {
 
 def main() = region global {
 
-  ignoring[BufferException] {
+  ignoring[BufferOverflow] {
     val b = emptyBuffer[Int](1) {global};
     println(b.capacity);
     println(b.full?);
@@ -111,7 +103,7 @@ def main() = region global {
     println(b.read());
   }
 
-  ignoring[BufferException] {
+  ignoring[BufferOverflow] {
     val ringbuffer = emptyBuffer[Int](3) {global};
     ringbuffer.write(1);
     ringbuffer.write(2);

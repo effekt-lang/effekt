@@ -3,8 +3,11 @@ module io/async
 import text/string
 
 import mutable/ref
+import mutable/buffer
+
 import immutable/dequeue
 import immutable/result
+
 
 extern type Bytes
 extern pure def size(b: Bytes): Int = "${b}.length"
@@ -29,6 +32,19 @@ interface IO {
   def performIO[T](computation: (T => Unit at {io,global}) => Unit at {io,global}): T
 }
 
+namespace IO {
+  /**
+   * Run an IO computation (that uses callbacks) here.
+   */
+  def run(program: () => Unit / IO at {io, global}): Unit =
+    try { program() }
+    with IO {
+      def performIO[T](computation) = computation(resume)
+    }
+}
+
+
+
 interface Process {
   def fork(p: Task[Unit]): Unit
   def yield(): Unit
@@ -52,10 +68,16 @@ type Promise[T] = Ref[PromiseState[T]]
 
 def fresh[T](): Promise[T] = fresh(Unresolved())
 
-def eventloop(prog: Task[Unit]) = {
+extern def unsafeCast[A, B](r: A): B = "${r}"
+
+def eventloop(prog: Task[Unit]) = region here {
 
   // TODO we need to replace this by a mutable queue
-  var queue: Dequeue[() => Unit at {global, io}] in global = emptyQueue();
+  val queue: Buffer[() => Unit at {io, global}] at {io,global} = unsafeCast(emptyBuffer[() => Unit at {io, global}](100) {here});
+
+  // TODO implement
+  def enqueue(task: () => Unit at {io, global}): Unit =
+    ignoring[BufferOverflow] { queue.write(task) }
 
   var iterations in global = 0;
 
@@ -63,9 +85,8 @@ def eventloop(prog: Task[Unit]) = {
 
   def run(): Unit = {
     iterations = iterations + 1;
-    queue.popBack match {
-      case Some((k, q)) =>
-        queue = q;
+    queue.read() match {
+      case Some(k) =>
         setTimeout(0, box { k(); run() })
       case None() and openIOTasks > 0 =>
         // Busy waiting
@@ -82,11 +103,11 @@ def eventloop(prog: Task[Unit]) = {
     try { p() }
     with Process {
       def yield() = {
-        queue = queue.pushFront(fun() { resume(()) })
+        enqueue(fun() { resume(()) })
       }
 
       def fork(task) = {
-        queue = queue.pushFront(box { handle(task) })
+        enqueue(box { handle(task) })
         resume(())
       }
 
@@ -109,12 +130,13 @@ def eventloop(prog: Task[Unit]) = {
           case Awaited(ks) =>
             p.set(Resolved(v))
             ks.foreach { k =>
-              queue = queue.pushBack(box { k(v) })
+              // was pushBack
+              enqueue(box { k(v) })
             }
         }
 
         val promise: Promise[T] = fresh();
-        queue = queue.pushFront(box { handle(box { resolve(promise, task()) }) })
+        enqueue(box { handle(box { resolve(promise, task()) }) })
         resume(promise)
       }
       def await[T](promise) = promise.get match {
@@ -123,6 +145,7 @@ def eventloop(prog: Task[Unit]) = {
         case Awaited(ks) => promise.set(Awaited(Cons(resume, ks)))
       }
     }
+
 
   // implement the concurrency / io actions (collecting tasks)
   handle(prog);
@@ -235,7 +258,7 @@ namespace network {
         val msg = do receive();
         println("Received a request: " ++ msg.toString)
         if (msg.toString.startsWith("GET /")) {
-          do send("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!".toBytes)
+          do send(toBytes("HTTP/1.1 200 OK\r\n\r\nHello from Effekt! Size: " ++ countFile().show))
           println("Sent the response.")
         } else {
           do send("HTTP/1.1 400 Bad Request\r\n\r\n".toBytes)
@@ -280,7 +303,7 @@ namespace console {
   }
 }
 
-extern io def setTimeout(millis: Int, prog: () => Unit at {global, io}): Unit =
+extern io def setTimeout(millis: Int, prog: () => Unit at {io, global}): Unit =
   "setTimeout(() => (${prog})().run(), ${millis})"
 
 def countFile(): Int / IO = console::withConsole {
