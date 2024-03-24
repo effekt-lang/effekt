@@ -6,6 +6,12 @@ import mutable/ref
 import immutable/dequeue
 import immutable/result
 
+extern type Bytes
+extern pure def size(b: Bytes): Int = "${b}.length"
+extern pure def empty(): Bytes = "(new Uint8Array(0))"
+extern pure def toBytes(s: String): Bytes = "(new TextEncoder().encode(${s}))"
+extern pure def toString(b: Bytes): String = "(new TextDecoder('utf-8').decode(${b}))"
+
 
 // Asynchronous I/O
 // ----------------
@@ -150,6 +156,7 @@ namespace files {
 }
 
 namespace network {
+
   extern """
     const net = require('node:net');
 
@@ -170,15 +177,19 @@ namespace network {
   extern io def jsServer(): JSServer = "net.createServer()"
   extern io def jsListen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, global}): Unit = "listen(${server}, ${port}, ${host}, (socket) => (${listener})(socket).run())"
 
-  extern io def jsSend(socket: JSSocket, data: String, callback: () => Unit at {io, global}): Unit =
+  extern io def jsSend(socket: JSSocket, data: Bytes, callback: () => Unit at {io, global}): Unit =
     "${socket}.write(${data}, () => (${callback})().run())"
 
-  extern io def jsReceive(socket: JSSocket, callback: String => Unit at {io, global}): Unit =
+  extern io def jsReceive(socket: JSSocket, callback: Bytes => Unit at {io, global}): Unit =
     "${socket}.once('data', (data) => (${callback})(data).run())"
 
+  extern io def jsEnd(socket: JSSocket, callback: () => Unit at {io, global}): Unit =
+    "${socket}.end(() => (${callback})().run())"
+
   interface Socket {
-    def send(message: String): Unit
-    def receive(): String
+    def send(message: Bytes): Unit
+    def receive(): Bytes
+    def end(): Unit
   }
 
   def server(host: String, port: Int, handler: () => Unit / { Socket, IO, Process, Promises } at {io, global}): Unit / { Process, IO } = {
@@ -196,14 +207,20 @@ namespace network {
             try { handler() } with Socket {
               def send(message) = {
                 do performIO[Unit](box { k =>
-                  jsSend(socket, message, box { k(()) })
+                  socket.jsSend(message, box { k(()) })
                 });
                 resume(())
               }
               def receive() = {
-                resume(do performIO[String](box { k =>
-                  jsReceive(socket, k)
+                resume(do performIO[Bytes](box { k =>
+                  socket.jsReceive(k)
                 }))
+              }
+              def end() = {
+                do performIO[Unit](box { k =>
+                  socket.jsEnd(box { k(()) })
+                });
+                resume(())
               }
             }
           })
@@ -214,11 +231,17 @@ namespace network {
   // creates a simple echo server.
   def example() = eventloop(box {
     server("localhost", 8080, box {
-
       loop {
         val msg = do receive();
-        println("Got: " ++ msg)
-        do send(msg)
+        println("Received a request: " ++ msg.toString)
+        if (msg.toString.startsWith("GET /")) {
+          do send("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!".toBytes)
+          println("Sent the response.")
+        } else {
+          do send("HTTP/1.1 400 Bad Request\r\n\r\n".toBytes)
+        }
+        do end()
+        println("Closing socket.")
       }
     })
   })
