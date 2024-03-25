@@ -1,7 +1,7 @@
 module io/network
 
 import immutable/bytes
-import immutable/dequeue
+import mutable/queue
 import io
 
 namespace js {
@@ -38,16 +38,15 @@ interface Socket {
 
 def server(host: String, port: Int, handler: () => Unit / { Socket, IO, Process, Promises } at {io, global}): Unit / { Process, IO } = {
   val server = js::server();
-  var connections: Dequeue[js::JSSocket] in global = emptyQueue()
+  val connections: Queue[js::JSSocket] at {global} = emptyQueue()
   js::listen(server, port, host, box { socket =>
-    connections = connections.pushFront(socket)
+    connections.pushFront(socket)
   })
 
   // TODO Instead of polling, we should use Channels
   loop {
     connections.popBack match {
-      case Some((socket, cs)) =>
-        connections = cs;
+      case Some(socket) =>
         do fork(box {
           try { handler() } with Socket {
             def send(message) = {

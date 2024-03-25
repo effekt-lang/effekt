@@ -38,16 +38,16 @@ def fromList[T](list: List[T]): Array[T] = {
   return arr;
 }
 
-extern pure def emptyArray[T](initialSize: Int): Array[T] =
+extern global def emptyArray[T](initialSize: Int): Array[T] =
   "(new Array(${initialSize}))"
 
 def get[T](arr: Array[T], index: Int): Option[T] =
   arr.unsafeGet(index).undefinedToOption
 
-extern pure def size[T](arr: Array[T]): Int =
+extern global def size[T](arr: Array[T]): Int =
   "${arr}.length"
 
-extern io def unsafeGet[T](arr: Array[T], index: Int): T =
+extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   "${arr}[${index}]"
 
 extern """
@@ -55,13 +55,22 @@ function put(arr, index, value) {
   arr[index] = value;
   return $effekt.unit
 }
+function copy(from, start, end, to, offset) {
+    for (let i = start, j = offset; i < end; i++, j++) {
+        to[j] = from[i];
+    }
+}
 """
 
-extern io def put[T](arr: Array[T], index: Int, value: T): Unit =
+extern global def put[T](arr: Array[T], index: Int, value: T): Unit =
   "put(${arr}, ${index}, ${value})"
 
-extern pure def copy[T](arr: Array[T]): Array[T] =
+extern global def copy[T](arr: Array[T]): Array[T] =
   "[...${arr}]"
+
+// Copies elements from start to end in `from` to `to` starting at `offset`
+extern global def copy[T](from: Array[T], start: Int, end: Int, to: Array[T], offset: Int): Unit =
+  "copy(${from}, ${start}, ${end}, ${to}, ${offset})"
 
 // Utility functions:
 

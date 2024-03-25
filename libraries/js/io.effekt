@@ -1,7 +1,7 @@
 module io
 
 import mutable/ref
-import mutable/buffer
+import mutable/queue
 
 // Asynchronous I/O
 // ----------------
@@ -63,13 +63,10 @@ type Promise[T] = Ref[PromiseState[T]]
 extern io def schedule(k: () => Unit at {io, global}): Unit =
   "setTimeout(() => (${k})().run(), 0)"
 
+
 def eventloop(prog: Task[Unit]) = {
 
-  val queue: Buffer[() => Unit at {io, global}] at {io, global} = emptyBuffer(100) {global};
-
-  // TODO implement resizing
-  def enqueue(task: () => Unit at {io, global}): Unit =
-    ignoring[BufferOverflow] { queue.write(task) }
+  val queue: Queue[() => Unit at {io, global}] at {global} = emptyQueue(32);
 
   var iterations in global = 0;
 
@@ -77,7 +74,7 @@ def eventloop(prog: Task[Unit]) = {
 
   def run(): Unit = {
     iterations = iterations + 1;
-    queue.read() match {
+    queue.popBack() match {
       case Some(k) =>
         schedule(box { k(); run() })
       case None() and openIOTasks > 0 =>
@@ -95,11 +92,11 @@ def eventloop(prog: Task[Unit]) = {
     try { p() }
     with Process {
       def yield() = {
-        enqueue(box { resume(()) })
+        queue.pushFront(box { resume(()) })
       }
 
       def fork(task) = {
-        enqueue(box { resume(()) })
+        queue.pushFront(box { resume(()) })
         handle(task)
       }
 
@@ -113,7 +110,7 @@ def eventloop(prog: Task[Unit]) = {
         computation(box { res =>
           openIOTasks = openIOTasks - 1;
           // Move task to the ready-queue
-          enqueue(box { resume(res) })
+          queue.pushFront(box { resume(res) })
         })
       }
     }
@@ -124,13 +121,13 @@ def eventloop(prog: Task[Unit]) = {
           case Resolved(v) => panic("Promise already resolved")
           case Awaited(ks) =>
             p.set(Resolved(v))
-            ks.reverse.foreach { k =>
-              enqueue(box { k(v) })
+            ks.foreach { k =>
+              queue.pushBack(box { k(v) })
             }
         }
 
         val promise: Promise[T] = fresh(Unresolved());
-        enqueue(box {  resume(promise) })
+        queue.pushFront(box {  resume(promise) })
         handle(box { resolve(promise, task()) })
       }
       def await[T](promise) = promise.get match {

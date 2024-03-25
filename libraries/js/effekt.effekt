@@ -1,7 +1,6 @@
 module effekt
 
 // Runtime
-// TODO split runtime into monadic and direct
 extern include "effekt_runtime.js"
 
 // Builtins

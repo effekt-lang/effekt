@@ -10,7 +10,7 @@ import mutable/array
 record BufferOverflow()
 
 /**
- * Elements represent fixed-size ring buffers (queues) where one can write
+ * Fixed-size ring buffers (queues) where one can write
  * elements to the head and read from the tail.
  */
 interface Buffer[T] {
@@ -40,15 +40,15 @@ interface Buffer[T] {
   def write(el: T): Unit / Exception[BufferOverflow]
 }
 
-def emptyBuffer[T](capacity: Int) {r: Region}: Buffer[T] at {r,io} = {
-  if (capacity == 1) refBuffer {r}
-  else arrayBuffer(capacity) {r}
+def emptyBuffer[T](capacity: Int): Buffer[T] at {global} = {
+  if (capacity == 1) refBuffer()
+  else arrayBuffer(capacity)
 }
-def arrayBuffer[T](initialCapacity: Int) {r: Region}: Buffer[T] at {r,io} = {
+def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
   // TODO actually allocate into region, then drop `io`.
   val contents = emptyArray[T](initialCapacity)
-  var head in r = 0
-  var tail in r = 0
+  var head in global = 0
+  var tail in global = 0
 
   def size(): Int =
     if (tail >= head) { tail - head }
@@ -69,7 +69,7 @@ def arrayBuffer[T](initialCapacity: Int) {r: Region}: Buffer[T] at {r,io} = {
       }
     }
     def write(el: T) = {
-      if (buffer.full?) panic("Full") // raise(BufferOverflow())
+      if (buffer.full?) <> // raise(BufferOverflow())
 
       contents.put(tail, el)
       tail = mod(tail + 1, initialCapacity)
@@ -77,8 +77,8 @@ def arrayBuffer[T](initialCapacity: Int) {r: Region}: Buffer[T] at {r,io} = {
   }
   buffer
 }
-def refBuffer[T] {r: Region}: Buffer[T] at {r} = {
-  var content: Option[T] in r = None()
+def refBuffer[T](): Buffer[T] at {global} = {
+  var content: Option[T] in global = None()
   new Buffer[T] {
     def capacity() = if (content.isEmpty) 1 else 0
     def full?() = content.isDefined
@@ -96,7 +96,7 @@ def refBuffer[T] {r: Region}: Buffer[T] at {r} = {
 def main() = region global {
 
   ignoring[BufferOverflow] {
-    val b = emptyBuffer[Int](1) {global};
+    val b = emptyBuffer[Int](1);
     println(b.capacity);
     println(b.full?);
 
@@ -105,7 +105,7 @@ def main() = region global {
   }
 
   ignoring[BufferOverflow] {
-    val ringbuffer = emptyBuffer[Int](3) {global};
+    val ringbuffer = emptyBuffer[Int](3);
     ringbuffer.write(1);
     ringbuffer.write(2);
     println(ringbuffer.read());
