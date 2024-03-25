@@ -5,6 +5,7 @@ import mutable/array
 // TODO (in Effekt compiler)
 // - [ ] fix allocating into actually global region
 // - [ ] fix exceptions on objects
+// - [X] allow omitting braces after `at` for singleton regions
 
 record BufferOverflow()
 

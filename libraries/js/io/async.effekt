@@ -44,12 +44,15 @@ namespace IO {
 }
 
 
-
 interface Process {
   def fork(p: Task[Unit]): Unit
   def yield(): Unit
   def exit(): Nothing
 }
+
+
+// Promises
+// --------
 
 interface Promises {
   def async[T](p: Task[T]): Promise[T]
@@ -68,14 +71,15 @@ type Promise[T] = Ref[PromiseState[T]]
 
 def fresh[T](): Promise[T] = fresh(Unresolved())
 
-extern def unsafeCast[A, B](r: A): B = "${r}"
+// TODO only used right now, since there is a bug with global regions
+extern pure def globalRegion(): Region at {global} = "$effekt.global"
+def global = globalRegion()
 
-def eventloop(prog: Task[Unit]) = region here {
+def eventloop(prog: Task[Unit]) = {
 
-  // TODO we need to replace this by a mutable queue
-  val queue: Buffer[() => Unit at {io, global}] at {io,global} = unsafeCast(emptyBuffer[() => Unit at {io, global}](100) {here});
+  val queue: Buffer[() => Unit at {io, global}] at {io, global} = emptyBuffer(100) {global};
 
-  // TODO implement
+  // TODO implement resizing
   def enqueue(task: () => Unit at {io, global}): Unit =
     ignoring[BufferOverflow] { queue.write(task) }
 
@@ -103,12 +107,12 @@ def eventloop(prog: Task[Unit]) = region here {
     try { p() }
     with Process {
       def yield() = {
-        enqueue(fun() { resume(()) })
+        enqueue(box { resume(()) })
       }
 
       def fork(task) = {
-        enqueue(box { handle(task) })
-        resume(())
+        enqueue(box { println("Back in server loop"); resume(()) })
+        enqueue(box { println("In handling thread"); handle(task) })
       }
 
       def exit() = {
@@ -118,7 +122,11 @@ def eventloop(prog: Task[Unit]) = region here {
     with IO {
       def performIO[T](computation) = {
         openIOTasks = openIOTasks + 1
-        computation(box { res => openIOTasks = openIOTasks - 1; resume(res) })
+        computation(box { res =>
+          openIOTasks = openIOTasks - 1;
+          // Move task to the ready-queue
+          enqueue(box { resume(res) })
+        })
       }
     }
     with Promises {
@@ -219,8 +227,10 @@ namespace network {
     val server = jsServer();
     var connections: Dequeue[JSSocket] in global = emptyQueue()
     server.jsListen(port, host, box { socket =>
+      println("new connection")
       connections = connections.pushFront(socket)
     })
+
     // TODO Instead of polling, we should use Channels
     loop {
       connections.popBack match {
@@ -247,24 +257,28 @@ namespace network {
               }
             }
           })
-        case None() => do yield()
+        case None() =>
+          do yield()
       }
     }
   }
   // creates a simple echo server.
   def example() = eventloop(box {
+    var x in global = 0;
     server("localhost", 8080, box {
       loop {
         val msg = do receive();
-        println("Received a request: " ++ msg.toString)
+        x = x + 1
+        //println("Received a request: " ++ msg.toString)
         if (msg.toString.startsWith("GET /")) {
-          do send(toBytes("HTTP/1.1 200 OK\r\n\r\nHello from Effekt! Size: " ++ countFile().show))
-          println("Sent the response.")
+          if (x <= 1) {
+            wait(10000)
+          }
+          do send(toBytes("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!"))
         } else {
           do send("HTTP/1.1 400 Bad Request\r\n\r\n".toBytes)
         }
         do end()
-        println("Closing socket.")
       }
     })
   })
@@ -306,9 +320,14 @@ namespace console {
 extern io def setTimeout(millis: Int, prog: () => Unit at {io, global}): Unit =
   "setTimeout(() => (${prog})().run(), ${millis})"
 
+def wait(millis: Int): Unit / IO =
+  do performIO(box { k => setTimeout(millis, box { () => k(()) }) })
+
 def countFile(): Int / IO = console::withConsole {
   println("Please enter filename:")
-  val filename = do console::readline()
+  //val filename = do console::readline()
+  val filename = "README.md"
+  wait(10000)
   println("Now reading: " ++ filename)
   files::readFile(filename).length
 }

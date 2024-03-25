@@ -573,7 +573,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a value type")
     )
 
-  lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
+  lazy val captureSet: P[CaptureSet] =
+    ( `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
+    | idRef ^^ { id => CaptureSet(List(id)) }
+    )
 
   lazy val blockType: P[BlockType] =
     ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
