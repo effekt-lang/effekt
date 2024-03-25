@@ -1,0 +1,149 @@
+module io
+
+import mutable/ref
+import mutable/buffer
+
+// Asynchronous I/O
+// ----------------
+
+interface IO {
+  /**
+   * Runs the provided computation and conceptually waits until it completes by
+   * calling the writer-continuation.
+   *
+   * The provided writer-continuation should only ever be called ONCE.
+   * The computation is passed as a thunk in order to prevent accidental usage of
+   * other control effects that would violate the contract of calling the writer
+   * once.
+   */
+  def performIO[T](computation: (T => Unit at {io,global}) => Unit at {io,global}): T
+}
+
+namespace IO {
+  /**
+   * Run an IO computation (that uses callbacks) here.
+   */
+  def run(program: () => Unit / IO at {io, global}): Unit =
+    try { program() }
+    with IO {
+      def performIO[T](computation) = computation(resume)
+    }
+}
+
+
+interface Process {
+  def fork(p: Task[Unit]): Unit
+  def yield(): Unit
+  def exit(): Nothing
+}
+
+
+// Promises
+// --------
+
+interface Promises {
+  def async[T](p: Task[T]): Promise[T]
+  def await[T](p: Promise[T]): T
+}
+
+type Task[T] = () => T / { IO, Process, Promises } at {io, global}
+
+type PromiseState[T] {
+  Unresolved()
+  Resolved(value: T)
+  Awaited(callbacks: List[T => Unit at {io, global}])
+}
+
+type Promise[T] = Ref[PromiseState[T]]
+
+
+// Event Loop
+// ----------
+
+extern io def schedule(k: () => Unit at {io, global}): Unit =
+  "setTimeout(() => (${k})().run(), 0)"
+
+def eventloop(prog: Task[Unit]) = {
+
+  val queue: Buffer[() => Unit at {io, global}] at {io, global} = emptyBuffer(100) {global};
+
+  // TODO implement resizing
+  def enqueue(task: () => Unit at {io, global}): Unit =
+    ignoring[BufferOverflow] { queue.write(task) }
+
+  var iterations in global = 0;
+
+  var openIOTasks in global = 0;
+
+  def run(): Unit = {
+    iterations = iterations + 1;
+    queue.read() match {
+      case Some(k) =>
+        schedule(box { k(); run() })
+      case None() and openIOTasks > 0 =>
+        // Busy waiting
+        // Using openIOTasks and busy waiting is mostly for instructive purposes.
+        // Instead, we could also make sure a call to `run()` is part of the captured continuation
+        // of the IO task to "wake up" the scheduler.
+        schedule(run)
+      case _ =>
+        println("leaving event loop after " ++ iterations.show ++ " iterations.")
+    }
+  }
+
+  def handle(p: Task[Unit]): Unit =
+    try { p() }
+    with Process {
+      def yield() = {
+        enqueue(box { resume(()) })
+      }
+
+      def fork(task) = {
+        enqueue(box { resume(()) })
+        handle(task)
+      }
+
+      def exit() = {
+        ()
+      }
+    }
+    with IO {
+      def performIO[T](computation) = {
+        openIOTasks = openIOTasks + 1
+        computation(box { res =>
+          openIOTasks = openIOTasks - 1;
+          // Move task to the ready-queue
+          enqueue(box { resume(res) })
+        })
+      }
+    }
+    with Promises {
+      def async[T](task) = {
+        def resolve[T](p: Promise[T], v: T): Unit = p.get match {
+          case Unresolved() => p.set(Resolved(v))
+          case Resolved(v) => panic("Promise already resolved")
+          case Awaited(ks) =>
+            p.set(Resolved(v))
+            ks.reverse.foreach { k =>
+              enqueue(box { k(v) })
+            }
+        }
+
+        val promise: Promise[T] = fresh(Unresolved());
+        enqueue(box {  resume(promise) })
+        handle(box { resolve(promise, task()) })
+      }
+      def await[T](promise) = promise.get match {
+        case Unresolved() => promise.set(Awaited(Cons(resume, Nil())))
+        case Resolved(v) => resume(v)
+        case Awaited(ks) => promise.set(Awaited(Cons(resume, ks)))
+      }
+    }
+
+
+  // implement the concurrency / io actions (collecting tasks)
+  handle(prog);
+
+  // run the scheduler
+  run()
+}
