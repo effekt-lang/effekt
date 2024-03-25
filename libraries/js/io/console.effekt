@@ -1,0 +1,34 @@
+module io/console
+
+import io
+
+extern """
+  const readline = require('node:readline');
+"""
+
+interface Console {
+  def readline(): String / IO
+}
+
+namespace js {
+  extern type JSConsole
+  extern {io} def newConsole(): JSConsole =
+    """readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      })"""
+  extern {io} def close(console: JSConsole): Unit = "${console}.close()"
+  extern {io} def readline(console: JSConsole, k: String => Unit at {io, global}): Unit =
+    "${console}.question('', input => (${k})(input).run())"
+}
+
+def withConsole[R] { prog: => R / Console }: R = {
+  val c = js::newConsole()
+  try { val res = prog(); js::close(c); res } with Console {
+    def readline() = resume {
+      do performIO[String](box { write =>
+        js::readline(c, write)
+      })
+    }
+  }
+}

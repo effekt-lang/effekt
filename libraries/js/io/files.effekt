@@ -1,0 +1,25 @@
+module io/files
+
+import io
+
+extern """
+  const fs = require("fs");
+"""
+
+/**
+  * Reads a file at given path in a utf8 encoded string.
+  *
+  * Also see: <https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382>
+  * Also see: <https://nodejs.org/api/fs.html#fsreadfilepath-options-callback>
+  */
+def readFile(path: String): String / IO =
+  do performIO[String](box { write => callback::readFile(path, write) })
+
+namespace promise {
+  def readFile(path: String): Promise[String] / Promises = do async(box { readFile(path) })
+}
+
+namespace callback {
+  extern io def readFile(path: String, onSuccess: String => Unit at {io, global}): Unit =
+    "fs.readFile(${path}, 'utf8', (err, res) => { if (!!err) { throw err } else { (${onSuccess})(res).run() } })"
+}

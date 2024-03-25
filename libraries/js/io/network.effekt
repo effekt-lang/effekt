@@ -1,0 +1,76 @@
+module io/network
+
+import immutable/bytes
+import immutable/dequeue
+import io
+
+namespace js {
+  extern """
+    const net = require('node:net');
+
+    function listen(server, port, host, listener) {
+      server.listen(port, host);
+      server.on('connection', listener);
+    }
+  """
+
+  extern type JSServer // = net.Server
+  extern type JSSocket // = net.Socket
+  extern io def server(): JSServer = "net.createServer()"
+  extern io def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, global}): Unit =
+    "listen(${server}, ${port}, ${host}, (socket) => (${listener})(socket).run())"
+
+  extern io def send(socket: JSSocket, data: Bytes, callback: () => Unit at {io, global}): Unit =
+    "${socket}.write(${data}, () => (${callback})().run())"
+
+  extern io def receive(socket: JSSocket, callback: Bytes => Unit at {io, global}): Unit =
+    "${socket}.once('data', (data) => (${callback})(data).run())"
+
+  extern io def end(socket: JSSocket, callback: () => Unit at {io, global}): Unit =
+    "${socket}.end(() => (${callback})().run())"
+}
+
+interface Socket {
+  def send(message: Bytes): Unit
+  def receive(): Bytes
+  def end(): Unit
+}
+
+def server(host: String, port: Int, handler: () => Unit / { Socket, IO, Process, Promises } at {io, global}): Unit / { Process, IO } = {
+  val server = js::server();
+  var connections: Dequeue[js::JSSocket] in global = emptyQueue()
+  js::listen(server, port, host, box { socket =>
+    connections = connections.pushFront(socket)
+  })
+
+  // TODO Instead of polling, we should use Channels
+  loop {
+    connections.popBack match {
+      case Some((socket, cs)) =>
+        connections = cs;
+        do fork(box {
+          try { handler() } with Socket {
+            def send(message) = {
+              do performIO[Unit](box { k =>
+                js::send(socket, message, box { k(()) })
+              });
+              resume(())
+            }
+            def receive() = {
+              resume(do performIO[Bytes](box { k =>
+                js::receive(socket, k)
+              }))
+            }
+            def end() = {
+              do performIO[Unit](box { k =>
+                js::end(socket, box { k(()) })
+              });
+              resume(())
+            }
+          }
+        })
+      case None() =>
+        do yield()
+    }
+  }
+}
