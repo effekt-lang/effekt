@@ -63,8 +63,7 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
 
     def popFront() =
       nonEmpty {
-        val result = contents.get(head)
-        // contents(head) = null // Clear the reference.
+        val result = contents.remove(head)
         head = mod(head + 1, capacity)
         size = size - 1
         result
@@ -73,9 +72,8 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
     def popBack() =
       nonEmpty {
         tail = mod(tail - 1 + capacity, capacity)
-        val result = contents.get(tail)
+        val result = contents.remove(tail)
         size = size - 1
-        // contents(tail) = null // Clear the reference.
         result
       }
 

@@ -63,7 +63,7 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
     def read() = {
       if (buffer.empty?) None()
       else {
-        val result: T = contents.get(head).getOrElse { <> };
+        val result: T = contents.remove(head).getOrElse { <> };
         head = mod(head + 1, initialCapacity)
         Some(result)
       }
@@ -83,7 +83,11 @@ def refBuffer[T](): Buffer[T] at {global} = {
     def capacity() = if (content.isEmpty) 1 else 0
     def full?() = content.isDefined
     def empty?() = isEmpty(content)
-    def read() = content
+    def read() = {
+      val res = content
+      content = None()
+      res
+    }
     def write(el: T) = content match {
       case Some(v) =>
         <> // do raise(BufferOverflow(), "Cannot read element from buffer")

@@ -60,7 +60,18 @@ function copy(from, start, end, to, offset) {
         to[j] = from[i];
     }
 }
+function remove(arr, index) {
+  const res = arr[index];
+  delete arr[index];
+  return res;
+}
 """
+
+def remove[T](arr: Array[T], index: Int): Option[T] =
+  unsafeRemove(arr, index).undefinedToOption
+
+extern global def unsafeRemove[T](arr: Array[T], index: Int): T =
+  "remove(${arr}, ${index})"
 
 extern global def put[T](arr: Array[T], index: Int, value: T): Unit =
   "put(${arr}, ${index}, ${value})"
