@@ -713,33 +713,22 @@ class ParsersBase(positions: Positions) {
   def regex(r: Regex, expected: => String): Parser[String] =
     Parser {
       in =>
-        val s = in.source.content.substring(in.offset)
-        r.findPrefixMatchOf(s) match {
-          case Some(m) =>
-            Success(s.substring(0, m.end), Input(in.source, in.offset + m.end))
-          case None =>
-            Failure(s"${expected} expected but ${in.found} found", in)
+        val pattern = r.pattern
+        val content = in.source.content
+        val start   = in.offset
+        val matcher = pattern.matcher(content)
+
+        matcher.region(start, content.length)
+
+        if (matcher.lookingAt()) {
+          Success(content.substring(start, matcher.end), Input(in.source, matcher.end))
+        } else {
+          Failure(s"${expected} expected but ${in.found} found", in)
         }
     }
 
   implicit def regex(r: Regex): Parser[String] =
     regex(r, s"string matching regex '$r'")
-
-  /**
-   * A parser that matches a regex string after skipping any whitespace.
-   * The form of the latter is defined by the `whitespace` parser.
-   */
-  def matchRegex(r: Regex): Parser[Match] =
-    Parser {
-      in =>
-        val s = in.source.content.substring(in.offset)
-        r.findPrefixMatchOf(s) match {
-          case Some(m) =>
-            Success(m, Input(in.source, in.offset + m.end))
-          case None =>
-            Failure(s"string matching regex '$r' expected but ${ in.found } found", in)
-        }
-    }
 
   /**
    * Convenience conversion to lift parsers that return 2-tilde-tuples to parsers
