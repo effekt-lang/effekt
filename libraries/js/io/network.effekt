@@ -3,6 +3,7 @@ module io/network
 import immutable/bytes
 import mutable/queue
 import io
+import text/string // only for the examples
 
 namespace js {
   extern """
@@ -36,9 +37,9 @@ interface Socket {
   def end(): Unit
 }
 
-def server(host: String, port: Int, handler: () => Unit / { Socket, IO, Process, Promises } at {io, global}): Unit / { Process, IO } = {
+def server(host: String, port: Int, handler: () => Unit / { Socket, IO } at {io, global}): Unit / { Process, AsyncIO } = {
   val server = js::server();
-  val connections: Queue[js::JSSocket] at {global} = emptyQueue()
+  def connections: Queue[js::JSSocket] = emptyQueue()
   js::listen(server, port, host, box { socket =>
     connections.pushFront(socket)
   })
@@ -72,4 +73,28 @@ def server(host: String, port: Int, handler: () => Unit / { Socket, IO, Process,
         do yield()
     }
   }
+}
+
+
+namespace examples {
+  def helloWorldApp(): Unit / Socket = {
+    val request = do receive();
+
+    println("Received a request: " ++ request.toString)
+
+    if (request.toString.startsWith("GET /")) {
+      do send(toBytes("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!"))
+    } else {
+      do send("HTTP/1.1 400 Bad Request\r\n\r\n".toBytes)
+    }
+    do end()
+  }
+
+  // A server that just shows "Hello from Effekt!" on localhost:8080
+  def main() =
+    eventloop(box {
+      server("localhost", 8080, box {
+        helloWorldApp()
+      })
+    })
 }

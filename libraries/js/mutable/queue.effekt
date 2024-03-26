@@ -99,3 +99,34 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
   }
   queue
 }
+
+namespace examples {
+  def main() = {
+    // queue with initial capacity 4
+    def b = emptyQueue[Int](4);
+    println(b.empty?);
+    b.pushFront(1);
+    b.pushBack(2);
+    b.pushFront(3);
+    b.pushBack(4);
+    // this will cause resizing:
+    b.pushBack(5);
+    b.pushBack(6);
+    b.pushBack(7);
+    b.pushBack(8);
+    // and again:
+    b.pushBack(9);
+
+    println(b.empty?);
+    println(b.popFront()); // Some(3)
+    println(b.popFront()); // Some(1)
+    println(b.popFront()); // Some(2)
+    println(b.popFront()); // Some(4)
+    println(b.popFront()); // Some(5)
+    println(b.popFront()); // Some(6)
+    println(b.popFront()); // Some(7)
+    println(b.popFront()); // Some(8)
+    println(b.popFront()); // Some(9)
+    println(b.popFront()); // None()
+  }
+}

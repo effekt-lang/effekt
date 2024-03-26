@@ -6,7 +6,7 @@ import mutable/queue
 // Asynchronous I/O
 // ----------------
 
-interface IO {
+interface AsyncIO {
   /**
    * Runs the provided computation and conceptually waits until it completes by
    * calling the writer-continuation.
@@ -19,13 +19,13 @@ interface IO {
   def performIO[T](computation: (T => Unit at {io,global}) => Unit at {io,global}): T
 }
 
-namespace IO {
+namespace AsyncIO {
   /**
    * Run an IO computation (that uses callbacks) here.
    */
-  def run(program: () => Unit / IO at {io, global}): Unit =
+  def run(program: () => Unit / AsyncIO at {io, global}): Unit =
     try { program() }
-    with IO {
+    with AsyncIO {
       def performIO[T](computation) = computation(resume)
     }
 }
@@ -42,11 +42,9 @@ interface Process {
 // --------
 
 interface Promises {
-  def async[T](p: Task[T]): Promise[T]
+  def promise[T](p: Task[T]): Promise[T]
   def await[T](p: Promise[T]): T
 }
-
-type Task[T] = () => T / { IO, Process, Promises } at {io, global}
 
 type PromiseState[T] {
   Unresolved()
@@ -55,6 +53,11 @@ type PromiseState[T] {
 }
 
 type Promise[T] = Ref[PromiseState[T]]
+
+// TODO we cannot add effects Files, Console, etc. to Task since modules cannot be recursive, at the moment.
+effect IO = { AsyncIO, Process, Promises }
+
+type Task[T] = () => T / IO at {io, global}
 
 
 // Event Loop
@@ -66,7 +69,7 @@ extern io def schedule(k: () => Unit at {io, global}): Unit =
 
 def eventloop(prog: Task[Unit]) = {
 
-  val queue: Queue[() => Unit at {io, global}] at {global} = emptyQueue(32);
+  def queue: Queue[() => Unit at {io, global}] = emptyQueue(32);
 
   var iterations in global = 0;
 
@@ -104,7 +107,7 @@ def eventloop(prog: Task[Unit]) = {
         ()
       }
     }
-    with IO {
+    with AsyncIO {
       def performIO[T](computation) = {
         openIOTasks = openIOTasks + 1
         computation(box { res =>
@@ -115,7 +118,7 @@ def eventloop(prog: Task[Unit]) = {
       }
     }
     with Promises {
-      def async[T](task) = {
+      def promise[T](task) = {
         def resolve[T](p: Promise[T], v: T): Unit = p.get match {
           case Unresolved() => p.set(Resolved(v))
           case Resolved(v) => panic("Promise already resolved")

@@ -2,10 +2,10 @@ module io/time
 
 import io
 
+def wait(millis: Int): Unit / AsyncIO =
+  do performIO(box { k => callback::wait(millis, box { () => k(()) }) })
+
 namespace callback {
   extern io def wait(millis: Int, onTimeout: () => Unit at {io, global}): Unit =
     "setTimeout(() => (${onTimeout})().run(), ${millis})"
 }
-
-def wait(millis: Int): Unit / IO =
-  do performIO(box { k => callback::wait(millis, box { () => k(()) }) })

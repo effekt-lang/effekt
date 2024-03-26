@@ -45,7 +45,7 @@ def emptyBuffer[T](capacity: Int): Buffer[T] at {global} = {
   else arrayBuffer(capacity)
 }
 def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
-  // TODO actually allocate into region, then drop `io`.
+  // TODO allocate buffer (and array) into a region r.
   val contents = emptyArray[T](initialCapacity)
   var head in global = 0
   var tail in global = 0
@@ -93,19 +93,18 @@ def refBuffer[T](): Buffer[T] at {global} = {
   }
 }
 
-def main() = region global {
-
-  ignoring[BufferOverflow] {
-    val b = emptyBuffer[Int](1);
+namespace examples {
+  def main() = ignoring[BufferOverflow] {
+    // Buffer with capacity 1
+    def b = emptyBuffer[Int](1);
     println(b.capacity);
     println(b.full?);
 
     b.write(17);
     println(b.read());
-  }
 
-  ignoring[BufferOverflow] {
-    val ringbuffer = emptyBuffer[Int](3);
+    // buffer with capacity 3
+    def ringbuffer = emptyBuffer[Int](3);
     ringbuffer.write(1);
     ringbuffer.write(2);
     println(ringbuffer.read());
@@ -117,5 +116,4 @@ def main() = region global {
     println(ringbuffer.read());
     println(ringbuffer.read());
   }
-
 }
