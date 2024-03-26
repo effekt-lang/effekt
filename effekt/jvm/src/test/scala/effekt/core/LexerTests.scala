@@ -4,7 +4,8 @@ import effekt.TokenKind.*
 
 class LexerTests extends munit.FunSuite {
   def assertTokensEq(prog: String, expected: TokenKind*): Unit = {
-    val res = Lexer(prog).run()
+    val (res, err) = Lexer(prog).run()
+    if (err.isDefined) fail(s"Lexing failed with error ${err.get}")
     assert(res.length == expected.length, "wrong number of tokens")
     res.zip(expected).foreach((t1, t2) => assertEquals(t1.kind, t2))
   }
