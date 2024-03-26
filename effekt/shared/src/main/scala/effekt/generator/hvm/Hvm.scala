@@ -8,6 +8,7 @@ import effekt.lifted.{ LiftInference, Monomorphize }
 
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
+import effekt.lifted.ModuleDecl
 
 class Hvm extends Compiler[String] {
 
@@ -46,7 +47,11 @@ class Hvm extends Compiler[String] {
     case CoreLifted(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      mainFile -> hvm.Var("needs to be changed") //------------------------------------------------------------------------------------------
+      val result = core match {
+        case ModuleDecl(path, includes, decls, externs, definitions, exports) => ???
+      }
+      val realResult = ??? //result map transform
+      mainFile -> hvm.Var("test") //------------------------------------------------------------------------------------------
   }
 
   // The Compilation Pipeline for VSCode
