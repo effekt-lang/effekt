@@ -32,7 +32,6 @@ def filesystem[R] { program: => R / Files }: R / AsyncIO =
 
 // AsyncIO-based API (default)
 // ---------------------------
-//
 
 /**
   * Reads a file at given path in a utf8 encoded string.

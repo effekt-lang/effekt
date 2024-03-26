@@ -52,6 +52,7 @@ type PromiseState[T] {
   Awaited(callbacks: List[T => Unit at {io, global}])
 }
 
+// In Haskell this is called `IVar`
 type Promise[T] = Ref[PromiseState[T]]
 
 // TODO we cannot add effects Files, Console, etc. to Task since modules cannot be recursive, at the moment.
@@ -71,12 +72,9 @@ def eventloop(prog: Task[Unit]) = {
 
   def queue: Queue[() => Unit at {io, global}] = emptyQueue(32);
 
-  var iterations in global = 0;
-
   var openIOTasks in global = 0;
 
-  def run(): Unit = {
-    iterations = iterations + 1;
+  def run(): Unit =
     queue.popBack() match {
       case Some(k) =>
         schedule(box { k(); run() })
@@ -86,10 +84,8 @@ def eventloop(prog: Task[Unit]) = {
         // Instead, we could also make sure a call to `run()` is part of the captured continuation
         // of the IO task to "wake up" the scheduler.
         schedule(run)
-      case _ =>
-        println("leaving event loop after " ++ iterations.show ++ " iterations.")
+      case _ => ()
     }
-  }
 
   def handle(p: Task[Unit]): Unit =
     try { p() }
