@@ -182,14 +182,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   lazy val externBody: P[ExternBody] =
-    (maybeFeatureFlag ~
-        ( multilineString ^^ { s => Template(List(s), Nil) }
-        | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
-        | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
-        ) ^^ {
-            case ff ~ body => ExternBody.StringExternBody(ff, body)
-        }
+    (maybeFeatureFlag ~ ("""(?=[\"])""".r ~> commit(
+              multilineString ^^ { s => Template(List(s), Nil) }
+            | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
+            | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi), potentially qualified")
+            )) ^^ {
+                case ff ~ body => ExternBody.StringExternBody(ff, body)
+            }
     | featureFlag ~ ("(" ~> expr <~ ")") ^^ { case ff ~ body => ExternBody.EffektExternBody(ff, body) }
+    | featureFlag ~> failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
 

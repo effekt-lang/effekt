@@ -1,4 +1,4 @@
-extern def jsPrintThree(): Unit = else """
+extern def jsPrintThree(): Unit = """
   console.log(3)
 "
 
