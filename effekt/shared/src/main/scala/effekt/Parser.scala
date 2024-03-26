@@ -889,8 +889,9 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   val multi = "\"\"\""
 
   // multi-line strings `(?s)` sets multi-line mode.
-  lazy val multilineString: P[String] = matchRegex(s"(?s)${ multi }[\t\n\r ]*(.*?)[\t\n\r ]*${ multi }".r) ^^ { m => m.group(1) }
-
+  lazy val multilineString: P[String] = regex(s"(?s)${ multi }[\t\n\r ]*(.*?)[\t\n\r ]*${ multi }".r) ^^ {
+    contents => contents.strip().stripPrefix(multi).stripSuffix(multi)
+  }
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =
