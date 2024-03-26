@@ -139,7 +139,7 @@ case class Include(path: String) extends Tree
  */
 enum Param extends Definition {
   case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: BlockType)
+  case BlockParam(id: IdDef, tpe: Option[BlockType])
 }
 export Param.*
 

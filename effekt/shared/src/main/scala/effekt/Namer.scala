@@ -236,7 +236,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), resolve(tpe))
+      val p = BlockParam(Name.local(id), tpe.map { resolve })
       Context.define(id, p)
       Context.bind(p.capture)
 
@@ -393,7 +393,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case tree @ source.Region(name, body) =>
-      val reg = BlockParam(Name.local(name.name), builtins.TRegion)
+      val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion))
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
@@ -560,7 +560,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym: BlockParam = BlockParam(Name.local(p.id), resolve(p.tpe))
+    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { resolve })
     Context.assignSymbol(p.id, sym)
     sym
   }

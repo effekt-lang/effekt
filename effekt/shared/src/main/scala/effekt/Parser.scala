@@ -201,14 +201,17 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val operationParams: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
-    ( maybeTypeParams ~ valueParamsOpt ~ blockParams
+    ( maybeTypeParams ~ valueParamsOpt ~ blockParamsOpt
     | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
-    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParamsOpt
     | failure("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
     )
 
   lazy val blockParams: P[List[BlockParam]] =
     some(`{` ~/> blockParam <~ `}`)
+
+  lazy val blockParamsOpt: P[List[BlockParam]] =
+    some(`{` ~/> blockParamOpt <~ `}`)
 
   lazy val maybeBlockParams: P[List[BlockParam]] =
     blockParams.? ^^ { bs => bs getOrElse Nil }
@@ -231,7 +234,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe) : ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
+    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, Some(tpe)) : BlockParam }
+
+  lazy val blockParamOpt: P[BlockParam] =
+    idDef ~ (`:` ~> blockType).? ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -451,7 +457,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val handler: P[Handler] =
     ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
       case capabilityName ~ impl =>
-        val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
+        val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
         Handler(capability, impl)
       }
     )
