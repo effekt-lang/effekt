@@ -189,7 +189,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
             )) ^^ {
                 case ff ~ body => ExternBody.StringExternBody(ff, body)
             }
-    | featureFlag ~ ("{" ~> stmt <~ "}") ^^ { case ff ~ body => ExternBody.EffektExternBody(ff, body) }
+    | featureFlag ~ ("{" ~> stmts <~ "}") ^^ { case ff ~ body => ExternBody.EffektExternBody(ff, body) }
     | featureFlag ~> failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
