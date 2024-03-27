@@ -21,6 +21,5 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     val tree = Deadcode.remove(mainSymbol, core)
 
     // (2) inline unique block definitions
-    //Inline.full(Set(mainSymbol), tree)
-    tree
+    Inline.full(Set(mainSymbol), tree)
 }

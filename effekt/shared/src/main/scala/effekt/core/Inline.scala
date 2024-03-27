@@ -12,16 +12,18 @@ import scala.collection.mutable
 import kiama.util.Counter
 
 /**
- * Inlines block definitions that are only used exactly once.
+ * Inlines block definitions.
  *
  * 1. First computes usage (using [[Reachable.apply]])
- * 2. Top down traversal where we inline unique definitions
+ * 2. Top down traversal where we inline definitions
  *
  * Invariants:
  *   - the context `defs` always contains the _original_ definitions, not rewritten ones.
  *     Rewriting them has to be performed at the inline-site.
  */
 object Inline {
+
+  val maxInlineSize = 20
 
   case class InlineContext(
     // is mutable to update when introducing temporaries;
@@ -44,7 +46,7 @@ object Inline {
     (m.copy(definitions = updatedDefs), context.inlineCount.value)
   }
 
-  def full(entrypoints: Set[Id], m: ModuleDecl) =
+  def full(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
     var lastCount = 1
     var tree = m
     while (lastCount > 0) {
@@ -60,7 +62,19 @@ object Inline {
       case None => false
       case Some(Usage.Once) => true
       case Some(Usage.Recursive) => false // we don't inline recursive functions for the moment
-      case Some(Usage.Many) => false
+      case Some(Usage.Many) =>
+        ctx.defs.get(id).exists { d =>
+          def isSmall = d.size <= maxInlineSize
+          def isHigherOrder = d match {
+            case Definition.Def(id, BlockLit(_, _, _, bparams, _)) =>
+              bparams.exists(p => p.tpe match {
+                case t: BlockType.Function => true
+                case t: BlockType.Interface => false
+              })
+            case _ => false
+          }
+          isSmall || isHigherOrder
+        }
     }
 
   def shouldKeep(id: Id)(using ctx: InlineContext): Boolean =
@@ -84,7 +98,8 @@ object Inline {
 
   def blockDefFor(id: Id)(using ctx: InlineContext): Option[Block] =
     ctx.defs.get(id) map {
-      case Definition.Def(id, block) => rewrite(block)
+      // TODO rewriting here leads to a stack overflow in one test, why?
+      case Definition.Def(id, block) => block //rewrite(block)
       case Definition.Let(id, binding) => INTERNAL_ERROR("Should not happen")
     }
 
