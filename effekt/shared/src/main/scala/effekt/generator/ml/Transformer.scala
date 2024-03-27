@@ -16,8 +16,6 @@ import scala.collection.mutable
 
 object Transformer {
 
-  val mlFeatureFlags: List[String] = List("ml")
-
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
   def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(using C: Context): ml.Toplevel = {
@@ -186,16 +184,12 @@ object Transformer {
   }
 
   def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
-    case Extern.Def(id, tparams, params, ret, bodies) =>
-      bodies.forFeatureFlags(mlFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ } match {
-        case ExternBody.StringExternBody(_, body) =>
-          ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
-        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
-      }
-    case Extern.Include(ff, contents) if ff.matches(mlFeatureFlags) =>
-      RawBind(contents)
+    case Extern.Def(id, tparams, params, ret, List(ExternBody.StringExternBody(featureFlag, body))) =>
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+    case Extern.Def(id, tparams, params, ret, _) =>
+      sys error "Extern def was not properly resolved"
     case Extern.Include(ff, contents) =>
-      RawBind("") // ignore, not meant for us
+      RawBind(contents)
   }
 
   def toML(t: Template[lifted.Expr])(using TransformerContext): ml.Expr =

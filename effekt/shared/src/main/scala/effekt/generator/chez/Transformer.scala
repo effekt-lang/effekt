@@ -13,8 +13,6 @@ import scala.language.implicitConversions
 
 object TransformerMonadic extends Transformer {
 
-  val chezFeatureFlags: List[String] = List("chezMonadic", "chez")
-
   def run(expr: chez.Expr): chez.Expr =
     Builtin("run", expr)
 
@@ -30,8 +28,6 @@ object TransformerMonadic extends Transformer {
 
 object TransformerCallCC extends Transformer {
 
-  val chezFeatureFlags: List[String] = List("chezCallCC", "chez")
-
   def run(expr: chez.Expr): chez.Expr = expr
 
   def pure(expr: chez.Expr): chez.Expr = expr
@@ -44,8 +40,6 @@ object TransformerCallCC extends Transformer {
 }
 
 trait Transformer {
-
-  val chezFeatureFlags: List[String]
 
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
@@ -138,19 +132,14 @@ trait Transformer {
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, bodies) =>
-      bodies.forFeatureFlags(chezFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
-        case ExternBody.StringExternBody(_, body) =>
-          chez.Constant(nameDef(id),
-            chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
-              toChez(body)))
-        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
-      }
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, List(ExternBody.StringExternBody(_, body))) =>
+      chez.Constant(nameDef(id),
+        chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
+          toChez(body)))
+    case Extern.Def(_,_,_,_,_,_,_,_) => sys error "Extern def was not properly resolved"
 
-    case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>
+    case Extern.Include(ff, contents) =>
       RawDef(contents)
-
-    case Extern.Include(_, _) => RawDef("") // ignore, not meant for us
   }
 
   def toChez(t: Template[core.Expr]): chez.Expr =
