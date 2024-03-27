@@ -6,7 +6,8 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.Term.BlockLiteral
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -837,8 +838,89 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case source.ExternBody.StringExternBody(ff, body) =>
             body.args.foreach { arg => checkExpr(arg, None) }
           case source.ExternBody.EffektExternBody(ff, body) =>
-            // FIXME this currently DOES NOT check effects or return type
-            () // TODO implement
+            // Check with each body as if this was a function definition
+            val sym = d.symbol
+            // was assigned by precheck
+            val functionCapture = Context.lookupCapture(sym)
+
+            // We can also try to solve for the function capture, after checking the function.
+            // Hence we provide it to `withUnificationScope`.
+            val captVars = functionCapture match {
+              case x: CaptUnificationVar => List(x)
+              case _ => Nil
+            }
+            val Result(funTpe, unhandledEffects) = Context.withUnificationScope(captVars) {
+
+              sym.vparams foreach Context.bind
+              sym.bparams foreach Context.bind
+
+              // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
+              val inferredCapture = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(BlockLiteral(tps, vps, bps, body)))
+
+              flowingInto(inferredCapture) {
+
+                (sym.annotatedType: @unchecked) match {
+                  case Some(annotated) =>
+                    // the declared effects are considered as bound
+                    val bound: ConcreteEffects = annotated.effects
+                    val capabilities = bound.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
+                    val captures = capabilities.map {
+                      _.capture
+                    }
+
+                    // block parameters and capabilities for effects are assumed bound
+                    val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
+                      Context in {
+                        body checkAgainst annotated.result
+                      }
+                    }
+                    Context.annotateInferredType(d, tpe)
+                    Context.annotateInferredEffects(d, effs.toEffects)
+
+                    // TODO also annotate the capabilities
+                    flowsIntoWithout(inferredCapture, functionCapture) {
+                      annotated.cparams ++ captures
+                    }
+
+                    Result(annotated, effs -- bound)
+
+                  case None =>
+                    // all effects are handled by the function itself (since they are inferred)
+                    val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
+                      Context in {
+                        checkStmt(body, None)
+                      }
+                    }
+
+                    // We do no longer use the order annotated on the function, but always the canonical ordering.
+                    val capabilities = effs.canonical.map {
+                      caps.apply
+                    }
+                    val captures = capabilities.map(_.capture)
+
+                    Context.bindCapabilities(d, capabilities)
+                    Context.annotateInferredType(d, tpe)
+                    Context.annotateInferredEffects(d, effs.toEffects)
+
+                    // we subtract all capabilities introduced by this function to compute its capture
+                    flowsIntoWithout(inferredCapture, functionCapture) {
+                      (sym.bparams ++ capabilities).map(_.capture)
+                    }
+
+                    // TODO also add capture parameters for inferred capabilities
+                    val funType = sym.toType(tpe, effs.toEffects, captures)
+                    Result(funType, Pure)
+                }
+              }
+            }
+            // we bind the function type outside of the unification scope to solve for variables.
+            val substituted = Context.unification(funTpe)
+            if (!isConcreteBlockType(substituted)) {
+              Context.abort(pretty"Cannot fully infer type for ${id}: ${substituted}")
+            }
+            Context.bind(sym, substituted)
+
+            Result((), unhandledEffects)
         }
 
         Result((), Pure)
