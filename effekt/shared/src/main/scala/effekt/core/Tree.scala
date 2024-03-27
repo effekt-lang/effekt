@@ -64,7 +64,25 @@ import effekt.util.messages.INTERNAL_ERROR
  *
  * -------------------------------------------
  */
-sealed trait Tree
+sealed trait Tree extends Product {
+  /**
+   * The number of nodes of this tree (potentially used by inlining heuristics)
+   */
+  lazy val size: Int = {
+    var nodeCount = 1
+
+    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
+    def one(obj: Any): Unit = obj match {
+      case t: Tree => nodeCount += t.size
+      case s: effekt.symbols.Symbol => ()
+      case p: Product => all(p.productIterator)
+      case t: Iterable[t] => all(t)
+      case leaf           => ()
+    }
+    this.productIterator.foreach(one)
+    nodeCount
+  }
+}
 
 /**
  * In core, all symbols are supposed to be "just" names.
