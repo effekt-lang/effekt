@@ -144,10 +144,7 @@ trait Transformer {
           chez.Constant(nameDef(id),
             chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
               toChez(body)))
-        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
-          chez.Constant(nameDef(id),
-            chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
-              toChez(body)))
+        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
 
     case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>

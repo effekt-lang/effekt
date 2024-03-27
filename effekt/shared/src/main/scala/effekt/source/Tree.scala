@@ -121,7 +121,7 @@ object FeatureFlag {
 sealed trait ExternBody extends Tree
 object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Term) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
 }
 
 

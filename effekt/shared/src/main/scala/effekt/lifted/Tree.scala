@@ -60,7 +60,7 @@ sealed trait ExternBody {
 }
 object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, body: Template[Expr]) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: Expr) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: Stmt) extends ExternBody
 }
 extension(self: List[ExternBody]) {
   def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {

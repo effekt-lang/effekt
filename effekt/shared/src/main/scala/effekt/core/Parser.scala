@@ -69,10 +69,10 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // -------
   lazy val externDecl: P[Extern] =
     ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
-    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> many(featureFlag ~ (externBody | "(" ~> expr <~ ")"))) ^^ {
+    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> many(featureFlag ~ (externBody | "{" ~> stmt <~ "}"))) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ bodies =>
         Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, bodies.map {
-          case ff ~ (body: Expr) =>
+          case ff ~ (body: Stmt) =>
             ExternBody.EffektExternBody(ff, body)
           case ff ~ (body: String) =>
             ExternBody.StringExternBody(ff, Template(List(body), Nil))

@@ -57,12 +57,11 @@ object Transformer {
       noteDefinition(name, params map transform, Nil)
       val tBodies = bodies.map {
         case lifted.ExternBody.StringExternBody(ff, Template(strings, args)) =>
-          ExternBody.StringExternBody(ff, Template(strings, args map {
+          ExternBody(ff, Template(strings, args map {
             case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
             case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
           }))
-        case lifted.ExternBody.EffektExternBody(ff, body) =>
-          ExternBody.EffektExternBody(ff, transform(body).run{ ret => Return(List(ret)) })
+        case lifted.ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
       Extern(transform(name), transformedParams, transform(ret), tBodies)
 

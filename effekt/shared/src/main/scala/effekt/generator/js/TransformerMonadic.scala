@@ -117,8 +117,7 @@ trait TransformerMonadic extends Transformer {
       bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
         case ExternBody.StringExternBody(_, body) =>
           js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
-        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
-          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(body))))
+        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
 
     case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
@@ -187,8 +186,7 @@ trait TransformerMonadic extends Transformer {
       extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ } match {
         case ExternBody.StringExternBody(_, body) =>
           inlineExtern(vargs, extern.vparams, body)
-        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
-          toJS(body)
+        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
 
     case DirectApp(f, targs, vargs, bargs) =>
@@ -199,8 +197,7 @@ trait TransformerMonadic extends Transformer {
       extern.bodies.forFeatureFlags(jsFeatureFlags).getOrElse { ??? /* TOOD insert hole */ } match {
         case ExternBody.StringExternBody(_, body) =>
           inlineExtern(vargs, extern.vparams, body)
-        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
-          toJS(body)
+        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
 
     case PureApp(f, targs, vargs) =>
