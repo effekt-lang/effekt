@@ -104,6 +104,11 @@ enum FeatureFlag extends Tree {
     case Default => true
     case _ => false
   }
+
+  override def toString: String = this match {
+    case FeatureFlag.NamedFeatureFlag(id) => id
+    case FeatureFlag.Default => "else"
+  }
 }
 object FeatureFlag {
   extension (self: List[ExternBody]) {
@@ -118,7 +123,9 @@ object FeatureFlag {
   }
 }
 
-sealed trait ExternBody extends Tree
+sealed trait ExternBody extends Tree {
+  def featureFlag: FeatureFlag
+}
 object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
   case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
