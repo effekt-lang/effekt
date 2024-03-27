@@ -71,7 +71,7 @@ object Transformer {
         definitions.foreach {
           case Definition.Def(id,  block @ lifted.BlockLit(tparams, params, body)) =>
 
-            params.collect { case lifted.BlockParam(id, tpe) => noteParameter(id) }
+            noteParameters(params)
 
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.toSet.flatMap {
@@ -82,14 +82,14 @@ object Transformer {
               case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
                 Set(Variable(transform(pid), Type.Reference(transform(stTpe))))
 
-              case lifted.BlockParam(pid, tpe) if pid != id => BPC.info.get(pid).map {
+              case lifted.BlockParam(pid, tpe) if pid != id => BPC.info(pid) match {
                   case BlockInfo.Definition(freeParams, blockParams) =>
                     BPC.freeParams(pid).toSet
-                  case BlockInfo.BlockParameter =>
+                  case BlockInfo.Parameter(tpe) =>
                     Set(Variable(transform(pid), transform(tpe)))
                   case BlockInfo.Resumption =>
                     Set(Variable(transform(pid), Type.Stack()))
-                }.getOrElse { Set.empty }
+                }
 
               case _ => Set.empty
             }
@@ -146,12 +146,14 @@ object Transformer {
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         BPC.info(id) match {
-
           // Unknown Jump
-          case BlockInfo.BlockParameter =>
+          case BlockInfo.Parameter(t : lifted.BlockType.Function) =>
             transform(args).run { values =>
               Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values)
             }
+
+          case BlockInfo.Parameter(t : lifted.BlockType.Interface) =>
+            E.panic("Cannot call an object (need to select a member first)")
 
           // Continuation Call
           case BlockInfo.Resumption =>
@@ -228,6 +230,9 @@ object Transformer {
         }
 
       case lifted.Try(lifted.BlockLit(tparams, ev :: ids, body), handlers) =>
+
+        noteParameters(ids)
+
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
@@ -242,7 +247,7 @@ object Transformer {
 
       // TODO what about the evidence passed to resume?
       case lifted.Shift(ev, lifted.Block.BlockLit(tparams, List(kparam), body)) =>
-        noteContinuation(kparam.id)
+        noteResumption(kparam.id)
         transform(ev).run { evValue =>
           PopStacks(Variable(transform(kparam).name, Type.Stack()), evValue,
             transform(body))
@@ -366,6 +371,7 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.BlockLit(tparams, params, body) =>
+      noteParameters(params)
       val parameters = params.map(transform);
       val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
@@ -475,7 +481,6 @@ object Transformer {
       case lifted.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
       case lifted.BlockParam(name, tpe) =>
-        noteParameter(name)
         Variable(transform(name), transform(tpe))
       case lifted.EvidenceParam(name) =>
         Variable(transform(name), builtins.Evidence)
@@ -515,6 +520,7 @@ object Transformer {
     definitions.foreach {
       case Definition.Def(blockName, lifted.BlockLit(tparams, params, body)) =>
         noteDefinition(blockName, params.map(transform), Nil)
+        noteParameters(params)
       case _ => ()
     }
 
@@ -528,7 +534,7 @@ object Transformer {
 
     def definition(id: Symbol): BlockInfo.Definition = info(id) match {
       case d : BlockInfo.Definition => d
-      case BlockInfo.BlockParameter => sys error s"Expected a function definition, but got a block parameter: ${id}"
+      case BlockInfo.Parameter(tpe) => sys error s"Expected a function definition, but got a block parameter: ${id}"
       case BlockInfo.Resumption => sys error s"Expected a function definition, but got a continuation: ${id}"
     }
     def blockParams(id: Symbol): Environment = definition(id).blockParams
@@ -536,20 +542,31 @@ object Transformer {
   }
   enum BlockInfo {
     case Definition(freeParams: Environment, blockParams: Environment)
-    case BlockParameter
+    case Parameter(tpe: lifted.BlockType)
     case Resumption
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
   def noteDefinition(id: Symbol, blockParams: Environment, freeParams: Environment)(using BC: BlocksParamsContext): Unit =
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: BlockInfo)")
     BC.info += (id -> BlockInfo.Definition(freeParams, blockParams))
 
-  def noteContinuation(id: Symbol)(using BC: BlocksParamsContext): Unit =
+  def noteResumption(id: Symbol)(using BC: BlocksParamsContext): Unit =
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Resumption)")
     BC.info += (id -> BlockInfo.Resumption)
 
-  def noteParameter(id: Symbol)(using BC: BlocksParamsContext): Unit =
-    BC.info += (id -> BlockInfo.BlockParameter)
+
+  def noteParameter(id: Symbol, tpe: lifted.BlockType)(using BC: BlocksParamsContext): Unit =
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
+    BC.info += (id -> BlockInfo.Parameter(tpe))
+
+  def noteParameters(ps: List[lifted.Param])(using BC: BlocksParamsContext): Unit =
+    ps.foreach {
+      case lifted.Param.BlockParam(id, tpe) => noteParameter(id, tpe)
+      case lifted.Param.ValueParam(id, tpe) => () // do not register value parameters
+      case lifted.Param.EvidenceParam(id) => () // do not register evidence parameters
+    }
 
   def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
     case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
