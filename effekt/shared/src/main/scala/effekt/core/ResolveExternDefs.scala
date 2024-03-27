@@ -31,8 +31,11 @@ case class ResolveExternDefs(supportedFeatureFlags: List[String]) extends Phase[
 
   def findPreferred(bodies: List[ExternBody], supported: List[String]): ExternBody = {
     bodies.filter { b => b.featureFlag.matches(supported) }
-      .minByOption { b => supported.indexOf(b.featureFlag) }
-      .getOrElse{ defaultExternBody }
+      .minByOption { b => supported.indexOf(b.featureFlag) match {
+          case -1 => supported.length
+          case p => p
+        }  
+      }.getOrElse{ defaultExternBody }
   }
 
   def resolve(e: Extern)(using C: Context): Resolved = e match {
