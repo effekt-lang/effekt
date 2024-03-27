@@ -46,7 +46,7 @@ object Transformer {
     Program(declarations, transformedDefinitions)
   }
 
-  def transform(extern: lifted.Extern)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Declaration = extern match {
+  def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case lifted.Extern.Def(name, tps, params, ret, bodies) =>
       val transformedParams = params.flatMap {
         case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
