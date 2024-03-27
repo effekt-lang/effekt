@@ -67,10 +67,31 @@ trait Transformer {
   // const $getOp = "get$1234"
   // const $putOp = "put$7554"
   def generateStateAccessors: List[js.Stmt] = {
-    val getter = Const(JSName("$getOp"), JsString(nameDef(symbols.builtins.TState.get).name))
-    val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
+    val getOp = nameDef(symbols.builtins.TState.get).name
+    val putOp = nameDef(symbols.builtins.TState.put).name
 
-    List(getter, setter)
+    js.RawStmt(
+      s"""  // TODO maybe use weak refs (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakRef)
+        |  function Cell(init) {
+        |    var _value = init;
+        |    const cell = ({
+        |      backup: function() {
+        |        var _backup = _value
+        |        var cell = this;
+        |        return () => { _value = _backup; return cell }
+        |      }
+        |    });
+        |    cell.${getOp} = function() {
+        |      return _value
+        |    };
+        |    cell.${putOp} = function(v) {
+        |      _value = v;
+        |      return $$effekt.unit;
+        |    };
+        |    return cell
+        |  }
+        |
+        |""".stripMargin) :: Nil
   }
 
   // Names

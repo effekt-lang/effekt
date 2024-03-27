@@ -54,5 +54,3 @@ function println$impl(obj) {
   //return $effekt.delayed(() => { console.log(show(obj)); return $effekt.unit; });
   console.log(show$impl(obj)); return $effekt.unit;
 }
-
-$effekt.unit = { __unit: true }
