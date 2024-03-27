@@ -838,7 +838,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             body.args.foreach { arg => checkExpr(arg, None) }
           case source.ExternBody.EffektExternBody(ff, body) =>
             // FIXME this currently DOES NOT check effects or return type
-            checkExpr(body, None)
+            () // TODO implement
         }
 
         Result((), Pure)

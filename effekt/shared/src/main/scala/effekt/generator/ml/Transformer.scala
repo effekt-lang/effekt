@@ -190,8 +190,7 @@ object Transformer {
       bodies.forFeatureFlags(mlFeatureFlags).getOrElse{ ??? /* TODO insert hole*/ } match {
         case ExternBody.StringExternBody(_, body) =>
           ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
-        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
-          ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
     case Extern.Include(ff, contents) if ff.matches(mlFeatureFlags) =>
       RawBind(contents)

@@ -3,7 +3,6 @@ package generator
 package llvm
 
 import effekt.machine
-import effekt.machine.forFeatureFlags
 import effekt.util.intercalate
 import effekt.machine.analysis.*
 
@@ -43,15 +42,11 @@ object Transformer {
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, bodies) =>
-        bodies.forFeatureFlags(llvmFeatureFlags).getOrElse{ ??? /* TODO insert holes */ } match {
-          case machine.ExternBody.StringExternBody(_, body) =>
-            VerbatimFunction(transform(returnType), functionName, parameters.map {
-              case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-            }, transform(body))
-          case machine.ExternBody.EffektExternBody(_, body) =>
-            sys.error("The LLVM backend does not support pseudo-extern definitions yet") // TODO FIXME
-        }
+      case machine.Extern(functionName, parameters, returnType, List(machine.ExternBody(_, body))) =>
+        VerbatimFunction(transform(returnType), functionName, parameters.map {
+          case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
+        }, transform(body))
+      case machine.Extern(_,_,_,_) => sys error "Extern bodies were not properly resolved"
       case machine.Include(ff, content) if ff.matches(llvmFeatureFlags) =>
         Verbatim(content)
       case machine.Include(ff, content) =>

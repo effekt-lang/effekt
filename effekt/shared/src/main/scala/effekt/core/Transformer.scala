@@ -111,7 +111,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           }
           ExternBody.StringExternBody(ff, Template(body.strings, args))
         case source.ExternBody.EffektExternBody(ff, body) =>
-          ExternBody.EffektExternBody(ff, transformAsExpr(body))
+          ExternBody.EffektExternBody(ff, transform(body))
       }
       List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBodies))
 

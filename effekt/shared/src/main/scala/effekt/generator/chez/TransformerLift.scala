@@ -206,12 +206,7 @@ object TransformerLift {
               case p: Param.EvidenceParam => None
               case p => Some(nameDef(p.id)) },
               toChez(body)))
-        case ExternBody.EffektExternBody(_, body) => // TODO check that this is correct
-          chez.Constant(nameDef(id),
-            chez.Lambda( params.flatMap {
-              case p: Param.EvidenceParam => None
-              case p => Some(nameDef(p.id)) },
-              toChez(body)))
+        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
 
     case Extern.Include(ff, contents) if ff.matches(chezFeatureFlags) =>
