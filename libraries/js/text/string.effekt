@@ -36,8 +36,16 @@ def toInt(str: String): Option[Int] =
 extern pure def unsafeCharAt(str: String, n: Int): String =
   "${str}[${n}]"
 
+extern """
+function parseIntUndefined(str) {
+  const result = parseInt(str, 10)
+  if (Number.isNaN(result)) return undefined;
+  else return result;
+}
+"""
+
 extern pure def unsafeToInt(str: String): Int =
-  "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
+  "parseIntUndefined(${str})"
 
 def indexOf(str: String, sub: String): Option[Int] = {
   val index = str.unsafeIndexOf(sub)
