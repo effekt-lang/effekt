@@ -132,12 +132,13 @@ trait Transformer {
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, List(ExternBody.StringExternBody(_, body))) =>
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
           toChez(body)))
+    case Extern.Def(_,_,_,_,_,_,_,_) => sys error "Extern def was not properly resolved"
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) =>
       RawDef(contents)
   }
 

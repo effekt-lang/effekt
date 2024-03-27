@@ -3,10 +3,10 @@ package generator
 package llvm
 
 import effekt.context.Context
+import effekt.core.ResolveExternDefs
 import effekt.lifted.LiftInference
 import effekt.machine
-
-import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
+import kiama.output.PrettyPrinterTypes.{Document, emptyLinks}
 import kiama.util.Source
 
 
@@ -15,6 +15,8 @@ class LLVM extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".ll"
+
+  override def supportedFeatureFlags: List[String] = Transformer.llvmFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -40,7 +42,7 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Lifted => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen LiftInference andThen Machine map {
+  lazy val Compile = allToCore(Core andThen ResolveExternDefs(supportedFeatureFlags)) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen LiftInference andThen Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 

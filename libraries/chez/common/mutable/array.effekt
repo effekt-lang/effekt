@@ -7,21 +7,21 @@ import immutable/cslist
 extern type Array[T]
 
 extern pure def emptyArray[T](size: Int): Array[T] =
-  "(make-vector ${size})"
+  chez "(make-vector ${size})"
 
 def get[T](arr: Array[T], index: Int): Option[T] =
   if (index >= arr.size) None() else Some(arr.unsafeGet(index))
 
 extern pure def size[T](arr: Array[T]): Int =
-  "(vector-length ${arr})"
+  chez "(vector-length ${arr})"
 
 // raises a scheme exception if out of bounds
 extern pure def unsafeGet[T](arr: Array[T], index: Int): T =
-  "(vector-ref ${arr} ${index})"
+  chez "(vector-ref ${arr} ${index})"
 
 // TODO raises a scheme exception if out of bounds
 extern io def put[T](arr: Array[T], index: Int, value: T): Unit =
-  "(begin (vector-set! ${arr} ${index} ${value}) #f)"
+  chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
 
 extern pure def toArray[A](l: CSList[A]): Array[A] =
-  "(list->vector ${l})"
+  chez "(list->vector ${l})"

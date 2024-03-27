@@ -3,11 +3,11 @@ module io/args
 import effekt
 import immutable/list
 
-extern io def get_argc(): Int = """
+extern io def get_argc(): Int = llvm """
   %c = call %Int @c_get_argc()
   ret %Int %c
 """
-extern io def get_arg(i: Int): String = """
+extern io def get_arg(i: Int): String = llvm """
   %s = call %Pos @c_get_arg(%Int %i)
   ret %Pos %s
 """

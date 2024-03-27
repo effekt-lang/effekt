@@ -3,20 +3,24 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.symbols.{ Module, Symbol }
-
+import effekt.core.ResolveExternDefs
+import effekt.symbols.{Module, Symbol}
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 class ChezSchemeMonadic extends ChezScheme {
   def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
     chez.TransformerMonadic.compilationUnit(mainSymbol, mod, decl)
+
+  override def supportedFeatureFlags: List[String] = List("chezMonadic", "chez")
 }
 
 
 class ChezSchemeCallCC extends ChezScheme {
   def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
     chez.TransformerCallCC.compilationUnit(mainSymbol, mod, decl)
+
+  override def supportedFeatureFlags: List[String] =  List("chezCallCC", "chez")
 }
 
 
@@ -27,6 +31,8 @@ trait ChezScheme extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".ss"
+
+  override def supportedFeatureFlags: List[String] = List("chez")
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -48,7 +54,7 @@ trait ChezScheme extends Compiler[String] {
   // ------------------------
   // Source => Core => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen Chez map { case (main, expr) =>
+    allToCore(Core andThen ResolveExternDefs(supportedFeatureFlags)) andThen Aggregate andThen core.Optimizer andThen Chez map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 

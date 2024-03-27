@@ -10,6 +10,8 @@ import scala.collection.mutable
 
 object Transformer {
 
+  val llvmFeatureFlags: List[String] = List("llvm")
+
   def transform(program: machine.Program): List[Definition] = program match {
     case machine.Program(declarations, statement) =>
       given MC: ModuleContext = ModuleContext();
@@ -40,12 +42,15 @@ object Transformer {
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, body) =>
+      case machine.Extern(functionName, parameters, returnType, List(machine.ExternBody(_, body))) =>
         VerbatimFunction(transform(returnType), functionName, parameters.map {
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
         }, transform(body))
-      case machine.Include(content) =>
+      case machine.Extern(_,_,_,_) => sys error "Extern bodies were not properly resolved"
+      case machine.Include(ff, content) if ff.matches(llvmFeatureFlags) =>
         Verbatim(content)
+      case machine.Include(ff, content) =>
+        Verbatim("") // ignore, not meant for us
     }
 
   def transform(t: Template[machine.Variable]): String = intercalate(t.strings, t.args.map {

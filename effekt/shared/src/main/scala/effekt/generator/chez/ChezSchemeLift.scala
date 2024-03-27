@@ -3,8 +3,8 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.lifted.{ LiftInference, Monomorphize }
-
+import effekt.core.ResolveExternDefs
+import effekt.lifted.{LiftInference, Monomorphize}
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -13,6 +13,8 @@ class ChezSchemeLift extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".ss"
+
+  override def supportedFeatureFlags: List[String] = List("chezLift", "chez")
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -35,7 +37,7 @@ class ChezSchemeLift extends Compiler[String] {
   // ------------------------
   // Source => Core => Lifted => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen ToChez map { case (main, expr) =>
+    allToCore(Core andThen ResolveExternDefs(supportedFeatureFlags)) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen ToChez map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 

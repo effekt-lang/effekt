@@ -1,6 +1,6 @@
 module mutable/heap
 
-extern """
+extern js """
 var heap$data = {};
 var heap$pointer = 0;
 
@@ -23,10 +23,10 @@ function get$impl(ref) {
 extern type HeapRef[T]
 
 extern io def fresh[T](init: T): HeapRef[T] =
-    "heap$fresh(${init})"
+    js "heap$fresh(${init})"
 
 extern io def put[T](ref: HeapRef[T], value: T): Unit =
-    "heap$put(${ref}, ${value})"
+    js "heap$put(${ref}, ${value})"
 
 extern io def get[T](ref: HeapRef[T]): T =
-    "heap$data[${ref}]"
+    js "heap$data[${ref}]"

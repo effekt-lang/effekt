@@ -4,7 +4,7 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.core.DirectStyleMutableState
+import effekt.core.{DirectStyleMutableState, ResolveExternDefs}
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -14,6 +14,8 @@ class JavaScript extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".js"
+
+  override def supportedFeatureFlags: List[String] = TransformerMonadicWhole.jsFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -42,7 +44,7 @@ class JavaScript extends Compiler[String] {
     Frontend andThen Middleend andThen DirectStyleMutableState
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe andThen core.LambdaLifting map {
+  lazy val Compile = allToCore(Core andThen ResolveExternDefs(supportedFeatureFlags)) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe andThen core.LambdaLifting map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)

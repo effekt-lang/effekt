@@ -8,7 +8,7 @@ extern type Regex
 record Match(matched: String, index: Int)
 
 extern pure def regex(str: String): Regex =
-  "new RegExp(${str})"
+  js "new RegExp(${str})"
 
 def exec(reg: Regex, str: String): Option[Match] =
   reg.unsafeExec(str).undefinedToOption match {
@@ -18,10 +18,10 @@ def exec(reg: Regex, str: String): Option[Match] =
 
 // internal representation { matched: String, index: Int }
 extern type RegexMatch
-extern pure def matched(r: RegexMatch): String = "${r}.matched"
-extern pure def index(r: RegexMatch): Int = "${r}.index"
+extern pure def matched(r: RegexMatch): String = js "${r}.matched"
+extern pure def index(r: RegexMatch): Int = js "${r}.index"
 
-extern """
+extern js """
 function regex$exec(reg, str) {
   var res = reg.exec(str);
   if (res === null) { return undefined }

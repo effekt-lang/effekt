@@ -2,7 +2,8 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ Constructor, Name, Symbol }
+import effekt.source.FeatureFlag
+import effekt.symbols.{Constructor, Name, Symbol}
 import scala.collection.immutable
 
 export effekt.core.Id
@@ -51,8 +52,24 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: Template[Expr])
-  case Include(contents: String)
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, bodies: List[ExternBody])
+  case Include(featureFlag: FeatureFlag, contents: String)
+}
+sealed trait ExternBody {
+  def featureFlag: FeatureFlag
+}
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, body: Template[Expr]) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: Stmt) extends ExternBody
+}
+extension(self: List[ExternBody]) {
+  def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
+    case Nil => self.find(_.featureFlag.isDefault)
+    case flag :: other =>
+      self.find( _.featureFlag.matches(flag, false) ) orElse {
+        self.forFeatureFlags(other)
+      }
+  }
 }
 
 enum Definition {
