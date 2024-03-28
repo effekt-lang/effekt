@@ -1,0 +1,7 @@
+module immutable/bytes
+
+extern type Bytes
+extern pure def size(b: Bytes): Int = "${b}.length"
+extern pure def empty(): Bytes = "(new Uint8Array(0))"
+extern pure def toBytes(s: String): Bytes = "(new TextEncoder().encode(${s}))"
+extern pure def toString(b: Bytes): String = "(new TextDecoder('utf-8').decode(${b}))"
