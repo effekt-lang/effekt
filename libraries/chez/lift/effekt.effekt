@@ -137,10 +137,10 @@ extern pure def infixGte(x: Double, y: Double): Bool =
 extern pure def not(b: Bool): Bool =
   "(not ${b})"
 
-def infixOr { first:  () => Bool } { second: () => Bool }: Bool = 
+def infixOr { first: => Bool } { second: => Bool }: Bool = 
   if (first()) true else second()
 
-def infixAnd { first:  () => Bool } { second: () => Bool }: Bool = 
+def infixAnd { first: => Bool } { second: => Bool }: Bool = 
   if (first()) second() else false
 
 // Should only be used internally since values in Effekt should not be undefined

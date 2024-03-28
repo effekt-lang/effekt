@@ -172,10 +172,10 @@ extern pure def infixGte(x: String, y: String): Bool =
 extern pure def not(b: Bool): Bool =
   "not ${b}"
 
-def infixOr { first:  () => Bool } { second: () => Bool }: Bool = 
+def infixOr { first: => Bool } { second: => Bool }: Bool = 
   if (first()) true else second()
 
-def infixAnd { first:  () => Bool } { second: () => Bool }: Bool = 
+def infixAnd { first: => Bool } { second: => Bool }: Bool = 
   if (first()) second() else false
 
 // Pairs

@@ -617,6 +617,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
+  // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
   private def thunkedBinaryOp(lhs: Term, op: String, rhs: Term): Term =
      Call(IdTarget(IdRef(Nil, thunkedOpName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
 

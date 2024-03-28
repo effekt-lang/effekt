@@ -150,10 +150,10 @@ extern pure def not(adt_p: Bool): Bool = """
     ret %Pos %adt_q
 """
 
-def infixOr { first:  () => Bool } { second: () => Bool }: Bool = 
+def infixOr { first: => Bool } { second: => Bool }: Bool = 
   if (first()) true else second()
 
-def infixAnd { first:  () => Bool } { second: () => Bool }: Bool = 
+def infixAnd { first: => Bool } { second: => Bool }: Bool = 
   if (first()) second() else false
 
 // show
