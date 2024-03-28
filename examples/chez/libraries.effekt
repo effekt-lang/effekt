@@ -10,7 +10,7 @@ import immutable/cslist
 
 import mutable/array
 import mutable/dict
-import mutable/heap
+import mutable/ref
 
 import text/regex
 import text/string
