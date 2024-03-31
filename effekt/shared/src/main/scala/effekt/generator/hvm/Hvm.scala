@@ -5,10 +5,13 @@ package hvm
 import effekt.context.Context
 import effekt.symbols.{ Module, Symbol }
 import effekt.lifted.{ LiftInference, Monomorphize }
+import effekt.cps
 
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-import effekt.lifted.ModuleDecl
+import effekt.core.PolymorphismBoxing.transform
+
+
 
 class Hvm extends Compiler[String] {
 
@@ -37,20 +40,17 @@ class Hvm extends Compiler[String] {
   // ------------------------
   // Source => Core => Lifted => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen ToHvm map { case (main, expr) =>
+    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen cps.Transformer andThen ToHvm map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 
   lazy val Core = Phase.cached("core") { Frontend andThen Middleend }
 
   lazy val ToHvm = Phase("hvm") {
-    case CoreLifted(source, tree, mod, core) =>
+    case CpsTransformed(source, tree, mod, core, cpsed) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      val result = core match {
-        case ModuleDecl(path, includes, decls, externs, definitions, exports) => ???
-      }
-      val realResult = ??? //result map transform
+      val realResult = hvm.transform(cpsed) //result map transform
       mainFile -> hvm.Var("test") //------------------------------------------------------------------------------------------
   }
 

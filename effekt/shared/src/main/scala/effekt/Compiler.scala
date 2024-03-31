@@ -57,6 +57,11 @@ enum PhaseResult {
    */
   case CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl)
 
+   /**
+   * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
+   */
+  case CpsTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl, cps: effekt.cps.ModuleDecl)
+  
   /**
    * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
    */
