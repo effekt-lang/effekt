@@ -71,11 +71,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case Match(sc, clauses, default) =>
       Match(rewriteAsExpr(sc), clauses.map(rewrite), default.map(rewrite))
 
-    case s @ Select(recv, name) if s.definition.isInstanceOf[Field] =>
-      Select(rewriteAsExpr(recv), name)
-
     case s @ Select(recv, name) =>
-      C.abort("selection on blocks not supported yet.")
+      Select(rewriteAsExpr(recv), name)
 
     case Do(effect, id, targs, vargs, bargs) =>
       Do(effect, id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock))

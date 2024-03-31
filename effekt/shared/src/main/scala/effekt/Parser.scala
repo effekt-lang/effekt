@@ -383,9 +383,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val mulExpr: P[Term] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
   lazy val accessExpr: P[Term] =
-    callExpr ~ many(`.` ~>
-      ( idRef ~ maybeTypeArgs ~ maybeValueArgs ~ maybeBlockArgs ^^ Left.apply
-      | idRef ^^ Right.apply
+    callExpr ~ many(
+      ( `.` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ maybeBlockArgs ^^ Left.apply
+      | `'s` ~> idRef ^^ Right.apply
       )
     ) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
@@ -817,6 +817,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `}>` = literal("}>")
   lazy val `!` = literal("!")
   lazy val `|` = literal("|")
+
+  lazy val `'s` = literal("'s")
 
   lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
