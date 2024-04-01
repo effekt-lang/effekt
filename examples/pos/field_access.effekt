@@ -1,0 +1,14 @@
+module field_access
+
+record Car(model: String)
+record Person(name: String, car: Car)
+
+def showCar(c: Car) = "Car(" ++ show(c's model) ++ ")"
+
+def main() = {
+  val Maxine = Person("Maxine", Car("Wartburg 353"))
+
+  println(Maxine's name)
+  println(showCar(Maxine's car))
+  println(Maxine's car's model)
+}
