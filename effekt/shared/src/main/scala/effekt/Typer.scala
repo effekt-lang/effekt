@@ -373,21 +373,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
           val declaredType = Context.lookupFunctionType(d.definition)
 
-          //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-          // The parameters C, D, ... are existentials
-          val existentials: List[ValueType] = tparams.map {
-            tparam => ValueTypeRef(tparam.symbol.asTypeParam)
-          }
-
           def assertArity(kind: String, got: Int, expected: Int): Unit =
             if (got != expected)
               Context.abort(pretty"Number of ${kind} (${got}) does not match declaration of '${op.name}', which expects ${expected}.")
 
-          assertArity("type parameters", existentials.size, declaredType.tparams.size - targs.size)
+          // if we have zero given type parameters, we synthesize them -- no need to check then
+          if (tparams.size != 0) assertArity("type parameters", tparams.size, declaredType.tparams.size - targs.size)
           assertArity("value parameters", vparams.size, declaredType.vparams.size)
 
-          val canonicalEffects = declaredType.effects.canonical
+          //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+          // The parameters C, D, ... are existentials
+          val existentials: List[ValueType] = if (tparams.size == declaredType.tparams.size - targs.size) {
+            tparams.map { tparam => ValueTypeRef(tparam.symbol.asTypeParam) }
+          } else {
+            // using the invariant that the universals are prepended to type parameters of the operation
+            declaredType.tparams.drop(targs.size).map { tp => ValueTypeRef(tp.asTypeParam) }
+          }
 
+          val canonicalEffects = declaredType.effects.canonical
 
           // distinguish between handler operation or object operation (which does not capture a cont.)
           val Result(_, effs) = continuationDetails match {
