@@ -1,4 +1,4 @@
-module examples/pos/polymorphic/type-omission
+module examples/pos/polymorphic/type_omission_op
 
 interface Eff[A] {
 	def eff[B, C](x: B, y: C) { f: B => A } { g: C => A }: A
