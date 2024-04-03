@@ -7,12 +7,12 @@ type Option[A] {
   Some(value: A)
 }
 
-def isDefined[A](self: Option[A]): Boolean = self match {
+def isDefined[A](self: Option[A]): Bool = self match {
   case None()  => false
   case Some(v) => true
 }
 
-def isEmpty[A](self: Option[A]): Boolean =
+def isEmpty[A](self: Option[A]): Bool =
   self.isDefined.not
 
 def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {

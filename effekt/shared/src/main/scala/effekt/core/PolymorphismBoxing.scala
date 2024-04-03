@@ -40,7 +40,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    */
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt     => PContext.boxer("Int")
-    case core.Type.TBoolean => PContext.boxer("Boolean")
+    case core.Type.TBoolean => PContext.boxer("Bool")
     case core.Type.TDouble  => PContext.boxer("Double")
     case core.Type.TUnit    => PContext.boxer("Unit")
     // Do strings need to be boxed? Really?

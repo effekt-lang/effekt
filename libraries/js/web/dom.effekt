@@ -30,7 +30,7 @@ extern type IdleDeadline
 extern pure def requestIdleCallback(callback: (IdleDeadline) => Unit at {io}): Unit =
   "window.requestIdleCallback(deadline => ${callback}(deadline).run())"
 
-extern pure def didDimeout(deadline: IdleDeadline): Boolean =
+extern pure def didDimeout(deadline: IdleDeadline): Bool =
   "${deadline}.didTimeout"
 
 extern pure def timeRemaining(deadline: IdleDeadline): Double =

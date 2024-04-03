@@ -1,6 +1,6 @@
 import immutable/option
 
-def guard(): Boolean = false
+def guard(): Bool = false
 
 def ex1(opt: Option[String]) = opt match {
   case _ and guard() and opt is Some(voo) => voo

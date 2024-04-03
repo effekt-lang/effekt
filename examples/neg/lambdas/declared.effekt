@@ -1,7 +1,7 @@
 
 def foo { f: (Int) => String }: Unit = ()
 
-// def bar { f: (Boolean) => Int }: Unit = foo { (x: Boolean) => f(x) }
+// def bar { f: (Bool) => Int }: Unit = foo { (x: Bool) => f(x) }
 
 
 interface Yield { def yield(): Unit }

@@ -1,6 +1,6 @@
 
 
-effect Flip(): Boolean
+effect Flip(): Bool
 effect Fail[A](): A
 
 def choice(n : Int): Int / { Flip, Fail } =

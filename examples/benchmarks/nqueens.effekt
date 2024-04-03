@@ -21,7 +21,7 @@ interface Search {
   def fail(): Nothing
 }
 
-def safe(queen: Int, diag: Int, xs: Solution): Boolean = xs match {
+def safe(queen: Int, diag: Int, xs: Solution): Bool = xs match {
   case Cons(q, qs) =>
     // we do not have shortcutting && in Effekt, hence we encode it here.
     val safeHere = queen != q && queen != q + diag && queen != q - diag;

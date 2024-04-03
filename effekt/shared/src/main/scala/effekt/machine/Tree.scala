@@ -236,7 +236,7 @@ object builtins {
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive("Boolean")
+  val BooleanType = Positive("Bool")
 
   val SingletonRecord: Tag = 0
 }

@@ -1,0 +1,60 @@
+import immutable/list
+import immutable/option
+import text/string
+import io/args
+
+// TODO: map uses `var` and therefore fails in ML with "Effect polymorphic recursion is not allowed."
+def vfix(lst: List[List[=> (Int => Int at {}) at {}] => (Int => Int at {}) at {}]): List[=> (Int => Int at {}) at {}] = {
+    lst.map { el => box { () => el(vfix(lst)) } }
+}
+
+// TODO: first/second/third could be replaced with standard library functions
+//       (once they are commonly available in all backends)
+
+def first(lst: List[=> (Int => Int at {}) at {}]) = lst match {
+    case Cons(a, _) => a
+    case _ => box { () => box { (x: Int) => x } }
+}
+
+def second(lst: List[=> (Int => Int at {}) at {}]) = lst match {
+    case Cons(_, Cons(b, _)) => b
+    case _ => box { () => box { (x: Int) => x } }
+}
+
+def third(lst: List[=> (Int => Int at {}) at {}]) = lst match {
+    case Cons(_, Cons(_, Cons(c, _))) => c
+    case _ => box { () => box { (x: Int) => x } }
+}
+
+def f1(fs: List[=> (Int => Int at {}) at {}]) =
+    box { (n: Int) =>
+        if (n == 0) 0
+        else second(fs)()(n - 1)
+    }
+
+def f2(fs: List[=> (Int => Int at {}) at {}]) =
+    box { (n: Int) =>
+        if (n == 0) 1
+        else third(fs)()(n - 1)
+    }
+
+def f3(fs: List[=> (Int => Int at {}) at {}]) =
+    box { (n: Int) =>
+        if (n == 0) 2
+        else first(fs)()(n - 1)
+    }
+
+def mod3(x: Int): Int = first(vfix([f1,f2,f3]))()(x)
+
+def calculate(x: Int) = {
+    return [mod3(x), mod3(x + 1), mod3(x + 2)]
+}
+
+def main() = commandLineArgs() match {
+  case Nil() => println(calculate(999))
+  case Cons(x, Nil()) => toInt(x) match {
+    case Some(i) => println(calculate(i))
+    case _ => println("Unexpected non-integer(s) '" ++ x ++ "'")
+  }
+  case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
+}

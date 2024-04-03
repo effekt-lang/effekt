@@ -20,7 +20,7 @@ extern io def get[K, V](d: Dict[K, V], key: K, default: V): V =
 extern io def unsafeGet[K, V](d: Dict[K, V], key: K): V =
     "(hashtable-ref ${d} ${key} #f)"
 
-extern io def contains[K, V](d: Dict[K, V], key: K): Boolean =
+extern io def contains[K, V](d: Dict[K, V], key: K): Bool =
     "(hashtable-contains? ${d} ${key})"
 
 extern io def remove[K, V](d: Dict[K, V], key: K): Unit =

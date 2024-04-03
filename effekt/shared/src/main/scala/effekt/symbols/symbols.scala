@@ -265,15 +265,15 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   lazy val vparams: List[ValueParam] = fields.map { f => f.param }
   val bparams: List[BlockParam] = Nil
 
-  val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
-  def annotatedResult: Option[ValueType] = Some(returnType)
+  val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
+  def annotatedResult: Option[ValueType] = Some(appliedDatatype)
   def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
   val tparams: List[TypeParam] = constructor.tparams
-  val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
+  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype)))
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get

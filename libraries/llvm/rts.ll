@@ -74,7 +74,7 @@
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Obj}
-%Boolean = type %Pos
+%Bool = type %Pos
 %Unit = type %Pos
 
 ; Negative types (codata) consist of a vtable and a heap object

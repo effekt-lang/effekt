@@ -375,7 +375,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val constructor: P[Constructor] =
-    idDef ~ valueParams ^^ Constructor.apply
+    idDef ~ maybeTypeParams ~ valueParams ^^ Constructor.apply
 
   /**
    * Expressions
@@ -534,10 +534,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val bool   = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit   = literal("()") ^^^ UnitLit()
   lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
-  lazy val string = stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1)) }
+  lazy val string = // we need to replace certain characters that would otherwise mess up the respective syntax emitted by the backends
+    ( multilineString ^^ { s => StringLit(s.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")) }
+    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\\\n", "").replace("\\\r\n", "").replace("\t", "\\t")) }
+    )
 
   lazy val boxedExpr: P[Term] =
-    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
+    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg | newExpr) ^^ { case capt ~ block => Box(capt, block) }
 
   lazy val lambdaExpr: P[Term] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
@@ -785,10 +788,11 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   // === Lexing ===
 
   lazy val nameFirst = """[a-zA-Z_]""".r
-  lazy val nameRest = """[a-zA-Z0-9$_]""".r
-  lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
-  lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
-  lazy val qualifiedName = "%s(::%s)*\\b".format(name, name).r
+  lazy val nameRest = """[a-zA-Z0-9_!?$]""".r
+  lazy val nameBoundary = """(?!%s)""".format(nameRest).r
+  lazy val name = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
+  lazy val moduleName = "%s([/]%s)*%s".format(name, name, nameBoundary).r
+  lazy val qualifiedName = "%s(::%s)*%s".format(name, name, nameBoundary).r
 
   lazy val ident =
     (not(anyKeyword) ~> name
@@ -885,7 +889,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
    */
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
-  lazy val stringLiteral   = regex("""\"(\\.|[^\"])*\"""".r, "String literal")
+  lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
 
   // Delimiter for multiline strings
   val multi = "\"\"\""

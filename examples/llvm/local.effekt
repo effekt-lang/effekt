@@ -1,6 +1,6 @@
 def foo(n: Int, m: Int) = {
 
-  def localFunction(x: Boolean) =
+  def localFunction(x: Bool) =
     if (x) { 1 } else { 2 }
 
   val a = n <= 0

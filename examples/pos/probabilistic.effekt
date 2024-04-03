@@ -29,7 +29,7 @@ def length[A](l: List[A]): Int = l match {
 
 type Var {
   Unobserved();
-  Observed(value: Boolean)
+  Observed(value: Bool)
 }
 
 type Ref { MkRef(n: Int) }
@@ -61,10 +61,10 @@ effect Disj(x: Ref, y: Ref): Ref
 effect Prior(x: Ref, prob: Double): Unit
 
 effect Score(prob: Double): Unit
-effect Fork(): Boolean
+effect Fork(): Bool
 effect Fail[A](): A
 
-def obs(r: Ref, a: Boolean) =
+def obs(r: Ref, a: Bool) =
   do get(r) match {
     case Unobserved() => do put(r, Observed(a))
     case Observed(y) => if (a == y) { () } else { do Fail() }
@@ -89,7 +89,7 @@ def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
 
 def fresh(): Ref / Heap = do empty(Unobserved())
 
-def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
   with Flip { p =>

@@ -1,7 +1,7 @@
 module text/regex
 
 extern type MLList[Elem] // = 'elem list
-extern pure def isEmpty[A](l: MLList[A]): Boolean = "null ${l}"
+extern pure def isEmpty[A](l: MLList[A]): Bool = "null ${l}"
 extern pure def head[A](l: MLList[A]): A = "hd ${l}"
 extern pure def tail[A](l: MLList[A]): MLList[A] = "tl ${l}"
 
