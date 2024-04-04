@@ -194,9 +194,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Parameters
    */
   lazy val params: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
-    ( maybeTypeParams ~ valueParams ~ blockParams
-    | maybeTypeParams ~ valueParams ~ success(List.empty[BlockParam])
-    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
+    ( maybeTypeParams ~ valueParamsOpt ~ blockParamsOpt
+    | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParamsOpt
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
@@ -212,9 +212,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   lazy val blockParamsOpt: P[List[BlockParam]] =
     some(`{` ~/> blockParamOpt <~ `}`)
-
-  lazy val maybeBlockParams: P[List[BlockParam]] =
-    blockParams.? ^^ { bs => bs getOrElse Nil }
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
