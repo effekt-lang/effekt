@@ -387,7 +387,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
             tparams.map { tparam => ValueTypeRef(tparam.symbol.asTypeParam) }
           } else {
             // using the invariant that the universals are prepended to type parameters of the operation
-            declaredType.tparams.drop(targs.size).map { tp => ValueTypeRef(tp.asTypeParam) }
+            declaredType.tparams.drop(targs.size).map { tp =>
+              // recreate "fresh" type variables
+              val name = tp.name
+              val newTp = TypeVar.TypeParam(name)
+              ValueTypeRef(newTp)
+            }
           }
 
           val canonicalEffects = declaredType.effects.canonical
@@ -884,6 +889,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val valueTypes = (vparams zip vps) map {
         case (param, expected) =>
           val adjusted = typeSubst substitute expected
+          // check given matches the expected, if given at all
           val tpe = param.symbol.tpe.map { got =>
             matchDeclared(got, adjusted, param);
             got
@@ -897,11 +903,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, expTpe) =>
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
-          val got = sym.tpe
-          matchDeclared(got.get, adjusted, param)
+          // check given matches the expected, if given at all
+          val got = sym.tpe.map { got =>
+            matchDeclared(got, adjusted, param)
+            got
+          } getOrElse { adjusted }
           // bind types to check body
-          Context.bind(param.symbol, got.get, CaptureSet(sym.capture))
-          got.get
+          Context.bind(param.symbol, got, CaptureSet(sym.capture))
+          got
       }
 
       // (4) Bind capabilities for all effects "handled" by this function
