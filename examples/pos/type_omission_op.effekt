@@ -4,40 +4,49 @@ interface Eff[A] {
 	def eff[B, C](x: B, y: C) { f: B => A } { g: C => A }: A
 }
 
-def impl = new Eff[Int] {
-	def eff(x, y) { f } { g } = { g(y); f(x) }
-}
-
-def impl2 = new Eff[Int] {
+def impl1 = new Eff[Int] {
     def eff(x, y) { f } { g } = { f(x); g(y) }
 }
 
-def impl3 = new Eff[Int] {
+def impl2 = new Eff[Int] {
     def eff[C, D](x, y) { f } { g } = { f(x); g(y) }
 }
 
-def impl4 = new Eff[Int] {
+def impl3 = new Eff[Int] {
     def eff[C, D](x, y) { f: C => Int } { g } = { g(y); f(x) }
 }
 
-def impl5 = new Eff[Int] {
+def impl4 = new Eff[Int] {
     def eff[C, D](x, y) { f } { g: D => Int } = { f(x); g(y) }
 }
 
-def impl6 = new Eff[Int] {
+def impl5 = new Eff[Int] {
     def eff[C, D](x, y) { f: C => Int } { g: D => Int } = { g(y); f(x) }
 }
+
+def handle1[B, C] { prog: () => B / Eff[C] }: B =
+    try { prog() }
+    with Eff[C] {
+        def eff(x, y) = resume { { h } { j } => h(x) }
+    }
+
+def handle2[B, C] { prog: () => B / Eff[C] }: B =
+    try { prog() }
+    with Eff[C] {
+        def eff[D, E](x: D, y: E) = resume { { h: D => C } { j: E => C } => h(x) }
+    }
 
 def main() = {
     val h: Int => Int at {} = box { x => x + 1 }
     val l: Int => Int at {} = box { x => x * 2 }
     val rs = [
-        impl.eff(1, 2) { h } { l },
+        impl1.eff(1, 2) { h } { l },
         impl2.eff(1, 2) { h } { l },
         impl3.eff(1, 2) { h } { l },
         impl4.eff(1, 2) { h } { l },
         impl5.eff(1, 2) { h } { l },
-        impl6.eff(1, 2) { h } { l }
+        handle1[Int, Int] { do eff(1, 2) { h } { l } },
+        handle2[Int, Int] { do eff(1, 2) { h } { l } }
     ]
     rs.foreach { x => println(x) }
 }
