@@ -2,6 +2,7 @@ package effekt
 package cps
 
 import effekt.core.CoreParsers.definition
+import effekt.symbols.{ Constructor, Name, Symbol}
 
 export effekt.core.Id
 
@@ -44,7 +45,7 @@ case class Name(name: String)
 
 enum Definition {
         case Function(name: Name, params: List[Param], cont: Name, body: Term)
-    }
+}
 
 enum Term {
         case LetCont(cont: Name, param: Param, body: Term, rest: Term)
