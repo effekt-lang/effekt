@@ -194,13 +194,14 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Parameters
    */
   lazy val params: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
-    ( maybeTypeParams ~ valueParamsOpt ~ blockParamsOpt
-    | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
-    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParamsOpt
+    ( maybeTypeParams ~ valueParams ~ blockParams
+    | maybeTypeParams ~ valueParams ~ success(List.empty[BlockParam])
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
-  lazy val operationParams: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+  // params with optional types, currently only allowed for block args and operation implementations
+  lazy val paramsOpt: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
     ( maybeTypeParams ~ valueParamsOpt ~ blockParamsOpt
     | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
     | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParamsOpt
@@ -278,7 +279,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
 
   lazy val lambdaParams: P[(List[Id], List[ValueParam], List[BlockParam])] =
-    ( params ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
+    ( paramsOpt ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
     | valueParamsOpt ^^ { ps => (Nil, ps, Nil) }
     | idDef ^^ { id => (Nil, List(ValueParam(id, None) : ValueParam), Nil) }
     )
@@ -473,7 +474,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ operationParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+    (`def` ~/> idRef) ~ paramsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
       case id ~ (tparams ~ vparams ~ bparams) ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
     }
 
