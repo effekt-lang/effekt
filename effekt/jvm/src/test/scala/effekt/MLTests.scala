@@ -76,6 +76,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "triples.effekt",
     examplesDir / "pos" / "bidirectional",
     examplesDir / "pos" / "type_omission_op",
+    examplesDir / "pos" / "type_omission_op.effekt",
     examplesDir / "benchmarks" / "variadic_combinators.effekt",
 
     // mutual recursion
