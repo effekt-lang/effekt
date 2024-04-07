@@ -23,16 +23,16 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   val showIR: ScallopOption[String] = choice(
-    choices = List("none", "source", "core", "lifted-core", "machine", "target"),
+    choices = List("none", "core", "lifted-core", "machine", "target"),
     name = "showIR",
     descr = "The intermediate presentation that should be printed.",
     default = Some("none"),
     noshort = true
   )
 
-  val showIRs: ScallopOption[Boolean] = toggle(
-    "showIRs",
-    descrYes = "Write all IRs to files",
+  val writeIRs: ScallopOption[Boolean] = toggle(
+    "writeIRs",
+    descrYes = "Write all IRs to files in the output directory",
     default = Some(false),
   )
 
