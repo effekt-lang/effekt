@@ -838,7 +838,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case source.ExternBody.StringExternBody(ff, body) =>
             body.args.foreach { arg => checkExpr(arg, None) }
           case source.ExternBody.EffektExternBody(ff, body) =>
-            checkStmt(body, Some(tpe.tpe))
+            checkStmt(body, Some(d.symbol.annotatedType.get.result))
         }
 
         Result((), Pure)
