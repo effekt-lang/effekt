@@ -293,8 +293,14 @@ object Namer extends Phase[Parsed, NameResolved] {
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
       if (!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
         val featureFlags = bodies.map(_.featureFlag)
-        Context.warning(s"Extern definition ${id} is not supported as it is only is defined for feature flags ${featureFlags.mkString(", ")}," +
-          s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
+        Context.warning(pp"Extern definition ${id} is not supported as it is only is defined for feature flags ${featureFlags.mkString(", ")}," +
+          pp"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
+      }
+      bodies.foreach {
+        case source.ExternBody.StringExternBody(ff, _) if ff.isDefault =>
+          Context.warning(pp"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
+            + pp"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
+        case _ => ()
       }
 
       val sym = f.symbol
@@ -375,7 +381,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
     case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(ff, path, _, _) => ()
+    case source.ExternInclude(ff, path, _, _) =>
+      if (ff.isDefault) {
+        val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
+        Context.warning("Found extern include without feature flag. It is likely that this will fail in other backends, "
+          + s"please annotate it with a feature flag (Supported in current backend: ${supported})")
+      }
+      ()
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
