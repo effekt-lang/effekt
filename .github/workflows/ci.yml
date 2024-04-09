@@ -10,7 +10,7 @@ jobs:
   build-jar:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest]
 
     name: Build Effekt compiler and run tests
     runs-on: ${{ matrix.os }}
@@ -25,6 +25,7 @@ jobs:
         java-version: 11
 
     - name: Install MLton
+      if: matrix.os != 'windows-latest'
       run: |
         curl -L https://github.com/MLton/mlton/releases/download/on-20210117-release/mlton-20210117-1.amd64-linux-glibc2.31.tgz --output mlton.tgz
         tar -xzf mlton.tgz
@@ -36,12 +37,15 @@ jobs:
         echo "$GITHUB_WORKSPACE/mlton/bin" >> $GITHUB_PATH
 
     - name: Update apt database
+      if: matrix.os != 'windows-latest'
       run: sudo apt-get update
 
     - name: Install Chez Scheme
+      if: matrix.os != 'windows-latest'
       run: sudo apt-get install chezscheme
 
     - name: Install LLVM 15
+      if: matrix.os != 'windows-latest'
       run: sudo apt-get install llvm-15
 
     - name: Set up NodeJS
