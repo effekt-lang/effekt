@@ -49,8 +49,8 @@ def lastIndexOf(str: String, sub: String): Option[Int] = {
   if (index < 0) { None() } else { Some(index) }
 }
 
-extern pure def unsafeIndexOf(str: String, sub: String): Int = "${str}.indexOf(${sub})"
-extern pure def unsafeLastIndexOf(str: String, sub: String): Int = "${str}.lastIndexOf(${sub})"
+extern pure def unsafeIndexOf(str: String, sub: String): Int = js "${str}.indexOf(${sub})"
+extern pure def unsafeLastIndexOf(str: String, sub: String): Int = js "${str}.lastIndexOf(${sub})"
 
 extern pure def startsWith(str: String, prefix: String): Bool =
   js "${str}.startsWith(${prefix})"

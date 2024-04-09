@@ -1,6 +1,6 @@
 interface Foo {}
-extern io def something {f: Foo}: Int = "${box f}"
-extern io def createFoo(): Foo at {global} = "42"
+extern io def something {f: Foo}: Int = simpleAtom "${box f}"
+extern io def createFoo(): Foo at {global} = simpleAtom "42"
 
 def main() = {
   def myFoo = createFoo()

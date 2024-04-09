@@ -9,10 +9,10 @@ extern resource deep: Builtin
 
 // Some Builtins pretending to use the resources
 // ---------------------------------------------
-extern {in}    def useIn(): Unit = "0"
-extern {out}   def useOut(): Unit = "0"
-extern {block} def performBlocking(): Unit = "0"
-extern {deep}  def blockDeepSleep(): Unit = "0"
+extern {in}    def useIn(): Unit = simpleAtom "0"
+extern {out}   def useOut(): Unit = simpleAtom "0"
+extern {block} def performBlocking(): Unit = simpleAtom "0"
+extern {deep}  def blockDeepSleep(): Unit = simpleAtom "0"
 
 // Interrupt routines can only use in, out, and io
 type ISR = () => Unit at {in, out, io}

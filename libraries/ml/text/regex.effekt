@@ -15,7 +15,7 @@ type Chars = MLList[Char]
 extern pure def chars(str: String): Chars = ml "String.explode ${str}"
 extern pure def toString(chars: Chars): String = ml "String.implode ${chars}"
 
-extern """
+extern ml """
 
 (** The RegExp module is created by choosing a parser (P) and an engine (E)
   * for regular expressions.

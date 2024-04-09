@@ -5,7 +5,7 @@ interface Foo {
   def bar(): String
 }
 
-extern control def fancy { f: Unit => Int }: Int = "foo"
+extern control def fancy { f: Unit => Int }: Int = simpleAtom "foo"
 
 def toplevel(x: Int, y: Int) = x + y
 

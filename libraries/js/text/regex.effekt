@@ -31,4 +31,4 @@ function regex$exec(reg, str) {
 
 // internals
 extern io def unsafeExec(reg: Regex, str: String): RegexMatch =
-  "regex$exec(${reg}, ${str})"
+  js "regex$exec(${reg}, ${str})"
