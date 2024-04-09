@@ -4,10 +4,8 @@ extern include else "spurious_default_externs.effekt" // WARN without feature fl
 extern """ weird """ // WARN without feature flag
 extern else """ more weird """ // WARN without feature flag
 
-extern def foo(): Unit =
-  else " wont work " // WARN without feature flag
+extern def foo(): Unit = else " wont work " // WARN without feature flag
 
-extern def bar(): Unit = 
-  " wont work either " // WARN without feature flag
+extern def bar(): Unit = " wont work either " // WARN without feature flag
 
 def main() = { () }
