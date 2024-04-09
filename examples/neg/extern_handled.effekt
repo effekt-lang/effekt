@@ -1,0 +1,7 @@
+interface Foo {
+  def foo(): Unit
+}
+
+extern {io,control} def bar(): Unit =
+  js { do foo() } // ERROR Effect Foo is not allowed in this context
+  else { () }
