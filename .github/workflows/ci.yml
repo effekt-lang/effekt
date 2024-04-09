@@ -12,7 +12,7 @@ jobs:
       matrix:
         os: [windows-latest]
 
-    name: Build Effekt compiler and runs one program
+    name: Build Effekt compiler and run one test
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
