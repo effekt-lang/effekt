@@ -55,6 +55,20 @@ trait Runner[Executable] {
   }
 
   /**
+   * Creates a OS-specific script file that will execute the command when executed.
+   * @return the actual name of the generated script (might be `!= name`)
+   */
+  def createScript(name: String, command: String*): String = os match {
+    case OS.POSIX =>
+      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")}", true)
+      name
+    case OS.Windows =>
+      val batName = name + ".bat"
+      IO.createFile(batName, command.mkString(" "))
+      batName
+  }
+
+  /**
    * Should check whether everything is installed for this backend
    * to run. Should return Right(()) if everything is ok and
    * Left(explanation) if something is missing.
@@ -152,11 +166,10 @@ object JSRunner extends Runner[String] {
 
       case OS.Windows =>
         val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
-        val batScriptPath = jsFilePath.stripSuffix(s".$extension") + ".bat"
+        val exePath = jsFilePath.stripSuffix(s".$extension")
         val batScript = s"node $jsMainFilePath"
         IO.createFile(jsMainFilePath, jsScript)
-        IO.createFile(batScriptPath, batScript)
-        batScriptPath
+        createScript(exePath, "node", jsMainFilePath)
     }
 }
 
@@ -178,19 +191,8 @@ trait ChezRunner extends Runner[String] {
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val schemeFilePath = (out / path).canonicalPath.escape
-    os match {
-      case OS.POSIX =>
-        val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
-        val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
-        IO.createFile(bashScriptPath, bashScript, true)
-        bashScriptPath
-
-      case OS.Windows =>
-        val batScriptPath = schemeFilePath.stripSuffix(s".$extension") + ".bat"
-        val batScript = s"scheme --script $schemeFilePath"
-        IO.createFile(batScriptPath, batScript)
-        batScriptPath
-    }
+    val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
+    createScript(exeScriptPath, "scheme", "--script", schemeFilePath)
 }
 
 object ChezMonadicRunner extends ChezRunner {
