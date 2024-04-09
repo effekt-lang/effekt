@@ -830,15 +830,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result((), effBinding)
         }
 
-      case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, bodies) => Context.withUnificationScope {
+      case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies) => Context.withUnificationScope {
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
 
-        bodies.foreach{
-          case source.ExternBody.StringExternBody(ff, body) =>
-            body.args.foreach { arg => checkExpr(arg, None) }
-          case source.ExternBody.EffektExternBody(ff, body) =>
-            checkStmt(body, Some(d.symbol.annotatedType.get.result))
+        flowingInto(Context.lookupCapture(id.symbol.asBlockSymbol)) {
+
+          // Note: Externs are always annotated with a type
+          val expectedReturnType = d.symbol.annotatedType.get.result
+          bodies.foreach {
+            case source.ExternBody.StringExternBody(ff, body) =>
+              body.args.foreach { arg => checkExpr(arg, None) }
+            case source.ExternBody.EffektExternBody(ff, body) =>
+              checkStmt(body, Some(expectedReturnType))
+          }
+
         }
 
         Result((), Pure)
