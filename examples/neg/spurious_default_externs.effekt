@@ -1,13 +1,13 @@
-extern include "spurious_default_externs.effekt" // WARNING: without feature flag
-extern include else "spurious_default_externs.effekt" // WARNING: without feature flag
+extern include "spurious_default_externs.effekt" // WARN without feature flag
+extern include else "spurious_default_externs.effekt" // WARN without feature flag
 
-extern """ weird """ // WARNING: without feature flag
-extern else """ more weird """ // WARNING: without feature flag
+extern """ weird """ // WARN without feature flag
+extern else """ more weird """ // WARN without feature flag
 
 extern def foo(): Unit =
-  else " wont work " // WARNING: without feature flag
+  else " wont work " // WARN without feature flag
 
 extern def bar(): Unit = 
-  " wont work either " // WARNING: without feature flag
+  " wont work either " // WARN without feature flag
 
 def main() = { () }
