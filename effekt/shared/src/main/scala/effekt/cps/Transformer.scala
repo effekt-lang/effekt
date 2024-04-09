@@ -32,24 +32,34 @@ def transform(decl: lifted.Declaration): Declaration = decl match {
 }
 
 def transform(extern: lifted.Extern): Extern = extern match {
-  case Extern.Def(id, tparams, params, ret, body) => Extern.Def(id, tparams, params, ret, Template(body.strings, body.args map transform)
-  )
+  case lifted.Extern.Def(id, tparams, params, ret, body) => ???
+    //Extern.Def(id, tparams, params, ret, Template(body.strings, body.args map transform)
+  case lifted.Extern.Include(contents) => Extern.Include(contents)
 }
 
-def transform(definition: lifted.Definition): Definition = ???
+def transform(definition: lifted.Definition): Definition = definition match {
+    case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
+      Definition.Function(Name(id.name.name), List(), Name("k"), transform(body))
+    case _ => 
+      println(definition)
+    ???
+}
 
 
-def transform(expr: lifted.Expr): Expr = ???
+def transform(expr: lifted.Expr): Expr = expr match {
+  case lifted.Literal(value, _) => Expr.Lit(value.toString())// any to Int
+  case _ => println(expr); ??? 
+}
 
 def transform(stmt: lifted.Stmt): Term = stmt match {
-  case lifted.Stmt.Return(e)  =>  Term.AppCont(Name("Return"), transform(e))
-  case lifted.Stmt.Val(id, binding, body)  =>  ???
+  case lifted.Stmt.Return(e)  =>  Term.AppCont(Name("k"), transform(e))
+  case lifted.Stmt.Val(id, binding, body)  => ???
   case _ => ???
 }
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
 def transform(property: lifted.Property): Property = Property(property.id, transform(property.tpe))
-def transform(field: lifted.Field): Field = Field(field.id, transform(field.tpe))
+def transform(field: lifted.Field): Field = Field(field.id, transform(field.tpe)) 
 
 def transform(tpe: lifted.ValueType): ValueType = tpe match {
   case lifted.ValueType.Var(id)  =>  ValueType.Var(id)
