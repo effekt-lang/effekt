@@ -47,7 +47,7 @@ def transform(definition: lifted.Definition): Definition = definition match {
 
 
 def transform(expr: lifted.Expr): Expr = expr match {
-  case lifted.Literal(value, _) => Expr.Lit(value.toString())// any to Int
+  case lifted.Literal(value, _) => Expr.Lit(value.toString().toInt)// any to Int
   case _ => println(expr); ??? 
 }
 
