@@ -39,6 +39,21 @@ trait Runner[Executable] {
    */
   def prelude: List[String] = List("effekt")
 
+  enum OS {
+    case POSIX, Windows
+  }
+  /**
+   * Returns an enum determining the OS we are running on.
+   */
+  def os: OS = {
+    val name = System.getProperty("os.name").toLowerCase()
+    if (name.contains("win")) {
+      OS.Windows
+    } else {
+      OS.POSIX // assume: There are no other OSs we currently support
+    }
+  }
+
   /**
    * Should check whether everything is installed for this backend
    * to run. Should return Right(()) if everything is ok and
@@ -125,13 +140,24 @@ object JSRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val jsFilePath = (out / path).unixPath
+    val jsFilePath = (out / path).canonicalPath
     // create "executable" using shebang besides the .js file
-    val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
     val jsScript = s"require('${jsFilePath}').main()"
-    val shebang = "#!/usr/bin/env node"
-    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
-    jsScriptFilePath
+    os match {
+      case OS.POSIX =>
+        val shebang = "#!/usr/bin/env node"
+        val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
+        IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
+        jsScriptFilePath
+
+      case OS.Windows =>
+        val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
+        val batScriptPath = jsFilePath.stripSuffix(s".$extension") + ".bat"
+        val batScript = s"node $jsMainFilePath"
+        IO.createFile(jsMainFilePath, jsScript)
+        IO.createFile(batScriptPath, batScript)
+        batScriptPath
+    }
 }
 
 trait ChezRunner extends Runner[String] {
@@ -151,11 +177,20 @@ trait ChezRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val schemeFilePath = (out / path).unixPath
-    val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
-    val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
-    IO.createFile(bashScriptPath, bashScript, true)
-    bashScriptPath
+    val schemeFilePath = (out / path).canonicalPath
+    os match {
+      case OS.POSIX =>
+        val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
+        val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
+        IO.createFile(bashScriptPath, bashScript, true)
+        bashScriptPath
+
+      case OS.Windows =>
+        val batScriptPath = schemeFilePath.stripSuffix(s".$extension") + ".bat"
+        val batScript = s"scheme --script $schemeFilePath"
+        IO.createFile(batScriptPath, batScript)
+        batScriptPath
+    }
 }
 
 object ChezMonadicRunner extends ChezRunner {
