@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
-import effekt.util.getOrElseAborting
+import effekt.util.{getOrElseAborting, escape}
 import kiama.util.IO
 
 /**
@@ -140,7 +140,7 @@ object JSRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val jsFilePath = (out / path).canonicalPath
+    val jsFilePath = (out / path).canonicalPath.escape
     // create "executable" using shebang besides the .js file
     val jsScript = s"require('${jsFilePath}').main()"
     os match {
@@ -177,7 +177,7 @@ trait ChezRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val schemeFilePath = (out / path).canonicalPath
+    val schemeFilePath = (out / path).canonicalPath.escape
     os match {
       case OS.POSIX =>
         val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
