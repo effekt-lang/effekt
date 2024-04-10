@@ -10,20 +10,21 @@ def show(o: Option[String]) = o match {
 
 def main() = {
     val arr = emptyArray[String]();
-    put(arr, 0, "hello");
-    put(arr, 2, "world");
-    println(show(get(arr, 0)));
-    println(show(get(arr, 2)));
-    println(show(get(arr, 4)));
-    put(arr, 4, "foo");
-    println(show(get(arr, 4)))
 
-    val arrWithVals: Array[String] = fill(4, "Hello World");
+    arr.put(0, "hello");
+    arr.put(2, "world");
+    println(show(arr.get(0)));
+    println(show(arr.get(2)));
+    println(show(arr.get(4)));
+    arr.put(4, "foo");
+    println(show(arr.get(4)))
+
+    val arrWithVals: Array[String] = mutable::array::fill(4, "Hello World");
     println(arrWithVals)
 
-    val arrByF: Array[Int] = build(5){ i => i };
+    val arrByF: Array[Int] = mutable::array::build(5){ i => i };
     println(arrByF);
 
-    var arrByList: Array[Int] = fromList([1, 5, 17]);
+    var arrByList: Array[Int] = mutable::array::fromList([1, 5, 17]);
     println(arrByList)
 }

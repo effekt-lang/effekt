@@ -41,7 +41,7 @@ def feed[R](input: List[String]) { prog: () => R / Next } : R / Fail = {
 }
 
 
-effect Flip(): Boolean
+effect Flip(): Bool
 
 def many[R] { prog: () => R }: List[R] / Flip = {
   var result: List[R] = Nil();

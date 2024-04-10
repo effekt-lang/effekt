@@ -136,7 +136,7 @@ def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] 
   } else { None() }
 }
 
-def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
+def isLightVisible(pos: Point, scene: Scene, light: Point): Bool =
     intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
 
 def lambert(scene: Scene, normal: Vector, pointAtTime: Point): Double = {

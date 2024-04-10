@@ -139,7 +139,7 @@ At the same time, we need to keep track of the line information.
     line = line + lines.size - 1
     if (lines.size == 1) { col = col + text.length } else { col = len }
   }
-  def eos(): Boolean = index >= in.length
+  def eos(): Bool = index >= in.length
 ```
 The function `tryMatch` applies a given token description to the current position of
 the input stream, without advancing it. Its companion `tryMatchAll` returns the first token

@@ -6,8 +6,8 @@
 One arm has type
   Box[Int]
 while another one has type
-  Box[Boolean]
+  Box[Bool]
 
-Type mismatch between Boolean and Int.
+Type mismatch between Bool and Int.
 def join(f: Foo) = f match {
                    ^

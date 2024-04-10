@@ -1,5 +1,5 @@
 interface Control {
-    def ifelse[A](cond: Boolean) { tcase: () => A } { fcase: () => A }: A
+    def ifelse[A](cond: Bool) { tcase: () => A } { fcase: () => A }: A
 }
 
 def cImpl: Control = new Control {

@@ -10,7 +10,7 @@ import scala.language.implicitConversions
 import effekt.util.paths.*
 
 
-def uniqueName(id: Symbol): String = id.name.toString + "_" + id.id
+def uniqueName(id: Symbol): String = id.name.toString.replace("?", "").replace("!", "") + "_" + id.id
 
 def name(id: Symbol): MLName = MLName(uniqueName(id))
 

@@ -3,5 +3,5 @@ interface Eff[A] {
 }
 
 def main() =
-  try { println(eff.op[Boolean, Int]("hello")) }
+  try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1
   with eff: Eff[Int] { def op(x) = resume(x / 1) }

@@ -19,7 +19,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def run(input: CoreTransformed)(using Context): Option[CoreLifted] =
     given Environment = Environment(Map.empty)
-    val transformed = transform(input.core)
+    val transformed = Context.timed(phaseName, input.source.name) { transform(input.core) }
     Some(CoreLifted(input.source, input.tree, input.mod, transformed))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!

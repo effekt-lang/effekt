@@ -139,8 +139,8 @@ class AnsiColoredMessaging extends ColoredMessaging {
   def red(s: String): String = Console.RED + s + Console.RESET
   def white(s: String): String = Console.WHITE + s + Console.RESET
   def bold(s: String): String = Console.BOLD + s + Console.RESET
-  def bold_red(s: String): String = Console.RED_B + s + Console.RESET
-  def highlight(s: String): String = Console.WHITE_B + s + Console.RESET
+  def bold_red(s: String): String = Console.BLACK + Console.RED_B + s + Console.RESET
+  def highlight(s: String): String = Console.BLACK + Console.WHITE_B + s + Console.RESET
   def underlined(s: String): String = Console.UNDERLINED + s + Console.RESET
 }
 

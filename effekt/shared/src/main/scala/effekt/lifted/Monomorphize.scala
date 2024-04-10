@@ -22,7 +22,9 @@ object Monomorphize extends Phase[CoreLifted, CoreLifted] {
   val phaseName = "lift-inference"
 
   def run(lifted: CoreLifted)(using Context): Option[CoreLifted] =
-    run(lifted.core).map { mono => lifted.copy(core = mono) }
+    Context.timed(phaseName, lifted.source.name) {
+      run(lifted.core).map { mono => lifted.copy(core = mono) }
+    }
 
   def run(mod: ModuleDecl)(using C: Context): Option[ModuleDecl] = {
     given analysis: FlowAnalysis()

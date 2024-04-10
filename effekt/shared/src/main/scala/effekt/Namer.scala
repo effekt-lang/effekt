@@ -34,11 +34,12 @@ object Namer extends Phase[Parsed, NameResolved] {
   def run(input: Parsed)(using Context): Option[NameResolved] = {
     val Parsed(source, tree) = input
     val mod = Module(tree, source)
-    Context.using(module = mod, focus = tree) { resolve(tree) }
+    Context.using(module = mod, focus = tree) { resolve(mod) }
     Some(NameResolved(source, tree, mod))
   }
 
-  def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
+  def resolve(mod: Module)(using Context): ModuleDecl = {
+    val Module(decl, src) = mod
     val scope = scopes.toplevel(Context.module.namespace, builtins.rootBindings)
 
     Context.initNamerstate(scope)
@@ -65,7 +66,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.at(im) { importDependency(path) }
     }
 
-    resolveGeneric(decl)
+    Context.timed(phaseName, src.name) { resolveGeneric(decl) }
 
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct
@@ -252,6 +253,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       val sym = VarBinder(Context.nameFor(id), tpe, d)
       Context.define(id, sym)
+      Context.bind(sym.capture)
 
     // allocation into a region
     case d @ source.RegDef(id, annot, region, binding) =>
@@ -303,7 +305,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val name = Context.nameFor(id)
 
           Context scoped {
-            // the parameters of the effect are in scope
+            // the parameters of the interface are in scope
             interface.tparams.foreach { p => Context.bind(p) }
 
             val tps = tparams map resolve
@@ -339,9 +341,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DataDef(id, tparams, ctors) =>
       val data = d.symbol
       data.constructors = ctors map {
-        case source.Constructor(id, ps) =>
+        case source.Constructor(id, tparams, ps) =>
           val name = Context.nameFor(id)
-          val constructor = Constructor(name, data.tparams, null, data)
+          val tps = tparams map resolve
+
+          val constructor = Constructor(name, data.tparams ++ tps, null, data)
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
           constructor
@@ -509,13 +513,13 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   // TODO move away
   def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
-    val paramSyms = Context scoped {
+    val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
       params map resolve
     }
 
-    (paramSyms zip params) map {
+    (vps zip params) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)

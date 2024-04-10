@@ -121,58 +121,82 @@ def max(n: Int, m: Int): Int =
 
 // Comparison ops
 // ==============
-extern pure def infixEq[R](x: R, y: R): Boolean =
+extern pure def infixEq[R](x: R, y: R): Bool =
   "equals$impl(${x}, ${y})"
 
-extern pure def infixNeq[R](x: R, y: R): Boolean =
+extern pure def infixNeq[R](x: R, y: R): Bool =
   "!equals$impl(${x}, ${y})"
 
-extern pure def infixLt(x: Int, y: Int): Boolean =
+// Result of comparison between two objects according to some order:
+//
+// - `Less()` means that the first object is *before* the first in the order,
+// - `Equal()` means that the two objects are the same in the order,
+// - and `Greater()` means that the second object is *before* the first in the order.
+type Ordering {
+   Less();
+   Equal();
+   Greater()
+ }
+
+ extern pure def genericCompareImpl[R](x: R, y: R): Int =
+   "compare$impl(${x}, ${y})"
+
+ // Compares two values of the same type, returning an `Ordering`.
+ def genericCompare[R](x: R, y: R): Ordering = {
+   genericCompareImpl(x, y) match {
+    case -1 => Less()
+    case 0 => Equal()
+    case 1 => Greater()
+    case _ => <{ "Impossible: JS comparison returned invalid value!" }>
+   }
+ }
+
+extern pure def infixLt(x: Int, y: Int): Bool =
   "(${x} < ${y})"
 
-extern pure def infixLte(x: Int, y: Int): Boolean =
+extern pure def infixLte(x: Int, y: Int): Bool =
   "(${x} <= ${y})"
 
-extern pure def infixGt(x: Int, y: Int): Boolean =
+extern pure def infixGt(x: Int, y: Int): Bool =
   "(${x} > ${y})"
 
-extern pure def infixGte(x: Int, y: Int): Boolean =
+extern pure def infixGte(x: Int, y: Int): Bool =
   "(${x} >= ${y})"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
+extern pure def infixLt(x: Double, y: Double): Bool =
   "(${x} < ${y})"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
+extern pure def infixLte(x: Double, y: Double): Bool =
   "(${x} <= ${y})"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
+extern pure def infixGt(x: Double, y: Double): Bool =
   "(${x} > ${y})"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
+extern pure def infixGte(x: Double, y: Double): Bool =
   "(${x} >= ${y})"
 
-extern pure def infixLt(x: String, y: String): Boolean =
+extern pure def infixLt(x: String, y: String): Bool =
   "(${x} < ${y})"
 
-extern pure def infixLte(x: String, y: String): Boolean =
+extern pure def infixLte(x: String, y: String): Bool =
   "(${x} <= ${y})"
 
-extern pure def infixGt(x: String, y: String): Boolean =
+extern pure def infixGt(x: String, y: String): Bool =
   "(${x} > ${y})"
 
-extern pure def infixGte(x: String, y: String): Boolean =
+extern pure def infixGte(x: String, y: String): Bool =
   "(${x} >= ${y})"
 
-// Boolean ops
+// Bool ops
 // ===========
 // for now those are considered eager
-extern pure def not(b: Boolean): Boolean =
+extern pure def not(b: Bool): Bool =
   "!${b}"
 
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+extern pure def infixOr(x: Bool, y: Bool): Bool =
   "(${x} || ${y})"
 
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+extern pure def infixAnd(x: Bool, y: Bool): Bool =
   "(${x} && ${y})"
 
 // Undefined and Null
@@ -180,11 +204,11 @@ extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
 // Should only be used for interop with JS, since values in Effekt should not be undefined
 
 // Is something an undefined JavaScript value?
-extern pure def isUndefined[A](value: A): Boolean =
+extern pure def isUndefined[A](value: A): Bool =
   "(${value} === undefined)"
 
 // Is something a JavaScript null value?
-extern pure def isNull[A](value: A): Boolean =
+extern pure def isNull[A](value: A): Bool =
   "(${value} === null)"
 
 // Pairs
@@ -272,7 +296,7 @@ def timed { block: => Unit }: Int = {
 }
 
 def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
-  def run(n: Int, report: Boolean): Unit = {
+  def run(n: Int, report: Bool): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };
       if (report) { println(time) } else { () };

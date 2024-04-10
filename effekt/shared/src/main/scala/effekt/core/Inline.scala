@@ -12,10 +12,10 @@ import scala.collection.mutable
 import kiama.util.Counter
 
 /**
- * Inlines block definitions that are only used exactly once.
+ * Inlines block definitions.
  *
  * 1. First computes usage (using [[Reachable.apply]])
- * 2. Top down traversal where we inline unique definitions
+ * 2. Top down traversal where we inline definitions
  *
  * Invariants:
  *   - the context `defs` always contains the _original_ definitions, not rewritten ones.
@@ -28,27 +28,28 @@ object Inline {
     // they should also be visible after leaving a scope (so mutable.Map and not `var usage`).
     usage: mutable.Map[Id, Usage],
     defs: Map[Id, Definition],
+    maxInlineSize: Int,
     inlineCount: Counter = Counter(0)
   ) {
-    def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other, inlineCount)
+    def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other, maxInlineSize, inlineCount)
 
     def ++=(fresh: Map[Id, Usage]): Unit = { usage ++= fresh }
   }
 
-  def once(entrypoints: Set[Id], m: ModuleDecl): (ModuleDecl, Int) = {
+  def once(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): (ModuleDecl, Int) = {
     val usage = Reachable(m) ++ entrypoints.map(id => id -> Usage.Many).toMap
     val defs = m.definitions.map(d => d.id -> d).toMap
-    val context = InlineContext(mutable.Map.from(usage), defs)
+    val context = InlineContext(mutable.Map.from(usage), defs, maxInlineSize)
 
     val (updatedDefs, _) = rewrite(m.definitions)(using context)
     (m.copy(definitions = updatedDefs), context.inlineCount.value)
   }
 
-  def full(entrypoints: Set[Id], m: ModuleDecl) =
+  def full(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl =
     var lastCount = 1
     var tree = m
     while (lastCount > 0) {
-      val (inlined, count) = Inline.once(entrypoints, tree)
+      val (inlined, count) = Inline.once(entrypoints, tree, maxInlineSize)
       // (3) drop unused definitions after inlining
       tree = Deadcode.remove(entrypoints, inlined)
       lastCount = count
@@ -60,7 +61,19 @@ object Inline {
       case None => false
       case Some(Usage.Once) => true
       case Some(Usage.Recursive) => false // we don't inline recursive functions for the moment
-      case Some(Usage.Many) => false
+      case Some(Usage.Many) =>
+        ctx.defs.get(id).exists { d =>
+          def isSmall = d.size <= ctx.maxInlineSize
+          def isHigherOrder = d match {
+            case Definition.Def(id, BlockLit(_, _, _, bparams, _)) =>
+              bparams.exists(p => p.tpe match {
+                case t: BlockType.Function => true
+                case t: BlockType.Interface => false
+              })
+            case _ => false
+          }
+          isSmall || isHigherOrder
+        }
     }
 
   def shouldKeep(id: Id)(using ctx: InlineContext): Boolean =
@@ -84,7 +97,8 @@ object Inline {
 
   def blockDefFor(id: Id)(using ctx: InlineContext): Option[Block] =
     ctx.defs.get(id) map {
-      case Definition.Def(id, block) => rewrite(block)
+      // TODO rewriting here leads to a stack overflow in one test, why?
+      case Definition.Def(id, block) => block //rewrite(block)
       case Definition.Let(id, binding) => INTERNAL_ERROR("Should not happen")
     }
 

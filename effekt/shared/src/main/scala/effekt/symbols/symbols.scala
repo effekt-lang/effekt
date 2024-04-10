@@ -62,8 +62,18 @@ case class Module(
     case e: Interface => e
   }
 
+  private def isPrelude: Boolean = name.name == "effekt"
+
   def findPrelude: Module = {
-    dependencies.find(_.name.name == "effekt").get
+    // Either this module is already Prelude
+    if (isPrelude) {
+      return this
+    }
+
+    // ... or we try to find Prelude in our dependencies
+    dependencies.find(_.isPrelude).getOrElse {
+      sys error "Cannot find Prelude, this should not happen"
+    }
   }
 
   /**
@@ -254,15 +264,15 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   lazy val vparams: List[ValueParam] = fields.map { f => f.param }
   val bparams: List[BlockParam] = Nil
 
-  val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
-  def annotatedResult: Option[ValueType] = Some(returnType)
+  val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
+  def annotatedResult: Option[ValueType] = Some(appliedDatatype)
   def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
   val tparams: List[TypeParam] = constructor.tparams
-  val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
+  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype)))
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get

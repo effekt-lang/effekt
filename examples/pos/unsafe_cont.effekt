@@ -5,7 +5,7 @@ import immutable/dequeue
 import immutable/option
 
 interface Process {
-    def fork(): Boolean
+    def fork(): Bool
     def exit(): Unit
     def suspend(): Unit
 }

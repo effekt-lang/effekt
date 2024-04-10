@@ -1,6 +1,6 @@
 extern type FFI
 
-def guard(): Boolean = false
+def guard(): Bool = false
 
 def foo(t: Option[Int]) =
   t match {

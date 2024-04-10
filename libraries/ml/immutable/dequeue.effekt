@@ -9,7 +9,7 @@ record Dequeue[R](front: List[R], frontSize: Int, rear: List[R], rearSize: Int)
 
 def emptyQueue[R](): Dequeue[R] = Dequeue(Nil(), 0, Nil(), 0)
 
-def isEmpty[R](dq: Dequeue[R]): Boolean = dq match {
+def isEmpty[R](dq: Dequeue[R]): Bool = dq match {
   case Dequeue(f, fs, r, rs) => (fs == 0) && (rs == 0)
 }
 

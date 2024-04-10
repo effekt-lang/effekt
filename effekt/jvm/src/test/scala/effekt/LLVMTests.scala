@@ -74,6 +74,10 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "stream_push.effekt",
     examplesDir / "pos" / "matching.effekt",
 
+    // boxing
+    examplesDir / "benchmarks" / "church_exponentiation.effekt",
+    examplesDir / "benchmarks" / "variadic_combinators.effekt",
+
     // others
     examplesDir / "pos" / "issue108.effekt",
     examplesDir / "pos" / "propagators.effekt",
@@ -88,6 +92,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "state.effekt",
     examplesDir / "pos" / "bug1.effekt",
 
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
 
     // whole folders
     examplesDir / "pos" / "bidirectional",

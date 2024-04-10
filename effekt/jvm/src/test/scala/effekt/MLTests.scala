@@ -54,6 +54,7 @@ class MLTests extends EffektTests {
     //    examplesDir / "pos" / "lambdas" / "localstate.effekt",
     //    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
 
+
     // region-based memory management is not yet supported (monomorphization would only work for type monomorphic regions)
     examplesDir / "pos" / "recursiveobject.effekt",
 
@@ -68,11 +69,13 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "dequeue.effekt",
     examplesDir / "pos" / "matchblock.effekt",
     examplesDir / "pos" / "polymorphic" / "exceptions.effekt",
+    examplesDir / "pos" / "exists.effekt", // now show instance for existentials
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
     examplesDir / "pos" / "triples.effekt",
     examplesDir / "pos" / "bidirectional",
+    examplesDir / "benchmarks" / "variadic_combinators.effekt",
 
     // mutual recursion
     examplesDir / "pos" / "mutualrecursion.effekt",
@@ -118,5 +121,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "patternmatching" / "matching-while.effekt",
 
     examplesDir / "pos" / "probabilistic.effekt",
+
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
   )
 }

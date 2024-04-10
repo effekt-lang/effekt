@@ -14,7 +14,7 @@ def main() = {
         printAll(tail)
     }
 
-  def printAll(s: Seq[Boolean]): Unit =
+  def printAll(s: Seq[Bool]): Unit =
     uncons(s) match {
       case IsEmpty() => ()
       case View(a, tail) =>

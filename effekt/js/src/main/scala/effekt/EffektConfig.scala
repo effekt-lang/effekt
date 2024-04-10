@@ -17,4 +17,10 @@ trait EffektConfig {
   def requiresLift(): Boolean = false
 
   def prelude() = List("effekt")
+
+  def optimize() = true
+
+  def maxInlineSize() = 50L
+
+  def timed() = false
 }

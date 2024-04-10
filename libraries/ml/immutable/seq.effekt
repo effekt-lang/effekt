@@ -361,12 +361,12 @@ def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
 // Predicates
 // ----------
 
-def isEmpty[A](seq: Seq[A]): Boolean = seq match {
+def isEmpty[A](seq: Seq[A]): Bool = seq match {
   case Empty() => true
   case _ => false
 }
 
-def nonEmpty[A](seq: Seq[A]): Boolean = seq match {
+def nonEmpty[A](seq: Seq[A]): Bool = seq match {
   case Empty() => false
   case _ => true
 }

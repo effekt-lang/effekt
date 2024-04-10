@@ -68,13 +68,16 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     C.backend match {
 
       case Backend(name, compiler, runner) =>
-        def compile() = compiler.compile(src) map {
-          case (outputFiles, exec) =>
-            outputFiles.foreach {
-              case (filename, doc) =>
-                saveOutput(filename, doc)
-            }
-            exec
+        // measure the total compilation time here
+        def compile() = C.timed("total", source.name) {
+          compiler.compile(src) map {
+            case (outputFiles, exec) =>
+              outputFiles.foreach {
+                case (filename, doc) =>
+                  saveOutput(filename, doc)
+              }
+              exec
+          }
         }
 
         // we are in one of three exclusive modes: LSPServer, Compile, Run
@@ -91,8 +94,25 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         context.info("  at " + line)
       }
   } finally {
+    outputTimes(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
+  }
+
+  /**
+   * Outputs the timing information captured in [[effekt.util.Timers]] by [[effekt.context.Context]]. Either a JSON file
+   * is written to disk or a plain text message is written to stdout.
+   */
+  def outputTimes(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (C.timersActive) config.time.toOption foreach {
+      case "json" =>
+        // extract source filename and write to given output path
+        val out = config.outputPath().getAbsolutePath
+        val name = s"${source.name.split("/").last.stripSuffix(".effekt")}.json"
+        IO.createFile((out / name).unixPath, C.timesToJSON())
+      case "text" =>
+        C.info(C.timesToString())
+    }
   }
 
   /**
