@@ -9,6 +9,7 @@ import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
 import effekt.core.CoreParsers.statement
 import effekt.cps.*
+import effekt.source.AnnotateCaptures.annotate
 
 
 
@@ -32,29 +33,40 @@ def transform(decl: lifted.Declaration): Declaration = decl match {
 }
 
 def transform(extern: lifted.Extern): Extern = extern match {
-  case lifted.Extern.Def(id, tparams, params, ret, body) => ???
-    //Extern.Def(id, tparams, params, ret, Template(body.strings, body.args map transform)
+  case lifted.Extern.Def(id, tparams, params, ret, body) =>
+    Extern.Def(id, tparams, params map transform, transform(ret), Template(body.strings, body.args map transform))
   case lifted.Extern.Include(contents) => Extern.Include(contents)
 }
 
+def transform(p: lifted.Param): Param = p match {
+  case lifted.Param.ValueParam(id, tpe) => Param.ValueParam(id, transform(tpe))
+  case lifted.Param.BlockParam(id, tpe) => Param.BlockParam(id, transform(tpe))
+  case lifted.Param.EvidenceParam(id) => Param.EvidenceParam(id)
+}
+
+
 def transform(definition: lifted.Definition): Definition = definition match {
-    case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
-      Definition.Function(Name(id.name.name), List(), Name("k"), transform(body))
-    case _ => 
-      println(definition)
-    ???
+  case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
+    Definition.Function(id, List(), Id.apply("k"), transform(body))
+  case lifted.Definition.Let(id, binding) => Definition.Let(id, transform(binding))
+  case _ => 
+    println(definition)
+  ???
 }
 
 
 def transform(expr: lifted.Expr): Expr = expr match {
   case lifted.Literal(value, _) => Expr.Lit(value.toString().toInt)// any to Int
+  case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
   case _ => println(expr); ??? 
 }
 
 def transform(stmt: lifted.Stmt): Term = stmt match {
-  case lifted.Stmt.Return(e)  =>  Term.AppCont(Name("k"), transform(e))
-  case lifted.Stmt.Val(id, binding, body)  => ???
-  case _ => ???
+  case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), transform(e))
+  case lifted.Stmt.Val(id, binding, body)  => Val(id, transform(binding), transform(body))
+  case lifted.Stmt.Scope(definitions, body) => Scope(definitions map transform, transform(body))
+  case lifted.Stmt.App(b, targs, args) => println(stmt); ???
+  case _ => println(stmt); ???
 }
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
