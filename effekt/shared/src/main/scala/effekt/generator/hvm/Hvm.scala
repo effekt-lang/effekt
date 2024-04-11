@@ -51,7 +51,7 @@ class Hvm extends Compiler[String] {
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
       val realResult = hvm.transform(cpsed) //result map transform
-      mainFile -> hvm.Var("test") //------------------------------------------------------------------------------------------
+      mainFile -> realResult //------------------------------------------------------------------------------------------
   }
 
   // The Compilation Pipeline for VSCode
@@ -66,5 +66,8 @@ class Hvm extends Compiler[String] {
   // Helpers
   // -------
   private def pretty(expr: hvm.Term): Document =
-    hvm.PrettyPrinter.pretty(hvm.PrettyPrinter.toDoc(expr), 100)//--------------------------------------------------------------------------
+    hvm.PrettyPrinter.pretty(hvm.PrettyPrinter.toDoc(expr), 100)
+
+  private def pretty(expr: hvm.Book): Document =
+    hvm.PrettyPrinter.pretty(hvm.PrettyPrinter.toDoc(expr), 100)
 }

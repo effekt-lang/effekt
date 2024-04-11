@@ -56,33 +56,35 @@ enum Block {
   case Unbox(e: Expr)
   case New(impl: Implementation)
 
-  val tpe: BlockType = Type.inferType(this)
+  //val tpe: BlockType = Type.inferType(this)
 }
 export Block.*
 
 enum Definition {
   case Function(name: Id, params: List[Param], cont: Id, body: Term)
+  case Let(id: Id, binding: Expr)
 }
-export Expr.*
+
 
 enum Term {
   case LetCont(cont: Id, param: Param, body: Term, rest: Term)
   case Let(name: Id, expr: Expr, rest: Term)
   case AppCont(cont: Id, arg: Expr)
   case App(func: Id, arg: Expr, cont: Id)
-  case Scope(definitions: List[Definition])
+  case Scope(definitions: List[Definition], body: Term)
   case Val(id: Id, binding: Term, body: Term)
   case If(cond: Expr, thn: Term, els: Term)
   case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Term])
-  val tpe: ValueType = Type.inferType(this)
+  //val tpe: ValueType = Type.inferType(this)
 } 
 export Term.*
 
 enum Expr {
   case Var(name: Id)
   case Lit(n: Int)
-  val tpe: ValueType = Type.inferType(this)
+  //val tpe: ValueType = Type.inferType(this)
 }
+export Expr.*
 
 
 /**
@@ -204,7 +206,7 @@ object Type {
     case ValueType.Boxed(tpe) => ValueType.Boxed(substitute(tpe, vsubst))
   }
 
-  def inferType(block: Block): BlockType = block match {
+  /*def inferType(block: Block): BlockType = block match {
     case Block.BlockVar(id, tpe) => tpe
 
     case Block.BlockLit(tparams, params, body) =>
@@ -217,7 +219,7 @@ object Type {
     case Block.Member(b, field, tpe) => tpe
     case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].tpe
     case Block.New(impl) => impl.tpe
-  }
+  }*/
   def inferType(term: Term): ValueType = term match {
     /*case Stmt.Scope(definitions, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
@@ -254,6 +256,7 @@ object Type {
     case _ => ???}
 
   def inferType(expr: Expr): ValueType = expr match {
+    //case Lit(value) => 
     // case DirectApp(callee, targs, vargs, bargs) => instantiate(callee.functionType, targs).result
     /*case Expr.Run(s) => s.tpe
     case Expr.ValueVar(id, tpe) => tpe
@@ -262,13 +265,13 @@ object Type {
     case Expr.PureApp(callee, targs, args) => instantiate(callee.functionType, targs).result
     case Expr.Select(target, field, annotatedType) => annotatedType
     case Expr.Box(block) => ValueType.Boxed(block.tpe)*/
-    case _ => ???
+    case _ => println(expr); ???
   }
 
-  extension (block: Block) {
+  /*extension (block: Block) {
     def returnType: ValueType = block.functionType.result
     def functionType: BlockType.Function = block.tpe.asInstanceOf
-  }
+  }*/ 
 }
 
 
