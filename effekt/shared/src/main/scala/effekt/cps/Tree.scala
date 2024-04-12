@@ -43,10 +43,26 @@ enum Extern {
   case Include(contents: String)
 }
 
+
+
+enum Definition {
+  case Function(name: Id, params: List[Param], cont: Id, body: Term)
+  case Let(id: Id, binding: Expr)
+}
+
+
+enum Expr{
+  case Var(name: Id)
+  case Lit(n: Int)
+  case PureApp(b: Block, targs: List[ValueType], args: List[Either[Expr, Block]])
+  //val tpe: ValueType = Type.inferType(this)
+}
+export Expr.*
+
 /**
  * Blocks
  */
-enum Block {
+enum Block{
 
   case BlockVar(id: Id, annotatedType: BlockType)
   case BlockLit(tparams: List[Id], params: List[Param], body: Term)
@@ -60,17 +76,11 @@ enum Block {
 }
 export Block.*
 
-enum Definition {
-  case Function(name: Id, params: List[Param], cont: Id, body: Term)
-  case Let(id: Id, binding: Expr)
-}
-
-
 enum Term {
   case LetCont(cont: Id, param: Param, body: Term, rest: Term)
   case Let(name: Id, expr: Expr, rest: Term)
-  case AppCont(cont: Id, arg: Expr)
-  case App(func: Id, arg: Expr, cont: Id)
+  case AppCont(cont: Id, arg: List[Expr])
+  case App(func: Id, arg: List[Expr], cont: Id)
   case Scope(definitions: List[Definition], body: Term)
   case Val(id: Id, binding: Term, body: Term)
   case If(cond: Expr, thn: Term, els: Term)
@@ -79,12 +89,7 @@ enum Term {
 } 
 export Term.*
 
-enum Expr {
-  case Var(name: Id)
-  case Lit(n: Int)
-  //val tpe: ValueType = Type.inferType(this)
-}
-export Expr.*
+
 
 
 /**
