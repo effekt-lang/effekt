@@ -95,8 +95,8 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
       }
   } finally {
     outputTimes(source, config)(context)
-    if (config.showIR() != "none") { showIR(source, config)(context) }
-    if (config.writeIRs()) { writeIRs(source, config)(context) }
+    showIR(source, config)(context)
+    writeIRs(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
   }
@@ -117,18 +117,13 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     }
   }
 
-  def showIR(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    val stage = config.showIR() match {
-      case "core" => Stage.Core
-      case "lifted-core" => Stage.Lifted
-      case "machine" => Stage.Machine
-      case "target" => Stage.Target
+  def showIR(source: Source, config: EffektConfig)(implicit C: Context): Unit =
+    config.showIR().map { stage =>
+      C.compiler.prettyIR(source, stage).map { case (Document(s, _)) => println(s) }
     }
 
-    C.compiler.prettyIR(source, stage).map { case (Document(s, _)) => println(s) }
-  }
-
   def writeIRs(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (!config.writeIRs()) return
     val out = config.outputPath().getAbsolutePath
     for (stage <- Stage.values)
       C.compiler.prettyIR(source, stage).map { case (Document(s, _)) =>

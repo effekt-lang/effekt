@@ -22,13 +22,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     default = Some(false)
   )
 
-  val showIR: ScallopOption[String] = choice(
-    choices = List("none", "core", "lifted-core", "machine", "target"),
+  val showIR: ScallopOption[Option[Stage]] = choice(
+    choices = List("none", "core", "lifted", "machine", "target"),
     name = "showIR",
     descr = "The intermediate presentation that should be printed.",
     default = Some("none"),
     noshort = true
-  )
+  ).map(s => Stage.values.find(_.toString.toLowerCase == s))
 
   val writeIRs: ScallopOption[Boolean] = toggle(
     "writeIRs",
