@@ -75,8 +75,25 @@ class LexerTests extends munit.FunSuite {
       QuotedStr(List(
         Token(1,16,Str("this is a quote ")), Token(17,18,`${`), Token(19,20,Ident("xs")), Token(21,21,`.`), Token(22,24,Ident("map")), Token(26,26,`{`), Token(28,28,Ident("x")), Token(30,31,`=>`), 
         Token(33,42,QuotedStr(List(Token(34,35,`${`), Token(36,36,Ident("x")), Token(38,38,`+`), Token(40,40,Integer(1)), Token(41,41,`}$`)))),
-        Token(44,44,`}`), Token(45,45,`}$`), Token(46,62,Str(" after the quote")))
+        Token(44,44,`}`), Token(45,45,`}$`), Token(46,61,Str(" after the quote")))
       ),
+      EOF
+    )
+  }
+  
+  test("quoted multi-line string") {
+    val prog =
+      "\"\"\"multi-line quote\n" +
+      "${x + 1}, ${y + 1} \n" +
+      "\"\"\""
+    assertTokensEq(
+      prog,
+      QuotedStr(List(
+        Token(3,19,Str("multi-line quote\n")), 
+        Token(20,21,`${`), Token(22,22,Ident("x")), Token(24,24,`+`), Token(26,26,Integer(1)), Token(27,27,`}$`),
+        Token(28,29,Str(", ")), 
+        Token(30,31,`${`), Token(32,32,Ident("y")), Token(34,34,`+`), Token(36,36,Integer(1)), Token(37,37,`}$`),
+        Token(38,39,Str(" \n")))),
       EOF
     )
   }

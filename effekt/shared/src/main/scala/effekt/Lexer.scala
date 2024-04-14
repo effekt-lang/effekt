@@ -176,7 +176,11 @@ object Lexer {
 class Lexer(source: String) {
   /** The absolute starting index in the source string of the currently scanned token */
   var start: Int = 0
-  /** The absolute index of the lexer's reading 'head' in the source string */
+  /** The absolute index of the lexer's reading 'head' in the source string. Example
+   * "hello world"
+   *     ^
+   *  chars.next() => current = 3
+   */
   var current: Int = 0
   /** The sequence of tokens the source strings contains. Returned as the result by [[Lexer.run()]] */
   val tokens: mutable.ListBuffer[Token] = mutable.ListBuffer.empty
@@ -312,7 +316,7 @@ class Lexer(source: String) {
    * expressions.
    */
   def matchString(): TokenKind = {
-    val extract = (start: Int, end: Int) => TokenKind.Str(slice(start, end))
+    val sliceStr = (start: Int, end: Int) => TokenKind.Str(slice(start, end))
     var closed = false
     val stringStart = start
     var multiline = false
@@ -328,24 +332,26 @@ class Lexer(source: String) {
     import Delimiter.*
 
     if (nextMatches("\"\"")) multiline = true
-    var delimiterOffset =
-      if (multiline) (3, 3)
-      else (1, 1)
-    start += delimiterOffset._1
-      
+    if (multiline && nextMatches("\"\"\"") || !multiline && nextMatches("\"")) return TokenKind.Str("")
+
+    val delimOffset =
+      if (multiline) 3
+      else 1
+    start += delimOffset
+
     while (!closed) {
       consume() match {
         // escaped character, allow arbitrary next character
         case Some('\\') => consume()
         // check for termination
         case Some('"') if !multiline => closed = true
-        case Some('"') if nextMatches("\"\"") && multiline => closed = true
+        case Some('"') if multiline && nextMatches("\"\"") => closed = true
         // quoted string
         case Some('$') if nextMatches("{") => {
           quoted = true
           // string before the quote
           if (current - 2 > start)
-            stringTokens += Token(start, current - 3, extract(start, current - 2))
+            stringTokens += Token(start, current - 3, sliceStr(start, current - 2))
           // set start to $
           start = current - 2
           stringTokens += makeToken(TokenKind.`${`)
@@ -376,7 +382,6 @@ class Lexer(source: String) {
               case _ => stringTokens += token
             }
           }
-          delimiterOffset = (0, delimiterOffset._2)
           start = current
         }
         // anything that is not escaped or terminates the string is allowed
@@ -385,10 +390,16 @@ class Lexer(source: String) {
         case None => return err(LexerError.UnterminatedString)
       }
     }
-    // be sure to exclude " symbols
-    if (current - delimiterOffset._2 > start + delimiterOffset._1) 
-      stringTokens += makeToken(extract(start + delimiterOffset._1, current - delimiterOffset._2))
-
+    // add remaining string after potential quote. Check if non-empty first.
+    if (current - delimOffset > start) {
+      stringTokens += Token(
+        start,
+        current - delimOffset - 1,
+        // exclude " symbols
+        sliceStr(start, current - delimOffset)
+      )
+    }
+    // reset starting location to original position of opening "
     start = stringStart
     if (quoted) TokenKind.QuotedStr(stringTokens.toList)
     else stringTokens.head.kind
