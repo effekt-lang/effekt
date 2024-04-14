@@ -15,6 +15,7 @@ enum LexerError {
   case InvalidKeywordIdent(s: String)
   case UnterminatedString
   case UnterminatedComment
+  case UnterminatedQuote
   case Eof
   case Expected(expected: String, got: String)
   case Custom(msg: String)
@@ -40,6 +41,7 @@ enum TokenKind {
   case Integer(n: Int)
   case Float(d: Double)
   case Str(s: String)
+  case QuotedStr(ts: List[Token])
   case Char(c: Char)
   // identifiers
   case Ident(id: String)
@@ -54,8 +56,10 @@ enum TokenKind {
   case `!=`
   case `:`
   case `@`
+  case `${`
   case `{`
   case `}`
+  case `}$`
   case `(`
   case `)`
   case `[`
@@ -265,7 +269,7 @@ class Lexer(source: String) {
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.
    */
-  def run(): (mutable.ListBuffer[Token], Option[LexerError]) = {
+  def run(): (List[Token], Option[LexerError]) = {
     var err: Option[LexerError] = None
     var eof = false
     while (!eof && err.isEmpty) {
@@ -273,17 +277,18 @@ class Lexer(source: String) {
       kind match {
         case TokenKind.EOF =>
           eof = true
-          tokens += makeToken(EOF)
-        case TokenKind.Error(e) => 
+          // EOF has the position of one after the last character
+          tokens += Token(current + 1, current + 1, EOF)
+        case TokenKind.Error(e) =>
           err = Some(e)
-        case k => 
+        case k =>
           tokens += makeToken(k)
       }
       start = current
     }
-    (tokens, err)
+    (tokens.toList, err)
   }
-  
+
   // --- Literal and comment matchers ---
   // It is assumed that the prefix character which was used for deciding on the kind of the token is already consumed.
 
@@ -301,20 +306,33 @@ class Lexer(source: String) {
       case _ => TokenKind.Integer(slice().toInt)
     }
   }
-  
+
   /** Matches a string literal -- both single- and multi-line strings. Strings may contain arbitrary escaped
-   * characters. These are not validated.
+   * characters, these are not validated. Strings may also contain quotes, i.e., "f = ${x + 1}" that include arbitrary
+   * expressions.
    */
   def matchString(): TokenKind = {
+    val extract = (start: Int, end: Int) => TokenKind.Str(slice(start, end))
     var closed = false
+    val stringStart = start
     var multiline = false
-    val delimiters = mutable.Stack()
-    
-    if (nextMatches("\"\"")) multiline = true
+    var quoted = false
+    val stringTokens = mutable.ListBuffer[Token]()
+    // each opening brace gets pushed and each closing brace pops the matching brace from the stack
+    // to determine whether the quote has ended, while allowing for nested braces.
+    val delimiters = mutable.Stack[Delimiter]()
+    enum Delimiter {
+      case `${`
+      case `{{`
+    }
+    import Delimiter.*
 
-    // special case empty strings
-    if (nextMatches("\"") && !multiline) return TokenKind.Str("")
-    else if (nextMatches("\"\"") && multiline) return TokenKind.Str("")
+    if (nextMatches("\"\"")) multiline = true
+    var delimiterOffset =
+      if (multiline) (3, 3)
+      else (1, 1)
+    start += delimiterOffset._1
+      
     while (!closed) {
       consume() match {
         // escaped character, allow arbitrary next character
@@ -322,6 +340,45 @@ class Lexer(source: String) {
         // check for termination
         case Some('"') if !multiline => closed = true
         case Some('"') if nextMatches("\"\"") && multiline => closed = true
+        // quoted string
+        case Some('$') if nextMatches("{") => {
+          quoted = true
+          // string before the quote
+          if (current - 2 > start)
+            stringTokens += Token(start, current - 3, extract(start, current - 2))
+          // set start to $
+          start = current - 2
+          stringTokens += makeToken(TokenKind.`${`)
+
+          delimiters.push(`${`)
+          var terminated = false
+          while (!terminated) {
+            val token = makeToken(nextToken())
+            token.kind match {
+              case TokenKind.`}` => {
+                delimiters.pop() match {
+                  // check if quote has been terminated
+                  case `${` => {
+                    terminated = true
+                    stringTokens += Token(token.start, token.end, TokenKind.`}$`)
+                  }
+                  case _ =>
+                    stringTokens += token
+                }
+              }
+              // additional nested level of braces
+              case TokenKind.`{` => {
+                delimiters.push(`{{`)
+                stringTokens += token
+              }
+              // reached EOF without closing quote
+              case TokenKind.EOF => return err(LexerError.UnterminatedQuote)
+              case _ => stringTokens += token
+            }
+          }
+          delimiterOffset = (0, delimiterOffset._2)
+          start = current
+        }
         // anything that is not escaped or terminates the string is allowed
         case Some(_) => ()
         // reached EOF without encountering "
@@ -329,10 +386,14 @@ class Lexer(source: String) {
       }
     }
     // be sure to exclude " symbols
-    if (!multiline) TokenKind.Str(slice(start + 1, current - 1))
-    else TokenKind.Str(slice(start + 3, current - 3))
+    if (current - delimiterOffset._2 > start + delimiterOffset._1) 
+      stringTokens += makeToken(extract(start + delimiterOffset._1, current - delimiterOffset._2))
+
+    start = stringStart
+    if (quoted) TokenKind.QuotedStr(stringTokens.toList)
+    else stringTokens.head.kind
   }
-  
+
   /** Matches a mult-line comment delimited by /* and */. */
   def matchMultilineComment(): TokenKind = {
     var closed = false
@@ -349,7 +410,7 @@ class Lexer(source: String) {
     val comment = slice(start + 2, current - 2)
     TokenKind.Comment(comment)
   }
-  
+
   /** Matches a single-line comment. */
   def matchComment(): TokenKind = {
     var newline = false
@@ -364,7 +425,7 @@ class Lexer(source: String) {
     val comment = slice(start + 2, current - 1)
     TokenKind.Comment(comment)
   }
-  
+
   @tailrec
   final def skipWhitespaces(): Unit = {
     peek() match {
@@ -375,7 +436,7 @@ class Lexer(source: String) {
       case _ => start = current
     }
   }
-  
+
   def nextToken(): TokenKind = {
     import TokenKind.*
     skipWhitespaces()
@@ -430,7 +491,7 @@ class Lexer(source: String) {
         Lexer.keywords.get(s) match {
           case Some(tok) => tok
           // identifier
-          case _ => 
+          case _ =>
             if (name.matches(s)) TokenKind.Ident(s)
             // cannot occur
             else err(LexerError.InvalidKeywordIdent(s))
