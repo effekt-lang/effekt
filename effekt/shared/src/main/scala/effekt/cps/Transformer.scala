@@ -14,6 +14,7 @@ import effekt.source.AnnotateCaptures.annotate
 
 
 
+
 object Transformer extends Phase[PhaseResult.CoreLifted, PhaseResult.CpsTransformed] {
 
   val phaseName = "cps-transform"
@@ -47,7 +48,7 @@ def transform(p: lifted.Param): Param = p match {
 
 def transform(definition: lifted.Definition): Definition = definition match {
   case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
-    Definition.Function(id, List(), Id.apply("k"), transform(body))
+    Definition.Function(id, params map transform, Id.apply("k"), transform(body))
   case lifted.Definition.Let(id, binding) => Definition.Let(id, transform(binding))
   case _ => 
     println(definition)
@@ -55,14 +56,40 @@ def transform(definition: lifted.Definition): Definition = definition match {
 }
 
 
+def transform(arg: lifted.Argument): Either[Expr, Block] = arg match {
+  case expr: lifted.Expr => Left(transform(expr))
+  case block: lifted.Block => Right(transform(block))
+  case ev: lifted.Evidence => ???
+}
+
+def transform(ev: lifted.Evidence): Var = Var(Id.apply("something"))
+
 def transform(expr: lifted.Expr): Expr = expr match {
   case lifted.Literal(value, _) => Expr.Lit(value.toString().toInt)// any to Int
   case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
+  case lifted.PureApp(b, targs, args) => Expr.PureApp(transform(b), targs map transform, args map transform)
   case _ => println(expr); ??? 
 }
 
+def transform(b: lifted.Block.BlockLit): BlockLit =
+  BlockLit(b.tparams, b.params map transform, transform(b.body))
+
+def transform(b: lifted.Block): Block = b match {
+  case lifted.Block.BlockVar(id, annotatedType) => BlockVar(id, transform(annotatedType))
+  case lifted.Block.BlockLit(tparams, params, body) => BlockLit(tparams, params map transform, transform(body))
+  case lifted.Block.Member(b, field, annotatedType) => Member(transform(b), field, transform(annotatedType))
+  case lifted.Block.Unbox(e) => Unbox(transform(e))
+  case lifted.Block.New(impl) => New(transform(impl))
+}
+
+def transform(impl: lifted.Implementation): Implementation =
+  Implementation(transform(impl.interface), impl.operations map transform)
+
+def transform(operation: lifted.Operation): Operation =
+  Operation(operation.name, transform(operation.implementation))
+
 def transform(stmt: lifted.Stmt): Term = stmt match {
-  case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), transform(e))
+  case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), List(transform(e)))
   case lifted.Stmt.Val(id, binding, body)  => Val(id, transform(binding), transform(body))
   case lifted.Stmt.Scope(definitions, body) => Scope(definitions map transform, transform(body))
   case lifted.Stmt.App(b, targs, args) => println(stmt); ???
@@ -79,10 +106,15 @@ def transform(tpe: lifted.ValueType): ValueType = tpe match {
   case lifted.ValueType.Boxed(blockTpe)  =>  ValueType.Boxed(transform(blockTpe))
 }
 
+def transform(tpe: lifted.BlockType.Interface): BlockType.Interface =
+  BlockType.Interface(tpe.name, tpe.targs map transform)
+
 def transform(tpe: lifted.BlockType): BlockType = tpe match {
   case lifted.BlockType.Function(tparams, eparams, vparams, bparams, result) 
     => BlockType.Function(tparams, eparams map transform , vparams map transform , bparams map transform, transform(result))
   case lifted.BlockType.Interface(name, targs) => BlockType.Interface(name, targs map transform)
 }
+
+
 
 def transform(tpe: lifted.EvidenceType): EvidenceType = EvidenceType()
