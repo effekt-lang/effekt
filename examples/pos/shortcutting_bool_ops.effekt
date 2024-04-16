@@ -1,0 +1,19 @@
+def foo(): Bool = {
+  println("hello")
+  false
+}
+
+def bar(): Bool = {
+  println("bye")
+  true
+}
+
+def main() = {
+  foo() && bar()
+  println("")
+  foo() || bar()
+  println("")
+  bar() && foo()
+  println("")
+  bar() || foo()
+}
