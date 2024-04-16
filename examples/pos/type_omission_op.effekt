@@ -1,7 +1,7 @@
 module examples/pos/polymorphic/type_omission_op
 
 interface Eff[A] {
-	def eff[B, C](x: B, y: C) { f: B => A } { g: C => A }: A
+    def eff[B, C](x: B, y: C) { f: B => A } { g: C => A }: A
 }
 
 def impl1 = new Eff[Int] {
