@@ -5,6 +5,7 @@ package hvm
 import effekt.core.Id
 
 import scala.collection.mutable.{Map => MutableMap}
+import effekt.util.intercalate
 
 
 
@@ -19,21 +20,25 @@ def transform(mod: cps.ModuleDecl): Book = {
   val defns = mod.definitions.map(transform)
   val defMap: MutableMap[Name, Definition] = MutableMap()
   decls.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
-  externs.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
+  //externs.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
-  Book(defMap, MutableMap(), MutableMap(), Some(Name(mod.path)))
+  Book(defMap, externs, MutableMap(), MutableMap(), Some(Name(mod.path)))
 }
+
 
 def transform(decl: cps.Declaration): List[Definition] = decl match {
   case cps.Declaration.Data(id, tparams, ctors) => List(Definition(id.name.name, transformConstructors(tparams, ctors), false))
   case cps.Declaration.Interface(id, tparams, operations) => List(Definition(id.name.name, transformProperties(tparams, operations), false))
 }
 
-def transform(decl: cps.Extern): Definition = decl match {
+def transform(decl: cps.Extern): Verbatim = decl match {
   case cps.Extern.Def(id, tparams, params, ret, body) =>
-    Definition(id.name.name, List(Rule((params map transform), Tup(body.args map transform))), false)
-  case cps.Extern.Include(contents) => Definition("", List(), false)//Definition(Id(contents).name.name, List(Rule(List(StrPattern(contents)), Str(contents))), false)
+    Verbatim.Def(id.name.name, params map transform, transform(body))
+  case cps.Extern.Include(contents) => Verbatim.Include(contents)//Definition("", List(), false)
+    //Definition(Id(contents).name.name, List(Rule(List(StrPattern(contents)), Str(contents))), false)
 }
+
+def transform(template: Template[cps.Expr]): String = intercalate(template.strings, template.args map transform).mkString
 
 def transform(definition: cps.Definition): Definition = definition match {
   //params + body => rule(patterns, body)

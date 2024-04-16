@@ -16,6 +16,10 @@ case class Rule(pats: List[Pattern], body: Term)
 
 case class Definition(name: String, rules: List[Rule], builtin: Boolean)
 
+enum Verbatim {
+  case Def(name: String, params: List[Pattern], body: String)//todo besserer Name
+  case Include(contents: String)
+}
 
 type Adts = MutableMap[Name, Adt]
 
@@ -38,6 +42,8 @@ enum AdtEncoding {
 case class Book(
   // The function definitions
   defs: MutableMap[Name, Definition],
+  // TODO
+  externs: List[Verbatim],
   // The algebraic datatypes defined by the program
   adts: Adts,
   // To which type does each constructor belong to

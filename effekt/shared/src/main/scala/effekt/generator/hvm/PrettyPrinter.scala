@@ -91,7 +91,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(definition: Definition) : Doc =
     vsep(definition.rules map ((x)=>toDoc(x, definition.name)))
 
+  def toDoc(verbatim: Verbatim): Doc = verbatim match {
+    case Verbatim.Def(name, params, body) => parens(string(name)<+>hsep(params map toDoc))<+>string("=")<+>string(body)
+    case Verbatim.Include(contents) => string(contents)
+  }
+
   def toDoc(book: Book) : Doc =
-    vsep((book.defs.values.toList map toDoc), linebreak)
+    vsep((book.defs.values.toList map toDoc), linebreak) <> linebreak <> vsep((book.externs map toDoc), linebreak) //todo: externs first
 
 }
