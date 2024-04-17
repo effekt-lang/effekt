@@ -831,10 +831,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
 
       case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies) => Context.withUnificationScope {
-        d.symbol.vparams foreach Context.bind
-        d.symbol.bparams foreach Context.bind
+        val sym = d.symbol
+        sym.vparams foreach Context.bind
+        sym.bparams foreach Context.bind
 
-        flowingInto(Context.lookupCapture(id.symbol.asBlockSymbol)) {
+        flowingInto(Context.lookupCapture(sym)) {
 
           // Note: Externs are always annotated with a type
           val expectedReturnType = d.symbol.annotatedType.get.result
