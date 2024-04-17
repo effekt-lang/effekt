@@ -64,7 +64,7 @@ trait Runner[Executable] {
       name
     case OS.Windows =>
       val batName = name + ".bat"
-      IO.createFile(batName, command.mkString(" "))
+      IO.createFile(batName, "@echo off\r\n" + command.mkString(" "))
       batName
   }
 
