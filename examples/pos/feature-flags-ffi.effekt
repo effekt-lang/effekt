@@ -2,13 +2,13 @@ extern def backendName(): String =
   js """ ("js") """
   chez {"chez"}
   llvm {"llvm"}
-  else {"unknown"}
+  default {"unknown"}
 
 extern def backendName2(): String =
   js """ ("js") """
   chez {"chez"}
   llvm {"llvm"}
-  else {"unknown"}
+  default {"unknown"}
 
 def main() = {
   println(backendName() == backendName2())

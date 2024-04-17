@@ -4,4 +4,4 @@ interface Foo {
 
 extern {io,control} def bar(): Unit =
   js { do foo() } // ERROR Effect Foo is not allowed in this context
-  else { () }
+  default { () }

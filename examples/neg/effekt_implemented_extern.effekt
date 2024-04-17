@@ -1,5 +1,5 @@
 extern pure def foo(): Unit = 
   js { println("Bar") }
-  else { () }
+  default { () }
 
 def main() = { foo() }

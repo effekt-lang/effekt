@@ -149,7 +149,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     }
 
   lazy val featureFlag: P[FeatureFlag] =
-    ( "else" ^^ { _ => FeatureFlag.Default }
+    ( "default" ^^ { _ => FeatureFlag.Default }
     | ident ^^ { flag => FeatureFlag.NamedFeatureFlag(flag) }
     )
 
