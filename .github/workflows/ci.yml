@@ -30,7 +30,7 @@ jobs:
         node-version: '12.x'
 
     - name: Run tests
-      run: sbt "effektJVM/clean; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples/pos/sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples/neg/coverage.*"
+      run: sbt "effektJVM/clean; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\\/]*coverage.*"
 
   build-jar:
     strategy:
