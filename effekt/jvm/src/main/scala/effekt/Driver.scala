@@ -127,7 +127,9 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     val out = config.outputPath().getAbsolutePath
     for (stage <- Stage.values)
       C.compiler.prettyIR(source, stage).map { case (Document(s, _)) =>
-        IO.createFile((out / (stage.toString + ".ir")).unixPath, s)  
+        val extension = if (stage == Stage.Target) C.runner.extension else "ir"
+        val name = source.name.split("/").last + "-" + stage.toString.toLowerCase + "." + extension
+        IO.createFile((out / name).unixPath, s)  
       }
   }
 
