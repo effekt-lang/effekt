@@ -55,6 +55,12 @@ enum Expr{
   case Var(name: Id)
   case Lit(n: Int)
   case PureApp(b: Block, targs: List[ValueType], args: List[Either[Expr, Block]])
+
+  case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
+  case Select(target: Expr, field: Id, annotatedType: ValueType)
+  case Box(b: Block)
+
+  case Run(t: Term)
   //val tpe: ValueType = Type.inferType(this)
 }
 export Expr.*
@@ -79,7 +85,7 @@ export Block.*
 enum Term {
   case LetCont(cont: Id, param: Param, body: Term, rest: Term)
   case Let(name: Id, expr: Expr, rest: Term)
-  case AppCont(cont: Id, arg: List[Expr])
+  case AppCont(cont: Id, arg: Expr)
   case App(func: Id, arg: List[Expr], cont: Id)
   case Scope(definitions: List[Definition], body: Term)
   case Val(id: Id, binding: Term, body: Term)
