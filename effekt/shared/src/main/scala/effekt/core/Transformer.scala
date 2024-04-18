@@ -2,13 +2,13 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{ MatchGuard, MatchPattern }
-import effekt.symbols.Binder.{ RegBinder, VarBinder }
+import effekt.source.{MatchGuard, MatchPattern, ResolveExternDefs}
+import effekt.symbols.Binder.{RegBinder, VarBinder}
 import effekt.typer.Substitutions
 import effekt.util.messages.ErrorReporter
 
@@ -26,6 +26,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val transformed = Context.timed(phaseName, source.name) { transform(mod, tree) }
       Some(CoreTransformed(source, tree, mod, transformed))
     }
+
+  enum CallingConvention {
+    case Pure, Direct, General
+  }
+  def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
+    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies) =>
+      val body = ResolveExternDefs.findPreferred(bodies)
+      body match {
+        case b: source.ExternBody.EffektExternBody => CallingConvention.General
+        case _ if f.capture.pure => CallingConvention.Pure
+        case _ if f.capture.pureOrIO => CallingConvention.Direct
+        case _ => CallingConvention.General
+      }
+    case _ => CallingConvention.General
+  }
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree
@@ -292,8 +307,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
-            case f: ExternFunction if f.capture.pure => etaExpandPure(f)
-            case f: ExternFunction if f.capture.pureOrIO => etaExpandDirect(f)
+            case f: ExternFunction if callingConvention(f) == CallingConvention.Pure => etaExpandPure(f)
+            case f: ExternFunction if callingConvention(f) == CallingConvention.Direct => etaExpandDirect(f)
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
@@ -636,9 +651,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: ExternFunction if f.capture.pure =>
+      case f: Callable if callingConvention(f) == CallingConvention.Pure =>
         PureApp(BlockVar(f), targs, vargsT)
-      case f: ExternFunction if f.capture.pureOrIO =>
+      case f: Callable if callingConvention(f) == CallingConvention.Direct =>
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
