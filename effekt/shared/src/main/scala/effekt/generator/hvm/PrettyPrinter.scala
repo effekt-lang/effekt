@@ -97,6 +97,5 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(book: Book) : Doc =
-    vsep((book.defs.values.toList map toDoc), linebreak) <> linebreak <> vsep((book.externs map toDoc), linebreak) //todo: externs first
-
+    vsep((book.externs map toDoc), linebreak) <> linebreak <> vsep((book.defs.values.toList map toDoc), linebreak)    
 }
