@@ -27,7 +27,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Some(CoreTransformed(source, tree, mod, transformed))
     }
 
-
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree
     val exports = transform(mod.exports)
