@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
-import effekt.util.{getOrElseAborting, escape}
+import effekt.util.{getOrElseAborting, escape, OS, os}
 import kiama.util.IO
 
 /**
@@ -38,21 +38,6 @@ trait Runner[Executable] {
    * Modules this backend loads by default
    */
   def prelude: List[String] = List("effekt")
-
-  enum OS {
-    case POSIX, Windows
-  }
-  /**
-   * Returns an enum determining the OS we are running on.
-   */
-  def os: OS = {
-    val name = System.getProperty("os.name").toLowerCase()
-    if (name.contains("win")) {
-      OS.Windows
-    } else {
-      OS.POSIX // assume: There are no other OSs we currently support
-    }
-  }
 
   /**
    * Creates a OS-specific script file that will execute the command when executed.
