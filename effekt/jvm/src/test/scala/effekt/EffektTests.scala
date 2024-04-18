@@ -4,6 +4,7 @@ import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
 import kiama.util.Severities
 import kiama.util.Severities.Severity
+import effekt.util.{OS, os}
 
 import java.io.File
 import sbt.io.*
@@ -13,6 +14,7 @@ import scala.sys.process.*
 import scala.language.implicitConversions
 
 trait EffektTests extends munit.FunSuite {
+
 
   // The name of the backend as it is passed to the --backend flag.
   def backendName: String
@@ -80,6 +82,27 @@ trait EffektTests extends munit.FunSuite {
     compiler.compileFile(input.getPath, configs)
     compiler.messaging.get.toList
 
+  /**
+   * Normalizes test output to ignore certain errors.
+   * 
+   * Currently:
+   * - If on Windows, replaces Windows paths with unix-style paths
+   *   `C:\\Documents` -> `c/Documents`, `examples\neg\Coverage.effekt` -> `examples/neg/Coverage.effekt`
+   */
+  def normalizeOutput(s: String): String = os match {
+    case OS.POSIX => s
+    case OS.Windows =>
+      // Regex for windows path-like substrings, captures: \1 drive letter (optional), \2 directories
+      val windowsPathRegex = """(?:([a-zA-Z]):\\{1,2})?((?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]*)""".r
+      windowsPathRegex.replaceAllIn(s, m => {
+        val drive = Option(m.group(1)) // Retrieve the drive letter or an empty string if not present
+        val path = m.group(2).replaceAll("\\\\", "/") // Replace backslashes with forward slashes in directories
+        drive match {
+          case Some(d) => s"$d/$path" // Combine the drive letter (if present) and the Unixified path
+          case None => path
+        }
+      })
+  }
 
   def runTests() =
     Backend.backend(backendName).runner.checkSetup() match {
@@ -94,7 +117,7 @@ trait EffektTests extends munit.FunSuite {
       case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f), expected)
+          assertNoDiff(normalizeOutput(run(f)), normalizeOutput(expected))
         }
     }
 
@@ -102,7 +125,7 @@ trait EffektTests extends munit.FunSuite {
     foreachFileIn(dir) {
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f), expected)
+          assertNoDiff(normalizeOutput(run(f)), normalizeOutput(expected))
         }
 
       case (f, None) =>
