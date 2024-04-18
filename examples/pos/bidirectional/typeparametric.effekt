@@ -1,6 +1,6 @@
 extern interface Cap[U, V]
 
-extern pure def cap[U, V](): Cap[U, V] at {} = simpleAtom "42"
+extern pure def cap[U, V](): Cap[U, V] at {} = default { <> }
 
 interface Foo[S] {
   def op[A]() {f: Cap[S, A]}: Cap[S, A] at {f} / { Exception[S] }

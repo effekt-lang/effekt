@@ -15,7 +15,7 @@ class ML extends Compiler[String] {
   // -----------------------------------------
   def extension = ".sml"
 
-  override def supportedFeatureFlags: List[String] = List("ml", FeatureFlag.simpleAtom)
+  override def supportedFeatureFlags: List[String] = List("ml")
 
   def buildFile(mainFile: String): String =
     s"""local

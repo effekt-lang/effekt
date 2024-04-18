@@ -1,6 +1,11 @@
-interface Foo {}
-extern io def something {f: Foo}: Int = simpleAtom "${box f}"
-extern io def createFoo(): Foo at {global} = simpleAtom "42"
+interface Foo {
+  def get(): Int
+}
+extern io def something {f: Foo}: Int = 
+  js "${f.get()}"
+  chez "${f.get()}"
+  ml "${f.get()}"
+extern io def createFoo(): Foo at {global} = default { box new Foo { def get() = 42 } }
 
 def main() = {
   def myFoo = createFoo()

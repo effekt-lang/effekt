@@ -1,7 +1,7 @@
 extern interface Cap
 
 // purposefully not pure to trigger a bug
-extern io def cap(): Cap at {} = simpleAtom "42"
+extern io def cap(): Cap at {} = default { <> }
 
 def main() = {
   def myCap = cap()

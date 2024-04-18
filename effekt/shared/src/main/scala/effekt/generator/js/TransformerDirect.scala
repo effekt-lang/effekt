@@ -20,7 +20,7 @@ import scala.collection.mutable
  */
 object TransformerDirect extends Transformer {
 
-  override val jsFeatureFlags: List[String] = List("jsDirect", "js", FeatureFlag.simpleAtom)
+  override val jsFeatureFlags: List[String] = List("jsDirect", "js")
 
   /**
    * Aggregates the contextual information required by the transformation

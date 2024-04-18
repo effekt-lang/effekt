@@ -70,11 +70,6 @@ enum Stage { case Core; case Lifted; case Machine; case Target; }
  * Constants for common feature flags (not specific to one generator)
  */
 object FeatureFlag {
-  /** For backends that translate to a programming language supporting at least:
-   * - directly splicing in variables ("${...}" works)
-   * - "simple" literals like "42"
-   */
-  val simpleAtom: String = "simpleAtom"
 }
 
 /**

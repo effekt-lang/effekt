@@ -2,6 +2,6 @@ module examples/pos/imports/importing_resources
 
 import examples/pos/imports/resources
 
-extern { r } def doNothing(): Unit = simpleAtom ""
+extern { r } def doNothing(): Unit = default { () }
 
 def main() = println("worked")

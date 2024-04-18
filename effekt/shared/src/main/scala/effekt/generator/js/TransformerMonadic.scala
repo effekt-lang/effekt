@@ -19,7 +19,7 @@ import scala.language.implicitConversions
  */
 object TransformerMonadicWhole extends TransformerMonadic {
 
-  override val jsFeatureFlags: List[String] = List("jsMonadic", "js", FeatureFlag.simpleAtom)
+  override val jsFeatureFlags: List[String] = List("jsMonadic", "js")
 
   /**
    * Exports are used in separate compilation (on the website), since they cannot be inlined [[inlineExtern]].
