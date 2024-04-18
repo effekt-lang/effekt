@@ -68,7 +68,10 @@ def transform(expr: lifted.Expr): Expr = expr match {
   case lifted.Literal(value, _) => Expr.Lit(value.toString().toInt)// any to Int
   case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
   case lifted.PureApp(b, targs, args) => Expr.PureApp(transform(b), targs map transform, args map transform)
-  case _ => println(expr); ??? 
+  case lifted.Make(data, tag, args) => Expr.Make(transform(data), tag, args map transform)
+  case lifted.Select(target, field, annotatedType) => Expr.Select(transform(target), field, transform(annotatedType))
+  case lifted.Box(b) => Expr.Box(transform(b))
+  case lifted.Run(s) => Expr.Run(transform(s))
 }
 
 def transform(b: lifted.Block.BlockLit): BlockLit =
@@ -89,7 +92,7 @@ def transform(operation: lifted.Operation): Operation =
   Operation(operation.name, transform(operation.implementation))
 
 def transform(stmt: lifted.Stmt): Term = stmt match {
-  case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), List(transform(e)))
+  case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), transform(e))
   case lifted.Stmt.Val(id, binding, body)  => Val(id, transform(binding), transform(body))
   case lifted.Stmt.Scope(definitions, body) => Scope(definitions map transform, transform(body))
   case lifted.Stmt.App(b, targs, args) => println(stmt); ???
@@ -105,6 +108,8 @@ def transform(tpe: lifted.ValueType): ValueType = tpe match {
   case lifted.ValueType.Data(name, targs)  =>  ValueType.Data(name, targs map transform)
   case lifted.ValueType.Boxed(blockTpe)  =>  ValueType.Boxed(transform(blockTpe))
 }
+
+def transform(dataTpe: lifted.ValueType.Data): ValueType.Data = ValueType.Data(dataTpe.name, dataTpe.targs map transform)
 
 def transform(tpe: lifted.BlockType.Interface): BlockType.Interface =
   BlockType.Interface(tpe.name, tpe.targs map transform)
