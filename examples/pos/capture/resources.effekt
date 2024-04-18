@@ -9,7 +9,10 @@ extern resource stack: StackLocal
 // this does not really implement arrays, but tests whether `makeArray`
 // will be in direct style.
 extern interface Array[T]
-extern {stack} def makeArray[T](size: Int): Array[T] at {stack} = default { size }
+extern {stack} def makeArray[T](size: Int): Array[T] at {stack} = 
+  js   "${size}"
+  ml   "${size}"
+  chez "${size}"
 
 def parameter[T] {a: Array[T]} = {
   val f: Array[T] at {a} = box a;

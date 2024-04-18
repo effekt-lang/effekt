@@ -1,11 +1,12 @@
-interface Foo {
-  def get(): Int
-}
+interface Foo {}
 extern io def something {f: Foo}: Int = 
-  js "${f.get()}"
-  chez "${f.get()}"
-  ml "${f.get()}"
-extern io def createFoo(): Foo at {global} = default { box new Foo { def get() = 42 } }
+  js   "${box f}"
+  ml   "${box f}"
+  chez "${box f}"
+extern io def createFoo(): Foo at {global} = 
+  js   "42"
+  ml   "42"
+  chez "42"
 
 def main() = {
   def myFoo = createFoo()
