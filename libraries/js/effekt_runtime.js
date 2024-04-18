@@ -1,29 +1,9 @@
-const $runtime = (function() {
+(function() {
 
   // Common Runtime
   // --------------
 
   // Regions
-  // TODO maybe use weak refs (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakRef)
-  function Cell(init) {
-    var _value = init;
-    const cell = ({
-      backup: function() {
-        var _backup = _value
-        var cell = this;
-        return () => { _value = _backup; return cell }
-      }
-    });
-    // $getOp and $putOp are auto generated from the compiler
-    cell[$getOp] = function() {
-      return _value
-    };
-    cell[$putOp] = function(v) {
-      _value = v;
-      return $effekt.unit;
-    };
-    return cell
-  }
 
   function Arena() {
     return {
@@ -170,19 +150,6 @@ const $runtime = (function() {
     })
   }
 
-  function withStateIn(prompt, init, f) {
-    const cell = Cell(init)
-
-    if (prompt === toplevel) {
-      return f(cell)
-    } else {
-      return Control(k => {
-        allocateInto(k, prompt, cell);
-        return Step(f(cell), k)
-      })
-    }
-  }
-
   // Delimited Control
   function Control(apply) {
     const self = {
@@ -209,20 +176,6 @@ const $runtime = (function() {
     return f(a => trampoline(apply(k, a)))
   })
 
-  const abort = Control(k => $effekt.unit)
-
-
-  const capture = f => {
-    // [abort; f
-    const action = () => f($effekt.unit).then(() => abort)
-    return shift(toplevel)(k =>
-      k({
-        shouldRun: false,
-        cont : () => k({ shouldRun: true, cont: action })
-      })).then(a => a.shouldRun ? a.cont() : $effekt.pure(a.cont))
-  }
-
-  //const reset = (p, c => Control(k => Step(c, Stack(Nil, Arena(), p, k)))
 
   function handleMonadic(body) {
     const p = _prompt++;
@@ -321,65 +274,55 @@ const $runtime = (function() {
     return leftRegion
   }
 
-  return {
-    // Common API
-    // -----------
-    constructor: (_, tag) => function() {
-      return { __tag: tag, __data: Array.from(arguments) }
-    },
 
-    hole: function() { throw "Implementation missing" },
+  // Common API
+  // -----------
+  $effekt.constructor = (_, tag) => function() {
+    return { __tag: tag, __data: Array.from(arguments) }
+  }
 
-    // Monadic API
-    // -----------
-    pure: pure,
-    callcc: callcc,
-    capture: capture,
-    delayed: delayed,
-    handleMonadic: handleMonadic,
-    ref: Cell,
-    state: withState,
-    shift: shift,
-    _if: (c, thn, els) => c ? thn() : els(),
-    withRegion: withRegion,
+  $effekt.hole = function() { throw "Implementation missing" }
 
+  $effekt.unit = { __unit: true }
 
-    // Direct style API
-    // ----------------
-    fresh: function(init) {
-      return currentRegion.fresh(init)
-    },
+  // Monadic API
+  // -----------
+  $effekt.pure = pure
+  $effekt.callcc = callcc
+  $effekt.delayed = delayed
+  $effekt.handleMonadic = handleMonadic
+  $effekt.ref = Cell
+  $effekt.state = withState
+  $effekt.shift = shift
+  $effekt._if = (c, thn, els) => c ? thn() : els()
+  $effekt.withRegion = withRegion
 
-    freshPrompt: function() { return ++_prompt; },
-
-    suspend: function(prompt, body) {
-      _stacksize = 0;
-      throw new Suspension(prompt, body, Nil, Empty)
-    },
-    suspend_bidirectional: function(prompt, caps, body) {
-      throw new Suspension(prompt, body, Cons(thunk => thunk.apply(null, caps), Nil), Empty)
-    },
+  // Direct style API
+  // ----------------
+  $effekt.fresh = function(init) {
+    return currentRegion.fresh(init)
+  }
+  $effekt.freshPrompt = function() { return ++_prompt; }
+  $effekt.suspend = function(prompt, body) {
+    throw new Suspension(prompt, body, Nil, Empty)
+  }
+  $effekt.suspend_bidirectional = function(prompt, caps, body) {
+    throw new Suspension(prompt, body, Cons(thunk => thunk.apply(null, caps), Nil), Empty)
+  }
 
     // suspension: the raised exception.
-    push: function(suspension, frame) {
-      if (!(suspension instanceof Suspension)) throw suspension;
-      // Assuming `suspension` is a value or variable you want to return
-      throw new Suspension(suspension.prompt, suspension.body,
-        Cons(frame, suspension.frames), suspension.cont);
-    },
-
-    handle: function(prompt, s) {
-      return handleOrRethrow(prompt, s, Nil)
-    },
-
-    freshRegion: function() {
-      return enterRegion(new Arena)
-    },
-
-    leaveRegion: leaveRegion,
-
-    global: global
+  $effekt.push = function(suspension, frame) {
+    if (!(suspension instanceof Suspension)) throw suspension;
+    // Assuming `suspension` is a value or variable you want to return
+    throw new Suspension(suspension.prompt, suspension.body,
+      Cons(frame, suspension.frames), suspension.cont);
   }
+  $effekt.handle = function(prompt, s) {
+    return handleOrRethrow(prompt, s, Nil)
+  }
+  $effekt.freshRegion = function() {
+    return enterRegion(Arena())
+  }
+  $effekt.leaveRegion = leaveRegion
+  $effekt.global = global
 })()
-
-Object.assign($effekt, $runtime);
