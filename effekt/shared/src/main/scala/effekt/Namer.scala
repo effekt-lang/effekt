@@ -293,7 +293,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
       if (!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
         val featureFlags = bodies.map(_.featureFlag)
-        Context.warning(pp"Extern definition ${id} is not supported as it is only is defined for feature flags ${featureFlags.mkString(", ")}," +
+        Context.warning(pp"Extern definition ${id} is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
           pp"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
       }
       bodies.foreach {
