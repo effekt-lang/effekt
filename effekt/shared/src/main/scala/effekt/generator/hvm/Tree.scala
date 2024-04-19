@@ -89,23 +89,24 @@ enum NumCtr {
 
 
 enum Term {
-   case  Lam(tag: Tag, nam: Option[String], bod: Term)
-   case  Var(nam: String)
-   case  Chn(tag: Tag, nam: Option[String], bod: Term)
-   case  Lnk(nam: String)
-   case  Let(pat: Pattern, value: Term, nxt: Term)
-   case  App(tag: Tag, fun: Term, arg: Term)
-   case  Tup(els: List[Term])
-   case  Dup(tag: Tag, bnd: List[Option[String]], value: Term, nxt: Term)
-   case  Sup(tag: Tag, els: List[Term])
-   case  Num(value: Long)
-   case  Str(value: String)
-   case  Lst(els: List[Term])
-   case  Opx(op: Op, fst: Term, snd: Term)
-   case  Mat(args: List[Term], rules: List[Rule])
-   case  Ref(nam: String)
-   case  Era
-   case  Err
+   case Lam(tag: Tag, nam: Option[String], bod: Term)
+   case Var(nam: String)
+   case Chn(tag: Tag, nam: Option[String], bod: Term)
+   case Lnk(nam: String)
+   case Let(pat: Pattern, value: Term, nxt: Term)
+   case App(tag: Tag, fun: Term, arg: Term)
+   case Tup(els: List[Term])
+   case Dup(tag: Tag, bnd: List[Option[String]], value: Term, nxt: Term)
+   case Sup(tag: Tag, els: List[Term])
+   case Num(value: Long)
+   case Str(value: String)
+   case Lst(els: List[Term])
+   case Opx(op: Op, fst: Term, snd: Term)
+   case Mat(args: List[Term], rules: List[Rule])//patternmatching with adts
+   case Swt(args: List[Term], rules: List[Rule])//pattern matching with numbers
+   case Ref(nam: String)
+   case Era
+   case Err
 }
 export Term.*
 
