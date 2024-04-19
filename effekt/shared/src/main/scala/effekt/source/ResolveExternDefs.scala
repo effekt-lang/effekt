@@ -24,6 +24,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
   }
 
   def findPreferred(bodies: List[ExternBody])(using Context): ExternBody = {
+    // IMPORTANT: Should be deterministic.
     bodies.filter { b => b.featureFlag.matches(supported) }
       .minByOption { b =>
         supported.indexOf(b.featureFlag) match {

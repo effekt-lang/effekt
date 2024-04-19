@@ -28,18 +28,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
 
   enum CallingConvention {
-    case Pure, Direct, General
+    case Pure, Direct, Control
   }
   def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
     case f @ ExternFunction(name, _, _, _, _, _, capture, bodies) =>
+      // resolve the preferred body again and hope it's the same
       val body = ResolveExternDefs.findPreferred(bodies)
       body match {
-        case b: source.ExternBody.EffektExternBody => CallingConvention.General
+        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
         case _ if f.capture.pure => CallingConvention.Pure
         case _ if f.capture.pureOrIO => CallingConvention.Direct
-        case _ => CallingConvention.General
+        case _ => CallingConvention.Control
       }
-    case _ => CallingConvention.General
+    case _ => CallingConvention.Control
   }
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
