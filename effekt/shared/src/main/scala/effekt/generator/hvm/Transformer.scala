@@ -6,21 +6,19 @@ import effekt.core.Id
 
 import scala.collection.mutable.{Map => MutableMap}
 import effekt.util.intercalate
-
+import effekt.core.CoreParsers.definition
 
 
 
 
 
 //cps to hvm
-def transform(mod: cps.ModuleDecl): Book = { 
-  //Decl=>adt, extern=> Extern, def=>Def, path=> entrypoint
+def transform(mod: cps.ModuleDecl): Book = {
   val decls = mod.decls.flatMap(transform)
   val externs = mod.externs.map(transform)
   val defns = mod.definitions.map(transform)
   val defMap: MutableMap[Name, Definition] = MutableMap()
   decls.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
-  //externs.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
   Book(defMap, externs, MutableMap(), MutableMap(), Some(Name(mod.path)))
 }
@@ -34,8 +32,7 @@ def transform(decl: cps.Declaration): List[Definition] = decl match {
 def transform(decl: cps.Extern): Verbatim = decl match {
   case cps.Extern.Def(id, tparams, params, ret, body) =>
     Verbatim.Def(id.name.name, params map transform, transform(body))
-  case cps.Extern.Include(contents) => Verbatim.Include(contents)//Definition("", List(), false)
-    //Definition(Id(contents).name.name, List(Rule(List(StrPattern(contents)), Str(contents))), false)
+  case cps.Extern.Include(contents) => Verbatim.Include(contents)
 }
 
 def transform(template: Template[cps.Expr]): String = intercalate(template.strings, template.args map transform).mkString
@@ -55,14 +52,43 @@ def transform(param: cps.Param): Pattern = param match {
  
 
 def transform(term: cps.Term): Term = term match {
-  case cps.Term.AppCont(id, arg) => App(Auto, Var(id.name.name), Tup(arg map transform))
-  case _ => println(term); ???
+  case cps.Term.AppCont(id, arg) => App(Auto, Var(id.name.name), transform(arg))
+  case cps.Term.App(id, args, cont) => chainApp(Var(cont.name.name)::(args map transform))
+  case cps.Term.Scope(definitions, body) => transform(definitions, body)
+  case cps.Term.If(cond, thn, els) => 
+    Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
+  case cps.Term.Match(scrutinee, clauses, None) => Swt(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
+  case cps.Term.Match(scrutinee, clauses, Some(default)) => Swt(List(transform(scrutinee)), (clauses map ((x: cps.Id, blockLit: cps.Block.BlockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
+  case _ => ??? 
+}
+
+//BlockLit=> Rule
+def transform(blockLit: cps.BlockLit): Rule = blockLit match {
+  case cps.BlockLit(_, params, body) => Rule(params map transform, transform(body))
+}
+def transform(block: cps.Block): Term = block match {
+  case cps.Block.BlockVar(id, annotatedType) => Var(id.name.name)
+  case _ => ???
+}
+
+def transform(arg: Either[cps.Expr, cps.Block]): Term = arg match{
+  case Left(expr) => transform(expr)
+  case Right(block) => transform(block)
+}
+
+def transform(definitions: List[cps.Definition], body: cps.Term): Term = definitions match {
+  case Nil => transform(body)
+  case _ => definitions.head match {
+    case cps.Definition.Let(id, bindings) => Let(VarPattern(Some(id.name.name)), transform(bindings), transform(definitions.tail, body))
+    case cps.Definition.Function(name, params, cont, body) => Let(VarPattern(Some(name.name.name)), Num(5), App(Auto, Var(cont.name.name), transform(body)))
+  }
 }
 
 def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Lit(n) => Num(n)
   case cps.Expr.Var(name) => Var(name.name.name)
-  case _ => println(expr); ???
+  case cps.Expr.PureApp(b, _, args) => chainApp(transform(b) :: (args map transform))
+  case _ => ???
 }
 
 def transformConstructors(tparams: List[cps.Id], constructors: List[cps.Constructor]): List[Rule] = (tparams, constructors) match {
@@ -75,4 +101,16 @@ def transformProperties(tparams: List[cps.Id], properties: List[cps.Property]): 
   case (List(), properties) => Rule(List(), Var(properties.head.id.name.name)) :: transformProperties(List(), properties.tail)
   case (tparams, List()) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(" ")) :: transformProperties(tparams, List())
   case (tparams, properties) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(properties.head.id.name.name)) :: transformProperties(tparams.tail, properties.tail)
+}
+
+//helper functions:
+def chainApp(args: List[Term]): Term = {//println(args);
+  val reverseArgs = args.reverse
+  chainAppHelper(reverseArgs)
+}
+
+def chainAppHelper(args: List[Term]): Term = args match {
+ case Nil => Err
+ case head :: Nil => head
+ case head:: tail => App(Auto, chainAppHelper(tail), head)
 }

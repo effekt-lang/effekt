@@ -15,6 +15,7 @@ import effekt.source.AnnotateCaptures.annotate
 
 
 
+
 object Transformer extends Phase[PhaseResult.CoreLifted, PhaseResult.CpsTransformed] {
 
   val phaseName = "cps-transform"
@@ -94,9 +95,28 @@ def transform(operation: lifted.Operation): Operation =
 def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), transform(e))
   case lifted.Stmt.Val(id, binding, body)  => Val(id, transform(binding), transform(body))
+  
   case lifted.Stmt.Scope(definitions, body) => Scope(definitions map transform, transform(body))
   case lifted.Stmt.App(b, targs, args) => println(stmt); ???
-  case _ => println(stmt); ???
+  
+  case lifted.Stmt.If(cond, thn, els) => If(transform(cond), transform(thn), transform(els))
+  case lifted.Stmt.Match(scrutinee, clauses, Some(default)) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), transform(blockLit))), Some(transform(default)))
+  case lifted.Stmt.Match(scrutinee, clauses, None) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), transform(blockLit))), None)
+
+  case lifted.Stmt.Region(body) => ???
+  case lifted.Stmt.Alloc(id, init, region, ev, body) => ???
+  
+  case lifted.Stmt.Var(init, body) => ???
+  case lifted.Stmt.Get(id, ev, annotatedTpe) => ???
+  case lifted.Stmt.Put(id, ev, value) => ???
+
+  case lifted.Stmt.Try(body, handler) => ???
+
+  case lifted.Stmt.Reset(body) => ???
+
+  case lifted.Stmt.Shift(ev, body) => ???
+
+  case lifted.Stmt.Hole() => ???
 }
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
