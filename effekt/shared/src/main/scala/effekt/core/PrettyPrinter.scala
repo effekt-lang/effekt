@@ -61,9 +61,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> vcat(bodies map {
-        case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
-        case ExternBody.EffektExternBody(ff, body) => toDoc(ff) <+> "(" <+> toDoc(body) <+> ")"
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
+        case ExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
       })
     case Extern.Include(ff, contents) => emptyDoc // right now, do not print includes.
   }

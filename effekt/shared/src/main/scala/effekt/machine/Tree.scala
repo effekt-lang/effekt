@@ -47,7 +47,7 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, bodies: List[ExternBody])
+  case Extern(name: String, parameters: Environment, returnType: Type, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*

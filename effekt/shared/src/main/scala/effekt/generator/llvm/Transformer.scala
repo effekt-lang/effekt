@@ -42,11 +42,10 @@ object Transformer {
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, List(machine.ExternBody(_, body))) =>
+      case machine.Extern(functionName, parameters, returnType, machine.ExternBody(_, body)) =>
         VerbatimFunction(transform(returnType), functionName, parameters.map {
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
         }, transform(body))
-      case machine.Extern(_,_,_,_) => sys error "Extern bodies were not properly resolved"
       case machine.Include(ff, content) if ff.matches(llvmFeatureFlags) =>
         Verbatim(content)
       case machine.Include(ff, content) =>

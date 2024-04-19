@@ -102,17 +102,15 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
-    case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
+    case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       val self = Param.EvidenceParam(EvidenceSymbol()) // will never be used!
       val eparams = bps map {
         case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
       }
       Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
-        bodies.map {
-          case core.ExternBody.StringExternBody(ff, body) => 
-            ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transform)))
-          case core.ExternBody.EffektExternBody(ff, body) =>
-            ExternBody.EffektExternBody(ff, transform(body))
+        body match {
+          case core.ExternBody(ff, bbody) =>
+            ExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
         })
     case core.Extern.Include(ff, contents) =>
       Extern.Include(ff, contents)

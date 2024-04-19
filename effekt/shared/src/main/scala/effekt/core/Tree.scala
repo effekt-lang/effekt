@@ -126,16 +126,11 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, bodies: List[ExternBody])
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-sealed trait ExternBody extends Tree {
-  def featureFlag: FeatureFlag
-}
-object ExternBody {
-  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends ExternBody
-  case class EffektExternBody(featureFlag: FeatureFlag, body: Stmt) extends ExternBody
-}
+case class ExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends Tree
+
 extension(self: List[ExternBody]) {
   def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
     case Nil => self.find( _.featureFlag.isDefault )

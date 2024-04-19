@@ -47,7 +47,7 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, tps, params, ret, bodies) =>
+    case lifted.Extern.Def(name, tps, params, ret, body) =>
       val transformedParams = params.flatMap {
         case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -55,15 +55,14 @@ object Transformer {
         case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       noteDefinition(name, params map transform, Nil)
-      val tBodies = bodies.map {
-        case lifted.ExternBody.StringExternBody(ff, Template(strings, args)) =>
+      val tBody = body match {
+        case lifted.ExternBody(ff, Template(strings, args)) =>
           ExternBody(ff, Template(strings, args map {
             case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
             case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
           }))
-        case lifted.ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
       }
-      Extern(transform(name), transformedParams, transform(ret), tBodies)
+      Extern(transform(name), transformedParams, transform(ret), tBody)
 
     case lifted.Extern.Include(ff, contents) =>
       Include(ff, contents)

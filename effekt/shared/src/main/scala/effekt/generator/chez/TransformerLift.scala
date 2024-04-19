@@ -196,13 +196,12 @@ object TransformerLift {
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {
-    case Extern.Def(id, tparams, params, ret, List(ExternBody.StringExternBody(_, body))) =>
+    case Extern.Def(id, tparams, params, ret, ExternBody(_, body)) =>
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
           case p => Some(nameDef(p.id)) },
           toChez(body)))
-    case Extern.Def(_,_,_,_,_) => sys error "Extern def was not properly resolved"
 
     case Extern.Include(ff, contents) =>
       RawDef(contents)

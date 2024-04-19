@@ -88,12 +88,8 @@ object TransformerDirect extends Transformer {
   }
 
   def toJS(e: core.Extern)(using TransformerContext): js.Stmt = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
-      bodies.forFeatureFlags(jsFeatureFlags).getOrElse{ ??? /* TODO insert hole */ } match {
-        case ExternBody.StringExternBody(_, body) =>
-          js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(body))))
-        case ExternBody.EffektExternBody(_, body) => sys error "Effekt extern body should have been removed"
-      }
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, ExternBody(featureFlag, contents)) =>
+      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(contents))))
 
     case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
       js.RawStmt(contents)
