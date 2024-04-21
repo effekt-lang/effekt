@@ -35,9 +35,7 @@ trait ContextOps
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-abstract class Context(val positions: Positions)
-    extends NamerOps
-    with TyperOps {
+abstract class Context(val positions: Positions) extends TyperOps {
 
   // bring the context itself in scope
   implicit val context: Context = this
@@ -51,51 +49,18 @@ abstract class Context(val positions: Positions)
   var _config: EffektConfig = _
   def config = _config
 
-  // We assume the backend never changes
-  lazy val backend = config.backend()
-  lazy val compiler = backend.compiler
-  lazy val runner = backend.runner
 
   /**
    * Clear current context to start processing a fresh unit
    */
-  def setup(cfg: EffektConfig): Unit = {
-    messaging.clear()
-    _config = cfg
-  }
+  def setup(cfg: EffektConfig): Unit = ()
 
-  def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
-    this.module = module
-    this.focus = focus
-    block
-  }
+  def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = ???
 
-  /**
-   * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
-   */
-  override def in[T](block: => T): T = {
-    val focusBefore = focus
-    val moduleBefore = module
-    val result = super.in(block)
-
-    // we purposefully do not include the reset into `finally` to preserve the
-    // state at the error position
-    focus = focusBefore
-    module = moduleBefore
-    result
-  }
+  override def in[T](block: => T): T = ???
 
   // temporarily switches the message buffer to collect messages
-  def withMessages[T](block: => T): (EffektMessages, T) = {
-    val bufferBefore = messaging.buffer
-
-    messaging.clear()
-
-    val res = block
-    val msgs = messaging.buffer
-    messaging.buffer = bufferBefore
-    (msgs, res)
-  }
+  def withMessages[T](block: => T): (EffektMessages, T) = ???
 }
 
 /**

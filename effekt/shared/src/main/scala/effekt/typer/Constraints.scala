@@ -66,7 +66,7 @@ class Constraints(
    */
   private var pendingInactive: Set[CNode] = Set.empty
 
-)(using C: ErrorReporter) {
+) {
 
   /**
    * The currently known substitutions
@@ -100,11 +100,7 @@ class Constraints(
 
   def solve(toRemove: Set[CNode]): Unit = ()
 
-  def forceSolving(node: CNode): CaptureSet =
-    captSubstitution.getOrElse(node, {
-      solve(Set(node))
-      captSubstitution(node)
-    })
+  def forceSolving(node: CNode): CaptureSet = ???
 
 
   override def clone(): Constraints = new Constraints(typeSubstitution, classes, captureConstraints, captSubstitution, pendingInactive)

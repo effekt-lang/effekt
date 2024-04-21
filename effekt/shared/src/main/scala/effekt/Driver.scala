@@ -1,8 +1,5 @@
 package effekt
 
-// Adapted from
-//   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
-
 import effekt.context.{ Context }
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
@@ -40,35 +37,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    *
    * In LSP mode: invoked for each file opened in an editor
    */
-  override def compileSource(source: Source, config: EffektConfig): Unit = try {
-    val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
-
-    // remember that we have seen this source, this is used by LSP (kiama.util.Server)
-    sources(source.name) = src
-
-    implicit val C = context
-    C.setup(config)
-
-    def saveOutput(path: String, doc: String): Unit =
-      if (C.config.requiresCompilation()) {
-        val out = C.config.outputPath()
-        out.mkdirs
-        IO.createFile((out / path).unixPath, doc)
-      }
-  } catch {
-    case FatalPhaseError(msg) => context.report(msg)
-    case e @ CompilerPanic(msg) =>
-      context.report(msg)
-      e.getStackTrace.foreach { line =>
-        context.info("  at " + line)
-      }
-  } finally {
-    outputTimes(source, config)(context)
-    showIR(source, config)(context)
-    writeIRs(source, config)(context)
-    // This reports error messages
-    afterCompilation(source, config)(context)
-  }
+  override def compileSource(source: Source, config: EffektConfig): Unit = ()
 
   /**
    * Outputs the timing information captured in [[effekt.util.Timers]] by [[effekt.context.Context]]. Either a JSON file
@@ -76,31 +45,12 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    */
   def outputTimes(source: Source, config: EffektConfig)(implicit C: Context): Unit = ()
 
-  def showIR(source: Source, config: EffektConfig)(implicit C: Context): Unit =
-    config.showIR().map { stage =>
-      C.compiler.prettyIR(source, stage).map { case (Document(s, _)) => println(s) }
-    }
+  def showIR(source: Source, config: EffektConfig)(implicit C: Context): Unit = ()
 
-  def writeIRs(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    if (!config.writeIRs()) return
-    val out = config.outputPath().getAbsolutePath
-    for (stage <- Stage.values)
-      C.compiler.prettyIR(source, stage).map { case (Document(s, _)) =>
-        val extension = if (stage == Stage.Target) C.runner.extension else "ir"
-        val name = source.name.split("/").last + "-" + stage.toString.toLowerCase + "." + extension
-        IO.createFile((out / name).unixPath, s)
-      }
-  }
+  def writeIRs(source: Source, config: EffektConfig)(implicit C: Context): Unit = ()
 
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode
    */
-  def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    // report messages
-    report(source, C.messaging.buffer, config)
-
-    // exit with non-zero code if not in repl/server mode and messaging buffer contains errors
-    if (config.exitOnError() && C.messaging.hasErrors)
-      sys.exit(1)
-  }
+  def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = ()
 }
