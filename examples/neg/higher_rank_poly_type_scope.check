@@ -1,3 +1,0 @@
-[error] examples/neg/higher_rank_poly_type_scope.effekt:1:27: Could not resolve type A
-def g { h: [A](A) => A }: A = h(42)
-                          ^

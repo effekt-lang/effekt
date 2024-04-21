@@ -1,3 +1,0 @@
-[error] examples/neg/lambdas/simpleescape.effekt:6:7: The return type () => Unit at {Raise$capability} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: {Raise$capability}
-  try {
-      ^

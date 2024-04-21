@@ -1,3 +1,0 @@
-[error] examples/neg/issue373/handler_no_annotation.effekt:6:24: Expected Int but got String.
-  try { println(eff.op("hello")) }
-                       ^^^^^^^

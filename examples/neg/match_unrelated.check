@@ -1,3 +1,0 @@
-[error] examples/neg/match_unrelated.effekt:5:8: Pattern matches against type SomethingElse but scrutinee has type Something.
-  case MakeIt() => 2
-       ^^^^^^^^

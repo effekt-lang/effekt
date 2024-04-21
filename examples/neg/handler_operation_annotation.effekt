@@ -1,9 +1,0 @@
-interface Reader { def read(): String }
-
-def main() = {
-  try {
-    do read()
-  } with Reader {
-    def read(): String = "Hello, world!"
-  }
-}

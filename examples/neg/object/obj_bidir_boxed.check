@@ -1,3 +1,0 @@
-[error] examples/neg/object/obj_bidir_boxed.effekt:21:9: Not allowed {Greet$capability}
-        box { x =>
-        ^

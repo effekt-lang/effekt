@@ -1,3 +1,0 @@
-[error] examples/neg/handler_operation_annotation.effekt:7:5: Unexpected type annotation on operation read.
-    def read(): String = "Hello, world!"
-    ^

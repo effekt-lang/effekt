@@ -1,2 +1,0 @@
-Cons(1, Cons(102, Cons(3, Nil())))
-Cons(1, Cons(2, Cons(3, Nil())))

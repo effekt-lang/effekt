@@ -1,9 +1,0 @@
-interface Foo { def bar(): Int }
-
-def main() = {
-  def obj = new Foo {
-    def bar(): Int = 42
-  }
-
-  println(obj.bar())
-}

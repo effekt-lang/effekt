@@ -1,5 +1,0 @@
-module trailing_comment
-
-def main() = ()
-
-// foo

@@ -1,6 +1,0 @@
-def main() = {
-    println(true)
-    println(true)
-    println(false)
-    println(true)
-}

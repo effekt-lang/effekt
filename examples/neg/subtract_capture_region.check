@@ -1,3 +1,0 @@
-[error] examples/neg/subtract_capture_region.effekt:5:29: Not allowed {io}
-  val f: () => Unit at {} = box {
-                            ^

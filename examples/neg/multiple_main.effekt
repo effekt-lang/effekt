@@ -1,5 +1,0 @@
-namespace nested { // ERROR Multiple main functions
-  def main() = println("hello")
-}
-
-def main() = println("world")

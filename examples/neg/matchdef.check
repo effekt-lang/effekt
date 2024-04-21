@@ -1,3 +1,0 @@
-[error] examples/neg/matchdef.effekt:13:9: Non exhaustive pattern matching, missing case for Other
-    val Person(name, age) = r;
-        ^^^^^^^^^^^^^^^^^

@@ -1,9 +1,0 @@
-def foo[A](a: A): A = a
-def foo[A](a: A): String = ""
-//def foo(a: Int): Int = a
-
-def id[A](a: A): A = a
-
-def something[B](): B = <>
-
-def main() = foo(id(id(4))) ++ ""

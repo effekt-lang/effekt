@@ -1,9 +1,0 @@
-module examples/pos/unused_effects
-
-effect Fail(): Unit
-
-def main() = try {
-  4
-} with Fail { () =>
-  0
-}

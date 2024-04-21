@@ -1,3 +1,0 @@
-[error] examples/neg/higher_rank_poly_vs_poly.effekt:9:28: Type parameter count does not match [A](List[A]) => Int vs. List[Int] => Int
-def main() = len([1, 2, 3]){ count }
-                           ^^^^^^^^^

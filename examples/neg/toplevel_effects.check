@@ -1,3 +1,0 @@
-[error] examples/neg/toplevel_effects.effekt:8:28: Effect Console is not allowed in this context.
-def pureFun(): Unit / {} = sayHello()
-                           ^

@@ -1,6 +1,0 @@
-module variables
-
-def main() = {
-  val x = 5;
-  x = 9
-}

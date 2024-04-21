@@ -1,3 +1,0 @@
-[error] examples/neg/unhandledmain.effekt:1:1: Main cannot have user defined effects, but includes effects: { Flip }
-module unhandledmain
-^

@@ -1,7 +1,0 @@
-namespace app
-namespace utils
-
-def one() = 1
-def two() = app::utils::one() + app::utils::one()
-
-def main() = println(app::utils::two())

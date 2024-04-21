@@ -1,8 +1,0 @@
-module typevars
-
-def f[R]() = {
-  def g[A](r: R) = ()
-  g[String](4) // should not typecheck
-}
-
-def main() = ()

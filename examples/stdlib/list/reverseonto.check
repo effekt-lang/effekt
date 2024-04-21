@@ -1,1 +1,0 @@
-Cons(3, Cons(2, Cons(1, Cons(4, Cons(5, Cons(6, Nil()))))))

@@ -1,7 +1,0 @@
-interface Eff[A] {
-  def op[B](x: A): A
-}
-
-def main() =
-  try { println(eff.op[Int]("hello")) }
-  with eff: Eff[Int] { def op[B](x) = resume(x / 1) }

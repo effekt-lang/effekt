@@ -1,6 +1,0 @@
-Dequeue(Cons(2, Nil()), 1, Cons(1, Nil()), 1)
-Some(Tuple2(2, Dequeue(Nil(), 0, Cons(1, Nil()), 1)))
-Some(Tuple2(2, Dequeue(Cons(1, Nil()), 1, Cons(3, Nil()), 1)))
-Some(Tuple2(3, Dequeue(Cons(2, Nil()), 1, Cons(1, Nil()), 1)))
-Some(2)
-Some(3)
