@@ -22,20 +22,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def run(input: NameResolved)(using Context): Option[Typechecked] = ???
 
-
-
-
 }
-
-
-/**
- * Instances of this class represent an immutable backup of the typer state
- */
-private[typer] case class TyperState(annotations: Annotations, unification: UnificationState, capabilityScope: CapabilityScope)
 
 trait TyperOps extends ContextOps { self: Context =>
 
+  // passing `this` as ErrorReporter here is also necessary for the cyclic error
   private[typer] val unification = new Unification(using this)
+
   // this export is NECESSARY for the cyclic error
   export unification.{ requireSubtype }
 
