@@ -8,9 +8,6 @@ import effekt.util.messages.ErrorReporter
 
 
 sealed trait Polarity { def flip: Polarity }
-case object Covariant extends Polarity { def flip = Contravariant}
-case object Contravariant extends Polarity { def flip = Covariant }
-case object Invariant extends Polarity { def flip = Invariant }
 
 /**
  * The state of the unification scope, used for backtracking on overload resolution
@@ -24,16 +21,6 @@ case class UnificationState(
 
 sealed trait Scope
 
-
-/**
- * A unification scope -- every fresh unification variable is associated with a scope.
- *
- * Structural comparison of types are outsourced into [[TypeComparer]], [[TypeUnifier]], and
- * [[TypeMerger]]. This way, the dependencies are a bit clearer and testability is improved.
- *
- * TODO
- *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
- */
 class Unification(using C: ErrorReporter) extends TypeInstantiator { self =>
 
   // State of the unification engine
