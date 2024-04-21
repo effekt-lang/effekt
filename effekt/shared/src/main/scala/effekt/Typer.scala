@@ -43,200 +43,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
 
-  def run(input: NameResolved)(using Context) = Context.using(module = input.mod, focus = input.tree) {
-    try {
-      val NameResolved(source, tree, mod) = input
-
-      Context.initTyperstate()
-      Context.timed(phaseName, source.name) {
-        Context in {
-          Context.withUnificationScope {
-            ???
-          }
-        }
-      }
-
-      if (Context.messaging.hasErrors) {
-        None
-      } else {
-        Some(Typechecked(source, tree, mod))
-      }
-    } finally {
-      // Store the backtrackable annotations into the global DB
-      // This is done regardless of errors, since
-      Context.commitTypeAnnotations()
-    }
-  }
-
-  def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
-    ???
-
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
-    ???
-
-  def findFunctionTypeFor(sym: BlockSymbol)(using Context): (FunctionType, Captures) = sym match {
-    // capture of effect operations is dealt with by type checking Do or MethodCall
-    case b: Operation => (Context.lookupFunctionType(b), CaptureSet.empty)
-    case b: BlockSymbol => (Context.lookupFunctionType(b), Context.lookupCapture(b))
-  }
-
-  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, EffektMessages)]) = {
-    val stateBefore = Context.backupTyperstate()
-    val results = inputs.map {
-      case input =>
-        try { input ->
-          Try {
-            val result = f(input)
-            val state = Context.backupTyperstate()
-            (result, state)
-          }
-        } finally { Context.restoreTyperstate(stateBefore) }
-    }
-    val successes = results.collect { case (sym, Right((r, st))) => (sym, r, st) }
-    val errors = results.collect { case (sym, Left(r)) => (sym, r) }
-    (successes, errors)
-  }
-
-  /**
-   * Returns Left(Messages) if there are any errors
-   *
-   * In the case of nested calls, currently only the errors of the innermost failing call
-   * are reported
-   */
-  private def Try[T](block: => T)(using C: Context): Either[EffektMessages, T] = {
-    import kiama.util.Severities.Error
-
-    val (msgs, optRes) = Context withMessages {
-      try { Some(block) } catch {
-        case FatalPhaseError(msg) =>
-          C.report(msg)
-          None
-      }
-    }
-
-    if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
-      Left(msgs)
-    } else {
-      Right(optRes.get)
-    }
-  }
-
-  //</editor-fold>
-
-  //<editor-fold desc="Helpers to register subcapturing constraints">
-
-  /**
-   * The current capture / region / scope for which we collect constraints.
-   *
-   * Functions [[usingCapture]] and [[usingCaptureWithout]] implicitly look
-   * up this scope and have their arguments flow into the current Capture.
-   *
-   * Function [[flowingInto]] sets the current capture.
-   *
-   * Example illustrating the interaction:
-   *
-   * {{{
-   *   val inferredCapture: Captures = ???
-   *   flowingInto(inferredCapture) {
-   *     // inferredCapture is now the current capture
-   *     assert(currentCapture == inferredCapture)
-   *
-   *     // other flows into inferredCapture (i.e. other <: inferredCapture)
-   *     usingCapture(other)
-   *   }
-   * }}}
-   */
-  def currentCapture(using current: Captures): Captures = current
-
-  /**
-   * Sets the [[currentCapture]] in a given scope.
-   */
-  def flowingInto[T](c: Captures)(prog: Captures ?=> T): T = prog(using c)
-
-  /**
-   * Requires that [[c]] is included in the [[currentCapture]] (i.e. [[c]] <: [[currentCapture]])
-   */
-  def usingCapture(c: Captures)(using C: Context, current: Captures): Unit =
-    C.requireSubregion(c, current)
-
-  /**
-   * Requires that [[c]] - [[filter]] is included in the [[currentCapture]] (i.e. ([[c]] - [[filter]]) <: [[currentCapture]])
-   */
-  def usingCaptureWithout(c: Captures)(filter: List[Capture])(using C: Context, current: Captures): Unit =
-    flowsIntoWithout(c, current)(filter)
-
-  /**
-   * Requires that [[from]] is included in [[to]] (i.e. [[from]] <: [[to]])
-   */
-  def flowsInto(from: Captures, to: Captures)(using C: Context): Unit =
-    C.requireSubregion(from, to)
-
-  /**
-   * Requires that [[from]] - [[filter]] is included in the [[to]] (i.e. ([[from]] - [[filter]]) <: [[to]])
-   */
-  def flowsIntoWithout(from: Captures, to: Captures)(filter: List[Capture])(using C: Context): Unit =
-    C.requireSubregionWithout(from, to, filter)
-
-  //</editor-fold>
-
-  //<editor-fold desc="Other helpers and Extension Methods">
-  def matchDeclared(got: BlockType, declared: BlockType, param: source.Param)(using Context): Unit =
-    Context.at(param) {
-      Context.requireSubtype(got, declared,
-        ErrorContext.Declaration(param, Context.unification(declared), Context.unification(got)))
-    }
-  def matchDeclared(got: ValueType, declared: ValueType, param: source.Param)(using Context): Unit =
-    Context.at(param) {
-      Context.requireSubtype(got, declared,
-        ErrorContext.Declaration(param, Context.unification(declared), Context.unification(got)))
-    }
-
-  def matchPattern(scrutinee: ValueType, patternTpe: ValueType, pattern: source.MatchPattern)(using Context): Unit =
-    Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(pattern))
-
-  def matchExpected(got: ValueType, expected: ValueType)(using Context): Unit =
-    Context.requireSubtype(got, expected,
-      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
-
-  def matchExpected(got: BlockType, expected: BlockType)(using Context): Unit =
-    Context.requireSubtype(got, expected,
-      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
-
-  extension (expr: Term) {
-    def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
-      checkExpr(expr, Some(tpe))
-  }
-
-  extension (stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
-      checkStmt(stmt, Some(tpe))
-  }
-
-  /**
-   * Combinators that also store the computed type for a tree in the TypesDB
-   */
-  def checkAgainst[T <: Tree](t: T, expected: Option[ValueType])(f: T => Result[ValueType])(using Context, Captures): Result[ValueType] =
-    Context.at(t) {
-      val Result(got, effs) = f(t)
-      wellformed(got)
-      wellformed(effs.toEffects)
-      expected foreach { matchExpected(got, _) }
-      Context.annotateInferredType(t, got)
-      Context.annotateInferredEffects(t, effs.toEffects)
-      Result(got, effs)
-    }
-
-  def checkBlockAgainst[T <: Tree](t: T, expected: Option[BlockType])(f: T => Result[BlockType])(using Context, Captures): Result[BlockType] =
-    Context.at(t) {
-      val Result(got, effs) = f(t)
-      wellformed(got)
-      wellformed(effs.toEffects)
-      expected foreach { matchExpected(got, _) }
-      Context.annotateInferredType(t, got)
-      Context.annotateInferredEffects(t, effs.toEffects)
-      Result(got, effs)
-    }
-  //</editor-fold>
+  def run(input: NameResolved)(using Context): Option[Typechecked] = ???
 
 }
 
@@ -249,8 +56,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] var annotations: Annotations = Annotations.empty
 
-  //<editor-fold desc="(1) Unification">
-
   /**
    * The unification engine, keeping track of constraints and the current unification scope
    *
@@ -258,16 +63,13 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using this)
+
   export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshTypeVar, freshCaptVar, without, requireSubregionWithout }
 
-  // opens a fresh unification scope
+
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = ???
 
   private[typer] def withUnificationScope[T](block: => T): T = ???
-
-  //</editor-fold>
-
-  //<editor-fold desc="(2) Capability Passing">
 
   private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
 
@@ -277,9 +79,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[InterfaceType, symbols.BlockParam]) = ???
 
-  /**
-   * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
-   */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam = ???
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam = ???
@@ -288,24 +87,16 @@ trait TyperOps extends ContextOps { self: Context =>
   private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] = ???
 
   private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType): BlockParam = ???
-  // first tries to find the type in the local typing context
-  // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
-  private[typer] def lookup(s: ValueSymbol) =
-    annotations.getOrElse(Annotations.ValueType, s, valueTypeOf(s))
 
-  private[typer] def lookup(s: BlockSymbol) = (lookupBlockType(s), lookupCapture(s))
+  private[typer] def lookup(s: ValueSymbol): symbols.ValueType = ???
+
+  private[typer] def lookup(s: BlockSymbol): (BlockType, Captures) = ???
 
   private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType = ???
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType = ???
 
-  private[typer] def lookupCapture(s: BlockSymbol) =
-    annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
-      s match {
-        case b: TrackedParam => CaptureSet(b.capture)
-        case _ => panic(pretty"Shouldn't happen: we do not have a capture for ${s}, yet.")
-      }
-    }
+  private[typer] def lookupCapture(s: BlockSymbol): Captures = ???
 
   private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit = ()
 
@@ -321,14 +112,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def bind(p: TrackedParam): Unit = ()
 
-  private[typer] def annotateInferredType(t: Tree, e: ValueType) =
-    annotations.update(Annotations.InferredValueType, t, e)
+  private[typer] def annotateInferredType(t: Tree, e: ValueType) = ()
 
-  private[typer] def annotateInferredType(t: Tree, e: BlockType) =
-    annotations.update(Annotations.InferredBlockType, t, e)
+  private[typer] def annotateInferredType(t: Tree, e: BlockType) = ()
 
-  private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
-    annotations.update(Annotations.InferredEffect, t, e)
+  private[typer] def annotateInferredEffects(t: Tree, e: Effects) = ()
 
   private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = ()
 
@@ -341,6 +129,4 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def restoreTyperstate(st: TyperState): Unit = ()
 
   private[typer] def commitTypeAnnotations(): Unit = ()
-
-  //</editor-fold>
 }
