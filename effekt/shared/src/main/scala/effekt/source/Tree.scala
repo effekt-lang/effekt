@@ -4,72 +4,6 @@ package source
 import effekt.context.Context
 import effekt.symbols.Symbol
 
-/**
- * Data type representing source program trees.
- *
- * ----------[[ effekt.source.Tree ]]----------
- *
- *   ─ [[ Tree ]]
- *     │─ [[ NoSource ]]
- *     │─ [[ Comment ]]
- *     │─ [[ Id ]]
- *     │  │─ [[ IdDef ]]
- *     │  │─ [[ IdRef ]]
- *     │
- *     │─ [[ Named ]]
- *     │  │─ [[ Definition ]]
- *     │  │─ [[ Reference ]]
- *     │
- *     │─ [[ ModuleDecl ]]
- *     │─ [[ Include ]]
- *     │─ [[ Stmt ]]
- *     │  │─ [[ DefStmt ]]
- *     │  │─ [[ ExprStmt ]]
- *     │  │─ [[ Return ]]
- *     │  │─ [[ BlockStmt ]]
- *     │
- *     │─ [[ Term ]]
- *     │  │─ [[ Var ]]
- *     │  │─ [[ Assign ]]
- *     │  │─ [[ Literal ]]
- *     │  │─ [[ Hole ]]
- *     │  │─ [[ Box ]]
- *     │  │─ [[ Unbox ]]
- *     │  │─ [[ Select ]]
- *     │  │─ [[ Do ]]
- *     │  │─ [[ Call ]]
- *     │  │─ [[ MethodCall ]]
- *     │  │─ [[ If ]]
- *     │  │─ [[ While ]]
- *     │  │─ [[ Match ]]
- *     │  │─ [[ TryHandle ]]
- *     │  │─ [[ Region ]]
- *     │  │─ [[ BlockLiteral ]]
- *     │  │─ [[ New ]]
- *     │
- *     │─ [[ CallTarget ]]
- *     │  │─ [[ IdTarget ]]
- *     │  │─ [[ ExprTarget ]]
- *     │
- *     │─ [[ MatchClause ]]
- *     │─ [[ MatchPattern ]]
- *     │  │─ [[ AnyPattern ]]
- *     │  │─ [[ TagPattern ]]
- *     │  │─ [[ IgnorePattern ]]
- *     │  │─ [[ LiteralPattern ]]
- *     │
- *     │─ [[ Type ]]
- *     │  │─ [[ ValueType ]]
- *     │  │─ [[ BlockType ]]
- *     │
- *     │─ [[ Effectful ]]
- *     │─ [[ Effects ]]
- *     │─ [[ CaptureSet ]]
- *
- * --------------------------------------------------------------
- *
- * We extend product to allow reflective access by Kiama.
- */
 sealed trait Tree extends Product {
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
     C.positions.dupPos(from, this);
@@ -124,15 +58,6 @@ sealed trait Definition extends Named {
 sealed trait Reference extends Named {
   def id: IdRef
 }
-
-/**
- * The type of whole compilation units
- *
- * Only a subset of definitions (FunDef and EffDef) is allowed on the toplevel
- *
- * A module declaration, the path should be an Effekt include path, not a system dependent file path
- *
- */
 case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
 case class Include(path: String) extends Tree
 
@@ -145,31 +70,6 @@ enum Param extends Definition {
 }
 export Param.*
 
-
-/**
- * Global and local definitions
- *
- * ----------[[ effekt.source.Def ]]----------
- *
- *   ─ [[ Def ]]
- *     │─ [[ FunDef ]]
- *     │─ [[ ValDef ]]
- *     │─ [[ RegDef ]]
- *     │─ [[ VarDef ]]
- *     │─ [[ DefDef ]]
- *     │─ [[ InterfaceDef ]]
- *     │─ [[ DataDef ]]
- *     │─ [[ RecordDef ]]
- *     │─ [[ TypeDef ]]
- *     │─ [[ EffectDef ]]
- *     │─ [[ ExternType ]]
- *     │─ [[ ExternDef ]]
- *     │─ [[ ExternResource ]]
- *     │─ [[ ExternInterface ]]
- *     │─ [[ ExternInclude ]]
- *
- * -------------------------------------------
- */
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
@@ -222,146 +122,18 @@ object Def {
 }
 export Def.*
 
-
-
-
-/**
- * ----------[[ effekt.source.Stmt ]]----------
- *
- *   ─ [[ Stmt ]]
- *     │─ [[ DefStmt ]]
- *     │─ [[ ExprStmt ]]
- *     │─ [[ Return ]]
- *     │─ [[ BlockStmt ]]
- *
- * --------------------------------------------
- *
- */
 enum Stmt extends Tree {
-  case DefStmt(d: Def, rest: Stmt)
-  case ExprStmt(d: Term, rest: Stmt)
   case Return(d: Term)
-  case BlockStmt(stmts: Stmt)
 }
 export Stmt.*
 
-
-/**
- * In our source language, almost everything is an expression.
- * Effectful calls, if, while, ...
- *
- * ----------[[ effekt.source.Term ]]----------
- *
- *   ─ [[ Term ]]
- *     │─ [[ Var ]]
- *     │─ [[ Assign ]]
- *     │─ [[ Literal ]]
- *     │─ [[ Hole ]]
- *     │─ [[ Box ]]
- *     │─ [[ Unbox ]]
- *     │─ [[ Select ]]
- *     │─ [[ Do ]]
- *     │─ [[ Call ]]
- *     │─ [[ MethodCall ]]
- *     │─ [[ If ]]
- *     │─ [[ While ]]
- *     │─ [[ Match ]]
- *     │─ [[ TryHandle ]]
- *     │─ [[ Region ]]
- *     │─ [[ BlockLiteral ]]
- *     │─ [[ New ]]
- *
- * --------------------------------------------
- */
 enum Term extends Tree {
 
   // Variable / Value use (can now also stand for blocks)
   case Var(id: IdRef) extends Term, Reference
-  case Assign(id: IdRef, expr: Term) extends Term, Reference
 
-  case Literal(value: Any, tpe: symbols.ValueType)
-  case Hole(stmts: Stmt)
-
-  // Boxing and unboxing to represent first-class values
-  case Box(capt: Option[CaptureSet], block: Term)
-  case Unbox(term: Term)
-
-  /**
-   * Models:
-   * - field selection, i.e., `record.field` (receiver is an expression, result is an expression)
-   * - future: nested capability / module selection, i.e., `mymod.nested.foo` (receiver is a block, result is a block)
-   *
-   * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
-   */
-  case Select(receiver: Term, id: IdRef) extends Term, Reference
-
-  /**
-   * A call to an effect operation, i.e., `do raise()`.
-   *
-   * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
-   * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
-   */
-  case Do(effect: Option[BlockType], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
-
-  /**
-   * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
-   */
-  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term])
-
-  /**
-   * Models:
-   * - uniform function call, i.e., `list.map { ... }` (receiver is an expression, result is an expression)
-   * - capability call, i.e., `exc.raise()` (receiver is a block, result is an expression)
-   *
-   * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
-   */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
-
-  // Control Flow
-  case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
-  case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt])
-  case Match(scrutinee: Term, clauses: List[MatchClause], default: Option[Stmt])
-
-  /**
-   * Handling effects
-   *
-   * try {
-   * <prog>
-   * } with <capability> : <Effect> { ... }
-   *
-   * Each with-clause is modeled as an instance of type [[Handler]].
-   */
-  case TryHandle(prog: Stmt, handlers: List[Handler])
-  case Region(id: IdDef, body: Stmt) extends Term, Definition
-
-  /**
-   * Lambdas / function literals (e.g., { x => x + 1 })
-   */
-  case BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
-  case New(impl: Implementation)
 }
 export Term.*
-
-// Smart Constructors for literals
-// -------------------------------
-def UnitLit(): Literal = ???
-def IntLit(value: Long): Literal = ???
-def BooleanLit(value: Boolean): Literal = ???
-def DoubleLit(value: Double): Literal = ???
-def StringLit(value: String): Literal = ???
-
-type CallLike = Call | Do | Select | MethodCall
-
-
-enum CallTarget extends Tree {
-
-  // potentially overloaded
-  case IdTarget(id: IdRef) extends CallTarget, Reference
-
-  // not overloaded
-  case ExprTarget(receiver: Term)
-}
-export CallTarget.*
 
 
 // Declarations
@@ -370,17 +142,7 @@ case class Constructor(id: IdDef, tparams: List[Id], params: List[ValueParam]) e
 case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
 
 // Implementations
-// ---------------
 
-/**
- * An implementation of a given interface
- *
- *     <Interface> {
- *       def <opClause> = ...
- *     }
- *
- * Called "template" or "class" in other languages.
- */
 case class Implementation(interface: BlockType, clauses: List[OpClause]) extends Reference {
   def id = ???
 }

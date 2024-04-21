@@ -5,7 +5,7 @@ package typer
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 
 // This import is also NECESSARY for the cyclic error
-import effekt.source.{resolve }
+import effekt.source.{ resolve }
 
 
 import effekt.symbols.*
@@ -20,9 +20,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
   val phaseName = "typer"
 
   def run(input: NameResolved)(using Context): Option[Typechecked] = ???
-
-
-
 
 }
 

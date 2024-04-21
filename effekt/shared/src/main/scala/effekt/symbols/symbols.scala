@@ -8,17 +8,6 @@ import effekt.context.Context
 import kiama.util.Source
 import effekt.util.messages.ErrorReporter
 
-/**
- * The symbol table contains things that can be pointed to:
- * - function definitions
- * - type definitions
- * - effect definitions
- * - parameters
- * - value / variable binders
- * - ...
- */
-
-
 sealed trait TermSymbol extends Symbol
 
 // the two universes of values and blocks
@@ -251,29 +240,11 @@ export Capture.*
 
 case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar {
   val name = Name.local("?C")
-  override def toString = role match {
-    case CaptUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
-    case CaptUnificationVar.Subtraction(handled, underlying) => s"?filter" + id
-    case CaptUnificationVar.FunctionRegion(fun) => s"?${fun.id.name}" + id
-    case CaptUnificationVar.AnonymousFunctionRegion(fun) => s"?anon" + id
-    case CaptUnificationVar.HandlerRegion(handler) => s"?Ck" + id
-    case _ => "?" + id
-  }
+
 }
 object CaptUnificationVar {
   sealed trait Role
-  case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
-  case class HandlerRegion(handler: source.TryHandle) extends Role
-  case class RegionRegion(handler: source.Region) extends Role
-  case class VarRegion(definition: source.VarDef) extends Role
-  case class FunctionRegion(fun: source.FunDef) extends Role
-  case class BlockRegion(fun: source.DefDef) extends Role
-  case class AnonymousFunctionRegion(fun: source.BlockLiteral) extends Role
-  case class InferredBox(box: source.Box) extends Role
-  case class InferredUnbox(unbox: source.Unbox) extends Role
-  // underlying should be a UnificationVar
-  case class Subtraction(handled: List[Capture], underlying: CaptUnificationVar) extends Role
-  case class Substitution() extends Role
+
 }
 
 /**
@@ -282,22 +253,7 @@ object CaptUnificationVar {
 
 sealed trait Captures
 
-case class CaptureSet(captures: Set[Capture]) extends Captures {
-  // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
-  def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
-  def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
-  def +(c: Capture): CaptureSet = CaptureSet(captures + c)
-  def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
-
-  def pureOrIO: Boolean = true
-
-  def pure: Boolean = captures.isEmpty
-}
-object CaptureSet {
-  def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
-  def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
-  def empty = CaptureSet()
-}
+case class CaptureSet(captures: Set[Capture]) extends Captures
 
 /**
  * FFI

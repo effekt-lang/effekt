@@ -8,15 +8,6 @@ import TypeVar.*
  */
 sealed trait Type
 
-/**
- * Value Types
- *
- * [[ValueType]]
- *   |
- *   |- [[ValueTypeRef]] references to type params
- *   |- [[ValueTypeApp]] references to type constructors
- *   |- [[BoxedType]] boxed block types
- */
 
 enum ValueType extends Type {
 
@@ -68,21 +59,6 @@ extension (i: BlockType.InterfaceType) {
   def name: Name = i.typeConstructor.name
 }
 
-/**
- * Represents effect sets on function types.
- *
- * All effects are dealiased by namer. Effects are inferred via [[typer.ConcreteEffects]] so
- * by construction all entries in the set of effects here should be concrete (no unification variables).
- *
- * Effect sets are themselves *not* symbols, they are just aggregates.
- *
- * We do not enforce entries to be distinct. This way we can substitute types and keep duplicate entries.
- * For instances { State[S], State[T] }[S -> Int, T -> Int] then becomes { State[Int], State[Int] }.
- * This is important since we need to pass two capabilities in this case.
- *
- * Member [[canonical]] computes the canonical ordering of capabilities for this set of effects.
- * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
- */
 case class Effects(effects: List[BlockType.InterfaceType]) {
 
   lazy val toList: List[InterfaceType] = effects.distinct
@@ -96,7 +72,7 @@ case class Effects(effects: List[BlockType.InterfaceType]) {
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
-  lazy val canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
+  lazy val canonical: List[InterfaceType] = ???
 
   def distinct: Effects = Effects(effects.distinct)
 }
@@ -111,28 +87,3 @@ object Effects {
   def empty: Effects = new Effects(Nil)
   val Pure = empty
 }
-
-/**
- * The canonical ordering needs to be stable, but should also distinguish two types,
- * if they are different.
- *
- * Bugs with the canonical ordering can lead to runtime errors as observed in ticket #108
- */
-object CanonicalOrdering extends Ordering[InterfaceType] {
-  def compare(tpe1: InterfaceType, tpe2: InterfaceType): Int = compareStructural(tpe1, tpe2)
-
-  def compareStructural(tpe1: Any, tpe2: Any): Int = (tpe1, tpe2) match {
-    case (sym1: Symbol, sym2: Symbol) =>
-      sym1.id - sym2.id
-    case (p1: Product, p2: Product) if p1.getClass == p2.getClass =>
-      (p1.productIterator zip p2.productIterator).collectFirst {
-        case (child1, child2) if compareStructural(child1, child2) != 0 => compareStructural(child1, child2)
-      }.getOrElse(fallback(tpe1, tpe2))
-    case _ =>
-      fallback(tpe1, tpe2)
-  }
-
-  def fallback(tpe1: Any, tpe2: Any): Int = tpe1.hashCode - tpe2.hashCode
-}
-
-
