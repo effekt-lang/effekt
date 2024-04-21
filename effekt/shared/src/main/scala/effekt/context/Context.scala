@@ -37,8 +37,7 @@ trait ContextOps
  */
 abstract class Context(val positions: Positions)
     extends NamerOps
-    with TyperOps
-    with ModuleDB {
+    with TyperOps {
 
   // bring the context itself in scope
   implicit val context: Context = this

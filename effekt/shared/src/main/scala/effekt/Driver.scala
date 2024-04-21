@@ -3,7 +3,7 @@ package effekt
 // Adapted from
 //   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.context.{ Context, IOModuleDB }
+import effekt.context.{ Context }
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
@@ -25,7 +25,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
-  object context extends Context(positions) with IOModuleDB { val messaging = outer.messaging }
+  object context extends Context(positions) { val messaging = outer.messaging }
 
   /**
    * If no file names are given, run the REPL
