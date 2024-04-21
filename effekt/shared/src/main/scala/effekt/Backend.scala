@@ -20,7 +20,7 @@ package effekt
  * @param runner the runner for this backend
  * @tparam E the type of executables, mostly String
  */
-case class Backend[E](name: String, compiler: Compiler[E], runner: Runner[E])
+case class Backend[E](name: String, compiler: Compiler[E])
 
 object Backend {
 

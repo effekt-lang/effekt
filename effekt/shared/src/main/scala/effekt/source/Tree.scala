@@ -95,7 +95,7 @@ case class Template[+T](strings: List[String], args: List[T])
  */
 sealed trait Id extends Tree {
   def name: String
-  def symbol(using C: Context): Symbol = C.symbolOf(this)
+  def symbol(using C: Context): Symbol = ???
   def clone(using C: Context): Id
 }
 case class IdDef(name: String) extends Id {
@@ -585,10 +585,10 @@ object Named {
   }
 
   extension [T <: Definitions](t: T & Definition) {
-    def symbol(using C: Context): ResolvedDefinitions[T] = C.symbolOf(t).asInstanceOf
+    def symbol(using C: Context): ResolvedDefinitions[T] = ???
   }
   extension [T <: References](t: T & Reference) {
-    def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf
+    def definition(using C: Context): ResolvedReferences[T] = ???
   }
 
 }
@@ -600,7 +600,7 @@ object Resolvable {
   // Value Types
   // -----------
   extension (t: ValueType) {
-    def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf
+    def resolve(using C: Context): symbols.ValueType = ???
   }
 
   // BLock Types
@@ -616,13 +616,13 @@ object Resolvable {
   }
 
   extension [T <: BlockTypes] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
+    def resolve(using C: Context): Resolved[T] = ???
   }
 
   // Capture Sets
   // ------------
   extension (capt: source.CaptureSet) {
-    def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
+    def resolve(using C: Context): symbols.CaptureSet = ???
   }
 }
 export Resolvable.resolve
@@ -641,98 +641,4 @@ object Tree {
     case leaf => ()
   }
 
-  // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite extends util.Structural {
-
-    def Context(using C: Context): Context = C
-
-    // Hooks to override
-    def expr(using Context): PartialFunction[Term, Term] = PartialFunction.empty
-    def stmt(using Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def defn(using Context): PartialFunction[Def, Def] = PartialFunction.empty
-
-    // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: Term)(using Context): Term = structuralVisit(e, expr)
-    def rewrite(t: Def)(using Context): Def = structuralVisit(t, defn)
-    def rewrite(t: Stmt)(using Context): Stmt = structuralVisit(t, stmt)
-
-    def rewrite(e: ModuleDecl)(using Context): ModuleDecl = structuralVisit(e)
-    def rewrite(h: Handler)(using Context): Handler = structuralVisit(h)
-    def rewrite(i: Implementation)(using Context): Implementation = structuralVisit(i)
-    def rewrite(h: OpClause)(using Context): OpClause = structuralVisit(h)
-    def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
-    def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
-    def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
-
-    /**
-     * Hook that can be overridden to perform an action at every node in the tree
-     *
-     * Copies all annotations and position information from source to target
-     */
-    def visit[T](source: T)(visitor: T => T)(using Context): T =
-      val target = visitor(source)
-      (source, target) match {
-        case (src: Tree, tgt: Tree) =>
-          tgt.inheritPosition(src)
-          Context.copyAnnotations(src, tgt)
-        case _ =>
-      }
-      target
-
-    inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using Context): T =
-      visit(sc) { t => rewriteStructurally(t, p) }
-
-    inline def structuralVisit[T](sc: T)(using Context): T =
-      visit(sc) { t => rewriteStructurally(t) }
-  }
-
-  trait Visit[Ctx] extends Query[Ctx, Unit] {
-    override def empty = ()
-    override def combine(r1: Unit, r2: Unit): Unit = ()
-    override def combineAll(rs: List[Unit]): Unit = ()
-  }
-
-  trait Query[Ctx, Res] extends util.Structural {
-
-    def empty: Res
-    def combine(r1: Res, r2: Res): Res
-    def combineAll(rs: List[Res]): Res = rs.foldLeft(empty)(combine)
-
-    // Hooks to override
-    def expr(using Context, Ctx): PartialFunction[Term, Res] = PartialFunction.empty
-    def stmt(using Context, Ctx): PartialFunction[Stmt, Res] = PartialFunction.empty
-    def defn(using Context, Ctx): PartialFunction[Def, Res] = PartialFunction.empty
-
-    /**
-     * Hook that can be overridden to perform an action at every node in the tree
-     */
-    def visit[T <: Tree](t: T)(visitor: T => Res)(using Context, Ctx): Res = scoped { visitor(t) }
-
-    /**
-     * Hook that can be overriden to perform something for each new lexical scope
-     */
-    def scoped(action: => Res)(using Context, Ctx): Res = action
-
-    //
-    // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def query(e: Term)(using C: Context, ctx: Ctx): Res = structuralQuery(e, expr)
-    def query(t: Def)(using C: Context, ctx: Ctx): Res = structuralQuery(t, defn)
-    def query(t: Stmt)(using C: Context, ctx: Ctx): Res = structuralQuery(t, stmt)
-
-    def query(e: ModuleDecl)(using Context, Ctx): Res = structuralQuery(e)
-    def query(h: Handler)(using Context, Ctx): Res = structuralQuery(h)
-    def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
-    def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
-    def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
-    def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
-
-    def query(t: Template[Term])(using Context, Ctx): Res =
-      combineAll(t.args.map(query))
-
-
-    inline def structuralQuery[T <: Tree](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Context, Ctx): Res =
-      visit(el) { t =>
-        if pf.isDefinedAt(el) then pf.apply(el) else queryStructurally(t, empty, combine)
-      }
-  }
 }

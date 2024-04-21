@@ -1,14 +1,10 @@
 package effekt
 
+import kiama.util.Source
 import effekt.context.Context
-import effekt.namer.Namer
-import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
-import effekt.symbols.Module
-import effekt.typer.{ Typer }
-import effekt.util.messages.FatalPhaseError
-import effekt.util.{ SourceTask, Task, VirtualSource, paths }
+import effekt.source.ModuleDecl
 import kiama.output.PrettyPrinterTypes.Document
-import kiama.util.{ Positions, Source }
+
 
 
 enum PhaseResult {

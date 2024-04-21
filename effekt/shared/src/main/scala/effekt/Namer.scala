@@ -4,13 +4,7 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.context.assertions.*
-import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
-import effekt.symbols.*
-import effekt.util.messages.ErrorMessageReifier
-import effekt.symbols.scopes.*
+import effekt.context.{ Context, ContextOps }
 
 /**
  * The output of this phase: a mapping from source identifier to symbol

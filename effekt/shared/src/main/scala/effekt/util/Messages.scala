@@ -125,31 +125,17 @@ object messages {
     def reraise(msg: EffektMessages): Unit = messaging.append(msg)
 
     // assumes errs is a non empty vector
-    def abortWith(errs: messaging.Messages): Nothing = {
-      val msg = errs.head
-      val msgs = errs.tail
-      reraise(msgs)
-      abort(msg)
-    }
+    def abortWith(errs: messaging.Messages): Nothing = ???
 
-    def at[T](t: Tree)(block: => T): T = {
-      val before = focus
-      focus = t;
-      val res = block;
-      focus = before;
-      res
-    }
+    def at[T](t: Tree)(block: => T): T = ???
 
-    def withFocus[T <: Tree, R](block: T => R): T => R = { t =>
-      at(t) { block(t) }
-    }
+    def withFocus[T <: Tree, R](block: T => R): T => R = ???
 
     /**
      * Sets the given tree into focus for error reporting
      */
-    def focusing[T <: Tree, R](t: T)(f: T => R): R =
-      at(t) { f(t) }
+    def focusing[T <: Tree, R](t: T)(f: T => R): R = ???
 
-    def rangeOf(t: Tree): Option[Range] = positions.getRange(t)
+    def rangeOf(t: Tree): Option[Range] = ???
   }
 }
