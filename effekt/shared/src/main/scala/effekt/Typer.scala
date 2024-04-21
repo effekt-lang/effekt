@@ -247,39 +247,6 @@ private[typer] case class TyperState(annotations: Annotations, unification: Unif
 
 trait TyperOps extends ContextOps { self: Context =>
 
-
-  /**
-   * Local annotations database, only used by Typer
-   *
-   * It is used to (1) model the typing context, (2) collect information
-   * used for elaboration (i.e., capabilities), and (3) gather inferred
-   * types for LSP support.
-   *
-   * (1) "Typing Context"
-   * --------------------
-   * Since symbols are unique, we can use mutable state instead of reader.
-   * Typer uses local annotations that are immutable and can be backtracked.
-   *
-   * The "Typing Context" consists of:
-   * - typing context for value types [[Annotations.ValueType]]
-   * - typing context for block types [[Annotations.BlockType]]
-   * - modalities on typing context for block symbol [[Annotations.Captures]]
-   *
-   * (2) Elaboration Info
-   * --------------------
-   * - [[Annotations.CapabilityReceiver]]
-   * - [[Annotations.CapabilityArguments]]
-   * - [[Annotations.BoundCapabilities]]
-   * - [[Annotations.TypeArguments]]
-   *
-   * (3) Inferred Information for LSP
-   * --------------------------------
-   * We first store the inferred types here, before substituting and committing to the
-   * global DB, later.
-   * - [[Annotations.InferredValueType]]
-   * - [[Annotations.InferredBlockType]]
-   * - [[Annotations.InferredEffect]]
-   */
   private [typer] var annotations: Annotations = Annotations.empty
 
   //<editor-fold desc="(1) Unification">
@@ -294,13 +261,9 @@ trait TyperOps extends ContextOps { self: Context =>
   export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshTypeVar, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
-  private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {
-    unification.enterScope()
-    val res = block
-    unification.leaveScope(additional)
-    res
-  }
-  private[typer] def withUnificationScope[T](block: => T): T = withUnificationScope(Nil)(block)
+  private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = ???
+
+  private[typer] def withUnificationScope[T](block: => T): T = ???
 
   //</editor-fold>
 
@@ -308,68 +271,23 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
 
-  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
-    bindCapabilities(binder, caps)
-    capabilityScope = BindSome(binder, caps.map { c => c.tpe.asInterfaceType -> c }.toMap, capabilityScope)
-    val result = f
-    capabilityScope = capabilityScope.parent
-    result
-  }
+  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = ???
 
-  private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
-    val capabilities = caps map { cap =>
-      assertConcrete(cap.tpe.asInterfaceType)
-      positions.dupPos(binder, cap)
-      cap
-    }
-    annotations.update(Annotations.BoundCapabilities, binder, capabilities)
+  private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit = ()
 
-  private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[InterfaceType, symbols.BlockParam]) = {
-    capabilityScope = BindAll(binder, Map.empty, capabilityScope)
-    val result = f
-    val caps = capabilityScope.asInstanceOf[BindAll].capabilities
-    capabilityScope = capabilityScope.parent
-    (result, caps)
-  }
+  private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[InterfaceType, symbols.BlockParam]) = ???
 
   /**
    * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
    */
-  private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    assertConcrete(tpe)
-    val cap = capabilityScope.capabilityFor(tpe)
-    annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
-    cap
+  private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam = ???
 
-  private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val capName = tpe.name.rename(_ + "$capability")
-    val param: BlockParam = BlockParam(capName, tpe)
-    // TODO FIXME -- generated capabilities need to be ignored in LSP!
-//     {
-//      override def synthetic = true
-//    }
-    bind(param, tpe)
-    param
+  private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam = ???
+  private [typer] def freshCapabilityFor(tpe: InterfaceType, capture: CaptureSet): symbols.BlockParam = ???
 
-  private [typer] def freshCapabilityFor(tpe: InterfaceType, capture: CaptureSet): symbols.BlockParam =
-    val param = freshCapabilityFor(tpe)
-    bind(param, capture)
-    param
+  private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] = ???
 
-  private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] =
-    val caps = effs.map(capabilityFor)
-    annotations.update(Annotations.CapabilityArguments, call, caps)
-    caps
-
-  private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType): BlockParam =
-    val cap = capabilityFor(eff)
-    annotations.update(Annotations.CapabilityReceiver, call, cap)
-    cap
-
-  //</editor-fold>
-
-  //<editor-fold desc="(3) Typing Context">
-
+  private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType): BlockParam = ???
   // first tries to find the type in the local typing context
   // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
   private[typer] def lookup(s: ValueSymbol) =
@@ -377,22 +295,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def lookup(s: BlockSymbol) = (lookupBlockType(s), lookupCapture(s))
 
-  private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType =
-    annotations.get(Annotations.BlockType, s)
-     .map {
-       case f: FunctionType => unification(f) // here we apply the substitutions known so far.
-       case tpe => abort(pretty"Expected function type, but got ${tpe}.")
-     }
-     .orElse(functionTypeOption(s))
-     .getOrElse {
-       if (s.name.name == "resume")
-        abort(pretty"Cannot find `resume`. Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?")
-       else
-        abort(pretty"Cannot find type for ${s.name} -- forward uses and recursive functions need annotated return types.")
-     }
+  private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType = ???
 
-  private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
-    annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s)).getOrElse(abort(pretty"Cannot find type for ${s.name}."))
+  private[typer] def lookupBlockType(s: BlockSymbol): BlockType = ???
 
   private[typer] def lookupCapture(s: BlockSymbol) =
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
@@ -402,39 +307,19 @@ trait TyperOps extends ContextOps { self: Context =>
       }
     }
 
-  private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
-    annotations.update(Annotations.ValueType, s, tpe)
+  private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit = ()
 
-  private[typer] def bind(s: BlockSymbol, tpe: BlockType, capt: Captures): Unit = { bind(s, tpe); bind(s, capt) }
+  private[typer] def bind(s: BlockSymbol, tpe: BlockType, capt: Captures): Unit = ()
 
-  private[typer] def bind(s: BlockSymbol, tpe: BlockType): Unit =
-    annotations.update(Annotations.BlockType, s, tpe)
+  private[typer] def bind(s: BlockSymbol, tpe: BlockType): Unit = ()
 
-  private[typer] def bind(s: BlockSymbol, capt: Captures): Unit =
-    annotations.update(Annotations.Captures, s, capt)
+  private[typer] def bind(s: BlockSymbol, capt: Captures): Unit = ()
 
-  private[typer] def bind(bs: Map[Symbol, ValueType]): Unit =
-    bs foreach {
-      case (v: ValueSymbol, t: ValueType) => bind(v, t)
-      case (sym, other) => panic(pretty"Internal Error: wrong combination of symbols and types: ${sym}:${other}")
-    }
+  private[typer] def bind(bs: Map[Symbol, ValueType]): Unit = ()
 
-  private[typer] def bind(p: ValueParam): Unit = p match {
-    case s @ ValueParam(name, Some(tpe)) => bind(s, tpe)
-    case s => panic(pretty"Internal Error: Cannot add $s to typing context.")
-  }
+  private[typer] def bind(p: ValueParam): Unit = ()
 
-  private[typer] def bind(p: TrackedParam): Unit = p match {
-    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
-    case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
-    case s : VarBinder => bind(s, CaptureSet(s.capture))
-    case r : ResumeParam => panic("Cannot bind resume")
-  }
-
-  //</editor-fold>
-
-
-  //<editor-fold desc="(5) Inferred Information for LSP">
+  private[typer] def bind(p: TrackedParam): Unit = ()
 
   private[typer] def annotateInferredType(t: Tree, e: ValueType) =
     annotations.update(Annotations.InferredValueType, t, e)
@@ -445,59 +330,17 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
     annotations.update(Annotations.InferredEffect, t, e)
 
-  private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = {
-    // apply what we know before saving
-    annotations.update(Annotations.TypeArguments, call, targs map unification.apply)
-  }
+  private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = ()
 
-  private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = {
-    annotations.apply(Annotations.TypeArguments, call)
-  }
+  private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = ???
 
-  //</editor-fold>
+  private[typer] def initTyperstate(): Unit = ()
 
-  //<editor-fold desc="(6) Managing Typer State">
+  private[typer] def backupTyperstate(): TyperState = ???
 
-  private[typer] def initTyperstate(): Unit = {
-    annotations = Annotations.empty
-    capabilityScope = GlobalCapabilityScope
-    unification.init()
-  }
+  private[typer] def restoreTyperstate(st: TyperState): Unit = ()
 
-  private[typer] def backupTyperstate(): TyperState =
-    TyperState(annotations.copy, unification.backup(), capabilityScope.copy)
-
-  private[typer] def restoreTyperstate(st: TyperState): Unit = {
-    annotations = st.annotations.copy
-    unification.restore(st.unification)
-    capabilityScope = st.capabilityScope.copy
-  }
-
-  private[typer] def commitTypeAnnotations(): Unit = {
-    val subst = unification.substitution
-
-    var capturesForLSP: List[(Tree, CaptureSet)] = Nil
-
-    // Since (in comparison to System C) we now have type directed overload resolution again,
-    // we need to make sure the typing context and all the annotations are backtrackable.
-    // This can be achieved by going back to local `annotations` which are easily backtrackable.
-    // In the end, we need to postprocess the annotations; see draft below...
-    annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
-    annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) => subst.substitute(tpe) }
-    annotations.updateAndCommit(Annotations.Captures) { case (t, capt) => subst.substitute(capt) }
-
-    // Update and write out all inferred types and captures for LSP support
-    // This info is currently also used by Transformer!
-    annotations.updateAndCommit(Annotations.InferredValueType) { case (t, tpe) => subst.substitute(tpe) }
-    annotations.updateAndCommit(Annotations.InferredBlockType) { case (t, tpe) => subst.substitute(tpe) }
-    annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
-
-    annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
-
-    annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
-    annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
-    annotations.updateAndCommit(Annotations.CapabilityReceiver) { case (t, caps) => caps }
-  }
+  private[typer] def commitTypeAnnotations(): Unit = ()
 
   //</editor-fold>
 }
