@@ -39,7 +39,7 @@ case class LocalScope(
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeInstantiator { self =>
+class Unification(using C: ErrorReporter) extends TypeInstantiator { self =>
 
   // State of the unification engine
   // -------------------------------
