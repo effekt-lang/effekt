@@ -43,7 +43,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
 
-
   def run(input: NameResolved)(using Context): Option[Typechecked] = ???
 
 }

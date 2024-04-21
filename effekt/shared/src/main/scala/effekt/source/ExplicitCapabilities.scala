@@ -24,10 +24,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   val phaseName = "explicit-capabilities"
 
-  def run(input: Typechecked)(using C: Context) =
-    val rewritten = C.timed(phaseName, input.source.name) { rewrite(input.tree) }
-
-    Some(input.copy(tree = rewritten))
+  def run(input: Typechecked)(using C: Context) = None
 
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>

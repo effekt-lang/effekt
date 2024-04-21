@@ -28,9 +28,7 @@ object Parser extends Phase[Source, Parsed] {
 
   def run(source: Source)(implicit C: Context) = source match {
     case VirtualSource(decl, _) => Some(decl)
-    case source =>
-      //println(s"parsing ${source.name}")
-      Context.timed(phaseName, source.name) { parser.parse(source) }
+    case source => ???
   } map { tree => Parsed(source, tree) }
 }
 

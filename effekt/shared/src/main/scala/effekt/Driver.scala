@@ -55,22 +55,6 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         out.mkdirs
         IO.createFile((out / path).unixPath, doc)
       }
-
-    C.backend match {
-
-      case Backend(name, compiler, runner) =>
-        // measure the total compilation time here
-        def compile() = C.timed("total", source.name) {
-          compiler.compile(src) map {
-            case (outputFiles, exec) =>
-              outputFiles.foreach {
-                case (filename, doc) =>
-                  saveOutput(filename, doc)
-              }
-              exec
-          }
-        }
-    }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
     case e @ CompilerPanic(msg) =>
@@ -90,17 +74,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
    * Outputs the timing information captured in [[effekt.util.Timers]] by [[effekt.context.Context]]. Either a JSON file
    * is written to disk or a plain text message is written to stdout.
    */
-  def outputTimes(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    if (C.timersActive) config.time.toOption foreach {
-      case "json" =>
-        // extract source filename and write to given output path
-        val out = config.outputPath().getAbsolutePath
-        val name = s"${source.name.split("/").last.stripSuffix(".effekt")}.json"
-        IO.createFile((out / name).unixPath, C.timesToJSON())
-      case "text" =>
-        C.info(C.timesToString())
-    }
-  }
+  def outputTimes(source: Source, config: EffektConfig)(implicit C: Context): Unit = ()
 
   def showIR(source: Source, config: EffektConfig)(implicit C: Context): Unit =
     config.showIR().map { stage =>
