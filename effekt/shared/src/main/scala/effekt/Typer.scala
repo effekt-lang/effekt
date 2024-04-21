@@ -43,6 +43,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
 
+
+
   def run(input: NameResolved)(using Context) = Context.using(module = input.mod, focus = input.tree) {
     try {
       val NameResolved(source, tree, mod) = input

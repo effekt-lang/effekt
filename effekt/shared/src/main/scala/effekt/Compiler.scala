@@ -4,7 +4,7 @@ import effekt.context.Context
 import effekt.namer.Namer
 import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
 import effekt.symbols.Module
-import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
+import effekt.typer.{ BoxUnboxInference, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import kiama.output.PrettyPrinterTypes.Document
@@ -178,12 +178,7 @@ trait Compiler[Executable] {
        * Type checks and annotates trees with inferred types and effects
        *   [[NameResolved]] --> [[Typechecked]]
        */
-      Typer andThen
-      /**
-       * Wellformedness checks (exhaustivity, non-escape)
-       *   [[Typechecked]] --> [[Typechecked]]
-       */
-      Wellformedness
+      Typer
   }
 
 
