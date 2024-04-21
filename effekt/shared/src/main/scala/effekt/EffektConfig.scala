@@ -1,12 +1,10 @@
 package effekt
 
-import java.io.File
-
 import effekt.util.paths.file
 import kiama.util.REPLConfig
+import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
 
-import org.rogach.scallop.ScallopOption
-import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter, stringListConverter, longConverter }
+import java.io.File
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 

@@ -1,9 +1,9 @@
 package effekt
 
 import effekt.context.Context
-import effekt.util.messages.FatalPhaseError
-import effekt.util.paths.{File, file}
 import effekt.util.getOrElseAborting
+import effekt.util.messages.FatalPhaseError
+import effekt.util.paths.{ File, file }
 import kiama.util.IO
 
 /**

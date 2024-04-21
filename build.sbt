@@ -66,22 +66,15 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("ki
     libraryDependencies ++= (replDependencies ++ lspDependencies)
   )
 
-lazy val root = project.in(file("effekt"))
-  .aggregate(effekt.js, effekt.jvm)
-  .settings(noPublishSettings)
-  .settings(Seq(
-    Compile / run := (effekt.jvm / Compile / run).evaluated
-  ))
-
-lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
+lazy val root = project.in(file("effekt") / "shared")
   .settings(
     name := "effekt",
     version := effektVersion
   )
   .settings(commonSettings)
-  .dependsOn(kiama)
+  .dependsOn(kiama.jvm)
   // .enablePlugins(NativeImagePlugin)
-  .jvmSettings(
+  .settings(
     libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
 
     // Test configuration
@@ -95,20 +88,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // disable tests for assembly to speed up build
     assembly / test := {},
-
-
-    // Options to compile Effekt with native-image
-    // -------------------------------------------
-    //    nativeImageOptions ++= Seq(
-    //      "--no-fallback",
-    //      "--initialize-at-build-time",
-    //      "--report-unsupported-elements-at-runtime",
-    //      "-H:+ReportExceptionStackTraces",
-    //      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
-    //      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
-    //      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
-    //    ),
-
 
     // Assembling one big jar-file and packaging it
     // --------------------------------------------
@@ -167,25 +146,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     collectBenchmarks := benchmarks.collect.value,
     buildBenchmarks   := benchmarks.build.value,
     bench             := benchmarks.measure.value
-  )
-  .jsSettings(
-
-    assembleJS := {
-      (Compile / clean).value
-      (Compile / compile).value
-      val jsFile = (Compile / fullOptJS).value.data
-      val outputFile = (ThisBuild / baseDirectory).value / "out" / "effekt.js"
-      IO.copyFile(jsFile, outputFile)
-    },
-
-    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-
-    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % "test",
-
-    testFrameworks += new TestFramework("utest.runner.Framework"),
-
-    // include all resource files in the virtual file system
-    Compile / sourceGenerators += stdLibGenerator.taskValue
   )
 
 

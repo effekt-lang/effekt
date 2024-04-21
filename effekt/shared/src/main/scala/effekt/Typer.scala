@@ -48,7 +48,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val NameResolved(source, tree, mod) = input
 
       Context.initTyperstate()
-
       Context.timed(phaseName, source.name) {
         Context in {
           Context.withUnificationScope {
@@ -58,6 +57,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               builtins.rootTerms.values.foreach {
                 case term: BlockParam =>
                   Context.bind(term, term.tpe)
+
                   Context.bind(term, CaptureSet(term.capture))
                 case term: ExternResource =>
                   Context.bind(term, term.tpe)

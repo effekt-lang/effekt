@@ -1,8 +1,8 @@
 package effekt
 package context
 
-import effekt.util.paths._
 import effekt.util.MarkdownSource
+import effekt.util.paths.*
 import kiama.util.{ FileSource, Filenames, IO, Source }
 
 trait IOModuleDB extends ModuleDB { self: Context =>

@@ -4,13 +4,11 @@ import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
-
-import kiama.util.{ Filenames, Position, Services, Source }
+import effekt.util.{ PlainMessaging, getOrElseAborting }
 import kiama.output.PrettyPrinterTypes.Document
-
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import kiama.util.{ Filenames, Position, Services, Source }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -20,9 +18,8 @@ import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteComman
  */
 trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with Driver with Intelligence {
 
-  import effekt.symbols._
-
-  import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+  import effekt.symbols.*
+  import org.eclipse.lsp4j.{ Location, Range as LSPRange }
 
   val name = "effekt"
 

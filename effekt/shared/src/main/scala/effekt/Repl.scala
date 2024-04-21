@@ -1,13 +1,13 @@
 package effekt
 
-import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
-import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
-import effekt.util.messages.EffektError
+import effekt.source.*
+import effekt.symbols.{ BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic }
 import effekt.util.Version.effektVersion
-import kiama.util.{ Console, REPL, Source, StringSource, Range }
+import effekt.util.messages.EffektError
+import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
+import kiama.util.{ Console, REPL, Range, Source, StringSource }
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
@@ -98,7 +98,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
      * Command `:status` -- Prints help about the available commands
      */
     def status(config: EffektConfig): Unit = {
-      import symbols._
+      import symbols.*
 
       module.includes.foreach { im =>
         outputCode(s"import ${im.path}", config)
@@ -269,9 +269,9 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    * Enables persistent command history on JLine
    */
   def usingCommandHistory[T](config: EffektConfig)(block: => T): T = {
-    import kiama.util.JLineConsole
-    import effekt.util.paths._
+    import effekt.util.paths.*
     import jline.console.history.FileHistory
+    import kiama.util.JLineConsole
 
     config.console() match {
       case c: JLineConsole.type =>

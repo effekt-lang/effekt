@@ -3,15 +3,15 @@ package effekt
 // Adapted from
 //   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
+import effekt.context.{ Context, IOModuleDB }
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
-import effekt.context.{ Context, IOModuleDB }
-import kiama.output.PrettyPrinterTypes.Document
-import kiama.parsing.ParseResult
-import kiama.util.{ IO, Source }
 import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
 import effekt.util.{ AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
+import kiama.output.PrettyPrinterTypes.Document
+import kiama.parsing.ParseResult
+import kiama.util.{ IO, Source }
 
 import scala.sys.process.Process
 
