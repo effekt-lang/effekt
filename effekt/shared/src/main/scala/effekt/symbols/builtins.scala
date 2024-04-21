@@ -3,7 +3,6 @@ package symbols
 
 import effekt.source.ModuleDecl
 import effekt.context.Context
-import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
 
 import kiama.util.StringSource

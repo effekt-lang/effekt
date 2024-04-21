@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import effekt.symbols.{ Capture, Captures, Effects, ErrorMessageInterpolator, LocalName, Name, NoName, QualifiedName, TypePrinter }
+import effekt.symbols.{ Capture, Captures, Effects, LocalName, Name, NoName, QualifiedName }
 import effekt.util.messages.*
 import kiama.util.{ Messaging, Position, Positions, Severities }
 import kiama.util.Severities._
