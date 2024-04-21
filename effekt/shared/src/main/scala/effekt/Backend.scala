@@ -1,7 +1,5 @@
 package effekt
 
-import effekt.generator.*
-
 /**
  * A Backend is composed of a compiler implementation and a runner.
  *
@@ -26,7 +24,5 @@ case class Backend[E](name: String, compiler: Compiler[E], runner: Runner[E])
 
 object Backend {
 
-  def backend(name: String): Backend[_] = name match {
-    case "js"           => Backend("js", js.JavaScript(), JSRunner)
-  }
+  def backend(name: String): Backend[_] = ???
 }
