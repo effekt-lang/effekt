@@ -10,7 +10,7 @@ lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.
 lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
-lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
+
 
 lazy val effektVersion = "0.2.2"
 
@@ -100,125 +100,6 @@ lazy val root = project.in(file("effekt") / "shared")
 
     Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "licenses",
 
-    // cli flag so sbt doesn't crash when effekt does
-    addCommandAlias("run", "runMain effekt.Server --noexit-on-error"),
-
-    assembleBinary := {
-      val jarfile = assembly.value
-
-      // prepend shebang to make jar file executable
-      val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
-      IO.delete(binary)
-      IO.append(binary, "#! /usr/bin/env java -jar\n")
-      IO.append(binary, IO.readBytes(jarfile))
-    },
-
-    deploy := {
-      generateLicenses.value
-      updateVersions.value
-      assembleBinary.value
-    },
-
-    install := {
-      assembleBinary.value
-
-      Process(s"${npm.value} pack").!!
-      Process(s"${npm.value} install -g effekt-${effektVersion}.tgz").!!
-    },
-
-    generateLicenses := {
-      Process(s"${mvn.value} license:download-licenses license:add-third-party").!!
-
-      val kiamaFolder = (ThisBuild / baseDirectory).value / "kiama"
-      val licenseFolder = (ThisBuild / baseDirectory).value / "licenses"
-      IO.copyFile(kiamaFolder / "LICENSE", licenseFolder / "kiama-license.txt")
-      IO.copyFile(kiamaFolder / "README.md", licenseFolder / "kiama-readme.txt")
-    },
-
-    updateVersions := {
-      Process(s"${npm.value} version ${effektVersion} --no-git-tag-version --allow-same-version").!!
-      Process(s"${mvn.value} versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
-    },
-    generateDocumentation := TreeDocs.replacer.value,
-    Compile / sourceGenerators += versionGenerator.taskValue,
-    Compile / sourceGenerators += TreeDocs.generator.taskValue,
-
-    collectBenchmarks := benchmarks.collect.value,
-    buildBenchmarks   := benchmarks.build.value,
-    bench             := benchmarks.measure.value
   )
 
 
-lazy val platform = Def.task {
-  val platformString = System.getProperty("os.name").toLowerCase
-  if (platformString.contains("win")) "windows"
-  else if (platformString.contains("mac")) "macos"
-  else if (platformString.contains("linux")) "linux"
-  else sys error s"Unknown platform ${platformString}"
-}
-
-lazy val npm = Def.task {
-  if (platform.value == "windows") "npm.cmd" else "npm"
-}
-
-lazy val mvn = Def.task {
-  if (platform.value == "windows") "mvn.cmd" else "mvn"
-}
-
-
-lazy val versionGenerator = Def.task {
-  val sourceDir = (Compile / sourceManaged).value
-  val sourceFile = sourceDir / "effekt" / "util" / "Version.scala"
-
-  IO.write(sourceFile,
-    s"""package effekt.util
-       |
-       |object Version {
-       |  val effektVersion = \"${effektVersion}\"
-       |}
-       |""".stripMargin)
-
-  Seq(sourceFile)
-}
-
-/**
- * This generator is used by the JS version of our compiler to bundle the
- * Effekt standard into the JS files and make them available in the virtual fs.
- */
-lazy val stdLibGenerator = Def.task {
-
-  val baseDir = (ThisBuild / baseDirectory).value / "libraries" / "js"
-  val resources = baseDir ** "*.*"
-
-  val sourceDir = (Compile / sourceManaged).value
-  val sourceFile = sourceDir / "Resources.scala"
-
-  if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
-
-    val virtuals = resources.get.map { file =>
-      val filename = file.relativeTo(baseDir).get
-      val content = IO.read(file).replace("$", "$$").replace("\"\"\"", "!!!MULTILINEMARKER!!!")
-      s"""loadIntoFile(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
-    }
-
-    val scalaCode =
-      s"""
-package effekt.util
-import effekt.util.paths._
-
-object Resources {
-
-  def loadIntoFile(filename: String, contents: String): Unit =
-    file(filename).write(contents.replace("!!!MULTILINEMARKER!!!", "\\"\\"\\""))
-
-  def load() = {
-${virtuals.mkString("\n\n")}
-  }
-}
-"""
-
-    IO.write(sourceFile, scalaCode)
-  }
-
-  Seq(sourceFile)
-}
