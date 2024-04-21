@@ -127,10 +127,10 @@ trait Compiler[Executable] {
 
   /**
    * Used by the server to typecheck, report type errors and show
-   * captures at boxes and definitions 
+   * captures at boxes and definitions
    */
   def runMiddleend(source: Source)(using Context): Option[Module] =
-    (Frontend andThen Middleend)(source).map { res => 
+    (Frontend andThen Middleend)(source).map { res =>
       validate(res.source, res.mod)
       res.mod
     }
@@ -295,12 +295,6 @@ trait Compiler[Executable] {
 
       // TODO in the future check for duplicate exports
       CoreTransformed(src, tree, mod, aggregated)
-  }
-
-  lazy val Machine = Phase("machine") {
-    case CoreLifted(source, tree, mod, core) =>
-      val main = Context.checkMain(mod)
-      (mod, main, machine.Transformer.transform(main, core))
   }
 
   // Helpers
