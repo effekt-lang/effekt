@@ -1,7 +1,6 @@
 package effekt
 
 import effekt.context.Context
-import effekt.util.messages.FatalPhaseError
 import kiama.util.Source
 
 trait Phase[-In, +Out] { curr =>

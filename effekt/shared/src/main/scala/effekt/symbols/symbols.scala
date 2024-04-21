@@ -6,7 +6,6 @@ import source.Template
 import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef, RegDef }
 import effekt.context.Context
 import kiama.util.Source
-import effekt.util.messages.ErrorReporter
 
 sealed trait TermSymbol extends Symbol
 

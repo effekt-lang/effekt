@@ -2,19 +2,17 @@ package effekt
 
 import effekt.context.{ Context }
 import kiama.util.{ Source }
-import effekt.util.{ AnsiColoredMessaging }
 import effekt.util.messages.EffektError
 
 
 
 trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
-  object messaging extends AnsiColoredMessaging
 
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
-  object context extends Context(positions) { val messaging = outer.messaging }
+  object context extends Context(positions) { val messaging = ??? }
 
   /**
    * If no file names are given, run the REPL

@@ -10,7 +10,6 @@ import effekt.source.{ resolve }
 
 import effekt.symbols.*
 import effekt.util.messages.*
-import effekt.util.foreachAborting
 
 import scala.language.implicitConversions
 
@@ -20,7 +19,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
   val phaseName = "typer"
 
   def run(input: NameResolved)(using Context): Option[Typechecked] = ???
-
 }
 
 trait TyperOps extends ContextOps { self: Context =>

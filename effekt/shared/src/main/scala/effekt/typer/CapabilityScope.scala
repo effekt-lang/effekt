@@ -3,7 +3,6 @@ package typer
 
 import effekt.context.Context
 import effekt.{ source, symbols }
-import effekt.util.messages.ErrorMessageReifier
 
 /**
  * Invariant: Like the result effects of Typer, all types of bound capabilities need to be concrete!
@@ -18,8 +17,7 @@ case object GlobalCapabilityScope extends CapabilityScope {
   def parent: CapabilityScope = sys error "No parent"
   // If we try to find a capability for an effect that is known to be unhandled (that is no outer scope could
   // potentially handle it, then we raise an error.
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    C.abort(pretty"Effect ${tpe} is not allowed in this context.")
+  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam = ???
 }
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)

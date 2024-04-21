@@ -10,79 +10,6 @@ object messages {
   type EffektMessages = Vector[EffektError]
 
   sealed trait EffektError extends Message
-  case class ParseError(message: String, range: Option[Range]) extends EffektError { val severity = Error }
-  case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends EffektError { val severity = Error }
-  case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends EffektError { val severity = Error }
-  case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends EffektError
-  case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends EffektError
-
-  case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
-
-  implicit class ErrorMessageReifier(private val sc: StringContext) extends AnyVal {
-    def pretty(args: Any*): StructuredMessage = StructuredMessage(sc, args)
-  }
-
-  /**
-   * Error that aborts a compilation phase
-   *
-   * Messages are part of the reporting pipeline and can be backtracked by Typer
-   */
-  case class FatalPhaseError(message: EffektError) extends Exception(message.toString)
-
-  /**
-   * Error that aborts the whole compilation and shows a stack trace
-   *
-   * Should be used for unexpected internal compiler errors
-   */
-  case class CompilerPanic(message: EffektError) extends Exception {
-    override def toString = message.toString // TODO render!
-  }
-
-  def TODO(msg: String = ""): Nothing =
-    val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
-    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
-
-  def FIXME[A](a: A, msg: String = ""): A = a
-
-  def NOT_SUPPORTED(msg: String = ""): Nothing =
-    val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
-    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
-
-  def INTERNAL_ERROR(msg: String = ""): Nothing =
-    val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
-    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
-
-  /**
-   * Stores messages in a mutable field
-   */
-  trait BufferedMessaging[M <: Message] extends Messaging[M] {
-    private var messages: Messages = noMessages
-
-    // TODO filter duplicate messages for overlapping positions. If there are multiple ones, pick the most specific location
-    def append(msg: Messages): Unit =
-      messages = messages ++ msg
-
-    def append(m: M): Unit = messages = messages.appended(m)
-
-    def get: Messages = messages
-
-    def hasErrors: Boolean = messages.exists {
-      m => m.severity == Error
-    }
-
-    def clear(): Unit = { messages = noMessages }
-
-    def buffer: Messages = messages
-    def buffer_=(msgs: Messages): Unit = messages = msgs
-  }
-
-  trait EffektMessaging extends BufferedMessaging[EffektError] {
-    def message(range: Option[Range], content: String, severity: Severity): EffektError = PlainTextError(content, range, severity)
-  }
-
-  class DebugMessaging extends EffektMessaging {
-    def formatContent(msg: EffektError): String = msg.toString
-  }
 
   /**
    * Every phase has a context that extends ErrorReporter
@@ -93,39 +20,14 @@ object messages {
 
     def currentRange: Option[Range] = rangeOf(focus)
 
-    val messaging: BufferedMessaging[EffektError]
 
     def positions: Positions // used to lookup positions of trees
 
-    def plainMessage(text: String, severity: Severity): EffektError =
-      PlainTextError(text, rangeOf(focus), severity)
 
-    def structuredMessage(content: StructuredMessage, severity: Severity): EffektError =
-      StructuredError(content, rangeOf(focus), severity)
+    def report(msg: EffektError): Unit = ???
 
-    def report(msg: EffektError): Unit = messaging.append(msg)
+    def reraise(msg: EffektMessages): Unit = ()
 
-    def error(msg: String): Unit = report(plainMessage(msg, Error))
-    def error(msg: StructuredMessage): Unit = report(structuredMessage(msg, Error))
-
-    def panic(msg: EffektError): Nothing = throw CompilerPanic(msg)
-    def panic(msg: String): Nothing = panic(plainMessage(msg, Error))
-    def panic(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Error))
-
-    def warning(msg: String): Unit = report(plainMessage(msg, Warning))
-    def warning(msg: StructuredMessage): Unit = report(structuredMessage(msg, Warning))
-
-    def info(msg: String): Unit = report(plainMessage(msg, Information))
-    def info(msg: StructuredMessage): Unit = report(structuredMessage(msg, Information))
-
-    def abort(msg: EffektError): Nothing = throw FatalPhaseError(msg)
-    def abort(msg: String): Nothing = abort(plainMessage(msg, Error))
-    def abort(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Error))
-
-    def reraise(msg: EffektMessages): Unit = messaging.append(msg)
-
-    // assumes errs is a non empty vector
-    def abortWith(errs: messaging.Messages): Nothing = ???
 
     def at[T](t: Tree)(block: => T): T = ???
 

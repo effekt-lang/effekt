@@ -2,8 +2,6 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.util.messages.{ ErrorReporter, ErrorMessageReifier }
-import effekt.util.foreachAborting
 
 // Auxiliary Definitions
 // ---------------------

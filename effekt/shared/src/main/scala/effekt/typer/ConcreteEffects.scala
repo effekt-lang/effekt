@@ -3,7 +3,6 @@ package typer
 
 import effekt.context.Context
 import effekt.symbols._
-import effekt.util.messages.ErrorMessageReifier
 
 
 /**
