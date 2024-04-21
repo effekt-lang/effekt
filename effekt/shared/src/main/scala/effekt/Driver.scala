@@ -30,16 +30,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   /**
    * If no file names are given, run the REPL
    */
-  override def run(config: EffektConfig): Unit =
-    if (config.repl()) {
-      new Repl(this).run(config)
-    // This is overridden by kiama.Server to launch the LSP server.
-    // TODO: remove dynamic dispatch here and consider replacing inheritance by composition.
-    } else if (config.server()) {
-      super.run(config)
-    } else for (filename <- config.filenames()) {
-      compileFile(filename, config)
-    }
+  override def run(config: EffektConfig): Unit = ()
 
   override def createConfig(args: Seq[String]) =
     new EffektConfig(args)
