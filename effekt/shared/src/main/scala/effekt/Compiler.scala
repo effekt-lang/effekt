@@ -1,9 +1,8 @@
 package effekt
 
-import effekt.PhaseResult.{ AllTransformed, CoreLifted, CoreTransformed }
+import effekt.PhaseResult.{ AllTransformed, CoreTransformed }
 import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
-import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
 import effekt.symbols.Module
@@ -53,18 +52,13 @@ enum PhaseResult {
   case AllTransformed(source: Source, main: PhaseResult.CoreTransformed, dependencies: List[PhaseResult.CoreTransformed])
 
   /**
-   * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
-   */
-  case CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl)
-
-  /**
    * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
    */
   case Compiled(source: Source, mainFile: String, outputFiles: Map[String, Document])
 }
 export PhaseResult.*
 
-enum Stage { case Core; case Lifted; case Machine; case Target; }
+enum Stage { case Core; case Target; }
 
 /**
  * The compiler for the Effekt language.

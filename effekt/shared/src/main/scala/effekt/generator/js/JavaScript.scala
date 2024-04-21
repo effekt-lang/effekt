@@ -17,15 +17,11 @@ class JavaScript extends Compiler[String] {
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
-    case Stage.Lifted => None
-    case Stage.Machine => None
     case Stage.Target => Separate(source) map { case (core, prog) => pretty(prog.virtual) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
-    case Stage.Lifted => None
-    case Stage.Machine => None
     case Stage.Target => Separate(source) map { case (core, prog) => prog }
   }
 
