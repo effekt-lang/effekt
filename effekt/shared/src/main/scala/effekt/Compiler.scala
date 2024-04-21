@@ -135,25 +135,7 @@ trait Compiler[Executable] {
    */
   def compile(source: Source)(using Context): Option[(Map[String, String], Executable)]
 
-  // The Compiler Compiler Phases:
-  // -----------------------------
-  // Components that can be used by individual (backend) implementations to structure
-  // the (individual) full compiler pipeline.
-
-  /**
-   * @note The result of parsing needs to be cached.
-   *
-   *       [[Intelligence]] uses both the results of [[getAST]] and [[runFrontend]].
-   *       Since we associate trees and symbols by the *object identity* of the tree,
-   *       running parser multiple times on the same input results in different trees.
-   *       In consequence, the symbols can't be found anymore. To avoid this, we
-   *       use a separate task for parsing.
-   *
-   *       Having access to the parse trees separately is also helpful for programs
-   *       that fail in later phases (for instance type checking). This way some
-   *       editor services can be provided, even in presence of errors.
-   */
-  val CachedParser = Phase.cached("cached-parser") { Parser }
+  val CachedParser: Phase[Source, Parsed] = ???
 
   /**
    * Frontend

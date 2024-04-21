@@ -15,27 +15,6 @@ import effekt.util.foreachAborting
 
 import scala.language.implicitConversions
 
-/**
- * Typechecking
- * ============
- *
- * Preconditions:
- * --------------
- * Typer assumes that all dependencies already have been type checked.
- * In particular, it assumes that all definitions / symbols (functions, parameters etc.)
- * have been annotated with a type: this models a (global) typing context.
- *
- * Postconditions:
- * ---------------
- * All trees will be annotated with intermediate types (and effects). This is useful for
- * IDE support.
- * Also, after type checking, all definitions of the file will be annotated with their type.
- *
- * Invariants:
- * -----------
- * All effects inferred by Typer are concrete and dealiased. This is established by
- * type [[ConcreteEffects]] and constructor [[Typer.asConcrete]].
- */
 case class Result[+T](tpe: T, effects: ConcreteEffects)
 
 

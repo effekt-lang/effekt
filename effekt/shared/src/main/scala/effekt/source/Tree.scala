@@ -85,6 +85,8 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
+case class Template[+T](strings: List[String], args: List[T])
+
 /**
  * We distinguish between identifiers corresponding to
  * - binding sites (IdDef)
