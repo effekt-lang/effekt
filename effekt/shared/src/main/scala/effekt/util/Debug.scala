@@ -14,7 +14,6 @@ lazy val showGeneric: PartialFunction[Any, String] = {
 
 lazy val show: PartialFunction[Any, String] =
   TypePrinter.show orElse
-    core.PrettyPrinter.show orElse
     showGeneric
 
 inline def debug[A](inline value: A): A =

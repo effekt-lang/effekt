@@ -1,7 +1,6 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.messages.EffektError
 import effekt.util.{ PlainMessaging, getOrElseAborting }

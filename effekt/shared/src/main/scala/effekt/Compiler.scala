@@ -1,8 +1,6 @@
 package effekt
 
-import effekt.PhaseResult.{ AllTransformed, CoreTransformed }
 import effekt.context.Context
-import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.namer.Namer
 import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
 import effekt.symbols.Module
@@ -41,20 +39,6 @@ enum PhaseResult {
    */
   case Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module)
 
-  /**
-   * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
-   */
-  case CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl)
-
-  /**
-   * The result of running the [[Compiler.Middleend]] on all dependencies.
-   */
-  case AllTransformed(source: Source, main: PhaseResult.CoreTransformed, dependencies: List[PhaseResult.CoreTransformed])
-
-  /**
-   * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
-   */
-  case Compiled(source: Source, mainFile: String, outputFiles: Map[String, Document])
 }
 export PhaseResult.*
 
@@ -119,15 +103,6 @@ trait Compiler[Executable] {
       mod
     }
 
-  /**
-   * Used by the server to typecheck, report type errors and show
-   * captures at boxes and definitions
-   */
-  def runMiddleend(source: Source)(using Context): Option[Module] =
-    (Frontend andThen Middleend)(source).map { res =>
-      validate(res.source, res.mod)
-      res.mod
-    }
 
   /**
    * Called after running the frontend from editor services.
@@ -159,14 +134,6 @@ trait Compiler[Executable] {
    * choose the representation of the executable.
    */
   def compile(source: Source)(using Context): Option[(Map[String, String], Executable)]
-
-  /**
-   * Should compile [[source]] with this backend, the compilation result should only include
-   * the contents of this file, not its dependencies. Only used by the website and implemented
-   * by the JS backend. All other backends can return `None`.
-   */
-  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, String)] = None
-
 
   // The Compiler Compiler Phases:
   // -----------------------------
@@ -219,77 +186,6 @@ trait Compiler[Executable] {
       Wellformedness
   }
 
-  /**
-   * Middleend
-   */
-  val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
-    /**
-     * Uses annotated effects to translate to explicit capability passing
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    ExplicitCapabilities andThen
-    /**
-     * Computes and annotates the capture of each subexpression
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    AnnotateCaptures andThen
-    /**
-     * Translates a source program to a core program
-     * [[Typechecked]] --> [[CoreTransformed]]
-     */
-    Transformer
-  }
-
-  /**
-   * Maps the phase over all core modules (dependencies and the main module)
-   */
-  def all(phase: Phase[CoreTransformed, CoreTransformed]): Phase[AllTransformed, AllTransformed] =
-    new Phase[AllTransformed, AllTransformed] {
-      val phaseName = s"all-${phase.phaseName}"
-
-      def run(input: AllTransformed)(using Context) = for {
-        main <- phase(input.main)
-        dependencies <- input.dependencies.foldRight[Option[List[CoreTransformed]]](Some(Nil)) {
-          case (dep, Some(deps)) => phase(dep).map(_ :: deps)
-          case (_, _) => None
-        }
-      } yield AllTransformed(input.source, main, dependencies)
-    }
-
-  def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
-    val phaseName = "core-dependencies"
-
-    def run(input: Source)(using Context) = for {
-      main @ CoreTransformed(_, _, mod, _) <- phase(input)
-      dependencies <- mod.dependencies.foldRight[Option[List[CoreTransformed]]](Some(Nil)) {
-        case (dep, Some(deps)) => phase(dep.source).map(_ :: deps)
-        case (_, _) => None
-      }
-    } yield AllTransformed(input, main, dependencies)
-  }
-
-  lazy val Aggregate = Phase[AllTransformed, CoreTransformed]("aggregate") {
-    case AllTransformed(_, CoreTransformed(src, tree, mod, main), deps) =>
-      val dependencies = deps.map(d => d.core)
-
-      // collect all information
-      var declarations: List[core.Declaration] = Nil
-      var externs: List[core.Extern] = Nil
-      var definitions: List[core.Definition] = Nil
-      var exports: List[symbols.Symbol] = Nil
-
-      (dependencies :+ main).foreach { module =>
-        externs ++= module.externs
-        declarations ++= module.declarations
-        definitions ++= module.definitions
-        exports ++= module.exports
-      }
-
-      val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
-
-      // TODO in the future check for duplicate exports
-      CoreTransformed(src, tree, mod, aggregated)
-  }
 
   // Helpers
   // -------
