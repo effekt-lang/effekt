@@ -29,11 +29,7 @@ class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, sym
 }
 class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindAll(binder, capabilities, parent.copy)
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.getOrElse(tpe, {
-      val freshCapability = C.freshCapabilityFor(tpe)
-      capabilities = capabilities.updated(tpe, freshCapability)
-      freshCapability
-    })
+  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam = ???
+
   override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }

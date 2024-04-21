@@ -43,6 +43,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
 
+
+
+
+
+
+
+
   def run(input: NameResolved)(using Context): Option[Typechecked] = ???
 
 }
@@ -66,67 +73,4 @@ trait TyperOps extends ContextOps { self: Context =>
 
   export unification.{ requireSubtype, requireSubregion, join, instantiate, instantiateFresh, freshTypeVar, freshCaptVar, without, requireSubregionWithout }
 
-
-  private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = ???
-
-  private[typer] def withUnificationScope[T](block: => T): T = ???
-
-  private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
-
-  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = ???
-
-  private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit = ()
-
-  private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[InterfaceType, symbols.BlockParam]) = ???
-
-  private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam = ???
-
-  private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam = ???
-  private [typer] def freshCapabilityFor(tpe: InterfaceType, capture: CaptureSet): symbols.BlockParam = ???
-
-  private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] = ???
-
-  private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType): BlockParam = ???
-
-  private[typer] def lookup(s: ValueSymbol): symbols.ValueType = ???
-
-  private[typer] def lookup(s: BlockSymbol): (BlockType, Captures) = ???
-
-  private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType = ???
-
-  private[typer] def lookupBlockType(s: BlockSymbol): BlockType = ???
-
-  private[typer] def lookupCapture(s: BlockSymbol): Captures = ???
-
-  private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit = ()
-
-  private[typer] def bind(s: BlockSymbol, tpe: BlockType, capt: Captures): Unit = ()
-
-  private[typer] def bind(s: BlockSymbol, tpe: BlockType): Unit = ()
-
-  private[typer] def bind(s: BlockSymbol, capt: Captures): Unit = ()
-
-  private[typer] def bind(bs: Map[Symbol, ValueType]): Unit = ()
-
-  private[typer] def bind(p: ValueParam): Unit = ()
-
-  private[typer] def bind(p: TrackedParam): Unit = ()
-
-  private[typer] def annotateInferredType(t: Tree, e: ValueType) = ()
-
-  private[typer] def annotateInferredType(t: Tree, e: BlockType) = ()
-
-  private[typer] def annotateInferredEffects(t: Tree, e: Effects) = ()
-
-  private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = ()
-
-  private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = ???
-
-  private[typer] def initTyperstate(): Unit = ()
-
-  private[typer] def backupTyperstate(): TyperState = ???
-
-  private[typer] def restoreTyperstate(st: TyperState): Unit = ()
-
-  private[typer] def commitTypeAnnotations(): Unit = ()
 }
