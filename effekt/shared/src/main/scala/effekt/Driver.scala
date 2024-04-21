@@ -1,14 +1,11 @@
 package effekt
 
 import effekt.context.{ Context }
-import effekt.source.{ ModuleDecl, Tree }
-import effekt.symbols.Module
 import kiama.util.{ Source }
 import effekt.util.{ AnsiColoredMessaging }
 import effekt.util.messages.EffektError
 
 
-import scala.sys.process.Process
 
 trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 

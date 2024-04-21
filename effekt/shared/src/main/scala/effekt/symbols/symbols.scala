@@ -33,63 +33,7 @@ case class Module(
   decl: ModuleDecl,
   source: Source
 ) extends Symbol {
-
-  val name: QualifiedName = {
-    val segments = decl.path.split("/").toList
-    QualifiedName(segments.init, segments.last)
-  }
-
-  val namespace = name.prefix :+ name.name
-
-  def path = decl.path
-
-  private var _exports: Bindings = _
-  def exports: Bindings = _exports
-
-  def terms = exports.terms
-  def types = exports.types
-  def captures = exports.captures
-
-
-  private var _includes: List[Module] = _
-  def includes = _includes
-
-  // a topological ordering of all transitive dependencies
-  // this is the order in which the modules need to be compiled / loaded
-  lazy val dependencies: List[Module] = includes.flatMap { im => im.dependencies :+ im }.distinct
-
-  // toplevel declared effects
-  def effects: List[Interface] = types.values.toList.collect {
-    case e: Interface => e
-  }
-
-  private def isPrelude: Boolean = name.name == "effekt"
-
-  def findPrelude: Module = {
-    // Either this module is already Prelude
-    if (isPrelude) {
-      return this
-    }
-
-    // ... or we try to find Prelude in our dependencies
-    dependencies.find(_.isPrelude).getOrElse {
-      sys error "Cannot find Prelude, this should not happen"
-    }
-  }
-
-  /**
-   * It is actually possible, that exports is invoked on a single module multiple times:
-   * The dependencies of a module might change, which triggers frontend on the same module
-   * again. It is the same, since the source and AST did not change.
-   */
-  def exports(
-    includes: List[Module],
-    exports: Bindings
-  ): this.type = {
-    _includes = includes
-    _exports = exports
-    this
-  }
+  val name: Name = ???
 }
 
 /**
@@ -104,12 +48,7 @@ case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSy
 
 sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
-  lazy val capture: Capture = this match {
-    case b: BlockParam => CaptureParam(b.name)
-    case r: ResumeParam => ???
-    case s: VarBinder => LexicalRegion(name, s.decl)
-    case r: ExternResource => Resource(name)
-  }
+  lazy val capture: Capture = ???
 }
 object TrackedParam {
   case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
@@ -120,32 +59,7 @@ object TrackedParam {
 export TrackedParam.*
 
 
-trait Callable extends BlockSymbol {
-  def tparams: List[TypeParam]
-  def vparams: List[ValueParam]
-  def bparams: List[BlockParam]
-  def annotatedResult: Option[ValueType]
-  def annotatedEffects: Option[Effects]
-
-   // invariant: only works if ret is defined!
-  def toType: FunctionType = annotatedType.get
-
-  def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =
-    val tps = tparams
-    val vps = vparams.map { p => p.tpe.get }
-    val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
-    FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
-
-  def annotatedType: Option[FunctionType] =
-    for {
-      ret <- annotatedResult;
-      effs <- annotatedEffects
-      effects = effs.distinct
-      // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
-      //   in the future namer needs to annotate the function with the capture parameters it introduced.
-      capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
-    } yield toType(ret, effects, capt)
-}
+trait Callable extends BlockSymbol
 
 case class UserFunction(
   name: Name,
@@ -375,14 +289,7 @@ case class CaptureSet(captures: Set[Capture]) extends Captures {
   def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
 
-  def pureOrIO: Boolean = captures.forall { c =>
-    def isIO = c == builtins.IOCapability.capture
-    // mutable state is now in CPS and not considered IO anymore.
-    def isMutableState = c.isInstanceOf[LexicalRegion]
-    def isResource = c.isInstanceOf[Resource]
-    def isControl = c == builtins.ControlCapability.capture
-    !(isControl || isMutableState) && (isIO || isResource)
-  }
+  def pureOrIO: Boolean = true
 
   def pure: Boolean = captures.isEmpty
 }

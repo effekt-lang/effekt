@@ -6,7 +6,6 @@ import effekt.source.ModuleDecl
 import kiama.output.PrettyPrinterTypes.Document
 
 
-
 enum PhaseResult {
 
   val source: Source

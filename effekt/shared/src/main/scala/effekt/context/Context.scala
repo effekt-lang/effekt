@@ -18,23 +18,9 @@ trait ContextOps
     extends ErrorReporter
     with AnnotationsDB { self: Context =>
 
-  /**
-   * Used throughout the compiler to create a new "scope"
-   *
-   * Each XOps slice can define what a new "scope" means and
-   * backup and restore state accordingly. Overriding definitions
-   * should call `super.in(block)`.
-   */
   def in[T](block: => T): T = block
 }
 
-/**
- * The compiler context consists of
- * - configuration (immutable)
- * - symbols (mutable database)
- * - types (mutable database)
- * - error reporting (mutable focus)
- */
 abstract class Context(val positions: Positions) extends TyperOps {
 
   // bring the context itself in scope

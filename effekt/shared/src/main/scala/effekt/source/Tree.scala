@@ -301,7 +301,7 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[BlockType], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
@@ -344,11 +344,11 @@ export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
-def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Long): Literal = Literal(value, symbols.builtins.TInt)
-def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
-def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
-def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
+def UnitLit(): Literal = ???
+def IntLit(value: Long): Literal = ???
+def BooleanLit(value: Boolean): Literal = ???
+def DoubleLit(value: Double): Literal = ???
+def StringLit(value: String): Literal = ???
 
 type CallLike = Call | Do | Select | MethodCall
 
@@ -381,8 +381,8 @@ case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bp
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: BlockType.BlockTypeRef, clauses: List[OpClause]) extends Reference {
-  def id = interface.id
+case class Implementation(interface: BlockType, clauses: List[OpClause]) extends Reference {
+  def id = ???
 }
 
 /**
@@ -423,49 +423,10 @@ enum MatchPattern extends Tree {
    */
   case AnyPattern(id: IdDef) extends MatchPattern, Definition
 
-  /**
-   * Pattern matching on a constructor
-   *
-   *   case Cons(a, as) => ...
-   */
-  case TagPattern(id: IdRef, patterns: List[MatchPattern]) extends MatchPattern, Reference
-
-  /**
-   * A wildcard pattern ignoring the matched value
-   *
-   *   case _ => ...
-   */
-  case IgnorePattern()
-
-  /**
-   * A pattern that matches a single literal value
-   */
-  case LiteralPattern(l: Literal)
 }
 export MatchPattern.*
 
 
-/**
- * Types and Effects
- *
- * TODO generalize to blocks that can take blocks
- *
- * ----------[[ effekt.source.Type ]]----------
- *
- *   ─ [[ Type ]]
- *     │─ [[ ValueType ]]
- *     │  │─ [[ ValueTypeTree ]]
- *     │  │─ [[ BoxedType ]]
- *     │  │─ [[ ValueTypeRef ]]
- *     │
- *     │─ [[ BlockType ]]
- *     │  │─ [[ BlockTypeTree ]]
- *     │  │─ [[ FunctionType ]]
- *     │  │─ [[ BlockTypeRef ]]
- *     │
- *
- * --------------------------------------------
- */
 sealed trait Type extends Tree
 
 /**
@@ -478,13 +439,6 @@ enum ValueType extends Type {
    */
   case ValueTypeTree(tpe: symbols.ValueType)
 
-  /**
-   * Types of first-class functions
-   */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
-
-  // Bound occurrences (args can be empty)
-  case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
 }
 export ValueType.*
 
@@ -493,12 +447,7 @@ export ValueType.*
  */
 enum BlockType extends Type {
 
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
-  case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
 }
 
 export BlockType.*
@@ -510,89 +459,13 @@ case class Effectful(tpe: ValueType, eff: Effects) extends Tree
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
  */
-case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
+case class Effects(effs: List[BlockType]) extends Tree
 object Effects {
-  val Pure: Effects = Effects()
-  def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
+  val Pure: Effects = ???
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Tree
 
-
-object Named {
-
-  type Params = ValueParam | BlockParam
-  type Externs = ExternDef | ExternResource | ExternInterface | ExternType
-  type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
-  type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
-
-  type Types = ValueTypeRef | BlockTypeRef
-  type Vars = Var | Assign
-  type Calls = Do | Select | MethodCall | IdTarget
-  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
-
-  type ResolvedDefinitions[T <: Definitions] = T match {
-    // Defs
-    case FunDef       => symbols.UserFunction
-    case ValDef       => symbols.Binder.ValBinder // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
-    case VarDef       => symbols.Binder.VarBinder
-    case RegDef       => symbols.Binder.RegBinder
-    case DefDef       => symbols.Binder.DefBinder
-    case InterfaceDef => symbols.BlockTypeConstructor.Interface
-    case DataDef      => symbols.TypeConstructor.DataType
-    case RecordDef    => symbols.TypeConstructor.Record
-    case TypeDef      => symbols.TypeAlias
-    case EffectDef    => symbols.EffectAlias
-
-    // Params
-    case ValueParam => symbols.ValueParam
-    case BlockParam => symbols.TrackedParam.BlockParam
-
-    // Externs
-    case ExternDef       => symbols.ExternFunction
-    case ExternResource  => symbols.TrackedParam.BlockParam
-    case ExternInterface => symbols.BlockTypeConstructor.ExternInterface
-    case ExternType      => symbols.TypeConstructor.ExternType
-
-    // Others
-    case Operation   => symbols.Operation
-    case Constructor => symbols.Constructor
-    case Region      => symbols.TrackedParam
-    case AnyPattern  => symbols.ValueParam
-  }
-
-  type ResolvedReferences[T <: References] = T match {
-    // Types
-    case ValueTypeRef => symbols.TypeConstructor
-    case BlockTypeRef => symbols.BlockTypeConstructor
-
-    // Vars
-    case Var    => symbols.TermSymbol
-    case Assign => symbols.RefBinder
-
-    // CallLike
-    case Do         => symbols.Operation
-    case Select     => symbols.Field
-    case MethodCall => symbols.Operation | symbols.CallTarget
-    case IdTarget   => symbols.TermSymbol
-
-    // Others
-    case Handler => symbols.BlockTypeConstructor.Interface
-    case OpClause => symbols.Operation
-    case Implementation => symbols.BlockTypeConstructor.Interface
-    case TagPattern => symbols.Constructor
-  }
-
-  extension [T <: Definitions](t: T & Definition) {
-    def symbol(using C: Context): ResolvedDefinitions[T] = ???
-  }
-  extension [T <: References](t: T & Reference) {
-    def definition(using C: Context): ResolvedReferences[T] = ???
-  }
-
-}
-export Named.symbol
 
 // MOVE TO NAMER
 object Resolvable {
@@ -607,12 +480,10 @@ object Resolvable {
   // -----------
   // we need to avoid widening, so here we define BlockType as a sum without a common parent
   // (see https://github.com/lampepfl/dotty/issues/16299)
-  type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
+  type BlockTypes = BlockTypeTree
 
   type Resolved[T <: BlockTypes] = T match {
     case BlockTypeTree => symbols.BlockType
-    case FunctionType => symbols.FunctionType
-    case BlockTypeRef => symbols.InterfaceType
   }
 
   extension [T <: BlockTypes] (t: T) {
@@ -626,19 +497,3 @@ object Resolvable {
   }
 }
 export Resolvable.resolve
-
-
-object Tree {
-
-  // Generic traversal of trees, applying the partial function `f` to every contained
-  // element of type Tree.
-  def visit(obj: Any)(f: PartialFunction[Tree, Unit]): Unit = obj match {
-    case t: Iterable[t] => t.foreach { t => visit(t)(f) }
-    case p: Product => p.productIterator.foreach {
-      case t: Tree => f(t)
-      case other   => ()
-    }
-    case leaf => ()
-  }
-
-}

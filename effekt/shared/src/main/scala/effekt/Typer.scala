@@ -1,15 +1,14 @@
 package effekt
 package typer
 
-/**
- * In this file we fully qualify source types, but use symbols directly
- */
+
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 
-import effekt.source.{ AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+// This import is also NECESSARY for the cyclic error
+import effekt.source.{resolve }
+
+
 import effekt.symbols.*
-import effekt.symbols.builtins.*
-import effekt.symbols.kinds.*
 import effekt.util.messages.*
 import effekt.util.foreachAborting
 
@@ -24,11 +23,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
 
 
+
 }
 
 trait TyperOps extends ContextOps { self: Context =>
 
-  // passing `this` as ErrorReporter here is also necessary for the cyclic error
+  // passing `this` as ErrorReporter here is also NECESSARY for the cyclic error
   private[typer] val unification = new Unification(using this)
 
   // this export is NECESSARY for the cyclic error
