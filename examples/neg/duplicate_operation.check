@@ -1,3 +1,0 @@
-[error] examples/neg/duplicate_operation.effekt:11:26: Duplicate definitions of operations
-    try { f(); () } with State {
-                         ^

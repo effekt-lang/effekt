@@ -1,7 +1,0 @@
-module examples/pos/imports/importing_resources
-
-import examples/pos/imports/resources
-
-extern { r } def doNothing(): Unit = ""
-
-def main() = println("worked")

@@ -1,3 +1,0 @@
-[error] examples/neg/issue362.effekt:4:31: Not allowed {arr}
-def foo() {arr: Exc} = box {} { read {arr} }
-                              ^^^^^^^^^^^^^^

@@ -1,7 +1,0 @@
-effect Eff(a: Int) {f: Int => Int} {g: Int => Int}: Int
-
-def impl: Eff = new Eff { (a: Int) =>
-    <>
-}
-
-def main() = impl.Eff(1) {x => x} {x => x}

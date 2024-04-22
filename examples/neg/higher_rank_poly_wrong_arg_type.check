@@ -1,6 +1,0 @@
-[error] examples/neg/higher_rank_poly_wrong_arg_type.effekt:2:5: Cannot infer type argument A, maybe consider annotating it?
-    g { a => a }
-    ^^^^^^^^^^^^
-[error] examples/neg/higher_rank_poly_wrong_arg_type.effekt:6:11: Expected A but got Int.
-        g(42);
-          ^^

@@ -1,7 +1,0 @@
-def foo[A](): A = <>
-
-
-def bar() =
-  (if (true) foo() else foo()) + 1
-
-def main() = ()

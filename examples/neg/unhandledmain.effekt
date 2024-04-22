@@ -1,5 +1,0 @@
-module unhandledmain
-
-effect Flip(): Bool
-
-def main() = do Flip()

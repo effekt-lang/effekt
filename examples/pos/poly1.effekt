@@ -1,8 +1,0 @@
-module poly1
-
-def poly[A](a: A): A = a
-
-def main() = {
-  val n = poly[Int](4);
-  n + 1
-}

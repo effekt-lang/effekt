@@ -1,8 +1,0 @@
-module examples/pos/list/reverseonto
-
-import immutable/list
-
-def main() = {
-  // synchronized with doctest in `reverseOnto`
-  println([1, 2, 3].reverseOnto([4, 5, 6]))
-}

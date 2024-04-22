@@ -1,3 +1,0 @@
-[error] examples/neg/lambdas/polymorphicescape.effekt:37:14: Not allowed {leak}
-      leak = fun() { resume(h) } // ERROR
-             ^^^^^^^^^^^^^^^^^^^

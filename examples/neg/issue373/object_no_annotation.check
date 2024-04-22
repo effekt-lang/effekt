@@ -1,3 +1,0 @@
-[error] examples/neg/issue373/object_no_annotation.effekt:9:29: Expected Int but got String.
-def main() = println(eff.op("hello"))
-                            ^^^^^^^

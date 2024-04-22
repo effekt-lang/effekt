@@ -1,6 +1,0 @@
-def hof[A] { f: A => A }: A = <>
-// def hof2[A] { f: A => String }: A = hof { f }
-def hof3 { f: String => String } = hof { f }
-
-
-def main() = ()

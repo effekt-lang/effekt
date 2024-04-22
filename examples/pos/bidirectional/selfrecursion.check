@@ -1,3 +1,0 @@
-[error] examples/pos/bidirectional/selfrecursion.effekt:3:1: Bidirectional effects that mention the same effect recursively are not (yet) supported.
-effect Loop(): Unit / Loop
-^

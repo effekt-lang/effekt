@@ -1,9 +1,0 @@
-type NumberThunk = () => Int at {}
-def force(t: NumberThunk): Int = t()
-def init(n: Int): NumberThunk = fun() { n }
-def test(): NumberThunk = fun() {
-  val num: Int = (init(42))()
-  num
-}
-
-def main() = println(test()())

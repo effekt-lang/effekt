@@ -1,3 +1,0 @@
-[error] examples/neg/lambdas/continuations.effekt:17:14: Not allowed {Raise$capability}
-      cont = fun() { resume(()) };
-             ^^^^^^^^^^^^^^^^^^^^

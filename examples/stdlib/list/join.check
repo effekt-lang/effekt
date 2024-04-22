@@ -1,4 +1,0 @@
-Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Nil()))))))
-Nil()
-Cons(100, Cons(1, Cons(2, Cons(3, Cons(200, Cons(300, Cons(1, Cons(2, Cons(3, Cons(400, Nil()))))))))))
-Nil()

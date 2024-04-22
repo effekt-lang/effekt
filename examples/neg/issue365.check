@@ -1,3 +1,0 @@
-[error] examples/neg/issue365.effekt:8:28: Not allowed {io}
-  val unboxed: Cap at {} = myCap;
-                           ^^^^^

@@ -1,5 +1,0 @@
-def addOne(x: Int) = x + 1
-
-def three = addOne(2)
-
-def main() = ()

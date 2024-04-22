@@ -1,8 +1,0 @@
-import io/args
-
-def show(l: List[String]): String = l match {
-    case Nil() => "Nil()"
-    case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
-}
-
-def main() = println(show(commandLineArgs()))

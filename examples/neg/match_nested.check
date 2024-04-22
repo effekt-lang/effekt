@@ -1,3 +1,0 @@
-[error] examples/neg/match_nested.effekt:9:20: Non exhaustive pattern matching, missing case for Mul
-def test(l: Exp) = l match {
-                   ^

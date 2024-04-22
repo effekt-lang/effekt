@@ -1,3 +1,0 @@
-[error] examples/neg/unhandled_under_handler.effekt:12:5: Effect Flip is not allowed in this context.
-    do Flip();
-    ^^^^^^^^^

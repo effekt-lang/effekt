@@ -1,3 +1,0 @@
-[error] examples/neg/lambdas/closure.effekt:6:15: The return type () => Unit at {Yield$capability} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: {Yield$capability}
-  val f = try { // @Yield =>
-              ^

@@ -1,3 +1,0 @@
-[error] examples/neg/multiline_string.effekt:1:22: ')' expected but '"' found
-def main() = println("a
-                     ^

@@ -1,9 +1,0 @@
-12
--22
-12.3
--3.141
-true
-unit
-Cons(1, Cons(2, Cons(3, Nil())))
-Some(12)
-

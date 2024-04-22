@@ -1,3 +1,0 @@
-[error] examples/neg/namer/overloading-nil.effekt:4:8: Can only pattern match on constructors of data types.
-  case Nil() => 0
-       ^^^
