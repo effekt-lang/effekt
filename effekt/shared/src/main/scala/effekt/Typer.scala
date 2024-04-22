@@ -1,14 +1,15 @@
 package effekt
 package typer
 
+import effekt.util.messages.ErrorReporter
 
-import effekt.context.{ Context, ContextOps }
+import effekt.context.{ Context }
 
 // This import is also NECESSARY for the cyclic error
 import effekt.source.{ resolve }
 
 
-trait TyperOps extends ContextOps { self: Context =>
+trait TyperOps extends ErrorReporter { self: Context =>
 
   // passing `this` as ErrorReporter here is also NECESSARY for the cyclic error
   private[typer] val unification = new Unification(using this)
