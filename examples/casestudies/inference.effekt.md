@@ -143,6 +143,20 @@ def handleRandom[R]{program: () => R / Random}: R = {
   with Random {() => resume(random())}
 }
 
+// pseudo random number generator
+def linearCongruentialGenerator[R](seed: Int) { prog: => R / Random } : R = {
+  // parameters from Numerical Recipes (https://en.wikipedia.org/wiki/Linear_congruential_generator)
+  val a = 1664525
+  val c = 1013904223
+  val m = 1073741824
+  var x: Int = seed;
+
+  def next() = { x = mod((a * x + c), m); x }
+  try { prog() } with Random {
+    resume(next().toDouble / m.toDouble)
+  }
+}
+
 def handleWeight[R]{program: () => R / Weight}: (R, Double)  = {
   var current = 1.0
   try {(program(), current)}
@@ -185,11 +199,11 @@ def handleRejection[R]{program: () => R / Weight}: R / Random = {
 ```
 It is possible to construct the rejection sampling algorithm with the handlers of this library:
 ```
-def rejectionSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit = {
-  def loop(): Unit / Emit[R]= {
-    handleRandom{handleSample{handleRejection{handleObserve{
+def rejectionSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit / Random = {
+  def loop(): Unit / Emit[R] = {
+    handleSample{handleRejection{handleObserve{
       do emit(program())
-    }}}}
+    }}}
     loop()
   }
   handleLimitEmit[R, Unit](n){loop()}
@@ -199,7 +213,7 @@ def rejectionSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit = {
 ## Slice Sampling
 ```
 def sliceSamplingAlgo[R](){program: () => R / Weight} = {
-  val (result, prob) = handleRandom{handleSample{handleWeight{program()}}}
+  val (result, prob) = handleSample{handleWeight{program()}}
   
   def step(result0: R, prob0: Probability) = handleRejection{
     val (result1, prob1) = handleWeight{program()}
@@ -275,11 +289,9 @@ def metropolisStep[A](prob0: Probability, trace0: Trace){program: Trace => (A, P
 ```
 def metropolisHastingsAlgo[A]{program: () => A / {Sample, Weight}} = {
   val ((result0, trace0), prob0) = handleWeight{
-    handleRandom{
-      handleSample{
-        handleTracing{
-          program()
-        }
+    handleSample{
+      handleTracing{
+        program()
       }
     }
   }
@@ -287,11 +299,9 @@ def metropolisHastingsAlgo[A]{program: () => A / {Sample, Weight}} = {
   def loop(result: A, trace: Trace, prob: Probability): Unit / Emit[A] = {
     do emit(result)
     val ((result1, trace1), prob1) =
-    handleRandom{
-      handleSample{
-        handleRejection{
-          metropolisStep(prob, trace){ trace => handleWeight { handleReusingTrace(trace) { program() } } }
-        }
+    handleSample{
+      handleRejection{
+        metropolisStep(prob, trace){ trace => handleWeight { handleReusingTrace(trace) { program() } } }
       }
     }
     loop(result1, trace1, prob1)
@@ -340,11 +350,9 @@ def metropolisStepSingleSite[A](prob0: Probability, trace0: Trace){program: Trac
 
 def metropolisHastingsSingleSiteAlgo[A]{program: () => A / {Sample, Weight}} = {
   val ((result0, trace0), prob0) = handleWeight{
-    handleRandom{
-      handleSample{
-        handleTracing{
-          program()
-        }
+    handleSample{
+      handleTracing{
+        program()
       }
     }
   }
@@ -352,11 +360,9 @@ def metropolisHastingsSingleSiteAlgo[A]{program: () => A / {Sample, Weight}} = {
   def loop(result: A, trace: Trace, prob: Probability): Unit / Emit[A] = {
     do emit(result)
     val ((result1, trace1), prob1)=
-    handleRandom{
-      handleSample{
-        handleRejection{
-          metropolisStepSingleSite(prob, trace){ trace => handleWeight { handleReusingTrace(trace) { program() } } }
-        }
+    handleSample{
+      handleRejection{
+        metropolisStepSingleSite(prob, trace){ trace => handleWeight { handleReusingTrace(trace) { program() } } }
       }
     }
     loop(result1, trace1, prob1)
@@ -368,19 +374,19 @@ def metropolisHastingsSingleSiteAlgo[A]{program: () => A / {Sample, Weight}} = {
 ## Wrappers
 In order to make it easier to use these algorithms without having to call the various effect handlers, we constructed wrappers for the algorithms implemented in this library.
 ```
-def sliceSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit = {
-  handleLimitEmit[R,Unit](n){handleRandom{handleSample{sliceSamplingAlgo[R]{handleObserve{
+def sliceSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit / Random = {
+  handleLimitEmit[R,Unit](n){handleSample{sliceSamplingAlgo[R]{handleObserve{
     program()
-  }}}}}
+  }}}}
 }
 
-def metropolisHastings[R](n: Int){program: () => R / {Sample, Observe}}: Unit = {
+def metropolisHastings[R](n: Int){program: () => R / {Sample, Observe}}: Unit / Random = {
   handleLimitEmit[R, Unit](n){metropolisHastingsAlgo[R]{handleObserve{
     program()
   }}}
 }
 
-def metropolisHastingsSingleSite[R](n: Int){program: () => R / {Sample, Observe}}: Unit = {
+def metropolisHastingsSingleSite[R](n: Int){program: () => R / {Sample, Observe}}: Unit / Random = {
   handleLimitEmit[R, Unit](n){metropolisHastingsSingleSiteAlgo[R]{handleObserve{
     program()
   }}}
@@ -480,17 +486,17 @@ Calling the algorithms on the examples.
 ```
 def main() = {
   //Linear Regression
-  rejectionSampling[(Double, Double)](5){
+  linearCongruentialGenerator(1){rejectionSampling[(Double, Double)](5){
     linearRegression([(5.0, 5.0), (1.0, 1.0), (-2.0, -2.0), (3.0, 3.0), (20.0, 20.0), (5.0, 5.0)])
-  }
+  }}
 
   //Robot movements
-  sliceSampling[State](5){
+  linearCongruentialGenerator(1){sliceSampling[State](5){
     val init = State(0.0, 3.0, 2.0, 0.0)
     step(init, 5.0)
-  }
+  }}
 
-  sliceSampling[List[State]](1){
+  linearCongruentialGenerator(1){sliceSampling[List[State]](1){
     var nextState = State(0.0, 3.0, 2.0, 0.0)
     var nextdis = 5.0
     var m = 5
@@ -504,15 +510,15 @@ def main() = {
       m = m - 1
     }
     return path
-  }
+  }}
 
   //Epidemic Spreading
-  metropolisHastings[Population](5){
+  linearCongruentialGenerator(1){metropolisHastings[Population](5){
     val init = Population(0.7, 0.2, 0.1)
     step(init, 0.8)
-  }
+  }}
 
-  metropolisHastings[List[Population]](1){
+  linearCongruentialGenerator(1){metropolisHastings[List[Population]](1){
     var nextPop = Population(0.7, 0.2, 0.1)
     var nextpr = 0.8
     var m = 5
@@ -529,6 +535,6 @@ def main() = {
     }
     return path
   }
-}
+}}
 ```
 The other algorithms of this library can be called alike on these examples.
