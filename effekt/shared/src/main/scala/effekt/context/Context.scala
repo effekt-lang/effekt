@@ -1,19 +1,12 @@
 package effekt
 package context
 
-import effekt.namer.NamerOps
 import effekt.typer.TyperOps
-import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, EffektMessages }
 import effekt.symbols.Module
 
 import kiama.util.Positions
 
-/**
- * Phases like Typer can add operations to the context by extending this trait
- *
- * For example, see TyperOps
- */
 trait ContextOps
     extends ErrorReporter
     with AnnotationsDB { self: Context =>
@@ -29,8 +22,6 @@ abstract class Context(val positions: Positions) extends TyperOps {
   // the currently processed module
   var module: Module = _
 
-  // the currently processed node
-  var focus: Tree = _
 
   var _config: EffektConfig = _
   def config = _config
@@ -40,8 +31,6 @@ abstract class Context(val positions: Positions) extends TyperOps {
    * Clear current context to start processing a fresh unit
    */
   def setup(cfg: EffektConfig): Unit = ()
-
-  def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = ???
 
   override def in[T](block: => T): T = ???
 

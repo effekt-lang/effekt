@@ -1,9 +1,6 @@
 package effekt
 package context
 
-import effekt.symbols.ResumeParam
-import effekt.util.messages.ErrorReporter
-import kiama.util.Memoiser
 
 case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
@@ -21,11 +18,7 @@ class Annotations private(
 }
 object Annotations {
 
-  def empty: Annotations = new Annotations(Map.empty)
-
   sealed trait Key[T] { def key: T }
-
-  private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] = ???
 
 }
 

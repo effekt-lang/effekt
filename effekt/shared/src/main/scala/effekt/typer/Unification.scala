@@ -2,7 +2,6 @@ package effekt
 package typer
 
 import effekt.context.Context
-import effekt.source.MatchPattern
 import effekt.symbols.*
 import effekt.util.messages.ErrorReporter
 

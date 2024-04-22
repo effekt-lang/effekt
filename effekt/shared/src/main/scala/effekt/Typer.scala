@@ -20,7 +20,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def run(input: NameResolved)(using Context): Option[Typechecked] = ???
 
-
 }
 
 trait TyperOps extends ContextOps { self: Context =>

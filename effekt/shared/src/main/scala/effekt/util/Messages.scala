@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import effekt.source.{ NoSource, Tree }
+import effekt.source.{ Tree }
 import kiama.util.{ Message, Messaging, Positions, Range, Severities }
 import kiama.util.Severities.*
 
