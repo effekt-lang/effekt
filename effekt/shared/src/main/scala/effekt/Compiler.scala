@@ -67,12 +67,6 @@ export PhaseResult.*
 enum Stage { case Core; case Lifted; case Machine; case Target; }
 
 /**
- * Constants for common feature flags (not specific to one generator)
- */
-object FeatureFlag {
-}
-
-/**
  * The compiler for the Effekt language.
  *
  * The compiler is set up in the following large phases that consist itself of potentially multiple phases
