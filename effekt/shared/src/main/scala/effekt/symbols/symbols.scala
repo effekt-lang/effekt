@@ -25,12 +25,6 @@ sealed trait TrackedParam extends Param, BlockSymbol {
   // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
   lazy val capture: Capture = ???
 }
-object TrackedParam {
-  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
-  case class ResumeParam(module: Module) extends TrackedParam { val name = ??? }
-  case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
-
-}
 
 
 trait Callable extends BlockSymbol
@@ -89,3 +83,8 @@ object CaptUnificationVar {
 }
 
 sealed trait Captures
+
+
+sealed trait Type
+sealed trait ValueType extends Type
+sealed trait BlockType extends Type

@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.typer.TyperOps
-import effekt.util.messages.{ ErrorReporter, EffektMessages }
+import effekt.util.messages.{ ErrorReporter }
 import effekt.symbols.Module
 
 import kiama.util.Positions
@@ -22,20 +22,8 @@ abstract class Context(val positions: Positions) extends TyperOps {
   // the currently processed module
   var module: Module = _
 
-
-  var _config: EffektConfig = _
-  def config = _config
-
-
-  /**
-   * Clear current context to start processing a fresh unit
-   */
-  def setup(cfg: EffektConfig): Unit = ()
-
   override def in[T](block: => T): T = ???
 
-  // temporarily switches the message buffer to collect messages
-  def withMessages[T](block: => T): (EffektMessages, T) = ???
 }
 
 /**
