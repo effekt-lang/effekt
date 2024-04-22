@@ -17,6 +17,7 @@ trait TyperOps extends ErrorReporter { self: Context =>
   // this export is NECESSARY for the cyclic error
   export unification.{ requireSubtype }
 
+  // vvvvvvvv insert a line here, save, and run `compile` again vvvvvvvvvv
 }
 
 
