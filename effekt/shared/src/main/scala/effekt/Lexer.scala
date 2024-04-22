@@ -317,7 +317,7 @@ class Lexer(source: String) {
    */
   def matchString(): TokenKind = {
     val sliceStr = (start: Int, end: Int) => TokenKind.Str(slice(start, end))
-    var closed = false
+    var endString = false
     val stringStart = start
     var multiline = false
     var quoted = false
@@ -339,13 +339,13 @@ class Lexer(source: String) {
       else 1
     start += delimOffset
 
-    while (!closed) {
+    while (!endString) {
       consume() match {
         // escaped character, allow arbitrary next character
         case Some('\\') => consume()
         // check for termination
-        case Some('"') if !multiline => closed = true
-        case Some('"') if multiline && nextMatches("\"\"") => closed = true
+        case Some('"') if !multiline => endString = true
+        case Some('"') if multiline && nextMatches("\"\"") => endString = true
         // quoted string
         case Some('$') if nextMatches("{") => {
           quoted = true
@@ -357,15 +357,15 @@ class Lexer(source: String) {
           stringTokens += makeToken(TokenKind.`${`)
 
           delimiters.push(`${`)
-          var terminated = false
-          while (!terminated) {
+          var endQuote = false
+          while (!endQuote) {
             val token = makeToken(nextToken())
             token.kind match {
               case TokenKind.`}` => {
                 delimiters.pop() match {
                   // check if quote has been terminated
                   case `${` => {
-                    terminated = true
+                    endQuote = true
                     stringTokens += Token(token.start, token.end, TokenKind.`}$`)
                   }
                   case _ =>
