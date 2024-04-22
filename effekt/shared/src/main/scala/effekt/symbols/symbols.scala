@@ -3,15 +3,12 @@ package symbols
 
 
 import effekt.context.Context
-import kiama.util.Source
 
 sealed trait TermSymbol extends Symbol
 sealed trait ValueSymbol extends TermSymbol
 sealed trait BlockSymbol extends TermSymbol
 
-case class Module(
-  source: Source
-) extends Symbol {
+case class Module() extends Symbol {
   val name: Name = ???
 }
 

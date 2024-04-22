@@ -5,7 +5,6 @@ import effekt.typer.TyperOps
 import effekt.util.messages.{ ErrorReporter }
 import effekt.symbols.Module
 
-import kiama.util.Positions
 
 trait ContextOps
     extends ErrorReporter
@@ -13,6 +12,8 @@ trait ContextOps
 
   def in[T](block: => T): T = block
 }
+
+sealed trait Positions
 
 abstract class Context(val positions: Positions) extends TyperOps {
 
