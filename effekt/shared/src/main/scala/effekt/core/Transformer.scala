@@ -117,18 +117,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
-      assert(bodies.length == 1, "Externs are resolved before core")
       val cps = bps.map(b => b.symbol.capture)
-      val tBody = bodies.map {
-        case source.ExternBody.StringExternBody(ff, body) =>
+      val tBody = bodies match {
+        case source.ExternBody.StringExternBody(ff, body) :: Nil =>
           val args = body.args.map(transformAsExpr).map {
             case p: Pure => p: Pure
             case _ => Context.abort("Spliced arguments need to be pure expressions.")
           }
           ExternBody(ff, Template(body.strings, args))
-        case source.ExternBody.EffektExternBody(ff, body) =>
+        case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
-      }.head
+      }
       List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBody))
 
     case e @ source.ExternInclude(ff, path, contents, _) =>
