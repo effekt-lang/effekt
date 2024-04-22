@@ -37,8 +37,7 @@ object TransformerMonadicWhole extends TransformerMonadic {
       val hasBlockParameters = bparams.nonEmpty
       val isControlEffecting = annotatedCapture contains symbols.builtins.ControlCapability.capture
       !hasBlockParameters && !isControlEffecting
-    case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) => false
-    case Extern.Include(ff, contents) => true // it's nothing anyway
+    case Extern.Include(ff, contents) => false
   }
 
   /**
@@ -116,10 +115,8 @@ trait TransformerMonadic extends Transformer {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, ExternBody(featureFlag, contents)) =>
       js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(contents))))
 
-    case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
+    case Extern.Include(ff, contents) =>
       js.RawStmt(contents)
-
-    case Extern.Include(_, _) => js.RawStmt("") // ignore, not meant for us
   }
 
   def toJS(t: Template[Pure])(using DeclarationContext, Context): js.Expr =

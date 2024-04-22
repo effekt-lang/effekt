@@ -46,10 +46,8 @@ object Transformer {
         VerbatimFunction(transform(returnType), functionName, parameters.map {
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
         }, transform(body))
-      case machine.Include(ff, content) if ff.matches(llvmFeatureFlags) =>
-        Verbatim(content)
       case machine.Include(ff, content) =>
-        Verbatim("") // ignore, not meant for us
+        Verbatim(content)
     }
 
   def transform(t: Template[machine.Variable]): String = intercalate(t.strings, t.args.map {

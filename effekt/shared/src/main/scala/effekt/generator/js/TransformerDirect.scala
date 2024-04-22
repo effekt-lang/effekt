@@ -91,10 +91,8 @@ object TransformerDirect extends Transformer {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, ExternBody(featureFlag, contents)) =>
       js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(contents))))
 
-    case Extern.Include(ff, contents) if ff.matches(jsFeatureFlags) =>
+    case Extern.Include(ff, contents) =>
       js.RawStmt(contents)
-
-    case Extern.Include(_, _) => js.RawStmt("") // ignore, not meant for us
   }
 
   def toJS(t: Template[Pure])(using TransformerContext): js.Expr = js.RawExpr(t.strings, t.args.map(toJS))
