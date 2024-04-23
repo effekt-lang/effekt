@@ -6,12 +6,12 @@ import immutable/option
 extern type MLOption[T]
 
 extern pure def isDefined[T](opt: MLOption[T]): Bool =
-  "Option.isSome ${opt}"
+  ml "Option.isSome ${opt}"
 
 def isEmpty[T](opt: MLOption[T]): Bool = not(opt.isDefined())
 
 extern pure def force[T](opt: MLOption[T]): T =
-  "Option.valOf ${opt}"
+  ml "Option.valOf ${opt}"
 
 def toOption[T](opt: MLOption[T]): Option[T] = {
     if (isDefined(opt)) Some(force(opt)) else None()

@@ -5,8 +5,7 @@ package llvm
 import effekt.context.Context
 import effekt.lifted.LiftInference
 import effekt.machine
-
-import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
+import kiama.output.PrettyPrinterTypes.{Document, emptyLinks}
 import kiama.util.Source
 
 
@@ -15,6 +14,8 @@ class LLVM extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".ll"
+
+  override def supportedFeatureFlags: List[String] = Transformer.llvmFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }

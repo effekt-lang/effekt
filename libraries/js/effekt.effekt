@@ -2,116 +2,116 @@ module effekt
 
 // Runtime
 // TODO split runtime into monadic and direct
-extern include "effekt_runtime.js"
+extern include js "effekt_runtime.js"
 
 // Builtins
-extern include "effekt_builtins.js"
+extern include js "effekt_builtins.js"
 
 def locally[R] { f: => R }: R = f()
 
 // Side effecting ops
 // ==================
 extern io def println[R](value: R): Unit =
-  "println$impl(${value})"
+  js "println$impl(${value})"
 
 extern io def inspect[R](value: R): Unit =
-  "console.log(${value})"
+  js "console.log(${value})"
 
 extern io def random(): Double =
-  "Math.random()"
+  js "Math.random()"
 
 extern io def timestamp(): Int =
-  "Date.now()"
+  js "Date.now()"
 
 // References and state
 // ====================
 // the following type is defined in builtins.scala
 // interface Ref[T] { def get(): T; def put(t: T): Unit }
-extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = "r.fresh(${t})"
-extern io def freshGlobal[T](t: T): Ref[T] at {global} = "$effekt.fresh(${t})"
+extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
+extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
 
 // String ops
 // ==========
 extern pure def show[R](value: R): String =
-  "show$impl(${value})"
+  js "show$impl(${value})"
 
 extern pure def infixConcat(s1: String, s2: String): String =
-  "${s1} + ${s2}"
+  js "${s1} + ${s2}"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(${x} + ${y})"
+  js "(${x} + ${y})"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(${x} * ${y})"
+  js "(${x} * ${y})"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "Math.floor(${x} / ${y})"
+  js "Math.floor(${x} / ${y})"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(${x} - ${y})"
+  js "(${x} - ${y})"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(${x} % ${y})"
+  js "(${x} % ${y})"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(${x} + ${y})"
+  js "(${x} + ${y})"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(${x} * ${y})"
+  js "(${x} * ${y})"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(${x} - ${y})"
+  js "(${x} - ${y})"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(${x} / ${y})"
+  js "(${x} / ${y})"
 
 
 extern pure def cos(x: Double): Double =
-  "Math.cos(${x})"
+  js "Math.cos(${x})"
 
 extern pure def sin(x: Double): Double =
-  "Math.sin(${x})"
+  js "Math.sin(${x})"
 
 extern pure def atan(x: Double): Double =
-  "Math.atan(${x})"
+  js "Math.atan(${x})"
 
 extern pure def tan(x: Double): Double =
-  "Math.tan(${x})"
+  js "Math.tan(${x})"
 
 extern pure def sqrt(x: Double): Double =
-  "Math.sqrt(${x})"
+  js "Math.sqrt(${x})"
 
 extern pure def square(x: Double): Double =
-  "(${x} * ${x})"
+  js "(${x} * ${x})"
 
 extern pure def log(x: Double): Double =
-  "Math.log(${x})"
+  js "Math.log(${x})"
 
 extern pure def log1p(x: Double): Double =
-  "Math.log1p(${x})"
+  js "Math.log1p(${x})"
 
 extern pure def exp(x: Double): Double =
-  "Math.exp(${x})"
+  js "Math.exp(${x})"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
-  "Math.PI"
+  js "Math.PI"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "Math.round(${d})"
+  js "Math.round(${d})"
 
 extern pure def toDouble(d: Int): Double =
-  "${d}"
+  js "${d}"
 
 extern pure def floor(d: Double): Int =
-  "Math.floor(${d})"
+  js "Math.floor(${d})"
 
 extern pure def ceil(d: Double): Int =
-  "Math.ceil(${d})"
+  js "Math.ceil(${d})"
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -122,10 +122,10 @@ def max(n: Int, m: Int): Int =
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Bool =
-  "equals$impl(${x}, ${y})"
+  js "equals$impl(${x}, ${y})"
 
 extern pure def infixNeq[R](x: R, y: R): Bool =
-  "!equals$impl(${x}, ${y})"
+  js "!equals$impl(${x}, ${y})"
 
 // Result of comparison between two objects according to some order:
 //
@@ -139,7 +139,7 @@ type Ordering {
  }
 
  extern pure def genericCompareImpl[R](x: R, y: R): Int =
-   "compare$impl(${x}, ${y})"
+   js "compare$impl(${x}, ${y})"
 
  // Compares two values of the same type, returning an `Ordering`.
  def genericCompare[R](x: R, y: R): Ordering = {
@@ -152,46 +152,46 @@ type Ordering {
  }
 
 extern pure def infixLt(x: Int, y: Int): Bool =
-  "(${x} < ${y})"
+  js "(${x} < ${y})"
 
 extern pure def infixLte(x: Int, y: Int): Bool =
-  "(${x} <= ${y})"
+  js "(${x} <= ${y})"
 
 extern pure def infixGt(x: Int, y: Int): Bool =
-  "(${x} > ${y})"
+  js "(${x} > ${y})"
 
 extern pure def infixGte(x: Int, y: Int): Bool =
-  "(${x} >= ${y})"
+  js "(${x} >= ${y})"
 
 extern pure def infixLt(x: Double, y: Double): Bool =
-  "(${x} < ${y})"
+  js "(${x} < ${y})"
 
 extern pure def infixLte(x: Double, y: Double): Bool =
-  "(${x} <= ${y})"
+  js "(${x} <= ${y})"
 
 extern pure def infixGt(x: Double, y: Double): Bool =
-  "(${x} > ${y})"
+  js "(${x} > ${y})"
 
 extern pure def infixGte(x: Double, y: Double): Bool =
-  "(${x} >= ${y})"
+  js "(${x} >= ${y})"
 
 extern pure def infixLt(x: String, y: String): Bool =
-  "(${x} < ${y})"
+  js "(${x} < ${y})"
 
 extern pure def infixLte(x: String, y: String): Bool =
-  "(${x} <= ${y})"
+  js "(${x} <= ${y})"
 
 extern pure def infixGt(x: String, y: String): Bool =
-  "(${x} > ${y})"
+  js "(${x} > ${y})"
 
 extern pure def infixGte(x: String, y: String): Bool =
-  "(${x} >= ${y})"
+  js "(${x} >= ${y})"
 
 // Bool ops
 // ===========
 // for now those are considered eager
 extern pure def not(b: Bool): Bool =
-  "!${b}"
+  js "!${b}"
 
 def infixOr { first: => Bool } { second: => Bool }: Bool = 
   if (first()) true else second()
@@ -205,11 +205,11 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 
 // Is something an undefined JavaScript value?
 extern pure def isUndefined[A](value: A): Bool =
-  "(${value} === undefined)"
+  js "(${value} === undefined)"
 
 // Is something a JavaScript null value?
 extern pure def isNull[A](value: A): Bool =
-  "(${value} === null)"
+  js "(${value} === null)"
 
 // Pairs
 // =====
@@ -224,7 +224,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "(function() { throw ${msg} })()"
+  js "(function() { throw ${msg} })()"
 
 interface Exception[E] {
   def raise(exception: E, msg: String): Nothing
@@ -282,10 +282,10 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // Current time in nanoseconds
 // TODO use a better timer
 extern control def currentTimeNanos(): Int =
-  "$effekt.delayed(() => new Date().getTime() * 1000000)"
+  js "$effekt.delayed(() => new Date().getTime() * 1000000)"
 
 extern io def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
-  "(function() { window.setTimeout(() => ${callback}().run(), ${timeout}); return $effekt.unit; })()"
+  js "(function() { window.setTimeout(() => ${callback}().run(), ${timeout}); return $effekt.unit; })()"
 
 // runs the block and returns the time in nanoseconds
 def timed { block: => Unit }: Int = {

@@ -132,12 +132,12 @@ trait Transformer {
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, ExternBody(_, body)) =>
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
           toChez(body)))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) =>
       RawDef(contents)
   }
 

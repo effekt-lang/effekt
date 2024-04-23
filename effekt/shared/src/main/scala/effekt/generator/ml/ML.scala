@@ -4,7 +4,7 @@ package ml
 
 import effekt.context.Context
 import effekt.core.LambdaLifting
-import effekt.lifted.{ LiftInference, Monomorphize }
+import effekt.lifted.{LiftInference, Monomorphize}
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
@@ -14,6 +14,9 @@ class ML extends Compiler[String] {
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".sml"
+
+  override def supportedFeatureFlags: List[String] = List("ml")
+
   def buildFile(mainFile: String): String =
     s"""local
        |  (* import libraries *)
