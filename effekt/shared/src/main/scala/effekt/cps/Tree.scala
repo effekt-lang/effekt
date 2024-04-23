@@ -39,26 +39,26 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: Template[Expr])
+  case Def(id: Id, tparams: List[Id], params: List[Id], ret: ValueType, body: Template[Expr])
   case Include(contents: String)
 }
 
 
 
 enum Definition {
-  case Function(name: Id, params: List[Param], cont: Id, body: Term)
+  case Function(name: Id, params: List[Id], cont: Id, body: Term)
   case Let(id: Id, binding: Expr)
 }
 
 
-enum Expr{
+enum Expr{//replace valueType with Id?
   case Var(name: Id)
   case Lit(n: Int)
-  case PureApp(b: Block, targs: List[ValueType], args: List[Either[Expr, Block]])
+  case PureApp(b: Id, targs: List[ValueType], args: List[Expr])
 
   case Make(data: ValueType.Data, tag: Id, vargs: List[Expr])
   case Select(target: Expr, field: Id, annotatedType: ValueType)
-  case Box(b: Block)
+  case Box(b: Id)
 
   case Run(t: Term)
   //val tpe: ValueType = Type.inferType(this)
@@ -71,7 +71,7 @@ export Expr.*
 enum Block{
 
   case BlockVar(id: Id, annotatedType: BlockType)
-  case BlockLit(tparams: List[Id], params: List[Param], body: Term)
+  case BlockLit(tparams: List[Id], params: List[Id], body: Term)
   case Member(b: Block, field: Id, annotatedTpe: BlockType)
 
   // WARNING not officially supported, yet
@@ -83,14 +83,15 @@ enum Block{
 export Block.*
 
 enum Term {
-  case LetCont(cont: Id, param: Param, body: Term, rest: Term)
+  case Fun(name: Id, params: List[Id], cont: Id, body: Term)
+  case LetCont(cont: Id, param: Id, body: Term, rest: Term)
   case Let(name: Id, expr: Expr, rest: Term)
   case AppCont(cont: Id, arg: Expr)
   case App(func: Id, arg: List[Expr], cont: Id)
   case Scope(definitions: List[Definition], body: Term)
   case Val(id: Id, binding: Term, body: Term)
   case If(cond: Expr, thn: Term, els: Term)
-  case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Term])
+  case Match(scrutinee: Expr, clauses: List[(Id, Id)], default: Option[Term])
   //val tpe: ValueType = Type.inferType(this)
 } 
 export Term.*
@@ -114,7 +115,7 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 
 
 
-enum Param {
+enum Param {// alle typen löschen Id => ID
   def id: Id
 
   case ValueParam(id: Id, tpe: ValueType)

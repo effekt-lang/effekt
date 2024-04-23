@@ -36,7 +36,7 @@ def transform(decl: lifted.Declaration): Declaration = decl match {
 
 def transform(extern: lifted.Extern): Extern = extern match {
   case lifted.Extern.Def(id, tparams, params, ret, body) =>
-    Extern.Def(id, tparams, params map transform, transform(ret), Template(body.strings, body.args map transform))
+    Extern.Def(id, tparams, params map paramToId, transform(ret), Template(body.strings, body.args map transform))
   case lifted.Extern.Include(contents) => Extern.Include(contents)
 }
 
@@ -49,7 +49,7 @@ def transform(p: lifted.Param): Param = p match {
 
 def transform(definition: lifted.Definition): Definition = definition match {
   case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
-    Definition.Function(id, params map transform, Id.apply("k"), transform(body))
+    Definition.Function(id, params map paramToId, Id.apply("k"), transform(body))
   case lifted.Definition.Let(id, binding) => Definition.Let(id, transform(binding))
   case _ => 
     println(definition)
@@ -57,9 +57,9 @@ def transform(definition: lifted.Definition): Definition = definition match {
 }
 
 
-def transform(arg: lifted.Argument): Either[Expr, Block] = arg match {
-  case expr: lifted.Expr => Left(transform(expr))
-  case block: lifted.Block => Right(transform(block))
+def transform(arg: lifted.Argument): Expr = arg match {
+  case expr: lifted.Expr => transform(expr)
+  case block: lifted.Block => Var(blockToId(block))
   case ev: lifted.Evidence => ???
 }
 
@@ -68,22 +68,22 @@ def transform(ev: lifted.Evidence): Var = Var(Id.apply("something"))
 def transform(expr: lifted.Expr): Expr = expr match {
   case lifted.Literal(value, _) => Expr.Lit(value.toString().toInt)// any to Int
   case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
-  case lifted.PureApp(b, targs, args) => Expr.PureApp(transform(b), targs map transform, args map transform)
+  case lifted.PureApp(b, targs, args) => Expr.PureApp(blockToId(b), targs map transform, args map transform)
   case lifted.Make(data, tag, args) => Expr.Make(transform(data), tag, args map transform)
   case lifted.Select(target, field, annotatedType) => Expr.Select(transform(target), field, transform(annotatedType))
-  case lifted.Box(b) => Expr.Box(transform(b))
+  case lifted.Box(b) => Expr.Box(blockToId(b))
   case lifted.Run(s) => Expr.Run(transform(s))
 }
 
 def transform(b: lifted.Block.BlockLit): BlockLit =
-  BlockLit(b.tparams, b.params map transform, transform(b.body))
+  BlockLit(b.tparams, b.params map paramToId, transform(b.body))
 
-def transform(b: lifted.Block): Block = b match {
-  case lifted.Block.BlockVar(id, annotatedType) => BlockVar(id, transform(annotatedType))
-  case lifted.Block.BlockLit(tparams, params, body) => BlockLit(tparams, params map transform, transform(body))
-  case lifted.Block.Member(b, field, annotatedType) => Member(transform(b), field, transform(annotatedType))
-  case lifted.Block.Unbox(e) => Unbox(transform(e))
-  case lifted.Block.New(impl) => New(transform(impl))
+def transform(b: lifted.Block): Term = b match { // block => Term
+  case lifted.Block.BlockVar(id, annotatedType) => ???//BlockVar(id, transform(annotatedType)) // Var
+  case lifted.Block.BlockLit(tparams, params, body) => ??? //BlockLit(tparams, params map transform, transform(body)) // Fun
+  case lifted.Block.Member(b, field, annotatedType) => ???
+  case lifted.Block.Unbox(e) => ??? //transform(e) 
+  case lifted.Block.New(impl) => ???
 }
 
 def transform(impl: lifted.Implementation): Implementation =
@@ -93,15 +93,15 @@ def transform(operation: lifted.Operation): Operation =
   Operation(operation.name, transform(operation.implementation))
 
 def transform(stmt: lifted.Stmt): Term = stmt match {
-  case lifted.Stmt.Return(e)  =>  AppCont(Id.apply("k"), transform(e))
-  case lifted.Stmt.Val(id, binding, body)  => Val(id, transform(binding), transform(body))
+  case lifted.Stmt.Return(e)  =>  AppCont(Id("k"), transform(e))
+  case lifted.Stmt.Val(id, binding, body)  => LetCont(Id("k"), id, transform(body), transform(binding))
   
-  case lifted.Stmt.Scope(definitions, body) => Scope(definitions map transform, transform(body))
+  case lifted.Stmt.Scope(definitions, body) => transform(definitions, transform(body))
   case lifted.Stmt.App(b, targs, args) => println(stmt); ???
   
   case lifted.Stmt.If(cond, thn, els) => If(transform(cond), transform(thn), transform(els))
-  case lifted.Stmt.Match(scrutinee, clauses, Some(default)) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), transform(blockLit))), Some(transform(default)))
-  case lifted.Stmt.Match(scrutinee, clauses, None) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), transform(blockLit))), None)
+  case lifted.Stmt.Match(scrutinee, clauses, Some(default)) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), blockToId(blockLit))), Some(transform(default)))
+  case lifted.Stmt.Match(scrutinee, clauses, None) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), blockToId(blockLit))), None)
 
   case lifted.Stmt.Region(body) => ???
   case lifted.Stmt.Alloc(id, init, region, ev, body) => ???
@@ -117,6 +117,12 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Shift(ev, body) => ???
 
   case lifted.Stmt.Hole() => ???
+}
+
+def transform(definitions: List[lifted.Definition], rest: Term): Term = definitions match {
+  case Nil => rest
+  case lifted.Definition.Let(id, binding) :: tail => Term.Let(id, transform(binding), transform(tail, rest))
+  case lifted.Definition.Def(id, block) :: tail => Term.Let(id, Expr.Var(blockToId(block)), transform(tail, rest))
 }
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
@@ -143,3 +149,12 @@ def transform(tpe: lifted.BlockType): BlockType = tpe match {
 
 
 def transform(tpe: lifted.EvidenceType): EvidenceType = EvidenceType()
+
+def paramToId(param: lifted.Param): Id = param.id
+
+def blockToId(b: lifted.Block): Id = b match {
+  case lifted.Block.BlockVar(id, _) => id
+  case lifted.Block.BlockLit(tparams, params, body) => params.head.id
+  case lifted.Block.Member(b, _, _) =>  blockToId(b)
+  case _ => ???
+}
