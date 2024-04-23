@@ -57,7 +57,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // bring builtins into scope
               builtins.rootTerms.values.foreach {
                 case term: BlockParam =>
-                  Context.bind(term, term.tpe.get)
+                  Context.bind(term, term.tpe.getOrElse {
+                    Context.abort("Builtins should always be annotated with their types.")
+                  })
                   Context.bind(term, CaptureSet(term.capture))
                 case term: ExternResource =>
                   Context.bind(term, term.tpe)
@@ -247,6 +249,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (4) Wellformedness checks
         val handlerFor = providedCapabilities.map { cap =>
           // all effects have to be concrete at this point in time
+          // safety: (1) ensures there's a type annotation
           val concreteEffect = Context.unification(cap.tpe.get.asInterfaceType)
           (concreteEffect, cap)
         }
@@ -953,7 +956,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
       val bps = bparams.map { p =>
         val param = p.symbol
-        val tpe = param.tpe.get
+        val tpe = param.tpe.getOrElse {
+          Context.abort("Expected type need to be know for function arguments at the moment.")
+        }
         Context.bind(param, tpe)
         tpe
       }
@@ -1467,7 +1472,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
     bindCapabilities(binder, caps)
-    capabilityScope = BindSome(binder, caps.map { c => c.tpe.get.asInterfaceType -> c }.toMap, capabilityScope)
+    capabilityScope = BindSome(
+      binder,
+      caps.map { c => c.tpe.getOrElse { Context.abort("Capability type needs to be know at this point.") }.asInterfaceType -> c }.toMap,
+      capabilityScope
+    )
     val result = f
     capabilityScope = capabilityScope.parent
     result
@@ -1475,7 +1484,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
-      assertConcrete(cap.tpe.get.asInterfaceType)
+      assertConcrete(cap.tpe.getOrElse { Context.abort("Capability type needs to be know at this point.") }.asInterfaceType)
       positions.dupPos(binder, cap)
       cap
     }

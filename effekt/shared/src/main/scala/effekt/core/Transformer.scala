@@ -87,7 +87,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
           val capabilities = effects.canonical
           val tparams = tps.drop(tparamsInterface.size)
-          val bparamsBlocks = bps.map(b => transform(b.tpe.get))
+          val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
+            Context.abort("Interface declarations should have annotated types.")
+          }))
           val bparamsCapabilities = capabilities.map(transform)
           //val bparams = bparamsBlocks ++ bparamsCapabilities
           val bparams = bparamsCapabilities
@@ -614,7 +616,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
         val cparams = bparams.map(b => b.capture) ++ effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
         val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.get))
-        val bparamTpes = bparams.map(b => substitution.substitute(b.tpe.get))
+        val bparamTpes = bparams.map(b => substitution.substitute(b.tpe.getOrElse {
+          Context.abort("Operation block parameters should have an annotated type.")
+        }))
 
         FunctionType(remainingTypeParams, cparams, vparamTpes, bparamTpes, substitution.substitute(resultType), substitution.substitute(effects))
     }
