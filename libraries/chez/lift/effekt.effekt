@@ -214,3 +214,12 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // should only be used with pure blocks
 extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit =
   "(delayed (display (measure (lambda () (run ((${box block} here)))) ${warmup} ${iterations})))"
+
+extern pure def xor(a: Int, b: Int): Int = 
+  "(bitwise-xor ${a} ${b})"
+
+extern pure def lshift(a: Int, b: Int): Int = 
+  "(bitwise-arithmetic-shift ${a} ${b})"
+
+extern pure def currentTimeNanos(): Int = 
+  "(+ (* 1000000000 (time-second (current-time))) (time-nanosecond (current-time)))"

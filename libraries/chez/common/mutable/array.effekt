@@ -9,6 +9,18 @@ extern type Array[T]
 extern pure def emptyArray[T](size: Int): Array[T] =
   "(make-vector ${size})"
 
+def emptyArray[T]() : Array[T] = {
+  emptyArray[T](0)
+}
+
+def fill[T](size: Int, default: T): Array[T] = {
+  val arr = emptyArray[T](size);
+  each(0,size){ i => 
+    put(arr, i, default)
+  }
+  arr
+}
+
 def get[T](arr: Array[T], index: Int): Option[T] =
   if (index >= arr.size) None() else Some(arr.unsafeGet(index))
 
