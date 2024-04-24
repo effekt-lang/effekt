@@ -29,7 +29,7 @@ def transform(decl: cps.Declaration): List[Definition] = decl match {
 }
 
 def transform(decl: cps.Extern): Verbatim = decl match {
-  case cps.Extern.Def(id, tparams, params, ret, body) =>
+  case cps.Extern.Def(id, tparams, params, body) =>
     Verbatim.Def(id.name.name, params map idToPattern, transform(body))//let tmp für jedes body.args
   case cps.Extern.Include(contents) => Verbatim.Include(contents)
 }
@@ -44,11 +44,6 @@ def transform(definition: cps.Definition): Definition = definition match {
   case cps.Definition.Let(id, expr) => Definition(id.name.name, List(Rule(List(VarPattern(Some(id.name.name))), transform(expr))), false)
 }
 
-def transform(param: cps.Param): Pattern = param match {
-  case cps.Param.ValueParam(id, _) => VarPattern(Some(id.name.name))
-  case cps.Param.EvidenceParam(id) => VarPattern(Some(id.name.name))
-  case _ => println(param); ??? 
-}
  
 
 def transform(term: cps.Term): Term = term match {
@@ -59,28 +54,19 @@ def transform(term: cps.Term): Term = term match {
     Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
   case cps.Term.Match(scrutinee, clauses, None) => ???//Swt(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
   case cps.Term.Match(scrutinee, clauses, Some(default)) => ???//Swt(List(transform(scrutinee)), (clauses map ((x: cps.Id, blockLit: cps.Block.BlockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
-  case _ => ??? 
+  case cps.Term.Let(name, expr, rest) => Let(VarPattern(Some(name.name.name)), transform(expr), transform(rest))
+  case _ => println(term); ??? 
 }
 
-//BlockLit=> Rule
-def transform(blockLit: cps.BlockLit): Rule = blockLit match {
-  case _ => ???
-}
-def transform(block: cps.Block): Term = block match {
-  case cps.Block.BlockVar(id, annotatedType) => Var(id.name.name)
-  case _ => ???
-}
-
-def transform(arg: Either[cps.Expr, cps.Block]): Term = arg match{
-  case Left(expr) => transform(expr)
-  case Right(block) => transform(block)
+def transform(blockLit: cps.BlockLit): Term = blockLit match {
+  case cps.BlockLit(params, body) => ???
 }
 
 def transform(definitions: List[cps.Definition], body: cps.Term): Term = definitions match {
   case Nil => transform(body)
   case _ => definitions.head match {
     case cps.Definition.Let(id, bindings) => Let(VarPattern(Some(id.name.name)), transform(bindings), transform(definitions.tail, body))
-    case cps.Definition.Function(name, params, cont, body) => Let(VarPattern(Some(name.name.name)), Num(5), App(Auto, Var(cont.name.name), transform(body)))
+    case cps.Definition.Function(name, params, cont, body) => ???//Let(VarPattern(Some(name.name.name)), Num(5), App(Auto, Var(cont.name.name), transform(body)))
   }
 }
 
@@ -97,14 +83,14 @@ def transformConstructors(tparams: List[cps.Id], constructors: List[cps.Construc
   case (tparams, constructors) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(constructors.head.id.name.name)) :: transformConstructors(tparams.tail, constructors.tail)
 }
 
-def transformProperties(tparams: List[cps.Id], properties: List[cps.Property]): List[Rule] = (tparams, properties) match {
-  case (List(), properties) => Rule(List(), Var(properties.head.id.name.name)) :: transformProperties(List(), properties.tail)
+def transformProperties(tparams: List[cps.Id], properties: List[cps.Id]): List[Rule] = (tparams, properties) match {
+  case (List(), properties) => Rule(List(), Var(properties.head.name.name)) :: transformProperties(List(), properties.tail)
   case (tparams, List()) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(" ")) :: transformProperties(tparams, List())
-  case (tparams, properties) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(properties.head.id.name.name)) :: transformProperties(tparams.tail, properties.tail)
+  case (tparams, properties) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(properties.head.name.name)) :: transformProperties(tparams.tail, properties.tail)
 }
 
 //helper functions:
-def chainApp(args: List[Term]): Term = {//println(args);
+def chainApp(args: List[Term]): Term = {
   val reverseArgs = args.reverse
   chainAppHelper(reverseArgs)
 }
