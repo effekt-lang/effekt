@@ -91,13 +91,16 @@ enum NumCtr {
 enum Term {
    case Lam(tag: Tag, nam: Option[String], bod: Term)
    case Var(nam: String)
-   case Chn(tag: Tag, nam: Option[String], bod: Term)
+   //case Chn(tag: Tag, nam: Option[String], bod: Term)
    case Lnk(nam: String)
    case Let(pat: Pattern, value: Term, nxt: Term)
+   case Bnd(fun: String, ask: Pattern, value: Term, nxt: Term)
+   case Use(name: Option[String], value: Term, nxt: Term)
    case App(tag: Tag, fun: Term, arg: Term)
-   case Tup(els: List[Term])
-   case Dup(tag: Tag, bnd: List[Option[String]], value: Term, nxt: Term)
-   case Sup(tag: Tag, els: List[Term])
+   //case Tup(els: List[Term])
+   //case Dup(tag: Tag, bnd: List[Option[String]], value: Term, nxt: Term)
+   //case Sup(tag: Tag, els: List[Term])
+   case Fan(fan: FanKind, tag: Tag, els: List[Term])
    case Num(value: Long)
    case Str(value: String)
    case Lst(els: List[Term])
@@ -110,6 +113,11 @@ enum Term {
 }
 export Term.*
 
+enum FanKind {
+   case Tup
+   case Dup
+}
+export FanKind.*
 
 enum Pattern {
    case VarPattern(name: Option[String])

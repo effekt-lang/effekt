@@ -16,15 +16,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(expr: Term): Doc = expr match {
       case Lam(tag, nam, bod)         => toDoc(tag)<+>string("λ")<>toDoc(nam)<+>toDoc(bod)
-      case Chn(tag, nam, bod)         => toDoc(tag)<+>string("λ$")<>toDoc(nam)<+>toDoc(bod)
+      //case Chn(tag, nam, bod)         => toDoc(tag)<+>string("λ$")<>toDoc(nam)<+>toDoc(bod)
       case Var(nam)                   => string(nam)
       case Lnk(nam)                   => string("$") <> string(nam)
       case Let(pat, value, nxt)       => string("let")<+> toDoc(pat) <+> string("=") <+> toDoc(value)<>string(";")<+>toDoc(nxt)
+      case Bnd(fun, ask, value, nxt) => string("do")<+>string(fun)<+>braces(bndToDoc(Bnd(fun, ask, value, nxt)))
+      case Use(None, value, nxt) => ???
+      case Use(Some(name), value, nxt) => string("use")<+>string(name)<+>string("=")<+>toDoc(value)<+>string(";")<+>toDoc(nxt)
       case Ref(nam)                   => string(nam)
       case App(tag, fun, arg)         => toDoc(tag)<>parens(toDoc(fun)<+> toDoc(arg))
-      case Tup(els)                   => parens(folddoc((els map toDoc), (x, y) => x <> String(",") <+> y))
-      case Dup(tag, bnd, value, nxt)  => string("let")<+>toDoc(tag)<>braces(hsep(bnd map toDoc))<+> string("=")<+>toDoc(value)<>string(";")<+> toDoc(nxt)
-      case Sup(tag, els)              => toDoc(tag)<>braces(hsep(els map toDoc))
+      //case Tup(els)                   => parens(folddoc((els map toDoc), (x, y) => x <> String(",") <+> y))
+      //case Dup(tag, bnd, value, nxt)  => string("let")<+>toDoc(tag)<>braces(hsep(bnd map toDoc))<+> string("=")<+>toDoc(value)<>string(";")<+> toDoc(nxt)
+      //case Sup(tag, els)              => toDoc(tag)<>braces(hsep(els map toDoc))
+      case Fan(Tup, tag, els) => toDoc(tag)<>parens(hsep(els map toDoc, string(", ")))
+      case Fan(Dup, tag, els) => toDoc(tag)<>braces(hsep(els map toDoc))
       case Num(value)                 => string(value.toString)
       case Str(value)                 => string(value)
       case Lst(els)                   => brackets(folddoc((els map toDoc), (x, y) => x <> String(",") <+> y))
@@ -34,6 +39,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case Era                        => string("*")
       case Err                        => string("<Invalid>")
   }
+
+  def bndToDoc(bnd: Bnd): Doc = bnd.nxt match {
+    case Bnd(_, _, _, _) => string("ask")<+>toDoc(bnd.ask)<+>string("=")<+>toDoc(bnd.value)<>string(";")<+>toDoc(bnd.nxt)
+    case _ => string("ask")<+>toDoc(bnd.ask)<+>string("=")<+>toDoc(bnd.value)<>string(";")<+>toDoc(bnd.nxt)
+  }
+    
 
 
   def toDoc(op: Op): Doc = op match {
