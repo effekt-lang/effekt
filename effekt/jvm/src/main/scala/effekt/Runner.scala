@@ -111,7 +111,9 @@ object JSRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "js"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def includes(path: File): List[File] = List(path / ".." / "common")
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())

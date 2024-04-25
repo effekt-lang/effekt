@@ -1,7 +1,5 @@
 module mutable/array
 
-import immutable/option
-
 // A mutable array, backed by a sml array.
 extern type Array[T]
 

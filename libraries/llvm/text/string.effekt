@@ -1,8 +1,5 @@
 module text/string
 
-import immutable/option
-import immutable/list
-
 extern pure def length(s: String): Int = llvm """
    %x = call %Int @c_buffer_length(%Pos %s)
    call void @c_buffer_refcount_decrement(%Pos %s)

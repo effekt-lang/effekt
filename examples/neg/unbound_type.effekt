@@ -2,8 +2,6 @@ module examples/pos/lexer
 
 import text/string
 import text/regex
-import immutable/option
-
 
 effect EOS[A](): A
 effect LexerError[A](msg: String, pos: Position): A

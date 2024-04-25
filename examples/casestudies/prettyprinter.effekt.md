@@ -20,8 +20,6 @@ Furthermore, the library presented here is neither linear
 module examples/casestudies/prettyprinter
 
 import examples/casestudies/parser // just needed for the example (Tree)
-import immutable/option
-import immutable/list
 import text/string
 ```
 
@@ -374,8 +372,8 @@ a parse tree, which we then pretty print:
 ```
 def parseAndPrint(text: String, width: Int): String =
   parse(text) { parseExpr() } match {
-    case Success(tree) => pretty(width) { toDoc(tree) }
-    case Failure(text) => text
+    case examples::casestudies::parser::Success(tree) => pretty(width) { toDoc(tree) }
+    case examples::casestudies::parser::Failure(text) => text
   }
 ```
 

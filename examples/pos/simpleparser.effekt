@@ -2,9 +2,6 @@ module examples/pos/simpleparser
 
 import text/string
 import text/regex
-import immutable/list
-import immutable/option
-
 
 effect Fail[A](msg: String) : A
 

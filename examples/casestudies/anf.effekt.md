@@ -159,8 +159,8 @@ our input:
 ```
 def pipeline(input: String): String =
   parse(input) { parseExpr() } match {
-    case Success(tree) => pretty(translate(tree))
-    case Failure(msg) => msg
+    case examples::casestudies::parser::Success(tree) => pretty(translate(tree))
+    case examples::casestudies::parser::Failure(msg) => msg
   }
 ```
 

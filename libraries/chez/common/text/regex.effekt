@@ -1,6 +1,5 @@
 module text/regex
 
-import immutable/option
 import immutable/cslist
 import mutable/array
 

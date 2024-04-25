@@ -1,8 +1,7 @@
 module examples/pos/unsafe_cont
 
+import dequeue
 import unsafe/cont
-import immutable/dequeue
-import immutable/option
 
 interface Process {
     def fork(): Bool

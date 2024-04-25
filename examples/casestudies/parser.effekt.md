@@ -15,7 +15,6 @@ Again, we require some imports -- in particular, we reuse the lexer implementati
 module examples/casestudies/parser
 
 import examples/casestudies/lexer
-import immutable/option
 import text/string
 ```
 

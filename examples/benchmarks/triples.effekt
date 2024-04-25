@@ -1,6 +1,4 @@
 import io/args
-import immutable/list
-import immutable/option
 import text/string
 
 record Triple(a: Int, b: Int, c: Int)

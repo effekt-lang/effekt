@@ -1,6 +1,5 @@
 module examples/pos/list/collect
 
-import immutable/list
 import mutable/array
 
 def listToArrayAndBack[A](list: List[A]): Unit = {

@@ -1,6 +1,5 @@
 module mutable/array
 
-import immutable/option
 import immutable/cslist
 
 // a mutable array backed by a scheme vector

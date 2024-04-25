@@ -1,10 +1,9 @@
 module text/string
 
-import immutable/option
 import mutable/array
 
 def charAt(str: String, index: Int): Option[String] =
-    str.unsafeCharAt(index).undefinedToOption
+    js::undefinedToOption(str.unsafeCharAt(index))
 
 extern pure def length(str: String): Int =
   js "${str}.length"
@@ -31,7 +30,7 @@ extern pure def trim(str: String): String =
   js "${str}.trim()"
 
 def toInt(str: String): Option[Int] =
-  str.unsafeToInt.undefinedToOption
+   js::undefinedToOption(str.unsafeToInt)
 
 extern pure def unsafeCharAt(str: String, n: Int): String =
   js "${str}[${n}]"

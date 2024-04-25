@@ -1,6 +1,4 @@
 import text/string
-import immutable/list
-import immutable/option
 import io/args
 
 type Succ[Z] = Z => Z at {}

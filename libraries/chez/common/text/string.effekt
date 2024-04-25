@@ -1,7 +1,5 @@
 module text/string
 
-import immutable/option
-
 // def charAt(str: String, index: Int): Option[String] =
 //     str.unsafeCharAt(index).undefinedToOption
 

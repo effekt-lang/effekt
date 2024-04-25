@@ -16,8 +16,6 @@ module examples/casestudies/lexer
 
 import text/string
 import text/regex
-import immutable/option
-import immutable/list
 import mutable/array
 ```
 

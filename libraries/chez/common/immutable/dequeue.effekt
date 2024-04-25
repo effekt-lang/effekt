@@ -1,7 +1,5 @@
 module immutable/dequeue
 
-import immutable/list
-import immutable/option
 
 // An implementation of a functional dequeue, using Okasaki's
 // bankers dequeue implementation.

@@ -18,7 +18,6 @@ module examples/casestudies/ad
 ```
 
 ```effekt:prelude:hide
-import immutable/list
 import mutable/heap
 ```
 

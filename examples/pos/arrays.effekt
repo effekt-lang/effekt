@@ -1,6 +1,5 @@
 module examples/pos/arrays
 
-import immutable/option
 import mutable/array
 
 def show(o: Option[String]) = o match {

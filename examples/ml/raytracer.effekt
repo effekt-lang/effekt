@@ -7,8 +7,6 @@
 //
 module examples/pos/raytracer
 
-import immutable/option
-import immutable/list
 import mutable/array
 import io/args
 import text/string

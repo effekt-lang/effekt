@@ -1,8 +1,5 @@
 module mutable/array
 
-import immutable/option
-import immutable/list
-
 // A mutable 0-based indexed array, backed by a JavaScript array.
 extern type Array[T]
 
@@ -42,7 +39,7 @@ extern pure def emptyArray[T](initialSize: Int): Array[T] =
   js "(new Array(${initialSize}))"
 
 def get[T](arr: Array[T], index: Int): Option[T] =
-  arr.unsafeGet(index).undefinedToOption
+  js::undefinedToOption(arr.unsafeGet(index))
 
 extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"

@@ -1,14 +1,22 @@
-import immutable/option
+module result
 
-// Results
-// =======
-// The "reification" of the Exception[E] effect.
+import effekt
+import option
+
+
+/**
+ * Represents the result of a potentially failing computation.
+ * It is the "reification" of the Exception[E] effect.
+ */
 type Result[A, E] {
   Error(exception: E, msg: String);
   Success(a: A)
 }
 
-def result[A, E] { f: () => A / Exception[E] }: Result[A, E] = try {
+/**
+ * Represent ("reify") the result of a potentially failing computation.
+ */
+def result[A, E] { f: => A / Exception[E] }: Result[A, E] = try {
   Success(f())
 } with Exception[E] {
   def raise(exc, msg) = Error(exc, msg)
@@ -23,6 +31,9 @@ def value[A, E](r: Result[A, E]): A / Exception[E] = r match {
   case Error(exc, msg) => do raise(exc, msg)
 }
 
+/**
+ * Converts a result to an option forgetting the error details
+ */
 def toOption[A, E](r: Result[A, E]): Option[A] = r match {
   case Success(a) => Some(a)
   case Error(exc, msg) => None()

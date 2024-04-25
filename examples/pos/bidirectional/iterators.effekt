@@ -1,7 +1,5 @@
 module examples/pos/bidirectional/iterators
 
-import immutable/list
-
 // specialized to Int, since ATM type parameters on effects are not
 // yet implemented.
 interface Yield {

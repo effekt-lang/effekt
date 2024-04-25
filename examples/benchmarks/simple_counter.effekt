@@ -1,5 +1,3 @@
-import immutable/list
-import immutable/option
 import text/string
 import io/args
 

@@ -1,8 +1,6 @@
 module drafts/propagators
 
-import immutable/option
-import immutable/list
-import immutable/dequeue
+import dequeue
 import unsafe/cont
 import mutable/heap
 

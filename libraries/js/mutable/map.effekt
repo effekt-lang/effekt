@@ -1,7 +1,6 @@
 module mutable/map
 
 import mutable/array
-import immutable/option
 
 // A mutable map, backed by a JavaScript Map.
 extern type Map[K, V]
@@ -10,7 +9,7 @@ extern pure def emptyMap[K, V](): Map[K, V] =
   js "new Map()"
 
 def get[K, V](m: Map[K, V], key: K): Option[V] =
-  m.unsafeGet(key).undefinedToOption
+  js::undefinedToOption(m.unsafeGet(key))
 
 extern pure def unsafeGet[K, V](m: Map[K, V], key: K): V =
   js "${m}.get(${key})"

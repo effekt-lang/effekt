@@ -16,9 +16,6 @@ As usual, we start with the module name and imports.
 
 ```
 module examples/casestudies/buildsystem
-
-import immutable/list
-import immutable/option
 ```
 
 This example revolves around a single effect: `Need`.

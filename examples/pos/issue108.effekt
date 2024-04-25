@@ -1,5 +1,3 @@
-import immutable/list
-
 type Option[A] {
   Present(value: A)
   Absent()

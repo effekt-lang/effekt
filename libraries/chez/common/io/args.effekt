@@ -1,9 +1,7 @@
 module io/args
 
 import effekt
-import immutable/option
 import immutable/cslist
-import immutable/list
 
 
 // ================================================

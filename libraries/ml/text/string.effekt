@@ -1,7 +1,7 @@
 module text/string
 
 import effekt
-import immutable/option
+
 import internal/option
 
 // For more information on the sml string type:

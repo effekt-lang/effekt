@@ -1,5 +1,3 @@
-import immutable/option
-
 // Results
 // =======
 // The "reification" of the Exception[E] effect.

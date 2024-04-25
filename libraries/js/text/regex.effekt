@@ -1,7 +1,6 @@
 module text/regex
 
 import text/string
-import immutable/option
 
 extern type Regex
 
@@ -11,7 +10,7 @@ extern pure def regex(str: String): Regex =
   js "new RegExp(${str})"
 
 def exec(reg: Regex, str: String): Option[Match] =
-  reg.unsafeExec(str).undefinedToOption match {
+   js::undefinedToOption(reg.unsafeExec(str)) match {
     case None() => None()
     case Some(v) => Some(Match(v.matched, v.index))
   }

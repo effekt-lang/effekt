@@ -7,8 +7,6 @@
 //
 module examples/pos/raytracer
 
-import immutable/option
-import immutable/list
 import mutable/array
 
 // replacing all vector operations by `inline pure def` buys us 20%

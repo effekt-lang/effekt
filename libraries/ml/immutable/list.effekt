@@ -1,7 +1,6 @@
 module immutable/list
 
 import effekt
-import immutable/option
 
 // Used as a type for `Exception` in functions which expect a nonempty list.
 record EmptyList()
