@@ -94,7 +94,7 @@ def Flip(prob: Double) = do Cond([], [prob])
 // scoring the current probability with some factor
 effect Score(prob: Double): Unit
 // forking the ways through the program
-effect Fork(): Boolean
+effect Fork(): Bool
 // failing
 effect Fail[A](): A
 
@@ -109,14 +109,14 @@ def pow(base: Int, exp: Int): Int = {
 
 /// observe a RV, failing when the same RV
 /// is observed again with a different result
-def observe(ref: Ref, b: Boolean) =
+def observe(ref: Ref, b: Bool) =
   do get(ref) match {
     case Unobserved() => do put(ref, Observed(b))
     case Observed(y) => if (b == y) { () } else { do Fail() }
   }
 
 /// observe each (if the Bool list is long enough) RV in a list
-def observeList(listRef: List[Ref], listBool: List[Boolean]): Unit / { Heap, Fail } = {
+def observeList(listRef: List[Ref], listBool: List[Bool]): Unit / { Heap, Fail } = {
   listRef match {
     case Nil() => ()
     case Cons(headRef, tailRef) => listBool match {
@@ -137,8 +137,8 @@ def observeList(listRef: List[Ref], listBool: List[Boolean]): Unit / { Heap, Fai
 /// 0               000            [false,false,false]
 /// 1               001            [false,false,true]
 /// 5               101            [true,false,true]
-def toBoolList(length: Int, number: Int): List[Boolean] = try {
-  def toBoolListReverse(length: Int, number: Int): List[Boolean] = {
+def toBoolList(length: Int, number: Int): List[Bool] = try {
+  def toBoolListReverse(length: Int, number: Int): List[Bool] = {
     if (number < 0) { do Fail() }
     else {
       if (length < 0) { do Fail() }
@@ -190,7 +190,7 @@ def fresh(): Ref / Heap = do empty(Unobserved())
 /// constructs, then observe the result RV in prog to be as expected and then
 /// go backwards through the program enumerating all possible possible ways
 /// how the result could have come about from the input RV.
-def handleLang(expected: Boolean) { prog: Ref => Ref / { Cond, Conj, Disj, Prior }}: Var / { IndexOutOfBounds, Score, Fail, Fork } = heap {
+def handleLang(expected: Bool) { prog: Ref => Ref / { Cond, Conj, Disj, Prior }}: Var / { IndexOutOfBounds, Score, Fail, Fork } = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
   with Cond { (listRef, listProbabilities) =>
@@ -277,7 +277,7 @@ def handleProbabilities[R] { prog: => R / { Score, Fork, Fail } } = {
 
 // functions for calculating the normalized posterior from a
 // list of weighted ways through a program
-def collectProbabilities(b: Boolean, l: List[Weighted[Var]]): Double = {
+def collectProbabilities(b: Bool, l: List[Weighted[Var]]): Double = {
   l match {
     case Nil() => 0.0
     case Cons(head, tail) => head match {
@@ -292,7 +292,7 @@ def collectProbabilities(b: Boolean, l: List[Weighted[Var]]): Double = {
   }
 }
 
-def posterior(result: List[Weighted[Var]]): List[Weighted[Boolean]] / Fail = {
+def posterior(result: List[Weighted[Var]]): List[Weighted[Bool]] / Fail = {
   val resultTrue = collectProbabilities(true, result);
   val resultFalse = collectProbabilities(false, result);
   val modelEvi = resultTrue + resultFalse;
