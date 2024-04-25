@@ -1,0 +1,5 @@
+def foo() = <x>
+
+def main() = {
+  println(42)
+}
