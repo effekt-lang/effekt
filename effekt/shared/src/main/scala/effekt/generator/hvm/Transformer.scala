@@ -11,6 +11,7 @@ import effekt.core.CoreParsers.definition
 
 
 
+
 //cps to hvm
 def transform(mod: cps.ModuleDecl): Book = {
   val decls = mod.decls.flatMap(transform)
@@ -35,7 +36,8 @@ def transform(decl: cps.Extern): Verbatim = decl match {
 }
 
 def transform(template: Template[cps.Expr]): String = 
-  intercalate(template.strings, template.args map {case cps.Expr.Var(name) => name case _ => ???}).mkString // keine map
+  //intercalate(template.strings, template.args).mkString // keine map
+  intercalate(template.strings, template.args map exprToString).mkString // keine map
 
 def transform(definition: cps.Definition): Definition = definition match {
   //params + body => rule(patterns, body)
@@ -43,7 +45,6 @@ def transform(definition: cps.Definition): Definition = definition match {
     Definition(name.name.name, List(Rule((params map idToPattern) :+ VarPattern(Some(cont.name.name)), transform(body))), false)
   case cps.Definition.Let(id, expr) => Definition(id.name.name, List(Rule(List(VarPattern(Some(id.name.name))), transform(expr))), false)
 }
-
  
 
 def transform(term: cps.Term): Term = term match {
@@ -52,28 +53,28 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Scope(definitions, body) => transform(definitions, body)
   case cps.Term.If(cond, thn, els) => 
     Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
-  case cps.Term.Match(scrutinee, clauses, None) => ???//Swt(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
-  case cps.Term.Match(scrutinee, clauses, Some(default)) => ???//Swt(List(transform(scrutinee)), (clauses map ((x: cps.Id, blockLit: cps.Block.BlockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
+  case cps.Term.Match(scrutinee, clauses, None) => Mat(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
+  case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((_, blockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
   case cps.Term.Let(name, expr, rest) => Let(VarPattern(Some(name.name.name)), transform(expr), transform(rest))
   case _ => println(term); ??? 
 }
 
-def transform(blockLit: cps.BlockLit): Term = blockLit match {
-  case cps.BlockLit(params, body) => ???
+def transform(blockLit: cps.BlockLit): Rule = blockLit match {
+  case cps.Expr.BlockLit(params, body) => Rule(params map idToPattern, transform(body))
 }
 
 def transform(definitions: List[cps.Definition], body: cps.Term): Term = definitions match {
   case Nil => transform(body)
   case _ => definitions.head match {
     case cps.Definition.Let(id, bindings) => Let(VarPattern(Some(id.name.name)), transform(bindings), transform(definitions.tail, body))
-    case cps.Definition.Function(name, params, cont, body) => ???//Let(VarPattern(Some(name.name.name)), Num(5), App(Auto, Var(cont.name.name), transform(body)))
+    case cps.Definition.Function(name, params, cont, body) => ???
   }
 }
 
 def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Lit(n) => Num(n)
   case cps.Expr.Var(name) => Var(name.name.name)
-  case cps.Expr.PureApp(b, _, args) => chainApp(Var(b.name.name) :: (args map transform))
+  case cps.Expr.PureApp(b, args) => chainApp(transform(b) :: (args map transform))
   case _ => ???
 }
 
@@ -101,4 +102,12 @@ def chainAppHelper(args: List[Term]): Term = args match {
  case head:: tail => App(Auto, chainAppHelper(tail), head)
 }
 
+def exprToString(expr: cps.Expr): String = expr match {
+    case cps.Var(name) => name.name.name
+    case cps.Expr.Lit(n) => n.toString()
+    case _ => ???
+}
+
 def idToPattern(id: Id): Pattern = VarPattern(Some(id.name.name))
+
+def idToVar(id: Id): Var = Var(id.name.name)

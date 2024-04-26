@@ -52,11 +52,11 @@ enum Definition {
 enum Expr{
   case Var(name: Id)
   case Lit(n: Int)
-  case PureApp(b: Id, targs: List[Id], args: List[Expr])
+  case PureApp(b: Expr, args: List[Expr])
 
   case Make(data: Id, tag: Id, vargs: List[Expr])
   case Select(target: Expr, field: Id)
-  case Box(b: Id)
+  case Box(b: Expr)
 
   case Run(t: Term)
   
