@@ -216,6 +216,11 @@ trait Compiler[Executable] {
        */
       BoxUnboxInference andThen
       /**
+       * Mini-phase to annotate which symbols are used in the definitions of other symbols
+       *   [[NameResolved]] --> [[NameResolved]]
+       */
+      source.AnnotateReachable andThen
+      /**
        * Type checks and annotates trees with inferred types and effects
        *   [[NameResolved]] --> [[Typechecked]]
        */

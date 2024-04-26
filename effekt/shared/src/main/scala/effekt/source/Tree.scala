@@ -772,6 +772,7 @@ object Tree {
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
     def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)
+    def query(t: source.CallTarget)(using Context, Ctx): Res = structuralQuery(t)
 
     def query(t: Template[Term])(using Context, Ctx): Res =
       combineAll(t.args.map(query))

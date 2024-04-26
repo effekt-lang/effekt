@@ -207,6 +207,11 @@ object Annotations {
     "the references referring to symbol"
   )
 
+  val DependsOn = Annotation[symbols.Symbol, Set[symbols.Symbol]](
+    "Dependencies",
+    "the symbols referenced in the definition of the symbol"
+  )
+
   /**
    * The symbol for an identifier as resolved by namer
    *

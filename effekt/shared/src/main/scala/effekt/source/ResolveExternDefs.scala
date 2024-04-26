@@ -1,16 +1,19 @@
-package effekt.source
+package effekt
+package source
 
 import effekt.Phase
 import effekt.PhaseResult.Typechecked
 import effekt.context.{ Context, Annotations }
-import effekt.source.Tree.Rewrite
 
 object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   val phaseName = "resolve-extern-defs"
 
   override def run(input: Typechecked)(using C: Context) = input match {
-    case Typechecked(source, tree, mod) => Some(Typechecked(source, rewrite(tree), mod))
+    case Typechecked(source, tree, mod) =>
+      Context.using(mod) {
+        Some(Typechecked(source, rewrite(tree), mod))
+      }
   }
 
   def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
@@ -33,10 +36,27 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
       }.getOrElse {
         val featureFlags = bodies.map(_.featureFlag)
-        Context.warning(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
-          s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
+        ifLive { via =>
+          Context.warning(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}, " +
+            s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.\n" +
+            s"Definition is reachable via: ${via}.")
+        }
         defaultExternBody
       }
+  }
+
+  def root(using Context): symbols.Symbol = Context.checkMain(Context.module) // TODO how to properly get main
+
+  def ifLive(using Context)(body : String => Unit): Unit = {
+    Context.focus match {
+      case d: Definition =>
+        val path = AnnotateReachable.isReachable(d.id.symbol, root) // TODO cache this in some useful way
+        path match {
+          case Some(p) => println(p); body(p.reverse.mkString(" -> "))
+          case None => ()
+        }
+      case _ => ()
+    }
   }
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
