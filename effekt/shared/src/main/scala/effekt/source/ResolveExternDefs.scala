@@ -32,15 +32,22 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
           case p => p
         }
       }.getOrElse {
+        val featureFlags = bodies.map(_.featureFlag)
+        Context.warning(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
+          s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
         defaultExternBody
       }
   }
 
-  def rewrite(defn: Def)(using Context): Option[Def] = {
-    defn match {
+  def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
       case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
         findPreferred(bodies) match {
           case body@ExternBody.StringExternBody(featureFlag, template) =>
+            if (featureFlag.isDefault) {
+              Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
+                + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
+            }
+
             val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body))
             Context.copyAnnotations(defn, d)
             Some(d)
@@ -52,6 +59,12 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
 
       case Def.ExternInclude(featureFlag, path, contents, id) if featureFlag.matches(supported) =>
+        if (featureFlag.isDefault) {
+          val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
+          Context.warning("Found extern include without feature flag. It is likely that this will fail in other backends, "
+            + s"please annotate it with a feature flag (Supported in current backend: ${supported})")
+        }
+
         Some(defn)
       case Def.ExternInclude(_, _, _, _) => None // Drop, not for this backend
 
@@ -61,7 +74,6 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         Context.copyAnnotations(defn, d)
         Some(d)
       case defn => Some(defn)
-    }
   }
 
 }
