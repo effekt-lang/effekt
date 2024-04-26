@@ -1,6 +1,6 @@
 module ref
 
-extern """
+extern js """
 function set$impl(ref, value) {
   ref.value = value;
   return $effekt.unit;

@@ -106,7 +106,7 @@ def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
   val input = NumB(in, fresh(0.0))
 
   // a helper function to update the derivative of a given number by adding v
-  def push(n: NumB, v: Double): Unit = put(n.d, get(n.d) + v)
+  def push(n: NumB, v: Double): Unit = set(n.d, get(n.d) + v)
 
   try { prog(input).push(1.0) } with AD[NumB] {
     def num(v) = resume(NumB(v, fresh(0.0)))
