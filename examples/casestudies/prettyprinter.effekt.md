@@ -372,8 +372,8 @@ a parse tree, which we then pretty print:
 ```
 def parseAndPrint(text: String, width: Int): String =
   parse(text) { parseExpr() } match {
-    case examples::casestudies::parser::Success(tree) => pretty(width) { toDoc(tree) }
-    case examples::casestudies::parser::Failure(text) => text
+    case parser::Success(tree) => pretty(width) { toDoc(tree) }
+    case parser::Failure(text) => text
   }
 ```
 

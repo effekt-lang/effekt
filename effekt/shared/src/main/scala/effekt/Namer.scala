@@ -47,9 +47,17 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     def importDependency(filePath: String) =
       val included = Context.moduleOf(filePath)
-      // include "effekt.effekt" as effekt
+
+      // Fully qualified:
+      //   include "foo/bar/baz.effekt" as foo::bar::baz
       scope.importAs(included.exports, included.namespace)
-      // import effekt::*
+
+      // Bind the module itself:
+      //   include "foo/bar/baz.effekt" as baz
+      scope.importAs(included.exports, List(included.name.name))
+
+      // Open it:
+      //   import baz::*
       scope.importAll(included.exports)
       included
 
