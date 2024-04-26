@@ -100,7 +100,7 @@ we automatically get access to the continuation in the implementation of
 `add`, `mul` and `exp`. We thus do not have to use `shift` and `reset`.
 Otherwise the implementation closely follows the one by Wang et al.
 ```
-record NumB(value: Double, d: HeapRef[Double])
+record NumB(value: Double, d: Ref[Double])
 def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
   // the representation of our input
   val input = NumB(in, fresh(0.0))

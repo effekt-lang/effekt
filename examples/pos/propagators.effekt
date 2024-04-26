@@ -11,7 +11,7 @@ import ref
 // we are using unsafe/Cont since operations cannot take blocks
 // Safety is established manually and restricted to the local scope of
 // the handler `propagators`.
-type Cell[T] = HeapRef[(Option[T], List[Cont[T, Unit]])]
+type Cell[T] = Ref[(Option[T], List[Cont[T, Unit]])]
 
 // A net of propagators
 interface Net {

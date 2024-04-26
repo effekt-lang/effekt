@@ -1,4 +1,4 @@
-import immutable/seq
+import seq
 
 def main() = {
 

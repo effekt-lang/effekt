@@ -1,4 +1,4 @@
-module immutable/seq
+module seq
 
 /**
  * This file implements the [[Seq]] type as a general purpose functional sequence.
