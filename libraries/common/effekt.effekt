@@ -1,13 +1,26 @@
 module effekt
 
-// Runtime
-// TODO split runtime into monadic and direct
-extern include js "effekt_runtime.js"
+namespace js {
+  // Runtime
+  extern include js "../js/effekt_runtime.js"
 
-// Builtins
-extern include js "effekt_builtins.js"
+  // Builtins
+  extern include js "../js/effekt_builtins.js"
+}
 
-def locally[R] { f: => R }: R = f()
+namespace chez {
+  // call/cc based implementation
+  // ----------------------------
+  extern include chez "../chez/common/effekt_primitives.ss"
+
+  extern include chezCallCC "../chez/callcc/seq0.ss"
+  extern include chezCallCC "../chez/callcc/tail0.ss"
+  extern include chezCallCC "../chez/callcc/effekt.ss"
+
+  // All Chez Scheme backends
+  // ------------------------
+  extern include chez "../chez/common/effekt_matching.ss"
+}
 
 // Side effecting ops
 // ==================
@@ -20,92 +33,112 @@ extern io def inspect[R](value: R): Unit =
 extern io def random(): Double =
   js "Math.random()"
 
-extern io def timestamp(): Int =
-  js "Date.now()"
 
 // References and state
 // ====================
 // the following type is defined in builtins.scala
 // interface Ref[T] { def get(): T; def put(t: T): Unit }
-extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
-extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
+//extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
+//extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
 
 // String ops
 // ==========
 extern pure def show[R](value: R): String =
   js "show$impl(${value})"
+  chez "(show_impl ${value})"
 
 extern pure def infixConcat(s1: String, s2: String): String =
   js "${s1} + ${s2}"
+  chez "(string-append ${s1} ${s2})"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
   js "(${x} + ${y})"
+  chez "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Int, y: Int): Int =
   js "(${x} * ${y})"
+  chez "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
   js "Math.floor(${x} / ${y})"
+  chez "(floor (/ ${x} ${y}))"
 
 extern pure def infixSub(x: Int, y: Int): Int =
   js "(${x} - ${y})"
+  chez "(- ${x} ${y})"
 
 extern pure def mod(x: Int, y: Int): Int =
   js "(${x} % ${y})"
+  chez "(modulo ${x} ${y})"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
   js "(${x} + ${y})"
+  chez "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Double, y: Double): Double =
   js "(${x} * ${y})"
+  chez "(* ${x} ${y})"
 
 extern pure def infixSub(x: Double, y: Double): Double =
   js "(${x} - ${y})"
+  chez "(- ${x} ${y})"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
   js "(${x} / ${y})"
-
+  chez "(/ ${x} ${y})"
 
 extern pure def cos(x: Double): Double =
   js "Math.cos(${x})"
+  chez "(cos ${x})"
 
 extern pure def sin(x: Double): Double =
   js "Math.sin(${x})"
+  chez "(sin ${x})"
 
 extern pure def atan(x: Double): Double =
   js "Math.atan(${x})"
+  chez "(atan ${x})"
 
 extern pure def tan(x: Double): Double =
   js "Math.tan(${x})"
+  chez "(tan ${x})"
 
 extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
+  chez "(sqrt ${x})"
 
 extern pure def square(x: Double): Double =
   js "(${x} * ${x})"
+  chez "(* ${x} ${x})"
 
 extern pure def log(x: Double): Double =
   js "Math.log(${x})"
+  chez "(log ${x})"
 
 extern pure def log1p(x: Double): Double =
   js "Math.log1p(${x})"
+  chez "(log (+ ${x} 1))"
 
 extern pure def exp(x: Double): Double =
   js "Math.exp(${x})"
+  chez "(exp ${x})"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
+  chez "(* 4 (atan 1))"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
   js "Math.round(${d})"
+  chez "(round ${d})"
 
 extern pure def toDouble(d: Int): Double =
   js "${d}"
+  chez "${d}"
 
 extern pure def floor(d: Double): Int =
   js "Math.floor(${d})"
@@ -123,9 +156,11 @@ def max(n: Int, m: Int): Int =
 // ==============
 extern pure def infixEq[R](x: R, y: R): Bool =
   js "equals$impl(${x}, ${y})"
+  chez "(equal_impl ${x} ${y})"
 
 extern pure def infixNeq[R](x: R, y: R): Bool =
   js "!equals$impl(${x}, ${y})"
+  chez "(not (equal_impl ${x} ${y}))"
 
 // Result of comparison between two objects according to some order:
 //
@@ -153,66 +188,90 @@ type Ordering {
 
 extern pure def infixLt(x: Int, y: Int): Bool =
   js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
 
 extern pure def infixLte(x: Int, y: Int): Bool =
   js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Int, y: Int): Bool =
   js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
 
 extern pure def infixGte(x: Int, y: Int): Bool =
   js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
 
 extern pure def infixLt(x: Double, y: Double): Bool =
   js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
 
 extern pure def infixLte(x: Double, y: Double): Bool =
   js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Double, y: Double): Bool =
   js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
 
 extern pure def infixGte(x: Double, y: Double): Bool =
   js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
 
 extern pure def infixLt(x: String, y: String): Bool =
   js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
 
 extern pure def infixLte(x: String, y: String): Bool =
   js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
 
 extern pure def infixGt(x: String, y: String): Bool =
   js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
 
 extern pure def infixGte(x: String, y: String): Bool =
   js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+
 
 // Bool ops
 // ===========
-// for now those are considered eager
 extern pure def not(b: Bool): Bool =
   js "!${b}"
+  chez "(not ${b})"
 
-def infixOr { first: => Bool } { second: => Bool }: Bool = 
+def infixOr { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
 
-def infixAnd { first: => Bool } { second: => Bool }: Bool = 
+def infixAnd { first: => Bool } { second: => Bool }: Bool =
   if (first()) second() else false
 
 // Undefined and Null
 // ==================
-// Should only be used for interop with JS, since values in Effekt should not be undefined
+// Should only be used for interop with FFI, since values in Effekt
+// should not be undefined.
+//
+//   js:   undefined || null
+//   chez: #f
 
-// Is something an undefined JavaScript value?
+/**
+ * The value used by the FFI to represent undefined values
+ */
+extern pure def undefined[A](): A =
+  js "undefined"
+  chez "#f"
+
+/**
+ * Is an FFI value undefined?
+ */
 extern pure def isUndefined[A](value: A): Bool =
-  js "(${value} === undefined)"
+  js "(${value} === undefined || ${value} == null)"
+  chez "(eq? ${value} #f)"
 
-// Is something a JavaScript null value?
-extern pure def isNull[A](value: A): Bool =
-  js "(${value} === null)"
 
-// Pairs
-// =====
+// Tuples
+// ======
 record Tuple2[A, B](first: A, second: B)
 record Tuple3[A, B, C](first: A, second: B, third: C)
 record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
@@ -222,9 +281,13 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 
 // Exceptions
 // ==========
-// a fatal runtime error that cannot be caught
+
+/**
+ * A fatal runtime error that cannot be caught
+ */
 extern io def panic[R](msg: String): R =
   js "(function() { throw ${msg} })()"
+  chez "(raise ${msg})"
 
 interface Exception[E] {
   def raise(exception: E, msg: String): Nothing
@@ -234,18 +297,24 @@ record RuntimeError()
 def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
 def raise[A, E](exception: E, msg: String): A / Exception[E] = do raise(exception, msg) match {}
 
-// converts exceptions of (static) type E to an uncatchable panic that aborts the program
+/**
+ * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
+ */
 def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
 
-// reports exceptions of (static) type E to the console
+/**
+ * Reports exceptions of (static) type E to the console
+ */
 def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
 
-// ignores exceptions of (static) type E
-// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
-def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
+/**
+ * Ignores exceptions of (static) type E
+ */
+def ignore[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
+
 
 // Control Flow
 // ============
@@ -279,10 +348,27 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // Benchmarking
 // ============
 
-// Current time in nanoseconds
-// TODO use a better timer
-extern control def currentTimeNanos(): Int =
-  js "$effekt.delayed(() => new Date().getTime() * 1000000)"
+
+/**
+ * The current time in milliseconds
+ */
+extern io def timestamp(): Int =
+  js "Date.now()"
+  chez "(current-time)"
+
+/**
+ * Current time in nanosecond (WARNING: no added precision over timestamp)
+ */
+def currentTimeNanos(): Int = timestamp() * 1000000
+
+/**
+ * High-precision timestamp in nanoseconds that should be for measurements.
+ *
+ * This timestamp should only be used for **relative** measurements,
+ * as gives no guarantees on the absolute time (unlike a UNIX timestamp).
+ */
+extern io def relativeTimestamp(): Int =
+  js "Math.round(performance.now() * 1000000)"
 
 extern io def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
   js "(function() { window.setTimeout(() => ${callback}().run(), ${timeout}); return $effekt.unit; })()"

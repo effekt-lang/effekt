@@ -43,7 +43,7 @@ def main() = {
     indexAll(s, n + 1)
   }
 
-  def testSplit(size: Int, index: Int) = ignoring[IndexOutOfBounds] {
+  def testSplit(size: Int, index: Int) = ignore[IndexOutOfBounds] {
     val seq = generate(size, Empty());
     val (s1, s2) = seq.splitAt(index)
     s1.printAll()
@@ -70,10 +70,10 @@ def main() = {
 
   println("\nTesting random access")
   printN(seq15, 15)
-  ignoring[NoSuchElement] { indexAll(seq15, 0) }
+  ignore[NoSuchElement] { indexAll(seq15, 0) }
 
   println("\nTesting update")
-  ignoring[NoSuchElement] {
+  ignore[NoSuchElement] {
     indexAll(seq15.update(7, 1337), 0)
   }
 

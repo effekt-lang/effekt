@@ -44,10 +44,4 @@ namespace js {
   def undefinedToOption[A](value: A): Option[A] =
     if (value.isUndefined) { None() } else { Some(value) }
 
-  def nullToOption[A](value: A): Option[A] =
-    if (value.isNull) { None() } else { Some(value) }
-
-  def nullishToOption[A](value: A): Option[A] =
-    if (value.isUndefined || value.isNull) { None() } else { Some(value) }
-
 }

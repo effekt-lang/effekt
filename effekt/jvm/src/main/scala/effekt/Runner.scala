@@ -109,9 +109,9 @@ object JSRunner extends Runner[String] {
 
   val extension = "js"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "js"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def includes(path: File): List[File] = List(path / ".." / "common")
+  override def includes(path: File): List[File] = List(path / ".." / "js")
 
   override def prelude: List[String] = List("effekt", "option", "list", "result")
 
@@ -137,8 +137,8 @@ object JSRunner extends Runner[String] {
 trait ChezRunner extends Runner[String] {
   val extension = "ss"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
-  override def includes(path: File): List[File] = List(path / ".." / "common")
+  override def prelude: List[String] = List("effekt", "option", "list", "result")
+  override def includes(path: File): List[File] = List(path / ".." / ".." / "common", path / ".." / "common")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
