@@ -39,7 +39,7 @@ extern pure def emptyArray[T](initialSize: Int): Array[T] =
   js "(new Array(${initialSize}))"
 
 def get[T](arr: Array[T], index: Int): Option[T] =
-  js::undefinedToOption(arr.unsafeGet(index))
+  undefinedToOption(arr.unsafeGet(index))
 
 extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"

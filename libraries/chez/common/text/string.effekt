@@ -29,7 +29,7 @@ def substring(str: String, from: Int): String =
 //   chez "str.trim()"
 
 def toInt(str: String): Option[Int] =
-  str.unsafeToInt.undefinedToOption
+  unsafeToInt(str).undefinedToOption
 
 // extern pure def unsafeCharAt(str: String, n: Int): String =
 //   chez "str[n]"

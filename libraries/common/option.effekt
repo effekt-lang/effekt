@@ -36,12 +36,8 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
 }
 
 
-// Interop with JS
+// Interop with FFI
 // ---------------
-// These functions should only be used by libraries that interface with native JS
-namespace js {
-
-  def undefinedToOption[A](value: A): Option[A] =
-    if (value.isUndefined) { None() } else { Some(value) }
-
-}
+// These functions should only be used by libraries that interface with FFI
+def undefinedToOption[A](value: A): Option[A] =
+  if (value.isUndefined) { None() } else { Some(value) }

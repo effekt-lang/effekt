@@ -9,37 +9,48 @@ namespace js {
 }
 
 namespace chez {
-  // call/cc based implementation
-  // ----------------------------
+
+  // All Chez Scheme backends
+  // ------------------------
   extern include chez "../chez/common/effekt_primitives.ss"
 
+  // call/cc based implementation
+  // ----------------------------
   extern include chezCallCC "../chez/callcc/seq0.ss"
   extern include chezCallCC "../chez/callcc/tail0.ss"
   extern include chezCallCC "../chez/callcc/effekt.ss"
 
-  // All Chez Scheme backends
-  // ------------------------
-  extern include chez "../chez/common/effekt_matching.ss"
+  // CPS implementation
+  // ------------------
+  extern include chezLift "../chez/lift/effekt.ss"
+
+  // Monadic implementation
+  // ----------------------
+  extern include chezMonadic "../chez/monadic/seq0.ss"
+  extern include chezMonadic "../chez/monadic/effekt.ss"
 }
 
 // Side effecting ops
 // ==================
 extern io def println[R](value: R): Unit =
   js "println$impl(${value})"
+  chez "(println_impl ${value})"
 
 extern io def inspect[R](value: R): Unit =
   js "console.log(${value})"
+  default { println(value) }
 
 extern io def random(): Double =
   js "Math.random()"
+  chez "(random 1.0)"
 
 
 // References and state
 // ====================
 // the following type is defined in builtins.scala
 // interface Ref[T] { def get(): T; def put(t: T): Unit }
-//extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
-//extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
+// extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
+// extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
 
 // String ops
 // ==========
@@ -142,15 +153,17 @@ extern pure def toDouble(d: Int): Double =
 
 extern pure def floor(d: Double): Int =
   js "Math.floor(${d})"
+  chez "(floor ${d})"
 
 extern pure def ceil(d: Double): Int =
   js "Math.ceil(${d})"
+  chez "(ceiling ${d})"
 
 def min(n: Int, m: Int): Int =
-    if (n < m) n else m
+  if (n < m) n else m
 
 def max(n: Int, m: Int): Int =
-    if (n > m) n else m
+  if (n > m) n else m
 
 // Comparison ops
 // ==============
@@ -162,11 +175,13 @@ extern pure def infixNeq[R](x: R, y: R): Bool =
   js "!equals$impl(${x}, ${y})"
   chez "(not (equal_impl ${x} ${y}))"
 
-// Result of comparison between two objects according to some order:
-//
-// - `Less()` means that the first object is *before* the first in the order,
-// - `Equal()` means that the two objects are the same in the order,
-// - and `Greater()` means that the second object is *before* the first in the order.
+/**
+ * Result of comparison between two objects according to some order:
+ *
+ * - `Less()` means that the first object is *before* the first in the order,
+ * - `Equal()` means that the two objects are the same in the order,
+ * - and `Greater()` means that the second object is *before* the first in the order.
+ */
 type Ordering {
    Less();
    Equal();
@@ -175,6 +190,7 @@ type Ordering {
 
  extern pure def genericCompareImpl[R](x: R, y: R): Int =
    js "compare$impl(${x}, ${y})"
+   default { <{ "TODO implement" }> }
 
  // Compares two values of the same type, returning an `Ordering`.
  def genericCompare[R](x: R, y: R): Ordering = {
@@ -348,18 +364,17 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // Benchmarking
 // ============
 
-
 /**
- * The current time in milliseconds
+ * The current time (since UNIX Epoch) in nanoseconds.
+ *
+ * The actual precision varies across the different backends.
+ * - js: Milliseconds
+ * - chez: Microseconds
  */
 extern io def timestamp(): Int =
-  js "Date.now()"
-  chez "(current-time)"
+  js "Date.now() * 1000000"
+  chez "(timestamp)"
 
-/**
- * Current time in nanosecond (WARNING: no added precision over timestamp)
- */
-def currentTimeNanos(): Int = timestamp() * 1000000
 
 /**
  * High-precision timestamp in nanoseconds that should be for measurements.
@@ -369,15 +384,15 @@ def currentTimeNanos(): Int = timestamp() * 1000000
  */
 extern io def relativeTimestamp(): Int =
   js "Math.round(performance.now() * 1000000)"
+  default { timestamp() }
 
-extern io def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
-  js "(function() { window.setTimeout(() => ${callback}().run(), ${timeout}); return $effekt.unit; })()"
-
-// runs the block and returns the time in nanoseconds
+/**
+ * Runs the block and returns the time in nanoseconds
+ */
 def timed { block: => Unit }: Int = {
-  val before = currentTimeNanos()
+  val before = relativeTimestamp()
   block()
-  val after = currentTimeNanos()
+  val after = relativeTimestamp()
   after - before
 }
 

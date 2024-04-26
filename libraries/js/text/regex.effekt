@@ -10,7 +10,7 @@ extern pure def regex(str: String): Regex =
   js "new RegExp(${str})"
 
 def exec(reg: Regex, str: String): Option[Match] =
-   js::undefinedToOption(reg.unsafeExec(str)) match {
+   undefinedToOption(reg.unsafeExec(str)) match {
     case None() => None()
     case Some(v) => Some(Match(v.matched, v.index))
   }

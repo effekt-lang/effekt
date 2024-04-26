@@ -1,6 +1,6 @@
 module immutable/cslist
 
-import immutable/list
+import list
 
 // a chez scheme cons list
 extern type CSList[A]

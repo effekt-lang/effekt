@@ -79,6 +79,10 @@
 (define (seconds diff)
   (+ (time-second diff) (/ (time-nanosecond diff) 1000000000.0)))
 
+(define (timestamp)
+  (let ([t (current-time)])
+    (+ (* (time-second t) 1000000000) (time-nanosecond t))))
+
 (define (measure block warmup iterations)
   (define (run n)
     (if (<= n 0)

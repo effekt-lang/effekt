@@ -5,7 +5,7 @@
 // immutable/option
 // immutable/list
 
-import immutable/dequeue
+import dequeue
 import immutable/cslist
 
 import mutable/array

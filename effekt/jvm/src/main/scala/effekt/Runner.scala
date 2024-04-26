@@ -137,8 +137,10 @@ object JSRunner extends Runner[String] {
 trait ChezRunner extends Runner[String] {
   val extension = "ss"
 
+   def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
   override def prelude: List[String] = List("effekt", "option", "list", "result")
-  override def includes(path: File): List[File] = List(path / ".." / ".." / "common", path / ".." / "common")
+  override def includes(path: File): List[File] = List(path / ".." / "chez" / "common")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
@@ -158,14 +160,14 @@ trait ChezRunner extends Runner[String] {
 }
 
 object ChezMonadicRunner extends ChezRunner {
-  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "monadic"
+  override def includes(path: File): List[File] = List(path / ".." / "chez" / "common", path / ".." / "chez" / "monadic")
 }
 
 object ChezCallCCRunner extends ChezRunner {
-  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "callcc"
+  override def includes(path: File): List[File] = List(path / ".." / "chez" / "common", path / ".." / "chez" / "callcc")
 }
 object ChezLiftRunner extends ChezRunner {
-  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "lift"
+  override def includes(path: File): List[File] = List(path / ".." / "chez" / "common", path / ".." / "chez" / "lift")
 }
 
 object LLVMRunner extends Runner[String] {
