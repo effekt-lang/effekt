@@ -2,7 +2,7 @@ module drafts/propagators
 
 import dequeue
 import unsafe/cont
-import mutable/heap
+import ref
 
 // An Experiment with Propagator Networks
 // ===

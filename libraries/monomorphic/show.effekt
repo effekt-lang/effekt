@@ -1,0 +1,26 @@
+extern def println(value: String): Unit =
+  ml { print(value); print("\n") }
+
+extern io def print(value: String): Unit =
+  ml "print ${value}"
+
+def println(value: Int): Unit = println(value.show)
+def println(value: Unit): Unit = println(value.show)
+def println(value: Double): Unit = println(value.show)
+def println(value: Bool): Unit = println(value.show)
+
+
+extern pure def show(value: Int): String =
+  ml "show'int ${value}"
+
+extern pure def show(value: Unit): String =
+  ml "show'unit ${value}"
+
+extern pure def show(value: Double): String =
+  ml "show'real ${value}"
+
+extern pure def show(value: String): String =
+  ml "show'string ${value}"
+
+extern pure def show(value: Bool): String =
+  ml "show'bool ${value}"

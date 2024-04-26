@@ -7,9 +7,9 @@
 //
 module examples/pos/raytracer
 
-import mutable/array
+import array
 import io/args
-import text/string
+import string
 
 // replacing all vector operations by `inline pure def` buys us 20%
 record Vector(x: Double, y: Double, z: Double)

@@ -1,0 +1,15 @@
+module show
+
+import effekt
+
+extern pure def show[R](value: R): String =
+  js "show$impl(${value})"
+  chez "(show_impl ${value})"
+
+extern io def println[R](value: R): Unit =
+  js "println$impl(${value})"
+  chez "(println_impl ${value})"
+
+extern io def inspect[R](value: R): Unit =
+  js "console.log(${value})"
+  default { println(value) }

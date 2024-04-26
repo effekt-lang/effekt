@@ -1,4 +1,4 @@
-module immutable/list
+module list
 
 import effekt
 

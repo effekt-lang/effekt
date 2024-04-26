@@ -1,7 +1,7 @@
 module io/args
 
 import effekt
-import mutable/array
+import array
 
 extern io def nativeArgs(): Array[String] = js "process.argv.slice(2)"
 

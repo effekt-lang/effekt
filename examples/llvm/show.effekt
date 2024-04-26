@@ -1,4 +1,4 @@
-import text/string
+import string
 
 def main() = {
     println(show(12))

@@ -1,5 +1,3 @@
-import mutable/array
-
 def main() = {
   val array = fromList([1,2,3]);
   println(array.toList)

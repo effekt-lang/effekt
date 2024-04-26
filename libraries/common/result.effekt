@@ -2,7 +2,7 @@ module result
 
 import effekt
 import option
-
+import exception
 
 /**
  * Represents the result of a potentially failing computation.

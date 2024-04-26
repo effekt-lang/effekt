@@ -1,4 +1,4 @@
-import text/string
+import string
 import io/args
 
 // TODO: map uses `var` and therefore fails in ML with "Effect polymorphic recursion is not allowed."

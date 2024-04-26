@@ -1,6 +1,6 @@
 module mutable/map
 
-import mutable/array
+import array
 
 // A mutable map, backed by a JavaScript Map.
 extern type Map[K, V]

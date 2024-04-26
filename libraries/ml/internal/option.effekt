@@ -1,6 +1,7 @@
 module internal/option
 
 import effekt
+import option
 
 extern type MLOption[T]
 

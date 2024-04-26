@@ -1,4 +1,4 @@
-import text/string
+import string
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit

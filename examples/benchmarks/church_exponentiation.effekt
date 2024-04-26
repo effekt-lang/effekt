@@ -1,4 +1,4 @@
-import text/string
+import string
 import io/args
 
 type Succ[Z] = Z => Z at {}

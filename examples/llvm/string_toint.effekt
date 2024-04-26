@@ -1,3 +1,3 @@
-import text/string
+import string
 
 def main() = println(show("-123".toInt))

@@ -1,0 +1,139 @@
+module array
+
+import effekt
+import option
+import list
+
+/**
+ * A mutable 0-based indexed array, backed by a JavaScript array.
+ */
+extern type Array[T]
+
+/**
+ * Creates a new Array of size `size` filled with the value `default`
+ */
+extern io def fill[T](size: Int, default: T): Array[T] =
+  ml "Array.array (${size}, ${default})"
+  default {
+    val arr = emptyArray[T](size)
+    each(0, size) { i =>
+      put(arr, i, default)
+    }
+    return arr;
+  }
+
+/**
+ * Builds a new Array of size `size` from a computation `index` which gets an index
+ * and returns a value that will be on that position in the resulting array
+ */
+def build[T](size: Int) { index: Int => T }: Array[T] = {
+  val arr = emptyArray[T](size)
+  each(0, size) { i =>
+    put(arr, i, index(i))
+  }
+  return arr
+}
+
+/**
+ * Converts a List `list` to an Array
+ */
+def fromList[T](list: List[T]): Array[T] = {
+  val listSize = list.size();
+  val arr = emptyArray(listSize);
+
+  foreachIndex(list) { (i, head) =>
+    put(arr, i, head)
+  }
+  return arr;
+}
+
+extern pure def emptyArray[T](size: Int): Array[T] =
+  js "(new Array(${size}))"
+  chez "(make-vector ${size})" // creates an array filled with 0s on CS
+
+def get[T](arr: Array[T], index: Int): Option[T] =
+  if (index < 0 || index >= arr.size) None()
+  else undefinedToOption(arr.unsafeGet(index))
+
+extern pure def size[T](arr: Array[T]): Int =
+  js "${arr}.length"
+  chez "(vector-length ${arr})"
+  ml "Array.length ${arr}"
+
+extern io def unsafeGet[T](arr: Array[T], index: Int): T =
+  js "${arr}[${index}]"
+  chez "(vector-ref ${arr} ${index})"
+  ml "SOME (Array.sub (${arr}, ${index}))"
+
+extern js """
+function put(arr, index, value) {
+  arr[index] = value;
+  return $effekt.unit
+}
+"""
+
+def put[T](arr: Array[T], index: Int, value: T): Unit =
+  if (index >= 0 && index < arr.size) unsafePut(arr, index, value)
+
+extern io def unsafePut[T](arr: Array[T], index: Int, value: T): Unit =
+  js "put(${arr}, ${index}, ${value})"
+  chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
+  ml "Array.update (${arr}, ${index}, ${value})"
+
+extern pure def copy[T](arr: Array[T]): Array[T] =
+  js "[...${arr}]"
+
+// Utility functions:
+
+def toList[T](arr: Array[T]): List[T] = {
+  var i = arr.size - 1;
+  var l = Nil[T]()
+  while (i >= 0) {
+    l = Cons(unsafeGet(arr, i), l)
+    i = i - 1
+  }
+  l
+}
+
+def foreach[T](arr: Array[T]){ action: T => Unit / Control }: Unit = {
+  each(0, arr.size) { i =>
+    val x: T = arr.unsafeGet(i)
+    action(x)
+  }
+}
+
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit / Control }: Unit = {
+  each(0, arr.size) { i =>
+    val x: T = arr.unsafeGet(i)
+    action(i, x)
+  }
+}
+
+def sum(list: Array[Int]): Int = {
+  var acc = 0
+  list.foreach { x =>
+    acc = acc + x
+  }
+  acc
+}
+
+// Old From Chez
+// -------------
+// extern pure def toArray[A](l: CSList[A]): Array[A] =
+//   chez "(list->vector ${l})"
+
+
+
+// Old from ML
+// -----------
+// def copy[T](arr: Array[T]): Array[T] =
+//     get(arr, 0) match {
+//         case None() => emptyArray()
+//         case Some(first) =>
+//             val dst = array(size(arr), first)
+//             copyInto(arr, dst);
+//             dst
+//     }
+
+// extern pure def copyInto[T](src: Array[T], dst: Array[T]): Unit =
+//     ml "Array.copy {src = ${src}, dst = ${dst}, di = 0}"

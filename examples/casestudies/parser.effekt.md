@@ -15,7 +15,7 @@ Again, we require some imports -- in particular, we reuse the lexer implementati
 module examples/casestudies/parser
 
 import examples/casestudies/lexer
-import text/string
+import string
 ```
 
 Parsers can be expressed by using the lexer effect and process the token stream. To model different alternatives in the grammar, we use the following effect for non-determinism:

@@ -1,7 +1,7 @@
 module io/args
 
 import effekt
-import immutable/list
+import list
 
 extern io def get_argc(): Int = llvm """
   %c = call %Int @c_get_argc()

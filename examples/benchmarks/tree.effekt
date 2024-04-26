@@ -1,5 +1,5 @@
 import io/args
-import text/string
+import string
 
 def abs(n: Int): Int = if (n < 0) 0 - n else n
 def max(n: Int, m: Int): Int = if (n > m) n else m

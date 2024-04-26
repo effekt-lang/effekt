@@ -8,11 +8,11 @@
 import dequeue
 import immutable/cslist
 
-import mutable/array
+import array
 import mutable/dict
-import mutable/heap
+import ref
 
 import text/regex
-import text/string
+import string
 
 def main() = ()

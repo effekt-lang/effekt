@@ -30,20 +30,17 @@ namespace chez {
   extern include chezMonadic "../chez/monadic/effekt.ss"
 }
 
+namespace ml {
+  extern include ml "../ml/effekt.sml"
+}
+
 // Side effecting ops
 // ==================
-extern io def println[R](value: R): Unit =
-  js "println$impl(${value})"
-  chez "(println_impl ${value})"
-
-extern io def inspect[R](value: R): Unit =
-  js "console.log(${value})"
-  default { println(value) }
 
 extern io def random(): Double =
   js "Math.random()"
   chez "(random 1.0)"
-
+  ml "mlRandomReal ()"
 
 // References and state
 // ====================
@@ -52,112 +49,122 @@ extern io def random(): Double =
 // extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
 // extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
 
-// String ops
-// ==========
-extern pure def show[R](value: R): String =
-  js "show$impl(${value})"
-  chez "(show_impl ${value})"
-
-extern pure def infixConcat(s1: String, s2: String): String =
-  js "${s1} + ${s2}"
-  chez "(string-append ${s1} ${s2})"
-
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
+  ml "(${x}: int) + ${y}"
 
 extern pure def infixMul(x: Int, y: Int): Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
+  ml "(${x}: int) * ${y}"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
   js "Math.floor(${x} / ${y})"
   chez "(floor (/ ${x} ${y}))"
+  ml "(${x}: int) div ${y}"
 
 extern pure def infixSub(x: Int, y: Int): Int =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
+  ml "(${x}: int) - ${y}"
 
 extern pure def mod(x: Int, y: Int): Int =
   js "(${x} % ${y})"
   chez "(modulo ${x} ${y})"
+  ml "(${x}: int) mod ${y}"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
+  ml "(${x}: real) + ${y}"
 
 extern pure def infixMul(x: Double, y: Double): Double =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
+  ml "(${x}: real) * ${y}"
 
 extern pure def infixSub(x: Double, y: Double): Double =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
+  ml "(${x}: real) - ${y}"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
   js "(${x} / ${y})"
   chez "(/ ${x} ${y})"
+  ml "(${x}: real) / ${y}"
 
 extern pure def cos(x: Double): Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
+  ml "Math.cos ${x}"
 
 extern pure def sin(x: Double): Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
+  ml "Math.sin ${x}"
 
 extern pure def atan(x: Double): Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
+  ml "Math.atan ${x}"
 
 extern pure def tan(x: Double): Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
+  ml "Math.tan ${x}"
 
 extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
   chez "(sqrt ${x})"
+  ml "Math.sqrt ${x}"
 
-extern pure def square(x: Double): Double =
-  js "(${x} * ${x})"
-  chez "(* ${x} ${x})"
+def square(x: Double): Double = x * x
 
 extern pure def log(x: Double): Double =
   js "Math.log(${x})"
   chez "(log ${x})"
+  ml "Math.ln ${x}"
 
 extern pure def log1p(x: Double): Double =
   js "Math.log1p(${x})"
   chez "(log (+ ${x} 1))"
+  ml "Math.ln (${x} + 1.0)"
 
 extern pure def exp(x: Double): Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
+  ml "Math.exp ${x}"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
+  ml "Math.pi"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
   js "Math.round(${d})"
   chez "(round ${d})"
+  ml "Real.round ${d}"
 
 extern pure def toDouble(d: Int): Double =
   js "${d}"
   chez "${d}"
+  ml "Real.fromInt ${d}"
 
 extern pure def floor(d: Double): Int =
   js "Math.floor(${d})"
   chez "(floor ${d})"
+  ml "Real.floor ${d}"
 
 extern pure def ceil(d: Double): Int =
   js "Math.ceil(${d})"
   chez "(ceiling ${d})"
+  ml "Real.ceil ${d}"
 
 def min(n: Int, m: Int): Int =
   if (n < m) n else m
@@ -170,10 +177,12 @@ def max(n: Int, m: Int): Int =
 extern pure def infixEq[R](x: R, y: R): Bool =
   js "equals$impl(${x}, ${y})"
   chez "(equal_impl ${x} ${y})"
+  ml "${x} = ${y}"
 
 extern pure def infixNeq[R](x: R, y: R): Bool =
   js "!equals$impl(${x}, ${y})"
   chez "(not (equal_impl ${x} ${y}))"
+  ml "not (${x} = ${y})"
 
 /**
  * Result of comparison between two objects according to some order:
@@ -205,18 +214,22 @@ type Ordering {
 extern pure def infixLt(x: Int, y: Int): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
+  ml "(${x}: int) < ${y}"
 
 extern pure def infixLte(x: Int, y: Int): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
+  ml "(${x}: int) <= ${y}"
 
 extern pure def infixGt(x: Int, y: Int): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
+  ml "(${x}: int) > ${y}"
 
 extern pure def infixGte(x: Int, y: Int): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
+  ml "(${x}: int) >= ${y}"
 
 extern pure def infixLt(x: Double, y: Double): Bool =
   js "(${x} < ${y})"
@@ -225,43 +238,53 @@ extern pure def infixLt(x: Double, y: Double): Bool =
 extern pure def infixLte(x: Double, y: Double): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
+  ml "(${x}: int) <= ${y}"
 
 extern pure def infixGt(x: Double, y: Double): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
+  ml "(${x}: int) > ${y}"
 
 extern pure def infixGte(x: Double, y: Double): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
+  ml "(${x}: int) >= ${y}"
 
+// TODO do we really need those? if yes, move to string.effekt
 extern pure def infixLt(x: String, y: String): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
+  ml "(${x}: int) < ${y}"
 
 extern pure def infixLte(x: String, y: String): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
+  ml "(${x}: int) <= ${y}"
 
 extern pure def infixGt(x: String, y: String): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
+  ml "(${x}: int) > ${y}"
 
 extern pure def infixGte(x: String, y: String): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
+  ml "(${x}: string) >= ${y}"
 
 
-// Bool ops
-// ===========
+// Boolean operations
+// ==================
 extern pure def not(b: Bool): Bool =
   js "!${b}"
   chez "(not ${b})"
+  ml "not ${b}"
 
 def infixOr { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
 
 def infixAnd { first: => Bool } { second: => Bool }: Bool =
   if (first()) second() else false
+
 
 // Undefined and Null
 // ==================
@@ -270,6 +293,7 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 //
 //   js:   undefined || null
 //   chez: #f
+//   ml:  NONE (of option 'a)
 
 /**
  * The value used by the FFI to represent undefined values
@@ -277,6 +301,7 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 extern pure def undefined[A](): A =
   js "undefined"
   chez "#f"
+  ml "NONE"
 
 /**
  * Is an FFI value undefined?
@@ -284,6 +309,7 @@ extern pure def undefined[A](): A =
 extern pure def isUndefined[A](value: A): Bool =
   js "(${value} === undefined || ${value} == null)"
   chez "(eq? ${value} #f)"
+  ml "Option.isSome ${value}"
 
 
 // Tuples
@@ -293,43 +319,6 @@ record Tuple3[A, B, C](first: A, second: B, third: C)
 record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
 record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
 record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
-
-
-// Exceptions
-// ==========
-
-/**
- * A fatal runtime error that cannot be caught
- */
-extern io def panic[R](msg: String): R =
-  js "(function() { throw ${msg} })()"
-  chez "(raise ${msg})"
-
-interface Exception[E] {
-  def raise(exception: E, msg: String): Nothing
-}
-record RuntimeError()
-
-def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
-def raise[A, E](exception: E, msg: String): A / Exception[E] = do raise(exception, msg) match {}
-
-/**
- * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
- */
-def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
-
-/**
- * Reports exceptions of (static) type E to the console
- */
-def report[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
-
-/**
- * Ignores exceptions of (static) type E
- */
-def ignore[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
 
 
 // Control Flow
@@ -359,51 +348,3 @@ def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
 }
 
 def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
-
-
-// Benchmarking
-// ============
-
-/**
- * The current time (since UNIX Epoch) in nanoseconds.
- *
- * The actual precision varies across the different backends.
- * - js: Milliseconds
- * - chez: Microseconds
- */
-extern io def timestamp(): Int =
-  js "Date.now() * 1000000"
-  chez "(timestamp)"
-
-
-/**
- * High-precision timestamp in nanoseconds that should be for measurements.
- *
- * This timestamp should only be used for **relative** measurements,
- * as gives no guarantees on the absolute time (unlike a UNIX timestamp).
- */
-extern io def relativeTimestamp(): Int =
-  js "Math.round(performance.now() * 1000000)"
-  default { timestamp() }
-
-/**
- * Runs the block and returns the time in nanoseconds
- */
-def timed { block: => Unit }: Int = {
-  val before = relativeTimestamp()
-  block()
-  val after = relativeTimestamp()
-  after - before
-}
-
-def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
-  def run(n: Int, report: Bool): Unit = {
-    if (n <= 0) { () } else {
-      val time = timed { block() };
-      if (report) { println(time) } else { () };
-      run(n - 1, report)
-    }
-  }
-  run(warmup, false)
-  run(iterations, true)
-}

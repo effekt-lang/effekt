@@ -1,5 +1,5 @@
 import io/args
-import text/string
+import string
 
 // not used at the moment (see below).
 def range(a: Int, b: Int): List[Int] = {

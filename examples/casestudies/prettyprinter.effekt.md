@@ -20,7 +20,7 @@ Furthermore, the library presented here is neither linear
 module examples/casestudies/prettyprinter
 
 import examples/casestudies/parser // just needed for the example (Tree)
-import text/string
+import string
 ```
 
 Similar to the [parser case study](parser), the pretty printing library is based

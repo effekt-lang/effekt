@@ -2,6 +2,7 @@ module list
 
 import effekt
 import option
+import exception
 
 // Used as a type for `Exception` in functions which expect a nonempty list.
 record EmptyList()

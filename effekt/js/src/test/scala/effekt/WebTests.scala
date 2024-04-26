@@ -57,7 +57,7 @@ object WebTests extends TestSuite {
     }
 
     test("Evaluate expressions using stdlib in REPL") {
-      val result = evaluate[Int](List("immutable/list"), "Cons(1, Cons(2, Nil())).size")
+      val result = evaluate[Int](List("list"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
     }
 
@@ -71,7 +71,7 @@ object WebTests extends TestSuite {
     }
 
     test("Load file with multiline extern strings") {
-      val result = evaluate[Int](List("immutable/list", "mutable/heap"), "Cons(1, Cons(2, Nil())).size")
+      val result = evaluate[Int](List("list", "ref"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
     }
 

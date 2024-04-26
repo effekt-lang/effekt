@@ -14,9 +14,8 @@ Before we get started, we require a few imports to deal with strings and regular
 ```
 module examples/casestudies/lexer
 
-import text/string
+import string
 import text/regex
-import mutable/array
 ```
 
 ## Tokens and Positions

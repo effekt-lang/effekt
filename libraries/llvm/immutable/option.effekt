@@ -1,4 +1,4 @@
-module immutable/option
+module option
 
 import effekt
 

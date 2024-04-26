@@ -1,5 +1,5 @@
 import io/args
-import text/string
+import string
 
 record Triple(a: Int, b: Int, c: Int)
 

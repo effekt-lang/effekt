@@ -1,9 +1,7 @@
 module examples/pos/array/sum
 
-import mutable/array
-
 def main() = {
-  val emptyArray: Array[Int] = emptyArray()
+  val emptyArray: Array[Int] = emptyArray(0)
   println(emptyArray.sum())
 
   val array: Array[Int] = build(3) { i => i + 1 } // Array(1, 2, 3)

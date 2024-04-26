@@ -1,0 +1,40 @@
+module exception
+
+import show
+
+// Exceptions
+// ==========
+
+/**
+ * A fatal runtime error that cannot be caught
+ */
+extern io def panic[R](msg: String): R =
+  js "(function() { throw ${msg} })()"
+  chez "(raise ${msg})"
+  ml "raise Fail ${msg}"
+
+interface Exception[E] {
+  def raise(exception: E, msg: String): Nothing
+}
+record RuntimeError()
+
+def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
+def raise[A, E](exception: E, msg: String): A / Exception[E] = do raise(exception, msg) match {}
+
+/**
+ * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
+ */
+def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
+
+/**
+ * Reports exceptions of (static) type E to the console
+ */
+def report[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
+
+/**
+ * Ignores exceptions of (static) type E
+ */
+def ignore[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }

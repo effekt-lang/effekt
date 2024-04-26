@@ -1105,7 +1105,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case CallTarget(syms) => syms
       // already resolved by a previous attempt to typecheck
       case sym: BlockSymbol => List(Set(sym))
-      case _ => ???
+      case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
     }
 
     // TODO right now unhandled effects (via capability search) influences overload resolution.

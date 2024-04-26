@@ -1,4 +1,4 @@
-module text/string
+module string
 
 extern pure def length(s: String): Int = llvm """
    %x = call %Int @c_buffer_length(%Pos %s)

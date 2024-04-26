@@ -1,7 +1,5 @@
 module examples/pos/list/collect
 
-import mutable/array
-
 def listToArrayAndBack[A](list: List[A]): Unit = {
   list.foreach { x => println(x) }
   println("")
@@ -50,7 +48,7 @@ def main() = {
   listToArrayAndBack(list)
 
   println("empty array")
-  val emptyArray = emptyArray[Int]()
+  val emptyArray = array::emptyArray[Int](0)
   arrayToListAndBack(emptyArray)
 
   println("nonempty array")

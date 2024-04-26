@@ -18,7 +18,7 @@ module examples/casestudies/ad
 ```
 
 ```effekt:prelude:hide
-import mutable/heap
+import ref
 ```
 
 ## Representing Differentiable Expressions
