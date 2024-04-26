@@ -30,13 +30,13 @@ def transform(core: lifted.ModuleDecl): ModuleDecl =
   ModuleDecl(core.path, core.includes, core.decls map transform, core.externs map transform, core.definitions map transform, core.exports)
 
 def transform(decl: lifted.Declaration): Declaration = decl match {
-  case lifted.Declaration.Data(id, tparams, constructors) => Declaration.Data(id, tparams, constructors map transform)
-  case lifted.Declaration.Interface(id, tparams, properties) => Declaration.Interface(id, tparams, properties map transform)
+  case lifted.Declaration.Data(id, tparams, constructors) => Declaration.Data(id, constructors map transform)
+  case lifted.Declaration.Interface(id, tparams, properties) => Declaration.Interface(id, properties map transform)
 }
 
 def transform(extern: lifted.Extern): Extern = extern match {
   case lifted.Extern.Def(id, tparams, params, ret, body) =>
-    Extern.Def(id, tparams, params map paramToId, Template(body.strings, body.args map transform))
+    Extern.Def(id, params map paramToId, Template(body.strings, body.args map transform))
   case lifted.Extern.Include(contents) => Extern.Include(contents)
 }
 

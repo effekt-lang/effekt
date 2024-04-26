@@ -25,12 +25,12 @@ def transform(mod: cps.ModuleDecl): Book = {
 
 
 def transform(decl: cps.Declaration): List[Definition] = decl match {
-  case cps.Declaration.Data(id, tparams, ctors) => List(Definition(id.name.name, transformConstructors(tparams, ctors), false))
-  case cps.Declaration.Interface(id, tparams, operations) => List(Definition(id.name.name, transformProperties(tparams, operations), false))
+  case cps.Declaration.Data(id, ctors) => List(Definition(id.name.name, transformConstructors(List(id), ctors), false))
+  case cps.Declaration.Interface(id, operations) => List(Definition(id.name.name, transformProperties(List(id), operations), false))
 }
 
 def transform(decl: cps.Extern): Verbatim = decl match {
-  case cps.Extern.Def(id, tparams, params, body) =>
+  case cps.Extern.Def(id, params, body) =>
     Verbatim.Def(id.name.name, params map idToPattern, transform(body))//let tmp für jedes body.args
   case cps.Extern.Include(contents) => Verbatim.Include(contents)
 }

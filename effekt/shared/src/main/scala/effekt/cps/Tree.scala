@@ -23,8 +23,8 @@ case class ModuleDecl(
 enum Declaration {
   def id: Id
 
-  case Data(id: Id, tparams: List[Id], constructors: List[Constructor])
-  case Interface(id: Id, tparams: List[Id], properties: List[Id])
+  case Data(id: Id, constructors: List[Constructor])
+  case Interface(id: Id, properties: List[Id])
 }
 export Declaration.*
 
@@ -37,7 +37,7 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Id, tparams: List[Id], params: List[Id], body: Template[Expr])
+  case Def(id: Id, params: List[Id], body: Template[Expr])
   case Include(contents: String)
 }
 
