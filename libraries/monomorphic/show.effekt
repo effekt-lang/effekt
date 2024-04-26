@@ -1,3 +1,7 @@
+module show
+
+import effekt
+
 extern def println(value: String): Unit =
   ml { print(value); print("\n") }
 

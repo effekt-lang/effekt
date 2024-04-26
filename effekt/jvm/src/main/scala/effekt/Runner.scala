@@ -113,7 +113,7 @@ object JSRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "generic", path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
@@ -139,7 +139,7 @@ trait ChezRunner extends Runner[String] {
 
    def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
@@ -230,7 +230,7 @@ object MLRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "string")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string", "ref")
 
   override def includes(path: File): List[File] = List(
     path / ".." / "monomorphic",
