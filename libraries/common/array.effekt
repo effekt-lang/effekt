@@ -117,12 +117,6 @@ def sum(list: Array[Int]): Int = {
   acc
 }
 
-// Old From Chez
-// -------------
-// extern pure def toArray[A](l: CSList[A]): Array[A] =
-//   chez "(list->vector ${l})"
-
-
 
 // Old from ML
 // -----------

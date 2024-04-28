@@ -27,5 +27,5 @@ extern pure def unsafeMatchString(reg: Regex, str: String): String =
 extern pure def split(reg: Regex, str: String): CSList[String] =
   chez "(pregexp-split ${reg} ${str})"
 
-def split(str: String, sep: String): Array[String] =
-  sep.regex.split(str).toArray
+// def split(str: String, sep: String): Array[String] =
+//   toArray(split(sep.regex, str))
