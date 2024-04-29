@@ -124,7 +124,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             case p: Pure => p: Pure
             case _ => Context.abort("Spliced arguments need to be pure expressions.")
           }
-          ExternBody(ff, Template(body.strings, args))
+          ExternBody.StringExternBody(ff, Template(body.strings, args))
+        case source.ExternBody.Unsupported(err) :: Nil =>
+          ExternBody.Unsupported(err)
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }

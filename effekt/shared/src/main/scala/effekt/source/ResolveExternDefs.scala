@@ -15,8 +15,8 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
 
-  def defaultExternBody: ExternBody =
-    ExternBody.EffektExternBody(FeatureFlag.Default, Return(Hole(Return(UnitLit()))))
+  def defaultExternBody(warning: String)(using Context): ExternBody =
+    ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
 
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
     case ModuleDecl(path, includes, defs) =>
@@ -33,9 +33,8 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
       }.getOrElse {
         val featureFlags = bodies.map(_.featureFlag)
-        Context.warning(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
+        defaultExternBody(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
           s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
-        defaultExternBody
       }
   }
 
@@ -55,6 +54,10 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
             val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret), body)
             Context.copyAnnotations(defn, d)
             Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??
+            Some(d)
+          case u: ExternBody.Unsupported =>
+            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u))
+            Context.copyAnnotations(defn, d)
             Some(d)
         }
 

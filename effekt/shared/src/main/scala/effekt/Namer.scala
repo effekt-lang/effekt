@@ -299,6 +299,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         bodies.foreach {
           case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolveGeneric)
           case source.ExternBody.EffektExternBody(ff, body) => resolveGeneric(body)
+          case u: source.ExternBody.Unsupported => u
         }
       }
 
