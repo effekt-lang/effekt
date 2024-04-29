@@ -1,9 +1,9 @@
 module effekt
 
-extern include "../common/effekt_primitives.ss"
-extern include "seq0.ss"
-extern include "effekt.ss"
-extern include "../common/effekt_matching.ss"
+extern include chezMonadic "../common/effekt_primitives.ss"
+extern include chezMonadic "seq0.ss"
+extern include chezMonadic "effekt.ss"
+extern include chezMonadic "../common/effekt_matching.ss"
 
 
 def locally[R] { f: => R }: R = f()
@@ -11,88 +11,88 @@ def locally[R] { f: => R }: R = f()
 // String ops
 // ==========
 extern pure def infixConcat(s1: String, s2: String): String =
-  "(string-append ${s1} ${s2})"
+  chezMonadic "(string-append ${s1} ${s2})"
 
 // TODO implement
 extern pure def show[R](value: R): String =
-  "(show_impl ${value})"
+  chezMonadic "(show_impl ${value})"
 
 extern io def println[R](r: R): Unit =
-  "(println_impl ${r})"
+  chezMonadic "(println_impl ${r})"
 
 extern io def error[R](msg: String): R =
-  "(raise ${msg})"
+  chezMonadic "(raise ${msg})"
 
 extern io def random(): Double =
-  "(random 1.0)"
+  chezMonadic "(random 1.0)"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(+ ${x} ${y})"
+  chezMonadic "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(* ${x} ${y})"
+  chezMonadic "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(floor (/ ${x} ${y}))"
+  chezMonadic "(floor (/ ${x} ${y}))"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(- ${x} ${y})"
+  chezMonadic "(- ${x} ${y})"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(modulo ${x} ${y})"
+  chezMonadic "(modulo ${x} ${y})"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(+ ${x} ${y})"
+  chezMonadic "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(* ${x} ${y})"
+  chezMonadic "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(/ ${x} ${y})"
+  chezMonadic "(/ ${x} ${y})"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(- ${x} ${y})"
+  chezMonadic "(- ${x} ${y})"
 
 extern pure def cos(x: Double): Double =
-  "(cos ${x})"
+  chezMonadic "(cos ${x})"
 
 extern pure def sin(x: Double): Double =
-  "(sin ${x})"
+  chezMonadic "(sin ${x})"
 
 extern pure def atan(x: Double): Double =
-  "(atan ${x})"
+  chezMonadic "(atan ${x})"
 
 extern pure def tan(x: Double): Double =
-  "(tan ${x})"
+  chezMonadic "(tan ${x})"
 
 extern pure def sqrt(x: Double): Double =
-  "(sqrt ${x})"
+  chezMonadic "(sqrt ${x})"
 
 extern pure def square(x: Double): Double =
-  "(* ${x} ${x})"
+  chezMonadic "(* ${x} ${x})"
 
 extern pure def log(x: Double): Double =
-  "(log ${x})"
+  chezMonadic "(log ${x})"
 
 extern pure def log1p(x: Double): Double =
-  "(log (+ ${x} 1))"
+  chezMonadic "(log (+ ${x} 1))"
 
 extern pure def exp(x: Double): Double =
-  "(exp ${x})"
+  chezMonadic "(exp ${x})"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
-  "(* 4 (atan 1))"
+  chezMonadic "(* 4 (atan 1))"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "(round ${d})"
+  chezMonadic "(round ${d})"
 
 extern pure def toDouble(d: Int): Double =
-  "${d}"
+  chezMonadic "${d}"
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -103,50 +103,50 @@ def max(n: Int, m: Int): Int =
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Bool =
-  "(equal_impl ${x} ${y})"
+  chezMonadic "(equal_impl ${x} ${y})"
 
 extern pure def infixNeq[R](x: R, y: R): Bool =
-  "(not (equal_impl ${x} ${y}))"
+  chezMonadic "(not (equal_impl ${x} ${y}))"
 
 extern pure def infixLt(x: Int, y: Int): Bool =
-  "(< ${x} ${y})"
+  chezMonadic "(< ${x} ${y})"
 
 extern pure def infixLte(x: Int, y: Int): Bool =
-  "(<= ${x} ${y})"
+  chezMonadic "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Int, y: Int): Bool =
-  "(> ${x} ${y})"
+  chezMonadic "(> ${x} ${y})"
 
 extern pure def infixGte(x: Int, y: Int): Bool =
-  "(>= ${x} ${y})"
+  chezMonadic "(>= ${x} ${y})"
 
 extern pure def infixLt(x: Double, y: Double): Bool =
-  "(< ${x} ${y})"
+  chezMonadic "(< ${x} ${y})"
 
 extern pure def infixLte(x: Double, y: Double): Bool =
-  "(<= ${x} ${y})"
+  chezMonadic "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Double, y: Double): Bool =
-  "(> ${x} ${y})"
+  chezMonadic "(> ${x} ${y})"
 
 extern pure def infixGte(x: Double, y: Double): Bool =
-  "(>= ${x} ${y})"
+  chezMonadic "(>= ${x} ${y})"
 
 // Bool ops
 // ===========
 // for now those are considered eager
 extern pure def not(b: Bool): Bool =
-  "(not ${b})"
+  chezMonadic "(not ${b})"
 
-extern pure def infixOr(x: Bool, y: Bool): Bool =
-  "(or ${x} ${y})"
+def infixOr { first: => Bool } { second: => Bool }: Bool = 
+  if (first()) true else second()
 
-extern pure def infixAnd(x: Bool, y: Bool): Bool =
-  "(and ${x} ${y})"
+def infixAnd { first: => Bool } { second: => Bool }: Bool = 
+  if (first()) second() else false
 
 // Should only be used internally since values in Effekt should not be undefined
 extern pure def isUndefined[A](value: A): Bool =
-  "(eq? ${value} #f)"
+  chezMonadic "(eq? ${value} #f)"
 
 // Pairs
 // =====
@@ -160,7 +160,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "(raise ${msg})"
+  chezMonadic "(raise ${msg})"
 
 interface Exception[E] {
   def raise(exception: E, msg: String): Nothing
@@ -215,4 +215,4 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // ============
 // should only be used with pure blocks
 extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit =
-  "(delayed (display (measure (lambda () (run (${box block}))) ${warmup} ${iterations})))"
+  chezMonadic "(delayed (display (measure (lambda () (run (${box block}))) ${warmup} ${iterations})))"

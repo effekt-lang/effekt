@@ -18,6 +18,8 @@ import scala.collection.mutable
  */
 trait Transformer {
 
+  val jsFeatureFlags: List[String] = List("js")
+
   def run(body: js.Expr): js.Stmt
 
   def shouldExport(id: Id)(using D: DeclarationContext): Boolean = true

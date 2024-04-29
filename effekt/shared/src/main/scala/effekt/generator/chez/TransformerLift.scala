@@ -196,14 +196,14 @@ object TransformerLift {
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {
-    case Extern.Def(id, tparams, params, ret, body) =>
+    case Extern.Def(id, tparams, params, ret, ExternBody(_, body)) =>
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
           case p => Some(nameDef(p.id)) },
           toChez(body)))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) =>
       RawDef(contents)
   }
 

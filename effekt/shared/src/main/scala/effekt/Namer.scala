@@ -11,6 +11,7 @@ import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
+import effekt.source.FeatureFlag.supportedByFeatureFlags
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -180,7 +181,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -192,7 +193,8 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        ExternFunction(name, tps, vps, bps, tpe, eff, capt, body)
+
+        ExternFunction(name, tps, vps, bps, tpe, eff, capt, bodies)
       })
     }
 
@@ -203,10 +205,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
       Context.bindBlock(sym)
 
-    case d @ source.ExternInclude(path, Some(contents), _) =>
+    case d @ source.ExternInclude(ff, path, Some(contents), _) =>
       ()
 
-    case d @ source.ExternInclude(path, None, _) =>
+    case d @ source.ExternInclude(ff, path, None, _) =>
       d.contents = Some(Context.contentsOf(path).getOrElse {
         Context.abort(s"Missing include: ${path}")
       })
@@ -288,13 +290,28 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) =>
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      if (!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
+        val featureFlags = bodies.map(_.featureFlag)
+        Context.warning(pp"Extern definition ${id} is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
+          pp"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
+      }
+      bodies.foreach {
+        case source.ExternBody.StringExternBody(ff, _) if ff.isDefault =>
+          Context.warning(pp"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
+            + pp"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
+        case _ => ()
+      }
+
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        body.args.foreach(resolveGeneric)
+        bodies.foreach {
+          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolveGeneric)
+          case source.ExternBody.EffektExternBody(ff, body) => resolveGeneric(body)
+        }
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
@@ -364,7 +381,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
     case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(path, _, _) => ()
+    case source.ExternInclude(ff, path, _, _) =>
+      if (ff.isDefault) {
+        val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
+        Context.warning("Found extern include without feature flag. It is likely that this will fail in other backends, "
+          + s"please annotate it with a feature flag (Supported in current backend: ${supported})")
+      }
+      ()
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }

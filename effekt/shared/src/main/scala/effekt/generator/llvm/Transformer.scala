@@ -10,6 +10,8 @@ import scala.collection.mutable
 
 object Transformer {
 
+  val llvmFeatureFlags: List[String] = List("llvm")
+
   def transform(program: machine.Program): List[Definition] = program match {
     case machine.Program(declarations, statement) =>
       given MC: ModuleContext = ModuleContext();
@@ -40,11 +42,11 @@ object Transformer {
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, body) =>
+      case machine.Extern(functionName, parameters, returnType, machine.ExternBody(_, body)) =>
         VerbatimFunction(transform(returnType), functionName, parameters.map {
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
         }, transform(body))
-      case machine.Include(content) =>
+      case machine.Include(ff, content) =>
         Verbatim(content)
     }
 

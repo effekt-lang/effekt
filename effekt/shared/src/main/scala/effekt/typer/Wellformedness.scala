@@ -19,7 +19,6 @@ class WFContext(var effectsInScope: List[Interface]) {
  *
  * Checks:
  * - exhaustivity
- * - lexical scoping of effects
  * - escape of capabilities through types
  */
 object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] {
@@ -138,22 +137,6 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     val before = ctx.effectsInScope
     action
     ctx.effectsInScope = before
-  }
-
-  override def visit[T <: Tree](t: T)(visitor: T => Unit)(using Context, WFContext): Unit = {
-    // Make sure that all annotated effects are well-scoped with regard to lexical scoping
-    Context.inferredEffectOption(t).foreach { effects => Context.at(t) { wellscoped(effects) } }
-    visitor(t)
-  }
-
-  // TODO extend check to also check in value types
-  //   (now that we have first class functions, they could mention effects).
-  def wellscoped(effects: Effects)(using C: Context, WF: WFContext): Unit = {
-    def checkEffect(eff: InterfaceType): Unit =
-      if (!(WF.effectsInScope contains eff.typeConstructor))
-        Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
-
-    effects.toList foreach checkEffect
   }
 
   // Can only compute free capture on concrete sets

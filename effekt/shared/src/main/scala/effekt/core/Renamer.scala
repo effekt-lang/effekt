@@ -81,6 +81,19 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       }
   }
 
+  override def rewrite(o: Operation): Operation = o match {
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id) ++ resume.map(_.id).toList) {
+        Operation(name,
+          tparams map rewrite,
+          cparams map rewrite,
+          vparams map rewrite,
+          bparams map rewrite,
+          resume map rewrite,
+          rewrite(body))
+      }
+  }
+
   def apply(m: core.ModuleDecl): core.ModuleDecl =
     suffix = 0
     m match {
