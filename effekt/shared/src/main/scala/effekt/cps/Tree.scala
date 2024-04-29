@@ -70,7 +70,7 @@ enum Term {
   case LetCont(cont: Id, param: Id, body: Term, rest: Term)
   case Let(name: Id, expr: Expr, rest: Term)
   case AppCont(cont: Id, arg: Expr)
-  case App(func: Id, arg: List[Expr], cont: Id)
+  case App(func: Expr, arg: List[Expr], cont: Id)
   case Scope(definitions: List[Definition], body: Term)
   case Val(id: Id, binding: Term, body: Term)
   case If(cond: Expr, thn: Term, els: Term)

@@ -48,15 +48,17 @@ def transform(definition: cps.Definition): Definition = definition match {
  
 
 def transform(term: cps.Term): Term = term match {
-  case cps.Term.AppCont(id, arg) => App(Auto, Var(id.name.name), transform(arg))
-  case cps.Term.App(id, args, cont) => chainApp(Var(cont.name.name)::(args map transform))
+  case cps.Term.AppCont(id, arg) => App(Auto, idToVar(id), transform(arg))
+  case cps.Term.App(id, args, cont) => chainApp(idToVar(cont)::(args map transform))
   case cps.Term.Scope(definitions, body) => transform(definitions, body)
   case cps.Term.If(cond, thn, els) => 
     Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
   case cps.Term.Match(scrutinee, clauses, None) => Mat(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((_, blockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
-  case cps.Term.Let(name, expr, rest) => Let(VarPattern(Some(name.name.name)), transform(expr), transform(rest))
-  case _ => println(term); ??? 
+  case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
+  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(name.name.name), transform(body)), transform(rest))
+  case cps.Term.Val(id, binding, body) => println(term); ??? 
+  case cps.Term.Fun(name, params, cont, body) => println(term); ???
 }
 
 def transform(blockLit: cps.BlockLit): Rule = blockLit match {
@@ -66,15 +68,18 @@ def transform(blockLit: cps.BlockLit): Rule = blockLit match {
 def transform(definitions: List[cps.Definition], body: cps.Term): Term = definitions match {
   case Nil => transform(body)
   case _ => definitions.head match {
-    case cps.Definition.Let(id, bindings) => Let(VarPattern(Some(id.name.name)), transform(bindings), transform(definitions.tail, body))
+    case cps.Definition.Let(id, bindings) => Let(idToPattern(id), transform(bindings), transform(definitions.tail, body))
     case cps.Definition.Function(name, params, cont, body) => ???
   }
 }
 
 def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Lit(n) => Num(n)
-  case cps.Expr.Var(name) => Var(name.name.name)
+  case cps.Expr.Var(name) => idToVar(name)
   case cps.Expr.PureApp(b, args) => chainApp(transform(b) :: (args map transform))
+  case cps.Expr.Box(b) => transform(b)
+  case cps.Expr.Run(t) => transform(t)
+  case cps.Expr.BlockLit(params, body) => transform(cps.Expr.BlockLit(params, body))
   case _ => ???
 }
 

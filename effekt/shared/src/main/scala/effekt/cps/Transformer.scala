@@ -90,7 +90,7 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Val(id, binding, body)  => LetCont(Id("k"), id, transform(body), transform(binding))
   
   case lifted.Stmt.Scope(definitions, body) => transform(definitions, transform(body))
-  case lifted.Stmt.App(b, targs, args) => println(stmt); ???
+  case lifted.Stmt.App(b, targs, args) => App(transform(b), args map transform, Id("k"))
   
   case lifted.Stmt.If(cond, thn, els) => If(transform(cond), transform(thn), transform(els))
   case lifted.Stmt.Match(scrutinee, clauses, Some(default)) => Match(transform(scrutinee), clauses map ((id: lifted.Id, blockLit: lifted.BlockLit) => (Id(id.name.name), transform(blockLit))), Some(transform(default)))
