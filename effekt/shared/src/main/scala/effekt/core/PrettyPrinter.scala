@@ -209,6 +209,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Hole() =>
       "<>"
+
+    case ReportIfReachable(errs, body) => "<>" // TODO
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {

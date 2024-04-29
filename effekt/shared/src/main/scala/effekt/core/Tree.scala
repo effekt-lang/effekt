@@ -139,7 +139,6 @@ extension(self: List[ExternBody]) {
   }
 }
 
-
 enum Definition extends Tree {
   def id: Id
 
@@ -313,6 +312,7 @@ enum Stmt extends Tree {
 
   // Others
   case Hole()
+  case ReportIfReachable(errs: List[util.messages.EffektError], body: Stmt)
 
   val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
@@ -662,6 +662,7 @@ object Variables {
 
     case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
     case Stmt.Hole() => Variables.empty
+    case Stmt.ReportIfReachable(errs, body) => free(body)
   }
 
   def bound(t: ValueParam): Variables = Variables.value(t.id, t.tpe)
@@ -773,6 +774,9 @@ object substitutions {
         Region(substitute(body))
 
       case h : Hole => h
+
+      case ReportIfReachable(errs, body) =>
+        ReportIfReachable(errs, substitute(body))
     }
 
   def substituteAsVar(id: Id)(using subst: Substitution): Id =

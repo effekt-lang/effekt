@@ -140,6 +140,7 @@ object Inline {
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)
     case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, rewrite(value))
     case Stmt.Hole() => s
+    case Stmt.ReportIfReachable(errs, body) => Stmt.ReportIfReachable(errs, rewrite(body))
   }
   def rewrite(b: BlockLit)(using InlineContext): BlockLit =
     b match {

@@ -127,6 +127,7 @@ class Reachable(
     case Stmt.Try(body, handlers) => process(body); handlers.foreach(process)
     case Stmt.Region(body) => process(body)
     case Stmt.Hole() => ()
+    case Stmt.ReportIfReachable(errs, body) => process(body)
   }
 
   def process(e: Expr)(using defs: Map[Id, Definition]): Unit = e match {

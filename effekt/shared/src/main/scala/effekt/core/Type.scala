@@ -176,6 +176,7 @@ object Type {
     case Stmt.Region(body) => body.returnType
 
     case Stmt.Hole() => TBottom
+    case Stmt.ReportIfReachable(errs, body) => inferType(body)
   }
 
   def inferCapt(defn: Definition): Captures = defn match {
@@ -197,6 +198,7 @@ object Type {
     case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
     case Stmt.Region(body) => body.capt
     case Stmt.Hole() => Set.empty
+    case Stmt.ReportIfReachable(errs, body) => body.capt
   }
 
   def inferType(expr: Expr): ValueType = expr match {

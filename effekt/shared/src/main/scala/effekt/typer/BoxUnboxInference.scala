@@ -187,6 +187,9 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
     case BlockStmt(b) =>
       BlockStmt(rewrite(b))
+
+    case ReportIfReachable(errs, b) =>
+      ReportIfReachable(errs, rewrite(b))
   }
 
   def rewrite(h: Handler)(using Context): Handler = visit(h) {

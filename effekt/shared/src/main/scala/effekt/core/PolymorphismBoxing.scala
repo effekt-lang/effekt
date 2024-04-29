@@ -210,6 +210,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Try(transform(body), handlers map transform)
     case Stmt.Region(body) => Stmt.Region(transform(body))
     case Stmt.Hole() => Stmt.Hole()
+    case Stmt.ReportIfReachable(errs, body) => Stmt.ReportIfReachable(errs, transform(body))
   }
 
   def transform(expr: Expr)(using PContext): Expr = expr match {

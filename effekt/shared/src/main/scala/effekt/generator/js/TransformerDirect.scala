@@ -303,6 +303,10 @@ object TransformerDirect extends Transformer {
     case Hole() =>
       Return($effekt.call("hole"))
 
+    case ReportIfReachable(errs, body) =>
+      errs.foreach(Context.report)
+      toJS(body)
+
     case Get(id, capt, tpe) => Context.panic("Should have been translated to direct style")
     case Put(id, capt, value) =>  Context.panic("Should have been translated to direct style")
 

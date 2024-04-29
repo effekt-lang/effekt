@@ -629,6 +629,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.Return(e)        => checkExpr(e, expected)
 
       case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
+
+      case source.Stmt.ReportIfReachable(errs, body) => checkStmt(body, expected)
     }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB

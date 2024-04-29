@@ -287,6 +287,8 @@ enum Stmt extends Tree {
   case ExprStmt(d: Term, rest: Stmt)
   case Return(d: Term)
   case BlockStmt(stmts: Stmt)
+  /** Only generated to delay warnings or errors for unused code */
+  case ReportIfReachable(errors: List[util.messages.EffektError], body: Stmt)
 }
 export Stmt.*
 

@@ -212,6 +212,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       case d: source.Def.NamespaceDef => Context.panic("Should have been removed by BoxUnboxInference")
     }
+
+    case source.Stmt.ReportIfReachable(errs, body) =>
+      core.Stmt.ReportIfReachable(errs, transform(body))
   }
 
   def transformUnbox(tree: source.Term)(implicit C: Context): Block =

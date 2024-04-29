@@ -229,6 +229,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Return(transform(e))
 
     case core.Hole() => Hole()
+
+    case core.ReportIfReachable(errs, body) =>
+      errs.foreach(ErrorReporter.report)
+      transform(body)
   }
 
   def transform(tree: core.Pure)(using Environment, ErrorReporter): Expr = tree match {
