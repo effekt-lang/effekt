@@ -82,6 +82,8 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
     // local state
     case source.DefStmt(tree @ VarDef(id, annot, binding), rest) =>
       query(binding) ++ (query(rest) -- CaptureSet(tree.symbol.capture))
+    case source.ReportIfReachable(errs, body) =>
+      query(body) ++ CaptureSet(builtins.IOCapability.capture, builtins.ControlCapability.capture)
   }
 
   override def defn(using Context, Unit) = {
