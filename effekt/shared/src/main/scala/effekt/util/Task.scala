@@ -89,9 +89,9 @@ object Task { build =>
   /**
    * A heterogenous store from Target to Trace
    */
-  val db = mutable.HashMap.empty[Target[Any, Any], Trace[Any]]
+  var cache = mutable.HashMap.empty[Target[Any, Any], Trace[Any]]
 
-  def reset(): Unit = db.clear()
+  def reset(): Unit = cache.clear()
 
   case class Info(target: Target[_, _], hash: Long) {
     def isValid: Boolean = target.fingerprint == hash
@@ -112,10 +112,10 @@ object Task { build =>
   private def coerce[A, B](a: A): B = a.asInstanceOf[B]
 
   def get[K, V](target: Target[K, V]): Option[Trace[V]] =
-    coerce(db.get(coerce(target)))
+    coerce(cache.get(coerce(target)))
 
   def update[K, V](target: Target[K, V], trace: Trace[V]): Unit =
-    db.update(coerce(target), coerce(trace))
+    cache.update(coerce(target), coerce(trace))
 
   /**
    * A trace recording information about computed targets
@@ -174,5 +174,5 @@ object Task { build =>
       compute(target)
   }
 
-  def dump() = db.foreach { case (k, v) => println(k.toString + " -> " + v) }
+  def dump() = cache.foreach { case (k, v) => println(k.toString + " -> " + v) }
 }
