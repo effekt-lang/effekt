@@ -316,7 +316,7 @@ class Lexer(source: String) {
    * expressions.
    */
   def matchString(): TokenKind = {
-    val sliceStr = (start: Int, end: Int) => TokenKind.Str(slice(start, end))
+    def sliceStr(start: Int, end: Int): TokenKind.Str = TokenKind.Str(slice(start, end))
     var endString = false
     val stringStart = start
     var multiline = false
@@ -368,7 +368,7 @@ class Lexer(source: String) {
                     endQuote = true
                     stringTokens += Token(token.start, token.end, TokenKind.`}$`)
                   }
-                  case _ =>
+                  case `{{` =>
                     stringTokens += token
                 }
               }
