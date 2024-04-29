@@ -44,7 +44,7 @@ class JavaScript extends Compiler[String] {
     Frontend andThen Middleend andThen DirectStyleMutableState
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe andThen core.LambdaLifting map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.ReportReachable andThen core.MakeStackSafe andThen core.LambdaLifting map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)

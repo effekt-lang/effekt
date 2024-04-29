@@ -54,7 +54,7 @@ class ML extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Lifted => ML
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen Monomorphize andThen ToML map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.ReportReachable andThen LiftInference andThen Monomorphize andThen ToML map {
     case (mainFile, prog) => (Map("main.mlb" -> buildFile(mainFile),  mainFile -> pretty(prog).layout), mainFile)
   }
 

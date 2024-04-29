@@ -53,7 +53,7 @@ trait ChezScheme extends Compiler[String] {
   // ------------------------
   // Source => Core => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen Chez map { case (main, expr) =>
+    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.ReportReachable andThen Chez map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 
