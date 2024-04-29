@@ -15,8 +15,12 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
 
-  def defaultExternBody: ExternBody =
-    ExternBody.EffektExternBody(FeatureFlag.Default, Return(Hole(Return(UnitLit()))))
+  def defaultExternBody(warning: String)(using Context): ExternBody = {
+    val r = ExternBody.EffektExternBody(FeatureFlag.Default, Stmt.ReportIfReachable(List(
+      Context.plainMessage(warning, kiama.util.Severities.Warning)),
+      Return(Hole(Return(UnitLit())))))
+    r
+  }
 
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
     case ModuleDecl(path, includes, defs) =>
@@ -33,9 +37,8 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
       }.getOrElse {
         val featureFlags = bodies.map(_.featureFlag)
-        Context.warning(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
+        defaultExternBody(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
           s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
-        defaultExternBody
       }
   }
 
