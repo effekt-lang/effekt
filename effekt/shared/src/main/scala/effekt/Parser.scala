@@ -339,10 +339,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
           val tgt = IdTarget(id) withPositionOf(id)
           Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
        }
-    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
-        case id ~ tps ~ vargs ~ body =>
+    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ maybeBlockArgs ~ (`;` ~> stmts) ^^ {
+        case id ~ tps ~ vargs ~ bargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
+          Return(Call(tgt, tps, vargs, bargs :+ (BlockLiteral(Nil, Nil, Nil, body) withPositionOf id)))
        }
     )
 
