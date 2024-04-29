@@ -29,9 +29,8 @@ def count(n: Int): Int = {
 
 def main() = commandLineArgs() match {
   case Nil() => println(count(1000))
-  case Cons(x, Nil()) => toInt(x) match {
-    case Some(i) => println(count(i))
-    case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "'")
-  }
+  case Cons(x, Nil()) =>
+    with report[WrongFormat];
+    println(count(x.toInt))
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }

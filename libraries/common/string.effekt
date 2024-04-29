@@ -3,6 +3,8 @@ module string
 import effekt
 import option
 import list
+import show
+import exception
 
 // TODO
 // - [ ] handle unicode codepoints (that can span two indices) correctly
@@ -40,15 +42,18 @@ def substring(str: String, from: Int): String =
  * Checks whether str starts with the given prefix at `from`
  */
 def isSubstringAt(str: String, prefix: String, from: Int): Bool = {
+  with default[OutOfBounds, Bool] { false };
+
   val stringLength = str.length
   val prefixLength = prefix.length
 
-  def matched?(index: Int): Bool = index >= prefixLength
-  def valid?(index: Int): Bool = (index + from) < stringLength
+  def done?(index: Int): Bool = index >= prefixLength
   def matches?(index: Int): Bool = prefix.charAt(index) == str.charAt(index + from)
 
   def go(index: Int): Bool =
-    index.matched? || (index.valid? && index.matches? && go(index + 1))
+    if (index.done?) true
+    else if (index.matches?) go(index + 1) else false
+
   go(0)
 }
 
@@ -108,20 +113,26 @@ extern pure def trim(str: String): String =
   js "${str}.trim()"
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
-def toInt(str: String): Option[Int] = {
+def toInt(str: String): Int / Exception[WrongFormat] = {
 
   val zero = '0'.toInt
 
-  def go(index: Int, acc: Int): Option[Int] = str.charAt(index) match {
-    case Some(c) and c >= '0' and c <= '9' =>
-      go(index + 1, 10 * acc + (c.toInt - zero))
-    case Some(c) => None()
-    case None() => Some(acc)
+  def go(index: Int, acc: Int): Int = {
+    // wrong index means we are done parsing
+    with default[OutOfBounds, Int] { () => acc };
+
+    str.charAt(index) match {
+      case c and c >= '0' and c <= '9' =>
+        go(index + 1, 10 * acc + (c.toInt - zero))
+      case c => wrongFormat("Not a valid number: '" ++ str ++ "'")
+    }
   }
+
+  with default[OutOfBounds, Int] { wrongFormat("Empty string is not a valid number") };
+
   str.charAt(0) match {
-    case Some('-') => go(1, 0).map { n => 0 - n }
-    case Some(_)   => go(0, 0)
-    case None()    => None()
+    case '-' => 0 - go(1, 0)
+    case _   => go(0, 0)
   }
 }
 
@@ -154,7 +165,7 @@ def indexOf(str: String, sub: String, from: Int): Option[Int] = {
  * Returns the index of the last occurence of `sub` in `str`
  */
 def lastIndexOf(str: String, sub: String): Option[Int] =
-  lastIndexOf(str, sub, str.length - 1)
+  lastIndexOf(str, sub, str.length)
 
 def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
   def go(index: Int): Option[Int] =
@@ -208,10 +219,10 @@ namespace ANSI {
 
 // Parsing
 // -------
-def toBool(s: String): Option[Bool] = s match {
-  case "true"  => Some(true)
-  case "false" => Some(false)
-  case _ => None()
+def toBool(s: String): Bool / Exception[WrongFormat] = s match {
+  case "true"  => true
+  case "false" => false
+  case _ => wrongFormat("Not a boolean value: '" ++ s ++ "'")
 }
 
 // Characters
@@ -238,11 +249,11 @@ extern pure def infixGt(x: Char, y: Char): Bool =
 extern pure def infixGte(x: Char, y: Char): Bool =
   js "(${x} >= ${y})"
 
-def charAt(str: String, index: Int): Option[Char] =
+def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
   if (index < 0 ||  index >= length(str))
-    None()
+    do raise(OutOfBounds(), "Index out of bounds: " ++ show(index) ++ " in string: '" ++ str ++ "'")
   else
-    Some(unsafeCharAt(str, index))
+    unsafeCharAt(str, index)
 
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"

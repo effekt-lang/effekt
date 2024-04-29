@@ -1,6 +1,7 @@
 module option
 
 import effekt
+import exception
 
 type Option[A] {
   None();
@@ -34,6 +35,15 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
   case None()  => ()
   case Some(v) => f(v)
 }
+
+def value[A](self: Option[A]): A / Exception[MissingValue] = self match {
+  case None() => do raise(MissingValue(), "Trying to get the value of an empty option")
+  case Some(v) => v
+}
+
+def option[A] { p: => A / Exception[MissingValue] }: Option[A] =
+  try { Some(p()) }
+  with Exception[MissingValue] { def raise(_, _) = None() }
 
 
 // Interop with FFI

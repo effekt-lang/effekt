@@ -16,39 +16,41 @@ def iter(l: List[Int]): List[Int] / { Yield, Behead } = {
     var in: List[Int] = l;
     var out: List[Int] = Nil();
 
-    while (not(in.isEmpty)) { ignore[EmptyList] {
-        val hd = in.head;
-        val tl = in.tail;
-        try { do Yield(hd); in = tl }
-        with Replace { n =>
-            out = Cons(n, out);
-            // in Effekt we distinguish between value arguments and block arguments
-            // so conceptually, there is two forms of resume:
-            //   resume(value)
-            // and
-            //   resume { block }
-            // that shouldn't be confused.
-            resume(())
-        }
-        with Behead { resume(()) }
-    }};
+    while (not(in.isEmpty)) {
+      with ignore[MissingValue];
+      val hd = in.head;
+      val tl = in.tail;
+      try { do Yield(hd); in = tl }
+      with Replace { n =>
+          out = Cons(n, out);
+          // in Effekt we distinguish between value arguments and block arguments
+          // so conceptually, there is two forms of resume:
+          //   resume(value)
+          // and
+          //   resume { block }
+          // that shouldn't be confused.
+          resume(())
+      }
+      with Behead { resume(()) }
+    };
 
     out.reverse
 }
 
 // prints Cons(0, Cons(2, Cons(6, Cons(18, Nil()))))
-def main() = ignore[EmptyList] {
-    var lst = [0, 1, 3, 0 - 2, 0 - 8, 9];
+def main() = {
+  with ignore[MissingValue];
+  var lst = [0, 1, 3, 0 - 2, 0 - 8, 9];
 
-    val res = try { lst.iter }
-    with Yield { x =>
-      resume { if (x < 0) do Behead() else do Replace(x * 2) }
-    }
-    with Behead { () =>
-        println("beheading in client?");
-        lst = lst.tail;
-        resume(())
-    };
+  val res = try { lst.iter }
+  with Yield { x =>
+    resume { if (x < 0) do Behead() else do Replace(x * 2) }
+  }
+  with Behead { () =>
+      println("beheading in client?");
+      lst = lst.tail;
+      resume(())
+  };
 
-    println(res)
+  println(res)
 }

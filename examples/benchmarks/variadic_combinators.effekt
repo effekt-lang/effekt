@@ -50,9 +50,8 @@ def calculate(x: Int) = {
 
 def main() = commandLineArgs() match {
   case Nil() => println(calculate(999))
-  case Cons(x, Nil()) => toInt(x) match {
-    case Some(i) => println(calculate(i))
-    case _ => println("Unexpected non-integer(s) '" ++ x ++ "'")
-  }
+  case Cons(x, Nil()) =>
+    with report[WrongFormat];
+    println(calculate(x.toInt))
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }

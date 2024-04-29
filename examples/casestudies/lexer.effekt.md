@@ -129,12 +129,13 @@ At the same time, we need to keep track of the line information.
   def position() = Position(line, col, index)
   def input() = in.substring(index)
   def consume(text: String): Unit = {
+    with ignore[MissingValue]
     val lines = text.split("\n")
-    val len = lines.unsafeGet(lines.size - 1).length
+    val offset = lines.last.length
     // compute new positions
     index = index + text.length
     line = line + lines.size - 1
-    if (lines.size == 1) { col = col + text.length } else { col = len }
+    if (lines.size == 1) { col = col + text.length } else { col = offset }
   }
   def eos(): Bool = index >= in.length
 ```

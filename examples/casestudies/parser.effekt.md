@@ -90,11 +90,9 @@ type Tree {
 Let us start by defining the parser for numeric literals.
 ```
 def parseNum(): Tree / Parser = {
-  val numText = number()
-  val num = toInt(numText).getOrElse {
-    do fail("Expected number, but cannot convert input to integer: " ++ numText)
-  }
-  Lit(num)
+  val numText = number();
+  with default[WrongFormat, Tree] { do fail("Expected number, but cannot convert input to integer: " ++ numText) };
+  Lit(numText.toInt)
 }
 ```
 We simply call the parser for `number()` and try to convert the

@@ -5,8 +5,10 @@ import text/regex
 
 effect Fail[A](msg: String) : A
 
-def stringToInt(str: String): Int / { Fail } =
-  str.toInt.getOrElse { do Fail("cannot convert input to integer") }
+def stringToInt(str: String): Int / { Fail } = {
+  with default[WrongFormat, Int] { do Fail("cannot convert input to integer") };
+  str.toInt
+}
 
 def perhapsAdd(): Int / { Fail } = stringToInt("1") + stringToInt("2")
 

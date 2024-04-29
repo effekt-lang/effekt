@@ -4,12 +4,6 @@ import effekt
 import option
 import exception
 
-// Used as a type for `Exception` in functions which expect a nonempty list.
-record EmptyList()
-
-// Used as a type for `Exception` in functions where an index can be out of bounds.
-record OutOfBounds()
-
 // Immutable linked list for finite sequences of elements.
 type List[A] {
   Nil();
@@ -61,20 +55,20 @@ def nonEmpty[A](l: List[A]): Bool = l match {
 }
 
 // Return the first element of a given list.
-// Throws a `EmptyList` exception if it's empty.
+// Throws a `MissingValue` exception if it's empty.
 //
 // O(1)
-def head[A](l: List[A]): A / Exception[EmptyList] = l match {
-  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+def head[A](l: List[A]): A / Exception[MissingValue] = l match {
+  case Nil() => do raise(MissingValue(), "Trying to get the head of an empty list")
   case Cons(a, rest) => a
 }
 
 // Return all elements of a given list except the first element.
-// Throws a `EmptyList` exception if it's empty.
+// Throws a `MissingValue` exception if it's empty.
 //
 // O(1)
-def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
-  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+def tail[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
+  case Nil() => do raise(MissingValue(), "Trying to get the head of an empty list")
   case Cons(a, rest) => rest
 }
 
@@ -87,19 +81,30 @@ def headOption[A](l: List[A]): Option[A] = l match {
   case Cons(a, rest) => Some(a)
 }
 
+// Returns the last element of a given list.
+//
+// O(N)
+def last[A](l: List[A]): A / Exception[MissingValue] = {
+  def go(list: List[A]): A = {
+    list match {
+      case Nil() => do raise(MissingValue(), "Trying to get the last element of an empty list")
+      case Cons(x, Nil()) => x
+      case Cons(x, xs) => go(xs)
+    }
+  }
+
+  go(l)
+}
+
 // Get the value at given index.
 //
 // O(N)
 def get[A](list: List[A], index: Int): A / Exception[OutOfBounds] = {
-  def go(list: List[A], i: Int): A / Exception[OutOfBounds] = {
+  def go(list: List[A], i: Int): A = {
     list match {
       case Nil() => do raise(OutOfBounds(), "Trying to get an element outside the bounds of a list")
-      case Cons(x, xs) =>
-        if (i == 0) {
-          x
-        } else {
-          go(xs, i - 1)
-        }
+      case Cons(x, xs) and i == 0 => x
+      case Cons(x, xs)            => go(xs, i - 1)
     }
   }
 
