@@ -1,5 +1,6 @@
 module exception
 
+import effekt
 import show
 
 // Exceptions
@@ -47,8 +48,6 @@ def wrongFormat(msg: String): Nothing / Exception[WrongFormat] =
   do raise(WrongFormat(), msg)
 
 
-
-
 /**
  * A fatal runtime error that cannot be caught
  */
@@ -58,10 +57,14 @@ extern io def panic[R](msg: String): R =
   ml "raise Fail ${msg}"
 
 
+// Exception Handlers
+// ==================
+
+
 /**
  * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
  */
-def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
+def panicOn[E, T] { prog: => T / Exception[E] }: T =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
 
 /**
@@ -81,3 +84,25 @@ def ignore[E] { prog: => Unit / Exception[E] }: Unit =
  */
 def default[E, T] { default: => T } { prog: => T / Exception[E] }: T =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = default() }
+
+
+/**
+ * A proxy value to enable partial type applications, such as:
+ *
+ * ```
+ * with on[MissingValue].ignore; ...
+ * ```
+ */
+record on[E]()
+
+def ignore[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
+  ignore[E] {prog}
+
+def default[E, T](proxy: on[E]) { d: => T } { prog: => T / Exception[E] }: T =
+  default[E, T] {d} {prog}
+
+def panic[E, T](proxy: on[E]) { prog: => T / Exception[E] }: T =
+  panicOn[E, T] {prog}
+
+def report[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
+  report[E] {prog}

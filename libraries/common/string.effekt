@@ -5,12 +5,21 @@ import option
 import list
 import show
 import exception
+import result
 
 // TODO
 // - [ ] handle unicode codepoints (that can span two indices) correctly
 // - [ ] use string buffers or other buffers to implement repeated concatenation more efficiently (and `join`)
 // - [ ] maybe use native implementations for toInt, repeat, split, indexOf, etc.
 
+/**
+ * Strings
+ * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
+ */
+
+
+// Operations
+// ----------
 
 extern pure def infixConcat(s1: String, s2: String): String =
   js "${s1} + ${s2}"
@@ -24,18 +33,19 @@ extern pure def length(str: String): Int =
 
 extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   js "${str}.substring(${from}, ${to})"
-  chez "(substring ${str} ${from} ${to})"
+  chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
   ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
 
 
 def substring(str: String, from: Int, to: Int): String = {
   def clamp(lower: Int, x: Int, upper: Int) = max(lower, min(x, upper))
-
-  str.unsafeSubstring(clamp(0, from, to), clamp(0, to, str.length))
+  val lower = clamp(0, from, to)
+  val upper = clamp(0, to, str.length)
+  str.unsafeSubstring(lower, upper)
 }
 
 def substring(str: String, from: Int): String =
-  str.unsafeSubstring(from, str.length)
+  str.substring(from, str.length)
 
 
 /**
@@ -112,19 +122,26 @@ def join(strings: List[String], sep: String): String = {
 extern pure def trim(str: String): String =
   js "${str}.trim()"
 
+// Parsing
+// -------
+def toBool(s: String): Bool / Exception[WrongFormat] = s match {
+  case "true"  => true
+  case "false" => false
+  case _ => wrongFormat("Not a boolean value: '" ++ s ++ "'")
+}
+
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
 def toInt(str: String): Int / Exception[WrongFormat] = {
 
   val zero = '0'.toInt
 
   def go(index: Int, acc: Int): Int = {
-    // wrong index means we are done parsing
-    with default[OutOfBounds, Int] { () => acc };
-
-    str.charAt(index) match {
-      case c and c >= '0' and c <= '9' =>
+    result[Char, OutOfBounds] { str.charAt(index) } match {
+      case Success(c) and c >= '0' and c <= '9' =>
         go(index + 1, 10 * acc + (c.toInt - zero))
-      case c => wrongFormat("Not a valid number: '" ++ str ++ "'")
+      case Success(c) => wrongFormat("Not a valid number: '" ++ str ++ "'")
+      // wrong index means we are done parsing
+      case Error(_, _) => acc
     }
   }
 
@@ -217,18 +234,10 @@ namespace ANSI {
 }
 
 
-// Parsing
-// -------
-def toBool(s: String): Bool / Exception[WrongFormat] = s match {
-  case "true"  => true
-  case "false" => false
-  case _ => wrongFormat("Not a boolean value: '" ++ s ++ "'")
-}
-
 // Characters
 // ----------
 // JS: Int (Unicode codepoints)
-// CS: Char
+// CS: Int
 
 extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
@@ -236,26 +245,61 @@ extern pure def toString(ch: Char): String =
 
 extern pure def toInt(ch: Char): Int =
   js "${ch}"
+  chez "${ch}"
 
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
+  //chez "(char<? ${x} ${y})"
+
 
 extern pure def infixLte(x: Char, y: Char): Bool =
   js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
 
 extern pure def infixGt(x: Char, y: Char): Bool =
   js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
 
 extern pure def infixGte(x: Char, y: Char): Bool =
   js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+
+// TODO iterator over codepoints (maybe use the JS primitive feature???)
+
+extern type StringIterator
+
+
+/**
+ * Determines the number of bytes needed by a codepoint
+ *
+ * Also see: https://en.wikipedia.org/wiki/UTF-8
+ */
+def utf8ByteCount(codepoint: Char): Int = codepoint match {
+  case c and c >= \u{0000}  and c <= \u{007F}   => 1
+  case c and c >= \u{0080}  and c <= \u{07FF}   => 2
+  case c and c >= \u{0800}  and c <= \u{FFFF}   => 3
+  case c and c >= \u{10000} and c <= \u{10FFFF} => 4
+  case c => panic("Not a valid code point")
+}
+
+def utf16UnitCount(codepoint: Char): Int = codepoint match {
+  case c and c >= \u{0000}  and c <= \u{FFFF}   => 1
+  case c and c >= \u{10000} and c <= \u{10FFFF} => 4
+  case c => panic("Not a valid code point")
+}
+
+extern pure def charWidth(c: Char): Int =
+  // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
+  js "(${c} > 0xffff) ? 2 : 1"
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
-  if (index < 0 ||  index >= length(str))
+  if (index < 0 || index >= length(str))
     do raise(OutOfBounds(), "Index out of bounds: " ++ show(index) ++ " in string: '" ++ str ++ "'")
   else
     unsafeCharAt(str, index)
 
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
-  chez "(string-ref ${str} ${n})"
+  chez "(char->integer (string-ref ${str} ${n}))"
   ml "SOME (String.sub (${str}, ${n}))" // Not unsafe in ML

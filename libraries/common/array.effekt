@@ -5,7 +5,7 @@ import option
 import list
 
 /**
- * A mutable 0-based indexed array, backed by a JavaScript array.
+ * A mutable 0-based indexed fixed-sized array.
  */
 extern type Array[T]
 

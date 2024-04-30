@@ -54,7 +54,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context in {
           Context.withUnificationScope {
             // No captures are allowed on the toplevel
-            flowingInto(CaptureSet(builtins.globalRegion.capture, builtins.IOCapability.capture)) {
+            flowingInto(CaptureSet()) {
               // bring builtins into scope
               builtins.rootTerms.values.foreach {
                 case term: BlockParam =>
