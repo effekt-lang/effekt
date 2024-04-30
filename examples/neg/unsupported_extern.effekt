@@ -1,0 +1,9 @@
+extern io def foo(): Unit = none "" // WARN not supported
+extern io def foo2(): Unit = none "" // unused
+
+def bar(): Unit = foo()
+def bar2(): Unit = foo2()
+
+def main(): Unit = {
+  bar()
+}
