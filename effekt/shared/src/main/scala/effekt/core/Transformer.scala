@@ -10,7 +10,7 @@ import effekt.core.PatternMatchingCompiler.Clause
 import effekt.source.{MatchGuard, MatchPattern, ResolveExternDefs}
 import effekt.symbols.Binder.{RegBinder, VarBinder}
 import effekt.typer.Substitutions
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -102,7 +102,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
           val capabilities = effects.canonical
           val tparams = tps.drop(tparamsInterface.size)
-          val bparamsBlocks = bps.map(b => transform(b.tpe))
+          val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
+            INTERNAL_ERROR("Interface declarations should have annotated types.")
+          }))
           val bparamsCapabilities = capabilities.map(transform)
           //val bparams = bparamsBlocks ++ bparamsCapabilities
           val bparams = bparamsCapabilities
@@ -633,8 +635,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
         val cparams = bparams.map(b => b.capture) ++ effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
-        val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.get))
-        val bparamTpes = bparams.map(b => substitution.substitute(b.tpe))
+        val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.getOrElse {
+          INTERNAL_ERROR("Operation value parameters should have an annotated type.")
+        }))
+        val bparamTpes = bparams.map(b => substitution.substitute(b.tpe.getOrElse {
+          INTERNAL_ERROR("Operation block parameters should have an annotated type.")
+        }))
 
         FunctionType(remainingTypeParams, cparams, vparamTpes, bparamTpes, substitution.substitute(resultType), substitution.substitute(effects))
     }

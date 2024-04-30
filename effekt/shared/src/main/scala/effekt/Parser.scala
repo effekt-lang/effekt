@@ -217,18 +217,19 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
-  lazy val operationParams: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
-    ( maybeTypeParams ~ valueParamsOpt ~ blockParams
+  // params with optional types, currently only allowed for block args and operation implementations
+  lazy val paramsOpt: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+    ( maybeTypeParams ~ valueParamsOpt ~ blockParamsOpt
     | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
-    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParamsOpt
     | failure("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
     )
 
   lazy val blockParams: P[List[BlockParam]] =
     some(`{` ~/> blockParam <~ `}`)
 
-  lazy val maybeBlockParams: P[List[BlockParam]] =
-    blockParams.? ^^ { bs => bs getOrElse Nil }
+  lazy val blockParamsOpt: P[List[BlockParam]] =
+    some(`{` ~/> blockParamOpt <~ `}`)
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
@@ -248,7 +249,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe) : ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
+    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, Some(tpe)) : BlockParam }
+
+  lazy val blockParamOpt: P[BlockParam] =
+    idDef ~ (`:` ~> blockType).? ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -292,7 +296,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
 
   lazy val lambdaParams: P[(List[Id], List[ValueParam], List[BlockParam])] =
-    ( params ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
+    ( paramsOpt ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
     | valueParamsOpt ^^ { ps => (Nil, ps, Nil) }
     | idDef ^^ { id => (Nil, List(ValueParam(id, None) : ValueParam), Nil) }
     )
@@ -468,7 +472,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val handler: P[Handler] =
     ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
       case capabilityName ~ impl =>
-        val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
+        val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
         Handler(capability, impl)
       }
     )
@@ -487,7 +491,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ operationParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+    (`def` ~/> idRef) ~ paramsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
       case id ~ (tparams ~ vparams ~ bparams) ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
     }
 

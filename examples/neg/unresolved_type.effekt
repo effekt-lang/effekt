@@ -1,0 +1,10 @@
+interface Defer {
+    def defer[A, B] { prog: () => A } { finally: A => B }: B
+}
+
+def impl = new Defer {
+    def defer { prog: () => A } { finally: A => B }: B = { // ERROR Could not resolve type A
+        val res = prog()
+        finally(res)
+    }
+}
