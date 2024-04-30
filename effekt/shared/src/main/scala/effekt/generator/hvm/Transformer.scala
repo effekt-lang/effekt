@@ -10,23 +10,21 @@ import effekt.core.CoreParsers.definition
 
 
 
-
-
-//cps to hvm
 def transform(mod: cps.ModuleDecl): Book = {
-  val decls = mod.decls.flatMap(transform)
+  val decls = transform(mod.decls, MutableMap()) //Adt
   val externs = mod.externs.map(transform)
   val defns = mod.definitions.map(transform)
   val defMap: MutableMap[Name, Definition] = MutableMap()
-  decls.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
+  //decls.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
-  Book(defMap, externs, MutableMap(), MutableMap(), Some(Name(mod.path)))
+  Book(defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
 
 
-def transform(decl: cps.Declaration): List[Definition] = decl match {
-  case cps.Declaration.Data(id, ctors) => List(Definition(id.name.name, transformConstructors(List(id), ctors), false))
-  case cps.Declaration.Interface(id, operations) => List(Definition(id.name.name, transformProperties(List(id), operations), false))
+def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): MutableMap[Name, Adt]= decls match {
+  case Nil => map
+  case cps.Declaration.Data(id, ctors) :: rest => transform(rest, map += (Name(id.toString) -> transform(ctors, Adt(MutableMap(), false)))) //List(Definition(id.name.name, transformConstructors(List(id), ctors), false))
+  case cps.Declaration.Interface(id, operations) :: rest => transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map idToString)), false)))//List(Definition(id.name.name, transformProperties(List(id), operations), false))
 }
 
 def transform(decl: cps.Extern): Verbatim = decl match {
@@ -83,13 +81,20 @@ def transform(expr: cps.Expr): Term = expr match {
   case _ => ???
 }
 
+def transform(constructors: List[cps.Constructor], adt: Adt): Adt = constructors match {
+  case Nil => adt
+  case cps.Constructor(id, fields) :: rest => transform(rest, Adt(adt.ctrs += (Name(id.toString) -> (fields map idToString)), false)) // ??? fields mao toString
+}
+
 def transformConstructors(tparams: List[cps.Id], constructors: List[cps.Constructor]): List[Rule] = (tparams, constructors) match {
+  case (List(), List()) => List()
   case (List(), constructors) => Rule(List(), Var(constructors.head.id.name.name)) :: transformConstructors(List(), constructors.tail)
   case (tparams, List()) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(" ")) :: transformConstructors(tparams, List())
   case (tparams, constructors) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(constructors.head.id.name.name)) :: transformConstructors(tparams.tail, constructors.tail)
 }
 
 def transformProperties(tparams: List[cps.Id], properties: List[cps.Id]): List[Rule] = (tparams, properties) match {
+  case (List(), List()) => List()
   case (List(), properties) => Rule(List(), Var(properties.head.name.name)) :: transformProperties(List(), properties.tail)
   case (tparams, List()) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(" ")) :: transformProperties(tparams, List())
   case (tparams, properties) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(properties.head.name.name)) :: transformProperties(tparams.tail, properties.tail)
@@ -116,3 +121,5 @@ def exprToString(expr: cps.Expr): String = expr match {
 def idToPattern(id: Id): Pattern = VarPattern(Some(id.name.name))
 
 def idToVar(id: Id): Var = Var(id.name.name)
+
+def idToString(id: Id): String = id.toString

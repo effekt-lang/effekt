@@ -5,6 +5,7 @@ package hvm
 import effekt.util.intercalate
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
+import scala.collection.mutable.{Map => MutableMap}
 
 
 
@@ -83,8 +84,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case VarPattern(Some(name))      => string(name)
     case Ctr(name, patterns)  => parens(string(name)<+>hsep(patterns map toDoc))
     case NumPattern(numCtr)     => toDoc(numCtr)
-    case TupPattern(patterns)   => parens(folddoc(patterns map toDoc, (x, y) => x <> String(",") <+> y))
-    case LstPattern(patterns)   => brackets(folddoc(patterns map toDoc, (x, y) => x <> String(",") <+> y))
+    case TupPattern(patterns)   => parens(folddoc(patterns map toDoc, (x, y) => x <> string(",") <+> y))
+    case LstPattern(patterns)   => brackets(folddoc(patterns map toDoc, (x, y) => x <> string(",") <+> y))
     case StrPattern(value)      => string(""""""")<>string(value)<>string(""""""")
   }
 
@@ -108,6 +109,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Verbatim.Include(contents) => string(contents)
   }
 
+  def toDoc(adt: Adt): Doc = vsep(adt.ctrs.map{case (Name(name), lst) => parens(string(name)<+>(hsep(lst map (x => string(x)))))}.toSeq, string("|"))
+  
+  def toDoc(name: Name, adt: Adt): Doc = string("data") <+> string(name.name) <+> string("=") <+> toDoc(adt)
+
+  def toDoc(adts: MutableMap[Name, Adt]): Doc = vsep(adts.map{case (name, adt) => toDoc(name, adt)}.toSeq)
+
   def toDoc(book: Book) : Doc =
-    vsep((book.externs map toDoc)) <> linebreak <> vsep((book.defs.values.toList map toDoc), linebreak)    
+    vsep((book.externs map toDoc)) <> linebreak <> toDoc(book.adts) <> linebreak <> vsep((book.defs.values.toList map toDoc), linebreak)    
 }

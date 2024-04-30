@@ -8,9 +8,6 @@ import scala.collection.mutable.{Map => MutableMap}
 /**
  * This file defines the syntax of HVM as it is the image of our translation.
  */
-
- //Book, Adt and Adtencoding missing
-
  
 case class Rule(pats: List[Pattern], body: Term)
 
@@ -85,7 +82,6 @@ enum NumCtr {
    case  Num(value: Long)
    case  Succ(value: Long, name: Option[Option[String]])
 } 
-
 
 
 enum Term {

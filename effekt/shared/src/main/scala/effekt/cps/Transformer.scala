@@ -10,6 +10,8 @@ import effekt.util.messages.ErrorReporter
 import effekt.core.CoreParsers.statement
 import effekt.cps.*
 import effekt.source.AnnotateCaptures.annotate
+import effekt.lifted.Field
+import effekt.lifted.Property
 
 
 
@@ -51,9 +53,7 @@ def transform(definition: lifted.Definition): Definition = definition match {
   case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
     Definition.Function(id, params map paramToId, Id.apply("k"), transform(body))
   case lifted.Definition.Let(id, binding) => Definition.Let(id, transform(binding))
-  case _ => 
-    println(definition)
-  ???
+  case lifted.Definition.Def(id, b) => Definition.Let(id, transform(b))
 }
 
 
@@ -119,8 +119,12 @@ def transform(definitions: List[lifted.Definition], rest: Term): Term = definiti
 }
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
-def transform(property: lifted.Property) = ???
-def transform(field: lifted.Field) = ???
+def transform(property: lifted.Property): Id = property match {
+  case Property(id, tpe) => id
+}
+def transform(field: lifted.Field): Id = field match {
+  case Field(id, tpe) => id
+}
 
 def transform(tpe: lifted.ValueType) = tpe match {
   case lifted.ValueType.Var(id)  => ???
