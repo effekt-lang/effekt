@@ -7,6 +7,7 @@ import effekt.lifted.*
 import effekt.core.Id
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.messages.ErrorReporter
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -52,7 +53,7 @@ object Transformer {
     case e: lifted.Evidence => toML(e)
   }
 
-  def toML(module: ModuleDecl)(using TransformerContext): List[ml.Binding] = {
+  def toML(module: ModuleDecl)(using TransformerContext, ErrorReporter): List[ml.Binding] = {
     val decls = sortDeclarations(module.decls).flatMap(toML)
     val externs = module.externs.map(toML)
     val rest = sortDefinitions(module.definitions).map(toML)
@@ -183,9 +184,15 @@ object Transformer {
     dataDecl :: accessors
   }
 
-  def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
-    case Extern.Def(id, tparams, params, ret, ExternBody(featureFlag, body)) =>
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+  def toML(ext: Extern)(using TransformerContext, ErrorReporter): ml.Binding = ext match {
+    case Extern.Def(id, tparams, params, ret, body) =>
+
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, body match {
+        case ExternBody.StringExternBody(_, contents) => toML(contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          ml.RawExpr("raise Hole")
+      })
     case Extern.Include(ff, contents) =>
       RawBind(contents)
   }

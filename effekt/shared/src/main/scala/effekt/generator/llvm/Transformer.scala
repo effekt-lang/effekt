@@ -4,6 +4,7 @@ package llvm
 
 import effekt.machine
 import effekt.util.intercalate
+import effekt.util.messages.ErrorReporter
 import effekt.machine.analysis.*
 
 import scala.collection.mutable
@@ -12,7 +13,7 @@ object Transformer {
 
   val llvmFeatureFlags: List[String] = List("llvm")
 
-  def transform(program: machine.Program): List[Definition] = program match {
+  def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, statement) =>
       given MC: ModuleContext = ModuleContext();
       given FC: FunctionContext = FunctionContext();
@@ -40,12 +41,23 @@ object Transformer {
   private def FC(using FC: FunctionContext): FunctionContext = FC
   private def BC(using BC: BlockContext): BlockContext = BC
 
-  def transform(declaration: machine.Declaration): Definition =
+  def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, machine.ExternBody(_, body)) =>
-        VerbatimFunction(transform(returnType), functionName, parameters.map {
-          case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-        }, transform(body))
+      case machine.Extern(functionName, parameters, returnType, body ) =>
+        body match {
+          case machine.ExternBody.StringExternBody(_, contents) =>
+            VerbatimFunction(transform(returnType), functionName, parameters.map {
+              case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
+            }, transform(contents))
+          case u: machine.ExternBody.Unsupported =>
+            u.report
+            VerbatimFunction(transform(returnType), functionName, parameters.map {
+                case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
+              },
+              """call void @hole()
+                |unreachable
+                |""".stripMargin)
+        }
       case machine.Include(ff, content) =>
         Verbatim(content)
     }

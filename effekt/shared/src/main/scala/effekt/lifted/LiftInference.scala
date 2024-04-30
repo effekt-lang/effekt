@@ -110,11 +110,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
         body match {
           case core.ExternBody.StringExternBody(ff, bbody) =>
-            ExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
-          case u: core.ExternBody.Unsupported =>
+            ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
+          case core.ExternBody.Unsupported(err) =>
             import effekt.source.FeatureFlag.Default
-            u.report
-            ExternBody(Default, util.messages.NOT_SUPPORTED("unsupported externs left over"))
+            ExternBody.Unsupported(err)
         })
     case core.Extern.Include(ff, contents) =>
       Extern.Include(ff, contents)

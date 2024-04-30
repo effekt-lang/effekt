@@ -56,11 +56,13 @@ object Transformer {
       }
       noteDefinition(name, params map transform, Nil)
       val tBody = body match {
-        case lifted.ExternBody(ff, Template(strings, args)) =>
-          ExternBody(ff, Template(strings, args map {
+        case lifted.ExternBody.StringExternBody(ff, Template(strings, args)) =>
+          ExternBody.StringExternBody(ff, Template(strings, args map {
             case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
             case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
           }))
+        case lifted.ExternBody.Unsupported(err) =>
+          ExternBody.Unsupported(err)
       }
       Extern(transform(name), transformedParams, transform(ret), tBody)
 
