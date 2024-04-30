@@ -962,7 +962,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val vps = vparams.map { p =>
         val param = p.symbol
         val tpe = p.symbol.tpe.getOrElse {
-          Context.abort("Expected type needs to be known for function arguments at the moment.")
+          INTERNAL_ERROR("Expected type needs to be known for function arguments at the moment.")
         }
         Context.bind(param, tpe)
         tpe
@@ -970,7 +970,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bps = bparams.map { p =>
         val param = p.symbol
         val tpe = param.tpe.getOrElse {
-          Context.abort("Expected type need to be know for function arguments at the moment.")
+          INTERNAL_ERROR("Expected type need to be know for function arguments at the moment.")
         }
         Context.bind(param, tpe)
         tpe
