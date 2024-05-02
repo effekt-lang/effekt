@@ -8,7 +8,10 @@ import effekt.symbols.{Symbol}
 import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
 import effekt.core.CoreParsers.statement
+import effekt.cps.*
 import effekt.source.AnnotateCaptures.annotate
+import effekt.lifted.Field
+import effekt.lifted.Property
 
 
 
@@ -61,8 +64,7 @@ def transform(arg: lifted.Argument): Expr = arg match {
 }
 
 def transform(expr: lifted.Expr): Expr = expr match {
-  case lifted.Literal(value, _) => println(value)
-  Expr.Lit(value.asInstanceOf[Int])// any to Int
+  case lifted.Literal(value, _) => Expr.Lit(value.toString().toInt)// any to Int
   case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
   case lifted.PureApp(b, targs, args) => Expr.PureApp(transform(b), args map transform)
   case lifted.Make(data, tag, args) => Expr.Make(transform(data), tag, args map transform)
@@ -97,7 +99,7 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Region(body) => ???
   case lifted.Stmt.Alloc(id, init, region, ev, body) => ???
   
-  case lifted.Stmt.Var(init, body) => println(stmt); ???
+  case lifted.Stmt.Var(init, body) => ???
   case lifted.Stmt.Get(id, ev, annotatedTpe) => ???
   case lifted.Stmt.Put(id, ev, value) => ???
 
@@ -124,15 +126,10 @@ def transform(field: lifted.Field): Id = field match {
   case Field(id, tpe) => id
 }
 
-def transform(tpe: lifted.ValueType): Id = tpe match {
-  case lifted.ValueType.Var(id)  => id
-  case lifted.ValueType.Data(name, targs)  => name
-  case lifted.ValueType.Boxed(blockTpe)  => transform(blockTpe)
-}
-
-def transform(tpe: lifted.BlockType): Id = tpe match {
-  case lifted.BlockType.Function(_, _, _, _, result) => transform(result)
-  case BlockType.Interface(name, _) => name
+def transform(tpe: lifted.ValueType) = tpe match {
+  case lifted.ValueType.Var(id)  => ???
+  case lifted.ValueType.Data(name, targs)  => ???
+  case lifted.ValueType.Boxed(blockTpe)  => ???
 }
 
 def transform(id: lifted.Id): Id = Id(id.name.name)

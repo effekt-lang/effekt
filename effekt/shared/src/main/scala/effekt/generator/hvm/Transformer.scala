@@ -15,6 +15,7 @@ def transform(mod: cps.ModuleDecl): Book = {
   val externs = mod.externs.map(transform)
   val defns = mod.definitions.map(transform)
   val defMap: MutableMap[Name, Definition] = MutableMap()
+  //decls.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
   Book(defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
@@ -22,8 +23,8 @@ def transform(mod: cps.ModuleDecl): Book = {
 
 def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): MutableMap[Name, Adt]= decls match {
   case Nil => map
-  case cps.Declaration.Data(id, ctors) :: rest => transform(rest, map += (Name(id.toString) -> transform(ctors, Adt(MutableMap(), false))))
-  case cps.Declaration.Interface(id, operations) :: rest => transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map (x=>x.toString))), false)))
+  case cps.Declaration.Data(id, ctors) :: rest => transform(rest, map += (Name(id.toString) -> transform(ctors, Adt(MutableMap(), false)))) //List(Definition(id.name.name, transformConstructors(List(id), ctors), false))
+  case cps.Declaration.Interface(id, operations) :: rest => transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map idToString)), false)))//List(Definition(id.name.name, transformProperties(List(id), operations), false))
 }
 
 def transform(decl: cps.Extern): Verbatim = decl match {
@@ -54,7 +55,7 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((_, blockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(name.name.name), transform(body)), transform(rest))
-  case cps.Term.Val(id, binding, body) => Let(idToPattern(id), transform(binding), transform(body))
+  case cps.Term.Val(id, binding, body) => println(term); ??? 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
 }
 
@@ -77,13 +78,12 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Box(b) => transform(b)
   case cps.Expr.Run(t) => transform(t)
   case cps.Expr.BlockLit(params, body) => transform(cps.Expr.BlockLit(params, body))
-  case cps.Expr.Make(data, tag, vargs) => ???
-  case cps.Expr.Select(target, field) => ???
+  case _ => ???
 }
 
 def transform(constructors: List[cps.Constructor], adt: Adt): Adt = constructors match {
   case Nil => adt
-  case cps.Constructor(id, fields) :: rest => transform(rest, Adt(adt.ctrs += (Name(id.toString) -> (fields map (x=>x.toString()))), false))
+  case cps.Constructor(id, fields) :: rest => transform(rest, Adt(adt.ctrs += (Name(id.toString) -> (fields map idToString)), false)) // ??? fields mao toString
 }
 
 def transformConstructors(tparams: List[cps.Id], constructors: List[cps.Constructor]): List[Rule] = (tparams, constructors) match {
@@ -121,3 +121,5 @@ def exprToString(expr: cps.Expr): String = expr match {
 def idToPattern(id: Id): Pattern = VarPattern(Some(id.name.name))
 
 def idToVar(id: Id): Var = Var(id.name.name)
+
+def idToString(id: Id): String = id.toString

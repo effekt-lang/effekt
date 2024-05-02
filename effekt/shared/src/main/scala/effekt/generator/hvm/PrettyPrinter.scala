@@ -109,7 +109,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Verbatim.Include(contents) => string(contents)
   }
 
-  def toDoc(adt: Adt): Doc = hsep(adt.ctrs.map{case (Name(name), Nil) => parens(string(name)); case (Name(name), lst) => parens(string(name)<+>(hsep(lst map (x => string(x)))))}.toSeq, string(" |"))
+  def toDoc(adt: Adt): Doc = vsep(adt.ctrs.map{case (Name(name), lst) => parens(string(name)<+>(hsep(lst map (x => string(x)))))}.toSeq, string("|"))
   
   def toDoc(name: Name, adt: Adt): Doc = string("data") <+> string(name.name) <+> string("=") <+> toDoc(adt)
 
