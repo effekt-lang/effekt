@@ -1,0 +1,58 @@
+module equality
+
+import effekt
+
+extern pure def infixEq(x: Int, y: Int): Bool =
+  llvm """
+    %z = icmp eq %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: Char, y: Char): Bool =
+  llvm """
+    %z = icmp eq %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Int, y: Int): Bool =
+  llvm """
+    %z = icmp ne %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: String, y: String): Bool =
+  llvm """
+    %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
+    call void @c_buffer_refcount_decrement(%Pos %x)
+    call void @c_buffer_refcount_decrement(%Pos %y)
+    ret %Pos %res
+  """
+
+extern pure def infixEq(x: Bool, y: Bool): Bool =
+  llvm """
+    %slim_x = extractvalue %Pos %x, 0
+    %slim_y = extractvalue %Pos %y, 0
+    %slim_z = icmp eq i64 %slim_x, %slim_y
+    %fat_z = zext i1 %slim_z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Bool, y: Bool): Bool =
+  llvm """
+    %slim_x = extractvalue %Pos %x, 0
+    %slim_y = extractvalue %Pos %y, 0
+    %slim_z = icmp ne i64 %slim_x, %slim_y
+    %fat_z = zext i1 %slim_z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+
+def infixNeq(x: String, y: String): Bool = not(x == y)

@@ -1,6 +1,7 @@
 module string
 
 import effekt
+import equality
 import option
 import list
 import show
@@ -15,6 +16,7 @@ import result
 /**
  * Strings
  * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
+ * - ML: Strings are sequences of 8-bit characters (https://smlfamily.github.io/Basis/string.html)
  */
 
 
@@ -25,16 +27,32 @@ extern pure def infixConcat(s1: String, s2: String): String =
   js "${s1} + ${s2}"
   chez "(string-append ${s1} ${s2})"
   ml "${s1} ^ ${s2}"
+  llvm """
+    %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
+    call void @c_buffer_refcount_decrement(%Pos %s1)
+    call void @c_buffer_refcount_decrement(%Pos %s2)
+    ret %Pos %spz
+  """
 
 extern pure def length(str: String): Int =
   js "${str}.length"
   chez "(string-length ${str})"
   ml "String.size ${str}"
+  llvm """
+    %x = call %Int @c_buffer_length(%Pos %str)
+    call void @c_buffer_refcount_decrement(%Pos %str)
+    ret %Int %x
+  """
 
 extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   js "${str}.substring(${from}, ${to})"
   chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
   ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
+  llvm """
+    %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
+    call void @c_buffer_refcount_decrement(%Pos %str)
+    ret %Pos %x
+  """
 
 
 def substring(str: String, from: Int, to: Int): String = {
@@ -207,7 +225,14 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 // extern pure def unsafeIndexOf(str: String, sub: String): Int =
 //   js "${str}.indexOf(${sub})"
 
+interface Stream {
+  def emit(string: Char): Unit
+}
 
+def string[T] { prog: => T / Stream }: (T, String) = <>
+
+// TODO implement after concurrent IO (we need to stub `process.stdout` in JS for browsers).
+def printing[T] { prog: => T / Stream }: T = <>
 
 
 // ANSI escape codes
@@ -236,8 +261,10 @@ namespace ANSI {
 
 // Characters
 // ----------
-// JS: Int (Unicode codepoints)
-// CS: Int
+//
+//   JS: Int (Unicode codepoints)
+//   CS: ?
+//   ML: 8-bit https://smlfamily.github.io/Basis/char.html
 
 extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
@@ -289,6 +316,16 @@ def utf16UnitCount(codepoint: Char): Int = codepoint match {
   case c => panic("Not a valid code point")
 }
 
+// TODO this is copied from the LLVM-backend stdlib. Do we need this?
+// def showQuoted(s: String): String =
+//  "\x22" ++ s.map { c =>
+//    if(c == "\x22") {
+//     "\\\x22"
+//    } else if (c == "\\") {
+//     "\\\\"
+//    } else c
+//  } ++ "\x22"
+
 extern pure def charWidth(c: Char): Int =
   // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
   js "(${c} > 0xffff) ? 2 : 1"
@@ -302,4 +339,9 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
-  ml "SOME (String.sub (${str}, ${n}))" // Not unsafe in ML
+  ml "(String.sub (${str}, ${n}))"
+  llvm """
+    %x = call %Int @c_buffer_index(%Pos %str, i64 %n)
+    call void @c_buffer_refcount_decrement(%Pos %str)
+    ret %Int %x
+  """

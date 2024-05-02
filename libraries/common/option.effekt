@@ -41,9 +41,9 @@ def value[A](self: Option[A]): A / Exception[MissingValue] = self match {
   case Some(v) => v
 }
 
-// def option[A] { p: => A / Exception[MissingValue] }: Option[A] =
-//   try { Some(p()) }
-//   with Exception[MissingValue] { def raise(_, _) = None() }
+def option[A] { p: => A / Exception[MissingValue] }: Option[A] =
+  try { Some(p()) }
+  with Exception[MissingValue] { def raise(_, _) = None() }
 
 def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
   try { Some(p()) }

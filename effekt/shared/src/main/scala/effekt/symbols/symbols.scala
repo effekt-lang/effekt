@@ -76,6 +76,16 @@ case class Module(
     }
   }
 
+  def findDependency(path: QualifiedName): Option[Module] = {
+    // Either this module is already Prelude
+    if (name == path) {
+      return Some(this)
+    }
+
+    // ... or we try to find Prelude in our dependencies
+    dependencies.find(dep => dep.name == path)
+  }
+
   /**
    * It is actually possible, that exports is invoked on a single module multiple times:
    * The dependencies of a module might change, which triggers frontend on the same module

@@ -34,6 +34,11 @@ namespace ml {
   extern include ml "../ml/effekt.sml"
 }
 
+namespace llvm {
+  extern include llvm "../llvm/rts.ll"
+  extern include llvm "../llvm/forward-declare-c.ll"
+}
+
 // Side effecting ops
 // ==================
 
@@ -55,46 +60,55 @@ extern pure def infixAdd(x: Int, y: Int): Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   ml "(${x}: int) + ${y}"
+  llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
 
 extern pure def infixMul(x: Int, y: Int): Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   ml "(${x}: int) * ${y}"
+  llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
   js "Math.floor(${x} / ${y})"
   chez "(floor (/ ${x} ${y}))"
   ml "(${x}: int) div ${y}"
+  llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
 
 extern pure def infixSub(x: Int, y: Int): Int =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   ml "(${x}: int) - ${y}"
+  llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
 
 extern pure def mod(x: Int, y: Int): Int =
   js "(${x} % ${y})"
   chez "(modulo ${x} ${y})"
   ml "(${x}: int) mod ${y}"
+  llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
   ml "(${x}: real) + ${y}"
+  llvm "%z = fadd %Double ${x}, ${y} ret %Double %z"
 
 extern pure def infixMul(x: Double, y: Double): Double =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
   ml "(${x}: real) * ${y}"
+  llvm "%z = fmul %Double ${x}, ${y} ret %Double %z"
 
 extern pure def infixSub(x: Double, y: Double): Double =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
   ml "(${x}: real) - ${y}"
+  llvm "%z = fsub %Double ${x}, ${y} ret %Double %z"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
   js "(${x} / ${y})"
   chez "(/ ${x} ${y})"
   ml "(${x}: real) / ${y}"
+  llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
 
 extern pure def cos(x: Double): Double =
   js "Math.cos(${x})"
@@ -172,66 +186,56 @@ def min(n: Int, m: Int): Int =
 def max(n: Int, m: Int): Int =
   if (n > m) n else m
 
-// Comparison ops
-// ==============
-extern pure def infixEq[R](x: R, y: R): Bool =
-  js "equals$impl(${x}, ${y})"
-  chez "(equal_impl ${x} ${y})"
-  ml "${x} = ${y}"
+def neg(n: Int): Int =
+    0 - n
 
-extern pure def infixNeq[R](x: R, y: R): Bool =
-  js "!equals$impl(${x}, ${y})"
-  chez "(not (equal_impl ${x} ${y}))"
-  ml "not (${x} = ${y})"
+def abs(n: Int): Int =
+    max(n, neg(n))
 
-/**
- * Result of comparison between two objects according to some order:
- *
- * - `Less()` means that the first object is *before* the first in the order,
- * - `Equal()` means that the two objects are the same in the order,
- * - and `Greater()` means that the second object is *before* the first in the order.
- */
-type Ordering {
-  Less();
-  Equal();
-  Greater()
-}
-
-
-
-extern pure def genericCompareImpl[R](x: R, y: R): Int =
-  js "compare$impl(${x}, ${y})"
-  default { <{ "TODO implement" }> }
-
- // Compares two values of the same type, returning an `Ordering`.
-def genericCompare[R](x: R, y: R): Ordering = {
-  genericCompareImpl(x, y) match {
-    case -1 => Less()
-    case 0 => Equal()
-    case 1 => Greater()
-    case _ => <{ "Impossible: JS comparison returned invalid value!" }>
-  }
-}
 
 extern pure def infixLt(x: Int, y: Int): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
   ml "(${x}: int) < ${y}"
+  llvm """
+    %z = icmp slt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixLte(x: Int, y: Int): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
   ml "(${x}: int) <= ${y}"
+  llvm """
+    %z = icmp sle %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixGt(x: Int, y: Int): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
   ml "(${x}: int) > ${y}"
+  llvm """
+    %z = icmp sgt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixGte(x: Int, y: Int): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
   ml "(${x}: int) >= ${y}"
+  llvm """
+    %z = icmp sge %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixLt(x: Double, y: Double): Bool =
   js "(${x} < ${y})"
@@ -281,6 +285,12 @@ extern pure def not(b: Bool): Bool =
   js "!${b}"
   chez "(not ${b})"
   ml "not ${b}"
+  llvm """
+    %p = extractvalue %Pos %b, 0
+    %q = xor i64 1, %p
+    %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0
+    ret %Pos %adt_q
+  """
 
 def infixOr { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
@@ -352,3 +362,11 @@ def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
 }
 
 def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
+
+
+// For boxing polymorphic values
+record BoxedUnit(unboxUnit: Unit)
+record BoxedInt(unboxInt: Int)
+record BoxedBool(unboxBool: Bool)
+record BoxedDouble(unboxDouble: Double)
+record BoxedString(unboxString: String)

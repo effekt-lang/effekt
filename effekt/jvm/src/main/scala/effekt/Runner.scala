@@ -113,7 +113,7 @@ object JSRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "generic", path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
@@ -139,7 +139,7 @@ trait ChezRunner extends Runner[String] {
 
    def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
@@ -183,7 +183,14 @@ object LLVMRunner extends Runner[String] {
 
   val extension = "ll"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "llvm"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def includes(path: File): List[File] = List(
+    path / ".." / "monomorphic",
+    path / ".." / "llvm")
+
+  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "showinstances", "exception", "string") // "array", "ref")
+
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
   lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
@@ -216,7 +223,7 @@ object LLVMRunner extends Runner[String] {
     exec(opt, llPath, "-S", "-O2", "-o", optPath)
     exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
 
-    val gccMainFile = (C.config.libPath / "main.c").unixPath
+    val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
     exec(gcc, gccMainFile, "-o", executableFile, objPath)
     executableFile
@@ -230,7 +237,7 @@ object MLRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "show", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "showinstances", "exception", "array", "string", "ref")
 
   override def includes(path: File): List[File] = List(
     path / ".." / "monomorphic",

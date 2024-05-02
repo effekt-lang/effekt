@@ -1,0 +1,44 @@
+module showinstances
+
+import effekt
+import show
+import string
+import list
+import option
+
+// This is only needed until we have typeclasses or generic show in LLVM (and MLton)
+
+// Lists
+// -----
+
+def show[A](l: List[A]) { showA: A => String }: String = {
+  def go(l: List[A]): String = l match {
+    case Nil() => "Nil()"
+    case Cons(x, xs) => "Cons(" ++ showA(x) ++ ", " ++ go(xs) ++ ")"
+  }
+  go(l)
+}
+def show(l: List[Int]): String = show(l) { e => show(e) }
+def show(l: List[Double]): String = show(l) { e => show(e) }
+def show(l: List[Bool]): String = show(l) { e => show(e) }
+def show(l: List[String]): String = show(l) { e => e }
+
+def println(l: List[Int]): Unit = println(show(l))
+def println(l: List[Double]): Unit = println(show(l))
+def println(l: List[Bool]): Unit = println(show(l))
+def println(l: List[String]): Unit = println(show(l))
+
+
+// Option
+// ------
+def show[A](o: Option[A]) { showA: A => String }: String = o match {
+  case None() => "None()"
+  case Some(v) => "Some(" ++ showA(v) ++ ")"
+}
+def show(o: Option[Int]): String = show(o) { e => show(e) }
+def show(o: Option[Double]): String = show(o) { e => show(e) }
+def show(o: Option[Bool]): String = show(o) { e => show(e) }
+
+def println(o: Option[Int]): Unit = println(show(o))
+def println(o: Option[Double]): Unit = println(show(o))
+def println(o: Option[Bool]): Unit = println(show(o))

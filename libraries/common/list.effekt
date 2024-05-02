@@ -1,6 +1,8 @@
 module list
 
 import effekt
+import show
+import equality
 import option
 import exception
 

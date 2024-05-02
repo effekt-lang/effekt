@@ -1,4 +1,4 @@
-import string
+module examples/llvm/show
 
 def main() = {
     println(show(12))
