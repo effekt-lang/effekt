@@ -267,6 +267,7 @@ namespace ANSI {
 //   JS: Int (Unicode codepoints)
 //   CS: ?
 //   ML: 8-bit https://smlfamily.github.io/Basis/char.html
+//   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
 
 extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
@@ -281,7 +282,7 @@ extern pure def toInt(ch: Char): Int =
   js "${ch}"
   chez "${ch}"
   ml "${ch}"
-  llvm "ret %Pos ${ch}"
+  llvm "ret %Int ${ch}"
 
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
