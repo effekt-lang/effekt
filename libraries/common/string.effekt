@@ -17,7 +17,8 @@ import result
  * Strings
  * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
  * - ML: Strings are sequences of 8-bit characters (https://smlfamily.github.io/Basis/string.html)
- * - Chez: Strings are sequences of unicode characters ()
+ * - Chez: Strings are sequences of unicode characters (?)
+ * - LLVM: UTF-8 (characters can take from 1-4 bytes).
  */
 
 

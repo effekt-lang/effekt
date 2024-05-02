@@ -53,6 +53,7 @@ def main() = {
 
 extern pure def platform(): String =
   chez { "chez" }
-  chez { "llvm" }
-  chez { "js" }
-  default { false }
+  llvm { "llvm" }
+  js { "js" }
+  ml { "ml" }
+  default { "other" }
