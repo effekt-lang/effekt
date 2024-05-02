@@ -36,6 +36,9 @@ object TypePrinter extends ParenPrettyPrinter {
     case t: Captures        => TypePrinter.show(t)
     case t: Effects         => TypePrinter.show(t)
     case t: ConcreteEffects => TypePrinter.show(t.toEffects)
+    case c: Constructor     => c.name.name
+    case c: Field           => c.name.name
+    case c: Operation       => c.name.name
   }
 
   def toDoc(m: Type): Doc = m match {

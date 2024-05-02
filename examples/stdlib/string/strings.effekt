@@ -1,10 +1,27 @@
+import exception
+
 def main() = {
   val str = "hello world"
   val c = 'a'
 
-  println(str.charAt(0))
-  println(str.charAt(10))
-  println(str.charAt(11))
+  def charOrOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].default { println("<OutOfBounds>") }
+    println(p().show)
+  }
+
+  def intOrWrongFormat { p: => Int / Exception[WrongFormat] }: Unit = {
+    with on[WrongFormat].default { println("<WrongFormat>") }
+    println(p().show)
+  }
+
+  charOrOutOfBounds { str.charAt(0) }     // 104
+  charOrOutOfBounds { str.charAt(10) }    // 100
+
+  println(utf8ByteCount('a'))      // 1
+  println(utf8ByteCount(\u{0a00})) // 3
+
+
+  charOrOutOfBounds { str.charAt(11) }
 
   println(str.isSubstringAt("hello", 0)) // true
   println(str.isSubstringAt("", 0))      // true
@@ -17,9 +34,6 @@ def main() = {
   println(str.indexOf("l", 4))           // Some(9)
   println(str.indexOf("l", 9))           // Some(9)
   println(str.indexOf("l", 10))          // None()
-  println("f😅o😅o".indexOf("😅", 0))    // Some(1) -- fails on Chez
-
-  println("f😅o😅o".charAt(6))
 
   println("foo, bar, baz, bam".split(", "))
   println("foo, bar, baz, bam".split(", ").join(", "))
@@ -30,7 +44,6 @@ def main() = {
   println("".split(", "))
   println("foo".split(", "))
   println("f:o:o".split(":"))
-  println("f😅o😅o".split("😅")) // fails on Chez
   println("foo".split(""))
 
   def splitJoinIdentity(str: String, sep: String) = {
@@ -40,13 +53,12 @@ def main() = {
   splitJoinIdentity("", "")
   splitJoinIdentity("foo", "")
   splitJoinIdentity("foo, bar, baz, bam", ", ")
-  println("😅")
 
-  println("42".toInt)
-  println("-42".toInt)
-  println("0".toInt)
-  println("".toInt)
-  println("9999".toInt)
+  intOrWrongFormat { "42".toInt }
+  intOrWrongFormat { "-42".toInt }
+  intOrWrongFormat { "0".toInt }
+  intOrWrongFormat { "".toInt }
+  intOrWrongFormat { "9999".toInt }
 
   println("---")
 

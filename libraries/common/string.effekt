@@ -17,6 +17,7 @@ import result
  * Strings
  * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
  * - ML: Strings are sequences of 8-bit characters (https://smlfamily.github.io/Basis/string.html)
+ * - Chez: Strings are sequences of unicode characters ()
  */
 
 
@@ -268,29 +269,62 @@ namespace ANSI {
 
 extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
-  chez "(string ${ch})"
+  chez "(string (integer->char ${ch}))"
+  llvm """
+    %z = call %Pos @c_buffer_show_Char(%Int %ch)
+    ret %Pos %z
+  """
 
+// Since we currently represent Char by integers in all backends, we could reuse comparison
 extern pure def toInt(ch: Char): Int =
   js "${ch}"
   chez "${ch}"
+  ml "${ch}"
+  llvm "ret %Pos ${ch}"
 
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
-  //chez "(char<? ${x} ${y})"
-
+  ml "(${x}: int) < ${y}"
+  llvm """
+    %z = icmp slt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixLte(x: Char, y: Char): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
+  ml "(${x}: int) <= ${y}"
+  llvm """
+    %z = icmp sle %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixGt(x: Char, y: Char): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
+  ml "(${x}: int) > ${y}"
+  llvm """
+    %z = icmp sgt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 extern pure def infixGte(x: Char, y: Char): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
+  ml "(${x}: int) >= ${y}"
+  llvm """
+    %z = icmp sge %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
 
 // TODO iterator over codepoints (maybe use the JS primitive feature???)
 
@@ -339,9 +373,9 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
-  ml "(String.sub (${str}, ${n}))"
+  ml "(Char.ord (String.sub (${str}, ${n})))"
   llvm """
-    %x = call %Int @c_buffer_index(%Pos %str, i64 %n)
+    %x = call %Int @c_buffer_character_at(%Pos %str, i64 %n)
     call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Int %x
   """

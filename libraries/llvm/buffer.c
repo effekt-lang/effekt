@@ -168,6 +168,30 @@ struct Pos c_buffer_show_Int(const Int n) {
     sprintf(str, "%" PRId64, n);
     return c_buffer_construct_from_null_terminated_string(str);
 }
+
+struct Pos c_buffer_show_Char(const int32_t n) {
+    char str[5] = {0};  // Max 4 bytes for UTF-8 + 1 for null terminator
+    unsigned char *buf = (unsigned char *)str;
+
+    if (n < 0x80) {  // 1-byte sequence
+        buf[0] = (unsigned char)n;
+    } else if (n < 0x800) {  // 2-byte sequence
+        buf[0] = (unsigned char)(0xC0 | (n >> 6));
+        buf[1] = (unsigned char)(0x80 | (n & 0x3F));
+    } else if (n < 0x10000) {  // 3-byte sequence
+        buf[0] = (unsigned char)(0xE0 | (n >> 12));
+        buf[1] = (unsigned char)(0x80 | ((n >> 6) & 0x3F));
+        buf[2] = (unsigned char)(0x80 | (n & 0x3F));
+    } else if (n < 0x110000) {  // 4-byte sequence
+        buf[0] = (unsigned char)(0xF0 | (n >> 18));
+        buf[1] = (unsigned char)(0x80 | ((n >> 12) & 0x3F));
+        buf[2] = (unsigned char)(0x80 | ((n >> 6) & 0x3F));
+        buf[3] = (unsigned char)(0x80 | (n & 0x3F));
+    }
+
+    return c_buffer_construct_from_null_terminated_string(str);
+}
+
 struct Pos c_buffer_show_Double(const Double x) {
     char str[64]; // TODO is this large enough? Possibly use snprintf first
     sprintf(str, "%g", x);
@@ -176,6 +200,40 @@ struct Pos c_buffer_show_Double(const Double x) {
 
 uint64_t c_buffer_index(const struct Pos str, const uint64_t index) {
     return c_buffer_bytes(str)[index];
+}
+
+uint32_t c_buffer_character_at(const struct Pos buffer, const uint64_t index) {
+    const uint8_t *bytes = c_buffer_bytes(buffer);
+    uint8_t first_byte = bytes[index];
+    uint32_t character = 0;
+
+    if (first_byte < 0x80) {
+        // Single-byte character (0xxxxxxx)
+        character = first_byte;
+    } else if ((first_byte & 0xE0) == 0xC0) {
+        // Two-byte character (110xxxxx 10xxxxxx)
+        if (index + 1 < buffer.tag) {
+            character = ((first_byte & 0x1F) << 6) |
+                        (bytes[index + 1] & 0x3F);
+        }
+    } else if ((first_byte & 0xF0) == 0xE0) {
+        // Three-byte character (1110xxxx 10xxxxxx 10xxxxxx)
+        if (index + 2 < buffer.tag) {
+            character = ((first_byte & 0x0F) << 12) |
+                        ((bytes[index + 1] & 0x3F) << 6) |
+                        (bytes[index + 2] & 0x3F);
+        }
+    } else if ((first_byte & 0xF8) == 0xF0) {
+        // Four-byte character (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
+        if (index + 3 < buffer.tag) {
+            character = ((first_byte & 0x07) << 18) |
+                        ((bytes[index + 1] & 0x3F) << 12) |
+                        ((bytes[index + 2] & 0x3F) << 6) |
+                        (bytes[index + 3] & 0x3F);
+        }
+    }
+
+    return character;
 }
 
 #endif

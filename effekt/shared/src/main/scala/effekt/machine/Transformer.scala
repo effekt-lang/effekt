@@ -403,6 +403,13 @@ object Transformer {
         LiteralInt(variable, value, k(variable))
       }
 
+    // for characters
+    case lifted.Literal(value: Int, _) =>
+      val variable = Variable(freshName("x"), Type.Int());
+      Binding { k =>
+        LiteralInt(variable, value, k(variable))
+      }
+
     case lifted.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("x"), Positive("Bool"))
       Binding { k =>
@@ -495,6 +502,7 @@ object Transformer {
     case lifted.ValueType.Boxed(tpe) => ???
     case lifted.Type.TUnit => builtins.UnitType
     case lifted.Type.TInt => Type.Int()
+    case lifted.Type.TChar => Type.Int()
     case lifted.Type.TBoolean => builtins.BooleanType
     case lifted.Type.TDouble => Type.Double()
     case lifted.Type.TString => Type.String()
