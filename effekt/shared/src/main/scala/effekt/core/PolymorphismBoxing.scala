@@ -406,6 +406,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         }
 
       }
+    case (BlockType.Interface(n1,targs), BlockType.Interface(n2,_)) =>
+      FunctionIdentityCoercer(fromtpe, totpe, targs)
     case _ => Context.abort(s"Unsupported coercion from ${PrettyPrinter.format(fromtpe)} to ${PrettyPrinter.format(totpe)}")
   }
 
