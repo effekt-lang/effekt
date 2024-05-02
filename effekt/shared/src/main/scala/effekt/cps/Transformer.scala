@@ -8,10 +8,7 @@ import effekt.symbols.{Symbol}
 import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
 import effekt.core.CoreParsers.statement
-import effekt.cps.*
 import effekt.source.AnnotateCaptures.annotate
-import effekt.lifted.Field
-import effekt.lifted.Property
 
 
 
@@ -120,16 +117,21 @@ def transform(definitions: List[lifted.Definition], rest: Term): Term = definiti
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
 def transform(property: lifted.Property): Id = property match {
-  case Property(id, tpe) => id
+  case lifted.Property(id, tpe) => id
 }
 def transform(field: lifted.Field): Id = field match {
-  case Field(id, tpe) => id
+  case lifted.Field(id, tpe) => id
 }
 
-def transform(tpe: lifted.ValueType) = tpe match {
-  case lifted.ValueType.Var(id)  => ???
-  case lifted.ValueType.Data(name, targs)  => ???
-  case lifted.ValueType.Boxed(blockTpe)  => ???
+def transform(tpe: lifted.ValueType): Id = tpe match {
+  case lifted.ValueType.Var(id)  => id
+  case lifted.ValueType.Data(name, targs)  => name
+  case lifted.ValueType.Boxed(blockTpe)  => transform(blockTpe)
+}
+
+def transform(tpe: lifted.BlockType): Id = tpe match {
+  case lifted.BlockType.Function(_, _, _, _, result) => transform(result)
+  case lifted.BlockType.Interface(name, _) => name
 }
 
 def transform(id: lifted.Id): Id = Id(id.name.name)
