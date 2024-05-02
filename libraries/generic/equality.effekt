@@ -16,7 +16,7 @@ type Ordering {
 }
 
 extern pure def genericCompareImpl[R](x: R, y: R): Int =
-  js "compare$impl(${x}, ${y})"
+  js "$effekt.compare(${x}, ${y})"
   default { <{ "TODO implement" }> }
 
  // Compares two values of the same type, returning an `Ordering`.
@@ -32,9 +32,9 @@ def genericCompare[R](x: R, y: R): Ordering = {
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Bool =
-  js "equals$impl(${x}, ${y})"
+  js "$effekt.equals(${x}, ${y})"
   chez "(equal_impl ${x} ${y})"
 
 extern pure def infixNeq[R](x: R, y: R): Bool =
-  js "!equals$impl(${x}, ${y})"
+  js "!$effekt.equals(${x}, ${y})"
   chez "(not (equal_impl ${x} ${y}))"

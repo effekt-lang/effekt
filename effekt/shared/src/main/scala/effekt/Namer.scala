@@ -217,10 +217,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case d @ source.ExternInclude(ff, path, None, _) =>
-      d.contents = Some(Context.contentsOf(path).getOrElse {
-        Context.abort(s"Missing include: ${path}")
-      })
-      ()
+      // only load include if it is required by the backend.
+      if (ff matches Context.compiler.supportedFeatureFlags) {
+        d.contents = Some(Context.contentsOf(path).getOrElse {
+          Context.abort(s"Missing include: ${path}")
+        })
+      } else {
+        d.contents = None
+      }
   }
 
   /**

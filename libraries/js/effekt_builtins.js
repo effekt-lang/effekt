@@ -1,7 +1,7 @@
-function show$impl(obj) {
+$effekt.show = function(obj) {
   if (!!obj && !!obj.__reflect) {
     const meta = obj.__reflect()
-    return meta.__name + "(" + meta.__data.map(show$impl).join(", ") + ")"
+    return meta.__name + "(" + meta.__data.map($effekt.show).join(", ") + ")"
   }
   else if (!!obj && obj.__unit) {
     return "()";
@@ -10,7 +10,7 @@ function show$impl(obj) {
   }
 }
 
-function equals$impl(obj1, obj2) {
+$effekt.equals = function(obj1, obj2) {
   if (!!obj1.__equals) {
     return obj1.__equals(obj2)
   } else {
@@ -24,8 +24,8 @@ function compare$prim(n1, n2) {
   else { return -1; }
 }
 
-function compare$impl(obj1, obj2) {
-  if (equals$impl(obj1, obj2)) { return 0; }
+$effekt.compare = function(obj1, obj2) {
+  if ($effekt.equals(obj1, obj2)) { return 0; }
 
   if (!!obj1 && !!obj2) {
     if (!!obj1.__reflect && !!obj2.__reflect) {
@@ -39,7 +39,7 @@ function compare$impl(obj1, obj2) {
       if (lengthOrdering != 0) { return lengthOrdering; }
 
       for (let i = 0; i < meta1.length; i++) {
-        const contentOrdering = compare$impl(meta1[i], meta2[i])
+        const contentOrdering = $effekt.compare(meta1[i], meta2[i])
         if (contentOrdering != 0) { return contentOrdering; }
       }
 
@@ -50,9 +50,9 @@ function compare$impl(obj1, obj2) {
   return compare$prim(obj1, obj2);
 }
 
-function println$impl(obj) {
+$effekt.println = function println$impl(obj) {
   //return $effekt.delayed(() => { console.log(show(obj)); return $effekt.unit; });
-  console.log(show$impl(obj)); return $effekt.unit;
+  console.log($effekt.show(obj)); return $effekt.unit;
 }
 
 $effekt.unit = { __unit: true }

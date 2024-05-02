@@ -3,11 +3,11 @@ module show
 import effekt
 
 extern pure def show[R](value: R): String =
-  js "show$impl(${value})"
+  js "$effekt.show(${value})"
   chez "(show_impl ${value})"
 
 extern io def println[R](value: R): Unit =
-  js "println$impl(${value})"
+  js "$effekt.println(${value})"
   chez "(println_impl ${value})"
 
 extern io def inspect[R](value: R): Unit =

@@ -47,6 +47,11 @@ object WebTests extends TestSuite {
       load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]
     }
 
+    test("Can read files from the stdlib") {
+      val contents = server.readFile("common/effekt.effekt")
+      assert(contents.length > 100)
+    }
+
     test("Evaluate simple expressions in REPL") {
       val result = evaluate[Int](List(), "1 + 2")
       assert(result == 3)
