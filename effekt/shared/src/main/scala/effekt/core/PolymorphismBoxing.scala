@@ -7,6 +7,7 @@ import effekt.symbols
 import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
 import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TState, TUnit }
+import effekt.symbols.ErrorMessageInterpolator
 
 import scala.annotation.targetName
 
@@ -200,7 +201,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
               )
               (id, coercer(clause.tpe, Type.instantiate(casetpe, targs map transformArg, List()))(transform(clause)))
           }, default map transform)
-        case t => Context.abort(s"Match on value of type ${PrettyPrinter.format(t)}")
+        case t => Context.abort(pp"Match on value of type ${t}")
       }
     case Stmt.Alloc(id, init, region, body) =>
       Stmt.Alloc(id, transform(init), region, transform(body))
@@ -226,7 +227,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Pure.Make(data, tag, vargs) =>
       val dataDecl = PContext.getDataLikeDeclaration(data.name)
       val ctorDecl = dataDecl.constructors.find(_.id == tag).getOrElse {
-        Context.panic(s"No constructor found for tag ${tag} in data type: ${data}")
+        Context.panic(pp"No constructor found for tag ${tag} in data type: ${data}")
       }
 
       val argTypes   = vargs.map(_.tpe)
@@ -408,7 +409,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       }
     case (BlockType.Interface(n1,targs), BlockType.Interface(n2,_)) =>
       FunctionIdentityCoercer(fromtpe, totpe, targs)
-    case _ => Context.abort(s"Unsupported coercion from ${PrettyPrinter.format(fromtpe)} to ${PrettyPrinter.format(totpe)}")
+    case _ => Context.abort(pp"Unsupported coercion from ${fromtpe} to ${totpe}")
   }
 
 }

@@ -568,7 +568,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
     }
     def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
-      Context.module.findPrelude.exports.terms("infixEq") collect {
+      val prelude = Context.module.findDependency(QualifiedName(Nil, "equality")).getOrElse {
+        Context.panic(pp"${Context.module.name.name}: Cannot find 'equality' in prelude, which is necessary to compile pattern matching.")
+      }
+      prelude.exports.terms("infixEq") collect {
         case sym: Callable => (sym, sym.toType)
       } collectFirst {
         // specialized version

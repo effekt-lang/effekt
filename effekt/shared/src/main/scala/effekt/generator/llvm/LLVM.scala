@@ -41,7 +41,8 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Lifted => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen LiftInference andThen Machine map {
+  //   TODO running optimizer and then polymorphism-boxing to avoid unsupported cases is only a quick fix
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.PolymorphismBoxing andThen core.Optimizer andThen LiftInference andThen Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 
