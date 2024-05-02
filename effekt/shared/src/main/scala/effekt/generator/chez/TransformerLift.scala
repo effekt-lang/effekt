@@ -286,7 +286,7 @@ object TransformerLift {
 
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _) => chez.RawValue("#f")
-    case Literal(s: String, _) => ChezString(s)
+    case Literal(s: String, _) => ChezString(chez.adaptEscapes(s))
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
     case ValueVar(id, _)  => chez.Variable(nameRef(id))
