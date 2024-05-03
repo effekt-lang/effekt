@@ -189,7 +189,8 @@ object LLVMRunner extends Runner[String] {
     path / ".." / "monomorphic",
     path / ".." / "llvm")
 
-  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "showinstances", "exception", "string") // "array", "ref")
+  // dequeue needs to be part of the prelude here since showinstances is also part of the prelude
+  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "dequeue", "show", "showinstances", "exception", "string") // "array", "ref")
 
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
@@ -237,7 +238,8 @@ object MLRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "showinstances", "exception", "array", "string", "ref")
+  // dequeue needs to be part of the prelude here since showinstances is also part of the prelude
+  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "dequeue", "show", "showinstances", "exception", "array", "string", "ref")
 
   override def includes(path: File): List[File] = List(
     path / ".." / "monomorphic",

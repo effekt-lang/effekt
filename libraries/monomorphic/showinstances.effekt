@@ -5,6 +5,7 @@ import show
 import string
 import list
 import option
+import dequeue
 
 // This is only needed until we have typeclasses or generic show in LLVM (and MLton)
 
@@ -42,3 +43,13 @@ def show(o: Option[Bool]): String = show(o) { e => show(e) }
 def println(o: Option[Int]): Unit = println(show(o))
 def println(o: Option[Double]): Unit = println(show(o))
 def println(o: Option[Bool]): Unit = println(show(o))
+
+
+// Dequeue
+// -------
+
+def show[A](d: Dequeue[A]) { showA: A => String }: String = {
+  val Dequeue(front, frontSize, rear, rearSize) = d;
+  "Dequeue(" ++ show(front){showA} ++ ", " ++ show(frontSize) ++ ", " ++
+      show(rear){showA} ++ ", " ++ show(rearSize) ++ ")"
+}

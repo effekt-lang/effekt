@@ -1,4 +1,4 @@
-module internal/option
+module internal/mloption
 
 import effekt
 import option

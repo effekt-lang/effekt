@@ -1,5 +1,7 @@
 module dequeue
 
+import effekt
+import equality
 import list
 import option
 
