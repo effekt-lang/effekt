@@ -60,7 +60,7 @@ trait EffektTests extends munit.FunSuite {
     ))
     configs.verify()
     compiler.compileFile(input.getPath, configs)
-    State(compiler.context.db, effekt.util.Task.cache)
+    State(compiler.context.db, compiler.context.cache)
 
   def run(input: File): String =
     val compiler = driver
@@ -73,7 +73,7 @@ trait EffektTests extends munit.FunSuite {
 
     // reuse state after compiling a trivial file
     compiler.context.db = state.annotations
-    effekt.util.Task.cache = state.cache
+    compiler.context.cache = state.cache
 
     compiler.compileFile(input.getPath, configs)
     configs.stringEmitter.result()

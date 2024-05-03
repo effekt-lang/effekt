@@ -56,6 +56,9 @@ abstract class Context(val positions: Positions)
   var _config: EffektConfig = _
   def config = _config
 
+  // cache used by tasks to save their results (in addition to information in the AnnotationsDB)
+  var cache: util.Task.Cache = util.Task.emptyCache
+
   // We assume the backend never changes
   lazy val backend = config.backend()
   lazy val compiler = backend.compiler
