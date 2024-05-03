@@ -1,6 +1,5 @@
 package effekt
 
-import effekt.context.Annotations
 import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
 import kiama.util.Severities
@@ -36,20 +35,12 @@ trait EffektTests extends munit.FunSuite {
       assertNoDiff(run(input), expected)
     }
 
-  import kiama.util.Memoiser
-  import effekt.context.Annotation
-  import effekt.util.Task.{Trace, Target}
-  import scala.collection.mutable
-  case class State(
-    annotations: Memoiser[Any, Map[Annotation[_, _], Any]],
-    cache: mutable.HashMap[Target[Any, Any], Trace[Any]])
-
-  lazy val state = warmup(file("empty.effekt"))
-
   // one shared driver for all tests in this test runner
   object driver extends effekt.Driver
 
-  def warmup(input: File): State =
+  lazy val state: driver.context.State = warmup(file("empty.effekt"))
+
+  def warmup(input: File): driver.context.State =
     val compiler = driver
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
@@ -60,7 +51,7 @@ trait EffektTests extends munit.FunSuite {
     ))
     configs.verify()
     compiler.compileFile(input.getPath, configs)
-    State(compiler.context.db, compiler.context.cache)
+    compiler.context.backup
 
   def run(input: File): String =
     val compiler = driver
@@ -72,9 +63,7 @@ trait EffektTests extends munit.FunSuite {
     configs.verify()
 
     // reuse state after compiling a trivial file
-    compiler.context.db = state.annotations
-    compiler.context.cache = state.cache
-
+    driver.context.restore(state)
     compiler.compileFile(input.getPath, configs)
     configs.stringEmitter.result()
 

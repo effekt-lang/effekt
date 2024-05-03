@@ -304,7 +304,9 @@ object Annotations {
 trait AnnotationsDB { self: Context =>
 
   private type Annotations = Map[Annotation[_, _], Any]
-  var db: Memoiser[Any, Map[Annotation[_, _], Any]] = Memoiser.makeIdMemoiser()
+  type DB = Memoiser[Any, Map[Annotation[_, _], Any]]
+  var db: DB = Memoiser.makeIdMemoiser()
+
   private def annotationsAt(key: Any): Map[Annotation[_, _], Any] = db.getOrDefault(key, Map.empty)
 
   /**
