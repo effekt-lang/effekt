@@ -56,6 +56,9 @@ abstract class Context(val positions: Positions)
   var _config: EffektConfig = _
   def config = _config
 
+  // cache used by tasks to save their results (in addition to information in the AnnotationsDB)
+  var cache: util.Task.Cache = util.Task.emptyCache
+
   // We assume the backend never changes
   lazy val backend = config.backend()
   lazy val compiler = backend.compiler
@@ -103,6 +106,24 @@ abstract class Context(val positions: Positions)
     val msgs = messaging.buffer
     messaging.buffer = bufferBefore
     (msgs, res)
+  }
+
+  /**
+   * The compiler state
+   */
+  case class State(annotations: DB, cache: util.Task.Cache)
+
+  /**
+   * Export the compiler state
+   */
+  def backup: State = State(this.db, this.cache)
+
+  /**
+   * Restores the compiler state from a backup
+   */
+  def restore(s: State) = {
+    db = s.annotations
+    cache = s.cache
   }
 }
 

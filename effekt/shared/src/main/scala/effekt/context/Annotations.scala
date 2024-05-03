@@ -70,8 +70,6 @@ object Annotations {
 
   def empty: Annotations = new Annotations(Map.empty)
 
-  private type DB = Map[Annotations.HashKey[Any], Map[Annotation[_, _], Any]]
-
   sealed trait Key[T] { def key: T }
 
   private class HashKey[T](val key: T) extends Key[T] {
@@ -306,8 +304,10 @@ object Annotations {
 trait AnnotationsDB { self: Context =>
 
   private type Annotations = Map[Annotation[_, _], Any]
-  private val annotations: Memoiser[Any, Annotations] = Memoiser.makeIdMemoiser()
-  private def annotationsAt(key: Any): Annotations = annotations.getOrDefault(key, Map.empty)
+  type DB = Memoiser[Any, Map[Annotation[_, _], Any]]
+  var db: DB = Memoiser.makeIdMemoiser()
+
+  private def annotationsAt(key: Any): Map[Annotation[_, _], Any] = db.getOrDefault(key, Map.empty)
 
   /**
    * Copies annotations, keeping existing annotations at `to`
@@ -325,12 +325,12 @@ trait AnnotationsDB { self: Context =>
    */
   def annotate[K, V](key: K, value: Map[Annotation[_, _], Any]): Unit = {
     val anns = annotationsAt(key)
-    annotations.put(key, anns ++ value)
+    db.put(key, anns ++ value)
   }
 
   def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
     val anns = annotationsAt(key)
-    annotations.put(key, anns + (ann -> value))
+    db.put(key, anns + (ann -> value))
   }
 
   def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =

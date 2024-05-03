@@ -35,14 +35,35 @@ trait EffektTests extends munit.FunSuite {
       assertNoDiff(run(input), expected)
     }
 
+  // one shared driver for all tests in this test runner
+  object driver extends effekt.Driver
+
+  lazy val state: driver.context.State = warmup(file("empty.effekt"))
+
+  def warmup(input: File): driver.context.State =
+    val compiler = driver
+    val configs = compiler.createConfig(Seq(
+      "--Koutput", "string",
+      "--compile",
+      "--noexit-on-error",
+      "--backend", backendName,
+      "--out", output.getPath
+    ))
+    configs.verify()
+    compiler.compileFile(input.getPath, configs)
+    compiler.context.backup
+
   def run(input: File): String =
-    val compiler = new effekt.Driver {}
+    val compiler = driver
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--backend", backendName,
       "--out", output.getPath
     ))
     configs.verify()
+
+    // reuse state after compiling a trivial file
+    driver.context.restore(state)
     compiler.compileFile(input.getPath, configs)
     configs.stringEmitter.result()
 
