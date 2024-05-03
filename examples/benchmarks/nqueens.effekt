@@ -1,4 +1,4 @@
-import io/args
+import args
 import string
 
 // not used at the moment (see below).

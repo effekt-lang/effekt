@@ -8,7 +8,7 @@
 module examples/pos/raytracer
 
 import array
-import io/args
+import args
 import string
 
 // replacing all vector operations by `inline pure def` buys us 20%

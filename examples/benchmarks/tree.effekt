@@ -1,4 +1,4 @@
-import io/args
+import args
 import string
 
 def abs(n: Int): Int = if (n < 0) 0 - n else n

@@ -1,4 +1,4 @@
-import io/args
+import args
 import string
 
 record Triple(a: Int, b: Int, c: Int)
