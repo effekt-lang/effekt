@@ -112,8 +112,14 @@ trait TransformerMonadic extends Transformer {
   def toJS(p: Param): JSName = nameDef(p.id)
 
   def toJS(e: core.Extern)(using DeclarationContext, Context): js.Stmt = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, ExternBody(featureFlag, contents)) =>
-      js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(contents))))
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
+      body match {
+        case ExternBody.StringExternBody(_, contents) =>
+          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(contents))))
+        case u: ExternBody.Unsupported =>
+          u.report
+          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(monadic.Run(monadic.Builtin("hole")))))
+      }
 
     case Extern.Include(ff, contents) =>
       js.RawStmt(contents)
@@ -176,14 +182,26 @@ trait TransformerMonadic extends Transformer {
 
     case DirectApp(f: core.Block.BlockVar, targs, vargs, Nil) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.body.contents)
+      extern.body match {
+        case ExternBody.StringExternBody(_, contents) =>
+          inlineExtern(vargs, extern.vparams, contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          monadic.Run(monadic.Builtin("hole"))
+      }
 
     case DirectApp(f, targs, vargs, bargs) =>
       js.Call(toJS(f), vargs.map(toJS) ++ bargs.map(toJS))
 
     case PureApp(f: core.Block.BlockVar, targs, vargs) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.body.contents)
+      extern.body match {
+        case ExternBody.StringExternBody(_, contents) =>
+          inlineExtern(vargs, extern.vparams, contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          monadic.Run(monadic.Builtin("hole"))
+      }
 
     case PureApp(f, targs, vargs) =>
       js.Call(toJS(f), vargs.map(toJS))

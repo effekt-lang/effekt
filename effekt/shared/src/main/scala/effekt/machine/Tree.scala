@@ -52,7 +52,13 @@ enum Declaration {
 }
 export Declaration.*
 
-case class ExternBody(featureFlag: FeatureFlag, contents: Template[Variable])
+sealed trait ExternBody
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Variable]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+    def report(using E: util.messages.ErrorReporter): Unit = E.report(err)
+  }
+}
 
 /**
  * Clauses are parametrized statements

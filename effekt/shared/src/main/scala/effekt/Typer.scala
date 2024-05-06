@@ -856,6 +856,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               body.args.foreach { arg => checkExpr(arg, None) }
             case source.ExternBody.EffektExternBody(ff, body) =>
               checkStmt(body, Some(expectedReturnType))
+            case u: source.ExternBody.Unsupported => u
           }
 
         }

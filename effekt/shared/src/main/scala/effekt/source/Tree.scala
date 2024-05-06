@@ -129,6 +129,9 @@ sealed trait ExternBody extends Tree {
 object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
   case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
+  case class Unsupported(message: util.messages.EffektError) extends ExternBody {
+    override def featureFlag: FeatureFlag = FeatureFlag.Default
+  }
 }
 
 

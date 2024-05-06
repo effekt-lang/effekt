@@ -4,6 +4,7 @@ package lifted
 import effekt.context.Context
 import effekt.source.FeatureFlag
 import effekt.symbols.{Constructor, Name, Symbol}
+import effekt.util.messages.ErrorReporter
 import scala.collection.immutable
 
 export effekt.core.Id
@@ -55,7 +56,13 @@ enum Extern {
   case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, bodies: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-case class ExternBody(featureFlag: FeatureFlag, body: Template[Expr])
+sealed trait ExternBody
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, body: Template[Expr]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+    def report(using E: ErrorReporter): Unit = E.report(err)
+  }
+}
 
 enum Definition {
   def id: Id

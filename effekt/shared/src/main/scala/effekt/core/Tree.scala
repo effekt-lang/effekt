@@ -4,6 +4,7 @@ package core
 import effekt.source.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.messages.ErrorReporter
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -129,16 +130,13 @@ enum Extern extends Tree {
   case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
-case class ExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends Tree
-
-extension(self: List[ExternBody]) {
-  def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
-    case Nil => self.find( _.featureFlag.isDefault )
-    case flag :: other =>
-      self.find( _.featureFlag.matches(flag, false) ) orElse { self.forFeatureFlags(other) }
+sealed trait ExternBody extends Tree
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+    def report(using E: ErrorReporter): Unit = E.report(err)
   }
 }
-
 
 enum Definition extends Tree {
   def id: Id
