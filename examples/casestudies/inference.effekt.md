@@ -10,13 +10,14 @@ This case study shows how we can perform inference over probabilistic models wit
 ---
 
 We require some imports 
+
 ```
-module probs 
 import immutable/list
-extern pure def pow(x: Double, y: Double): Double = "Math.pow(x, y)"
+extern pure def pow(x: Double, y: Double): Double = "Math.pow(${x}, ${y})"
 ```
 
 We need some effects to peform probabilistic operations
+
 ```
 effect Sample(dist: Distribution): Double
 effect Observe(value: Double, dist: Distribution): Unit
@@ -26,9 +27,11 @@ interface Emit[A] {
   def emit(element: A): Unit
 }
 ```
+
 With the effect `Sample`, we can get samples from a given distribution, and with the effect `Observe` we can determine if it is possible to get a given value from a distribution.
 
 We also need to define some type aliases:
+
 ```
 type Distribution{
   Gaussian(mean: Double, variance: Double)
@@ -40,6 +43,7 @@ type Trace = List[Double]
 ```
 
 Currently, we can support models with Gaussian, uniform or beta distributions.
+
 ```
 def draw(dist: Distribution): Double / Random = {
   dist match {
@@ -125,8 +129,11 @@ def density(value: Double, dist: Distribution): Double = {
       return density
   }
 }
+
 ```
+
 We define default handlers for all effects in this library
+
 ```
 def handleSample[R]{program: () => R / Sample} = {
   try {program()}
@@ -171,7 +178,9 @@ def handleEmit[A,R]{program: () => R / Emit[A]} = {
     def emit(element) = {println(element); resume(())}}
 }
 ``` 
+
 With the effect `emit` it is also possible to limit possibly infinite loops. This allows for flexible numbers of steps to be performed with any algorithm that uses the effect `emit`.
+
 ```
 def handleLimitEmit[A,R](n: Int){program: () => R / Emit[A]} = {
   var steps = n
@@ -188,6 +197,7 @@ def handleLimitEmit[A,R](n: Int){program: () => R / Emit[A]} = {
 
 ## Rejection Sampling
 The effect `Weight` is also the basis of the rejection handling algorithm 
+
 ```
 def handleRejection[R]{program: () => R / Weight}: R / Random = {
   try {program()}
@@ -197,7 +207,9 @@ def handleRejection[R]{program: () => R / Weight}: R / Random = {
   }
 }
 ```
+
 It is possible to construct the rejection sampling algorithm with the handlers of this library:
+
 ```
 def rejectionSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit / Random = {
   def loop(): Unit / Emit[R] = {
@@ -211,6 +223,7 @@ def rejectionSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit / R
 ```
 
 ## Slice Sampling
+
 ```
 def sliceSamplingAlgo[R](){program: () => R / Weight} = {
   val (result, prob) = handleSample{handleWeight{program()}}
@@ -232,9 +245,11 @@ def sliceSamplingAlgo[R](){program: () => R / Weight} = {
 ```
 
 ## Metropolis-Hastings
+
 ### Tracing
 A trace records past samples used by an algorithm. The trace also controls where the algorithm draws samples from in the next iterations. 
 Constructing traces is possible by handling the effect `Sample`, not with the default handler, but one that draws new samples and records them in a trace.
+
 ```
 def handleTracing[R]{program: () => R / Sample}: (R, Trace) / Sample = {
   try {(program(), [])}
@@ -258,9 +273,11 @@ def handleReusingTrace[R](trace0: Trace){program: () => R / Sample} = handleObse
   }
 }
 ```
+
 ### Proposing samples
 How the candidates of this algorithm are proposed can vary between different implementations of the algorithm and thus creating inference of the Metropolis-Hastings algorithm.
 The Metropolis-Hastings algorithm proposes a new trace based on the old trace, by recursively adding noise to the samples in the old trace and thus creating a new trace.
+
 ```
 def propose(trace: Trace): Trace / Sample = {
   trace match {
@@ -272,8 +289,10 @@ def propose(trace: Trace): Trace / Sample = {
   }
 }
 ```
+
 ### Metropolis-Hastings algorithm
 The algorithm is implemented with a helper function
+
 ```
 def metropolisStep[A](prob0: Probability, trace0: Trace){program: Trace => (A, Probability)} = {
   val trace1 = propose(trace0)
@@ -285,7 +304,9 @@ def metropolisStep[A](prob0: Probability, trace0: Trace){program: Trace => (A, P
   ((result1, trace1), prob1)
 }
 ```
+
 `metropolisStep` is then called in the algorithm implementation
+
 ```
 def metropolisHastingsAlgo[A]{program: () => A / {Sample, Weight}} = {
   val ((result0, trace0), prob0) = handleWeight{
@@ -314,6 +335,7 @@ def metropolisHastingsAlgo[A]{program: () => A / {Sample, Weight}} = {
 ### Single-Site Metropolis-Hastings
 To perform inference over the Metropolis-Hastings algorithm, and therefore creating the single-site Metropolis-Hastings algorithm, we just need to alter the implementation of the `propose` function.
 In this implementation, the noise is added to only one random sample in the trace and the other samples are reused. 
+
 ```
 def proposeSingleSite(trace: Trace): Trace / Sample = {
   val tsize = toDouble(size(trace))
@@ -336,7 +358,9 @@ def proposeSingleSite(trace: Trace): Trace / Sample = {
   putAti(floor(rand), trace)
 }
 ```
+
 The single-site Metropolis-Hastings algorithm is implemented like the Metropolis-Hastings algorithm above.
+
 ```
 def metropolisStepSingleSite[A](prob0: Probability, trace0: Trace){program: Trace => (A, Probability)} = {
   val trace1 = proposeSingleSite(trace0)
@@ -371,8 +395,10 @@ def metropolisHastingsSingleSiteAlgo[A]{program: () => A / {Sample, Weight}} = {
   loop(result0, trace0, prob0)
 }
 ```
+
 ## Wrappers
 In order to make it easier to use these algorithms without having to call the various effect handlers, we constructed wrappers for the algorithms implemented in this library.
+
 ```
 def sliceSampling[R](n: Int){program: () => R / {Sample, Observe}}: Unit / Random = {
   handleLimitEmit[R,Unit](n){handleSample{sliceSamplingAlgo[R]{handleObserve{
@@ -394,8 +420,10 @@ def metropolisHastingsSingleSite[R](n: Int){program: () => R / {Sample, Observe}
 ```
 
 ## Examples
+
 ### Linear Regression
 As a short example on how the effects `Sample` and `Observe` can be used in an model, we construct the linear regression model.
+
 ```
 def linearRegression(observations: List[(Double, Double)]) = {
   val m = do Sample(Gaussian(0.0, 3.0))
@@ -413,10 +441,13 @@ def linearRegression(observations: List[(Double, Double)]) = {
 It is also possible to construct bigger examples on which we can apply the algorithms of this library.
 In this example, the movements of a robot on a 2D-plane are observed. In the center of this plane, at the coordinates (0, 0), there is a radar station that can measure the distance to the robot at any point in time.
 The current state of the robot, consisting of position and velocity.
+
 ```
 record State(x: Double, y: Double, vx: Double, vy: Double)
 ```
+
 In this example we also define a type alias for `Measurement`
+
 ```
 type Measurement = Double
 
@@ -449,6 +480,7 @@ def step(s0: State, m1: Measurement): State / {Sample,Observe} = {
 
 ### Epidemic Spreading
 This examples simulates a population in an epidemic with the SIR model. The SIR model divides the population into susceptible **S**, infected **I** and recovered **R**.
+
 ```
 record Population(susceptible: Double, infected: Double, recovered: Double)
 
@@ -483,6 +515,7 @@ def step(p0: Population, pr1: Double): Population / {Sample, Observe} = {
 ```
 
 Calling the algorithms on the examples.
+
 ```
 def main() = {
   //Linear Regression
@@ -537,4 +570,5 @@ def main() = {
   }
 }}
 ```
+
 The other algorithms of this library can be called alike on these examples.
