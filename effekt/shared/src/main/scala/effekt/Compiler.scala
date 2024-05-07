@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
+import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ResolveExternDefs, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
 import effekt.util.messages.FatalPhaseError
@@ -106,6 +106,8 @@ trait Compiler[Executable] {
   // Used by Driver, Server, Repl and Web
 
   def extension: String
+
+  def supportedFeatureFlags: List[String]
 
   /**
    * Used by LSP server (Intelligence) to map positions to source trees
@@ -229,6 +231,11 @@ trait Compiler[Executable] {
    * Middleend
    */
   val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
+    /**
+     * Resolves `extern`s for the current backend
+     * [[Typechecked]] --> [[Typechecked]]
+     */
+    ResolveExternDefs andThen
     /**
      * Uses annotated effects to translate to explicit capability passing
      * [[Typechecked]] --> [[Typechecked]]

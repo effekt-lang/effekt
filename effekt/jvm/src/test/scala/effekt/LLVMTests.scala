@@ -109,5 +109,8 @@ class LLVMTests extends EffektTests {
 
     // See PR #355
     examplesDir / "llvm" / "string_toint.effekt",
+
+    // no pseudo-extern definitions
+    examplesDir / "llvm" / "feature-flags-ffi.effekt",
   )
 }

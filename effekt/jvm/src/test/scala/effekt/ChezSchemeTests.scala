@@ -29,6 +29,7 @@ abstract class ChezSchemeTests extends EffektTests {
     // bidirectional effects are not yet supported in our Chez backend
     examplesDir / "pos" / "bidirectional",
     examplesDir / "pos" / "object",
+    examplesDir / "pos" / "type_omission_op.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",

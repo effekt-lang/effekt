@@ -7,13 +7,13 @@ def charAt(str: String, index: Int): Option[String] =
     str.unsafeCharAt(index).undefinedToOption
 
 extern pure def length(str: String): Int =
-  "${str}.length"
+  js "${str}.length"
 
 extern pure def repeat(str: String, n: Int): String =
-  "${str}.repeat(${n})"
+  js "${str}.repeat(${n})"
 
 extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
-  "${str}.substring(${from}, ${to})"
+  js "${str}.substring(${from}, ${to})"
 
 def substring(str: String, from: Int, to: Int): String =
   if (from >= to) { "" }
@@ -25,19 +25,19 @@ def substring(str: String, from: Int): String =
   str.unsafeSubstring(from, str.length)
 
 extern pure def split(str: String, sep: String): Array[String] =
-  "${str}.split(${sep})"
+  js "${str}.split(${sep})"
 
 extern pure def trim(str: String): String =
-  "${str}.trim()"
+  js "${str}.trim()"
 
 def toInt(str: String): Option[Int] =
   str.unsafeToInt.undefinedToOption
 
 extern pure def unsafeCharAt(str: String, n: Int): String =
-  "${str}[${n}]"
+  js "${str}[${n}]"
 
 extern pure def unsafeToInt(str: String): Int =
-  "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
+  js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
 
 def indexOf(str: String, sub: String): Option[Int] = {
   val index = str.unsafeIndexOf(sub)
@@ -49,14 +49,14 @@ def lastIndexOf(str: String, sub: String): Option[Int] = {
   if (index < 0) { None() } else { Some(index) }
 }
 
-extern pure def unsafeIndexOf(str: String, sub: String): Int = "${str}.indexOf(${sub})"
-extern pure def unsafeLastIndexOf(str: String, sub: String): Int = "${str}.lastIndexOf(${sub})"
+extern pure def unsafeIndexOf(str: String, sub: String): Int = js "${str}.indexOf(${sub})"
+extern pure def unsafeLastIndexOf(str: String, sub: String): Int = js "${str}.lastIndexOf(${sub})"
 
 extern pure def startsWith(str: String, prefix: String): Bool =
-  "${str}.startsWith(${prefix})"
+  js "${str}.startsWith(${prefix})"
 
 extern pure def endsWith(str: String, suffix: String): Bool =
-  "${str}.endsWith(${suffix})"
+  js "${str}.endsWith(${suffix})"
 
 // ANSI escape codes
 val ANSI_GREEN = "\u001b[32m"

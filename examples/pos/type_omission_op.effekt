@@ -1,0 +1,52 @@
+module examples/pos/polymorphic/type_omission_op
+
+interface Eff[A] {
+    def eff[B, C](x: B, y: C) { f: (B) { B => B } => A } { g: C => A }: A
+}
+
+def impl1 = new Eff[Int] {
+    def eff(a, b) { h } { j } = { h(a) { x => x }; j(b) }
+}
+
+def impl2 = new Eff[Int] {
+    def eff[C, D](a, b) { h } { j } = { h(a) { x => x }; j(b) }
+}
+
+def impl3 = new Eff[Int] {
+    def eff[C, D](a, b) { h: (C) { C => C } => Int } { j } = { j(b); h(a) { x => x } }
+}
+
+def impl4 = new Eff[Int] {
+    def eff[C, D](a, b) { h } { j: D => Int } = { h(a) { x => x }; j(b) }
+}
+
+def impl5 = new Eff[Int] {
+    def eff[C, D](a, b) { h: (C) { C => C } => Int } { j: D => Int } = { j(b); h(a) { x => x } }
+}
+
+def handle1[B, C] { prog: () => B / Eff[C] }: B =
+    try { prog() }
+    with Eff[C] {
+        def eff(a, b) = resume { { h } { j } => h(a) { x => x } }
+    }
+
+def handle2[B, C] { prog: () => B / Eff[C] }: B =
+    try { prog() }
+    with Eff[C] {
+        def eff[D, E](a: D, b: E) = resume { { h: (D) { D => D } => C } { j: E => C } => j(b) }
+    }
+
+def main() = {
+    val h: (Int) { Int => Int } => Int at {} = box { (x) { f } => x + 1 }
+    val l: Int => Int at {} = box { (x) => x * 2 }
+    val rs = [
+        impl1.eff(1, 2) { h } { l },
+        impl2.eff(1, 2) { h } { l },
+        impl3.eff(1, 2) { h } { l },
+        impl4.eff(1, 2) { h } { l },
+        impl5.eff(1, 2) { h } { l },
+        handle1[Int, Int] { do eff(1, 2) { h } { l } },
+        handle2[Int, Int] { do eff(1, 2) { h } { l } }
+    ]
+    rs.foreach { x => println(x) }
+}

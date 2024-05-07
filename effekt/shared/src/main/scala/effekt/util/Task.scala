@@ -86,13 +86,6 @@ object Task { build =>
     def fingerprint: Long = task.fingerprint(key)
   }
 
-  /**
-   * A heterogenous store from Target to Trace
-   */
-  val db = mutable.HashMap.empty[Target[Any, Any], Trace[Any]]
-
-  def reset(): Unit = db.clear()
-
   case class Info(target: Target[_, _], hash: Long) {
     def isValid: Boolean = target.fingerprint == hash
     override def toString =
@@ -109,13 +102,15 @@ object Task { build =>
     }
   }
 
+  type Cache = mutable.HashMap[Target[Any, Any], Trace[Any]]
+  def emptyCache = mutable.HashMap.empty[Target[Any, Any], Trace[Any]]
+
   private def coerce[A, B](a: A): B = a.asInstanceOf[B]
 
-  def get[K, V](target: Target[K, V]): Option[Trace[V]] =
-    coerce(db.get(coerce(target)))
-
-  def update[K, V](target: Target[K, V], trace: Trace[V]): Unit =
-    db.update(coerce(target), coerce(trace))
+  def get[K, V](target: Target[K, V])(using C: Context): Option[Trace[V]] =
+    coerce(C.cache.get(coerce(target)))
+  def update[K, V](target: Target[K, V], trace: Trace[V])(using C: Context): Unit =
+    C.cache.update(coerce(target), coerce(trace))
 
   /**
    * A trace recording information about computed targets
@@ -135,8 +130,8 @@ object Task { build =>
     trace = extended.distinct
   }
 
-  def compute[K, V](target: Target[K, V])(implicit C: Context): Option[V] = {
-    var before = clearTrace()
+  def compute[K, V](target: Target[K, V])(using C: Context): Option[V] = {
+    val before = clearTrace()
     // log(s"computing for ${target}")
 
     // capture the messages, so they can be replayed later
@@ -154,7 +149,7 @@ object Task { build =>
     res
   }
 
-  def reuse[V](tr: Trace[V])(implicit C: Context): Option[V] = {
+  def reuse[V](tr: Trace[V])(using C: Context): Option[V] = {
     // log(s"reusing ${tr.current.target}")
     // replay the trace
     C.messaging.append(tr.msgs)
@@ -162,9 +157,9 @@ object Task { build =>
     tr.value
   }
 
-  def need[K, V](task: Task[K, V], key: K)(implicit C: Context): Option[V] = need(Target(task, key))
+  def need[K, V](task: Task[K, V], key: K)(using C: Context): Option[V] = need(Target(task, key))
 
-  def need[K, V](target: Target[K, V])(implicit C: Context): Option[V] = get(target) match {
+  def need[K, V](target: Target[K, V])(using C: Context): Option[V] = get(target) match {
     case Some(trace) if !trace.isValid =>
       // log(s"Something changed for ${target}")
       compute(target)
@@ -174,5 +169,6 @@ object Task { build =>
       compute(target)
   }
 
-  def dump() = db.foreach { case (k, v) => println(k.toString + " -> " + v) }
+  def dump()(using C: Context) =
+    C.cache.foreach { case (k, v) => println(k.toString + " -> " + v) }
 }

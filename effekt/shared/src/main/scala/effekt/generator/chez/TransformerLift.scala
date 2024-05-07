@@ -7,6 +7,7 @@ import effekt.context.Context
 import effekt.lifted.*
 import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
 import effekt.util.paths.*
+import effekt.util.messages.ErrorReporter
 import effekt.symbols.builtins
 
 import kiama.output.PrettyPrinterTypes.Document
@@ -25,7 +26,7 @@ object TransformerLift {
     if (monomorphized) chez.Call(chez.Call(main), List(CPS.id))
     else chez.Call(chez.Call(main, CPS.id), List(CPS.id))
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
@@ -38,7 +39,7 @@ object TransformerLift {
     case e: lifted.Evidence => toChez(e)
   }
 
-  def toChez(module: ModuleDecl): List[chez.Def] = {
+  def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.decls.flatMap(toChez)
     val externs = module.externs.map(toChez)
     // TODO FIXME, once there is a let _ = ... in there, we are doomed!
@@ -195,15 +196,20 @@ object TransformerLift {
       generateConstructor(id, operations.map(_.id))
   }
 
-  def toChez(decl: lifted.Extern): chez.Def = decl match {
+  def toChez(decl: lifted.Extern)(using ErrorReporter): chez.Def = decl match {
     case Extern.Def(id, tparams, params, ret, body) =>
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
           case p => Some(nameDef(p.id)) },
-          toChez(body)))
+          body match {
+            case ExternBody.StringExternBody(_, contents) => toChez(contents)
+            case u: ExternBody.Unsupported =>
+              u.report
+              chez.Builtin("hole")
+          }))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) =>
       RawDef(contents)
   }
 

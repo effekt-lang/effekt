@@ -20,6 +20,8 @@ import scala.collection.mutable
  */
 object TransformerDirect extends Transformer {
 
+  override val jsFeatureFlags: List[String] = List("jsDirect", "js")
+
   /**
    * Aggregates the contextual information required by the transformation
    */
@@ -87,9 +89,15 @@ object TransformerDirect extends Transformer {
 
   def toJS(e: core.Extern)(using TransformerContext): js.Stmt = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(body))))
+      body match {
+        case ExternBody.StringExternBody(featureFlag, contents) =>
+          js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(toJS(contents))))
+        case u: ExternBody.Unsupported =>
+          u.report
+          js.Stmt.Return($effekt.call("hole"))
+      }
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) =>
       js.RawStmt(contents)
   }
 

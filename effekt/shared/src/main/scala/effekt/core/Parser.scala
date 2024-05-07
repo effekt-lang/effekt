@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.core.Param.ValueParam
-import effekt.source.NoSource
+import effekt.source.{FeatureFlag, NoSource}
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Range, Source, StringSource }
@@ -68,11 +68,20 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Externs
   // -------
   lazy val externDecl: P[Extern] =
-    ( `extern` ~> externBody ^^ Extern.Include.apply
-    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> externBody) ^^ {
+    ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
+    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBody)) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, Template(List(body), Nil))
+        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
+          case ff ~ (body: String) =>
+            ExternBody.StringExternBody(ff, Template(List(body), Nil))
+        })
     })
+
+  lazy val featureFlag: P[FeatureFlag] =
+    ("else" ^^ { _ => FeatureFlag.Default }
+    | ident ^^ FeatureFlag.NamedFeatureFlag.apply
+    )
+
 
   lazy val externBody = stringLiteral | multilineString
 

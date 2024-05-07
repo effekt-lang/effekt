@@ -1,6 +1,6 @@
 module io/async
 
-extern include "async.js"
+extern include js "async.js"
 
 extern type Promise[T]
 
@@ -19,10 +19,10 @@ def asyncIO[R](p: () => R / AsyncIO at {io}): R = try {
 def block[T](p: Promise[T]) = do await(p)
 
 extern io def readPromise(path: String): Promise[String] =
-  "fsPromises.readFile(${path}, 'utf8')"
+  js "fsPromises.readFile(${path}, 'utf8')"
 
 extern io def awaitPromise[T, R](p: Promise[T], cont: T => R at {io}): R =
-  "${p}.then(res => (${cont})(res).run())"
+  js "${p}.then(res => (${cont})(res).run())"
 
 extern io def fork(process: () => Unit at {io}): Unit =
-  "setTimeout(() => (${process})().run(), 0)"
+  js "setTimeout(() => (${process})().run(), 0)"

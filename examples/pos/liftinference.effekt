@@ -5,7 +5,11 @@ interface Foo {
   def bar(): String
 }
 
-extern control def fancy { f: Unit => Int }: Int = "foo"
+// add for other lift-based backends, if they get added!
+extern control def fancy { f: Unit => Int }: Int =
+  chezLift "foo"
+  llvm "foo"
+  default { <> }
 
 def toplevel(x: Int, y: Int) = x + y
 

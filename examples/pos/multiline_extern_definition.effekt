@@ -1,4 +1,4 @@
-extern io def jsPrintNoop(): Unit = """
+extern io def jsPrintNoop(): Unit = js """
   console.log("no-op")
 """
 
