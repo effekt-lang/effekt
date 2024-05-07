@@ -13,7 +13,8 @@ We require some imports
 
 ```
 import immutable/list
-extern pure def pow(x: Double, y: Double): Double = "Math.pow(${x}, ${y})"
+extern pure def pow(x: Double, y: Double): Double = 
+  js "Math.pow(${x}, ${y})"
 ```
 
 We need some effects to peform probabilistic operations
