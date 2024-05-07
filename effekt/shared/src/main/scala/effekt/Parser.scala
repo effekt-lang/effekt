@@ -77,8 +77,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val includeDecl: P[Include] =
-    `import` ~/> moduleName ^^ Include.apply
-
+    `import` ~/> moduleName ~ opt(`on` ~> featureFlag) ^^ Include.apply
 
   /**
    * For the REPL
@@ -867,6 +866,7 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `def` = keyword("def")
   lazy val `module` = keyword("module")
   lazy val `import` = keyword("import")
+  lazy val `on` = keyword("on")
   lazy val `export` = keyword("export")
   lazy val `extern` = keyword("extern")
   lazy val `include` = keyword("include")

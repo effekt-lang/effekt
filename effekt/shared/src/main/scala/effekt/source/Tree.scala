@@ -182,7 +182,7 @@ sealed trait Reference extends Named {
  *
  */
 case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
-case class Include(path: String) extends Tree
+case class Include(path: String, on: Option[FeatureFlag] = None) extends Tree
 
 /**
  * Parameters and arguments

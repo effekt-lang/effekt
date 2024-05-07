@@ -20,7 +20,13 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
     case ModuleDecl(path, includes, defs) =>
-      ModuleDecl(path, includes, defs.flatMap(rewrite))
+      ModuleDecl(path, includes.flatMap(rewrite), defs.flatMap(rewrite))
+  }
+
+  def rewrite(i: Include)(using Context): Option[Include] = i match {
+    case i@Include(path, None) => Some(i)
+    case i@Include(path, Some(ff)) if ff.matches(supported) => Some(i)
+    case _ => None // only on other backends
   }
 
   def findPreferred(bodies: List[ExternBody])(using Context): ExternBody = {

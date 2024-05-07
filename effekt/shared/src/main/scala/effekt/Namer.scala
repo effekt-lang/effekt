@@ -63,7 +63,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // process all includes, updating the terms and types in scope
     val includes = decl.includes collect {
-      case im @ source.Include(path) =>
+      case im @ source.Include(path, on) =>
         Context.at(im) { importDependency(path) }
     }
 
