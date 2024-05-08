@@ -6,7 +6,7 @@ import effekt.context.Context
 import effekt.symbols
 import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
-import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TState, TUnit }
+import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TChar, TState, TUnit }
 import effekt.symbols.ErrorMessageInterpolator
 
 import scala.annotation.targetName
@@ -41,6 +41,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    */
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt     => PContext.boxer("Int")
+    case core.Type.TChar    => PContext.boxer("Char")
     case core.Type.TBoolean => PContext.boxer("Bool")
     case core.Type.TDouble  => PContext.boxer("Double")
     case core.Type.TUnit    => PContext.boxer("Unit")

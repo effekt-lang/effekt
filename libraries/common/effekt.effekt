@@ -367,6 +367,7 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // For boxing polymorphic values
 record BoxedUnit(unboxUnit: Unit)
 record BoxedInt(unboxInt: Int)
+record BoxedChar(unboxChar: Char)
 record BoxedBool(unboxBool: Bool)
 record BoxedDouble(unboxDouble: Double)
 record BoxedString(unboxString: String)
