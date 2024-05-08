@@ -1,16 +1,16 @@
 module effekt
 
-extern include "effekt.hvm"
+extern include hvm "effekt.hvm"
 
 //String ops
 
 extern io def println[R](r: R): Unit =
-  "(print ${r} ${r})"
+  hvm "(HVM.print ${r} ${r})"
 
 
 
 extern pure def show[R](value: R): String =
-  "(log ${value} ${value})"
+  hvm "(HVM.log ${value} ${value})"
 
 //extern pure def infixConcat(s1: String, s2: String): String =
 //  "${s1} + ${s2}"
@@ -20,32 +20,32 @@ extern pure def show[R](value: R): String =
 //Math ops
 
 extern def infixAdd(x: Int, y: Int): Int =
-  "(+ ${x} ${y})"
+  hvm "(+ ${x} ${y})"
 
 extern def infixMul(x: Int, y: Int): Int =
-  "(* ${x} ${y})"
+  hvm "(* ${x} ${y})"
 
 extern def infixDiv(x: Int, y: Int): Int =
-  "(/ ${x} ${y})"
+  hvm "(/ ${x} ${y})"
 
 
 extern def infixSub(x: Int, y: Int): Int =
-  "(- ${x} ${y})"
+  hvm "(- ${x} ${y})"
 
 extern def mod(x: Int, y: Int): Int =
-  "(% ${x} ${y})"
+  hvm "(% ${x} ${y})"
 
 extern def infixAdd(x: Double, y: Double): Double =
-  "(+ ${x} ${y})"
+  hvm "(+ ${x} ${y})"
 
 extern def infixMul(x: Double, y: Double): Double =
-  "(* ${x} ${y})"
+  hvm "(* ${x} ${y})"
 
 extern def infixDiv(x: Double, y: Double): Double =
-  "(/ ${x} ${y})"
+  hvm "(/ ${x} ${y})"
 
 extern def infixSub(x: Double, y: Double): Double =
-  "(- ${x} ${y})"
+  hvm "(- ${x} ${y})"
 
 def min(n: Int, m: Int): Int =
   if (n < m) n else m
@@ -56,34 +56,34 @@ def max(n: Int, m: Int): Int =
 //Comparison ops
 
 extern def infixEq[R](x: R, y: R): Bool =
-  "(== ${x} ${y})"
+  hvm "(== ${x} ${y})"
 
 extern def infixNeq[R](x: R, y: R): Bool =
-  "(!= ${x} ${y})"
+  hvm "(!= ${x} ${y})"
 
 extern def infixLt(x: Int, y: Int): Bool =
-  "(< ${x} ${y})"
+  hvm "(< ${x} ${y})"
 
 extern def infixLte(x: Int, y: Int): Bool =
-  "(<= ${x} ${y})"
+  hvm "(<= ${x} ${y})"
 
 extern def infixGt(x: Int, y: Int): Bool =
-  "(> ${x} ${y})"
+  hvm "(> ${x} ${y})"
 
 extern def infixGte(x: Int, y: Int): Bool =
-  "(>= ${x} ${y})"
+  hvm "(>= ${x} ${y})"
 
 extern def infixLt(x: Double, y: Double): Bool =
-  "(< ${x} ${y})"
+  hvm "(< ${x} ${y})"
 
 extern def infixLte(x: Double, y: Double): Bool =
-  "(<= ${x} ${y})"
+  hvm "(<= ${x} ${y})"
 
 extern def infixGt(x: Double, y: Double): Bool =
-  "(> ${x} ${y})"
+  hvm "(> ${x} ${y})"
 
 extern def infixGte(x: Double, y: Double): Bool =
-  "(>= ${x} ${y})"
+  hvm "(>= ${x} ${y})"
 
 //Bool ops
 
