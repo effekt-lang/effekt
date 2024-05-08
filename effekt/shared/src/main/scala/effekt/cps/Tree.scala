@@ -24,11 +24,12 @@ enum Declaration {
   def id: Id
 
   case Data(id: Id, constructors: List[Constructor])
-  case Interface(id: Id, properties: List[Id])
+  case Interface(id: Id, properties: List[Property])
 }
 export Declaration.*
 
 case class Constructor(id: Id, fields: List[Id])
+case class Property(id: Id, args: List[Id])
 
 /**
  * FFI external definitions

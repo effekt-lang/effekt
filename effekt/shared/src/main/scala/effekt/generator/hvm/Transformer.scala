@@ -16,14 +16,19 @@ def transform(mod: cps.ModuleDecl): Book = {
   val defns = mod.definitions.map(transform)
   val defMap: MutableMap[Name, Definition] = MutableMap()
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
+  mod.decls.foreach({case cps.Declaration.Interface(id, operations) => defMap ++ transform(id, operations, defMap); case _ => ()})
   Book(defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
 
+def transform(id: cps.Id, operations: List[cps.Property], map: MutableMap[Name, Definition]): MutableMap[Name, Definition] = operations match {
+  case Nil => map
+  case cps.Property(propertyId, args) :: next => transform(propertyId, next, map += (Name(id.toString + "." + propertyId.toString) -> Definition(id.toString + "." + propertyId.toString, List(Rule(List(), Lam(Auto, Some("x"), Var("x")))), false)))
+}
 
 def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): MutableMap[Name, Adt]= decls match {
   case Nil => map
   case cps.Declaration.Data(id, ctors) :: rest => transform(rest, map += (Name(id.toString) -> transform(ctors, Adt(MutableMap(), false))))
-  case cps.Declaration.Interface(id, operations) :: rest => transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map (x=>x.toString()))), false)))
+  case cps.Declaration.Interface(id, operations) :: rest => transform(rest, map)//transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map (x=>x.toString()))), false)))
 }
 
 def transform(decl: cps.Extern): Verbatim = decl match {
@@ -75,7 +80,7 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.PureApp(b, args) => chainApp(transform(b) :: (args map transform))
   case cps.Expr.Box(b) => transform(b)
   case cps.Expr.Run(t) => transform(t)
-  case cps.Expr.BlockLit(params, body) => transform(cps.Expr.BlockLit(params, body))
+  case cps.Expr.BlockLit(params, body) => println(expr); transform(cps.Expr.BlockLit(params, body))//
   case cps.Expr.Make(data, tag, vargs) => App(Auto, idToVar(data), chainApp(vargs map transform)) //constructor App
   case cps.Expr.Select(target, field) => ???
 }

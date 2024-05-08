@@ -25,12 +25,12 @@ object Transformer extends Phase[PhaseResult.CoreLifted, PhaseResult.CpsTransfor
     Some(CpsTransformed(input.source, input.tree, input.mod, input.core, transformed))
 }
 
-def transform(core: lifted.ModuleDecl): ModuleDecl = {println(core)
+def transform(core: lifted.ModuleDecl): ModuleDecl = {
   ModuleDecl(core.path, core.includes, core.decls map transform, core.externs map transform, core.definitions map transform, core.exports)
 }
 def transform(decl: lifted.Declaration): Declaration = decl match {
   case lifted.Declaration.Data(id, tparams, constructors) => Declaration.Data(id, constructors map transform)
-  case lifted.Declaration.Interface(id, tparams, properties) =>println(decl); Declaration.Interface(id, properties map transform)
+  case lifted.Declaration.Interface(id, tparams, properties) => Declaration.Interface(id, properties map transform)
 }
 
 def transform(extern: lifted.Extern): Extern = extern match {
@@ -77,7 +77,8 @@ def transform(b: lifted.Block): Expr = b match { // block => Term
   case lifted.Block.BlockLit(tparams, params, body) => BlockLit(params map transform, transform(body)) // Fun
   case lifted.Block.Member(b, field, annotatedType) => Var(field)
   case lifted.Block.Unbox(e) => transform(e) 
-  case lifted.Block.New(impl) => Var(impl.interface.name)// add operations to definitions
+  case lifted.Block.New(impl) => Var(impl.interface.name)//BlockLit(List(impl.interface.name), Scope(impl.operations map transform, ))
+  //case _ => ???
 }
 
 def transform(blockLit: lifted.BlockLit): BlockLit = blockLit match {
@@ -119,8 +120,9 @@ def transform(definitions: List[lifted.Definition], rest: Term): Term = definiti
 }
 
 def transform(constructor: lifted.Constructor): Constructor = Constructor(constructor.id, constructor.fields map transform)
-def transform(property: lifted.Property): Id = property match {
-  case lifted.Property(id, tpe) => id
+def transform(property: lifted.Property): Property = property match {
+  case lifted.Property(id, lifted.BlockType.Interface(name, targs)) => Property(name, targs map transform)
+  case lifted.Property(id, lifted.BlockType.Function(_, eparams, vparams, _, result)) => Property(id, vparams map transform)
 }
 def transform(field: lifted.Field): Id = field match {
   case lifted.Field(id, tpe) => id
