@@ -2,15 +2,15 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{ MatchGuard, MatchPattern }
-import effekt.symbols.Binder.{ RegBinder, VarBinder }
+import effekt.source.{MatchGuard, MatchPattern, ResolveExternDefs}
+import effekt.symbols.Binder.{RegBinder, VarBinder}
 import effekt.typer.Substitutions
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -27,6 +27,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Some(CoreTransformed(source, tree, mod, transformed))
     }
 
+  enum CallingConvention {
+    case Pure, Direct, Control
+  }
+  def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
+    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies) =>
+      // resolve the preferred body again and hope it's the same
+      val body = ResolveExternDefs.findPreferred(bodies)
+      body match {
+        case b: source.ExternBody.EffektExternBody => CallingConvention.Control
+        case _ if f.capture.pure => CallingConvention.Pure
+        case _ if f.capture.pureOrIO => CallingConvention.Direct
+        case _ => CallingConvention.Control
+      }
+    case _ => CallingConvention.Control
+  }
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs) = tree
@@ -87,7 +102,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
           val capabilities = effects.canonical
           val tparams = tps.drop(tparamsInterface.size)
-          val bparamsBlocks = bps.map(b => transform(b.tpe))
+          val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
+            INTERNAL_ERROR("Interface declarations should have annotated types.")
+          }))
           val bparamsCapabilities = capabilities.map(transform)
           //val bparams = bparamsBlocks ++ bparamsCapabilities
           val bparams = bparamsCapabilities
@@ -99,19 +116,26 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           core.Property(op, btpe)
       }))
 
-    case f @ source.ExternDef(pure, id, _, vps, bps, _, body) =>
+    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
-      val args = body.args.map(transformAsExpr).map {
-        case p: Pure => p: Pure
-        case _ => Context.abort("Spliced arguments need to be pure expressions.")
+      val tBody = bodies match {
+        case source.ExternBody.StringExternBody(ff, body) :: Nil =>
+          val args = body.args.map(transformAsExpr).map {
+            case p: Pure => p: Pure
+            case _ => Context.abort("Spliced arguments need to be pure expressions.")
+          }
+          ExternBody.StringExternBody(ff, Template(body.strings, args))
+        case source.ExternBody.Unsupported(err) :: Nil =>
+          ExternBody.Unsupported(err)
+        case _ =>
+          Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt),
-        Template(body.strings, args)))
+      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBody))
 
-    case e @ source.ExternInclude(path, contents, _) =>
-      List(Extern.Include(contents.get))
+    case e @ source.ExternInclude(ff, path, contents, _) =>
+      List(Extern.Include(ff, contents.get))
 
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
@@ -288,8 +312,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
             case cns: Constructor => etaExpandConstructor(cns)
-            case f: ExternFunction if f.capture.pure => etaExpandPure(f)
-            case f: ExternFunction if f.capture.pureOrIO => etaExpandDirect(f)
+            case f: ExternFunction if callingConvention(f) == CallingConvention.Pure => etaExpandPure(f)
+            case f: ExternFunction if callingConvention(f) == CallingConvention.Direct => etaExpandDirect(f)
             // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
@@ -613,8 +637,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
         val cparams = bparams.map(b => b.capture) ++ effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
-        val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.get))
-        val bparamTpes = bparams.map(b => substitution.substitute(b.tpe))
+        val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.getOrElse {
+          INTERNAL_ERROR("Operation value parameters should have an annotated type.")
+        }))
+        val bparamTpes = bparams.map(b => substitution.substitute(b.tpe.getOrElse {
+          INTERNAL_ERROR("Operation block parameters should have an annotated type.")
+        }))
 
         FunctionType(remainingTypeParams, cparams, vparamTpes, bparamTpes, substitution.substitute(resultType), substitution.substitute(effects))
     }
@@ -632,9 +660,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val bargsT = bargs.map(transformAsBlock)
 
     sym match {
-      case f: ExternFunction if f.capture.pure =>
+      case f: Callable if callingConvention(f) == CallingConvention.Pure =>
         PureApp(BlockVar(f), targs, vargsT)
-      case f: ExternFunction if f.capture.pureOrIO =>
+      case f: Callable if callingConvention(f) == CallingConvention.Direct =>
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")

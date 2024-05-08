@@ -1,0 +1,33 @@
+interface Foo[A, B] {
+  def bar(x: A): B
+}
+
+interface Exc[E] {
+  def raise(e: E): Nothing
+}
+
+def idFoo[A, R](){ prog: {Foo[A,A]} => R }: R = {
+  def foo = new Foo[A,A] {
+    def bar(x) = x
+  }
+  prog(){foo}
+}
+
+def failing(): Unit / Exc[Int] = {
+  do raise(42)
+}
+
+def report(){ prog: => Unit / Exc[Int] }: Unit = try {
+  prog(); ()
+} with Exc[Int] {
+  def raise(x) = {
+    println(x)
+  } 
+}
+
+def main() = { 
+  println(idFoo[Int, Int]{ {foo: Foo[Int, Int]} => foo.bar(12) }) 
+  report{
+    failing()
+  }
+}

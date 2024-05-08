@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef, RegDef }
+import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -111,7 +111,7 @@ sealed trait TrackedParam extends Param, BlockSymbol {
   }
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType]) extends TrackedParam
   case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
   case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
 
@@ -133,7 +133,8 @@ trait Callable extends BlockSymbol {
     val tps = tparams
     val vps = vparams.map { p => p.tpe.get }
     val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
-    FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
+    val bps_ = bps.collect { case Some(bp) => bp }
+    FunctionType(tps, bcapt ++ capabilityParams, vps, bps_, ret, effects)
 
   def annotatedType: Option[FunctionType] =
     for {
@@ -402,7 +403,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  body: Template[source.Term]
+  bodies: List[source.ExternBody]
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)

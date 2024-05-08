@@ -7,15 +7,15 @@ import immutable/option
 extern type Map[K, V]
 
 extern pure def emptyMap[K, V](): Map[K, V] =
-  "new Map()"
+  js "new Map()"
 
 def get[K, V](m: Map[K, V], key: K): Option[V] =
   m.unsafeGet(key).undefinedToOption
 
 extern pure def unsafeGet[K, V](m: Map[K, V], key: K): V =
-  "${m}.get(${key})"
+  js "${m}.get(${key})"
 
-extern """
+extern js """
 function map$update(m, key, value) {
   m.set(key, value);
   return $effekt.unit
@@ -23,10 +23,10 @@ function map$update(m, key, value) {
 """
 
 extern io def update[K, V](m: Map[K, V], key: K, value: V): Unit =
-  "map$update(${m}, ${key}, ${value})"
+  js "map$update(${m}, ${key}, ${value})"
 
 extern pure def values[K, V](map: Map[K, V]): Array[V] =
-  "Array.from(${map}.values())"
+  js "Array.from(${map}.values())"
 
 extern pure def keys[K, V](map: Map[K, V]): Array[K] =
-  "Array.from(${map}.keys())"
+  js "Array.from(${map}.keys())"

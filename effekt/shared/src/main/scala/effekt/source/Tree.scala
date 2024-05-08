@@ -86,6 +86,56 @@ case object NoSource extends Tree
 case class Comment() extends Tree
 
 /**
+ * Used to mark externs for different backends
+ */
+enum FeatureFlag extends Tree {
+  case NamedFeatureFlag(id: String)
+  case Default
+
+  def matches(name: String, matchDefault: Boolean = true): Boolean = this match {
+    case NamedFeatureFlag(n) if n == name => true
+    case Default => matchDefault
+    case _ => false
+  }
+  def isDefault: Boolean = this == Default
+
+  def matches(names: List[String]): Boolean = this match {
+    case NamedFeatureFlag(n) if names.contains(n) => true
+    case Default => true
+    case _ => false
+  }
+
+  override def toString: String = this match {
+    case FeatureFlag.NamedFeatureFlag(id) => id
+    case FeatureFlag.Default => "else"
+  }
+}
+object FeatureFlag {
+  extension (self: List[ExternBody]) {
+    def supportedByFeatureFlags(names: List[String]): Boolean = names match {
+      case Nil => false
+      case name :: other =>
+        self.collectFirst {
+          case ExternBody.StringExternBody(flag, a) if flag.matches(name) => ()
+          case ExternBody.EffektExternBody(flag, a) if flag.matches(name) => ()
+        }.isDefined || (self.supportedByFeatureFlags(other))
+    }
+  }
+}
+
+sealed trait ExternBody extends Tree {
+  def featureFlag: FeatureFlag
+}
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
+  case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
+  case class Unsupported(message: util.messages.EffektError) extends ExternBody {
+    override def featureFlag: FeatureFlag = FeatureFlag.Default
+  }
+}
+
+
+/**
  * We distinguish between identifiers corresponding to
  * - binding sites (IdDef)
  * - use site (IdRef)
@@ -139,7 +189,7 @@ case class Include(path: String) extends Tree
  */
 enum Param extends Definition {
   case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: BlockType)
+  case BlockParam(id: IdDef, tpe: Option[BlockType])
 }
 export Param.*
 
@@ -197,7 +247,9 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: Template[Term]) extends Def
+  case ExternDef(capture: CaptureSet, id: IdDef,
+                 tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
+                 bodies: List[ExternBody]) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -209,7 +261,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -219,8 +271,6 @@ object Def {
   type Local = FunDef | ValDef | DefDef | Alias | VarDef
 }
 export Def.*
-
-
 
 
 /**
@@ -661,6 +711,7 @@ object Tree {
     def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
     def rewrite(c: MatchGuard)(using Context): MatchGuard = structuralVisit(c)
     def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
+    def rewrite(b: ExternBody)(using Context): source.ExternBody = structuralVisit(b)
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -723,6 +774,7 @@ object Tree {
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
+    def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)
 
     def query(t: Template[Term])(using Context, Ctx): Res =
       combineAll(t.args.map(query))

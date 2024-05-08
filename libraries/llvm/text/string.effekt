@@ -3,12 +3,12 @@ module text/string
 import immutable/option
 import immutable/list
 
-extern pure def length(s: String): Int = """
+extern pure def length(s: String): Int = llvm """
    %x = call %Int @c_buffer_length(%Pos %s)
    call void @c_buffer_refcount_decrement(%Pos %s)
    ret %Int %x
 """
-extern pure def substring(s: String, start: Int, end: Int): String = """
+extern pure def substring(s: String, start: Int, end: Int): String = llvm """
    %x = call %Pos @c_buffer_substring(%Pos %s, i64 %start, i64 %end)
    call void @c_buffer_refcount_decrement(%Pos %s)
    ret %Pos %x
@@ -125,7 +125,7 @@ def toBool(s: String): Option[Bool] = {
 type Bytes = String
 def bytes(s: String): Bytes = s
 // length(Bytes) = length(String)
-extern pure def unsafeIndex(s: Bytes, i: Int): Int = """
+extern pure def unsafeIndex(s: Bytes, i: Int): Int = llvm """
    %x = call %Int @c_buffer_index(%Pos %s, i64 %i)
    call void @c_buffer_refcount_decrement(%Pos %s)
    ret %Int %x

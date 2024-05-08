@@ -1,8 +1,10 @@
 package effekt
 package core
 
+import effekt.source.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.messages.ErrorReporter
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -125,10 +127,16 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: Template[Pure])
-  case Include(contents: String)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Include(featureFlag: FeatureFlag, contents: String)
 }
-
+sealed trait ExternBody extends Tree
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+    def report(using E: ErrorReporter): Unit = E.report(err)
+  }
+}
 
 enum Definition extends Tree {
   def id: Id
@@ -499,6 +507,7 @@ object Tree {
     def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
     def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
     def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
+    def externBody(using Ctx): PartialFunction[ExternBody, Res] = PartialFunction.empty
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -520,6 +529,7 @@ object Tree {
       if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
         case (id, lit) => query(lit)
     }
+    def query(b: ExternBody)(using Ctx): Res = structuralQuery(b, externBody)
   }
 
   class Rewrite extends Structural {
@@ -543,6 +553,7 @@ object Tree {
     def rewrite(p: Param): Param = rewriteStructurally(p, param)
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(b: ExternBody): ExternBody= rewrite(b)
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
     def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)

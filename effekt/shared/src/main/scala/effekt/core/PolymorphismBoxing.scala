@@ -125,8 +125,11 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(extern: Extern)(using PContext): Extern = extern match {
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
       Extern.Def(id, tparams, cparams, vparams map transform, bparams map transform, transform(ret),
-        annotatedCapture, Template(body.strings, body.args map transform))
-    case Extern.Include(contents) => Extern.Include(contents)
+        annotatedCapture, body match {
+          case ExternBody.StringExternBody(ff, bbody) => ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args map transform))
+          case e @ ExternBody.Unsupported(_) => e
+        } )
+    case Extern.Include(ff, contents) => Extern.Include(ff, contents)
   }
 
   def transform(valueParam: Param.ValueParam)(using PContext): Param.ValueParam = valueParam match {
@@ -404,6 +407,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         }
 
       }
+    case (BlockType.Interface(n1,targs), BlockType.Interface(n2,_)) =>
+      FunctionIdentityCoercer(fromtpe, totpe, targs)
     case _ => Context.abort(s"Unsupported coercion from ${PrettyPrinter.format(fromtpe)} to ${PrettyPrinter.format(totpe)}")
   }
 

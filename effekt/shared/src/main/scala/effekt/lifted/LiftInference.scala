@@ -108,9 +108,15 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
       }
       Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
-        Template(body.strings, body.args.map(transform)))
-    case core.Extern.Include(contents) =>
-      Extern.Include(contents)
+        body match {
+          case core.ExternBody.StringExternBody(ff, bbody) =>
+            ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
+          case core.ExternBody.Unsupported(err) =>
+            import effekt.source.FeatureFlag.Default
+            ExternBody.Unsupported(err)
+        })
+    case core.Extern.Include(ff, contents) =>
+      Extern.Include(ff, contents)
   }
 
   def transform(p: core.Param.ValueParam): lifted.Param.ValueParam = p match {

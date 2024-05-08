@@ -1,6 +1,8 @@
 package effekt
 package machine
 
+import effekt.source.FeatureFlag
+
 /**
  * Variables stand for values
  */
@@ -45,11 +47,18 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, body: Template[Variable])
-  case Include(contents: String)
+  case Extern(name: String, parameters: Environment, returnType: Type, body: ExternBody)
+  case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*
 
+sealed trait ExternBody
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Variable]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+    def report(using E: util.messages.ErrorReporter): Unit = E.report(err)
+  }
+}
 
 /**
  * Clauses are parametrized statements

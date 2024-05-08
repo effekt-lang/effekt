@@ -6,6 +6,7 @@ import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
 import effekt.util.paths.*
+import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
 import util.messages.{ INTERNAL_ERROR, NOT_SUPPORTED }
 
@@ -50,14 +51,14 @@ trait Transformer {
   def state(id: ChezName, init: chez.Expr, body: chez.Block): chez.Expr =
     Builtin("state", init, chez.Lambda(List(id), body))
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 
-  def toChez(module: ModuleDecl): List[chez.Def] = {
+  def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.declarations.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
@@ -131,13 +132,19 @@ trait Transformer {
       generateConstructor(id, operations.map(op => op.id))
   }
 
-  def toChez(decl: core.Extern): chez.Def = decl match {
+  def toChez(decl: core.Extern)(using ErrorReporter): chez.Def = decl match {
     case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+      val tBody = body match {
+        case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          chez.Builtin("hole")
+      }
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
-          toChez(body)))
+          tBody))
 
-    case Extern.Include(contents) =>
+    case Extern.Include(ff, contents) =>
       RawDef(contents)
   }
 

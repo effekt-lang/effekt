@@ -47,8 +47,8 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     val code =
       """module main
         |
-        |extern {} def bar() {f@f: MyInterface}: Foo at {f} = "my decl"
-        |extern {} def bar() {g: MyInterface}: Foo at {g} = "my decl"
+        |extern {} def bar() {f@f: MyInterface}: Foo at {f} = default "my decl"
+        |extern {} def bar() {g: MyInterface}: Foo at {g} = default "my decl"
         |
         |def prim = { () => return 42 }
         |def union = { () => if (true) (f: () => Int @ {f})() else (g: () => Unit @ {g})() }
