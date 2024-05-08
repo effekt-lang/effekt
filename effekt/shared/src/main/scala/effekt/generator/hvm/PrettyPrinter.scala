@@ -97,8 +97,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   //helper function to pretty print Definition
-  def toDoc(rule: Rule, name: String) : Doc =
-    parens(string(name)<+>hsep(rule.pats map toDoc))<+>string("=")<+>toDoc(rule.body)
+  def toDoc(rule: Rule, name: String) : Doc = rule match {
+    case Rule(Nil, body) => parens(string(name))<+>string("=")<+>toDoc(body)
+    case Rule(pats, body) => parens(string(name)<+>hsep(pats map toDoc))<+>string("=")<+>toDoc(body)
+  }
+    
 
 
   def toDoc(definition: Definition) : Doc =
