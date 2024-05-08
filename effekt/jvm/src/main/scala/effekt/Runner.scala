@@ -171,7 +171,7 @@ object LLVMRunner extends Runner[String] {
 
   val extension = "ll"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "llvm"
+  def standardLibraryPath(root: File): File = root / "libraries" / "llvm2"
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
   lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
