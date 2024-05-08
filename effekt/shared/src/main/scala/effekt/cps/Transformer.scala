@@ -34,9 +34,10 @@ def transform(decl: lifted.Declaration): Declaration = decl match {
 }
 
 def transform(extern: lifted.Extern): Extern = extern match {
-  case lifted.Extern.Def(id, tparams, params, ret, body) =>
+  case lifted.Extern.Def(id, tparams, params, ret, lifted.ExternBody.StringExternBody(_, body)) =>
     Extern.Def(id, params map transform, Template(body.strings, body.args map transform))
-  case lifted.Extern.Include(contents) => Extern.Include(contents)
+  case lifted.Extern.Include(_, contents) => Extern.Include(contents)
+  case _ => Extern.Def(Id(""), List(), Template(List(), List()))
 }
 
 def transform(definition: lifted.Definition): Definition = definition match {
