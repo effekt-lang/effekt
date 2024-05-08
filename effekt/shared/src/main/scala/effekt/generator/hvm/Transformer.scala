@@ -28,7 +28,7 @@ def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): Mutable
 
 def transform(decl: cps.Extern): Verbatim = decl match {
   case cps.Extern.Def(id, params, body) =>
-    Verbatim.Def(id.name.name, params map idToPattern, transform(body))//let tmp für jedes body.args
+    Verbatim.Def(id.name.name, params map idToPattern, transform(body))
   case cps.Extern.Include(contents) => Verbatim.Include(contents)
 }
 
@@ -42,7 +42,6 @@ def transform(definition: cps.Definition): Definition = definition match {
     Definition(name.name.name, List(Rule((params map idToPattern) :+ VarPattern(Some(cont.name.name)), transform(body))), false)
   case cps.Definition.Let(id, expr) => Definition(id.name.name, List(Rule(List(VarPattern(Some(id.name.name))), transform(expr))), false)
 }
- 
 
 def transform(term: cps.Term): Term = term match {
   case cps.Term.AppCont(id, arg) => App(Auto, idToVar(id), transform(arg))
@@ -53,7 +52,7 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Match(scrutinee, clauses, None) => Mat(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((_, blockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
-  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(name.name.name), transform(body)), transform(rest))
+  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest))
   case cps.Term.Val(id, binding, body) => Let(idToPattern(id), transform(binding), transform(body)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
 }
@@ -77,7 +76,7 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Box(b) => transform(b)
   case cps.Expr.Run(t) => transform(t)
   case cps.Expr.BlockLit(params, body) => transform(cps.Expr.BlockLit(params, body))
-  case cps.Expr.Make(data, tag, vargs) => ???
+  case cps.Expr.Make(data, tag, vargs) => App(Auto, idToVar(data), chainApp(vargs map transform)) //constructor App
   case cps.Expr.Select(target, field) => ???
 }
 
