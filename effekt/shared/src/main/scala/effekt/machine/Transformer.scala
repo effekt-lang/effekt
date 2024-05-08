@@ -242,14 +242,16 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val prompt = Variable(freshName("p"), builtins.Evidence)
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
-            PushStack(delimiter,
-              (ids zip handlers).foldRight(transform(body)){
-                case ((id, handler), body) =>
-                  New(transform(id), transform(handler), body)
-              })))
+          FreshPrompt(prompt,
+            NewStack(delimiter, prompt, returnClause,
+              PushStack(delimiter,
+                (ids zip handlers).foldRight(transform(body)){
+                  case ((id, handler), body) =>
+                    New(transform(id), transform(handler, prompt), body)
+                }))))
 
       // TODO what about the evidence passed to resume?
       case lifted.Shift(ev, lifted.Block.BlockLit(tparams, List(kparam), body)) =>
@@ -263,10 +265,12 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val prompt = Variable(freshName("p"), builtins.Evidence)
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
-            PushStack(delimiter, transform(body))))
+          FreshPrompt(prompt,
+            NewStack(delimiter, prompt, returnClause,
+              PushStack(delimiter, transform(body)))))
 
       case lifted.Alloc(id, init, region, ev, body) =>
         transform(init).run { value =>
@@ -471,13 +475,23 @@ object Transformer {
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
+  def transform(handler: lifted.Implementation, prompt: Variable)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
     handler.operations.sortBy {
       case lifted.Operation(operationName, _) =>
         DeclarationContext.getInterface(handler.interface.name).properties.indexWhere(_.id == operationName)
-    }.map(transform)
+    }.map(op => transform(op, prompt))
 
-  def transform(op: lifted.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause = op match {
+  def transform(op: lifted.Operation, prompt: Variable)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause = op match {
+    // Since at the moment shift is evidence and not prompt based, here we inline the implementation of shift
+    case lifted.Operation(name, lifted.BlockLit(tparams, params, lifted.Shift(ev, lifted.Block.BlockLit(tparams2, List(kparam), body)))) =>
+      noteResumption(kparam.id)
+
+      Clause(params.map(transform),
+        PopStacksPrompt(Variable(transform(kparam).name, Type.Stack()), prompt,
+          transform(body)))
+
+    // fall back to evidence based solution, this makes it easier to comment out the above line and check whether the evidence
+    // version still works.
     case lifted.Operation(name, lifted.BlockLit(tparams, params, body)) =>
       Clause(params.map(transform), transform(body))
   }

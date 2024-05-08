@@ -98,6 +98,16 @@
 @region = private global %Region zeroinitializer
 @rest = private global %Stk undef
 
+; fresh prompt generation
+@lastPrompt = private global %Prompt 0
+
+define %Prompt @freshPrompt() {
+entry:
+    %current_val = load %Prompt, %Prompt* @lastPrompt
+    %new_val = add %Prompt %current_val, 1
+    store %Prompt %new_val, %Prompt* @lastPrompt
+    ret %Prompt %new_val
+}
 
 define %StkVal @getStk(%Sp %sp) alwaysinline {
     %base   = load %Base, ptr @base
@@ -326,7 +336,7 @@ define %Mem @newMem() alwaysinline {
     ret %Mem %mem.2
 }
 
-define %Stk @newStack() alwaysinline {
+define %Stk @newStack(%Prompt %prompt) alwaysinline {
 
     ; TODO find actual size of stack
     %stk = call ptr @malloc(i64 120)
@@ -338,8 +348,7 @@ define %Stk @newStack() alwaysinline {
     %stk.1 = insertvalue %StkVal %stk.0, %Mem %stackmem, 1
     %stk.2 = insertvalue %StkVal %stk.1, %Region zeroinitializer, 2
 
-    ; TODO newStack should take the prompt as argument; for now we just use 0
-    %stk.3 = insertvalue %StkVal %stk.2, %Prompt 0, 3
+    %stk.3 = insertvalue %StkVal %stk.2, %Prompt %prompt, 3
     %stk.4 = insertvalue %StkVal %stk.3, %Stk %stk, 4
 
     store %StkVal %stk.4, %Stk %stk
@@ -399,10 +408,9 @@ loop:
     %stkval = phi %StkVal [%oldstk, %entry], [%newstk, %loop]
     %p = phi i64 [%prompt, %entry], [%current_prompt, %loop]
 
-    %current_prompt = extractvalue %StkVal %stkval, 3
     %newstkp = extractvalue %StkVal %stkval, 4
     %newstk = load %StkVal, %Stk %newstkp
-
+    %current_prompt = extractvalue %StkVal %stkval, 3
 
     %prompt_match = icmp eq %Prompt %current_prompt, %prompt
     br i1 %prompt_match, label %done, label %loop
