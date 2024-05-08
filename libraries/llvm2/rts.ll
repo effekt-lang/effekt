@@ -54,6 +54,7 @@
 %FrameHeader = type { %RetAdr, %Sharer, %Eraser }
 
 ; Pointers for a heap allocated stack
+; Size: 8 + 8 + 8 = 24
 %Mem = type { %Sp, %Base, %Limit }
 
 ; The garbage collector differentiates three groups of types:
@@ -62,15 +63,21 @@
 ; - Strings
 ; For each group we have an arena where mutable state is allocated.
 ;
+; Size: 3 * 24 = 72
 %Region = type [ 3 x %Mem ]
+
+; Unique tags to index into the stack.
+%Prompt = type i64
 
 ; The "meta" stack (a stack of stacks)
 %Stk = type ptr
 
 ; This is used for two purposes:
-;   - a refied first-class list of stacks (cyclic linked-list)
+;   - a refied first-class list of stacks (cyclic linked-list)       TODO why cyclic?
 ;   - as part of an intrusive linked-list of stacks (meta stack)
-%StkVal = type { %Rc, %Mem, %Region, %Stk }
+;
+; Size: 8 + 24 + 72 + 8 + 8 = 120
+%StkVal = type { %Rc, %Mem, %Region, %Prompt, %Stk }
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Obj}
@@ -86,36 +93,41 @@
 ; Global locations
 
 @base = private global %Base null
+@prompt = private global %Prompt 0
 @limit = private global %Limit null
 @region = private global %Region zeroinitializer
 @rest = private global %Stk undef
 
 
 define %StkVal @getStk(%Sp %sp) alwaysinline {
-    %base = load %Base, ptr @base
-    %limit = load %Limit, ptr @limit
+    %base   = load %Base, ptr @base
+    %limit  = load %Limit, ptr @limit
     %region = load %Region, ptr @region
-    %rest = load %Stk, ptr @rest
+    %prompt = load %Prompt, ptr @prompt
+    %rest   = load %Stk, ptr @rest
 
     %stk.0 = insertvalue %StkVal undef, %Rc 0, 0
     %stk.1 = insertvalue %StkVal %stk.0, %Sp %sp, 1, 0
     %stk.2 = insertvalue %StkVal %stk.1, %Base %base, 1, 1
     %stk.3 = insertvalue %StkVal %stk.2, %Limit %limit, 1, 2
     %stk.4 = insertvalue %StkVal %stk.3, %Region %region, 2
-    %stk.5 = insertvalue %StkVal %stk.4, %Stk %rest, 3
+    %stk.5 = insertvalue %StkVal %stk.4, %Prompt %prompt, 3
+    %stk.6 = insertvalue %StkVal %stk.5, %Stk %rest, 4
 
-    ret %StkVal %stk.5
+    ret %StkVal %stk.6
 }
 
 define void @setStk(%StkVal %stk) alwaysinline {
-    %base = extractvalue %StkVal %stk, 1, 1
-    %limit = extractvalue %StkVal %stk, 1, 2
+    %base   = extractvalue %StkVal %stk, 1, 1
+    %limit  = extractvalue %StkVal %stk, 1, 2
     %region = extractvalue %StkVal %stk, 2
-    %rest = extractvalue %StkVal %stk, 3
+    %prompt = extractvalue %StkVal %stk, 3
+    %rest   = extractvalue %StkVal %stk, 4
 
     store %Base %base, ptr @base
     store %Limit %limit, ptr @limit
     store %Region %region, ptr @region
+    store %Prompt %prompt, ptr @prompt
     store %Stk %rest, ptr @rest
     ret void
 }
@@ -317,7 +329,7 @@ define %Mem @newMem() alwaysinline {
 define %Stk @newStack() alwaysinline {
 
     ; TODO find actual size of stack
-    %stk = call ptr @malloc(i64 112)
+    %stk = call ptr @malloc(i64 120)
 
     ; TODO initialize to zero and grow later
     %stackmem = call %Mem @newMem()
@@ -325,9 +337,12 @@ define %Stk @newStack() alwaysinline {
     %stk.0 = insertvalue %StkVal undef, %Rc 0, 0
     %stk.1 = insertvalue %StkVal %stk.0, %Mem %stackmem, 1
     %stk.2 = insertvalue %StkVal %stk.1, %Region zeroinitializer, 2
-    %stk.3 = insertvalue %StkVal %stk.2, %Stk %stk, 3
 
-    store %StkVal %stk.3, %Stk %stk
+    ; TODO newStack should take the prompt as argument; for now we just use 0
+    %stk.3 = insertvalue %StkVal %stk.2, %Prompt 0, 3
+    %stk.4 = insertvalue %StkVal %stk.3, %Stk %stk, 4
+
+    store %StkVal %stk.4, %Stk %stk
 
     ret %Stk %stk
 }
@@ -355,7 +370,7 @@ loop:
     %stkval = phi %StkVal [%oldstk, %entry], [%newstk, %loop]
     %i = phi i64 [%n, %entry], [%nexti, %loop]
 
-    %newstkp = extractvalue %StkVal %stkval, 3
+    %newstkp = extractvalue %StkVal %stkval, 4
     %newstk = load %StkVal, %Stk %newstkp
 
     %nexti = sub i64 %i, 1
@@ -485,25 +500,28 @@ copy:
     %newoldrc = sub %Rc %rc, 1
     store %Rc %newoldrc, ptr %stkrc
 
-    %newhead = call ptr @malloc(i64 112)
+    %newhead = call ptr @malloc(i64 120)
     br label %loop
 
 loop:
     %old = phi %Stk [%stk, %copy], [%rest, %next]
     %newstk = phi %Stk [%newhead, %copy], [%nextnew, %next]
 
-    %stkmem = getelementptr %StkVal, %Stk %old, i64 0, i32 1
+    %stkmem    = getelementptr %StkVal, %Stk %old, i64 0, i32 1
     %stkregion = getelementptr %StkVal, %Stk %old, i64 0, i32 2
-    %stkrest = getelementptr %StkVal, %Stk %old, i64 0, i32 3
+    %stkprompt = getelementptr %StkVal, %Stk %old, i64 0, i32 3
+    %stkrest   = getelementptr %StkVal, %Stk %old, i64 0, i32 4
 
-    %mem = load %Mem, ptr %stkmem
+    %mem    = load %Mem, ptr %stkmem
     %region = load %Region, ptr %stkregion
-    %rest = load %Stk, ptr %stkrest
+    %prompt = load %Prompt, ptr %stkprompt
+    %rest   = load %Stk, ptr %stkrest
 
-    %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
-    %newstkmem = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1
+    %newstkrc     = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
+    %newstkmem    = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1
     %newstkregion = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2
-    %newstkrest = getelementptr %StkVal, %Stk %newstk, i64 0, i32 3
+    %newstkprompt = getelementptr %StkVal, %Stk %newstk, i64 0, i32 3
+    %newstkrest   = getelementptr %StkVal, %Stk %newstk, i64 0, i32 4
 
     %newmem = call %Mem @copyMem(%Mem %mem)
 
@@ -515,12 +533,13 @@ loop:
     store %Rc 0, ptr %newstkrc
     store %Mem %newmem, ptr %newstkmem
     store %Region %newregion, ptr %newstkregion
+    store %Prompt %prompt, ptr %newstkprompt
 
     %last = icmp eq %Stk %rest, %stk
     br i1 %last, label %closecycle, label %next
 
 next:
-    %nextnew = call ptr @malloc(i64 112)
+    %nextnew = call ptr @malloc(i64 120)
     store %Stk %nextnew, ptr %newstkrest
     br label %loop
 
