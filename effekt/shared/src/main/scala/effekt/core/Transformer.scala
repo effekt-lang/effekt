@@ -407,19 +407,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       Context.bind(loopName, Block.BlockLit(Nil, Nil, Nil, Nil, loopBody))
 
-      // TODO renable
-      //      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
-      //        Context.warning(pp"Condition to while loop is pure, which might not be intended.")
-      //      }
-
       Context.bind(loopCall)
+
+    // Empty match (matching on Nothing)
+    case source.Match(sc, Nil, None) =>
+      val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
+      Context.bind(core.Match(scrutinee, Nil, None))
 
     case source.Match(sc, cs, default) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
       val clauses = cs.map(c => preprocess(scrutinee, c))
       val defaultClause = default.map(stmt => preprocess(Nil, Nil, transform(stmt))).toList
-      val compiledMatch = Context.at(tree) { PatternMatchingCompiler.compile(clauses ++ defaultClause) }
+      val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause)
       Context.bind(compiledMatch)
 
     case source.TryHandle(prog, handlers) =>

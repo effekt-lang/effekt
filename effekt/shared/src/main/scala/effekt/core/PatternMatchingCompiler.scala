@@ -4,7 +4,6 @@ package core
 import effekt.context.Context
 import effekt.core.substitutions.Substitution
 import effekt.symbols.TmpValue
-import effekt.util.messages.ErrorReporter
 
 import scala.collection.mutable
 
@@ -84,8 +83,8 @@ object PatternMatchingCompiler {
    * - a sequence of clauses that represent alternatives (disjunction)
    * - each sequence contains a list of conditions that all have to match (conjunction).
    */
-  def compile(clauses: List[Clause])(using ErrorReporter): core.Stmt = {
-    // matching on void will result in this case
+  def compile(clauses: List[Clause]): core.Stmt = {
+    // This shouldn't be reachable anymore since we specialize matching on void before calling compile
     if (clauses.isEmpty) return core.Hole()
 
     // (0) normalize clauses
