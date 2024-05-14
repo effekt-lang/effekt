@@ -1,7 +1,4 @@
-package effekt
-
-import effekt.LexerError.{InvalidKeywordIdent, MalformedFloat}
-import effekt.TokenKind.EOF
+package effekt.lexer
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -52,9 +49,10 @@ enum TokenKind {
   case Error(err: LexerError)
   // symbols
   case `=`
-  case `==`
-  case `!=`
+  case `===`
+  case `!==`
   case `:`
+  case `::`
   case `@`
   case `${`
   case `{`
@@ -86,86 +84,86 @@ enum TokenKind {
   case `-`
   case `*`
   // keywords
-  case Let
-  case True
-  case False
-  case Val
-  case Var
-  case If
-  case Else
-  case While
-  case Type
-  case Effect
-  case Interface
-  case Try
-  case With
-  case Case
-  case Do
-  case Fun
-  case Resume
-  case Match
-  case Def
-  case Module
-  case Import
-  case Export
-  case Extern
-  case Include
-  case Record
-  case At
-  case In
-  case Box
-  case Unbox
-  case Return
-  case Region
-  case Resource
-  case New
-  case And
-  case Is
-  case Namespace
+  case `let`
+  case `true`
+  case `false`
+  case `val`
+  case `var`
+  case `if`
+  case `else`
+  case `while`
+  case `type`
+  case `effect`
+  case `interface`
+  case `try`
+  case `with`
+  case `case`
+  case `do`
+  case `fun`
+  case `resume`
+  case `match`
+  case `def`
+  case `module`
+  case `import`
+  case `export`
+  case `extern`
+  case `include`
+  case `record`
+  case `at`
+  case `in`
+  case `box`
+  case `unbox`
+  case `return`
+  case `region`
+  case `resource`
+  case `new`
+  case `and`
+  case `is`
+  case `namespace`
+  case `pure`
 }
 
 object Lexer {
   import TokenKind.*
 
   val keywords: immutable.HashMap[String, TokenKind] = immutable.HashMap(
-    "let" -> Let,
-    "true" -> True,
-    "false" -> False,
-    "val" -> Val,
-    "false" -> False,
-    "val" -> Val,
-    "var" -> Var,
-    "if" -> If,
-    "else" -> Else,
-    "while" -> While,
-    "type" -> Type,
-    "effect" -> Effect,
-    "interface" -> Interface,
-    "try" -> Try,
-    "with" -> With,
-    "case" -> Case,
-    "do" -> Do,
-    "fun" -> Fun,
-    "resume" -> Resume,
-    "match" -> Match,
-    "def" -> Def,
-    "module" -> Module,
-    "import" -> Import,
-    "export" -> Export,
-    "extern" -> Extern,
-    "include" -> Include,
-    "record" -> Record,
-    "at" -> At,
-    "in" -> In,
-    "box" -> Box,
-    "unbox" -> Unbox,
-    "return" -> Return,
-    "region" -> Region,
-    "resource" -> Resource,
-    "new" -> New,
-    "and" -> And,
-    "is" -> Is,
-    "namespace" -> Namespace,
+    "let" -> `let`,
+    "true" -> `true`,
+    "false" -> `false`,
+    "val" -> `val`,
+    "var" -> `var`,
+    "if" -> `if`,
+    "else" -> `else`,
+    "while" -> `while`,
+    "type" -> `type`,
+    "effect" -> `effect`,
+    "interface" -> `interface`,
+    "try" -> `try`,
+    "with" -> `with`,
+    "case" -> `case`,
+    "do" -> `do`,
+    "fun" -> `fun`,
+    "resume" -> `resume`,
+    "match" -> `match`,
+    "def" -> `def`,
+    "module" -> `module`,
+    "import" -> `import`,
+    "export" -> `export`,
+    "extern" -> `extern`,
+    "include" -> `include`,
+    "record" -> `record`,
+    "at" -> `at`,
+    "in" -> `in`,
+    "box" -> `box`,
+    "unbox" -> `unbox`,
+    "return" -> `return`,
+    "region" -> `region`,
+    "resource" -> `resource`,
+    "new" -> `new`,
+    "and" -> `and`,
+    "is" -> `is`,
+    "namespace" -> `namespace`,
+    "pure" -> `pure`
   )
 }
 
@@ -282,7 +280,7 @@ class Lexer(source: String) {
         case TokenKind.EOF =>
           eof = true
           // EOF has the position of one after the last character
-          tokens += Token(current + 1, current + 1, EOF)
+          tokens += Token(current + 1, current + 1, TokenKind.EOF)
         case TokenKind.Error(e) =>
           err = Some(e)
         case k =>
@@ -457,8 +455,9 @@ class Lexer(source: String) {
     c match {
       // --- symbols & pre- and infix operations ---
       case '=' if nextMatches(">") => `=>`
-      case '=' if nextMatches("=") => TokenKind.`==`
+      case '=' if nextMatches("=") => `===`
       case '=' => `=`
+      case ':' if nextMatches(":") => `::`
       case ':' => `:`
       case '@' => `@`
       case '<' if nextMatches("{") => `<{`
@@ -479,7 +478,7 @@ class Lexer(source: String) {
       case '/' if nextMatches("*") => matchMultilineComment()
       case '/' if nextMatches("/")  => matchComment()
       case '/' => `/`
-      case '!' if nextMatches("=") => TokenKind.`!=`
+      case '!' if nextMatches("=") => TokenKind.`!==`
       case '!' => `!`
       case '|' if nextMatches("|") => `||`
       case '|' => `|`
