@@ -1,10 +1,12 @@
 package effekt
 
 import effekt.context.Context
+import effekt.lexer.TokenKind.*
+import effekt.lexer
 import effekt.source.*
 import effekt.util.{SourceTask, VirtualSource}
 import effekt.util.messages.ParseError
-import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
+import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success, TokenInput}
 import kiama.util.{Position, Positions, Range, Source, StringSource}
 
 import scala.util.matching.Regex
@@ -30,7 +32,7 @@ object Parser extends Phase[Source, Parsed] {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
       //println(s"parsing ${source.name}")
-      Context.timed(phaseName, source.name) { parser.parse(source) }
+      Context.timed(phaseName, source.name) { parser.parse(???) }
   } map { tree => Parsed(source, tree) }
 }
 
@@ -39,14 +41,17 @@ object Parser extends Phase[Source, Parsed] {
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class EffektParsers(positions: Positions) extends EffektLexers(positions) {
+class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
-  def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
-    parseAll(program, source) match {
+  type Token = effekt.lexer.TokenKind
+  type P[Out] = PackratParser[Out]
+
+  def parse(source: List[effekt.lexer.Token])(implicit C: Context): Option[ModuleDecl] =
+    parseAll(program, TokenInput(source.map { case effekt.lexer.Token(_, _, tok) => tok }, source.map { case effekt.lexer.Token(s, e, _) => (s, e) }, 0, ???)) match {
       case Success(ast, _) =>
         Some(ast)
 
-      case res: NoSuccess =>
+      case res: NoSuccess[_] =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
         C.report(ParseError(res.message, Some(range)))
@@ -56,7 +61,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   /**
    * Names
    */
-  lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
+  lazy val idDef: P[IdDef] = accept("identifier") { case Ident(id) => IdDef(id) }
   lazy val idRef: P[IdRef] = identRef ^^ { path =>
     val ids = path.split("::").toList
     IdRef(ids.init, ids.last)
@@ -117,8 +122,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | typeAliasDef
     | effectAliasDef
     | namespaceDef
-    | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
-        failure(s"Only supported on the toplevel: ${kw} declaration.")
+    | (`extern` | `effect` | `interface` | `type` | `record`).into { kw =>
+        failure(s"Only supported on the toplevel: ${kw.toString()} declaration.")
       }
     | failure("Expected a definition")
     )
@@ -172,13 +177,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   lazy val externBody: P[Template[Term]] =
-    ( multilineString ^^ { s => Template(List(s), Nil) }
+    ( accept("multiline string") { case Str(s) => Template(List(s), Nil) }
     | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
   lazy val externCapture: P[CaptureSet] =
-    ( "pure" ^^^ CaptureSet(Nil)
+    ( `pure` ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
     | success(CaptureSet(List(IdRef(List("effekt"), "io"))))
@@ -326,7 +331,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val valDef: P[Def] =
-     `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
+    `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
 
   lazy val varDef: P[Def] =
     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`in` ~/> idRef).? ~ (`=` ~/> stmt) ^^ {
@@ -375,12 +380,12 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Expressions
    */
   lazy val expr:    P[Term] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
-  lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
-  lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
-  lazy val eqExpr:  P[Term] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
-  lazy val relExpr: P[Term] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
-  lazy val addExpr: P[Term] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Term] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
+  lazy val orExpr:  P[Term] = orExpr  ~ `||` ~/ andExpr ^^ binaryOp | andExpr
+  lazy val andExpr: P[Term] = andExpr ~ `&&` ~/ eqExpr ^^ binaryOp | eqExpr
+  lazy val eqExpr:  P[Term] = eqExpr  ~ oneof(`===`, `!==`) ~/ relExpr ^^ binaryOp | relExpr
+  lazy val relExpr: P[Term] = relExpr ~ oneof(`<=`, `>=`, `<`, `>`) ~/ addExpr ^^ binaryOp | addExpr
+  lazy val addExpr: P[Term] = addExpr ~ oneof(`++`, `+`, `-`) ~/ mulExpr ^^ binaryOp | mulExpr
+  lazy val mulExpr: P[Term] = mulExpr ~ oneof(`*`, `/`) ~/ accessExpr ^^ binaryOp | accessExpr
 
   lazy val accessExpr: P[Term] =
     callExpr ~ many(`.` ~>
@@ -517,18 +522,14 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | `<{` ~> stmts <~ `}>` ^^ Hole.apply
     )
 
-  lazy val literals: P[Literal] =
+  lazy val literals =
     double | int | bool | unit | string
 
-  lazy val int    = integerLiteral.flatMap { n =>
-    try { val number = n.toLong;
-      success(IntLit(number).withPositionOf(n))
-    } catch { case e => failure("Not a 64bit integer literal.") }
-  }
-  lazy val bool   = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
-  lazy val unit   = literal("()") ^^^ UnitLit()
-  lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
-  lazy val string = stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1)) }
+  lazy val int = accept("integer") { case Integer(n) => IntLit(n) }
+  lazy val bool = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
+  lazy val unit = (`(` ~ `)`) ^^^ UnitLit()
+  lazy val double = accept("double") { case Float(d) => DoubleLit(d) }
+  lazy val string = accept("string") { case Str(s) => StringLit(s) }
 
   lazy val boxedExpr: P[Term] =
     `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
@@ -611,23 +612,23 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   // === AST Helpers ===
 
-  private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
+  private def binaryOp(lhs: Term, op: Token, rhs: Term): Term =
      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
-  private def opName(op: String): String = op match {
-    case "||" => "infixOr"
-    case "&&" => "infixAnd"
-    case "==" => "infixEq"
-    case "!=" => "infixNeq"
-    case "<"  => "infixLt"
-    case ">"  => "infixGt"
-    case "<=" => "infixLte"
-    case ">=" => "infixGte"
-    case "+"  => "infixAdd"
-    case "-"  => "infixSub"
-    case "*"  => "infixMul"
-    case "/"  => "infixDiv"
-    case "++" => "infixConcat"
+  private def opName(op: Token): String = op match {
+    case `||` => "infixOr"
+    case `&&` => "infixAnd"
+    case `===` => "infixEq"
+    case `!==` => "infixNeq"
+    case `<` => "infixLt"
+    case `>` => "infixGt"
+    case `<=` => "infixLte"
+    case `>=` => "infixGte"
+    case `+` => "infixAdd"
+    case `-` => "infixSub"
+    case `*` => "infixMul"
+    case `/` => "infixDiv"
+    case `++` => "infixConcat"
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
@@ -641,7 +642,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    */
   lazy val `;` = new Parser[Unit] {
 
-    def apply(in: Input): ParseResult[Unit] = {
+    def apply(in: Input[Token]): ParseResult[_, Unit] = {
       val content = in.source.content
       var pos = in.offset
       val str = content.substring(pos)
@@ -742,7 +743,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
             case Success(result, next) =>
               arguments.append(result)
               pos = next.offset
-            case error: NoSuccess => break(error)
+            case error: NoSuccess[_] => break(error)
           }
           skipWhitespace()
           skipUnquoteEnd()
@@ -763,7 +764,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
-    def apply(in: Input): ParseResult[String] = {
+    def apply(in: Input[Token]): ParseResult[_, String] = {
       val filename = in.source.name
       val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
@@ -772,124 +773,21 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   }
 }
 
-class EffektLexers(positions: Positions) extends Parsers(positions) {
-
-  type P[T] = PackratParser[T]
-
-  // === Lexing ===
-
-  lazy val nameFirst = """[a-zA-Z_]""".r
-  lazy val nameRest = """[a-zA-Z0-9_!?$]""".r
-  lazy val nameBoundary = """(?!%s)""".format(nameRest).r
-  lazy val name = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
-  lazy val moduleName = "%s([/]%s)*%s".format(name, name, nameBoundary).r
-  lazy val qualifiedName = "%s(::%s)*%s".format(name, name, nameBoundary).r
-
-  lazy val ident =
-    (not(anyKeyword) ~> name
-    | failure("Expected an identifier")
-    )
-
-  lazy val identRef =
-    (not(anyKeyword) ~> qualifiedName
-    | failure("Expected an identifier")
-    )
-
-  lazy val `=` = literal("=")
-  lazy val `:` = literal(":")
-  lazy val `@` = literal("@")
-  lazy val `{` = literal("{")
-  lazy val `}` = literal("}")
-  lazy val `(` = literal("(")
-  lazy val `)` = literal(")")
-  lazy val `[` = literal("[")
-  lazy val `]` = literal("]")
-  lazy val `,` = literal(",")
-  lazy val `'` = literal("'")
-  lazy val `.` = literal(".")
-  lazy val `/` = literal("/")
-  lazy val `=>` = literal("=>")
-  lazy val `<>` = literal("<>")
-  lazy val `<{` = literal("<{")
-  lazy val `}>` = literal("}>")
-  lazy val `!` = literal("!")
-  lazy val `|` = literal("|")
-
-  lazy val `let` = keyword("let")
-  lazy val `true` = keyword("true")
-  lazy val `false` = keyword("false")
-  lazy val `val` = keyword("val")
-  lazy val `var` = keyword("var")
-  lazy val `if` = keyword("if")
-  lazy val `else` = keyword("else")
-  lazy val `while` = keyword("while")
-  lazy val `type` = keyword("type")
-  lazy val `effect` = keyword("effect")
-  lazy val `interface` = keyword("interface")
-  lazy val `try` = keyword("try")
-  lazy val `with` = keyword("with")
-  lazy val `case` = keyword("case")
-  lazy val `do` = keyword("do")
-  lazy val `fun` = keyword("fun")
-  lazy val `resume` = keyword("resume")
-  lazy val `match` = keyword("match")
-  lazy val `def` = keyword("def")
-  lazy val `module` = keyword("module")
-  lazy val `import` = keyword("import")
-  lazy val `export` = keyword("export")
-  lazy val `extern` = keyword("extern")
-  lazy val `include` = keyword("include")
-  lazy val `record` = keyword("record")
-  lazy val `at` = keyword("at")
-  lazy val `in` = keyword("in")
-  lazy val `box` = keyword("box")
-  lazy val `unbox` = keyword("unbox")
-  lazy val `return` = keyword("return")
-  lazy val `region` = keyword("region")
-  lazy val `resource` = keyword("resource")
-  lazy val `new` = keyword("new")
-  lazy val `and` = keyword("and")
-  lazy val `is` = keyword("is")
-  lazy val `namespace` = keyword("namespace")
-
-  def keywordStrings: List[String] = List(
-    "def", "let", "val", "var", "true", "false", "else", "type",
-    "effect", "interface", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun",
-    "at", "box", "unbox", "return", "region", "new", "resource", "and", "is", "namespace"
-  )
-
-  def keyword(kw: String): Parser[String] =
-    regex((s"$kw(?!$nameRest)").r, kw)
-
-  lazy val anyKeyword =
-    keywords("[^a-zA-Z0-9]".r, keywordStrings)
-
-  /**
-   * Whitespace Handling
-   */
-  lazy val linebreak      = """(\r\n|\n)""".r
-  lazy val singleline     = """//[^\n]*(\n|\z)""".r
-  lazy val multiline      = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
-  lazy val simplespace    = """\s+""".r
-
-  override val whitespace = rep(simplespace | singleline | multiline | failure("Expected whitespace"))
-
-  /**
-   * Literals
-   */
-  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
-  lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
-  lazy val stringLiteral   = regex("""\"(\\.|[^\"])*\"""".r, "String literal")
-
-  // Delimiter for multiline strings
-  val multi = "\"\"\""
-
-  // multi-line strings `(?s)` sets multi-line mode.
-  lazy val multilineString: P[String] = matchRegex(s"(?s)${ multi }[\t\n\r ]*(.*?)[\t\n\r ]*${ multi }".r) ^^ { m => m.group(1) }
-
+class ParserUtils(positions: Positions) extends Parsers(positions) {
+  type P[Out] = PackratParser[Out]
 
   // === Utils ===
+  implicit def tok2Parser(tok: Token): Parser[Token] =
+    elem(tok)
+
+  def accept[T](expected: String)(f: PartialFunction[Any, T]): P[T] = Parser { in =>
+    if (in.atEnd) Failure(s"End of input reached, expected $expected", in)
+    else if (f.isDefinedAt(in.first)) {
+      val result = f(in.first)
+      Success(result, in.rest)
+    } else Failure(s"Unexpected token ${in.first}, expected $expected", in)
+  }
+
   def many[T](p: => Parser[T]): Parser[List[T]] =
     rep(p) ^^ { _.toList }
 
@@ -972,11 +870,13 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
       t
     })
 
-  def parseAll[T](p: Parser[T], input: String): ParseResult[T] =
+  /*
+  def parseAll[T](p: Parser[T], input: String): ParseResult[SourceInput, Out] =
     parseAll(p, StringSource(input, "input-string"))
+  */
 
-  lazy val path = someSep(ident, `/`)
+  lazy val path: Parser[List[Ident]] = someSep(accept("identifier") { case id: Ident => id }, elem(`/`))
 
-  def oneof(strings: String*): Parser[String] =
-    strings.map(literal).reduce(_ | _)
+  def oneof(strings: Token*): Parser[Token] = ???
+  //strings.map(literal).reduce(_ | _)
 }
