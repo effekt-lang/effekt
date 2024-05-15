@@ -1,30 +1,26 @@
-module probabilistic
+module examples/pos/probabilistic
 
+import immutable/list
+
+
+// Bayesian inference for random variables (RVs) with boolean values
+// -----------------------------------------------------------------
+
+// set up a heap for storing RVs
 effect IndexOutOfBounds[A](): A
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-
-def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
-  case Nil() => l2
-  case Cons(a, rest) => concat(rest, Cons(a, l2))
-}
-
-def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
+def lookup[A](l: List[A], index: Int): A / IndexOutOfBounds = l match {
   case Nil() => do IndexOutOfBounds()
-  case Cons(n, rest) => if (idx == 0) n else lookup(rest, idx - 1)
+  case Cons(n, rest) => if (index == 0) n else lookup(rest, index - 1)
 }
 
-def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l match {
+def updateAt[A](l: List[A], index: Int, element: A): List[A] / IndexOutOfBounds = l match {
   case Nil() => do IndexOutOfBounds()
-  case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
-}
-
-def length[A](l: List[A]): Int = l match {
-  case Nil() => 0
-  case Cons(_, rest) => 1 + length(rest)
+  case Cons(n, rest) =>
+    if (index == 0)
+      Cons(element, rest)
+    else
+      Cons(n, updateAt(rest, index - 1, element))
 }
 
 type Var {
@@ -44,73 +40,217 @@ def heap[R] { prog: => R / Heap } = {
   var cells: List[Var] = Nil();
   var n = 0;
   try { prog() } with Heap {
-    def empty(v) = { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
+    def empty(v) = {
+      cells = Cons(v, cells);
+      val ref = MkRef(n);
+      n = n + 1;
+      resume(ref)
+    }
     def get(r) = r match {
-      case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
+      case MkRef(index) => resume(lookup(cells, (size(cells) - index) - 1))
     }
     def put(r, v) = r match {
-      case MkRef(idx) =>
-        cells = updateAt(cells, (length(cells) - idx) - 1, v);
+      case MkRef(index) =>
+        cells = updateAt(cells, (size(cells) - index) - 1, v);
         resume(())
     }
   }
 }
 
-effect Flip(prob: Double): Ref
+
+// Effects for expressing some constructs on RVs
+// ---------------------------------------------
+
+// Cond expresses a RV which depends on a some other RVs listed in listRef.
+// The list listProbabilities contains the probabilities with which the
+// expressed RV is true given that the RVs in listRef are true/false:
+// if there are n RVs in listRef, then there are supposed to be 2^n
+// elements in listProbabilities, one for each combination of true/false
+// for the elements in listRef.
+// The order in listProbabilities goes from all RVs in listRef are false to
+// all of them are true in ascending order, when false is read
+// as 0 and true as 1 and the list is interpreted as binary number.
+// That is, if, e.g., there are 3 elements in listRef, then the first element
+// in listProbabilities corresponds to [false,false,false] (interpreted as 000),
+// the second to [false,false,true] (or 001) then [false,true,false]
+// (or 010) and so on up to [true,true,true] (or 111).
+effect Cond(listRef: List[Ref], listProbabilities: List[Double]): Ref
+
+// Conj and Disj express the conjunction and disjunction of
+// RVs x and y, i.e., Conj(x, y) is true iff x and y are both true,
+// where Disj(x, y) is false iff x and y are both false.
+effect Conj(x: Ref, y: Ref): Ref
 effect Disj(x: Ref, y: Ref): Ref
+
+// Prior expresses that the prior belief that x is true is prob.
 effect Prior(x: Ref, prob: Double): Unit
 
+// Flip expresses a RV which is true with probability prob.
+// It can be written as a special case of Cond with no dependencies,
+// so it is no additional effect but just a function using Cond.
+def Flip(prob: Double) = do Cond([], [prob])
+
+
+// effects for:
+// scoring the current probability with some factor
 effect Score(prob: Double): Unit
+// forking the ways through the program
 effect Fork(): Bool
+// failing
 effect Fail[A](): A
 
-def obs(r: Ref, a: Bool) =
-  do get(r) match {
-    case Unobserved() => do put(r, Observed(a))
-    case Observed(y) => if (a == y) { () } else { do Fail() }
+
+// Some functions for handling the probabilistic constructs
+// --------------------------------------------------------
+
+def pow(base: Int, exp: Int): Int = {
+  if (exp < 0) { 0 }
+  else if (exp == 0) { 1 }
+  else { base * pow(base, exp - 1) }
+}
+
+// Observe a RV, failing when the same RV
+// is observed again with a different result.
+def observe(ref: Ref, b: Bool) =
+  do get(ref) match {
+    case Unobserved() => do put(ref, Observed(b))
+    case Observed(y) => if (b == y) { () } else { do Fail() }
   }
+
+// Observe each (if the Bool list is long enough) RV in a list.
+def observeList(listRef: List[Ref], listBool: List[Bool]): Unit / { Heap, Fail } = {
+  listRef match {
+    case Nil() => ()
+    case Cons(headRef, tailRef) => listBool match {
+      case Nil() => ()
+      case Cons(headBool, tailBool) =>
+        observe(headRef, headBool);
+        observeList(tailRef, tailBool)
+    }
+  }
+}
+
+/**
+ * Convert a non-negative number to a list of booleans with specified length.
+ * The conversion proceeds according to the interpretation of positions
+ * in a list as described above for the Cond effect. If the number is too large
+ * to fit into the list of the specified length, the higher bits are truncated.
+ * Example: given that the length is 3, the correspondence is
+ * decimal number  binary number  bool list
+ * 0               000            [false,false,false]
+ * 1               001            [false,false,true]
+ * 5               101            [true,false,true]
+ */
+def toBoolList(length: Int, number: Int): List[Bool] = try {
+  def toBoolListReverse(length: Int, number: Int): List[Bool] = {
+    if (number < 0) { do Fail() }
+    else {
+      if (length < 0) { do Fail() }
+      else if (length == 0) { Nil() }
+      else {
+        if (mod(number, 2) == 1) {
+          Cons(true, toBoolList(length - 1, number / 2))
+        } else {
+          Cons(false, toBoolList(length - 1, number / 2))
+        }
+      }
+    }
+  };
+  reverse(toBoolListReverse(length, number))
+} with Fail[A] { () => println("toBoolList: Unexpected negative number."); [] }
+
+/**
+ * Observe the possibilities of true/false combinations for the RVs
+ * in listRef corresponding to the above-described interpretation of
+ * positions in a list up to position index, and score in each case
+ * with the probability at the corresponding position in listProbabilities.
+ * Usually this function is called with index = (2^n - 1) where n is the
+ * length of listRef, to observe all possibilitites.
+ */
+def observeAndScore(index: Int, listRef: List[Ref], listProbabilities: List[Double]): Unit / { IndexOutOfBounds, Heap, Fail, Fork, Score } = {
+  if (index < 0)
+    ()
+  else if (index >= pow(2, size(listRef)))
+    observeAndScore(pow(2, size(listRef)) - 1, listRef, listProbabilities)
+  else if (index == 0) {
+    observeList(listRef, toBoolList(size(listRef), index));
+    do Score(lookup(listProbabilities, index))
+  }
+  else {
+    if (do Fork()) {
+      observeList(listRef, toBoolList(size(listRef), index));
+      do Score(lookup(listProbabilities, index))
+    }
+    else
+      observeAndScore(index - 1, listRef, listProbabilities)
+  }
+}
 
 def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
   if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
 
-type Weighted[R] { MkWeighted(weight: Double, value: R) }
-
-def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
-  val empty: List[Weighted[R]] = Nil();
-  try {
-    var current = 1.0;
-    try {
-      val res = prog();
-      Cons(MkWeighted(current, res), empty)
-    } with Score { p => current = current * p; resume(()) }
-  } with Fork { () => concat(resume(true), resume(false)) }
-    with Fail[A] { () => empty }
-}
-
 def fresh(): Ref / Heap = do empty(Unobserved())
 
-def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+/*
+ * Handler for effects for probabilistic constructs:
+ * run the program prog forwards collecting all effects for probabilistic
+ * constructs, then observe the result RV in prog to be as expected and
+ * then go backwards through the program enumerating all possible ways
+ * how the result could have come about from the input RV.
+ */
+def handleLang(expected: Bool) { prog: Ref => Ref / { Cond, Conj, Disj, Prior }}: Var / { IndexOutOfBounds, Score, Fail, Fork } = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
-  with Flip { p =>
-    val res: Ref = fresh();
-    resume(res);
-    do get(res) match {
+  with Cond { (listRef, listProbabilities) =>
+    val length = size(listRef);
+    if (pow(2, length) == size(listProbabilities)) {
+      val result: Ref = fresh();
+      resume(result);
+      do get(result) match {
+        case Unobserved() => ()
+        case Observed(b) => if (b) {
+          observeAndScore(pow(2, length) - 1, listRef, listProbabilities)
+        } else {
+          observeAndScore(pow(2, length) - 1, listRef, map(listProbabilities) { x => 1.0 - x })
+        }
+      }
+    } else { do Fail() }
+  } with Conj { (x, y) =>
+    val result: Ref = fresh();
+    resume(result);
+    do get(result) match {
       case Unobserved() => ()
-      case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
+      case Observed(b) =>
+        if (b)
+          { observe(x, true); observe(y, true) }
+        else {
+          choose3 {
+            observe(x, false); observe(y, true)
+          } {
+            observe(x, true); observe(y, false)
+          } {
+            observe(x, false); observe(y, false)
+          }
+        }
     }
   } with Disj { (x, y) =>
-    val res: Ref = fresh();
-    resume(res);
-    do get(res) match {
+    val result: Ref = fresh();
+    resume(result);
+    do get(result) match {
       case Unobserved() => ()
-      case Observed(b) => if (b) { choose3 {
-        obs(x, false); obs(y, true)
-      } {
-        obs(x, true); obs(y, false)
-      } {
-        obs(x, true); obs(y, true)
-      } } else { obs(x, false); obs(y, false) }
+      case Observed(b) =>
+        if (b)
+        {
+          choose3 {
+            observe(x, false); observe(y, true)
+          } {
+            observe(x, true); observe(y, false)
+          } {
+            observe(x, true); observe(y, true)
+          }
+        }
+        else
+          { observe(x, false); observe(y, false) }
     }
   } with Prior { (x, p) =>
     resume(());
@@ -121,6 +261,66 @@ def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var 
   };
   do get(input)
 }
+
+
+type Weighted[R] { MkWeighted(weight: Double, value: R) }
+
+/*
+ * Handler for scoring, forking and failing:
+ * start with current probability 1, run the program prog
+ * and handle Score by updating the current probability
+ * accordingly and handle Fork by resuming with both
+ * possibilities false and true appending the results.
+ * This yields a list of weighted ways through the program.
+ */
+def handleProbabilities[R] { prog: => R / { Score, Fork, Fail } } = {
+  val empty: List[Weighted[R]] = Nil();
+  try {
+    var current = 1.0;
+    try {
+      val result = prog();
+      Cons(MkWeighted(current, result), empty)
+    } with Score { p => current = current * p; resume(()) }
+  } with Fork { () => resume(true).append(resume(false)) }
+    with Fail[A] { () => empty }
+}
+
+
+// Functions for calculating the normalized posterior from a
+// list of weighted ways through a program
+
+
+def collectProbabilities(b: Bool, l: List[Weighted[Var]]): Double = {
+  l match {
+    case Nil() => 0.0
+    case Cons(head, tail) => head match {
+      case MkWeighted(w, Observed(out)) =>
+        if (out == b)
+          w + collectProbabilities(b, tail)
+        else
+          collectProbabilities(b, tail)
+      case MkWeighted(w, Unobserved()) =>
+        collectProbabilities(b, tail)
+    }
+  }
+}
+
+def posterior(result: List[Weighted[Var]]): List[Weighted[Bool]] / Fail = {
+  val resultTrue = collectProbabilities(true, result);
+  val resultFalse = collectProbabilities(false, result);
+  val modelEvi = resultTrue + resultFalse;
+  if (modelEvi == 0.0) { do Fail() }
+  else {
+    val posteriorTrue = MkWeighted(resultTrue / modelEvi, true);
+    val posteriorFalse = MkWeighted(resultFalse / modelEvi, false);
+    Cons(posteriorTrue, Cons(posteriorFalse, Nil()))
+  }
+}
+
+
+// Some examples
+// -------------
+// In particular three versions of the famous sprinkler-rain-grass example
 
 def test() = {
   if (do Fork()) {
@@ -136,6 +336,41 @@ def test() = {
       false
     }
   }
+}
+
+def grassModel(rain: Ref) = {
+  do Prior(rain, 0.2);
+  val sprinkler = Flip(0.1);
+  val grassIsWet = do Disj(do Disj(
+    do Conj(Flip(0.8), rain),
+    do Conj(Flip(0.95), sprinkler)),
+    Flip(0.01));
+  grassIsWet
+}
+
+def grassModelCond(rain: Ref) = {
+  do Prior(rain, 0.2);
+  val sprinkler = Flip(0.1);
+  val grassIsWet = do Cond([rain, sprinkler], [0.01, 0.90, 0.70, 0.99]);
+  grassIsWet
+}
+
+def grassModelCondSprinkler(rain: Ref) = {
+  do Prior(rain, 0.2);
+  val sprinkler = do Cond([rain], [0.4, 0.01]);
+  val grassIsWet = do Cond([rain, sprinkler], [0.0, 0.90, 0.80, 0.99]);
+  grassIsWet
+}
+
+def printGrassModel(result: List[Weighted[Var]]): Unit = {
+  val prior = 0.2;
+  val priorTru = MkWeighted(prior, true);
+  val priorFls = MkWeighted(1.0 - prior, false);
+  println("prior rain true/false");
+  println(Cons(priorTru, Cons(priorFls, Nil())));
+  println("posterior rain true/false conditioned grass is wet");
+  try{ println(posterior(result)) }
+  with Fail[A] { () => println("Bad model: model evidence is 0, cannot compute posterior.") }
 }
 
 def heapTest() = heap {
@@ -158,23 +393,52 @@ def catch[R] { p: => R / IndexOutOfBounds }: Unit =
   try { p(); () }
   with IndexOutOfBounds[A] { () => println("Index out of bounds!") }
 
+
 def main() = {
-  val res = handleProb {
+  val result = handleProbabilities {
     test()
   };
-  println(res);
+  println(result);
 
   catch {
     heapTest()
   };
 
   catch {
-    val res = handleProb {
+    val result = handleProbabilities {
       handleLang(true) { r =>
-        do Disj(do Flip(0.2), r)
+        do Disj(Flip(0.2), r)
       }
     };
-    println(res)
-  }
+    println(result)
+  };
 
+  println("grass model:")
+  catch {
+    val result = handleProbabilities {
+      handleLang(true) { r =>
+        grassModel(r)
+      }
+    };
+    printGrassModel(result)
+  };
+
+  println("grass model Cond:")
+  catch {
+    val result = handleProbabilities {
+      handleLang(true) { r =>
+        grassModelCond(r) }
+    };
+    printGrassModel(result)
+  };
+
+  println("grass model Cond sprinkler:")
+  catch {
+    val result = handleProbabilities {
+      handleLang(true) { r =>
+        grassModelCondSprinkler(r)
+      }
+    };
+    printGrassModel(result)
+  }
 }

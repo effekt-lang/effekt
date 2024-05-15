@@ -4,3 +4,18 @@ Unobserved()Observed(true)Unobserved()
 Unobserved()Observed(true)Observed(false)
 Unobserved()Observed(false)Observed(false)
 Cons(MkWeighted(0.8, Observed(true)), Cons(MkWeighted(0.2, Observed(false)), Cons(MkWeighted(0.2, Observed(true)), Nil())))
+grass model:
+prior rain true/false
+Cons(MkWeighted(0.2, true), Cons(MkWeighted(0.8, false), Nil()))
+posterior rain true/false conditioned grass is wet
+Cons(MkWeighted(0.6635435445145956, true), Cons(MkWeighted(0.3364564554854043, false), Nil()))
+grass model Cond:
+prior rain true/false
+Cons(MkWeighted(0.2, true), Cons(MkWeighted(0.8, false), Nil()))
+posterior rain true/false conditioned grass is wet
+Cons(MkWeighted(0.6479999999999999, true), Cons(MkWeighted(0.352, false), Nil()))
+grass model Cond sprinkler:
+prior rain true/false
+Cons(MkWeighted(0.2, true), Cons(MkWeighted(0.8, false), Nil()))
+posterior rain true/false conditioned grass is wet
+Cons(MkWeighted(0.3576876756322762, true), Cons(MkWeighted(0.6423123243677238, false), Nil()))
