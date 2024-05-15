@@ -1,0 +1,71 @@
+import io/args
+import text/string
+import mutable/array
+import immutable/list
+
+type Disk = Int
+type Pile = List[Disk]
+type Towers = Array[Pile]
+
+def run(n: Int) = {
+
+  var movesDone: Int = 0;
+  var towers: Towers = fill(3, Nil());
+
+  def pushDisk(newTopDiskOnPile: Disk, pileIdx: Int): Unit = {
+    val pile: Pile = towers.unsafeGet(pileIdx);
+    pile match {
+      case Cons(topDiskOnStack,_) => 
+        if (newTopDiskOnPile >= topDiskOnStack) {
+          panic("Cannot put a big disk onto a smaller one");
+        }
+    }
+    put(towers, pileIdx, Cons(newTopDiskOnPile, pile));
+  }
+
+  def popDisk(pileIdx: Int): Disk = {
+    val pile = towers.unsafeGet(pileIdx);
+    
+    pile match {
+      case Nil() =>
+        panic("Attempting to remove a newTopDiskOnPile from an empty pileIdx");
+      case Cons(disk, next) => 
+        put(towers, pileIdx, next)
+        disk
+    }
+  }
+
+  def moveTopDisk(fromPile: Int, ontoPile: Int) = {
+    pushDisk(popDisk(fromPile), ontoPile);
+    movesDone = movesDone + 1;
+  }
+
+  def moveDisks(disks: Int, fromPile: Int, ontoPile: Int): Unit = {
+    if (disks == 1) {
+      moveTopDisk(fromPile, ontoPile);
+    } else {
+      val otherPile = (3 - fromPile) - ontoPile;
+      moveDisks(disks - 1, fromPile, otherPile);
+      moveTopDisk(fromPile, ontoPile);
+      moveDisks(disks - 1, otherPile, ontoPile);
+    }
+  }
+
+  def buildTowerAt(pileIdx: Int, n: Int) = {
+    var i = n;
+    while (i >= 0) {
+      pushDisk(i, pileIdx);
+      i = i - 1;
+    }
+  }
+
+  buildTowerAt(0, n);
+  moveDisks(n, 0, 1);
+  movesDone
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 13 };
+  val r = run(n);
+  println(r)
+}

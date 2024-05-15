@@ -1,0 +1,53 @@
+import io/args
+import text/string
+import immutable/list
+
+def length(xs: List[Int]): Int =
+  xs match {
+    case Nil() => 0
+    case Cons(y, ys) => 1 + length(ys) 
+  }
+
+def isShorterThan(x: List[Int], y: List[Int]): Bool =
+  (x, y) match {
+    case (_, Nil()) => false
+    case (Nil(), _) => true
+    case (Cons(_,xTail),Cons(_,yTail)) => isShorterThan(xTail,yTail)
+  }
+
+def makeList(n: Int): List[Int] =
+  if (n == 0) {
+    Nil()
+  } else {
+    Cons(n, makeList(n - 1))
+  }
+
+def tail(xs: List[Int], ys: List[Int], zs: List[Int]): List[Int] =
+  if (ys.isShorterThan(xs)) {
+    (xs, ys, zs) match {
+      case (Cons(_, xsTail), Cons(_, ysTail), Cons(_, zsTail)) => 
+        tail(
+          tail(xsTail, ys, zs),
+          tail(ysTail, zs, xs),
+          tail(zsTail, xs, ys)
+        )
+      case _ => panic("oh no!");
+    }
+  } else {
+    zs
+  }
+
+def run(n: Int) = {
+  var s = 0;
+  each(0, n) { _ =>
+    val result = tail(makeList(15), makeList(10), makeList(6));
+    s = s + length(result)
+  };
+  s
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
+  val r = run(n);
+  println(r)
+}

@@ -1,0 +1,79 @@
+import io/args
+import text/string
+import mutable/array
+
+interface Break[T] {
+  def returnValue(result: T): Nothing
+}
+
+def breakableLoop[T](from: Int, to: Int, finally: T){ fnc: Int => Unit / Break[T] } : T = {
+  if (from == to) {
+    finally
+  } else {
+    try {
+      fnc(from);
+      breakableLoop(from+1, to, finally){ fnc };
+    } with Break[T] {
+      def returnValue(value) = value
+    }
+  }
+}
+
+def run(_: Int) = {
+  var freeMaxs = emptyArray[Bool]();
+  var freeRows = emptyArray[Bool]();
+  var freeMins = emptyArray[Bool]();
+  var queenRows = emptyArray[Int]();
+
+  def getRowColumn(r: Int, c: Int) = {
+    freeRows.unsafeGet(r) && freeMaxs.unsafeGet(c + r) && freeMins.unsafeGet(c - r + 7);
+  }
+
+  def setRowColumn(r: Int, c: Int, v: Bool) = {
+    put(freeRows,r, v);
+    put(freeMaxs,c + r, v);
+    put(freeMins,c - r + 7, v);
+  }
+
+  def placeQueen(c: Int): Bool = {
+    def iterate(r: Int): Unit / Break[Bool] = {
+      if (getRowColumn(r, c)) {
+        put(queenRows,r, c);
+        setRowColumn(r, c, false);
+
+        if (c == 7) {
+          do returnValue(true);
+        }
+
+        if (placeQueen(c + 1)) {
+          do returnValue(true);          
+        } 
+        setRowColumn(r, c, true);
+      }
+    }
+    breakableLoop[Bool](0, 8, false){ iterate }
+  }
+
+  def queens() = {
+    freeRows = fill(8,true);
+    freeMaxs = fill(16,true);
+    freeMins = fill(16,true);
+    queenRows = fill(8,-1);
+
+    placeQueen(0);
+  }
+
+  var result = true;
+
+  each(0, 10){ i =>
+    result = result && queens();
+  };
+
+  result
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
+  val r = run(n);
+  println(r)
+}

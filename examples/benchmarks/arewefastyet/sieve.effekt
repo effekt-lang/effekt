@@ -1,0 +1,25 @@
+import io/args
+import text/string
+import mutable/array
+
+def sieve(size: Int): Int = {
+  var primeCount: Int = 0;
+  val flags: Array[Bool] = fill(size, true);
+  each(2, size){ i =>
+    if (flags.unsafeGet(i - 1)) {
+      primeCount = primeCount + 1;
+      var k = i + i;
+      while (k <= size) {
+        put(flags, (k - 1), false);
+        k = k + i;
+      }
+    }
+  }
+  return primeCount;
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5000 };
+  val r = sieve(n);
+  println(r)
+}

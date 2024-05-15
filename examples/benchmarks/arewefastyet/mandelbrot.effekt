@@ -1,0 +1,68 @@
+import io/args
+import text/string
+
+extern def leftShift(x: Int, y: Int): Int = js "${x} << ${y}"
+
+extern def xor(x: Int, y: Int): Int = js "${x} ^ ${y}"
+
+def mandelbrot(size: Int): Int = {
+  var sum = 0;
+  var byteAcc = 0;
+  var bitNum = 0;
+
+  each(0, size){ y =>
+    val ci: Double = (2.0 * toDouble(y) / toDouble(size)) - 1.0;
+
+    each(0, size){ x =>
+      var zrzr = 0.0;
+      var zi = 0.0;
+      var zizi = 0.0;
+      val cr = (2.0 * toDouble(x) / toDouble(size)) - 1.5
+
+
+      var z = 0;
+      var notDone = true;
+      var escape = 0;
+
+      while (notDone && z < 50) {
+        val zr = zrzr - zizi + cr;
+        zi = 2.0 * zr * zi + ci;
+
+        zrzr = zr * zr;
+        zizi = zi * zi
+
+        if (zrzr + zizi > 4.0) {
+          notDone = false;
+          escape = 1;
+        }
+        z = z + 1;
+      }
+
+      byteAcc = leftShift(byteAcc, 1) + escape;
+      bitNum = bitNum + 1;
+
+      if (bitNum == 8) {
+        sum = xor(sum, byteAcc);
+        byteAcc = 0;
+        bitNum = 0;
+      } else if (x == size - 1) {
+        byteAcc = leftShift(byteAcc, (8 - bitNum));
+        sum = xor(sum, byteAcc);
+        byteAcc = 0;
+        bitNum = 0;
+      }
+    }
+  }
+
+  sum
+}
+
+def run(n: Int) = {
+  mandelbrot(n)
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
+  val r = run(n);
+  println(r)
+}

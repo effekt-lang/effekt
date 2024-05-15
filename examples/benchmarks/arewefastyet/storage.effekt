@@ -1,0 +1,54 @@
+import io/args
+import text/string
+import mutable/array
+
+type Tree {
+  Leaf(arr: Array[Int])
+  Node(i0: Tree, i1: Tree, i2: Tree, i3: Tree)
+}
+
+interface Random {
+  def next(): Int
+}
+
+def bitAnd(x: Int, y: Int) = mod(x, y + 1) 
+
+def withRandom[R]{ program: { Random } => R}: R = {
+  var seed = 74755;
+  def rand = new Random {
+    def next() = {
+    seed = bitAnd((seed * 1309) + 13849, 65535);
+    seed;
+    }
+  }
+  program{rand}
+}
+
+def run(n: Int) = {
+  var count = 0;
+
+  def buildTreeDepth(depth: Int){ rand: Random }: Tree = {
+    count = count + 1;
+    if (depth == 1) {
+      Leaf(emptyArray[Int](mod(rand.next(), 10) + 1))
+    } else {
+      Node(
+        buildTreeDepth(depth - 1){ rand },
+        buildTreeDepth(depth - 1){ rand },
+        buildTreeDepth(depth - 1){ rand },
+        buildTreeDepth(depth - 1){ rand })
+    }
+  }
+
+  each(0, n) { _ =>
+    withRandom{ { rand: Random } => buildTreeDepth(7){ rand }; () }
+  }  
+
+  count
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
+  val r = run(n);
+  println(r)
+}
