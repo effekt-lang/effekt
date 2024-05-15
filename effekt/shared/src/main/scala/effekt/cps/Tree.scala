@@ -78,3 +78,20 @@ enum Term {
   case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Term])
 } 
 export Term.*
+
+
+enum Lift {
+  case Var(ev: EvidenceSymbol)
+  case Try()
+  case Reg() // used for local mutable state AND region based state
+}
+
+/**
+ * Evidence for lifts
+ */
+case class Evidence(lifts: List[Lift])
+
+def Here() = Evidence(Nil)
+
+class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
+
