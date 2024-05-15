@@ -43,7 +43,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(s: String): Doc = string(s"\"${escape(s)}\"")
 
 
-  def toDoc(id: Id): Doc = toDoc(id.toString)
+  def toDoc(id: Id): Doc = toDoc(id.show)
 
   def toDoc(m: Method): Doc = m match {
     case Method(tag, params, ret) => jsonObjectSmall(ListMap(

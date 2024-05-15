@@ -162,15 +162,16 @@ object Transformer {
       val tBody = transform(body)
       jit.LetRec(promptIds.map{ x =>
         jit.Definition(jit.Var(x, jit.Base.Label), jit.FreshLabel())
-      } ++ (cparams zip promptIds zip handlers).map{ case ((c, p), h) =>
-        jit.Definition(jit.Var(c, Codata(c, h.operations.map {
-          case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-            jit.Method(name, (((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams)).map(_.tpe), jit.Top) // TODO
-        })), jit.New(c, h.operations.map {
-          case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      } ++ (cparams zip promptIds zip (handlers zip bparams)).map{ case ((c, p), (h, bc)) =>
+        jit.Definition(jit.Var(bc.id, transform(bc.tpe)), jit.New(c, h.operations.map {
+          case core.Operation(name, tparams, cparams, vparams, bparams, resume, obody) =>
             val args = (((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams))
-            val r = jit.Var(TmpValue(), jit.Top)
-            (name, jit.Clause(args, jit.DOp(jit.Var(p, jit.Base.Label), name, args, jit.Clause(List(r), r), jit.Top)))
+            val rtpe = resume.map(_.tpe) match {
+              case Some(core.BlockType.Function(_, _, List(r), _, _)) => transform(r)
+              case _ => jit.Top
+            }
+            val r = jit.Var(TmpValue(), rtpe)
+            (name, jit.Clause(args, jit.DOp(jit.Var(p, jit.Base.Label), name, args, jit.Clause(List(r), r), rtpe)))
         }))
       }, handlers.zip(promptIds).foldRight(tBody){ case ((core.Implementation(itpe, ops), id), b) =>
         jit.DHandle(jit.HandlerType.Deep, jit.Var(id, jit.Base.Label),
