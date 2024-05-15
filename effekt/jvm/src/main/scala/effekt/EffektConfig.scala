@@ -78,6 +78,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true
   )
 
+  val llvmPrompt: ScallopOption[Boolean] = toggle(
+    "llvm-prompt",
+    descrYes = "Enable the prompt-based implementation",
+    default = Some(false),
+    noshort = true
+  )
+
   val preludePath: ScallopOption[List[String]] = opt[List[String]](
     "prelude",
     descr = "Modules to be automatically imported in every file",

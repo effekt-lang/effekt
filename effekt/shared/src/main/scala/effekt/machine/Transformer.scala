@@ -483,7 +483,8 @@ object Transformer {
 
   def transform(op: lifted.Operation, prompt: Variable)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause = op match {
     // Since at the moment shift is evidence and not prompt based, here we inline the implementation of shift
-    case lifted.Operation(name, lifted.BlockLit(tparams, params, lifted.Shift(ev, lifted.Block.BlockLit(tparams2, List(kparam), body)))) =>
+    case lifted.Operation(name, lifted.BlockLit(tparams, params, lifted.Shift(ev, lifted.Block.BlockLit(tparams2, List(kparam), body))))
+        if unsafeContext.config.llvmPrompt() =>
       noteResumption(kparam.id)
 
       Clause(params.map(transform),
@@ -495,6 +496,8 @@ object Transformer {
     case lifted.Operation(name, lifted.BlockLit(tparams, params, body)) =>
       Clause(params.map(transform), transform(body))
   }
+
+  def unsafeContext(using C: ErrorReporter): Context = C.asInstanceOf[Context]
 
   def transform(param: lifted.Param)(using BlocksParamsContext, ErrorReporter): Variable =
     param match {
