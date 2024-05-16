@@ -62,6 +62,7 @@ enum Expr{
   case Run(t: Term)
   
   case BlockLit(params: List[Id], body: Term)
+  case New(impl: Implementation)
 }
 export Expr.*
 
@@ -76,9 +77,23 @@ enum Term {
   case Val(id: Id, binding: Term, body: Term)
   case If(cond: Expr, thn: Term, els: Term)
   case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Term])
+  case Reset(evidence: Id, body: Term)
 } 
 export Term.*
 
+/**
+ * An instance of an interface, concretely implementing the operations.
+ *
+ * Used to represent handlers / capabilities, and objects / modules.
+ */
+case class Implementation(interface: Interface, operations: List[Operation]) {
+  val tpe = interface
+}
+
+/**
+ * Implementation of a method / effect operation.
+ */
+case class Operation(name: Id, implementation: Expr.BlockLit)
 
 enum Lift {
   case Var(ev: EvidenceSymbol)
@@ -89,7 +104,7 @@ enum Lift {
 /**
  * Evidence for lifts
  */
-case class Evidence(lifts: List[Lift])
+case class Evidence(lifts: List[Lift]) // expr als case Nil=> here, List(_) => plus
 
 def Here() = Evidence(Nil)
 

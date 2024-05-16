@@ -41,7 +41,7 @@ def transform(extern: lifted.Extern): Extern = extern match {
 }
 
 def transform(definition: lifted.Definition): Definition = 
-  println(definition)
+  //println(definition)
   definition match {
   case lifted.Definition.Def(id, lifted.BlockLit(List(), params, body)) =>
     Definition.Function(id, params map transform, Id.apply("k"), transform(body))
@@ -76,8 +76,8 @@ def transform(expr: lifted.Expr): Expr = expr match {
 
 def transform(b: lifted.Block): Expr = b match { // block => Term
   case lifted.Block.BlockVar(id, annotatedType) => Var(id)
-  case lifted.Block.BlockLit(tparams, params, body) => BlockLit(params map transform, transform(body)) // Fun
-  case lifted.Block.Member(b, field, annotatedType) => println(Expr);
+  case lifted.Block.BlockLit(tparams, params, body) => BlockLit(params map transform, transform(body))
+  case lifted.Block.Member(b, field, annotatedType) => 
   b match {
     case lifted.Block.BlockVar(id, annotatedType) => annotatedType match {
       case lifted.BlockType.Interface(name, targs) => PureApp(Var(Id(name.toString + "." + field.toString)), List(Var(id)))
@@ -86,9 +86,17 @@ def transform(b: lifted.Block): Expr = b match { // block => Term
     case _ => ???
   }
   case lifted.Block.Unbox(e) => transform(e) 
-  case lifted.Block.New(impl) =>PureApp(Var(impl.interface.name), impl.operations map (x => PureApp(Var(x.name), List(BlockLit(List(), Let(Id("k"), Var(Id("id")), AppCont(Id("id"), transform(x.implementation))))))))
+  case lifted.Block.New(impl) => New(transform(impl))//PureApp(Var(impl.interface.name), impl.operations map (x => PureApp(Var(x.name), List(BlockLit(List(), Let(Id("k"), Var(Id("id")), AppCont(Id("id"), transform(x.implementation))))))))
   //case _ => ???
 }
+
+def transform(implementation: lifted.Implementation): Implementation =
+  Implementation(transform(implementation.interface), implementation.operations map transform)
+
+def transform(interface: lifted.BlockType.Interface) = ???
+
+def transform(operation: lifted.Operation): Operation =
+  Operation(operation.name, transform(operation.implementation))
 
 def transform(blockLit: lifted.BlockLit): BlockLit = blockLit match {
   case lifted.BlockLit(_, params, body) => BlockLit(params map transform, transform(body))
@@ -100,7 +108,7 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   
   case lifted.Stmt.Scope(definitions, body) => transform(definitions, transform(body))
   case lifted.Stmt.App(b, targs, args) => b match {
-    case lifted.Block.Member(_, _, _) => println("Block:" + b); AppCont(Id("k"), PureApp(transform(b), args map transform))
+    case lifted.Block.Member(_, _, _) => AppCont(Id("k"), PureApp(transform(b), args map transform))
     case _ => App(transform(b), args map transform, Id("k"))
   }
     //println(stmt); App(transform(b), args map transform, Id("k"))
@@ -117,7 +125,11 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Get(id, ev, annotatedTpe) => ???
   case lifted.Stmt.Put(id, ev, value) => ???
 
-  case lifted.Stmt.Try(body, handler) => println(body); ???
+  case lifted.Stmt.Try(lifted.BlockLit(_, params, body), List(handler)) => params match {
+    case ev :: cap :: Nil => Reset(transform(ev), Let(transform(cap), ???, transform(body)))
+    case _ => ???
+  }
+  case lifted.Stmt.Try(body, handler) => ???
 
   case lifted.Stmt.Reset(body) => ???
 

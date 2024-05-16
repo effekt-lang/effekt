@@ -71,6 +71,7 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest))
   case cps.Term.Val(id, binding, body) => Let(idToPattern(id), transform(binding), transform(body)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
+  case cps.Term.Reset(ev, body) => App(Auto, Let(VarPattern(Some("ev")), Var("lift"), Let(VarPattern(Some("k")), Var("pure"), transform(body))), Var("k"))
 }
 
 def transform(blockLit: cps.BlockLit): Rule = blockLit match {
@@ -91,9 +92,10 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.PureApp(b, args) => chainApp(transform(b) :: (args map transform))
   case cps.Expr.Box(b) => transform(b)
   case cps.Expr.Run(t) => transform(t)
-  case cps.Expr.BlockLit(params, body) => println(expr); chainLam(params map (x => x.toString()), transform(body))
-  case cps.Expr.Make(data, tag, vargs) => App(Auto, idToVar(data), chainApp(vargs map transform)) //constructor App
+  case cps.Expr.BlockLit(params, body) => chainLam(params map (x => x.toString()), transform(body))
+  case cps.Expr.Make(data, tag, vargs) => App(Auto, idToVar(data), chainApp(vargs map transform))
   case cps.Expr.Select(target, field) => ???
+  case cps.New(impl) => ???
 }
 
 def chainLam(list: List[String], body: Term): Term = list match {
