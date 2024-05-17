@@ -16,7 +16,7 @@ def transform(mod: cps.ModuleDecl): Book = {
   val defns = mod.definitions.map(transform)
   val defMap: MutableMap[Name, Definition] = MutableMap()
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
-  mod.decls.foreach({case cps.Declaration.Interface(id, operations) => defMap ++ transform(id, operations, defMap); case _ => ()})
+  mod.decls.foreach({case cps.Declaration.InterfaceDecl(id, operations) => defMap ++ transform(id, operations, defMap); case _ => ()})
   Book(defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
 
@@ -25,17 +25,14 @@ def transform(id: cps.Id, operations: List[cps.Property], map: MutableMap[Name, 
   val newMap = map
   operations.foreach(operation => 
   map += (Name(id.toString + "." + operation.id.toString) -> 
-        Definition(id.toString + "." + operation.id.toString, List(Rule(List(Ctr(id.toString, (operations map (x => x match {case cps.Property(operation.id, _) => Ctr(operation.id.toString, List(VarPattern(Some("x")))); case _ => VarPattern(Some("_"))})))), Var("x"))), false)))
+        Definition(id.toString + "." + operation.id.toString, List(Rule(List(Ctr(id.toString, (operations map (x => x match {case cps.Property(operation.id, _) => VarPattern(Some(operation.id.toString)); case _ => VarPattern(Some("_"))})))), Var(operation.id.toString))), false)))
   map
 
 def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): MutableMap[Name, Adt]= decls match {
   case Nil => map
   case cps.Declaration.Data(id, ctors) :: rest => transform(rest, map += (Name(id.toString) -> transform(ctors, Adt(MutableMap(), false))))
-  case cps.Declaration.Interface(id, operations) :: rest => 
-    map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map (x=>x.id.toString()))), false))
-    val adts = (operations map (x => transform(x.id)))
-    adts map (x => map ++= x)
-    transform(rest, map)
+  case cps.Declaration.InterfaceDecl(id, operations) :: rest => 
+    transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map (x=>x.id.toString()))), false)))
 }
 
 def transform(decl: cps.Extern): Verbatim = decl match {
@@ -95,12 +92,8 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.BlockLit(params, body) => chainLam(params map (x => x.toString()), transform(body))
   case cps.Expr.Make(data, tag, vargs) => App(Auto, idToVar(data), chainApp(vargs map transform))
   case cps.Expr.Select(target, field) => ???
-  case cps.New(impl) => ???
-}
-
-def chainLam(list: List[String], body: Term): Term = list match {
-  case Nil => body
-  case head :: next => Lam(Auto, Some(head), chainLam(next, body))
+  case cps.Member(interface, field, tpe) => println(expr); App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
+  case cps.New(impl) => chainApp(idToVar(impl.interface._1) :: (impl.operations map (x => transform(x.implementation: cps.Expr))))
 }
 
 def transform(constructors: List[cps.Constructor], adt: Adt): Adt = constructors match {
@@ -132,16 +125,21 @@ def chainApp(args: List[Term]): Term = {
   chainAppHelper(reverseArgs)
 }
 
-def chainCtr(args: List[StrPattern]): Pattern = args match {
-  case Nil => VarPattern(None)
-  case head :: Nil => head
-  case StrPattern(string) :: next => Ctr(string, next)
-}
-
 def chainAppHelper(args: List[Term]): Term = args match {
  case Nil => Err
  case head :: Nil => head
  case head:: tail => App(Auto, chainAppHelper(tail), head)
+}
+
+def chainLam(list: List[String], body: Term): Term = list match {
+  case Nil => body
+  case head :: next => Lam(Auto, Some(head), chainLam(next, body))
+}
+
+def chainCtr(args: List[StrPattern]): Pattern = args match {
+  case Nil => VarPattern(None)
+  case head :: Nil => head
+  case StrPattern(string) :: next => Ctr(string, next)
 }
 
 def exprToString(expr: cps.Expr): String = expr match {

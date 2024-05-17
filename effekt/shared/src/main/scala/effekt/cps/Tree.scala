@@ -4,7 +4,6 @@ package cps
 import effekt.core.CoreParsers.definition
 import effekt.symbols.{ Constructor, Name, Symbol}
 
-import effekt.symbols.builtins
 
 export effekt.core.Id
 
@@ -24,7 +23,7 @@ enum Declaration {
   def id: Id
 
   case Data(id: Id, constructors: List[Constructor])
-  case Interface(id: Id, properties: List[Property])
+  case InterfaceDecl(id: Id, properties: List[Property])
 }
 export Declaration.*
 
@@ -62,6 +61,7 @@ enum Expr{
   case Run(t: Term)
   
   case BlockLit(params: List[Id], body: Term)
+  case Member(Interface: Expr, field: Id, tpe: Interface)
   case New(impl: Implementation)
 }
 export Expr.*
@@ -94,6 +94,8 @@ case class Implementation(interface: Interface, operations: List[Operation]) {
  * Implementation of a method / effect operation.
  */
 case class Operation(name: Id, implementation: Expr.BlockLit)
+
+case class Interface(name: Id, args: List[Id])
 
 enum Lift {
   case Var(ev: EvidenceSymbol)
