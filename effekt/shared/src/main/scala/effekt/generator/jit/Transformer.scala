@@ -31,13 +31,16 @@ object Transformer {
     case core.ValueType.Data(name, _) if symbols.builtins.rootTypes.values.exists(_ == name) =>
       C.error(s"Unsupported builtin type ${core.PrettyPrinter.format(t)}.")
       jit.Top
-    case core.ValueType.Data(name, targs) =>
-      val core.Declaration.Data(id, tparams, constructors) = DC.getData(name)
-      jit.Data(name, constructors map { cons =>
-        jit.Constructor(cons.id, cons.fields.map { f =>
-          if f.tpe == t then jit.Ptr else transform(f.tpe)
+    case core.ValueType.Data(name, targs) => DC.findData(name) match {
+      case Some(core.Declaration.Data(id, tparams, constructors)) =>
+        jit.Data(name, constructors map { cons =>
+          jit.Constructor(cons.id, cons.fields.map { f =>
+            if f.tpe == t then jit.Ptr else transform(f.tpe)
+          })
         })
-      })
+      case None => // assume this is a `extern type`, and that this is a ptr
+        jit.Ptr
+    }
     case core.ValueType.Boxed(tpe, capt) => transform(tpe)
   }
   def capabilityParamsFor(cparams: List[core.Id])(using DC: core.DeclarationContext, C: ErrorReporter): List[jit.LhsOperand] = Nil
