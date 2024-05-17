@@ -21,7 +21,7 @@ object Transformer {
 
       // TODO proper initialization of runtime
       emit(Call("env", envType, malloc, List(ConstantInt(1024 * 1024))));
-      emit(Call("sp", spType, malloc, List(ConstantInt(1024 * 1024))));
+      emit(Call("sp", spType, malloc, List(ConstantInt(256 * 1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(), "base"), LocalReference(spType, "sp")));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
