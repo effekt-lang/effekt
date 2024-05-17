@@ -59,12 +59,12 @@ def drop[A](l: List[A], n: Int): List[A] =
     case Cons(a, rest) => rest.drop(n - 1)
   }
 
-def isEmpty[A](l: List[A]): Boolean = l match {
+def isEmpty[A](l: List[A]): Bool = l match {
   case Nil() => true
   case Cons(a, rest) => false
 }
 
-def nonEmpty[A](l: List[A]): Boolean = l match {
+def nonEmpty[A](l: List[A]): Bool = l match {
   case Nil() => false
   case Cons(a, rest) => true
 }
@@ -85,7 +85,7 @@ def headOption[A](l: List[A]): Option[A] = l match {
 }
 
 // elements that satisfy the predicate go into the left list
-def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
+def partition[A](l: List[A]) { pred: A => Bool }: (List[A], List[A]) = {
   var lefts: List[A] = Nil()
   var rights: List[A] = Nil()
   l.foreach { el =>
@@ -97,7 +97,7 @@ def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
 }
 
 // this implementation is not stacksafe!
-def sortBy[A](l: List[A]) { compare: (A, A) => Boolean }: List[A] =
+def sortBy[A](l: List[A]) { compare: (A, A) => Bool }: List[A] =
   l match {
     case Nil() => Nil()
     case Cons(pivot, rest) =>
@@ -123,9 +123,9 @@ def showList[A](l: List[A]){ showA: A => String }: String = {
 }
 def show(l: List[Int]): String = showList(l){ v => show(v) }
 def show(l: List[Double]): String = showList(l){ v => show(v) }
-def show(l: List[Boolean]): String = showList(l){ v => show(v) }
+def show(l: List[Bool]): String = showList(l){ v => show(v) }
 def show(l: List[String]): String = showList(l){ v => v }
 def println(l: List[Int]): Unit = println(show(l))
 def println(l: List[Double]): Unit = println(show(l))
-def println(l: List[Boolean]): Unit = println(show(l))
+def println(l: List[Bool]): Unit = println(show(l))
 def println(l: List[String]): Unit = println(show(l))

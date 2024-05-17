@@ -3,11 +3,11 @@ module mutualrecursion
 def even(n: Int) =
   if (n <= 0) true else odd(n - 1)
 
-def odd(n: Int): Boolean =
+def odd(n: Int): Bool =
   if (n <= 0) false else even(n - 1)
 
 def nestedEven(n: Int) = {
-  def even(n: Int): Boolean =
+  def even(n: Int): Bool =
     if (n <= 0) true else odd(n - 1)
 
   def odd(n: Int) =

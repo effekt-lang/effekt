@@ -3,7 +3,7 @@ module blockparams
 def foo { f : Int => Int } =
   f(2)
 
-def bar { f : (Int, Boolean) => Unit } =
+def bar { f : (Int, Bool) => Unit } =
   f(2, true)
 
 def main() = {
@@ -15,7 +15,7 @@ def main() = {
   val r2 = foo { x => x + 1 };
   println(r2);
 
-  bar { (x: Int, y: Boolean) =>
+  bar { (x: Int, y: Bool) =>
     if (y) { println(x) } else { println(0) }
   };
 

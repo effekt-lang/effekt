@@ -2,16 +2,16 @@ type TokenKind { Number(); Ident(); Punct(); Space() }
 
 record Token(kind: TokenKind, text: String)
 
-effect Nondet {
+interface Nondet {
   def fail[A](msg: String): A
 }
-effect Lexer {
+interface Lexer {
   def next(): Token
 }
 
 effect Parser = { Nondet, Lexer }
 
-def accept { p: Token => Boolean } : Unit / Parser = ()
+def accept { p: Token => Bool } : Unit / Parser = ()
 def accept(exp: TokenKind) : Unit / Parser = ()
 
 // this is a call to an overloaded function where each of the functions intoduce

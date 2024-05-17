@@ -3,8 +3,8 @@ module io/args
 import effekt
 import immutable/list
 
-extern pure def get_argc(): Int = "get_argc(): Int"
-extern pure def get_arg(i: Int): String = "get_arg(Int): String"
+extern pure def get_argc(): Int = jit "get_argc(): Int"
+extern pure def get_arg(i: Int): String = jit "get_arg(Int): String"
 
 def commandLineArgs(): List[String] = {
     def rec(start: Int): List[String] = {

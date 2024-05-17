@@ -19,6 +19,8 @@ class JIT() extends Compiler[String] {
   // -----------------------------------------
   def extension = ".mcore.json"
 
+  override def supportedFeatureFlags: List[String] = List("jit")
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted | Stage.Machine => None

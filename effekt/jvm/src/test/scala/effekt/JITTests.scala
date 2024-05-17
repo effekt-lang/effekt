@@ -14,7 +14,7 @@ class JITTests extends EffektTests {
 
   def backendName = "jit"
 
-  override def included: List[File] = List(
+  override def positives: List[File] = List(
     examplesDir / "jit",
   )
 

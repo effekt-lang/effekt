@@ -1,4 +1,4 @@
-effect Console { def println(msg: String): Unit }
+interface Console { def println(msg: String): Unit }
 
 def myFunction { console: Console } =
   console.println("hello")

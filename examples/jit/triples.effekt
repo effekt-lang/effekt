@@ -1,5 +1,5 @@
 
-effect Flip(): Boolean
+effect Flip(): Bool
 effect Fail[A](): A
 
 record Triple(a: Int, b: Int, c: Int)

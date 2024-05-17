@@ -3,9 +3,9 @@ module text/string
 import immutable/option
 import immutable/list
 
-extern pure def length(s: String): Int = "length(String): Int"
-extern pure def substring(s: String, start: Int, end: Int): String = "substring(String, Int, Int): String"
-extern pure def unsafeCharAt(s: String, i: Int): String = "unsafeCharAt(String, Int): String"
+extern pure def length(s: String): Int = jit "length(String): Int"
+extern pure def substring(s: String, start: Int, end: Int): String = jit "substring(String, Int, Int): String"
+extern pure def unsafeCharAt(s: String, i: Int): String = jit "unsafeCharAt(String, Int): String"
 
 def repeat(s: String, n: Int): String = {
     def rec(n: Int, acc: String): String = {
@@ -28,7 +28,7 @@ def charAt(str: String, i: Int): Option[String] = {
     }
 }
 
-def startsWith(str: String, prefix: String): Boolean = {
+def startsWith(str: String, prefix: String): Bool = {
     if (length(str) < length(prefix)) {
         false
     } else {
@@ -90,20 +90,20 @@ def show(s: String): String =
  } ++ "\x22"
 
 
-extern pure def unsafeRead(s: String): Int = "read(String): Int"
-extern pure def unsafeRead(s: String): Double = "read(String): Double"
-extern pure def unsafeRead(s: String): Boolean = "read(String): Boolean"
+extern pure def unsafeRead(s: String): Int = jit "read(String): Int"
+extern pure def unsafeRead(s: String): Double = jit "read(String): Double"
+extern pure def unsafeRead(s: String): Bool = jit "read(String): Boolean"
 
 def read(s: String): Option[Int] = unsafeToOption{ () => unsafeRead(s) }
 def read(s: String): Option[Double] = unsafeToOption{ () => unsafeRead(s) }
-def read(s: String): Option[Boolean] = unsafeToOption{ () => unsafeRead(s) }
+def read(s: String): Option[Bool] = unsafeToOption{ () => unsafeRead(s) }
 def toInt(s: String): Option[Int] = read(s)
 def toDouble(s: String): Option[Double] = read(s)
-def toBoolean(s: String): Option[Boolean] = read(s)
+def toBool(s: String): Option[Bool] = read(s)
 
 // Byte arrays
 extern type Bytes
-extern pure def bytes(s: String): Bytes = "bytes(String): Bytes"
-extern pure def length(b: Bytes): Int = "length(Bytes): Int"
+extern pure def bytes(s: String): Bytes = jit "bytes(String): Bytes"
+extern pure def length(b: Bytes): Int = jit "length(Bytes): Int"
 // TODO make safe (using unsafe/internal or unsafeToOption)
-extern pure def index(b: Bytes, i: Int): Int = "unsafeIndex(Bytes, Int): Int"
+extern pure def index(b: Bytes, i: Int): Int = jit "unsafeIndex(Bytes, Int): Int"

@@ -190,19 +190,21 @@ object Transformer {
     case core.Definition.Let(id, binding) => jit.Definition(jit.Var(id, transform(core.Type.inferType(binding))), transform(binding))
   }
   def transform(e: core.Extern)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Definition = e match {
-    case Extern.Def(id, tparams, cparams, vparams, bparams, retTpe, annotatedCapture, body) =>
+    case Extern.Def(id, tparams, cparams, vparams, bparams, retTpe, annotatedCapture,
+          core.ExternBody.StringExternBody(featureFlag, Template(List(body), Nil))) =>
       val args = ((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams)
       val ret = jit.Var(TmpValue(), transform(retTpe))
       val tpe = jit.Function(args.map(_.tpe), transform(retTpe),
         if annotatedCapture.isEmpty then Purity.Pure else Purity.Effectful)
       jit.Definition(jit.Var(id, tpe), jit.Abs(args,
         jit.Primitive(body, args, List(ret), ret)))
-    case Extern.Include(contents) =>
+    case Extern.Include(_, contents) =>
       C.abort("Extern includes are not supported in the JIT backend.")
+    case e => C.abort(s"Unsupported extern: ${e}")
   }
   def transform(coreMod: core.ModuleDecl, mod: effekt.symbols.Module)(using C: Context): jit.Program = coreMod match {
     case core.ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-      given DC: core.DeclarationContext = new core.DeclarationContext(coreMod.declarations)
+      given DC: core.DeclarationContext = new core.DeclarationContext(coreMod.declarations, coreMod.externs)
       val main = C.checkMain(mod)
       val tDefinitions = (externs map transform) ++ (definitions map transform)
       jit.Program(tDefinitions, jit.App(jit.Var(main, jit.Function(Nil, jit.Base.Unit, jit.Purity.Effectful)), Nil))

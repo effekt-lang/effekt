@@ -2,76 +2,76 @@ module effekt
 
 // Side effection ops
 // ==================
-extern io def random(): Int = "random(): Int"
-extern io def random(): Double = "random(): Double"
+extern io def random(): Int = jit "random(): Int"
+extern io def random(): Double = jit "random(): Double"
 
 // Console ops
 // ===========
 
-extern io def println(s: String): Unit = "println(String): Unit"
-extern io def printlnErr(s: String): Unit = "printlnErr(String): Unit"
-extern io def readLn(): String = "readLn(): String"
-extern io def readInt(): Int = "readInt(): Int"
+extern io def println(s: String): Unit = jit "println(String): Unit"
+extern io def printlnErr(s: String): Unit = jit "printlnErr(String): Unit"
+extern io def readLn(): String = jit "readLn(): String"
+extern io def readInt(): Int = jit "readInt(): Int"
 
 def println(n: Int): Unit = println(show(n))
 def println(n: Double): Unit = println(show(n))
-def println(b: Boolean): Unit = println(show(b))
+def println(b: Bool): Unit = println(show(b))
 def println(b: Unit): Unit = println("()")
 
 // integer primitives
 // ==================
 
-extern pure def infixAdd(x: Int, y: Int): Int = "infixAdd(Int, Int): Int"
-extern pure def infixMul(x: Int, y: Int): Int = "infixMul(Int, Int): Int"
-extern pure def infixDiv(x: Int, y: Int): Int = "infixDiv(Int, Int): Int"
-extern pure def infixSub(x: Int, y: Int): Int = "infixSub(Int, Int): Int"
-extern pure def mod(x: Int, y: Int): Int = "mod(Int, Int): Int"
-extern pure def abs(x: Int): Int = "abs(Int): Int"
+extern pure def infixAdd(x: Int, y: Int): Int = jit "infixAdd(Int, Int): Int"
+extern pure def infixMul(x: Int, y: Int): Int = jit "infixMul(Int, Int): Int"
+extern pure def infixDiv(x: Int, y: Int): Int = jit "infixDiv(Int, Int): Int"
+extern pure def infixSub(x: Int, y: Int): Int = jit "infixSub(Int, Int): Int"
+extern pure def mod(x: Int, y: Int): Int = jit "mod(Int, Int): Int"
+extern pure def abs(x: Int): Int = jit "abs(Int): Int"
 
 // double primitives
 // =================
-extern pure def infixAdd(x: Double, y: Double): Double = "infixAdd(Double, Double): Double"
-extern pure def infixMul(x: Double, y: Double): Double = "infixMul(Double, Double): Double"
-extern pure def infixDiv(x: Double, y: Double): Double = "infixDiv(Double, Double): Double"
-extern pure def infixSub(x: Double, y: Double): Double = "infixSub(Double, Double): Double"
-extern pure def mod(x: Double, y: Double): Double = "mod(Double, Double): Double"
-extern pure def abs(x: Double): Double = "abs(Double): Double"
+extern pure def infixAdd(x: Double, y: Double): Double = jit "infixAdd(Double, Double): Double"
+extern pure def infixMul(x: Double, y: Double): Double = jit "infixMul(Double, Double): Double"
+extern pure def infixDiv(x: Double, y: Double): Double = jit "infixDiv(Double, Double): Double"
+extern pure def infixSub(x: Double, y: Double): Double = jit "infixSub(Double, Double): Double"
+extern pure def mod(x: Double, y: Double): Double = jit "mod(Double, Double): Double"
+extern pure def abs(x: Double): Double = jit "abs(Double): Double"
 
-extern pure def cos(x: Double): Double = "cos(Double): Double"
-extern pure def acos(x: Double): Double = "acos(Double): Double"
-extern pure def sin(x: Double): Double = "sin(Double): Double"
-extern pure def asin(x: Double): Double = "asin(Double): Double"
-extern pure def tan(x: Double): Double = "tan(Double): Double"
-extern pure def atan(x: Double): Double = "atan(Double): Double"
-extern pure def atan2(x: Double, y: Double): Double = "atan2(Double, Double): Double"
+extern pure def cos(x: Double): Double = jit "cos(Double): Double"
+extern pure def acos(x: Double): Double = jit "acos(Double): Double"
+extern pure def sin(x: Double): Double = jit "sin(Double): Double"
+extern pure def asin(x: Double): Double = jit "asin(Double): Double"
+extern pure def tan(x: Double): Double = jit "tan(Double): Double"
+extern pure def atan(x: Double): Double = jit "atan(Double): Double"
+extern pure def atan2(x: Double, y: Double): Double = jit "atan2(Double, Double): Double"
 
-extern pure def cosh(x: Double): Double = "cosh(Double): Double"
-extern pure def acosh(x: Double): Double = "acosh(Double): Double"
-extern pure def sinh(x: Double): Double = "sinh(Double): Double"
-extern pure def asinh(x: Double): Double = "asinh(Double): Double"
-extern pure def tanh(x: Double): Double = "tanh(Double): Double"
-extern pure def atanh(x: Double): Double = "atanh(Double): Double"
+extern pure def cosh(x: Double): Double = jit "cosh(Double): Double"
+extern pure def acosh(x: Double): Double = jit "acosh(Double): Double"
+extern pure def sinh(x: Double): Double = jit "sinh(Double): Double"
+extern pure def asinh(x: Double): Double = jit "asinh(Double): Double"
+extern pure def tanh(x: Double): Double = jit "tanh(Double): Double"
+extern pure def atanh(x: Double): Double = jit "atanh(Double): Double"
 
-extern pure def sqrt(x: Double): Double = "sqrt(Double): Double"
-extern pure def log(x: Double): Double = "log(Double): Double"
-extern pure def log1p(x: Double): Double = "log1p(Double): Double"
-extern pure def log10(x: Double): Double = "log10(Double): Double"
-extern pure def exp(x: Double, y: Double): Double = "exp(Double, Double): Double"
+extern pure def sqrt(x: Double): Double = jit "sqrt(Double): Double"
+extern pure def log(x: Double): Double = jit "log(Double): Double"
+extern pure def log1p(x: Double): Double = jit "log1p(Double): Double"
+extern pure def log10(x: Double): Double = jit "log10(Double): Double"
+extern pure def exp(x: Double, y: Double): Double = jit "exp(Double, Double): Double"
 
-extern pure def floor(x: Double): Double = "floor(Double): Double"
-extern pure def ceil(x: Double): Double = "ceil(Double): Double"
-extern pure def toInt(x: Double): Int = "toInt(Double): Int"
-extern pure def toDouble(x: Int): Double = "toDouble(Int): Double"
+extern pure def floor(x: Double): Double = jit "floor(Double): Double"
+extern pure def ceil(x: Double): Double = jit "ceil(Double): Double"
+extern pure def toInt(x: Double): Int = jit "toInt(Double): Int"
+extern pure def toDouble(x: Int): Double = jit "toDouble(Int): Double"
 
 // ordering on signed integers
 // ===========================
 
-extern pure def infixEq(x: Int, y: Int): Boolean = "infixEq(Int, Int): Boolean"
-extern pure def infixLt(x: Int, y: Int): Boolean = "infixLt(Int, Int): Boolean"
-extern pure def infixGt(x: Int, y: Int): Boolean = "infixGt(Int, Int): Boolean"
-def infixNeq(x: Int, y: Int): Boolean = not(x == y)
-def infixLte(x: Int, y: Int): Boolean = (x == y) || (x < y)
-def infixGte(x: Int, y: Int): Boolean = (x == y) || (x > y)
+extern pure def infixEq(x: Int, y: Int): Bool = jit "infixEq(Int, Int): Boolean"
+extern pure def infixLt(x: Int, y: Int): Bool = jit "infixLt(Int, Int): Boolean"
+extern pure def infixGt(x: Int, y: Int): Bool = jit "infixGt(Int, Int): Boolean"
+def infixNeq(x: Int, y: Int): Bool = not(x == y)
+def infixLte(x: Int, y: Int): Bool = (x == y) || (x < y)
+def infixGte(x: Int, y: Int): Bool = (x == y) || (x > y)
 
 def min(x: Int, y: Int): Int = {
   if (x < y) { x } else { y }
@@ -83,39 +83,43 @@ def max(x: Int, y: Int): Int = {
 // ordering on doubles
 // ===================
 
-extern pure def infixEq(x: Double, y: Double): Boolean = "infixEq(Double, Double): Boolean"
-extern pure def infixNeq(x: Double, y: Double): Boolean = "infixNeq(Double, Double): Boolean"
-extern pure def infixLt(x: Double, y: Double): Boolean = "infixLt(Double, Double): Boolean"
-extern pure def infixLte(x: Double, y: Double): Boolean = "infixLte(Double, Double): Boolean"
-extern pure def infixGt(x: Double, y: Double): Boolean = "infixGt(Double, Double): Boolean"
-extern pure def infixGte(x: Double, y: Double): Boolean = "infixGte(Double, Double): Boolean"
+extern pure def infixEq(x: Double, y: Double): Bool = jit "infixEq(Double, Double): Boolean"
+extern pure def infixNeq(x: Double, y: Double): Bool = jit "infixNeq(Double, Double): Boolean"
+extern pure def infixLt(x: Double, y: Double): Bool = jit "infixLt(Double, Double): Boolean"
+extern pure def infixLte(x: Double, y: Double): Bool = jit "infixLte(Double, Double): Boolean"
+extern pure def infixGt(x: Double, y: Double): Bool = jit "infixGt(Double, Double): Boolean"
+extern pure def infixGte(x: Double, y: Double): Bool = jit "infixGte(Double, Double): Boolean"
 
 // boolean algebra
 // ===============
 
-def infixEq(x: Boolean, y: Boolean): Boolean = if (x) y else not(y)
-def infixNeq(x: Boolean, y: Boolean): Boolean = not(infixEq(x, y))
-def not(b: Boolean): Boolean = if (b) false else true
-def infixOr(x: Boolean, y: Boolean): Boolean = if (x) true else y
-def infixAnd(x: Boolean, y: Boolean): Boolean = if (x) y else false
+def infixEq(x: Bool, y: Bool): Bool = if (x) y else not(y)
+def infixNeq(x: Bool, y: Bool): Bool = not(infixEq(x, y))
+def not(b: Bool): Bool = if (b) false else true
+
+def infixOr { first: => Bool } { second: => Bool }: Bool =
+  if (first()) true else second()
+
+def infixAnd { first: => Bool } { second: => Bool }: Bool =
+  if (first()) second() else false
 
 // operations on strings
 // =====================
 // TODO make safe
-extern pure def infixConcat(s1: String, s2: String): String = "infixConcat(String, String): String"
-extern pure def infixEq(s1: String, s2: String): Boolean = "infixEq(String, String): Boolean"
-extern pure def infixNeq(s1: String, s2: String): Boolean = "infixEq(String, String): Boolean"
-extern pure def show(value: Int): String = "show(Int): String"
-extern pure def show(value: Double): String = "show(Double): String"
-def show(value: Boolean): String = if (value) "true" else "false"
+extern pure def infixConcat(s1: String, s2: String): String = jit "infixConcat(String, String): String"
+extern pure def infixEq(s1: String, s2: String): Bool= jit "infixEq(String, String): Boolean"
+extern pure def infixNeq(s1: String, s2: String): Bool= jit "infixEq(String, String): Boolean"
+extern pure def show(value: Int): String = jit "show(Int): String"
+extern pure def show(value: Double): String = jit "show(Double): String"
+def show(value: Bool): String = if (value) "true" else "false"
 
 // Benchmarking
 // ============
-extern io def currentTimeNanos(): Int = "currentTimeNanos(): Int"
+extern io def currentTimeNanos(): Int = jit "currentTimeNanos(): Int"
 
 // System
 // ======
-extern io def exit(code: Int): Nothing = "exit(Int): Void" // should probably be control, but this is unsupported as of now
+extern io def exit(code: Int): Nothing = jit "exit(Int): Void"
 def panic(msg: String): Nothing = {
   printlnErr("Panic: " ++ msg);
   exit(1)
@@ -131,7 +135,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 
 // Exceptions
 // ==========
-effect Exception[E] {
+interface Exception[E] {
   def raise[A](exception: E, msg: String): A
 }
 record RuntimeError()
@@ -166,7 +170,7 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 
 // For boxing polymorphic values
 record BoxedUnit(unboxUnit: Unit)
-record BoxedBoolean(unboxBoolean: Boolean)
+record BoxedBool(unboxBoolean: Bool)
 record BoxedInt(unboxInt: Int)
 record BoxedDouble(unboxDouble: Double)
 record BoxedString(unboxString: String)

@@ -1,5 +1,5 @@
 
-effect Fork(): Boolean
+effect Fork(): Bool
 
 def main() = {
   try {

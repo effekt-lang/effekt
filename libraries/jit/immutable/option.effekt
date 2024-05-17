@@ -8,12 +8,12 @@ type Option[A] {
   Some(value: A)
 }
 
-def isDefined[A](self: Option[A]): Boolean = self match {
+def isDefined[A](self: Option[A]): Bool = self match {
   case None()  => false
   case Some(v) => true
 }
 
-def isEmpty[A](self: Option[A]): Boolean =
+def isEmpty[A](self: Option[A]): Bool =
   self.isEmpty.not
 
 def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {
@@ -43,11 +43,11 @@ def showOption[A](o: Option[A]){ showA: A => String }: String = o match {
 }
 def show(o: Option[Int]): String = showOption(o){ v => show(v) }
 def show(o: Option[Double]): String = showOption(o){ v => show(v) }
-def show(o: Option[Boolean]): String = showOption(o){ v => show(v) }
+def show(o: Option[Bool]): String = showOption(o){ v => show(v) }
 def show(o: Option[String]): String = showOption(o){ v => v }
 def println(o: Option[Int]): Unit = println(show(o))
 def println(o: Option[Double]): Unit = println(show(o))
-def println(o: Option[Boolean]): Unit = println(show(o))
+def println(o: Option[Bool]): Unit = println(show(o))
 def println(o: Option[String]): Unit = println(show(o))
 
 def unsafeToOption[A]{ body: () => A }: Option[A] = {

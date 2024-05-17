@@ -1,3 +1,17 @@
+def assert(b: Bool, msg: String) = {
+  if(b) {
+    println("OK")
+  } else {
+    println(msg)
+  }
+}
+def assertNot(b: Bool, msg: String) = {
+  if(b) {
+    println(msg)
+  } else {
+    println("OK")
+  }
+}
 def main() = {
     val start = currentTimeNanos();
     println(0);
@@ -8,12 +22,12 @@ def main() = {
     println(y/x);
     println(x-y);
     println(mod(x,y));
-    println(x<y);
-    println(x<=y);
-    println(x==y);
-    println(x>y);
-    println(x!=y);
-    println(x>=y);
-    println(random() != random());
-    println((currentTimeNanos()-start) > 0);
+    assert(x<y, "<");
+    assert(x<=y, "<=");
+    assertNot(x==y, "==");
+    assertNot(x>y, ">");
+    assert(x != y, "!=");
+    assertNot(x>=y, ">=");
+    assert(random() != random(), "random");
+    assert((currentTimeNanos()-start) > 0, "time did not pass");
 }
