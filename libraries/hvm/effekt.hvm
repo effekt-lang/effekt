@@ -1,0 +1,4 @@
+(here) = @m m
+(plus e1 e2) = @m (e1 (e2 m))
+(lift) = @m @k @j (m (@x (k x) j))
+(pure) = @x @k (k x)
