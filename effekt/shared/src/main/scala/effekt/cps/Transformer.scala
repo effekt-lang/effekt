@@ -30,7 +30,7 @@ def transform(core: lifted.ModuleDecl): ModuleDecl = {
 }
 def transform(decl: lifted.Declaration): Declaration = decl match {
   case lifted.Declaration.Data(id, tparams, constructors) => Declaration.Data(id, constructors map transform)
-  case lifted.Declaration.Interface(id, tparams, properties) => Declaration.Interface(id, properties map transform)
+  case lifted.Declaration.Interface(id, tparams, properties) => Declaration.InterfaceDecl(id, properties map transform)
 }
 
 def transform(extern: lifted.Extern): Extern = extern match {
@@ -80,26 +80,24 @@ def transform(b: lifted.Block): Expr = b match { // block => Term
   case lifted.Block.Member(b, field, annotatedType) => 
   b match {
     case lifted.Block.BlockVar(id, annotatedType) => annotatedType match {
-      case lifted.BlockType.Interface(name, targs) => PureApp(Var(Id(name.toString + "." + field.toString)), List(Var(id)))
+      case lifted.BlockType.Interface(name, targs) => Member(transform(b), field, Interface(name, targs map transform))
       case _ => ???
     }
     case _ => ???
   }
   case lifted.Block.Unbox(e) => transform(e) 
-  case lifted.Block.New(impl) => New(transform(impl))//PureApp(Var(impl.interface.name), impl.operations map (x => PureApp(Var(x.name), List(BlockLit(List(), Let(Id("k"), Var(Id("id")), AppCont(Id("id"), transform(x.implementation))))))))
+  case lifted.Block.New(impl) => New(transform(impl))
   //case _ => ???
 }
 
 def transform(implementation: lifted.Implementation): Implementation =
-  Implementation(transform(implementation.interface), implementation.operations map transform)
-
-def transform(interface: lifted.BlockType.Interface) = ???
+  Implementation(Interface(implementation.interface.name, implementation.interface.targs map transform), implementation.operations map transform)
 
 def transform(operation: lifted.Operation): Operation =
   Operation(operation.name, transform(operation.implementation))
 
 def transform(blockLit: lifted.BlockLit): BlockLit = blockLit match {
-  case lifted.BlockLit(_, params, body) => BlockLit(params map transform, transform(body))
+  case lifted.BlockLit(_, params, body) => BlockLit((params map transform) :+ Id("k"), transform(body))
 }
 
 def transform(stmt: lifted.Stmt): Term = stmt match {
@@ -107,10 +105,8 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Val(id, binding, body)  => LetCont(Id("k"), id, transform(body), transform(binding))
   
   case lifted.Stmt.Scope(definitions, body) => transform(definitions, transform(body))
-  case lifted.Stmt.App(b, targs, args) => b match {
-    case lifted.Block.Member(_, _, _) => AppCont(Id("k"), PureApp(transform(b), args map transform))
-    case _ => App(transform(b), args map transform, Id("k"))
-  }
+  case lifted.Stmt.App(b, targs, args) => App(transform(b), args map transform, Id("k"))
+  
     //println(stmt); App(transform(b), args map transform, Id("k"))
   
   case lifted.Stmt.If(cond, thn, els) => If(transform(cond), transform(thn), transform(els))
