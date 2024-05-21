@@ -75,6 +75,8 @@ trait Transformer {
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    // empty matches are translated to a hole in chez scheme
+    case Match(scrutinee, Nil, None) => chez.Builtin("hole")
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>

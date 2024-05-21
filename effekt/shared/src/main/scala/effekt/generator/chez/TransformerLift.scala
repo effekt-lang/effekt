@@ -86,6 +86,8 @@ object TransformerLift {
           chez.Let(List(Binding(nameDef(id), value)), toChez(body, k))
         }
       }
+    // empty matches are translated to a hole in chez scheme
+    case Match(scrutinee, Nil, None) => CPS.inline { k => chez.Builtin("hole") }
     case Match(scrutinee, clauses, default) => CPS.join { k =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>

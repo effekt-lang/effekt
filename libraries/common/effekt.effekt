@@ -207,6 +207,7 @@ def differsFrom[R](x: R, y: R): Bool =
 // TODO fix this in the pattern matching compiler
 extern pure def infixEq(x: Unit, y: Unit): Bool =
   js "true"
+  chez "#t"
 
 extern pure def infixEq(x: Int, y: Int): Bool =
   js "${x} === ${y}"
