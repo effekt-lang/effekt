@@ -9,34 +9,35 @@ type Towers = Array[Pile]
 
 def run(n: Int) = {
 
-  var movesDone: Int = 0;
-  var towers: Towers = fill(3, Nil());
+  var movesDone: Int in global = 0;
+  var towers: Towers in global = fill(3, Nil());
 
   def pushDisk(newTopDiskOnPile: Disk, pileIdx: Int): Unit = {
     val pile: Pile = towers.unsafeGet(pileIdx);
     pile match {
-      case Cons(topDiskOnStack,_) => 
+      case Cons(topDiskOnStack, _) =>
         if (newTopDiskOnPile >= topDiskOnStack) {
           panic("Cannot put a big disk onto a smaller one");
         }
+      case Nil() => ()
     }
-    put(towers, pileIdx, Cons(newTopDiskOnPile, pile));
+    towers.put(pileIdx, Cons(newTopDiskOnPile, pile));
   }
 
   def popDisk(pileIdx: Int): Disk = {
     val pile = towers.unsafeGet(pileIdx);
-    
+
     pile match {
       case Nil() =>
-        panic("Attempting to remove a newTopDiskOnPile from an empty pileIdx");
-      case Cons(disk, next) => 
+        panic("Attempting to remove a disk from an empty pile");
+      case Cons(disk, next) =>
         put(towers, pileIdx, next)
         disk
     }
   }
 
   def moveTopDisk(fromPile: Int, ontoPile: Int) = {
-    pushDisk(popDisk(fromPile), ontoPile);
+    pushDisk(fromPile.popDisk, ontoPile);
     movesDone = movesDone + 1;
   }
 
