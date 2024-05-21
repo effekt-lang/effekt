@@ -1,0 +1,31 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+effect Emit(e: Int): Unit
+
+def range(l: Int, u: Int): Unit / Emit =
+  if (l > u) {
+    ()
+  } else {
+    do Emit(l);
+    range(l + 1, u)
+  }
+
+def run(n: Int) = {
+  var s = 0;
+  try {
+    range(0, n);
+    s
+  } with Emit { (e: Int) =>
+    s = s + e;
+    resume(())
+  }
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}

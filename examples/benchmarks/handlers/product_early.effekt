@@ -1,0 +1,46 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+interface Abort {
+  def done[A](i: Int): A
+}
+
+def product(xs: List[Int]): Int / Abort =
+  xs match {
+    case Nil() => 0
+    case Cons(y, ys) => if (y == 0) { do done(0) } else { y * product(ys) }
+  }
+
+def enumerate(i: Int): List[Int] =
+  if (i < 0) {
+    Nil()
+  } else {
+    Cons(i, enumerate(i - 1))
+  }
+
+def runProduct(xs: List[Int]) =
+  try {
+    product(xs)
+  } with Abort {
+    def done[A](r) = r
+  }
+
+def run(n: Int) = {
+  val xs = enumerate(1000);
+  def loop(i: Int, a: Int): Int = {
+    if (i == 0) {
+      a
+    } else {
+      loop (i - 1, a + runProduct(xs))
+    }
+  }
+  loop(n,0)
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}

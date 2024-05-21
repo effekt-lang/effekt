@@ -1,0 +1,41 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+def abs(i: Int): Int = if (i < 0) { 0 - i } else { i }
+
+effect Operator(x: Int): Unit
+
+def loop(i: Int, s: Int): Int / Operator =
+  if (i == 0) {
+    s
+  } else {
+    do Operator(i);
+    loop(i - 1, s)
+  }
+
+def run(n: Int, s: Int): Int =
+  try {
+    loop(n, s)
+  } with Operator { (x: Int) =>
+    val y = resume(());
+    mod(abs(x - (503 * y) + 37), 1009)
+  }
+
+def repeat(n: Int): Int = {
+  def step(l: Int, s: Int): Int = {
+    if (l == 0) {
+      s
+    } else {
+      step(l - 1, run(n,s))
+    }
+  }
+  step(1000, 0)
+}
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = repeat(n);
+  println(r)
+}

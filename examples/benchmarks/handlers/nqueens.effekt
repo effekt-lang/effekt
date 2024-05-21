@@ -1,0 +1,58 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+type Solution = List[Int]
+
+interface Search {
+  def pick(size: Int): Int
+  def fail(): Nothing
+}
+
+def safe(queen: Int, diag: Int, xs: Solution): Bool =
+  xs match {
+    case Nil() => true
+    case Cons(q, qs) => if (queen != q && queen != q + diag && queen != q - diag) {
+      safe(queen, diag + 1, qs)
+    } else {
+      false
+    }
+  }
+
+def place(size: Int, column: Int) : Solution / Search =
+  if (column == 0) {
+    Nil()
+  } else {
+    val rest = place(size, column - 1);
+    val next = do pick(size);
+    if (safe(next, 1, rest)) {
+      Cons(next, rest)
+    } else {
+      do fail() match {}
+    }
+  }
+
+def run(n: Int): Int =
+  try {
+    place(n, n);
+    1
+  } with Search {
+    def fail() = 0
+    def pick(size) = {
+      def loop(i: Int, a: Int): Int = {
+        if (i == size) {
+          a + resume(i)
+        } else {
+          loop(i + 1, a + resume(i))
+        }
+      };
+      loop(1, 0)
+    }
+  }
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}
