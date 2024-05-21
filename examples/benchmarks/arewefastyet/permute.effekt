@@ -26,19 +26,13 @@ def run(n: Int) = {
     }
   }
 
-  each(0, n) { _ =>
-    val arr = emptyArray[Int](6);
-    each(0, arr.size) { i =>
-      put(arr, i, 1);
-    }
-    arr.permute(6)
-  }
+  fill(n, 1).permute(n);
 
   count
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 6 };
   val r = run(n);
   println(r)
 }

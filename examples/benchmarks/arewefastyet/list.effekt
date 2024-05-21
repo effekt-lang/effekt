@@ -35,16 +35,11 @@ def tail(xs: List[Int], ys: List[Int], zs: List[Int]): List[Int] =
   }
 
 def run(n: Int) = {
-  var s in global = 0;
-  each(0, n) { _ =>
-    val result = tail(makeList(15), makeList(10), makeList(6));
-    s = s + length(result)
-  };
-  s
+  tail(makeList(n), makeList(10), makeList(6)).length;
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 15 };
   val r = run(n);
   println(r)
 }

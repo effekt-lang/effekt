@@ -3,71 +3,53 @@ import text/string
 import mutable/array
 
 interface Break[T] {
-  def returnWith(result: T): Nothing
+  def break(result: T): Nothing
 }
-
-def breakableLoop[T](from: Int, to: Int, default: T) { fnc: Int => Unit / Break[T] } : T =
-  try {
-    each(from, to) { n => fnc(n) };
-    default
-  } with Break[T] {
-    def returnWith(value) = value
-  }
 
 def run(n: Int) = {
 
-  var freeMaxs = emptyArray[Bool]();
-  var freeRows = emptyArray[Bool]();
-  var freeMins = emptyArray[Bool]();
-  var queenRows = emptyArray[Int]();
+  val freeRows: Array[Bool] = fill(n, true);
+  val freeMaxs: Array[Bool] = fill(2 * n, true);
+  val freeMins: Array[Bool] = fill(2 * n, true);
+  val queenRows: Array[Int] = fill(n, -1);
 
   def getRowColumn(r: Int, c: Int): Bool =
-    freeRows.unsafeGet(r) && freeMaxs.unsafeGet(c + r) && freeMins.unsafeGet(c - r + 7)
+    freeRows.unsafeGet(r) && freeMaxs.unsafeGet(c + r) && freeMins.unsafeGet(c - r + (n - 1))
 
   def setRowColumn(r: Int, c: Int, v: Bool) = {
     freeRows.put(r, v);
     freeMaxs.put(c + r, v);
-    freeMins.put(c - r + 7, v)
+    freeMins.put(c - r + (n - 1), v)
   }
 
   def placeQueen(c: Int): Bool =
-    breakableLoop[Bool](0, 8, false) { r =>
-      if (getRowColumn(r, c)) {
-        queenRows.put(r, c);
-        setRowColumn(r, c, false);
+    try {
+      each(0, n) { r =>
+        if (getRowColumn(r, c)) {
+          queenRows.put(r, c);
+          setRowColumn(r, c, false);
 
-        if (c == 7) {
-          do returnWith(true);
-        }
+          if (c == (n - 1)) {
+            do break(true);
+          }
 
-        if (placeQueen(c + 1)) {
-          do returnWith(true);
+          if (placeQueen(c + 1)) {
+            do break(true);
+          }
+          setRowColumn(r, c, true);
         }
-        setRowColumn(r, c, true);
-      }
+      };
+      false
+    } with Break[Bool] {
+        def break(value) = value
     }
 
-  def queens() = {
-    freeRows = fill(8, true);
-    freeMaxs = fill(16, true);
-    freeMins = fill(16, true);
-    queenRows = fill(8, -1);
+  placeQueen(0)
 
-    placeQueen(0);
-  }
-
-  // This should be factored into a benchmarking library
-  var result in global = true;
-
-  each(0, n) { _ =>
-    result = result && queens()
-  };
-
-  result
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 10 };
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 8 };
   val r = run(n);
   println(r)
 }
