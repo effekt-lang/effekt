@@ -1,4 +1,4 @@
 def main() = {
   val array = fromList([1,2,3]);
-  println(array.toList)
+  inspect(array.toList)
 }

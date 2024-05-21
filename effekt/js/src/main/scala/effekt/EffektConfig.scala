@@ -22,11 +22,9 @@ trait EffektConfig {
 
   def prelude(): List[String] = List(
     "effekt",
-    "equality",
     "option",
     "list",
     "result",
-    "show",
     "exception",
     "array",
     "string",

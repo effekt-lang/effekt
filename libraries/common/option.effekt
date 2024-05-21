@@ -54,3 +54,19 @@ def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
 // These functions should only be used by libraries that interface with FFI
 def undefinedToOption[A](value: A): Option[A] =
   if (value.isUndefined) { None() } else { Some(value) }
+
+
+// Show Instances
+// --------------
+
+def show[A](o: Option[A]) { showA: A => String }: String = o match {
+  case None() => "None()"
+  case Some(v) => "Some(" ++ showA(v) ++ ")"
+}
+def show(o: Option[Int]): String = show(o) { e => show(e) }
+def show(o: Option[Double]): String = show(o) { e => show(e) }
+def show(o: Option[Bool]): String = show(o) { e => show(e) }
+
+def println(o: Option[Int]): Unit = println(show(o))
+def println(o: Option[Double]): Unit = println(show(o))
+def println(o: Option[Bool]): Unit = println(show(o))

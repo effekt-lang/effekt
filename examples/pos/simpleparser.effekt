@@ -77,6 +77,6 @@ def parse[R](input: List[String]) { prog: () => R / Parser }: Result[R] / {} =
 
 
 def main() = {
-  println(parse(["12", "34", "56"]) { manyNumbers() })
+  inspect(parse(["12", "34", "56"]) { manyNumbers() })
   // Success(Cons(12, Cons(34, Cons(56, Nil()))))
 }

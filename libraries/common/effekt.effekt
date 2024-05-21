@@ -39,6 +39,104 @@ namespace llvm {
   extern include llvm "../llvm/forward-declare-c.ll"
 }
 
+// Showing and debugging
+// =====================
+
+extern def println(value: String): Unit =
+  js "$effekt.println(${value})"
+  chez "(println_impl ${value})"
+  llvm """
+    call void @c_io_println_String(%Pos %value)
+    call void @c_buffer_refcount_decrement(%Pos %value)
+    ret %Pos zeroinitializer ; Unit
+  """
+
+extern io def print(value: String): Unit =
+  ml "print ${value}"
+
+def println(value: Int): Unit = println(value.show)
+def println(value: Unit): Unit = println(value.show)
+def println(value: Double): Unit = println(value.show)
+def println(value: Bool): Unit = println(value.show)
+
+extern pure def show(value: Int): String =
+  js "'' + ${value}"
+  chez "(show-number ${value})"
+  ml "show'int ${value}"
+  llvm """
+    %z = call %Pos @c_buffer_show_Int(%Int %value)
+    ret %Pos %z
+  """
+
+def show(value: Unit): String = "()"
+
+extern pure def show(value: Double): String =
+  js "'' + ${value}"
+  chez "(show-number ${value})"
+  ml "show'real ${value}"
+  llvm """
+    %z = call %Pos @c_buffer_show_Double(%Double %value)
+    ret %Pos %z
+  """
+
+def show(value: String): String =
+  value
+
+def show(value: Bool): String =
+  if (value) "true" else "false"
+
+extern pure def show(value: Char): String =
+  js "String.fromCharCode(${value})"
+  chez "(show-char ${value})"
+  ml "show'int ${value}" // TODO implement properly
+  llvm """
+    %z = call %Pos @c_buffer_show_Int(%Int %value)
+    ret %Pos %z
+  """
+
+extern pure def genericShow[R](value: R): String =
+  js "$effekt.show(${value})"
+  chez "(show_impl ${value})"
+
+extern io def inspect[R](value: R): Unit =
+  js { println(genericShow(value)) }
+  chez { println(genericShow(value)) }
+
+
+// Strings
+// =======
+extern pure def infixConcat(s1: String, s2: String): String =
+  js "${s1} + ${s2}"
+  chez "(string-append ${s1} ${s2})"
+  ml "${s1} ^ ${s2}"
+  llvm """
+    %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
+    call void @c_buffer_refcount_decrement(%Pos %s1)
+    call void @c_buffer_refcount_decrement(%Pos %s2)
+    ret %Pos %spz
+  """
+
+extern pure def length(str: String): Int =
+  js "${str}.length"
+  chez "(string-length ${str})"
+  ml "String.size ${str}"
+  llvm """
+    %x = call %Int @c_buffer_length(%Pos %str)
+    call void @c_buffer_refcount_decrement(%Pos %str)
+    ret %Int %x
+  """
+
+extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
+  js "${str}.substring(${from}, ${to})"
+  chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
+  ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
+  llvm """
+    %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
+    call void @c_buffer_refcount_decrement(%Pos %str)
+    ret %Pos %x
+  """
+
+
 // Side effecting ops
 // ==================
 
@@ -53,6 +151,146 @@ extern io def random(): Double =
 // interface Ref[T] { def get(): T; def put(t: T): Unit }
 // extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
 // extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
+
+
+// Equality
+// ========
+/**
+ * Result of comparison between two objects according to some order:
+ *
+ * - `Less()` means that the first object is *before* the first in the order,
+ * - `Equal()` means that the two objects are the same in the order,
+ * - and `Greater()` means that the second object is *before* the first in the order.
+ */
+type Ordering {
+  Less();
+  Equal();
+  Greater()
+}
+
+extern pure def genericCompareImpl[R](x: R, y: R): Int =
+  js "$effekt.compare(${x}, ${y})"
+
+ // Compares two values of the same type, returning an `Ordering`.
+def genericCompare[R](x: R, y: R): Ordering = {
+  genericCompareImpl(x, y) match {
+    case -1 => Less()
+    case 0 => Equal()
+    case 1 => Greater()
+    case _ => <{ "Impossible: JS comparison returned invalid value!" }>
+  }
+}
+
+def show(o: Ordering): String = o match {
+  case Less() => "Less()"
+  case Equal() => "Equal()"
+  case Greater() => "Greater()"
+}
+
+def println(o: Ordering): Unit = println(o.show)
+
+
+// Comparison ops
+// ==============
+
+/**
+ * Structural equality: Not available in the LLVM backend
+ */
+extern pure def equals[R](x: R, y: R): Bool =
+  js "$effekt.equals(${x}, ${y})"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+
+def differsFrom[R](x: R, y: R): Bool =
+  not(equals(x, y))
+
+// TODO fix this in the pattern matching compiler
+extern pure def infixEq(x: Unit, y: Unit): Bool =
+  js "true"
+
+extern pure def infixEq(x: Int, y: Int): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %z = icmp eq %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Int, y: Int): Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  ml "${x} <> ${y}"
+  llvm """
+    %z = icmp ne %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: Char, y: Char): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %z = icmp eq %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Char, y: Char): Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  ml "${x} <> ${y}"
+  llvm """
+    %z = icmp ne %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: String, y: String): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
+    call void @c_buffer_refcount_decrement(%Pos %x)
+    call void @c_buffer_refcount_decrement(%Pos %y)
+    ret %Pos %res
+  """
+
+def infixNeq(x: String, y: String): Bool = not(x == y)
+
+extern pure def infixEq(x: Bool, y: Bool): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %slim_x = extractvalue %Pos %x, 0
+    %slim_y = extractvalue %Pos %y, 0
+    %slim_z = icmp eq i64 %slim_x, %slim_y
+    %fat_z = zext i1 %slim_z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Bool, y: Bool): Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  ml "${x} <> ${y}"
+  llvm """
+    %slim_x = extractvalue %Pos %x, 0
+    %slim_y = extractvalue %Pos %y, 0
+    %slim_z = icmp ne i64 %slim_x, %slim_y
+    %fat_z = zext i1 %slim_z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
 
 // Math ops
 // ========

@@ -1,8 +1,6 @@
 module list
 
 import effekt
-import show
-import equality
 import option
 import exception
 
@@ -649,3 +647,24 @@ def isSortedBy[A](list: List[A]) { compare: (A, A) => Bool }: Bool = {
   }
   go(list)
 }
+
+
+// Show Instances
+// --------------
+
+def show[A](l: List[A]) { showA: A => String }: String = {
+  def go(l: List[A]): String = l match {
+    case Nil() => "Nil()"
+    case Cons(x, xs) => "Cons(" ++ showA(x) ++ ", " ++ go(xs) ++ ")"
+  }
+  go(l)
+}
+def show(l: List[Int]): String = show(l) { e => show(e) }
+def show(l: List[Double]): String = show(l) { e => show(e) }
+def show(l: List[Bool]): String = show(l) { e => show(e) }
+def show(l: List[String]): String = show(l) { e => e }
+
+def println(l: List[Int]): Unit = println(show(l))
+def println(l: List[Double]): Unit = println(show(l))
+def println(l: List[Bool]): Unit = println(show(l))
+def println(l: List[String]): Unit = println(show(l))

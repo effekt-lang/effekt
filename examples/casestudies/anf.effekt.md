@@ -167,7 +167,7 @@ def pipeline(input: String): String =
 Here we use `pipeline` to translate some examples:
 ```
 def main() = {
-  println(exampleResult)
+  inspect(exampleResult)
   println(examplePretty)
 
   println("----")

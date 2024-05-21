@@ -117,6 +117,32 @@ def sum(list: Array[Int]): Int = {
   acc
 }
 
+// Show Instances
+// --------------
+
+def show[A](arr: Array[A]) { showA: A => String }: String = {
+  var output = "Array("
+  val lastIndex = arr.size - 1
+
+  arr.foreachIndex { (index, a) =>
+    if (index == lastIndex) output = output ++ showA(a)
+    else output = output ++ showA(a) ++ ", "
+  }
+  output = output ++ ")"
+
+  output
+}
+def show(l: Array[Int]): String = show(l) { e => show(e) }
+def show(l: Array[Double]): String = show(l) { e => show(e) }
+def show(l: Array[Bool]): String = show(l) { e => show(e) }
+def show(l: Array[String]): String = show(l) { e => e }
+
+def println(l: Array[Int]): Unit = println(show(l))
+def println(l: Array[Double]): Unit = println(show(l))
+def println(l: Array[Bool]): Unit = println(show(l))
+def println(l: Array[String]): Unit = println(show(l))
+
+
 
 // Old from ML
 // -----------

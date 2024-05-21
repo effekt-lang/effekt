@@ -50,9 +50,8 @@ $effekt.compare = function(obj1, obj2) {
   return compare$prim(obj1, obj2);
 }
 
-$effekt.println = function println$impl(obj) {
-  //return $effekt.delayed(() => { console.log(show(obj)); return $effekt.unit; });
-  console.log($effekt.show(obj)); return $effekt.unit;
+$effekt.println = function println$impl(str) {
+  console.log(str); return $effekt.unit;
 }
 
 $effekt.unit = { __unit: true }

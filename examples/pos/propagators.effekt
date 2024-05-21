@@ -31,7 +31,7 @@ interface Net {
 
 def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net } =
   do subscribe(cell).foreach { a =>
-    println("received a " ++ a.show);
+    println("received a " ++ a.genericShow);
     f(a); do abort() } // this abort seems to abort also other subscribers?
 
 // establishes a connection between cellA and cellB
@@ -72,7 +72,7 @@ def example() = {
   println("z = y + x")
   z.sumOf(y, x)
 
-  println(do subscribe(z))
+  inspect(do subscribe(z))
 }
 
 // cells must not leave the propagator!
@@ -110,12 +110,12 @@ def propagators { net: => Unit / Net }: Unit = {
         run()
 
       // we already knew it!
-      case (Some(v), k) => if (v == value) {
+      case (Some(v), k) => if (v.equals(value)) {
         resume(())
         run()
       } else {
         // contradiction
-        println("contradiction: " ++ value.show ++ " and " ++ v.show);
+        println("contradiction: " ++ value.genericShow ++ " and " ++ v.genericShow);
         ()
       }
     }

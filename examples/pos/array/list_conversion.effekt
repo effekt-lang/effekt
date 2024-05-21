@@ -1,19 +1,19 @@
 module examples/pos/list/collect
 
 def listToArrayAndBack[A](list: List[A]): Unit = {
-  list.foreach { x => println(x) }
+  list.foreach { x => inspect(x) }
   println("")
 
   val arr = fromList(list)
   println("size " ++ show(arr.size))
   arr.foreachIndex { (i, x) =>
     println(i)
-    println(x)
+    inspect(x)
   }
   println("")
 
   val reconstructedList = arr.toList()
-  reconstructedList.foreach { x => println(x) }
+  reconstructedList.foreach { x => inspect(x) }
   println("")
 }
 
@@ -21,19 +21,19 @@ def arrayToListAndBack[A](arr: Array[A]): Unit = {
   println("size " ++ show(arr.size))
   arr.foreachIndex { (i, x) =>
     println(i)
-    println(x)
+    inspect(x)
   }
   println("")
 
   val list = arr.toList
-  list.foreach { x => println(x) }
+  list.foreach { x => inspect(x) }
   println("")
 
   val reconstructedArray = fromList(list)
   println("size " ++ show(reconstructedArray.size))
   reconstructedArray.foreachIndex { (i, x) =>
     println(i)
-    println(x)
+    inspect(x)
   }
   println("")
 }

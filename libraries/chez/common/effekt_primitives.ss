@@ -60,8 +60,8 @@
 
 
 
-(define (println_impl obj)
-  (display (show_impl obj))
+(define (println_impl str)
+  (display str)
   (newline))
 
 (define (equal_impl obj1 obj2)

@@ -42,16 +42,15 @@ def f3(fs: List[=> (Int => Int at {}) at {}]) =
         else first(fs)()(n - 1)
     }
 
-def mod3(x: Int): Int = first(vfix([f1,f2,f3]))()(x)
+def mod3(x: Int): Int = first(vfix([f1, f2, f3]))()(x)
 
-def calculate(x: Int) = {
-    return [mod3(x), mod3(x + 1), mod3(x + 2)]
-}
+def calculate(x: Int) =
+  println("[" ++ mod3(x).show ++ ", " ++ mod3(x + 1).show ++ ", " ++ mod3(x + 2).show ++ "]")
 
 def main() = commandLineArgs() match {
-  case Nil() => println(calculate(999))
+  case Nil() => calculate(999)
   case Cons(x, Nil()) =>
     with report[WrongFormat];
-    println(calculate(x.toInt))
+    calculate(x.toInt)
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }

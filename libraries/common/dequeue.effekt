@@ -1,9 +1,5 @@
 module dequeue
 
-import effekt
-import equality
-import list
-import option
 
 // An implementation of a functional dequeue, using Okasaki's
 // bankers dequeue implementation.
@@ -78,3 +74,19 @@ def popBack[R](dq: Dequeue[R]): Option[(R, Dequeue[R])] = dq match {
     case Dequeue(f, fs, Cons(x, rest), rs) =>
         Some((x, Dequeue(f, fs, rest, rs - 1).check))
 }
+
+
+def show[A](d: Dequeue[A]) { showA: A => String }: String = {
+  val Dequeue(front, frontSize, rear, rearSize) = d;
+  "Dequeue(" ++ show(front){showA} ++ ", " ++ show(frontSize) ++ ", " ++
+      show(rear){showA} ++ ", " ++ show(rearSize) ++ ")"
+}
+def show(l: Dequeue[Int]): String = show(l) { e => show(e) }
+def show(l: Dequeue[Double]): String = show(l) { e => show(e) }
+def show(l: Dequeue[Bool]): String = show(l) { e => show(e) }
+def show(l: Dequeue[String]): String = show(l) { e => e }
+
+def println(l: Dequeue[Int]): Unit = println(show(l))
+def println(l: Dequeue[Double]): Unit = println(show(l))
+def println(l: Dequeue[Bool]): Unit = println(show(l))
+def println(l: Dequeue[String]): Unit = println(show(l))

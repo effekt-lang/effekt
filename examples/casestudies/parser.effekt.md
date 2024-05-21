@@ -38,7 +38,7 @@ input stream and fails, if it does not match.
 def accept { p: Token => Bool } : Token / Parser = {
   val got = do next();
   if (p(got)) got
-  else do fail("Unexpected token " ++ show(got))
+  else do fail("Unexpected token " ++ got.show)
 }
 ```
 
@@ -223,19 +223,19 @@ Having implemented a handler for the `Parser` effect, we can run our example "gr
 
 ```
 def main() = {
-  println(parse("42") { parseCalls() })
-  println(parse("foo(1)") { parseCalls() })
-  println(parse("foo(1, 2)") { parseCalls() })
-  println(parse("foo(1, 2, 3, 4)") { parseCalls() })
-  println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-  println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+  inspect(parse("42") { parseCalls() })
+  inspect(parse("foo(1)") { parseCalls() })
+  inspect(parse("foo(1, 2)") { parseCalls() })
+  inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
+  inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
+  inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-  println(parse("}42") { parseExpr() })
-  println(parse("42") { parseExpr() })
-  println(parse("let x = 4 in 42") { parseExpr() })
-  println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-  println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-  println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-  println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+  inspect(parse("}42") { parseExpr() })
+  inspect(parse("42") { parseExpr() })
+  inspect(parse("let x = 4 in 42") { parseExpr() })
+  inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+  inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+  inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+  inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 }
 ```

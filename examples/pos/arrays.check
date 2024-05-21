@@ -2,6 +2,6 @@ Some(hello)
 Some(world)
 None()
 Some(foo)
-Hello World,Hello World,Hello World,Hello World
-0,1,2,3,4
-1,5,17
+Array(Hello World, Hello World, Hello World, Hello World)
+Array(0, 1, 2, 3, 4)
+Array(1, 5, 17)

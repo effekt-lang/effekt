@@ -1,10 +1,8 @@
 module string
 
 import effekt
-import equality
 import option
 import list
-import show
 import exception
 import result
 
@@ -24,38 +22,6 @@ import result
 
 // Operations
 // ----------
-
-extern pure def infixConcat(s1: String, s2: String): String =
-  js "${s1} + ${s2}"
-  chez "(string-append ${s1} ${s2})"
-  ml "${s1} ^ ${s2}"
-  llvm """
-    %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
-    call void @c_buffer_refcount_decrement(%Pos %s1)
-    call void @c_buffer_refcount_decrement(%Pos %s2)
-    ret %Pos %spz
-  """
-
-extern pure def length(str: String): Int =
-  js "${str}.length"
-  chez "(string-length ${str})"
-  ml "String.size ${str}"
-  llvm """
-    %x = call %Int @c_buffer_length(%Pos %str)
-    call void @c_buffer_refcount_decrement(%Pos %str)
-    ret %Int %x
-  """
-
-extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
-  js "${str}.substring(${from}, ${to})"
-  chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
-  ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
-  llvm """
-    %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
-    call void @c_buffer_refcount_decrement(%Pos %str)
-    ret %Pos %x
-  """
-
 
 def substring(str: String, from: Int, to: Int): String = {
   def clamp(lower: Int, x: Int, upper: Int) = max(lower, min(x, upper))

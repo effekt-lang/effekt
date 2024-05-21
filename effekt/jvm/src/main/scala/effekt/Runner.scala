@@ -113,7 +113,7 @@ object JSRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "generic", path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
@@ -139,7 +139,7 @@ trait ChezRunner extends Runner[String] {
 
    def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "show", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
@@ -189,8 +189,7 @@ object LLVMRunner extends Runner[String] {
     path / ".." / "monomorphic",
     path / ".." / "llvm")
 
-  // dequeue needs to be part of the prelude here since showinstances is also part of the prelude
-  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "dequeue", "show", "showinstances", "exception", "string") // "array", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string") // "array", "ref")
 
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
@@ -238,8 +237,7 @@ object MLRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  // dequeue needs to be part of the prelude here since showinstances is also part of the prelude
-  override def prelude: List[String] = List("effekt", "equality", "option", "list", "result", "dequeue", "show", "showinstances", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   override def includes(path: File): List[File] = List(
     path / ".." / "monomorphic",
