@@ -288,7 +288,7 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: Pure)
-  case Val(id: Id, binding: Stmt, body: Stmt)
+  case Val(id: Id, annotatedTpe: ValueType, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
@@ -322,7 +322,7 @@ export Stmt.*
  */
 object normal {
 
-  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+  def valDef(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt =
     (binding, body) match {
 
       // [[ val x = STMT; return x ]] == STMT
@@ -345,9 +345,9 @@ object normal {
       //
       // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
       case (Stmt.Scope(definitions, binding), body) =>
-        scope(definitions, valDef(id, binding, body))
+        scope(definitions, valDef(id, tpe, binding, body))
 
-      case _ => Stmt.Val(id, binding, body)
+      case _ => Stmt.Val(id, tpe, binding, body)
     }
 
   // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
@@ -645,7 +645,7 @@ object Variables {
       stillFree ++ (free(body) -- boundSoFar)
 
     case Stmt.Return(expr) => free(expr)
-    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
+    case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
@@ -736,8 +736,8 @@ object substitutions {
       case Return(expr) =>
         Return(substitute(expr))
 
-      case Val(id, binding, body) =>
-        Val(id, substitute(binding),
+      case Val(id, tpe, binding, body) =>
+        Val(id, substitute(tpe), substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case App(callee, targs, vargs, bargs) =>

@@ -58,9 +58,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
       go(definitions, Nil)
 
-    case core.Val(id, binding, body) =>
+    case core.Val(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Val(rewrite(id), tpe, resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)

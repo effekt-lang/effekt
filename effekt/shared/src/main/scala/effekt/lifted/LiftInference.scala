@@ -201,7 +201,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       Scope(definitions.map(d => transform(d)(using env, ErrorReporter)), body)
 
-    case core.Val(id, binding, body) =>
+    case core.Val(id, tpe, binding, body) =>
       Val(id, transform(binding), transform(body))
 
     case core.Var(id, init, capture, body) =>

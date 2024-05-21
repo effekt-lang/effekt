@@ -194,7 +194,7 @@ object TransformerDirect extends Transformer {
     //   let x = undefined;
     //   [[bind]](x = []);
     //   [[body]](k)
-    case d @ Val(id, binding, body) =>
+    case d @ Val(id, tpe, binding, body) =>
       // Here we fix the order of arguments
       val free = C.locals(d).toList
       val freeValues = free.collect { case core.Variable.Value(id, tpe) => id }

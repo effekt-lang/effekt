@@ -31,9 +31,9 @@ object DirectStyleMutableState extends Phase[CoreTransformed, CoreTransformed] {
   object directStyle extends Tree.Rewrite {
     override def stmt: PartialFunction[Stmt, Stmt] = {
 
-      case Stmt.Val(y, Get(x, tpe), s) => Let(y, Get(rewrite(x), tpe), rewrite(s))
+      case Stmt.Val(y, _, Get(x, tpe), s) => Let(y, Get(rewrite(x), tpe), rewrite(s))
 
-      case Stmt.Val(y, Put(x, tpe, v), s) => Let(y, Put(x, tpe, rewrite(v)), rewrite(s))
+      case Stmt.Val(y, _, Put(x, tpe, v), s) => Let(y, Put(x, tpe, rewrite(v)), rewrite(s))
 
       case Get(x, tpe) =>
         val id = Id("tmp")

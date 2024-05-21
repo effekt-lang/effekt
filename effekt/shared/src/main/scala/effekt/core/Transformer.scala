@@ -88,7 +88,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val additionalDefinitions = bindings.toList.map {
         case Binding.Let(name, binding) => Definition.Let(name, binding)
         case Binding.Def(name, binding) => Definition.Def(name, binding)
-        case Binding.Val(name, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
+        case Binding.Val(name, tpe, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
       }
       additionalDefinitions ++ List(definition)
 
@@ -166,7 +166,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
-      Val(Wildcard(), insertBindings { Return(transformAsPure(e)) }, transform(rest))
+      val binding = insertBindings { Return(transformAsPure(e)) }
+      Val(Wildcard(), binding.tpe, binding, transform(rest))
 
     // return e
     case source.Return(e) =>
@@ -188,7 +189,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Let(v.symbol, Run(transform(binding)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) =>
-        Val(v.symbol, transform(binding), transform(rest))
+        val transformed = transform(binding)
+        Val(v.symbol, transformed.tpe, transformed, transform(rest))
 
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol
@@ -395,7 +397,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
-      val thenBranch = Stmt.Val(TmpValue(), transform(body), loopCall)
+      val transformedBody = transform(body)
+      val thenBranch = Stmt.Val(TmpValue(), transformedBody.tpe, transformedBody, loopCall)
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
       val loopBody = guards match {
@@ -608,7 +611,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         }
       }
       bindings.toList.map {
-        case Binding.Val(name, binding) => Condition.Val(name, binding)
+        case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
         case Binding.Let(name, binding) => Condition.Let(name, binding)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
@@ -758,7 +761,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 
 private[core] enum Binding {
-  case Val(name: TmpValue, binding: Stmt)
+  case Val(name: TmpValue, tpe: core.ValueType, binding: Stmt)
   case Let(name: TmpValue, binding: Expr)
   case Def(name: BlockSymbol, binding: Block)
 }
@@ -784,7 +787,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     // create a fresh symbol and assign the type
     val x = TmpValue()
 
-    val binding = Binding.Val(x, s)
+    val binding = Binding.Val(x, s.tpe, s)
     bindings += binding
 
     ValueVar(x, s.tpe)
@@ -823,8 +826,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def reifyBindings(body: Stmt, bindings: ListBuffer[Binding]): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
-      case (Binding.Val(x, b), Return(ValueVar(y, _))) if x == y => b
-      case (Binding.Val(x, b), body) => Val(x, b, body)
+      case (Binding.Val(x, tpe, b), Return(ValueVar(y, _))) if x == y => b
+      case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
       case (Binding.Let(x, Run(s)), Return(ValueVar(y, _))) if x == y => s
       case (Binding.Let(x, b: Pure), Return(ValueVar(y, _))) if x == y => Return(b)
       case (Binding.Let(x, b), body) => Let(x, b, body)

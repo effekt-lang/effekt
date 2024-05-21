@@ -171,12 +171,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Val(Wildcard(), binding, body) =>
+    case Val(Wildcard(), _, binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, binding, body) =>
-      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+    case Val(id, tpe, binding, body) =>
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, vargs, bargs) =>

@@ -105,7 +105,7 @@ class Reachable(
       }
       process(body)(using currentDefs)
     case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, binding, body) => process(binding); process(body)
+    case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       vargs.foreach(process)
