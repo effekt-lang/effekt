@@ -11,26 +11,26 @@ interface Random {
   def next(): Int
 }
 
-def bitAnd(x: Int, y: Int) = mod(x, y + 1) 
+def bitAnd(x: Int, y: Int) = mod(x, y + 1)
 
-def withRandom[R]{ program: { Random } => R}: R = {
+def withRandom[R]{ program: { Random } => R }: R = {
   var seed = 74755;
   def rand = new Random {
     def next() = {
-    seed = bitAnd((seed * 1309) + 13849, 65535);
-    seed;
+      seed = bitAnd((seed * 1309) + 13849, 65535);
+      seed;
     }
   }
   program{rand}
 }
 
 def run(n: Int) = {
-  var count = 0;
+  var count in global = 0;
 
-  def buildTreeDepth(depth: Int){ rand: Random }: Tree = {
+  def buildTreeDepth(depth: Int) { rand: Random }: Tree = {
     count = count + 1;
     if (depth == 1) {
-      Leaf(emptyArray[Int](mod(rand.next(), 10) + 1))
+      Leaf(emptyArray(mod(rand.next, 10) + 1))
     } else {
       Node(
         buildTreeDepth(depth - 1){ rand },
@@ -41,8 +41,8 @@ def run(n: Int) = {
   }
 
   each(0, n) { _ =>
-    withRandom{ { rand: Random } => buildTreeDepth(7){ rand }; () }
-  }  
+    withRandom { { rand: Random } => buildTreeDepth(7) {rand}; () }
+  }
 
   count
 }
