@@ -9,6 +9,7 @@ import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
 import effekt.core.CoreParsers.statement
 import effekt.source.AnnotateCaptures.annotate
+import scala.runtime.BoxedUnit
 
 
 
@@ -53,19 +54,19 @@ def transform(arg: lifted.Argument): Expr =
   arg match {
   case expr: lifted.Expr => transform(expr)
   case block: lifted.Block => transform(block)
-  case lifted.Evidence(evList) => Expr.Var(Id("id"))
+  case lifted.Evidence(evList) => Expr.Var(Id("here"))
 }
 
 def transform(expr: lifted.Expr): Expr = expr match {
-  case lifted.Literal(value: Int, _) => Expr.Lit(value)// any to Int
-  case lifted.Literal(value: Long, _) => Expr.Lit(value.toInt)// any to Int
-  case lifted.Literal(value: String, _) => Expr.Lit(value.toInt)
+  case lifted.Literal(value: Int, _) => Expr.Lit(value)
+  case lifted.Literal(value: Long, _) => Expr.Lit(value.toInt)
+  case lifted.Literal(value: String, _) => println(value); Expr.Var(Id(value)) //strings in cps??
   case lifted.Literal(value: Boolean, _) => value match {
     case true => Expr.Lit(1)
     case false => Expr.Lit(0)
   }
-  //case lifted.Literal(value, _) =>println(value.getClass()); ???//Expr.Lit(value.toInt); ???
-  case lifted.Literal(_, _) => ???
+  case lifted.Literal(value: BoxedUnit, _) => Expr.Var(Id(""))
+  case lifted.Literal(value, _) => println(value.getClass()); ???//Expr.Lit(value.toInt); ???
   case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
   case lifted.PureApp(b, targs, args) => Expr.PureApp(transform(b), (args map transform))
   case lifted.Make(data, tag, args) => Expr.Make(transform(data), tag, args map transform)
@@ -122,14 +123,14 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Put(id, ev, value) => ???
 
   case lifted.Stmt.Try(lifted.BlockLit(_, params, body), List(handler)) => params match {
-    case ev :: cap :: Nil => Reset(transform(ev), Let(transform(cap), ???, transform(body)))
+    case ev :: cap :: Nil => println(stmt); Reset(transform(ev), Let(transform(cap), New(transform(handler)), transform(body)))
     case _ => ???
   }
   case lifted.Stmt.Try(body, handler) => ???
 
   case lifted.Stmt.Reset(body) => ???
 
-  case lifted.Stmt.Shift(ev, body) => ???
+  case lifted.Stmt.Shift(ev, body) => println(stmt); AppCont(Id("ev"), transform(body))
 
   case lifted.Stmt.Hole() => ???
 }
