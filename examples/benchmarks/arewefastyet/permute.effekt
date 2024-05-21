@@ -3,13 +3,13 @@ import text/string
 import mutable/array
 
 def swap(arr: Array[Int], i: Int, j: Int) = {
-  val tmp = unsafeGet(arr,i);
-  put(arr, i, unsafeGet(arr, j));
-  put(arr, j, tmp)
+  val tmp = arr.unsafeGet(i);
+  arr.put(i, arr.unsafeGet(j));
+  arr.put(j, tmp)
 }
 
 def run(n: Int) = {
-  var count = 0;
+  var count in global = 0;
 
   def permute(arr: Array[Int], n: Int): Unit = {
     count = count + 1;
@@ -17,10 +17,10 @@ def run(n: Int) = {
       val n1 = n - 1;
       permute(arr, n1);
       var i = n1;
-      while(i >= 0){
-        swap(arr, n1, i);
-        permute(arr, n1);
-        swap(arr, n1, i);
+      while (i >= 0){
+        arr.swap(n1, i);
+        arr.permute(n1);
+        arr.swap(n1, i);
         i = i - 1;
       }
     }
@@ -28,10 +28,10 @@ def run(n: Int) = {
 
   each(0, n) { _ =>
     val arr = emptyArray[Int](6);
-    each(0,arr.size()){ i =>
-      put(arr,i, 1);  
+    each(0, arr.size) { i =>
+      put(arr, i, 1);
     }
-    permute(arr, 6)
+    arr.permute(6)
   }
 
   count
