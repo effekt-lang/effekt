@@ -1,0 +1,179 @@
+module text/string
+
+import immutable/option
+import immutable/list
+
+extern pure def length(s: String): Int = llvm """
+   %x = call %Int @c_buffer_length(%Pos %s)
+   call void @c_buffer_refcount_decrement(%Pos %s)
+   ret %Int %x
+"""
+extern pure def substring(s: String, start: Int, end: Int): String = llvm """
+   %x = call %Pos @c_buffer_substring(%Pos %s, i64 %start, i64 %end)
+   call void @c_buffer_refcount_decrement(%Pos %s)
+   ret %Pos %x
+"""
+def unsafeCharAt(s: String, i: Int): String = substring(s, i, i+1)
+
+def charAt(str: String, i: Int): Option[String] = {
+    if ( i < 0 || i >= length(str)) {
+        None()
+    } else {
+        Some(unsafeCharAt(str, i))
+    }
+}
+
+def startsWith(str: String, prefix: String): Bool = {
+    if (length(str) < length(prefix)) {
+        false
+    } else {
+        substring(str, 0, length(prefix)) == prefix
+    }
+}
+def map(str: String){ f: String => String }: String = {
+    def rec(i: Int, acc: String): String = {
+        if (i < length(str)) {
+            rec(i+1, acc ++ f(unsafeCharAt(str, i)))
+        } else acc
+    }
+    rec(0, "")
+}
+def map[A](str: String){ f: String => A }: List[A] = {
+    def rec(i: Int): List[A] = {
+        if (i < length(str)) {
+            Cons(f(unsafeCharAt(str, i)), rec(i+1))
+        } else Nil()
+    }
+    rec(0)
+}
+def indexOf(str: String, start: Int, substr: String): Option[Int] = {
+    if(length(str) - start < length(substr)) {
+        None()
+    } else if(substring(str, start, start + length(substr)) == substr) {
+        Some(start)
+    } else {
+        indexOf(str, start + 1, substr)
+    }
+}
+// """ // fix some parsing bug for vscode syntax highlighting
+
+def showQuoted(s: String): String =
+ "\x22" ++ map(s){ c =>
+   if(c == "\x22") {
+    "\\\x22"
+   } else if (c == "\\") {
+    "\\\\"
+   } else c
+ } ++ "\x22"
+def showQuoted(l: List[String]): String = showList(l){e => showQuoted(e)}
+def showQuoted(o: Option[String]): String = showOption(o){ e => showQuoted(e) }
+
+def toInt(s: String): Option[Int] = {
+  def go(i: Int, acc: Int): Int / Exception[RuntimeError] = {
+    if(i >= length(s)) {
+      acc
+    } else if(unsafeCharAt(s, i) == "0") {
+      go(i + 1, 10 * acc + 0)
+    } else if(unsafeCharAt(s, i) == "1") {
+      go(i + 1, 10 * acc + 1)
+    } else if(unsafeCharAt(s, i) == "2") {
+      go(i + 1, 10 * acc + 2)
+    } else if(unsafeCharAt(s, i) == "3") {
+      go(i + 1, 10 * acc + 3)
+    } else if(unsafeCharAt(s, i) == "4") {
+      go(i + 1, 10 * acc + 4)
+    } else if(unsafeCharAt(s, i) == "5") {
+      go(i + 1, 10 * acc + 5)
+    } else if(unsafeCharAt(s, i) == "6") {
+      go(i + 1, 10 * acc + 6)
+    } else if(unsafeCharAt(s, i) == "7") {
+      go(i + 1, 10 * acc + 7)
+    } else if(unsafeCharAt(s, i) == "8") {
+      go(i + 1, 10 * acc + 8)
+    } else if(unsafeCharAt(s, i) == "9") {
+      go(i + 1, 10 * acc + 9)
+    } else {
+      raise("Not an integer")
+    }
+  }
+  try {
+    if(s.length == 0) {
+        None()
+    } else if(s.startsWith("-")) {
+        Some(0 - go(1, 0))
+    } else {
+        Some(go(0, 0))
+    }
+  } with Exception[RuntimeError] {
+    def raise(e: RuntimeError, msg: String) = {
+      None()
+    }
+  }
+}
+def toBool(s: String): Option[Bool] = {
+  if(s == "true") {
+    Some(true)
+  } else if (s == "false") {
+    Some(false)
+  } else {
+    None()
+  }
+}
+
+
+// Byte arrays (for compatibility with other backends, we have the Bytes type)
+type Bytes = String
+def bytes(s: String): Bytes = s
+// length(Bytes) = length(String)
+extern pure def unsafeIndex(s: Bytes, i: Int): Int = llvm """
+   %x = call %Int @c_buffer_index(%Pos %s, i64 %i)
+   call void @c_buffer_refcount_decrement(%Pos %s)
+   ret %Int %x
+"""
+// """ // fix some parsing bug for vscode syntax highlighting
+def index(b: Bytes, i: Int): Option[Int] = if(i < b.length) { Some(b.unsafeIndex(i)) } else { None() }
+
+def eachInRange(b: Bytes, start: Int, end: Int){ fn: Int => Unit }: Unit = {
+  if(end < 0 || end > b.length) {
+    b.eachInRange(start,b.length){fn}
+  }
+  def rec(start: Int): Unit = {
+    if(start < end) {
+      fn(b.unsafeIndex(start))
+      rec(start+1)
+    } else { () }
+  }
+  rec(start)
+}
+def each(b: Bytes){ fn: Int => Unit } = {
+  b.eachInRange(0,b.length){fn}
+}
+
+effect Abort(): Unit // TODO: Maybe use Control effect
+def occursAt(subb: Bytes, b: Bytes, i: Int): Bool = {
+  if(i + subb.length <= b.length) {
+    try{
+      var x = 0;
+      b.eachInRange(i, i + subb.length){ b =>
+        if(b != subb.unsafeIndex(x)){ do Abort() }
+        x = x + 1
+      }
+      true
+    } with Abort {
+      () => false
+    }
+  } else false
+}
+def split(b: String, sep: String): List[String] = {
+  def rec(next: Int, done: Int, acc: List[String]): List[Bytes] = {
+    if(sep.occursAt(b, next)) {
+      rec(next - 1, next,
+        Cons(b.substring(next + sep.length, done), acc))
+    } else if(next == 0) {
+      Cons(b.substring(0, done), acc)
+    } else {
+      rec(next - 1, done, acc)
+    }
+  }
+  rec(b.length - sep.length, b.length, Nil())
+}

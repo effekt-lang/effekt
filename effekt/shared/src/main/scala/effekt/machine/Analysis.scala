@@ -39,12 +39,16 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>
       Set.from(values)
-    case NewStack(name, frame, rest) =>
-      freeVariables(frame) ++ (freeVariables(rest) -- Set(name))
+    case NewStack(name, prompt, frame, rest) =>
+      freeVariables(frame) ++ (freeVariables(rest) -- Set(name)) ++ Set(prompt)
     case PushStack(value, rest) =>
       Set(value) ++ freeVariables(rest)
     case PopStacks(name, n, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(n)
+    case PopStacksPrompt(name, prompt, rest) =>
+      freeVariables(rest) -- Set(name) ++ Set(prompt)
+    case FreshPrompt(name, rest) =>
+      freeVariables(rest) -- Set(name)
     case ComposeEvidence(name, ev1, ev2, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(ev1, ev2)
     case LiteralInt(name, value, rest) =>
