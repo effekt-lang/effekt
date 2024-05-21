@@ -1,0 +1,26 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+def range(i: Int, n: Int): List[Int] =
+  if (i < n) {
+    Cons(i, range(i + 1, n))
+  } else {
+    Nil()
+  }
+
+def sum(xs: List[Int]): Int =
+  xs match {
+    case Nil() => 0
+    case Cons(y, ys) => y + sum(ys)
+  }
+
+def run(n: Int) =
+  sum(range(0, n))
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}

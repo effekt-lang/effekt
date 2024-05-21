@@ -1,0 +1,20 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+def factorial(a: Int, i: Int): Int =
+  if (i == 0) {
+    a
+  } else {
+    factorial((i * a).mod(1000000007), i - 1)
+  }
+
+def run(n: Int): Int =
+  factorial(1, n)
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}

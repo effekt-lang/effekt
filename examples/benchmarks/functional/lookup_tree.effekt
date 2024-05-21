@@ -1,0 +1,32 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+type Tree {
+  Leaf(n: Int)
+  Node(l: Tree, r: Tree)
+}
+
+def create(i: Int, n: Int): Tree =
+  if (i < n) {
+    val t = create(i + 1, n);
+    Node(t, t)
+  } else {
+    Leaf(n)
+  }
+
+def lookup(t: Tree): Int =
+  t match {
+    case Leaf(v) => v
+    case Node(l, _) => lookup(l)
+  }
+
+def run(n: Int) =
+  lookup(create(0, n))
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}

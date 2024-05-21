@@ -1,0 +1,26 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+def attempt(i: Int): Option[Int] =
+  if (i == 0) {
+    Some(i)
+  } else {
+    attempt(i - 1) match {
+      case Some(x) => Some(x + 1)
+      case None() => None()
+    }
+  }
+
+def run(n: Int) =
+  attempt(n) match {
+    case Some(x) => x
+    case None() => -1
+  }
+
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
+  val r = run(n);
+  println(r)
+}
