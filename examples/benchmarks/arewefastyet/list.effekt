@@ -5,27 +5,24 @@ import immutable/list
 def length(xs: List[Int]): Int =
   xs match {
     case Nil() => 0
-    case Cons(y, ys) => 1 + length(ys) 
+    case Cons(y, ys) => 1 + length(ys)
   }
 
 def isShorterThan(x: List[Int], y: List[Int]): Bool =
   (x, y) match {
     case (_, Nil()) => false
     case (Nil(), _) => true
-    case (Cons(_,xTail),Cons(_,yTail)) => isShorterThan(xTail,yTail)
+    case (Cons(_, xs),Cons(_, ys)) => isShorterThan(xs, ys)
   }
 
 def makeList(n: Int): List[Int] =
-  if (n == 0) {
-    Nil()
-  } else {
-    Cons(n, makeList(n - 1))
-  }
+  if (n == 0) Nil()
+  else Cons(n, makeList(n - 1))
 
 def tail(xs: List[Int], ys: List[Int], zs: List[Int]): List[Int] =
   if (ys.isShorterThan(xs)) {
     (xs, ys, zs) match {
-      case (Cons(_, xsTail), Cons(_, ysTail), Cons(_, zsTail)) => 
+      case (Cons(_, xsTail), Cons(_, ysTail), Cons(_, zsTail)) =>
         tail(
           tail(xsTail, ys, zs),
           tail(ysTail, zs, xs),
@@ -38,7 +35,7 @@ def tail(xs: List[Int], ys: List[Int], zs: List[Int]): List[Int] =
   }
 
 def run(n: Int) = {
-  var s = 0;
+  var s in global = 0;
   each(0, n) { _ =>
     val result = tail(makeList(15), makeList(10), makeList(6));
     s = s + length(result)
