@@ -37,7 +37,7 @@ def generator { prog: => Unit / Yield } {r: Region}: Generator at {prog, r} = {
   }
 }
 
-def sumGenerator(n: Int): Int = region r {
+def run(n: Int): Int = region r {
   val tree = makeTree(n)
 
   def iterate(tree: Tree): Unit / Yield = tree match {
@@ -61,10 +61,8 @@ def sumGenerator(n: Int): Int = region r {
   consumer(0)
 }
 
-def main() = commandLineArgs() match {
-  case Nil() => println(sumGenerator(10))
-  case Cons(x, Nil()) =>
-    with report[WrongFormat];
-    println(sumGenerator(x.toInt))
-  case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
+def main() = {
+  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 10 };
+  val r = run(n);
+  println(r)
 }
