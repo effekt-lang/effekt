@@ -188,9 +188,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
         Let(v.symbol, Run(transform(binding)), transform(rest))
 
-      case v @ source.ValDef(id, _, binding) =>
+      case v @ source.ValDef(id, tpe, binding) =>
         val transformed = transform(binding)
-        Val(v.symbol, transformed.tpe, transformed, transform(rest))
+        val transformedTpe = v.symbol.tpe match {
+          case Some(tpe) => transform(tpe)
+          case None => transformed.tpe
+        }
+        Val(v.symbol, transformedTpe, transformed, transform(rest))
 
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol
