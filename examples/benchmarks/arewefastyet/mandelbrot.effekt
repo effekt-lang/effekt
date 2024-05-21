@@ -6,23 +6,24 @@ extern def leftShift(x: Int, y: Int): Int = js "${x} << ${y}"
 extern def xor(x: Int, y: Int): Int = js "${x} ^ ${y}"
 
 def mandelbrot(size: Int): Int = {
-  var sum = 0;
-  var byteAcc = 0;
-  var bitNum = 0;
+  var sum in global = 0;
+  var byteAcc in global = 0;
+  var bitNum in global = 0;
 
-  each(0, size){ y =>
+  each(0, size) { y =>
     val ci: Double = (2.0 * toDouble(y) / toDouble(size)) - 1.0;
 
-    each(0, size){ x =>
-      var zrzr = 0.0;
-      var zi = 0.0;
-      var zizi = 0.0;
+    each(0, size) { x =>
+      var zrzr in global = 0.0;
+      var zi in global = 0.0;
+      var zizi in global = 0.0;
+
       val cr = (2.0 * toDouble(x) / toDouble(size)) - 1.5
 
 
-      var z = 0;
-      var notDone = true;
-      var escape = 0;
+      var z in global = 0;
+      var notDone in global = true;
+      var escape in global = 0;
 
       while (notDone && z < 50) {
         val zr = zrzr - zizi + cr;
@@ -46,7 +47,7 @@ def mandelbrot(size: Int): Int = {
         byteAcc = 0;
         bitNum = 0;
       } else if (x == size - 1) {
-        byteAcc = leftShift(byteAcc, (8 - bitNum));
+        byteAcc = leftShift(byteAcc, 8 - bitNum);
         sum = xor(sum, byteAcc);
         byteAcc = 0;
         bitNum = 0;
