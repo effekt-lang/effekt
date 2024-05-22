@@ -142,7 +142,7 @@ enum Definition extends Tree {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Let(id: Id, binding: Expr) // PURE on the toplevel?
+  case Let(id: Id, tpe: ValueType, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -161,8 +161,11 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
 def Def(id: Id, block: Block, rest: Stmt) =
   addToScope(Definition.Def(id, block), rest)
 
+def Let(id: Id, tpe: ValueType, binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(id, tpe, binding), rest)
+
 def Let(id: Id, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id,  binding), rest)
+  addToScope(Definition.Let(id, binding.tpe, binding), rest)
 
 
 /**
@@ -338,7 +341,7 @@ object normal {
       //   all recursive functions that could blow the stack are trivially wrapped
       //   again, after optimizing.
       case (Stmt.Return(expr), body) =>
-        scope(List(Definition.Let(id, expr)), body)
+        scope(List(Definition.Let(id, tpe, expr)), body)
 
       // here we are flattening scopes; be aware that this extends
       // life-times of bindings!
@@ -621,7 +624,7 @@ object Variables {
 
   def free(d: Definition): Variables = d match {
     case Definition.Def(id, block) => free(block)
-    case Definition.Let(id, binding) => free(binding)
+    case Definition.Let(id, _, binding) => free(binding)
   }
 
   def all[T](t: IterableOnce[T], f: T => Variables): Variables =
@@ -667,7 +670,7 @@ object Variables {
 
   def bound(d: Definition): Variables = d match {
     case Definition.Def(id, block) => Variables.block(id, block.tpe, block.capt)
-    case Definition.Let(id, binding) => Variables.value(id, binding.tpe)
+    case Definition.Let(id, tpe, binding) => Variables.value(id, tpe)
   }
 }
 
@@ -712,7 +715,7 @@ object substitutions {
   def substitute(definition: Definition)(using Substitution): Definition =
     definition match {
       case Definition.Def(id, block) => Definition.Def(id, substitute(block))
-      case Definition.Let(id, binding) => Definition.Let(id, substitute(binding))
+      case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, substitute(binding))
     }
 
   def substitute(expression: Expr)(using Substitution): Expr =

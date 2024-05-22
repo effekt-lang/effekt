@@ -155,7 +155,7 @@ trait Transformer {
     case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -165,7 +165,7 @@ trait Transformer {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 

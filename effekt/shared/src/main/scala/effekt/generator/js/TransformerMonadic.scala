@@ -336,10 +336,10 @@ trait TransformerMonadic extends Transformer {
     case Definition.Def(id, block) =>
       js.Const(nameDef(id), toJS(block))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       js.ExprStmt(toJS(binding))
 
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       js.Const(nameDef(id), toJS(binding))
   }
 

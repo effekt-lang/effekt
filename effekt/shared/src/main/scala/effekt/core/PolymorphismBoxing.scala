@@ -141,7 +141,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(definition: Definition)(using PContext): Definition = definition match {
     case Definition.Def(id, block) => Definition.Def(id, transform(block))
-    case Definition.Let(id, binding) => Definition.Let(id, transform(binding))
+    case Definition.Let(id, tpe, binding) => Definition.Let(id, transform(tpe), transform(binding))
   }
 
   def transform(block: Block.BlockLit)(using PContext): Block.BlockLit = block match {
@@ -185,7 +185,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val coerce = coercer(binding.tpe, transform(tpe))
       val orig = TmpValue()
       Stmt.Val(orig, binding.tpe, transform(binding),
-        Let(id, coerce(Pure.ValueVar(orig, binding.tpe)),
+        Let(id, ???, coerce(Pure.ValueVar(orig, binding.tpe)),
           transform(body)))
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
@@ -399,7 +399,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
         override def callDirect(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Expr = {
           val result = TmpValue()
-          Run(Let(result, DirectApp(block, targs map transformArg,
+          Run(Let(result, ???, DirectApp(block, targs map transformArg,
             (vcoercers zip vargs).map {case (c,v) => c(v)},
             (bcoercers zip bargs).map {case (c,b) => c(b)}),
             Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))

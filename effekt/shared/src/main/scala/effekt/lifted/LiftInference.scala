@@ -129,7 +129,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
     case core.Definition.Def(id, block) =>
       Definition.Def(id, transform(block))
-    case core.Definition.Let(id, binding) =>
+    case core.Definition.Let(id, _, binding) =>
       Definition.Let(id, transform(binding))
   }
 
@@ -327,7 +327,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       val extendedEnv = env.bind(id, env.evidenceFor(block).lifts)
       pretransform(rest)(using extendedEnv, E)
     // even if defs cannot be mutually recursive across lets, we still have to pretransform them.
-    case core.Definition.Let(id, _) :: rest =>
+    case core.Definition.Let(id, _, _) :: rest =>
       pretransform(rest)
     case Nil => env
   }

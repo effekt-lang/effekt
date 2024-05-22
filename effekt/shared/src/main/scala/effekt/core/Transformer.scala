@@ -72,8 +72,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = d.symbol
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
-    case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      List(Definition.Let(v.symbol, Run(transform(binding))))
+    case v @ source.ValDef(id, tpe, binding) if pureOrIO(binding) =>
+      val transformed = transform(binding)
+      val transformedTpe = v.symbol.tpe match {
+        case Some(tpe) => transform(tpe)
+        case None => transformed.tpe
+      }
+      List(Definition.Let(v.symbol, transformedTpe, Run(transformed)))
 
     case v @ source.ValDef(id, _, binding) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
@@ -86,7 +91,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       // convert binding into Definition.
       val additionalDefinitions = bindings.toList.map {
-        case Binding.Let(name, binding) => Definition.Let(name, binding)
+        case Binding.Let(name, tpe, binding) =>
+          Definition.Let(name, tpe, binding)
         case Binding.Def(name, binding) => Definition.Def(name, binding)
         case Binding.Val(name, tpe, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
       }
@@ -161,7 +167,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
-      val let = Let(Wildcard(), expr, transform(rest))
+      val let = Let(Wildcard(), expr.tpe, expr, transform(rest))
       Context.reifyBindings(let, bs)
 
     // { e; stmt } --> { val _ = e; stmt }
@@ -616,7 +622,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       bindings.toList.map {
         case Binding.Val(name, tpe, binding) => Condition.Val(name, tpe, binding)
-        case Binding.Let(name, binding) => Condition.Let(name, binding)
+        case Binding.Let(name, tpe, binding) => Condition.Let(name, tpe, binding)
         case Binding.Def(name, binding) => Context.panic("Should not happen")
       } :+ cond
 
@@ -766,7 +772,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
 private[core] enum Binding {
   case Val(name: TmpValue, tpe: core.ValueType, binding: Stmt)
-  case Let(name: TmpValue, binding: Expr)
+  case Let(name: TmpValue, tpe: core.ValueType, binding: Expr)
   case Def(name: BlockSymbol, binding: Block)
 }
 
@@ -803,7 +809,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
       // create a fresh symbol and assign the type
       val x = TmpValue()
 
-      val binding = Binding.Let(x, e)
+      val binding = Binding.Let(x, e.tpe, e)
       bindings += binding
 
       ValueVar(x, e.tpe)
@@ -832,9 +838,9 @@ trait TransformerOps extends ContextOps { Context: Context =>
       // optimization: remove unnecessary binds
       case (Binding.Val(x, tpe, b), Return(ValueVar(y, _))) if x == y => b
       case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
-      case (Binding.Let(x, Run(s)), Return(ValueVar(y, _))) if x == y => s
-      case (Binding.Let(x, b: Pure), Return(ValueVar(y, _))) if x == y => Return(b)
-      case (Binding.Let(x, b), body) => Let(x, b, body)
+      case (Binding.Let(x, tpe, Run(s)), Return(ValueVar(y, _))) if x == y => s
+      case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y, _))) if x == y => Return(b)
+      case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
       case (Binding.Def(x, b), body) => Def(x, b, body)
     }
   }

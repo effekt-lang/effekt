@@ -90,8 +90,8 @@ object Inline {
     val filtered = definitions.collect {
       case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
       // we drop aliases
-      case Definition.Let(id, binding) if !binding.isInstanceOf[ValueVar] =>
-        Definition.Let(id, rewrite(binding))
+      case Definition.Let(id, tpe, binding) if !binding.isInstanceOf[ValueVar] =>
+        Definition.Let(id, tpe, rewrite(binding))
     }
     (filtered, allDefs)
 
@@ -99,7 +99,7 @@ object Inline {
     ctx.defs.get(id) map {
       // TODO rewriting here leads to a stack overflow in one test, why?
       case Definition.Def(id, block) => block //rewrite(block)
-      case Definition.Let(id, binding) => INTERNAL_ERROR("Should not happen")
+      case Definition.Let(id, _, binding) => INTERNAL_ERROR("Should not happen")
     }
 
   def dealias(b: Block.BlockVar)(using ctx: InlineContext): BlockVar =
@@ -110,13 +110,13 @@ object Inline {
 
   def dealias(b: Pure.ValueVar)(using ctx: InlineContext): ValueVar =
     ctx.defs.get(b.id) match {
-      case Some(Definition.Let(id, aliased : Pure.ValueVar)) => dealias(aliased)
+      case Some(Definition.Let(id, _, aliased : Pure.ValueVar)) => dealias(aliased)
       case _ => b
     }
 
   def rewrite(d: Definition)(using InlineContext): Definition = d match {
     case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
-    case Definition.Let(id, binding) => Definition.Let(id, rewrite(binding))
+    case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, rewrite(binding))
   }
 
   def rewrite(s: Stmt)(using InlineContext): Stmt = s match {

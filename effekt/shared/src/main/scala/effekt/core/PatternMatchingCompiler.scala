@@ -66,7 +66,7 @@ object PatternMatchingCompiler {
     case Predicate(pred: Pure)
     // a predicate trivially met by running and binding the statement
     case Val(x: Id, tpe: core.ValueType, binding: Stmt)
-    case Let(x: Id, binding: Expr)
+    case Let(x: Id, tpe: core.ValueType, binding: Expr)
   }
 
   enum Pattern {
@@ -100,8 +100,8 @@ object PatternMatchingCompiler {
       case Clause(Condition.Val(x, tpe, binding) :: rest, target, args) =>
         return core.Val(x, tpe, binding, compile(Clause(rest, target, args) :: remainingClauses))
       // - We need to perform a computation
-      case Clause(Condition.Let(x, binding) :: rest, target, args) =>
-        return core.Let(x, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      case Clause(Condition.Let(x, tpe, binding) :: rest, target, args) =>
+        return core.Let(x, tpe, binding, compile(Clause(rest, target, args) :: remainingClauses))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, args) =>
         return core.If(pred,
@@ -273,10 +273,10 @@ object PatternMatchingCompiler {
         val substituted = Condition.Val(x, substitutedType, substitutedBinding)
         (prefix(patterns, substituted :: resCond), resSubst)
 
-      case Condition.Let(x, binding) :: rest =>
+      case Condition.Let(x, tpe, binding) :: rest =>
         val substitutedBinding = core.substitutions.substitute(binding)(using subst)
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
-        (prefix(patterns, Condition.Let(x, substitutedBinding) :: resCond), resSubst)
+        (prefix(patterns, Condition.Let(x, tpe, substitutedBinding) :: resCond), resSubst)
 
       case Condition.Predicate(p) :: rest =>
         val substitutedPredicate = core.substitutions.substitute(p)(using subst)
@@ -300,8 +300,8 @@ object PatternMatchingCompiler {
   def show(c: Condition): String = c match {
     case Condition.Patterns(patterns) => patterns.map { case (v, p) => s"${util.show(v)} is ${show(p)}" }.mkString(", ")
     case Condition.Predicate(pred) => util.show(pred) + "?"
-    case Condition.Val(x,tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
-    case Condition.Let(x, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
+    case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
+    case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
   }
 
   def show(p: Pattern): String = p match {

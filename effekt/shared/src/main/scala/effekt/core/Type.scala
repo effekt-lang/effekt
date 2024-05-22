@@ -180,7 +180,7 @@ object Type {
 
   def inferCapt(defn: Definition): Captures = defn match {
     case Definition.Def(id, block) => block.capt
-    case Definition.Let(id, binding) => binding.capt
+    case Definition.Let(id, tpe, binding) => binding.capt
   }
 
   def inferCapt(stmt: Stmt): Captures = stmt match {

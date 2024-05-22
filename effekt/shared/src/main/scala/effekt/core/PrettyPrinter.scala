@@ -160,7 +160,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 

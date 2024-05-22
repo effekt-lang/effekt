@@ -368,16 +368,16 @@ object TransformerDirect extends Transformer {
     case Definition.Def(id, block) =>
       List(js.Const(nameDef(id), toJS(block)))
 
-    case Definition.Let(Wildcard(), core.Run(s)) =>
+    case Definition.Let(Wildcard(), _, core.Run(s)) =>
       toJS(s)(Continuation.Ignore)
 
-    case Definition.Let(id, core.Run(s)) =>
+    case Definition.Let(id, _, core.Run(s)) =>
       js.Let(nameDef(id), js.Undefined) :: toJS(s)(Continuation.Assign(id))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       List(js.ExprStmt(toJS(binding)))
 
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       List(js.Const(nameDef(id), toJS(binding)))
   }
 

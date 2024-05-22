@@ -61,7 +61,7 @@ class Reachable(
         seen = seen + id
         within(id) { process(block) }
 
-      case Definition.Let(id, binding) =>
+      case Definition.Let(id, _, binding) =>
         seen = seen + id
         process(binding)
     }
