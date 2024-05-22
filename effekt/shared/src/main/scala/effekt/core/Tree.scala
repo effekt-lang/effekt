@@ -164,10 +164,6 @@ def Def(id: Id, block: Block, rest: Stmt) =
 def Let(id: Id, tpe: ValueType, binding: Expr, rest: Stmt) =
   addToScope(Definition.Let(id, tpe, binding), rest)
 
-def Let(id: Id, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id, binding.tpe, binding), rest)
-
-
 /**
  * Expressions (with potential IO effects)
  *

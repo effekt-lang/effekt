@@ -37,11 +37,13 @@ object DirectStyleMutableState extends Phase[CoreTransformed, CoreTransformed] {
 
       case Get(x, tpe) =>
         val id = Id("tmp")
-        Let(id, Get(x, tpe), Stmt.Return(Pure.ValueVar(id, tpe.result)))
+        val binding = Get(x, tpe)
+        Let(id, binding.tpe, binding, Stmt.Return(Pure.ValueVar(id, tpe.result)))
 
       case Put(x, tpe, v) =>
         val id = Id("tmp")
-        Let(id, Put(x, tpe, v), Stmt.Return(Pure.ValueVar(id, Type.TUnit)))
+        val binding = Put(x, tpe, v)
+        Let(id, binding.tpe, binding, Stmt.Return(Pure.ValueVar(id, Type.TUnit)))
     }
   }
 

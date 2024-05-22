@@ -191,8 +191,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val bparams = bps map transform
         Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
 
-      case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-        Let(v.symbol, Run(transform(binding)), transform(rest))
+      case v @ source.ValDef(id, tpe, binding) if pureOrIO(binding) =>
+        val transformed = Run(transform(binding))
+        val transformedTpe = v.symbol.tpe match {
+          case Some(tpe) => transform(tpe)
+          case None => transformed.tpe
+        }
+        Let(v.symbol, transformedTpe, transformed, transform(rest))
 
       case v @ source.ValDef(id, tpe, binding) =>
         val transformed = transform(binding)
@@ -316,8 +321,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               case Param.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
             }
             val result = TmpValue()
+            val resultBinding = DirectApp(BlockVar(f), targs, vargs, bargs)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-              core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs),
+              core.Let(result, resultBinding.tpe, resultBinding,
                 Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
           }
 
