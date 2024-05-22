@@ -87,11 +87,11 @@ def show(value: Bool): String =
   if (value) "true" else "false"
 
 extern pure def show(value: Char): String =
-  js "String.fromCharCode(${value})"
-  chez "(show-char ${value})"
-  ml "show'int ${value}" // TODO implement properly
+  js "String.fromCodePoint(${value})"
+  chez "(string (integer->char ${value}))"
+  ml "str (chr ${value})"
   llvm """
-    %z = call %Pos @c_buffer_show_Int(%Int %value)
+    %z = call %Pos @c_buffer_show_Char(%Int %value)
     ret %Pos %z
   """
 
