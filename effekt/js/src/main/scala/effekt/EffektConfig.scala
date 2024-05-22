@@ -11,7 +11,6 @@ trait EffektConfig {
   def includes(): List[String] = List(
     "common",
     "js",
-    "generic",
     ".")
 
   def backend(): Backend = Backend()

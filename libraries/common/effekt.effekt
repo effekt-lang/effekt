@@ -50,6 +50,7 @@ extern def println(value: String): Unit =
     call void @c_buffer_refcount_decrement(%Pos %value)
     ret %Pos zeroinitializer ; Unit
   """
+  ml { print(value); print("\n") }
 
 extern io def print(value: String): Unit =
   ml "print ${value}"
@@ -208,6 +209,7 @@ def differsFrom[R](x: R, y: R): Bool =
 extern pure def infixEq(x: Unit, y: Unit): Bool =
   js "true"
   chez "#t"
+  ml "true"
 
 extern pure def infixEq(x: Int, y: Int): Bool =
   js "${x} === ${y}"

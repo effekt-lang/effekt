@@ -28,7 +28,6 @@ def assertFalse(condition: Bool, msg: String) =
 def assertFalse(condition: Bool) =
   do assert(not(condition), "Assertion failed")
 
-
 def assert(obtained: Int, expected: Int, msg: String): Unit / Assertion =
   assertEqual(obtained, expected, msg) { (x, y) => x == y }
 
@@ -53,10 +52,10 @@ def assert(obtained: Char, expected: Char): Unit / Assertion =
 def assert(obtained: String, expected: String): Unit / Assertion =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
-def assertEqualGeneric[A](obtained: A, expected: A, msg: String): Unit / Assertion =
+def assertEqual[A](obtained: A, expected: A, msg: String): Unit / Assertion =
   assertEqual(obtained, expected, msg) { (x, y) => x.equals(y) }
 
-def assertEqualGeneric[A](obtained: A, expected: A): Unit / Assertion =
+def assertEqual[A](obtained: A, expected: A): Unit / Assertion =
   assertEqual(obtained, expected) { (x, y) => x.equals(y) } { x => x.genericShow }
 
 def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bool }: Unit / Assertion =
@@ -64,6 +63,7 @@ def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bo
 
 def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: A => String }: Unit / Assertion =
   do assert(equals(obtained, expected), "Obtained: " ++ show(obtained) ++ "\n but expected:" ++ show(expected))
+
 
 interface Test {
   def success(name: String): Unit
