@@ -105,9 +105,8 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Definitions
   // -----------
   lazy val definition: P[Definition] =
-  ( `let` ~> id ~ opt(`:` ~/> valueType) ~ (`=` ~/> expr) ^^ {
-    case (name ~ Some(tpe) ~ binding) => Definition.Let(name, tpe, binding)
-    case (name ~ None ~ binding) => Definition.Let(name, binding.tpe, binding)
+  ( `let` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ^^ {
+    case (name ~ tpe ~ binding) => Definition.Let(name, tpe.getOrElse(binding.tpe), binding)
   }
   | `def` ~> id ~ (`=` ~/> block) ^^ Definition.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
