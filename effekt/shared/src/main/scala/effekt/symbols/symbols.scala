@@ -62,7 +62,7 @@ case class Module(
     case e: Interface => e
   }
 
-  private def isPrelude: Boolean = name.name == "effekt"
+  def isPrelude: Boolean = name.name == "effekt"
 
   def findPrelude: Module = {
     // Either this module is already Prelude

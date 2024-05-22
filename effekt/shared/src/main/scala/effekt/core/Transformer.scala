@@ -52,8 +52,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val externals = toplevelDeclarations.collect { case d: Extern => d }
     val declarations = toplevelDeclarations.collect { case d: Declaration => d }
 
+    // add data declarations for Bottom
+    val preludeDeclarations = if (mod.isPrelude)
+      List(Declaration.Data(builtins.BottomSymbol, Nil, Nil))
+    else Nil
+
     // We use the includes on the symbol (since they include the prelude)
-    ModuleDecl(path, mod.includes.map { _.path }, declarations, externals, definitions, exports)
+    ModuleDecl(path, mod.includes.map { _.path }, preludeDeclarations ++ declarations, externals, definitions, exports)
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Definition | Declaration | Extern] = d match {
