@@ -304,8 +304,8 @@ define ptr @getPtr(%Ref %ref, i64 %idx, i64 %evidence) alwaysinline {
 ; Meta-stack management
 
 define %Mem @newMem() alwaysinline {
-    %sp = call %Sp @malloc(i64 1024)
-    %limit = getelementptr i8, ptr %sp, i64 1024
+    %sp = call %Sp @malloc(i64 268435456)
+    %limit = getelementptr i8, ptr %sp, i64 268435456
 
     %mem.0 = insertvalue %Mem undef, %Sp %sp, 0
     %mem.1 = insertvalue %Mem %mem.0, %Base %sp, 1

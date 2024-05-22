@@ -73,7 +73,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
         Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
           case ff ~ (body: String) =>
-            ExternBody(ff, Template(List(body), Nil))
+            ExternBody.StringExternBody(ff, Template(List(body), Nil))
         })
     })
 

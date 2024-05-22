@@ -128,7 +128,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
       Extern.Def(id, tparams, cparams, vparams map transform, bparams map transform, transform(ret),
         annotatedCapture, body match {
-          case ExternBody(ff, bbody) => ExternBody(ff, Template(bbody.strings, bbody.args map transform))
+          case ExternBody.StringExternBody(ff, bbody) => ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args map transform))
+          case e @ ExternBody.Unsupported(_) => e
         } )
     case Extern.Include(ff, contents) => Extern.Include(ff, contents)
   }
@@ -331,6 +332,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
     case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
     case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
+    case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+    case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
     case _ =>
       //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
       new IdentityCoercer(from, to)
