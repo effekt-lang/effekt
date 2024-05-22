@@ -100,7 +100,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(decl: ModuleDecl)(using PContext): ModuleDecl = decl match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions map transform, exports)
+      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions flatMap transform, exports)
   }
 
   def transform(declaration: Declaration)(using PContext): Declaration = declaration match {
@@ -139,9 +139,19 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, transform(tpe), capt)
   }
 
-  def transform(definition: Definition)(using PContext): Definition = definition match {
-    case Definition.Def(id, block) => Definition.Def(id, transform(block))
-    case Definition.Let(id, tpe, binding) => Definition.Let(id, transform(tpe), transform(binding))
+  def transform(definition: Definition)(using PContext): List[Definition] = definition match {
+    case Definition.Def(id, block) => List(Definition.Def(id, transform(block)))
+    case Definition.Let(id, tpe, binding) =>
+      val coerce = coercer(binding.tpe, transform(tpe))
+      if (coerce.isIdentity) {
+        List(Definition.Let(id, transform(tpe), transform(binding)))
+      } else {
+        val orig = TmpValue()
+        val origTpe = binding.tpe
+        List(
+          Definition.Let(orig, origTpe, transform(binding)),
+          Definition.Let(id, transform(tpe), coerce(ValueVar(orig, origTpe))))
+      }
   }
 
   def transform(block: Block.BlockLit)(using PContext): Block.BlockLit = block match {
@@ -179,13 +189,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using PContext): Stmt = stmt match {
     case Stmt.Scope(definitions, body) =>
-      Stmt.Scope(definitions map transform, transform(body))
+      Stmt.Scope(definitions flatMap transform, transform(body))
     case Stmt.Return(expr) => Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>
       val coerce = coercer(binding.tpe, transform(tpe))
       val orig = TmpValue()
       Stmt.Val(orig, binding.tpe, transform(binding),
-        Let(id, ???, coerce(Pure.ValueVar(orig, binding.tpe)),
+        Let(id, transform(binding.tpe), coerce(Pure.ValueVar(orig, binding.tpe)),
           transform(body)))
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
@@ -399,7 +409,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
         override def callDirect(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Expr = {
           val result = TmpValue()
-          Run(Let(result, ???, DirectApp(block, targs map transformArg,
+          Run(Let(result, rcoercer.from, DirectApp(block, targs map transformArg,
             (vcoercers zip vargs).map {case (c,v) => c(v)},
             (bcoercers zip bargs).map {case (c,b) => c(b)}),
             Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
