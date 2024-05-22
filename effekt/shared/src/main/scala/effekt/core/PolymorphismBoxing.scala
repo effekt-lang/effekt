@@ -51,18 +51,21 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     def findDeclarations(id: Id): List[Declaration] = {
       declarations.filter(_.id == id)
     }
-    def getDataLikeDeclaration(id: Id): Declaration.Data = {
-      val decls: List[Declaration.Data] = declarations.flatMap{
-        case d : Declaration.Data if d.id == id =>
-          Some(d)
-        case _ => None
-      }
-      if (decls.length != 1) {
-        Context.abort(s"No unique declaration for ${id}. Options: \n" +
-          (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n"))
-      } else {
-        decls.head
-      }
+    def getDataLikeDeclaration(id: Id): Declaration.Data = id match {
+      case x if x == effekt.symbols.builtins.BottomSymbol =>
+        Declaration.Data(id, Nil, Nil)
+      case _ =>
+        val decls: List[Declaration.Data] = declarations.flatMap{
+          case d : Declaration.Data if d.id == id =>
+            Some(d)
+          case _ => None
+        }
+        if (decls.length != 1) {
+          Context.abort(s"No unique declaration for ${id}. Options: \n" +
+            (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n"))
+        } else {
+          decls.head
+        }
     }
 
     lazy val prelude = Context.module.findPrelude
@@ -341,6 +344,23 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Pure.Select(t, boxer.field, to)
     }
   }
+  case class BottomCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
+    override def from = core.Type.TBottom
+    override def to = valueType
+
+    override def apply(t: Pure): Pure = {
+      to match {
+        case core.Type.TInt => Pure.Literal(1337L, core.Type.TInt)
+        case core.Type.TBoolean => Pure.Literal(false, core.Type.TBoolean)
+        case core.Type.TDouble  => Pure.Literal(13.37, core.Type.TDouble)
+        case core.Type.TUnit    => Pure.Literal((), core.Type.TUnit)
+        // Do strings need to be boxed? Really?
+        case core.Type.TString  => Pure.Literal("<?nothing>", core.Type.TString)
+        case t if box.isDefinedAt(t) => sys error s"No default value defined for ${t}"
+        case _ => sys error s"Trying to unbox Nothing to ${t}"
+      }
+    }
+  }
 
   def coercer(from: ValueType, to: ValueType)(using PContext): Coercer[ValueType, Pure] = (from, to) match {
     case (f,t) if f==t => new IdentityCoercer(f,t)
@@ -350,9 +370,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
     case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
     case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-    case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
+    case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => BottomCoercer(unboxed)
     case _ =>
-      //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
+      Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
       new IdentityCoercer(from, to)
   }
 
