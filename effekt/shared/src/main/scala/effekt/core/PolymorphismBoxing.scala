@@ -193,10 +193,14 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Return(expr) => Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>
       val coerce = coercer(binding.tpe, transform(tpe))
-      val orig = TmpValue()
-      Stmt.Val(orig, binding.tpe, transform(binding),
-        Let(id, transform(binding.tpe), coerce(Pure.ValueVar(orig, binding.tpe)),
-          transform(body)))
+      if (coerce.isIdentity) {
+        Stmt.Val(id, transform(tpe), transform(binding), transform(body))
+      } else {
+        val orig = TmpValue()
+        Stmt.Val(orig, binding.tpe, transform(binding),
+          Let(id, transform(binding.tpe), coerce(Pure.ValueVar(orig, binding.tpe)),
+            transform(body)))
+      }
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
       instantiate(calleeT, targs).call(calleeT, vargs map transform, bargs map transform)
