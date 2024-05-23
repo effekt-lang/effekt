@@ -111,7 +111,7 @@ object JSRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def includes(path: File): List[File] = List(path / ".." / "generic", path / ".." / "js")
+  override def includes(path: File): List[File] = List(path / ".." / "js")
 
   override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
@@ -160,20 +160,17 @@ trait ChezRunner extends Runner[String] {
 
 object ChezMonadicRunner extends ChezRunner {
   override def includes(path: File): List[File] = List(
-    path / ".." / "generic",
     path / ".." / "chez" / "common",
     path / ".." / "chez" / "monadic")
 }
 
 object ChezCallCCRunner extends ChezRunner {
   override def includes(path: File): List[File] = List(
-    path / ".." / "generic",
     path / ".." / "chez" / "common",
     path / ".." / "chez" / "callcc")
 }
 object ChezLiftRunner extends ChezRunner {
   override def includes(path: File): List[File] = List(
-    path / ".." / "generic",
     path / ".." / "chez" / "common",
     path / ".." / "chez" / "lift")
 }
@@ -185,9 +182,7 @@ object LLVMRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def includes(path: File): List[File] = List(
-    path / ".." / "monomorphic",
-    path / ".." / "llvm")
+  override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
   override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string") // "array", "ref")
 
@@ -239,9 +234,7 @@ object MLRunner extends Runner[String] {
 
   override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
-  override def includes(path: File): List[File] = List(
-    path / ".." / "monomorphic",
-    path / ".." / "ml")
+  override def includes(path: File): List[File] = List(path / ".." / "ml")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("mlton") then Right(())
