@@ -65,10 +65,10 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Match(scrutinee, clauses, None) => Mat(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((_, blockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
-  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest))
-  case cps.Term.Val(id, binding, body) => Let(idToPattern(id), transform(binding), transform(body)) 
+  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
-  case cps.Term.Reset(ev, body) => App(Auto, Let(VarPattern(Some("ev")), Var("lift"), Let(VarPattern(Some("k")), Var("pure"), transform(body))), Var("k"))
+  case cps.Term.Reset(ev, body) => App(Auto, Let(VarPattern(Some("ev")), Var("lift"), Let(VarPattern(Some("k")), Var("pure"), transform(body))), Var("k")) //(@ev @k transfomr(body)) lift pure k
+  case cps.Term.Shift(ev, cont, body) => transform(body)//(ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body))
 }
 
 def transform(blockLit: cps.BlockLit): Rule = blockLit match {

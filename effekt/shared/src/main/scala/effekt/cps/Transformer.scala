@@ -128,11 +128,13 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   }
   case lifted.Stmt.Try(body, handler) => ???
 
-  case lifted.Stmt.Reset(body) => ???
+  case lifted.Stmt.Reset(body) => Reset(Id("evidence"), transform(body))
 
-  case lifted.Stmt.Shift(ev, body) => println(stmt); AppCont(Id("ev"), transform(body))
+  case lifted.Stmt.Shift(lifted.Evidence(List(lifted.Lift.Var(ev))), lifted.BlockLit(Nil, List(param), body)) => Shift(transform(ev), transform(param), transform(body)) //shift zu cps
 
   case lifted.Stmt.Hole() => ???
+
+  case _ => ???
 }
 
 def transform(definitions: List[lifted.Definition], rest: Term): Term = definitions match {

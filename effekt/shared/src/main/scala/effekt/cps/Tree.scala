@@ -74,10 +74,10 @@ enum Term {
   case AppCont(cont: Id, arg: Expr)
   case App(func: Expr, arg: List[Expr], cont: Id)
   case Scope(definitions: List[Definition], body: Term)
-  case Val(id: Id, binding: Term, body: Term)
   case If(cond: Expr, thn: Term, els: Term)
   case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Term])
   case Reset(evidence: Id, body: Term)
+  case Shift(evidence: Id, cont: Id, body: Term)
 } 
 export Term.*
 
