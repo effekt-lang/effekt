@@ -206,7 +206,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       }
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
-      instantiate(calleeT, targs).call(calleeT, vargs map transform, bargs map transform)
+      val tpe: BlockType.Function = calleeT.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
+      }
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val tBargs = bargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val fcoercer = coercer[Block](tpe, itpe, targs)
+      fcoercer.call(calleeT, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, transform(tpe))
     case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, transform(value))
     case Stmt.If(cond, thn, els) =>
@@ -237,7 +247,18 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using PContext): Expr = expr match {
     case DirectApp(b, targs, vargs, bargs) =>
-      instantiate(b, targs).callDirect(b, vargs map transform, bargs map transform)
+      val callee = transform(b)
+      val tpe: BlockType.Function = callee.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
+      }
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val tBargs = bargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val fcoercer = coercer[Block](tpe, itpe, targs)
+      fcoercer.callDirect(callee, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
     case Run(s) => Run(transform(s))
     case pure: Pure => transform(pure)
   }
@@ -245,7 +266,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(pure: Pure)(using PContext): Pure = pure match {
     case Pure.ValueVar(id, annotatedType) => Pure.ValueVar(id, transform(annotatedType))
     case Pure.Literal(value, annotatedType) => Pure.Literal(value, transform(annotatedType))
-    case Pure.PureApp(b, targs, vargs) => instantiate(b, targs).callPure(b, vargs map transform)
+    case Pure.PureApp(b, targs, vargs) =>
+      val callee = transform(b)
+      val tpe: BlockType.Function = callee.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
+      }
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val fcoercer = coercer[Block](tpe, itpe, targs)
+      fcoercer.callPure(b, (vcoercers zip tVargs).map(_(_)))
     case Pure.Make(data, tag, vargs) =>
       val dataDecl = PContext.getDataLikeDeclaration(data.name)
       val ctorDecl = dataDecl.constructors.find(_.id == tag).getOrElse {
