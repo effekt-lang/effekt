@@ -214,15 +214,15 @@ object LLVMRunner extends Runner[String] {
 object MLRunner extends Runner[String] {
   import scala.sys.process.Process
 
-  val extension = "sml"
+  val extension = "ml"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "ml"
 
   override def prelude: List[String] = List("effekt", "immutable/option",  "internal/option", "immutable/list", "text/string")
 
   def checkSetup(): Either[String, Unit] =
-    if canRunExecutable("mlton") then Right(())
-    else Left("Cannot find mlton. This is required to use the ML backend.")
+    if canRunExecutable("ocaml") then Right(())
+    else Left("Cannot find ocaml. This is required to use the ML backend.")
 
   /**
    * Compile the MLton source file (`<...>.sml`) to an executable.
@@ -232,10 +232,9 @@ object MLRunner extends Runner[String] {
    */
   override def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
-    val buildFile = (out / "main.mlb").canonicalPath
-    val executable = (out / "mlton-main").canonicalPath
-    exec("mlton",
-      "-default-type", "int64", // to avoid integer overflows
-      "-output", executable, buildFile)
+    val appFile = (out / path).canonicalPath
+    val executable = (out / "ocaml-main").canonicalPath
+    exec("ocamlc",
+      "-o", executable, appFile)
     executable
 }

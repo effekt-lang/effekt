@@ -18,7 +18,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(toplevel: Toplevel): Doc = {
     val Toplevel(bindings, body) = toplevel
-    toDoc(bindings) <> line <> line <> toDoc(body) <> ";" <> line
+    toDoc(bindings) <> line <> line <>
+      "let" <+> "()" <+> "=" <+> toDoc(body) <> line
   }
 
   def toDoc(bindings: List[Binding]): Doc = {
@@ -30,20 +31,18 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(binding: Binding): Doc = binding match {
     case AnonBind(body) =>
-      group("val" <+> "_"         <+> "=" <> nest(line <> toDoc(body) <> ";"))
+      group("let" <+> "_"         <+> "=" <> nest(line <> toDoc(body)))
     case ValBind(name, body) =>
-      group("val" <+> toDoc(name) <+> "=" <> nest(line <> toDoc(body) <> ";"))
+      group("let" <+> toDoc(name) <+> "=" <> nest(line <> toDoc(body)))
     case FunBind(name, params, body) =>
-      group("fun" <+> toDoc(name) <+> argList(params, paramToDoc, true) <+>
-        "=" <> nest(line <> toDoc(body) <> ";"))
+      group("let" <+> toDoc(name) <+> argList(params, paramToDoc, true) <+>
+        "=" <> nest(line <> toDoc(body)))
     case DataBind(name, tparams, constructors) =>
-      "datatype" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <> nest(line <>
-        ssep(constructors.map {
-          case (name, None) => toDoc(name)
-          case (name, Some(tpe)) => toDoc(name) <+> "of" <+> toDoc(tpe)
-        }, line <> "| ") <>
-        ";"
-      )
+      "type" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <> nest(line <>
+        vcat(constructors.map {
+          case (name, None) => "|" <+> toDoc(name)
+          case (name, Some(tpe)) => "|" <+> toDoc(name) <+> "of" <+> toDoc(tpe)
+        }))
     case RawBind(raw) =>
       string(raw)
     case TypeBind(name, Nil, tpe) =>
@@ -93,26 +92,24 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.RawExpr(strings, args) => hcat(intercalate(strings.map(string), args.map(toDoc)))
     case Expr.Let(binding :: Nil, body) =>
       val let =
-        "let" <+> group(toDoc(binding)) <>
+        group(toDoc(binding)) <>
           line <>
-          "in" <+> group(toDoc(body)) <> line <>
-          "end"
+          "in" <+> group(toDoc(body)) <> line
       let
     case Expr.Let(bindings, body) =>
       val let =
-        "let" <> nest(line <>
-          vsep(bindings map toDoc)
+        nest(line <>
+          vcat(bindings map { b => toDoc(b) <+> "in" })
         ) <> line <>
-          "in" <> group(nest(line <>
+          group(nest(line <>
           toDoc(body)
-        )) <> line <>
-          "end"
+        )) <> line
       let
     case Expr.Lambda(Nil, body) =>
-      val lambda = "fn () =>" <+> toDoc(body)
+      val lambda = "fun () ->" <+> toDoc(body)
       parens(lambda)
     case Expr.Lambda(params, body) =>
-      val paramDocs = params.map{p => "fn" <+> paramToDoc(p) <+> "=>"}
+      val paramDocs = params.map{p => "fun" <+> paramToDoc(p) <+> "->"}
       val lambda = nest(hsep(paramDocs) <@> toDoc(body))
       parens(lambda)
     case Expr.If(cond, thn, els) =>

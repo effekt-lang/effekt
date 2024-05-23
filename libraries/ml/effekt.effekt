@@ -2,7 +2,7 @@
 
 module effekt
 
-extern include ml "effekt.sml"
+extern include ml "effekt.ml"
 
 def locally[R] { f: => R }: R = f()
 
@@ -14,7 +14,7 @@ def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 
 def println(value: String): Unit = print(value ++ "\n")
-extern io def print(value: String): Unit = ml "print ${value}"
+extern io def print(value: String): Unit = ml "print_string ${value}"
 
 extern io def random(): Double =
   ml "mlRandomReal ()"
@@ -26,7 +26,7 @@ extern io def timestamp(): Int =
 // String ops
 // ==========
 extern pure def show(value: Int): String =
-  ml "show'int ${value}"
+  ml "string_of_int ${value}"
 extern pure def show(value: Unit): String =
   ml "show'unit ${value}"
 extern pure def show(value: Double): String =
@@ -172,10 +172,10 @@ extern pure def infixGte(x: String, y: String): Bool =
 extern pure def not(b: Bool): Bool =
   ml "not ${b}"
 
-def infixOr { first: => Bool } { second: => Bool }: Bool = 
+def infixOr { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
 
-def infixAnd { first: => Bool } { second: => Bool }: Bool = 
+def infixAnd { first: => Bool } { second: => Bool }: Bool =
   if (first()) second() else false
 
 // Pairs

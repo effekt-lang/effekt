@@ -110,7 +110,7 @@ object Transformer {
     case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
       C.abort("higher order functions currently not supported")
     case BlockType.Interface(typeConstructor, args) =>
-      ml.Type.TApp(ml.Type.Data(interfaceNameFor(args.size)), args.map(tpeToML))
+      ml.Type.TApp(ml.Type.Data(interfaceTypeNameFor(args.size)), args.map(tpeToML))
   }
 
   def tpeToML(tpe: ValueType)(using TransformerContext): ml.Type = tpe match {
@@ -119,16 +119,16 @@ object Transformer {
     case lifted.Type.TDouble => ml.Type.Real
     case lifted.Type.TBoolean => ml.Type.Bool
     case lifted.Type.TString => ml.Type.String
-    case ValueType.Var(id) => ml.Type.Var(name(id))
-    case ValueType.Data(id, Nil) => ml.Type.Data(name(id))
-    case ValueType.Data(id, args) => ml.Type.TApp(ml.Type.Data(name(id)), args.map(tpeToML))
+    case ValueType.Var(id) => ml.Type.Var(typeName(id))
+    case ValueType.Data(id, Nil) => ml.Type.Data(typeName(id))
+    case ValueType.Data(id, args) => ml.Type.TApp(ml.Type.Data(typeName(id)), args.map(tpeToML))
     case ValueType.Boxed(tpe) => tpeToML(tpe)
   }
 
   def toML(decl: Declaration)(using C: TransformerContext): List[ml.Binding] = decl match {
 
     case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
-      defineRecord(name(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
+      defineRecord(typeName(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
 
     case Declaration.Data(id, tparams, ctors) =>
       def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
@@ -138,19 +138,19 @@ object Transformer {
           (name(id), tpe)
       }
 
-      val tvars: List[ml.Type.Var] = tparams.map(p => ml.Type.Var(name(p)))
-      List(ml.Binding.DataBind(name(id), tvars, ctors map constructorToML))
+      val tvars: List[ml.Type.Var] = tparams.map(p => ml.Type.Var(typeName(p)))
+      List(ml.Binding.DataBind(typeName(id), tvars, ctors map constructorToML))
 
     case Declaration.Interface(id, tparams, operations) =>
       defineInterface(id, operations.map { op => op.id })
   }
 
+  def interfaceTypeNameFor(arity: Int): MLName = MLName(s"object${arity}")
   def interfaceNameFor(arity: Int): MLName = MLName(s"Object${arity}")
 
   def defineInterface(typeName: Id, props: List[Id])(using C: TransformerContext): List[ml.Binding] = {
     val arity = props.size
 
-    val interfaceName = interfaceNameFor(arity)
     val accessorNames = props.zipWithIndex.map { case (id, i) =>
       val name = MLName(s"member${i + 1}of${arity}")
       C.accessorCache.update(id, name)
@@ -159,9 +159,9 @@ object Transformer {
 
     if C.recordCache.isDefinedAt(arity) then return Nil
 
-    C.recordCache.update(arity, CoData(interfaceName, accessorNames))
+    C.recordCache.update(arity, CoData(interfaceTypeNameFor(arity), accessorNames))
 
-    defineRecord(interfaceName, interfaceName, accessorNames)
+    defineRecord(interfaceTypeNameFor(arity), interfaceNameFor(arity), accessorNames)
   }
 
   def defineRecord(typeName: MLName, constructorName: MLName, fields: List[MLName])(using TransformerContext): List[ml.Binding] = {
@@ -238,7 +238,7 @@ object Transformer {
       def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {
         val (id, b) = c
         val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
-        val pattern = ml.Pattern.Datatype(name(id), binders)
+        val pattern = ml.Pattern.Datatype(typeName(id), binders)
         (pattern, toMLExpr(b.body))
       }
 
