@@ -75,7 +75,7 @@ trait Transformer {
     case Return(e) => pure(toChez(e))
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     // empty matches are translated to a hole in chez scheme
     case Match(scrutinee, Nil, None) => chez.Builtin("hole")
     case Match(scrutinee, clauses, default) =>
@@ -158,7 +158,7 @@ trait Transformer {
     case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -168,7 +168,7 @@ trait Transformer {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 

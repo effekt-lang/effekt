@@ -1,0 +1,15 @@
+type EMPTY {}
+
+extern io def exit(errorCode: Int): Unit =
+  js   "(function() { process.exit(${errorCode}) })()"
+  llvm """
+    call void @exit(i64 %errorCode)
+    ret %Pos zeroinitializer ;
+  """
+
+def main() = {
+  def loop(): EMPTY = { println("!"); loop() }
+  def foo(): EMPTY = { exit(0); loop() };
+  val x: Int = foo() match {}
+  x + 1
+}

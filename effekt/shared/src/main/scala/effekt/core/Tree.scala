@@ -142,7 +142,7 @@ enum Definition extends Tree {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Let(id: Id, binding: Expr) // PURE on the toplevel?
+  case Let(id: Id, tpe: ValueType, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -161,9 +161,8 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
 def Def(id: Id, block: Block, rest: Stmt) =
   addToScope(Definition.Def(id, block), rest)
 
-def Let(id: Id, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id,  binding), rest)
-
+def Let(id: Id, tpe: ValueType, binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(id, tpe, binding), rest)
 
 /**
  * Expressions (with potential IO effects)
@@ -288,7 +287,7 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: Pure)
-  case Val(id: Id, binding: Stmt, body: Stmt)
+  case Val(id: Id, annotatedTpe: ValueType, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
@@ -322,7 +321,7 @@ export Stmt.*
  */
 object normal {
 
-  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+  def valDef(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt =
     (binding, body) match {
 
       // [[ val x = STMT; return x ]] == STMT
@@ -338,16 +337,16 @@ object normal {
       //   all recursive functions that could blow the stack are trivially wrapped
       //   again, after optimizing.
       case (Stmt.Return(expr), body) =>
-        scope(List(Definition.Let(id, expr)), body)
+        scope(List(Definition.Let(id, tpe, expr)), body)
 
       // here we are flattening scopes; be aware that this extends
       // life-times of bindings!
       //
       // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
       case (Stmt.Scope(definitions, binding), body) =>
-        scope(definitions, valDef(id, binding, body))
+        scope(definitions, valDef(id, tpe, binding, body))
 
-      case _ => Stmt.Val(id, binding, body)
+      case _ => Stmt.Val(id, tpe, binding, body)
     }
 
   // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
@@ -621,7 +620,7 @@ object Variables {
 
   def free(d: Definition): Variables = d match {
     case Definition.Def(id, block) => free(block)
-    case Definition.Let(id, binding) => free(binding)
+    case Definition.Let(id, _, binding) => free(binding)
   }
 
   def all[T](t: IterableOnce[T], f: T => Variables): Variables =
@@ -645,7 +644,7 @@ object Variables {
       stillFree ++ (free(body) -- boundSoFar)
 
     case Stmt.Return(expr) => free(expr)
-    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
+    case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
@@ -667,7 +666,7 @@ object Variables {
 
   def bound(d: Definition): Variables = d match {
     case Definition.Def(id, block) => Variables.block(id, block.tpe, block.capt)
-    case Definition.Let(id, binding) => Variables.value(id, binding.tpe)
+    case Definition.Let(id, tpe, binding) => Variables.value(id, tpe)
   }
 }
 
@@ -712,7 +711,7 @@ object substitutions {
   def substitute(definition: Definition)(using Substitution): Definition =
     definition match {
       case Definition.Def(id, block) => Definition.Def(id, substitute(block))
-      case Definition.Let(id, binding) => Definition.Let(id, substitute(binding))
+      case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, substitute(binding))
     }
 
   def substitute(expression: Expr)(using Substitution): Expr =
@@ -736,8 +735,8 @@ object substitutions {
       case Return(expr) =>
         Return(substitute(expr))
 
-      case Val(id, binding, body) =>
-        Val(id, substitute(binding),
+      case Val(id, tpe, binding, body) =>
+        Val(id, substitute(tpe), substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case App(callee, targs, vargs, bargs) =>

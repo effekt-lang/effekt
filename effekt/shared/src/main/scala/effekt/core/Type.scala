@@ -160,7 +160,7 @@ object Type {
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
-    case Stmt.Val(id, binding, body) => body.tpe
+    case Stmt.Val(id, tpe, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
 
@@ -181,13 +181,13 @@ object Type {
 
   def inferCapt(defn: Definition): Captures = defn match {
     case Definition.Def(id, block) => block.capt
-    case Definition.Let(id, binding) => binding.capt
+    case Definition.Let(id, tpe, binding) => binding.capt
   }
 
   def inferCapt(stmt: Stmt): Captures = stmt match {
     case Stmt.Scope(definitions, body) => definitions.foldLeft(body.capt)(_ ++ _.capt)
     case Stmt.Return(expr) => Set.empty
-    case Stmt.Val(id, binding, body) => binding.capt ++ body.capt
+    case Stmt.Val(id, tpe, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
