@@ -316,7 +316,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     }
 
     def makeEval(expr: Term): ModuleDecl =
-      make(Call(IdTarget(IdRef(List("show"), "println")), Nil, List(expr), Nil))
+      make(Call(IdTarget(IdRef(List(), "println")), Nil, List(expr), Nil))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }
