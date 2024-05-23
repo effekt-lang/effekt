@@ -57,8 +57,7 @@ def transform(definition: cps.Definition): Definition =
 def transform(term: cps.Term): Term = term match {
   case cps.Term.AppCont(id, arg) => App(Auto, idToVar(id), transform(arg))
   case cps.Term.App(id, args, cont) =>
-    chainApp((transform(id)::(args map transform)):+idToVar(cont))
-    //App(Auto, Var(cont.toString), chainApp(transform(id)::(args map transform)))
+    chainApp(transform(id), (args map transform):+idToVar(cont))
   case cps.Term.Scope(definitions, body) => transform(definitions, body)
   case cps.Term.If(cond, thn, els) => 
     Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
@@ -67,8 +66,8 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
-  case cps.Term.Reset(ev, body) => App(Auto, Let(VarPattern(Some("ev")), Var("lift"), Let(VarPattern(Some("k")), Var("pure"), transform(body))), Var("k")) //(@ev @k transfomr(body)) lift pure k
-  case cps.Term.Shift(ev, cont, body) => transform(body)//(ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body))
+  case cps.Term.Reset(ev, body) => println(term); chainApp(chainLam(List("ev", "k"), transform(body)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
+  case cps.Term.Shift(ev, cont, body) => App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body))))//(ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body))
 }
 
 def transform(blockLit: cps.BlockLit): Rule = blockLit match {
@@ -86,14 +85,14 @@ def transform(definitions: List[cps.Definition], body: cps.Term): Term = definit
 def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Lit(n) => Num(n)
   case cps.Expr.Var(name) => idToVar(name)
-  case cps.Expr.PureApp(b, args) => chainApp(transform(b) :: (args map transform))
+  case cps.Expr.PureApp(b, args) => chainApp(transform(b), (args map transform))
   case cps.Expr.Box(b) => transform(b)
   case cps.Expr.Run(t) => transform(t)
   case cps.Expr.BlockLit(params, body) => chainLam(params map (x => x.toString()), transform(body))
-  case cps.Expr.Make(data, tag, vargs) => App(Auto, idToVar(data), chainApp(vargs map transform))
+  case cps.Expr.Make(data, tag, vargs) => chainApp(idToVar(data), vargs map transform)
   case cps.Expr.Select(target, field) => ???
   case cps.Member(interface, field, tpe) => println(expr); App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
-  case cps.New(impl) => chainApp(idToVar(impl.interface._1) :: (impl.operations map (x => transform(x.implementation: cps.Expr))))
+  case cps.New(impl) => chainApp(idToVar(impl.interface._1), impl.operations map (x => transform(x.implementation: cps.Expr)))
 }
 
 def transform(constructors: List[cps.Constructor], adt: Adt): Adt = constructors match {
@@ -120,15 +119,14 @@ def transformProperties(tparams: List[cps.Id], properties: List[cps.Id]): List[R
 }
 
 //helper functions:
-def chainApp(args: List[Term]): Term = {
+def chainApp(name: Term, args: List[Term]): Term = { //add parameter body
   val reverseArgs = args.reverse
-  chainAppHelper(reverseArgs)
+  chainAppHelper(name, reverseArgs)
 }
 
-def chainAppHelper(args: List[Term]): Term = args match {
- case Nil => Err
- case head :: Nil => head
- case head:: tail => App(Auto, chainAppHelper(tail), head)
+def chainAppHelper(name: Term, args: List[Term]): Term = args match {
+ case Nil => name
+ case head :: tail => App(Auto, chainAppHelper(name, tail), head)
 }
 
 def chainLam(list: List[String], body: Term): Term = list match {
@@ -148,6 +146,12 @@ def exprToString(expr: cps.Expr): String = expr match {
     case _ => ???
 }
 
-def idToPattern(id: Id): Pattern = VarPattern(Some(id.name.name))
+def idToPattern(id: Id): Pattern = {
+  val updatedName = id.name.name.replace('$', '.')
+  VarPattern(Some(updatedName))
+}
 
-def idToVar(id: Id): Var = Var(id.name.name)
+def idToVar(id: Id): Var = {
+  val updatedName = id.name.name.replace('$', '.')
+  Var(updatedName)
+}
