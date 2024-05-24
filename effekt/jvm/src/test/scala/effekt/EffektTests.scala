@@ -45,7 +45,7 @@ trait EffektTests extends munit.FunSuite {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--compile",
-      "--noexit-on-error",
+      "--no-exit-on-error",
       "--backend", backendName,
       "--out", output.getPath
     ))
@@ -72,7 +72,7 @@ trait EffektTests extends munit.FunSuite {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--compile",
-      "--noexit-on-error",
+      "--no-exit-on-error",
       "--backend", backendName,
       "--out", output.getPath
     ))
