@@ -15,6 +15,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     "compile",
     descrYes = "Compile the Effekt program to the backend specific representation",
     default = Some(false),
+    prefix = "no-",
     group = common
   )
 
@@ -82,6 +83,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     descrYes = "Exit with non-zero exit code on error",
     default = Some(!repl() && !server()),
     noshort = true,
+    prefix = "no-",
     group = advanced
   )
 
@@ -90,6 +92,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     descrYes = "Run optimizations (in particular the inliner) when compiling programs",
     default = Some(true),
     short = 'O',
+    prefix = "no-",
     group = advanced
   )
 
@@ -123,6 +126,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     descrYes = "Write all IRs to files in the output directory",
     default = Some(false),
     noshort = true,
+    prefix = "no-",
     group = debugging
   )
 
