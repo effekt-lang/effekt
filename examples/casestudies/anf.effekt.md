@@ -159,15 +159,15 @@ our input:
 ```
 def pipeline(input: String): String =
   parse(input) { parseExpr() } match {
-    case Success(tree) => pretty(translate(tree))
-    case Failure(msg) => msg
+    case parser::Success(tree) => pretty(translate(tree))
+    case parser::Failure(msg) => msg
   }
 ```
 
 Here we use `pipeline` to translate some examples:
 ```
 def main() = {
-  println(exampleResult)
+  inspect(exampleResult)
   println(examplePretty)
 
   println("----")

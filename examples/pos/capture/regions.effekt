@@ -1,5 +1,3 @@
-import immutable/list
-
 interface Counter {
   def get(): Int
   def inc(): Unit

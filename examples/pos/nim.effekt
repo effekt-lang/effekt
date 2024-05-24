@@ -74,7 +74,7 @@ def printError { prog: => Unit / Error } = try { prog() } with Error[A] { (msg) 
 
 def cheatReport[R] { prog: => R / Cheat }: R / Error =
   try { prog() } with Cheat[A] { (p) =>
-    do Error(show(p) ++ " cheated!")
+    do Error(genericShow(p) ++ " cheated!")
   }
 
 def check { prog: => Player / Move } = try { prog() } with Move { (p, n) =>
@@ -163,26 +163,26 @@ def testPrint2() = {
         bobChooses { val p = game(7); do UpdateScore(p); p }; ()
       }
     };
-    println(do GetScore())
+    inspect(do GetScore())
   }
 }
 
 def main() = {
-  println(perfect { game(7) }); // Alice
-  println(perfect { game(12) }); // Bob
-  println(gametree { game(3) }); // Figure 1 in the paper
+  inspect(perfect { game(7) }); // Alice
+  inspect(perfect { game(12) }); // Bob
+  inspect(gametree { game(3) }); // Figure 1 in the paper
   printError {
     val result = perfect { cheatReport { check { game(7) } } }; // alice
-    println("result is " ++ show(result))
+    println("result is " ++ genericShow(result))
   };
   printError {
     pc { cheatReport { check { game(12) } } }; () // bob cheats
   };
   printError { perfect {
     val result = cheatReport { check { pc { game(12) } } }; // bob
-    println("result is " ++ show(result))
+    println("result is " ++ genericShow(result))
   }};
-  println(allResults { bobChooses { game(7) } }); // List(Bob, Alice)
+  inspect(allResults { bobChooses { game(7) } }); // List(Bob, Alice)
   deterministic {
     println(do Choose()); // true
     println(do Choose()); // false

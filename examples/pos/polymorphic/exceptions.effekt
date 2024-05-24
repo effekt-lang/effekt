@@ -15,11 +15,11 @@ def saveDiv(x: Int, y: Int): Int / Exception[DivByZero] =
 
 def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] {
-    def raise[A](e) = println(e.show)
+    def raise[A](e) = println(e.genericShow)
   }
 
 def main() = report[DivByZero] {
-  println(saveDiv(4, 2))
-  println(saveDiv(1, 0))
-  println(saveDiv(1, 3))
+  inspect(saveDiv(4, 2))
+  inspect(saveDiv(1, 0))
+  inspect(saveDiv(1, 3))
 }

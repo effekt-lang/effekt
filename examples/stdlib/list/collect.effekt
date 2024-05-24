@@ -1,8 +1,5 @@
 module examples/pos/list/collect
 
-import immutable/option
-import immutable/list
-
 def main() = {
   val empty = Nil[Int]()
   empty.collect { x => Some(x) }.foreach { x => println(x) }

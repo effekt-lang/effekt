@@ -1,7 +1,5 @@
 module mutable/dict
 
-import immutable/option
-
 // https://cisco.github.io/ChezScheme/csug9.5/compat.html#g148
 extern type Dict[K, V]
 

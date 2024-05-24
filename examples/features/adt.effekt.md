@@ -25,7 +25,7 @@ While selectors are immediately available for **records**, on a sumtype like `Li
 be sure that selecting will succeed. So we write our own selector here:
 
 ```
-def first(l : List) = l match {
+def first(l: List) = l match {
   case Cons(m, _) => m
   case Nil() => do NoSuchElement()
 }
@@ -61,14 +61,12 @@ def main() = {
     var n = 10;
     val l1 = genlist { if (n > 0) { n = n - 1; n } else { do Done(); 0 } };
 
-    val l = Cons(1, Cons(2, Cons(3, Nil())));
-
     foreach(l1) { n =>
         println(n)
-    };
+    }
 
     try {
-        println(first(Cons(42, Nil())))
+        println(first(Cons(42, l1)))
     } with NoSuchElement { () => () }
 }
 ```

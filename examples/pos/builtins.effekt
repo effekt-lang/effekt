@@ -7,5 +7,5 @@ def main() = {
     println("foo");
     println(true);
     println(1 == 2);
-    println(Red())
+    inspect(Red())
 }

@@ -182,7 +182,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |                  (hhofargarg: Int) =>
         |                      {
         |                        def tmp = hhofargB: ('A) => 'A @ {}
-        |                        val rres = (tmp: ('A) => 'A @ {})(make BoxedInt MkBoxedInt(hhofargarg: Int));
+        |                        val rres:BoxedInt = (tmp: ('A) => 'A @ {})(make BoxedInt MkBoxedInt(hhofargarg: Int));
         |                        return rres:BoxedInt.unboxInt: Int
         |                      }
         |              };

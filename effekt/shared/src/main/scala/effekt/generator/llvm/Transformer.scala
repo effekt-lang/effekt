@@ -139,8 +139,6 @@ object Transformer {
           case (tag, clause) => (tag, labelClause(clause))
         }
 
-        assert(labels.nonEmpty, "Should not be possible. In the future also support matching on void")
-
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
       case machine.New(variable, clauses, rest) =>

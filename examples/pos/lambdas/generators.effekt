@@ -25,9 +25,9 @@ def main() = region this {
   // right now we do not infer unbox for a mutable variable since it
   // already is of block type.
   def gen() = (unbox generator)()
-  println(gen())
-  println(gen())
-  println(gen())
-  println(gen())
-  println(gen())
+  inspect(gen())
+  inspect(gen())
+  inspect(gen())
+  inspect(gen())
+  inspect(gen())
 }

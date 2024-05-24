@@ -227,8 +227,8 @@ lazy val versionGenerator = Def.task {
  */
 lazy val stdLibGenerator = Def.task {
 
-  val baseDir = (ThisBuild / baseDirectory).value / "libraries" / "js"
-  val resources = baseDir ** "*.*"
+  val baseDir = (ThisBuild / baseDirectory).value / "libraries"
+  val resources = baseDir.glob("common" || "js") ** "*.*"
 
   val sourceDir = (Compile / sourceManaged).value
   val sourceFile = sourceDir / "Resources.scala"

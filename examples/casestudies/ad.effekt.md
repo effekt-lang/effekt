@@ -18,8 +18,7 @@ module examples/casestudies/ad
 ```
 
 ```effekt:prelude:hide
-import immutable/list
-import mutable/heap
+import ref
 ```
 
 ## Representing Differentiable Expressions
@@ -101,13 +100,13 @@ we automatically get access to the continuation in the implementation of
 `add`, `mul` and `exp`. We thus do not have to use `shift` and `reset`.
 Otherwise the implementation closely follows the one by Wang et al.
 ```
-record NumB(value: Double, d: HeapRef[Double])
+record NumB(value: Double, d: Ref[Double])
 def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
   // the representation of our input
   val input = NumB(in, fresh(0.0))
 
   // a helper function to update the derivative of a given number by adding v
-  def push(n: NumB, v: Double): Unit = put(n.d, get(n.d) + v)
+  def push(n: NumB, v: Double): Unit = set(n.d, get(n.d) + v)
 
   try { prog(input).push(1.0) } with AD[NumB] {
     def num(v) = resume(NumB(v, fresh(0.0)))
