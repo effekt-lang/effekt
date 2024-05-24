@@ -35,7 +35,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ValBind(name, body) =>
       group("let" <+> toDoc(name) <+> "=" <> nest(line <> toDoc(body)))
     case FunBind(name, params, body) =>
-      group("let" <+> toDoc(name) <+> argList(params, paramToDoc, true) <+>
+      group("let" <+> "rec" <+> toDoc(name) <+> argList(params, paramToDoc, true) <+>
         "=" <> nest(line <> toDoc(body)))
     case DataBind(name, tparams, constructors) =>
       "type" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <> nest(line <>
@@ -135,10 +135,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
         case None => ""
         case Some(d) =>
           val delim: Doc = if (clauses.isEmpty) "" else line <> "| "
-          delim <> "_ =>" <+> toDoc(d)
+          delim <> "_ ->" <+> toDoc(d)
       }
-      val mlMatch = group("case" <@> toDoc(scrutinee) <@> "of") <+> nest(line <>
-        ssep(clauses map toDoc, line <> "| ") <> mlDefault
+      val mlMatch = group("match" <@> toDoc(scrutinee) <@> "with") <+> nest(line <>
+        ssep(clauses map { c => "|" <+> toDoc(c) }, line) <> mlDefault
       )
       group(nest("(" <@> mlMatch <@> ")"))
     case Expr.Ref(exp) =>
@@ -153,7 +153,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(mc: ml.MatchClause): Doc = {
-    toDoc(mc.pattern) <+> "=>" <+> toDoc(mc.body)
+    toDoc(mc.pattern) <+> "->" <+> toDoc(mc.body)
   }
 
   def toDoc(p: ml.Pattern): Doc = p match {

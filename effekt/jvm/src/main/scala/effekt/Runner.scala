@@ -234,7 +234,11 @@ object MLRunner extends Runner[String] {
     val out = C.config.outputPath()
     val appFile = (out / path).canonicalPath
     val executable = (out / "ocaml-main").canonicalPath
+    exec("opam", "switch", "ocaml-5.1.0")
     exec("ocamlc",
+      "unix.cma",  // link with unix module
+      "-I", "+unix",  // link with unix module
+      "-w", "-26", // suppress unused variable warnings
       "-o", executable, appFile)
     executable
 }
