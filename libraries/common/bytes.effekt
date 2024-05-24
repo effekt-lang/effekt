@@ -1,0 +1,15 @@
+module bytes
+
+extern type Bytes
+
+extern pure def size(b: Bytes): Int =
+  js "${b}.length"
+
+extern pure def empty(size: Int): Bytes =
+  js "(new Uint8Array(${size}))"
+
+extern pure def toBytes(s: String): Bytes =
+  js "(new TextEncoder().encode(${s}))"
+
+extern pure def toString(b: Bytes): String =
+  js "(new TextDecoder('utf-8').decode(${b}))"

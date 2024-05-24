@@ -12,7 +12,7 @@ extern type Array[T]
 /**
  * Creates a new Array of size `size` filled with the value `default`
  */
-extern io def fill[T](size: Int, default: T): Array[T] =
+extern global def fill[T](size: Int, default: T): Array[T] =
   ml "Array.array (${size}, ${default})"
   default {
     val arr = emptyArray[T](size)
@@ -47,7 +47,7 @@ def fromList[T](list: List[T]): Array[T] = {
   return arr;
 }
 
-extern pure def emptyArray[T](size: Int): Array[T] =
+extern global def emptyArray[T](size: Int): Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
 
@@ -55,12 +55,12 @@ def get[T](arr: Array[T], index: Int): Option[T] =
   if (index < 0 || index >= arr.size) None()
   else undefinedToOption(arr.unsafeGet(index))
 
-extern pure def size[T](arr: Array[T]): Int =
+extern global def size[T](arr: Array[T]): Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
   ml "Array.length ${arr}"
 
-extern io def unsafeGet[T](arr: Array[T], index: Int): T =
+extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
   ml "SOME (Array.sub (${arr}, ${index}))"
@@ -70,18 +70,42 @@ function put(arr, index, value) {
   arr[index] = value;
   return $effekt.unit
 }
+function copy(from, start, end, to, offset) {
+  for (let i = start, j = offset; i < end; i++, j++) {
+    to[j] = from[i];
+  }
+}
+function remove(arr, index) {
+  const res = arr[index];
+  delete arr[index];
+  return res;
+}
 """
+
+def remove[T](arr: Array[T], index: Int): Option[T] =
+  unsafeRemove(arr, index).undefinedToOption
+
+extern global def unsafeRemove[T](arr: Array[T], index: Int): T =
+  js "remove(${arr}, ${index})"
 
 def put[T](arr: Array[T], index: Int, value: T): Unit =
   if (index >= 0 && index < arr.size) unsafePut(arr, index, value)
 
-extern io def unsafePut[T](arr: Array[T], index: Int, value: T): Unit =
+extern global def unsafePut[T](arr: Array[T], index: Int, value: T): Unit =
   js "put(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   ml "Array.update (${arr}, ${index}, ${value})"
 
-extern pure def copy[T](arr: Array[T]): Array[T] =
-  js "[...${arr}]"
+def copy[T](arr: Array[T]): Array[T] = {
+  val len = arr.size;
+  val newArray = emptyArray[T](len);
+  copy[T](arr, 0, len, newArray, 0);
+  newArray
+}
+
+// Copies elements from `start` to `end` in the source array `from` to `offset` in the target array `to`
+extern global def copy[T](from: Array[T], start: Int, end: Int, to: Array[T], offset: Int): Unit =
+  js "copy(${from}, ${start}, ${end}, ${to}, ${offset})"
 
 // Utility functions:
 

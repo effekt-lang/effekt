@@ -1,0 +1,87 @@
+module io/files
+
+import io
+
+extern js """
+  const fs = require("fs");
+"""
+
+/**
+ * An abstract interface applications can program against.
+ *
+ * Can be interpreted into AsyncIO with the `filesystem`
+ * handler, or virtualized etc.
+ *
+ * See example below.
+ */
+interface Files {
+  def readFile(path: String): String
+  def writeFile(path: String, contents: String): Unit
+}
+
+/**
+ * Using the file system via node.js
+ */
+def filesystem[R] { program: => R / Files }: R / AsyncIO =
+  try { program() }
+  with Files {
+    def readFile(path) = resume(readFile(path))
+    def writeFile(path, contents) = resume(writeFile(path, contents))
+  }
+
+
+// AsyncIO-based API (default)
+// ---------------------------
+
+/**
+  * Reads a file at given path in a utf8 encoded string.
+  */
+def readFile(path: String): String / AsyncIO =
+  do performIO(box { k => callback::readFile(path, k) })
+
+def writeFile(path: String, contents: String): Unit / AsyncIO =
+  do performIO(box { k => callback::writeFile(path, contents, box { k(()) }) })
+
+
+// Promise-based API
+// ------------------
+namespace promise {
+  def readFile(path: String): Promise[String] / Promises =
+    do promise(box { readFile(path) })
+
+  def writeFile(path: String, contents: String): Promise[Unit] / Promises =
+    do promise(box { writeFile(path, contents) })
+}
+
+// Callback-based API
+// ------------------
+// mostly used as an implementation detail.
+namespace callback {
+
+  /**
+   * Also see: <https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382>
+   * Also see: <https://nodejs.org/api/fs.html#fsreadfilepath-options-callback>
+   */
+  extern io def readFile(path: String, onSuccess: String => Unit at {io, global}): Unit =
+    js "fs.readFile(${path}, 'utf8', (err, res) => { if (!!err) { throw err } else { (${onSuccess})(res).run() } })"
+
+  extern io def writeFile(path: String, contents: String, onSuccess: () => Unit at {io, global}): Unit =
+    js "fs.writeFile(${path}, ${contents}, (err) => { if (!!err) { throw err } else { (${onSuccess})().run() } })"
+
+}
+
+namespace examples {
+
+  // Example illustrating using abstract files interface
+  // and interpreting it into asynchronous IO
+  def copy(from: String, to: String): Unit / Files = {
+    val contents = do readFile(from)
+    do writeFile(to, contents)
+  }
+
+  def main() = eventloop(box {
+    with filesystem;
+
+    copy("README.md", "out/test.md")
+  })
+}
