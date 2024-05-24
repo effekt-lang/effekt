@@ -89,6 +89,13 @@ trait Runner[Executable] {
     case FatalPhaseError(e) => C.report(e)
   }
 
+  def exec(command: String*)(env: Seq[(String, String)])(using C: Context): Unit = try {
+    val p = Process(command, None, env: _*)
+    C.config.output().emit(p.!!)
+  } catch {
+    case FatalPhaseError(e) => C.report(e)
+  }
+
   /**
    * Try running a handful of names for a system executable; returns the first successful name,
    * if any.
@@ -214,15 +221,31 @@ object LLVMRunner extends Runner[String] {
 object MLRunner extends Runner[String] {
   import scala.sys.process.Process
 
-  val extension = "sml"
+  val extension = "ml"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "ml"
 
   override def prelude: List[String] = List("effekt", "immutable/option",  "internal/option", "immutable/list", "text/string")
 
-  def checkSetup(): Either[String, Unit] =
-    if canRunExecutable("mlton") then Right(())
-    else Left("Cannot find mlton. This is required to use the ML backend.")
+  def checkSetup(): Either[String, Unit] = {
+    if canRunExecutable("opam", "switch", "ocaml-5.1.0") && canRunExecutable("ocamlc") then Right(())
+    else Left("Cannot find ocaml. This is required to use the ML backend.")
+  }
+
+  def opamEnv(): Map[String, String] = {
+    val envOutput = Process(Seq("opam", "env")).!!
+    val envMap = scala.collection.mutable.Map[String, String]()
+
+    envOutput.split("\n").foreach { line =>
+      val keyValue = line.split("=").map(_.trim)
+      if (keyValue.length == 2) {
+        val key = keyValue(0)
+        val value = keyValue(1).replace("\"", "")
+        envMap += (key -> value)
+      }
+    }
+    envMap.toMap
+  }
 
   /**
    * Compile the MLton source file (`<...>.sml`) to an executable.
@@ -232,10 +255,22 @@ object MLRunner extends Runner[String] {
    */
   override def build(path: String)(using C: Context): String =
     val out = C.config.outputPath()
-    val buildFile = (out / "main.mlb").canonicalPath
-    val executable = (out / "mlton-main").canonicalPath
-    exec("mlton",
-      "-default-type", "int64", // to avoid integer overflows
-      "-output", executable, buildFile)
+    val appFile = (out / path).canonicalPath
+    val executable = (out / "ocaml-main").canonicalPath
+    exec("opam", "switch", "ocaml-5.1.0")
+    val env = opamEnv()
+
+    val suppressWarnings = Seq(
+      8,  // "this pattern-matching is not exhaustive"
+      11, // "this match case is unused"
+      26  // "unused variable"
+    )
+
+    exec("ocamlopt",
+      "-O3",
+      "unix.cmxa",  // link with unix module
+      "-I", "+unix",  // link with unix module
+      "-w", suppressWarnings.map(w => "-" + w.toString).mkString,
+      "-o", executable, appFile)(env.toSeq)
     executable
 }

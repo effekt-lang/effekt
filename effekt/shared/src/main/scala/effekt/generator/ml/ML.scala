@@ -13,7 +13,7 @@ class ML extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
-  def extension = ".sml"
+  def extension = ".ml"
 
   override def supportedFeatureFlags: List[String] = List("ml")
 
@@ -55,7 +55,7 @@ class ML extends Compiler[String] {
   // ------------------------
   // Source => Core => Lifted => ML
   lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen LiftInference andThen Monomorphize andThen ToML map {
-    case (mainFile, prog) => (Map("main.mlb" -> buildFile(mainFile),  mainFile -> pretty(prog).layout), mainFile)
+    case (mainFile, prog) => (Map(mainFile -> pretty(prog).layout), mainFile)
   }
 
   lazy val Core = Phase.cached("core") {

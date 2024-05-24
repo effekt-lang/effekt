@@ -2,7 +2,7 @@
 
 module effekt
 
-extern include ml "effekt.sml"
+extern include ml "effekt.ml"
 
 def locally[R] { f: => R }: R = f()
 
@@ -14,27 +14,25 @@ def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
 
 def println(value: String): Unit = print(value ++ "\n")
-extern io def print(value: String): Unit = ml "print ${value}"
+extern io def print(value: String): Unit = ml "print_string ${value}"
 
 extern io def random(): Double =
-  ml "mlRandomReal ()"
+  ml "Random.float 1.0"
 
 // TODO: js is absolute, but that is too big for 32-bit ints
 extern io def timestamp(): Int =
-  ml "IntInf.toInt ((Time.toMilliseconds (Time.now ())) - mlStartTime)"
+  ml "int_of_float ((Unix.gettimeofday ()) *. 1000.0)"
 
 // String ops
 // ==========
 extern pure def show(value: Int): String =
-  ml "show'int ${value}"
-extern pure def show(value: Unit): String =
-  ml "show'unit ${value}"
+  ml "string_of_int ${value}"
+def show(value: Unit): String = "()"
 extern pure def show(value: Double): String =
-  ml "show'real ${value}"
-extern pure def show(value: String): String =
-  ml "show'string ${value}"
+  ml "show_float ${value}"
+def show(value: String): String = value
 extern pure def show(value: Bool): String =
-  ml "show'bool ${value}"
+  ml "string_of_bool ${value}"
 
 extern pure def infixConcat(s1: String, s2: String): String =
   ml "${s1} ^ ${s2}"
@@ -42,31 +40,31 @@ extern pure def infixConcat(s1: String, s2: String): String =
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  ml "(${x}: int) + ${y}"
+  ml "${x} + ${y}"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  ml "(${x}: int) * ${y}"
+  ml "${x} * ${y}"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  ml "(${x}: int) div ${y}"
+  ml "${x} / ${y}"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  ml "(${x}: int) - ${y}"
+  ml "${x} - ${y}"
 
 extern pure def mod(x: Int, y: Int): Int =
-  ml "(${x}: int) mod ${y}"
+  ml "${x} mod ${y}"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  ml "(${x}: real) + ${y}"
+  ml "${x} +. ${y}"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  ml "(${x}: real) * ${y}"
+  ml "${x} *. ${y}"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  ml "(${x}: real) - ${y}"
+  ml "${x} -. ${y}"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  ml "(${x}: real) / ${y}"
+  ml "${x} /. ${y}"
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -76,51 +74,50 @@ def max(n: Int, m: Int): Int =
 
 // trig
 // ====
-
 extern pure def cos(x: Double): Double =
-  ml "Math.cos ${x}"
+  ml "cos ${x}"
 
 extern pure def sin(x: Double): Double =
-  ml "Math.sin ${x}"
+  ml "sin ${x}"
 
 extern pure def atan(x: Double): Double =
-  ml "Math.atan ${x}"
+  ml "atan ${x}"
 
 extern pure def tan(x: Double): Double =
-  ml "Math.tan ${x}"
+  ml "tan ${x}"
 
 extern pure def sqrt(x: Double): Double =
-  ml "Math.sqrt ${x}"
+  ml "sqrt ${x}"
 
 extern pure def square(x: Double): Double =
-  ml "(${x}: real) * ${x}"
+  ml "${x} *. ${x}"
 
 extern pure def log(x: Double): Double =
-  ml "Math.ln ${x}"
+  ml "log ${x}"
 
 extern pure def log1p(x: Double): Double =
-  ml "Math.ln (${x} + 1.0)"
+  ml "log1p ${x}"
 
 extern pure def exp(x: Double): Double =
-  ml "Math.exp ${x}"
+  ml "exp ${x}"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
-  ml "Math.pi"
+  ml "Float.pi"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  ml "Real.round ${d}"
+  ml "int_of_float (floor (${d} +. 0.5))"
 
 extern pure def toDouble(d: Int): Double =
-  ml "Real.fromInt ${d}"
+  ml "float_of_int ${d}"
 
 extern pure def floor(d: Double): Int =
-  ml "Real.floor ${d}"
+  ml "int_of_float (floor ${d})"
 
 extern pure def ceil(d: Double): Int =
-  ml "Real.ceil ${d}"
+  ml "int_of_float (ceil ${d})"
 
 
 // Comparison ops
@@ -144,16 +141,16 @@ extern pure def infixGte(x: Int, y: Int): Bool =
   ml "(${x}: int) >= ${y}"
 
 extern pure def infixLt(x: Double, y: Double): Bool =
-  ml "(${x}: real) < ${y}"
+  ml "(${x}: float) < ${y}"
 
 extern pure def infixLte(x: Double, y: Double): Bool =
-  ml "(${x}: real) <= ${y}"
+  ml "(${x}: float) <= ${y}"
 
 extern pure def infixGt(x: Double, y: Double): Bool =
-  ml "(${x}: real) > ${y}"
+  ml "(${x}: float) > ${y}"
 
 extern pure def infixGte(x: Double, y: Double): Bool =
-  ml "(${x}: real) >= ${y}"
+  ml "(${x}: float) >= ${y}"
 
 extern pure def infixLt(x: String, y: String): Bool =
   ml "(${x}: string) < ${y}"
@@ -172,10 +169,10 @@ extern pure def infixGte(x: String, y: String): Bool =
 extern pure def not(b: Bool): Bool =
   ml "not ${b}"
 
-def infixOr { first: => Bool } { second: => Bool }: Bool = 
+def infixOr { first: => Bool } { second: => Bool }: Bool =
   if (first()) true else second()
 
-def infixAnd { first: => Bool } { second: => Bool }: Bool = 
+def infixAnd { first: => Bool } { second: => Bool }: Bool =
   if (first()) second() else false
 
 // Pairs

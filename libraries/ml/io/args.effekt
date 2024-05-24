@@ -17,25 +17,22 @@ import immutable/list
 // ml Ref of ml list
 extern type Args
 
-// Works like an iterator
 extern io def nativeArgs(): Args =
-  ml "ref (CommandLine.arguments ())"
+  ml "Sys.argv"
 
-extern ml """
-fun nextArgument a =
-  case !a of
-    [] => NONE |
-    x :: xs => (a := xs; SOME x);
-"""
+extern pure def length(a: Args): Int =
+  ml "Array.length ${a}"
 
-// consumes the next arg if present
-extern io def nativeNext(a: Args): MLOption[String] =
-  ml "nextArgument ${a}"
+extern pure def argAt(a: Args, idx: Int): String =
+  ml "${a}.(${idx})"
 
 def commandLineArgs(): List[String] = {
-  def argsToRevList(a: Args, acc: List[String]): List[String] = toOption(nativeNext(a)) match {
-    case None() => acc
-    case Some(v) => argsToRevList(a, Cons(v, acc))
-  }
-  reverse(argsToRevList(nativeArgs(), Nil()))
+  val args = nativeArgs()
+
+  def go(i: Int, acc: List[String]): List[String] =
+    // 0th argument is the binary name
+    if (i > 0) go(i - 1, Cons(args.argAt(i), acc))
+    else acc
+
+  go (args.length - 1, Nil())
 }

@@ -20,7 +20,7 @@ object Transformer {
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
   def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(using C: Context): ml.Toplevel = {
-    ml.Toplevel(toML(core)(using TransformerContext(C)), runMain(name(mainSymbol)))
+    ml.Toplevel(toML(core)(using TransformerContext(C)), runMain(termName(mainSymbol)))
   }
 
   /**
@@ -45,7 +45,7 @@ object Transformer {
 
 
 
-  def toML(p: Param): MLName = name(p.id)
+  def toML(p: Param): MLName = termName(p.id)
 
   def toML(e: Argument)(using TransformerContext): ml.Expr = e match {
     case e: lifted.Expr => toML(e)
@@ -110,7 +110,7 @@ object Transformer {
     case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
       C.abort("higher order functions currently not supported")
     case BlockType.Interface(typeConstructor, args) =>
-      ml.Type.TApp(ml.Type.Data(interfaceNameFor(args.size)), args.map(tpeToML))
+      ml.Type.TApp(ml.Type.Data(interfaceTypeNameFor(args.size)), args.map(tpeToML))
   }
 
   def tpeToML(tpe: ValueType)(using TransformerContext): ml.Type = tpe match {
@@ -119,38 +119,38 @@ object Transformer {
     case lifted.Type.TDouble => ml.Type.Real
     case lifted.Type.TBoolean => ml.Type.Bool
     case lifted.Type.TString => ml.Type.String
-    case ValueType.Var(id) => ml.Type.Var(name(id))
-    case ValueType.Data(id, Nil) => ml.Type.Data(name(id))
-    case ValueType.Data(id, args) => ml.Type.TApp(ml.Type.Data(name(id)), args.map(tpeToML))
+    case ValueType.Var(id) => ml.Type.Var(typeName(id))
+    case ValueType.Data(id, Nil) => ml.Type.Data(typeName(id))
+    case ValueType.Data(id, args) => ml.Type.TApp(ml.Type.Data(typeName(id)), args.map(tpeToML))
     case ValueType.Boxed(tpe) => tpeToML(tpe)
   }
 
   def toML(decl: Declaration)(using C: TransformerContext): List[ml.Binding] = decl match {
 
     case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
-      defineRecord(name(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
+      defineRecord(typeName(id), constructorName(id.constructor), ctor.fields.map { f => termName(f.id) })
 
     case Declaration.Data(id, tparams, ctors) =>
       def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
         case Constructor(id, fields) =>
           val tpeList = fields.map { f => tpeToML(f.tpe) }
           val tpe = typesToTupleIsh(tpeList)
-          (name(id), tpe)
+          (constructorName(id), tpe)
       }
 
-      val tvars: List[ml.Type.Var] = tparams.map(p => ml.Type.Var(name(p)))
-      List(ml.Binding.DataBind(name(id), tvars, ctors map constructorToML))
+      val tvars: List[ml.Type.Var] = tparams.map(p => ml.Type.Var(typeName(p)))
+      List(ml.Binding.DataBind(typeName(id), tvars, ctors map constructorToML))
 
     case Declaration.Interface(id, tparams, operations) =>
       defineInterface(id, operations.map { op => op.id })
   }
 
+  def interfaceTypeNameFor(arity: Int): MLName = MLName(s"object${arity}")
   def interfaceNameFor(arity: Int): MLName = MLName(s"Object${arity}")
 
   def defineInterface(typeName: Id, props: List[Id])(using C: TransformerContext): List[ml.Binding] = {
     val arity = props.size
 
-    val interfaceName = interfaceNameFor(arity)
     val accessorNames = props.zipWithIndex.map { case (id, i) =>
       val name = MLName(s"member${i + 1}of${arity}")
       C.accessorCache.update(id, name)
@@ -159,9 +159,9 @@ object Transformer {
 
     if C.recordCache.isDefinedAt(arity) then return Nil
 
-    C.recordCache.update(arity, CoData(interfaceName, accessorNames))
+    C.recordCache.update(arity, CoData(interfaceTypeNameFor(arity), accessorNames))
 
-    defineRecord(interfaceName, interfaceName, accessorNames)
+    defineRecord(interfaceTypeNameFor(arity), interfaceNameFor(arity), accessorNames)
   }
 
   def defineRecord(typeName: MLName, constructorName: MLName, fields: List[MLName])(using TransformerContext): List[ml.Binding] = {
@@ -187,7 +187,7 @@ object Transformer {
   def toML(ext: Extern)(using TransformerContext, ErrorReporter): ml.Binding = ext match {
     case Extern.Def(id, tparams, params, ret, body) =>
 
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, body match {
+      ml.FunBind(termName(id), params map { p => ml.Param.Named(termName(p.id)) }, body match {
         case ExternBody.StringExternBody(_, contents) => toML(contents)
         case u: ExternBody.Unsupported =>
           u.report
@@ -231,14 +231,14 @@ object Transformer {
 
     case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
-        toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
+        toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(termName(id), value)), b) }
       }
 
     case lifted.Match(scrutinee, clauses, default) =>
       def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {
         val (id, b) = c
-        val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
-        val pattern = ml.Pattern.Datatype(name(id), binders)
+        val binders = b.params.map(p => ml.Pattern.Named(termName(p.id)))
+        val pattern = ml.Pattern.Datatype(constructorName(id), binders)
         (pattern, toMLExpr(b.body))
       }
 
@@ -272,13 +272,13 @@ object Transformer {
 
     case lifted.Alloc(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
-        val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
+        val bind = ml.Binding.ValBind(termName(id), ml.Expr.Ref(toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k).reify())
       }
 
     case lifted.Alloc(id, init, region, ev, body) =>
       CPS.inline { k =>
-        val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
+        val bind = ml.Binding.ValBind(termName(id), ml.Call(ml.Consts.fresh)(ml.Variable(termName(region)), toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k).reify())
       }
 
@@ -299,7 +299,7 @@ object Transformer {
             ml.Call(m)(ml.Lambda(a)(ml.Call(ml.Call(k)(a))(s))))))
         }
 
-        ml.mkLet(List(Binding.ValBind(name(ev.id), lift)),
+        ml.mkLet(List(Binding.ValBind(termName(ev.id), lift)),
           toMLExpr(body)(returnCont)(toML(init)).reify())
       }
     // after monomorphization
@@ -345,22 +345,22 @@ object Transformer {
   }
 
   def createBinder(id: Symbol, binding: Expr)(using TransformerContext): Binding = {
-    ml.ValBind(name(id), toML(binding))
+    ml.ValBind(termName(id), toML(binding))
   }
 
   def createBinder(id: Symbol, binding: Block)(using TransformerContext): Binding = {
     binding match {
       case BlockLit(tparams, params, body) =>
         val k = freshName("k")
-        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
+        ml.FunBind(termName(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
       case New(impl) =>
         toML(impl) match {
           case ml.Lambda(ps, body) =>
-            ml.FunBind(name(id), ps, body)
-          case other => ml.ValBind(name(id), other)
+            ml.FunBind(termName(id), ps, body)
+          case other => ml.ValBind(termName(id), other)
         }
       case _ =>
-        ml.ValBind(name(id), toML(binding))
+        ml.ValBind(termName(id), toML(binding))
     }
   }
 
@@ -373,12 +373,12 @@ object Transformer {
   def toML(block: BlockLit)(using TransformerContext): ml.Lambda = block match {
     case BlockLit(tparams, params, body) =>
       val k = freshName("k")
-      ml.Lambda(params.map { p => ml.Param.Named(name(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
+      ml.Lambda(params.map { p => ml.Param.Named(termName(p.id)) } :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)).reify())
   }
 
   def toML(block: Block)(using C: TransformerContext): ml.Expr = block match {
     case lifted.BlockVar(id, _) =>
-      Variable(name(id))
+      Variable(termName(id))
 
     case b @ lifted.BlockLit(_, _, _) =>
       toML(b)
@@ -409,7 +409,7 @@ object Transformer {
 
   def toML(l: Lift): ml.Expr = l match {
     case Lift.Try() => Consts.lift
-    case Lift.Var(x) => Variable(name(x))
+    case Lift.Var(x) => Variable(termName(x))
     case Lift.Reg() => Consts.lift
   }
 
@@ -418,7 +418,7 @@ object Transformer {
       def numberString(x: AnyVal): ml.Expr = {
         val s = x.toString
         if (s.startsWith("-")) {
-          ml.RawExpr(s"~${s.substring(1)}")
+          ml.RawExpr(s"(-${s.substring(1)})")
         } else ml.RawValue(s)
       }
 
@@ -434,10 +434,10 @@ object Transformer {
         case v: Boolean => if (v) Consts.trueVal else Consts.falseVal
         case _ => ml.RawValue(l.value.toString)
       }
-    case ValueVar(id, _) => ml.Variable(name(id))
+    case ValueVar(id, _) => ml.Variable(termName(id))
 
     case Make(data, tag, vargs) =>
-      ml.Expr.Make(name(tag), expsToTupleIsh(vargs map toML))
+      ml.Expr.Make(constructorName(tag), expsToTupleIsh(vargs map toML))
 
     case PureApp(b, _, args) =>
       val mlArgs = args map {
@@ -448,7 +448,7 @@ object Transformer {
       ml.Call(toML(b), mlArgs)
 
     case Select(b, field, _) =>
-      ml.Call(name(field))(toML(b))
+      ml.Call(termName(field))(toML(b))
 
     case Run(s) => toMLExpr(s).run
 
@@ -582,7 +582,7 @@ object Transformer {
 
       // [[ [ev :: evs](m) ]] = [[evs]]( [[ev]](m) )
       case Lift.Var(x) :: lifts =>
-        CPS.reified(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
+        CPS.reified(ml.Call(Variable(termName(x)))(lift(lifts, m).reify()))
 
       case Nil => m
     }

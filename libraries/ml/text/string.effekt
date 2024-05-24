@@ -13,13 +13,13 @@ def charAt(str: String, index: Int): Option[String] =
     else None()
 
 extern pure def length(str: String): Int =
-    ml "String.size ${str}"
+    ml "String.length ${str}"
 
 extern pure def startsWith(str: String, prefix: String): Bool =
-    ml "String.isPrefix ${prefix} ${str}"
+    ml "String.starts_with ${str} ~prefix:${prefix}"
 
 extern pure def endsWith(str: String, suffix: String): Bool =
-    ml "String.isSuffix ${suffix} ${str}"
+    ml "String.ends_with ${str} ~suffix:${suffix}"
 
 // extern pure def repeat(str: String, n: Int): String =
 //     ml "???"
@@ -39,7 +39,7 @@ def substring(str: String, from: Int): String =
     str.substring(from, str.length)
 
 extern pure def unsafeSubstring(str: String, from: Int, len: Int): String =
-    ml "String.extract (${str}, ${from}, SOME ${len})"
+    ml "String.sub ${str} ${from} ${len}"
 
 // extern pure def split(str: String, sep: String): Array[String] =
 //     ml "Array.fromList (map (String.str) (String.explode str))"
@@ -49,12 +49,12 @@ extern pure def unsafeSubstring(str: String, from: Int, len: Int): String =
 
 // also accepts sml style `~2` for unary minus along with `+2` and `-2`
 extern pure def internalStringToInt(str: String): MLOption[Int] =
-    ml "Int.fromString ${str}"
+    ml "int_of_string_opt ${str}"
 
 def toInt(str: String): Option[Int] = toOption(internalStringToInt(str))
 
 extern pure def unsafeCharAt(str: String, n: Int): String =
-    ml "String.sub (${str}, ${n})"
+    ml "String.sub ${str} ${n} 1"
 
 def indexOf(str: String, sub: String): Option[Int] = {
     def loop(str: String, sub: String, index: Int): Int = {
@@ -76,6 +76,6 @@ def lastIndexOf(str: String, sub: String): Option[Int] = {
     if (index == -1) { None() } else { Some(index) }
 }
 
-val ANSI_GREEN = "\u001b[32m"
-val ANSI_RED = "\u001b[31m"
-val ANSI_RESET = "\u001b[0m"
+val ANSI_GREEN = "\x1b[32m"
+val ANSI_RED = "\x1b[31m"
+val ANSI_RESET = "\x1b[0m"
