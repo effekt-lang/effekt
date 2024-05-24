@@ -418,7 +418,7 @@ object Transformer {
       def numberString(x: AnyVal): ml.Expr = {
         val s = x.toString
         if (s.startsWith("-")) {
-          ml.RawExpr(s"-${s.substring(1)}")
+          ml.RawExpr(s"(-${s.substring(1)})")
         } else ml.RawValue(s)
       }
 

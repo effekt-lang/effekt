@@ -29,7 +29,7 @@ extern pure def show(value: Int): String =
   ml "string_of_int ${value}"
 def show(value: Unit): String = "()"
 extern pure def show(value: Double): String =
-  ml "string_of_float ${value}"
+  ml "show_float ${value}"
 def show(value: String): String = value
 extern pure def show(value: Bool): String =
   ml "string_of_bool ${value}"

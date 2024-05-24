@@ -19,7 +19,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(toplevel: Toplevel): Doc = {
     val Toplevel(bindings, body) = toplevel
     toDoc(bindings) <> line <> line <>
-      "let" <+> "()" <+> "=" <+> toDoc(body) <> line
+      "let" <+> "_" <+> "=" <+> toDoc(body) <> line
   }
 
   def toDoc(bindings: List[Binding]): Doc = {
@@ -71,7 +71,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       parens(d)
     case Type.Unit => "unit"
     case Type.Integer => "int"
-    case Type.Real => "real"
+    case Type.Real => "float"
     case Type.String => "string"
     case Type.Bool => "bool"
     case Type.Data(name) => toDoc(name)

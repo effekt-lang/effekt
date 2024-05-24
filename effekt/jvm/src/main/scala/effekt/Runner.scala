@@ -89,6 +89,13 @@ trait Runner[Executable] {
     case FatalPhaseError(e) => C.report(e)
   }
 
+  def exec(command: String*)(env: Seq[(String, String)])(using C: Context): Unit = try {
+    val p = Process(command, None, env: _*)
+    C.config.output().emit(p.!!)
+  } catch {
+    case FatalPhaseError(e) => C.report(e)
+  }
+
   /**
    * Try running a handful of names for a system executable; returns the first successful name,
    * if any.
@@ -220,9 +227,25 @@ object MLRunner extends Runner[String] {
 
   override def prelude: List[String] = List("effekt", "immutable/option",  "internal/option", "immutable/list", "text/string")
 
-  def checkSetup(): Either[String, Unit] =
-    if canRunExecutable("ocaml") then Right(())
+  def checkSetup(): Either[String, Unit] = {
+    if canRunExecutable("opam", "switch", "ocaml-5.1.0") && canRunExecutable("ocamlc") then Right(())
     else Left("Cannot find ocaml. This is required to use the ML backend.")
+  }
+
+  def opamEnv(): Map[String, String] = {
+    val envOutput = Process(Seq("opam", "env")).!!
+    val envMap = scala.collection.mutable.Map[String, String]()
+
+    envOutput.split("\n").foreach { line =>
+      val keyValue = line.split("=").map(_.trim)
+      if (keyValue.length == 2) {
+        val key = keyValue(0)
+        val value = keyValue(1).replace("\"", "")
+        envMap += (key -> value)
+      }
+    }
+    envMap.toMap
+  }
 
   /**
    * Compile the MLton source file (`<...>.sml`) to an executable.
@@ -235,10 +258,19 @@ object MLRunner extends Runner[String] {
     val appFile = (out / path).canonicalPath
     val executable = (out / "ocaml-main").canonicalPath
     exec("opam", "switch", "ocaml-5.1.0")
+    val env = opamEnv()
+
+    val suppressWarnings = Seq(
+      8,  // "this pattern-matching is not exhaustive"
+      11, // "this match case is unused"
+      26  // "unused variable"
+    )
+
     exec("ocamlc",
       "unix.cma",  // link with unix module
       "-I", "+unix",  // link with unix module
+      "-w", suppressWarnings.map(w => "-" + w.toString).mkString,
       "-w", "-26", // suppress unused variable warnings
-      "-o", executable, appFile)
+      "-o", executable, appFile)(env.toSeq)
     executable
 }
