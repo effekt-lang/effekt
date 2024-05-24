@@ -266,11 +266,11 @@ object MLRunner extends Runner[String] {
       26  // "unused variable"
     )
 
-    exec("ocamlc",
-      "unix.cma",  // link with unix module
+    exec("ocamlopt",
+      "-O3",
+      "unix.cmxa",  // link with unix module
       "-I", "+unix",  // link with unix module
       "-w", suppressWarnings.map(w => "-" + w.toString).mkString,
-      "-w", "-26", // suppress unused variable warnings
       "-o", executable, appFile)(env.toSeq)
     executable
 }
