@@ -1,0 +1,9 @@
+module internal/mllist
+
+extern type MLList[Elem] // = 'elem list
+extern pure def isEmpty[A](l: MLList[A]): Bool = ml "null ${l}"
+extern pure def head[A](l: MLList[A]): A = ml "hd ${l}"
+extern pure def tail[A](l: MLList[A]): MLList[A] = ml "tl ${l}"
+
+def toList[A](l: MLList[A]): List[A] =
+  if (l.isEmpty) Nil() else Cons(l.head, toList(l.tail))

@@ -14,7 +14,7 @@ class FileNotFound(filename: String) extends Exception(s"File not found: ${filen
  */
 object paths extends PathUtils {
 
-  private type Path = String
+  private type Path = Seq[String]
 
   case class VirtualFile(timestamp: Long, contents: String)
 
@@ -24,27 +24,31 @@ object paths extends PathUtils {
 
   class File(path: Path) extends FileOps {
 
-    def /(other: String): File =
-      if (path.isEmpty)
-        file(other)
-      else if (path.endsWith(separator))
-        file(path + other)
-      else
-        file(path + separator + other)
+    val normalized: Path = {
+      var res: Path = Seq.empty
+      path.foreach {
+        case "."  => ()
+        case ".." if res.nonEmpty => res = res.init
+        case seg  => res = res :+ seg.trim.stripSuffix("/")
+      }
+      res
+    }
 
-    def unixPath = path
+    def /(other: String): File = new File(path ++ other.split(separatorChar).toSeq)
+
+    def unixPath = normalized.mkString(separatorChar.toString)
     def canonicalPath = unixPath
 
-    def parent = file(path.split(separatorChar).init.mkString(separator))
+    def parent = file(normalized.init)
 
-    def lastModified: Long = files.getOrElse(path, throw new FileNotFound(path)).timestamp
+    def lastModified: Long = files.getOrElse(normalized, throw new FileNotFound(unixPath)).timestamp
 
-    def read: String = files.getOrElse(path, throw new FileNotFound(path)).contents
-    def tryRead: Option[String] = files.get(path).map(_.contents)
-    def write(content: String) = files.put(path, VirtualFile(System.currentTimeMillis, content))
-    def exists: Boolean = files.isDefinedAt(path)
+    def read: String = files.getOrElse(normalized, throw new FileNotFound(unixPath)).contents
+    def tryRead: Option[String] = files.get(normalized).map(_.contents)
+    def write(content: String) = files.put(normalized, VirtualFile(System.currentTimeMillis, content))
+    def exists: Boolean = files.isDefinedAt(normalized)
 
-    override def toString = path
+    override def toString = unixPath
   }
 
   override def lastModified(src: Source): Long = src match {
@@ -52,5 +56,6 @@ object paths extends PathUtils {
     case _ => super.lastModified(src)
   }
 
-  implicit def file(path: String): File = new File(path)
+  implicit def file(path: String): File = file(path.split(separatorChar).toSeq)
+  def file(path: Seq[String]): File = new File(path)
 }

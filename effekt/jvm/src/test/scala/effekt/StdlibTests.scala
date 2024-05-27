@@ -34,6 +34,9 @@ class StdlibMLTests extends StdlibTests {
     // [error] Effect polymorphic recursion is not allowed. The following definition is effect polymorphic since unification variable X occurs in instantiation ...
     examplesDir / "stdlib" / "list" / "join.effekt",
     examplesDir / "stdlib" / "list" / "flatmap.effekt",
+
+    // unicode is not supported in the ML backend
+    examplesDir / "stdlib" / "string" / "unicode.effekt"
   )
 }
 class StdlibLLVMTests extends StdlibTests {

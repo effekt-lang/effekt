@@ -1,5 +1,7 @@
-extern pure def foo(): Unit = 
-  js { println("Bar") }
+extern io def test(): Unit = default { () }
+
+extern pure def foo(): Unit =
+  js { test() }
   default { () }
 
 def main() = { foo() }

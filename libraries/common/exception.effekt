@@ -1,0 +1,113 @@
+module exception
+
+import effekt
+
+// Exceptions
+// ==========
+
+interface Exception[E] {
+  def raise(exception: E, msg: String): Nothing
+}
+
+def raise[A, E](exception: E, msg: String): A / Exception[E] =
+  do raise(exception, msg) match {}
+
+/**
+ * Used as a type for `Exception` in functions which expect a non-empty
+ * container (e.g. option or list).
+ */
+record MissingValue()
+
+def missingValue(): Nothing / Exception[MissingValue] =
+  do raise(MissingValue(), "Missing value.")
+
+/**
+ * Used as a type for `Exception` in functions where an index can be out of bounds.
+ */
+record OutOfBounds()
+
+/**
+ * Unexpected runtime exceptions that can be caught.
+ */
+record RuntimeError()
+
+def raise[A](msg: String): A / Exception[RuntimeError] =
+  do raise(RuntimeError(), msg) match {}
+
+/**
+ * Used as a type for `Exception` in functions which expect the input
+ * to be formatted in a specific way.
+ */
+record WrongFormat()
+
+def wrongFormat(): Nothing / Exception[WrongFormat] =
+  do raise(WrongFormat(), "Wrong format.")
+
+def wrongFormat(msg: String): Nothing / Exception[WrongFormat] =
+  do raise(WrongFormat(), msg)
+
+
+/**
+ * A fatal runtime error that cannot be caught
+ */
+extern io def panic[R](msg: String): R =
+  js "(function() { throw ${msg} })()"
+  chez "(raise ${msg})"
+  ml "raise Fail ${msg}"
+  llvm """
+    call void @c_io_println_String(%Pos %msg)
+    call void @c_buffer_refcount_decrement(%Pos %msg)
+    call void @exit(i32 1)
+    ret %Pos zeroinitializer ; Unit
+  """
+
+
+// Exception Handlers
+// ==================
+
+
+/**
+ * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
+ */
+def panicOn[E, T] { prog: => T / Exception[E] }: T =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
+
+/**
+ * Reports exceptions of (static) type E to the console
+ */
+def report[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
+
+/**
+ * Ignores exceptions of (static) type E
+ */
+def ignore[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
+
+/**
+ * Use the default value to handle the exception of type E
+ */
+def default[E, T] { default: => T } { prog: => T / Exception[E] }: T =
+  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = default() }
+
+
+/**
+ * A proxy value to enable partial type applications, such as:
+ *
+ * ```
+ * with on[MissingValue].ignore; ...
+ * ```
+ */
+record on[E]()
+
+def ignore[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
+  ignore[E] {prog}
+
+def default[E, T](proxy: on[E]) { d: => T } { prog: => T / Exception[E] }: T =
+  default[E, T] {d} {prog}
+
+def panic[E, T](proxy: on[E]) { prog: => T / Exception[E] }: T =
+  panicOn[E, T] {prog}
+
+def report[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
+  report[E] {prog}

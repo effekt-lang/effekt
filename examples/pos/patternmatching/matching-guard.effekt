@@ -1,5 +1,3 @@
-import immutable/option
-
 def guard(): Bool = false
 
 def ex1(opt: Option[String]) = opt match {

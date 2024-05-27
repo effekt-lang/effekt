@@ -21,7 +21,7 @@ object Transformer {
 
       // TODO proper initialization of runtime
       emit(Call("env", envType, malloc, List(ConstantInt(1024 * 1024))));
-      emit(Call("sp", spType, malloc, List(ConstantInt(1024 * 1024))));
+      emit(Call("sp", spType, malloc, List(ConstantInt(256 * 1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(), "base"), LocalReference(spType, "sp")));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
@@ -138,8 +138,6 @@ object Transformer {
         val labels = clauses.map {
           case (tag, clause) => (tag, labelClause(clause))
         }
-
-        assert(labels.nonEmpty, "Should not be possible. In the future also support matching on void")
 
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
@@ -417,8 +415,8 @@ object Transformer {
   def refType = NamedType("Ref");
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive(_)         => positiveType
-    case machine.Negative(_)         => negativeType
+    case machine.Positive()          => positiveType
+    case machine.Negative()          => negativeType
     case machine.Type.Int()          => NamedType("Int")
     case machine.Type.Double()       => NamedType("Double")
     case machine.Type.String()       => positiveType
@@ -431,8 +429,8 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive(_)       => 16
-      case machine.Negative(_)       => 16
+      case machine.Positive()        => 16
+      case machine.Negative()        => 16
       case machine.Type.Int()        => 8 // TODO Make fat?
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
@@ -444,8 +442,8 @@ object Transformer {
     tpe match {
           case machine.Type.Reference(machine.Type.Int()) => 0
           case machine.Type.Reference(machine.Type.Double()) => 0
-          case machine.Type.Reference(machine.Type.Positive(_)) => 1
-          case machine.Type.Reference(machine.Type.Negative(_)) => 1
+          case machine.Type.Reference(machine.Type.Positive()) => 1
+          case machine.Type.Reference(machine.Type.Negative()) => 1
           case machine.Type.Reference(machine.Type.String()) => 2
           case _ => ???
     }
@@ -621,8 +619,8 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_)       => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
-      case machine.Negative(_)       => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
+      case machine.Positive()        => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
+      case machine.Negative()        => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
       case machine.Type.Stack()      => emit(Call("_", VoidType(), shareStack, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Double()     => ()
@@ -633,8 +631,8 @@ object Transformer {
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_)       => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
-      case machine.Negative(_)       => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
+      case machine.Positive()        => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
+      case machine.Negative()        => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
       case machine.Type.Stack()      => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Double()     => ()

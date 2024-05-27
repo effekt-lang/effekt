@@ -61,3 +61,5 @@ fun mlRandomReal () =
 
 (* HOLES *)
 exception Hole
+
+exception Absurd

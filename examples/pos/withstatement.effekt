@@ -1,7 +1,5 @@
 module examples/pos/withstatement
 
-import immutable/list
-
 effect Exc[A](msg: String): A
 
 def printer { p: => Unit / Exc }: Unit = try { p() } with Exc[A] { (msg) =>

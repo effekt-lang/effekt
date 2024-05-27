@@ -227,10 +227,10 @@ similar to let-insertion ([Yallop, 2017][@yallop2017staged]).
 Finally, we can run our examples to inspect the generated sentences.
 ```
 def main() = {
-  println(s1)
-  println(s1a())
-  println(s1c())
-  println(s2())
+  inspect(s1)
+  inspect(s1a())
+  inspect(s1c())
+  inspect(s2())
 }
 ```
 
