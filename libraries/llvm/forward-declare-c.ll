@@ -13,6 +13,8 @@ declare void @c_buffer_refcount_increment(%Pos)
 declare void @c_buffer_refcount_decrement(%Pos)
 declare %Pos @c_buffer_concatenate(%Pos, %Pos)
 
+declare i8* @c_buffer_as_null_terminated_string(%Pos)
+
 declare void @hole()
 
 declare %Pos @c_buffer_eq(%Pos, %Pos)

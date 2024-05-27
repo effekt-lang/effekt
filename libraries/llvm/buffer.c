@@ -97,29 +97,40 @@ struct Pos c_buffer_copy(const struct Pos buffer) {
 }
 
 
-// incurs a malloc: the returned pointer needs to be managed
-char *c_buffer_as_null_terminated_string(const struct Pos buffer) {
-    // Zero runes are represented as non-minimal utf8 in the null-terminated
-    // string. As such, a count reveals the necessary number of bytes.
+/**
+ * Converts a Pos buffer to a null-terminated string, handling zero bytes by encoding them as non-minimal UTF-8 sequences.
+ *
+ * Note: the returned pointer needs to be managed manually!
+ *
+ * @param buffer The Pos buffer to convert.
+ * @return A null-terminated string representing the contents of the buffer.
+ */
+char* c_buffer_as_null_terminated_string(const struct Pos buffer) {
+    uint64_t length = c_buffer_length(buffer);
     uint64_t zero_runes = 0;
-    for (uint64_t j = 0; j < c_buffer_length(buffer); ++j)
-        zero_runes += !c_buffer_bytes(buffer)[j];
+    uint8_t* bytes = c_buffer_bytes(buffer);
 
-    const uint64_t n = c_buffer_length(buffer) + zero_runes;
-    char *buf = (char *) malloc((n+1) * sizeof *buf);
+    // Count zero runes
+    for (uint64_t j = 0; j < length; ++j) {
+        zero_runes += !bytes[j];
+    }
+
+    // Allocate buffer for the null-terminated string
+    uint64_t n = length + zero_runes;
+    char *buf = (char *) malloc((n + 1) * sizeof(*buf));
     ASSERT_NON_NULL(buf)
 
     uint64_t i = 0;
-    for (uint64_t j = 0; j < c_buffer_length(buffer); ++j) {
-        buf[i++] = c_buffer_bytes(buffer)[j];
-        if (!buf[i]) {
-            buf[i]   = 0xc0; // 0b110.00000
-            buf[i++] = 0x80; // 0b10.000000
+    for (uint64_t j = 0; j < length; ++j) {
+        buf[i++] = bytes[j];
+        if (buf[i-1] == 0) {
+            buf[i-1] = 0xc0; // 0b11000000
+            buf[i++] = 0x80; // 0b10000000
         }
     }
 
-    // null-terminated
-    buf[n] = '\00';
+    // Null-terminate the string
+    buf[n] = '\0';
 
     return buf;
 }
