@@ -124,7 +124,7 @@ object PatternMatchingCompiler {
     }
 
     // (3a) Match on a literal
-    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure) = {
+    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
         case Clause(Split(Pattern.Literal(lit, _), _, _), _, _) => lit
@@ -147,6 +147,10 @@ object PatternMatchingCompiler {
           addDefault(c)
           variants.foreach { v => addClause(v, c) }
       }
+
+      // special case matching on ()
+      val unit: Literal = Literal((), core.Type.TUnit)
+      if (lit == unit) return compile(clausesFor.getOrElse(unit, Nil))
 
       // (4) assemble syntax tree for the pattern match
       variants.foldRight(compile(defaults)) {
