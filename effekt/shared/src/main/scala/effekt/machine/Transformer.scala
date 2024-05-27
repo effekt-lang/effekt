@@ -149,7 +149,7 @@ object Transformer {
 
       // TODO deal with BlockLit
       case lifted.App(lifted.BlockVar(id, tpe), targs, args) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         BPC.info(id) match {
           // Unknown Jump
@@ -180,11 +180,17 @@ object Transformer {
             }
         }
 
+      case lifted.App(lifted.Unbox(e), targs, args) =>
+        transform(e).run { x =>
+          transform(args).run { values =>
+            Invoke(x, builtins.Apply, values)
+          }
+        }
 
       // hardcoded translation for get and put.
       // TODO remove this when interfaces are correctly translated
       case lifted.App(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), targs, List(ev)) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
         val variable = Variable(freshName("x"), tpe)
@@ -194,7 +200,7 @@ object Transformer {
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(ev, arg)) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
         val variable = Variable(freshName("x"), Positive());
@@ -468,6 +474,9 @@ object Transformer {
         PushFrame(Clause(List(variable), k(variable)), transform(stmt))
       }
 
+    case lifted.Box(block) =>
+      transform(block)
+
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")
   }
@@ -501,7 +510,7 @@ object Transformer {
 
   def transform(tpe: lifted.ValueType)(using ErrorReporter): Type = tpe match {
     case lifted.ValueType.Var(name) => Positive() // assume all value parameters are data
-    case lifted.ValueType.Boxed(tpe) => ???
+    case lifted.ValueType.Boxed(tpe) => Negative()
     case lifted.Type.TUnit => builtins.UnitType
     case lifted.Type.TInt => Type.Int()
     case lifted.Type.TChar => Type.Int()
