@@ -167,15 +167,32 @@ object JSWebRunner extends Runner[String] {
   override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
 
   def checkSetup(): Either[String, Unit] =
-    if canRunExecutable("node", "--version") then Right(())
-    else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
+    Left("Running js-web code directly is not supported (yet). Use `--compile` to generate a js file / `--build` to generate a html file.") // TODO
 
   /**
-   * Creates an executable `.js` file besides the given `.js` file ([[path]])
+   * Creates an openable `.html` file besides the given `.js` file ([[path]])
    * and then returns the absolute path of the created executable.
    */
   def build(path: String)(using C: Context): String =
-    ??? // TODO
+    import java.nio.file.Path
+    val out = C.config.outputPath().getAbsolutePath
+    val jsFilePath = (out / path).unixPath
+    val jsFileName = jsFilePath.split("/").last
+    val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
+    val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
+    val htmlContent =
+      s"""<!DOCTYPE html>
+         |<html>
+         |  <body>
+         |    <script type="text/javascript" src="${jsFileName}"></script>
+         |    <script type="text/javascript">
+         |      window.onload=${mainName};
+         |    </script>
+         |  </body>
+         |</html>
+         |""".stripMargin
+    IO.createFile(htmlFilePath, htmlContent, false)
+    htmlFilePath
 }
 
 trait ChezRunner extends Runner[String] {
