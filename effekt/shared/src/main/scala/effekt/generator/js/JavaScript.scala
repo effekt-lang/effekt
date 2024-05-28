@@ -62,3 +62,5 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)
 }
+class JavaScriptWeb extends JavaScript(List("jsWeb")) {}
+class JavaScriptNode extends JavaScript(List("jsNode")) {}

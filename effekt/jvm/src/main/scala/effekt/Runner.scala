@@ -119,7 +119,7 @@ trait Runner[Executable] {
   }
 }
 
-object JSRunner extends Runner[String] {
+object JSNodeRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "js"
@@ -156,6 +156,26 @@ object JSRunner extends Runner[String] {
         IO.createFile(jsMainFilePath, jsScript)
         createScript(exePath, "node", jsMainFilePath)
     }
+}
+object JSWebRunner extends Runner[String] {
+  import scala.sys.process.Process
+
+  val extension = "js"
+
+  def standardLibraryPath(root: File): File = root / "libraries" / "js"
+
+  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+
+  def checkSetup(): Either[String, Unit] =
+    if canRunExecutable("node", "--version") then Right(())
+    else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
+
+  /**
+   * Creates an executable `.js` file besides the given `.js` file ([[path]])
+   * and then returns the absolute path of the created executable.
+   */
+  def build(path: String)(using C: Context): String =
+    ??? // TODO
 }
 
 trait ChezRunner extends Runner[String] {
