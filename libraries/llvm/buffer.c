@@ -30,7 +30,6 @@ uint8_t *c_buffer_bytes(const struct Pos buffer) {
     return (uint8_t *) (buffer.obj + BUFFER_HEADER_WIDTH);
 }
 
-
 struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     uint8_t *obj = malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
     ASSERT_NON_NULL(obj)
@@ -42,6 +41,29 @@ struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     // data
     for (uint64_t j = 0; j < n; ++j)
         obj[BUFFER_HEADER_WIDTH + j] = data[j];
+
+    return (struct Pos) {
+        .tag = n,
+        .obj = obj,
+    };
+}
+
+// TODO this allocates, copies, and frees immediately... improve this
+struct Pos c_buffer_construct_zeroed(const uint64_t n) {
+    uint8_t *zeroes = calloc(n, sizeof *zeroes);
+    ASSERT_NON_NULL(zeroes)
+    const struct Pos buffer = c_buffer_construct(n, zeroes);
+    free(zeroes);
+    return buffer;
+}
+
+struct Pos c_buffer_construct_uninitialized(const uint64_t n) {
+    uint8_t *obj = malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
+    ASSERT_NON_NULL(obj)
+
+    // reference count (a reference count of zero means one sole owner)
+    for (uint64_t j = 0; j < BUFFER_HEADER_WIDTH; ++j)
+        obj[j] = 0;
 
     return (struct Pos) {
         .tag = n,
@@ -77,14 +99,6 @@ void c_buffer_refcount_decrement(const struct Pos buffer) {
         c_buffer_destruct(buffer);
 }
 
-
-struct Pos c_buffer_construct_zeroed(const uint64_t n) {
-    uint8_t *zeroes = calloc(n, sizeof *zeroes);
-    ASSERT_NON_NULL(zeroes)
-    const struct Pos buffer = c_buffer_construct(n, zeroes);
-    free(zeroes);
-    return buffer;
-}
 
 void c_buffer_truncate(struct Pos buffer, const uint64_t n) {
     if (n > c_buffer_length(buffer))
@@ -180,7 +194,13 @@ struct Pos c_buffer_show_Int(const Int n) {
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Pos c_buffer_show_Char(const int32_t n) {
+struct Pos c_buffer_show_Byte(const uint8_t n) {
+    char str[4];  // Byte values range from 0 to 255, 3 characters + null terminator
+    sprintf(str, "%" PRIu8, n);
+    return c_buffer_construct_from_null_terminated_string(str);
+}
+
+struct Pos c_buffer_show_Char(const uint64_t n) {
     char str[5] = {0};  // Max 4 bytes for UTF-8 + 1 for null terminator
     unsigned char *buf = (unsigned char *)str;
 
@@ -210,7 +230,11 @@ struct Pos c_buffer_show_Double(const Double x) {
 }
 
 uint64_t c_buffer_index(const struct Pos str, const uint64_t index) {
-    return c_buffer_bytes(str)[index];
+    return ((uint8_t *) (str.obj + BUFFER_HEADER_WIDTH))[index];
+}
+
+void c_buffer_set(struct Pos str, const uint64_t index, uint8_t value) {
+    ((uint8_t *) (str.obj + BUFFER_HEADER_WIDTH))[index] = value;
 }
 
 uint32_t c_buffer_character_at(const struct Pos buffer, const uint64_t index) {

@@ -66,6 +66,7 @@ enum Type {
   case IntegerType1()
   case IntegerType8() // required for `void*` (which only exists as `i8*` in LLVM) and `char*`
   case IntegerType64()
+  case DoubleType()
   case PointerType()
   case ArrayType(size: Int, of: Type)
   case StructureType(elementTypes: List[Type])

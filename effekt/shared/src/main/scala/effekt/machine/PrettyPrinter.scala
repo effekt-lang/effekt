@@ -34,6 +34,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Positive()          => "Positive"
     case Negative()          => "Negative"
     case Type.Int()          => "Int"
+    case Type.Byte()         => "Byte"
     case Type.Double()       => "Double"
     case Type.String()       => "String"
     case Type.Stack()        => "Stack"

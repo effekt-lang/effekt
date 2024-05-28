@@ -514,6 +514,7 @@ object Transformer {
     case lifted.Type.TUnit => builtins.UnitType
     case lifted.Type.TInt => Type.Int()
     case lifted.Type.TChar => Type.Int()
+    case lifted.Type.TByte => Type.Byte()
     case lifted.Type.TBoolean => builtins.BooleanType
     case lifted.Type.TDouble => Type.Double()
     case lifted.Type.TString => Type.String()

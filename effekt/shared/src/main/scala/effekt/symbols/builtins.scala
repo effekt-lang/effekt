@@ -37,6 +37,9 @@ object builtins {
   val CharSymbol = ExternType(name("Char"), Nil)
   val TChar = ValueTypeApp(CharSymbol, Nil)
 
+  val ByteSymbol = ExternType(name("Byte"), Nil)
+  val TByte = ValueTypeApp(ByteSymbol, Nil)
+
   val TopSymbol = ExternType(name("Any"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
@@ -76,6 +79,7 @@ object builtins {
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,
     "Char" -> CharSymbol,
+    "Byte" -> ByteSymbol,
     "Any" -> TopSymbol,
     "Nothing" -> BottomSymbol,
     "IO" -> IOSymbol,

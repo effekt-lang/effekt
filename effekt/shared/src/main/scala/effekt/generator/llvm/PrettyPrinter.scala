@@ -128,6 +128,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case IntegerType1() => "i1"
     case IntegerType8() => "i8"
     case IntegerType64() => "i64"
+    case DoubleType() => "double"
     case PointerType() => "ptr"
     case ArrayType(size, of) => s"[$size x ${show(of)}]"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(show))}}"

@@ -59,6 +59,7 @@ def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
+def println(value: Byte): Unit = println(value.show)
 
 extern pure def show(value: Int): String =
   js "'' + ${value}"
@@ -92,6 +93,12 @@ extern pure def show(value: Char): String =
   ml "str (chr ${value})"
   llvm """
     %z = call %Pos @c_buffer_show_Char(%Int %value)
+    ret %Pos %z
+  """
+
+extern pure def show(value: Byte): String =
+  llvm """
+    %z = call %Pos @c_buffer_show_Byte(i8 %value)
     ret %Pos %z
   """
 
