@@ -43,7 +43,7 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
         js.Destruct(names, js.Call(Variable(JSName("require")), List(JsString(s"./${ file }"))))
     }
 
-    val exportStatement = js.Assign(RawExpr("module.exports"),
+    val exportStatement = js.Assign(RawExpr(s"(typeof module != \"undefined\" && module !== null ? module : {}).exports = ${name.name}"),
       js.Object(exports.map { e => e.name -> e.expr })
     )
 
