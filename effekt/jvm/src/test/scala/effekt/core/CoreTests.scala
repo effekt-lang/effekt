@@ -63,7 +63,7 @@ trait CoreTests extends munit.FunSuite {
       case Success(result, next) if next.atEnd => result
       case Success(result, next) => fail(s"Parsing ${nickname} had trailing garbage: " +
         s"${next.source.toString.substring(next.offset)}")
-      case err: NoSuccess =>
+      case err: NoSuccess[_] =>
         val pos = err.next.position
         fail(s"Parsing ${nickname} failed\n[${pos.line}:${pos.column}] ${err.message}")
     }
@@ -76,7 +76,7 @@ trait CoreTests extends munit.FunSuite {
       case Success(result, next) if next.atEnd => result
       case Success(result, next) => fail(s"Parsing ${nickname} had trailing garbage: " +
         s"${next.source.toString.substring(next.offset)}")
-      case err: NoSuccess =>
+      case err: NoSuccess[_] =>
         val pos = err.next.position
         fail(s"Parsing ${nickname} failed\n[${pos.line}:${pos.column}] ${err.message}")
     }

@@ -52,6 +52,7 @@ enum TokenKind {
   case `===`
   case `!==`
   case `:`
+  case `;`
   case `::`
   case `@`
   case `${`
@@ -459,6 +460,7 @@ class Lexer(source: String) {
       case '=' => `=`
       case ':' if nextMatches(":") => `::`
       case ':' => `:`
+      case ';' => `;`
       case '@' => `@`
       case '<' if nextMatches("{") => `<{`
       case '{' => `{`

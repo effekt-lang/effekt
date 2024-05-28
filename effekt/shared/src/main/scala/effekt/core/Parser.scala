@@ -4,7 +4,7 @@ package core
 import effekt.core.Param.ValueParam
 import effekt.source.NoSource
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
+import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Success }
 import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
 import scala.util.matching.Regex
@@ -23,8 +23,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
-
-      case res: NoSuccess =>
+      case res: NoSuccess[_] =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
         C.report(ParseError(res.message, Some(range)))
@@ -313,20 +312,20 @@ object CoreParsers {
     parsers
 
   // Some alternative main entry points for most common usages
-  def module(input: String, names: Map[String, Id] = Map.empty): ParseResult[ModuleDecl] =
+  def module(input: String, names: Map[String, Id] = Map.empty): ParseResult[_, ModuleDecl] =
     val in = StringSource(input, "input-string")
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.program, in)
 
-  def module(input: String, names: Names): ParseResult[ModuleDecl] =
+  def module(input: String, names: Names): ParseResult[_, ModuleDecl] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.program, input)
 
-  def statement(input: String, names: Names): ParseResult[Stmt] =
+  def statement(input: String, names: Names): ParseResult[_, Stmt] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.stmt, input)
 
-  def definition(input: String, names: Names): ParseResult[Definition] =
+  def definition(input: String, names: Names): ParseResult[_, Definition] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.definition, input)
 }

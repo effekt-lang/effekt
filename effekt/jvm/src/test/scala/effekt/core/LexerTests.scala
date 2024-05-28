@@ -1,6 +1,6 @@
 package effekt.core
-import effekt.{Lexer, Position, Token, TokenKind}
-import effekt.TokenKind.*
+import effekt.lexer.{Lexer, Position, Token, TokenKind}
+import effekt.lexer.TokenKind.*
 
 import scala.collection.mutable.ListBuffer
 
@@ -20,10 +20,10 @@ class LexerTests extends munit.FunSuite {
         |""".stripMargin
     assertTokensEq(
       prog, 
-      Def, Ident("f"), `[`, Ident("A"), `]`,
+      `def`, Ident("f"), `[`, Ident("A"), `]`,
       `(`, Ident("x"), `:`, Ident("A"), `,`, Ident("y"), `:`, Ident("A"), `)`,
-      `:`, `(`, `)`, `=>`, `(`, Ident("A"), `,`, Ident("A"), `)`, At, `{`, `}`, `=`,
-      Return, Box, `{`, `(`, `)`, `=>`, `(`, Ident("x"), `,`, Ident("y"), `)`, `}`,
+      `:`, `(`, `)`, `=>`, `(`, Ident("A"), `,`, Ident("A"), `)`, `at`, `{`, `}`, `=`,
+      `return`, `box`, `{`, `(`, `)`, `=>`, `(`, Ident("x"), `,`, Ident("y"), `)`, `}`,
       EOF
     )
   }
@@ -105,9 +105,9 @@ class LexerTests extends munit.FunSuite {
         |val x = 2""".stripMargin
     assertTokensEq(
       prog,
-      Interface, Ident("Eff"), `{`, Def, Ident("operation"), `(`, `)`, `:`, Ident("Unit"), `}`,
+      `interface`, Ident("Eff"), `{`, `def`, Ident("operation"), `(`, `)`, `:`, Ident("Unit"), `}`,
       Comment(" val x = 1 def while / \\t still\\n comment"),
-      Val, Ident("x"), `=`, Integer(2), EOF
+      `val`, Ident("x"), `=`, Integer(2), EOF
     )
   }
   
@@ -122,9 +122,9 @@ class LexerTests extends munit.FunSuite {
       
     assertTokensEq(
       prog,
-      Val, Ident("x"), `=`, Integer(42),
+      `val`, Ident("x"), `=`, Integer(42),
       Comment(" comment begin def return /* * /\nstill comment\nhere's the end\n"),
-      Def, Ident("main"), `(`, `)`, `:`, Ident("Unit"), `=`, `(`, `)`,
+      `def`, Ident("main"), `(`, `)`, `:`, Ident("Unit"), `=`, `(`, `)`,
       EOF
     )
   }
@@ -151,8 +151,8 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(
       prog,
       Comment(" interface definition"),
-      Interface, Ident("Eff"), `[`, Ident("A"), `,`, Ident("B"), `]`, `{`,
-      Def, Ident("operation"), `[`, Ident("C"), `]`, `(`, Ident("x"), `:`, Ident("C"), `)`, `:`, `(`, Ident("A"), `,`, Ident("B"), `)`,
+      `interface`, Ident("Eff"), `[`, Ident("A"), `,`, Ident("B"), `]`, `{`,
+      `def`, Ident("operation"), `[`, Ident("C"), `]`, `(`, Ident("x"), `:`, Ident("C"), `)`, `:`, `(`, Ident("A"), `,`, Ident("B"), `)`,
       `}`,
       EOF
     )

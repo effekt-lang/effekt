@@ -1,15 +1,16 @@
 package effekt
 
-import effekt.source._
-import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
-import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
+import effekt.lexer.Token
+import effekt.source.*
+import effekt.context.{Context, IOModuleDB}
+import effekt.symbols.{BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic}
+import effekt.util.{AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting}
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
-import kiama.util.{ Console, REPL, Source, StringSource, Range }
-import kiama.parsing.{ NoSuccess, ParseResult, Success }
+import kiama.util.{Console, REPL, Range, Source, StringSource}
+import kiama.parsing.{NoSuccess, ParseResult, Success, TokenInput, Input}
 
-class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
+class Repl(driver: Driver) extends REPL[Token, Tree, EffektConfig, EffektError] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
 
@@ -52,9 +53,13 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    * Use the special `repl` nonterminal to process the input. It recognizes expressions, statements
    * and everything else that can occur on the top-level.
    */
-  override def parse(source: Source): ParseResult[Tree] = {
-    val parsers = new EffektParsers(positions)
-    parsers.parseAll(parsers.repl, source)
+  override def parse(source: Source): ParseResult[Input[Token], Tree] = {
+    val lexer = effekt.lexer.Lexer(source.content)
+    val (tokens, errs) = lexer.run()
+    val tokenkinds = tokens.map { case Token(_, _, tok) => tok }
+    val tokenPos = tokens.map { case Token(s, e, _) => (s, e) }
+    val parser = new EffektParsers(positions)
+    parser.parseAll(parser.repl, TokenInput(tokens, 0, source, { case Token(s, e, _) => s }))
   }
 
   /**
@@ -130,7 +135,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
           output.emitln("Can only show type of expressions")
 
         // this is usually encapsulated in REPL.processline
-        case res: NoSuccess =>
+        case res: NoSuccess[_] =>
           val pos = res.next.position
           val messages = Vector(messaging.message(Range(pos, pos), res.message))
           report(source, messages, config)
