@@ -171,7 +171,7 @@ object JSWebRunner extends Runner[String] {
 
   /**
    * Creates an openable `.html` file besides the given `.js` file ([[path]])
-   * and then returns the absolute path of the created executable.
+   * and then returns the absolute path of a shell script opening it.
    */
   def build(path: String)(using C: Context): String =
     import java.nio.file.Path
@@ -179,6 +179,7 @@ object JSWebRunner extends Runner[String] {
     val jsFilePath = (out / path).unixPath
     val jsFileName = jsFilePath.split("/").last
     val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
+    val shFilePath = jsFilePath.stripSuffix(s".$extension")
     val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
     val htmlContent =
       s"""<!DOCTYPE html>
@@ -192,7 +193,10 @@ object JSWebRunner extends Runner[String] {
          |</html>
          |""".stripMargin
     IO.createFile(htmlFilePath, htmlContent, false)
-    htmlFilePath
+    IO.createFile(shFilePath,
+      s"#!/bin/sh\nxdg-open ${htmlFilePath} || open ${htmlFilePath} || echo \"Cannot open browser\"",
+      true)
+    shFilePath
 }
 
 trait ChezRunner extends Runner[String] {
