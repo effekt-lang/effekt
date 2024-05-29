@@ -29,7 +29,7 @@ case class Position(line: Int, column: Int, offset: Int)
 
 /**
  * A token consist of the absolute starting position, the absolute end position in the source file
- * and the kind of token. Both position are to be understood as inclusive. 
+ * and the kind of token. Both position are to be understood as inclusive.
  */
 case class Token(start: Int, end: Int, kind: TokenKind)
 
@@ -169,7 +169,7 @@ object Lexer {
 }
 
 /**
- * 
+ *
  * @param source A string of a Effekt program to be lexed.
  */
 class Lexer(source: String) {
@@ -185,16 +185,16 @@ class Lexer(source: String) {
   val tokens: mutable.ListBuffer[Token] = mutable.ListBuffer.empty
   /** A peekable iterator of the source string. This is used instead of directly indexing the source string. */
   val chars: BufferedIterator[Char] = source.iterator.buffered
-  
+
   lazy val whitespace: Regex = """([ \t\r\n])""".r // single whitespace characters
   lazy val nameFirst: Regex = """[a-zA-Z_]""".r
   lazy val nameRest: Regex = """[a-zA-Z0-9_!?$]""".r
   lazy val nameBoundary: Regex = """(?!%s)""".format(nameRest).r
   lazy val name: Regex = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
-  
+
   def isEOF: Boolean =
     current >= source.length
-    
+
   /** Advance the [[Lexer.chars]] iterator and [[Lexer.current]] index. Returns [[None]] if EOF is reached. */
   def consume(): Option[Char] = {
     if (!chars.hasNext) {
@@ -204,7 +204,7 @@ class Lexer(source: String) {
       Some(chars.next())
     }
   }
-  
+
   def expect(c: Char, err: LexerError): Either[LexerError, Unit] = {
     val copt = consume()
     copt match {
@@ -212,9 +212,9 @@ class Lexer(source: String) {
       case None => Left(LexerError.Eof)
       case _ => Left(err)
     }
-    
+
   }
-  
+
   /** Advance the [[Lexer.chars]] iterator while the next character matches the given predicate. */
   @tailrec
   final def consumeWhile(pred: Char => Boolean): Either[LexerError, Unit] =
@@ -226,9 +226,9 @@ class Lexer(source: String) {
 
   /** Peek at the next character. Returns [[None]] if EOF is reached. */
   def peek(): Option[Char] = chars.headOption
-  
+
   def peekMatches(pred: Char => Boolean): Boolean = peek().exists(pred)
-  
+
   /** Convenience function for creating a token.
    * Assumed Invariant: When making a token, the lexer's head [[current]] is pointing not at the token's
    * last position but at the next one.
@@ -240,8 +240,8 @@ class Lexer(source: String) {
     TokenKind.Error(err)
 
   /** Checks if the characters starting at [[start]] match the expected string and only then
-   * consumes all corresponding characters. That is, if there's no match, no characters are consumed. 
-   * */  
+   * consumes all corresponding characters. That is, if there's no match, no characters are consumed.
+   **/
   def matches(expected: String, start: Int = start): Boolean = {
     val len = expected.length
     val end = start + len - 1
@@ -258,7 +258,7 @@ class Lexer(source: String) {
   /** Extract a slice of the source string delimited by the starting and (exclusive) current index */
   def slice(start: Int = start, end: Int = current): String =
     source.substring(start, end)
-  
+
   /** Like [[Lexer.matches]] but starts matching at the lexer's current head [[current]]. */
   def nextMatches(expected: String): Boolean = matches(expected, current)
 
@@ -267,7 +267,7 @@ class Lexer(source: String) {
     val candidate = rest.takeWhile { c => !whitespace.matches(c.toString) }
     r.matches(candidate)
   }
-  
+
   /** Main entry-point of the lexer. Whitespace is ignored and comments are collected.
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.

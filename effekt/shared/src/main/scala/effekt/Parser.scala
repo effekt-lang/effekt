@@ -107,7 +107,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    * Main entry point
    */
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(includeDecl) ~ toplevelDefs ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(includeDecl) ~ toplevelDefs <~ EOF ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -827,25 +827,28 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     }
   }
 
+  def acceptToken[T](expected: String)(f: PartialFunction[Token, T]): P[T] = Parser { in =>
+    if (in.atEnd) Failure(s"End of input reached, expected $expected", in)
+    else in.first match {
+      case Some(token) if f.isDefinedAt(token) => Success(f(token), in.rest)
+      case _ => Failure(s"Unexpected token ${in.first}, expected $expected", in)
+    }
+  }
+
+  def accept[T](expected: String)(f: PartialFunction[TokenKind, T]): P[T] =
+    acceptToken[T](expected) {
+      case Token(start, end, kind) if f.isDefinedAt(kind) => f(kind)
+    }
+
   implicit def tok2Parser(kind: lexer.TokenKind): Parser[Elem] =
-    accept("token") {
+    acceptToken("token") {
       case t@Token(_, _, kind1) if kind == kind1 => t
     }
 }
 
 class ParserUtils(positions: Positions) extends Parsers(positions) {
-  type P[Out] = PackratParser[Out]
 
   // === Utils ===
-
-  def accept[T](expected: String)(f: PartialFunction[Any, T]): P[T] = Parser { in =>
-    if (in.atEnd) Failure(s"End of input reached, expected $expected", in)
-    else if (f.isDefinedAt(in.first)) {
-      val result = f(in.first)
-      Success(result, in.rest)
-    } else Failure(s"Unexpected token ${in.first}, expected $expected", in)
-  }
-
   def oneof[T](p: => Parser[T]*): Parser[T] = p.reduce(_ | _)
 
   def many[T](p: => Parser[T]): Parser[List[T]] =
