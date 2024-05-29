@@ -22,17 +22,15 @@ class LLVMTests extends EffektTests {
     // BUGS
     // ----
 
-    // seg faults!
-    examplesDir / "pos" / "issue108.effekt",
+    examplesDir / "pos" / "issue108.effekt", // seg faults!
 
     // boxing
-    examplesDir / "benchmarks" / "church_exponentiation.effekt",
+    examplesDir / "benchmarks" / "church_exponentiation.effekt", // ... are used as type parameters but would require boxing.
+    examplesDir / "llvm" / "not-boxed.effekt", // Unboxing is performed on not-boxed int, leading to program termination
 
-    // missing dealiasing of `def f = g`
-    examplesDir / "pos" / "defdef.effekt",
 
     // unsure
-    examplesDir / "pos" / "parametrized.effekt",
+    examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
     examplesDir / "ml" / "probabilistic.effekt", // crashes with "PANIC: Reached a hole in the program"
 
     // MISSING FEATURES
