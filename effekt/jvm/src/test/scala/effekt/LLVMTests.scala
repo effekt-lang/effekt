@@ -13,6 +13,7 @@ class LLVMTests extends EffektTests {
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
     examplesDir / "pos",
+    examplesDir / "benchmarks",
   )
 
   lazy val bugs: List[File] = List(
@@ -96,6 +97,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "lambdas" / "scheduler.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
     examplesDir / "pos" / "file.effekt",
+    examplesDir / "benchmarks" / "generator.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
