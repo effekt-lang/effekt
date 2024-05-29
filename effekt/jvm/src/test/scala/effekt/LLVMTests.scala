@@ -11,17 +11,11 @@ class LLVMTests extends EffektTests {
   def backendName = "llvm"
 
   override lazy val positives: List[File] = List(
-    examplesDir / "llvm"
+    examplesDir / "llvm",
+    examplesDir / "pos",
   )
 
-  /**
-   * Documentation of currently failing tests in pos and their reason
-   */
-  lazy val failingTestsInPos: List[File] = List(
-
-    // BUGS
-    // ----
-
+  lazy val bugs: List[File] = List(
     examplesDir / "pos" / "issue108.effekt", // seg faults!
 
     // boxing
@@ -33,8 +27,24 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
     examplesDir / "ml" / "probabilistic.effekt", // crashes with "PANIC: Reached a hole in the program"
 
-    // MISSING FEATURES
-    // ----------------
+    // names not sanitized (even?)
+    examplesDir / "pos" / "special_names.effekt",
+
+    // *** MALLOC PANIC
+    examplesDir / "pos" / "get_put.effekt",
+
+    // showing of strings with escaped " is wrong / different from other backends
+    examplesDir / "pos" / "escaped_linebreaks.effekt",
+    examplesDir / "pos" / "multiline_string.effekt",
+
+    // unclear
+    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
+  )
+
+  /**
+   * Documentation of currently failing tests and their reason
+   */
+  lazy val missingFeatures: List[File] = List(
 
     // now show instance for records / datatypes
     examplesDir / "pos" / "builtins.effekt",
@@ -45,10 +55,13 @@ class LLVMTests extends EffektTests {
     // inspect
     examplesDir / "pos" / "probabilistic.effekt",
     examplesDir / "pos" / "nim.effekt",
+    examplesDir / "pos" / "exists.effekt",
 
     // arrays
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "raytracer.effekt",
+    examplesDir / "pos" / "issue319.effekt",
+    examplesDir / "pos" / "array",
 
     // Regex
     examplesDir / "pos" / "simpleparser.effekt",
@@ -59,6 +72,7 @@ class LLVMTests extends EffektTests {
     // toplevel def and let bindings
     examplesDir / "pos" / "toplevelval.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
+    examplesDir / "pos" / "lib_test.effekt",
 
     // foreign functions with block arguments
     examplesDir / "pos" / "liftinference.effekt",
@@ -76,6 +90,8 @@ class LLVMTests extends EffektTests {
 
     // Bidirectional effects do not work in general
     examplesDir / "pos" / "bidirectional",
+    examplesDir / "pos" / "type_omission_op.effekt",
+    examplesDir / "pos" / "object"/ "higher_order_compose_op.effekt",
 
     // first class functions closing over capabilities
     examplesDir / "pos" / "capture" / "borrows.effekt",
@@ -84,15 +100,14 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "lambdas" / "annotated.effekt",
     examplesDir / "pos" / "lambdas" / "scheduler.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+    examplesDir / "pos" / "file.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
 
-  )
-
-  override lazy val ignored: List[File] = List(
-
     // See PR #355
     examplesDir / "llvm" / "string_toint.effekt",
   )
+
+  override lazy val ignored: List[File] = bugs ++ missingFeatures
 }
