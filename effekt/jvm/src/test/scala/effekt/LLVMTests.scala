@@ -13,15 +13,11 @@ class LLVMTests extends EffektTests {
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
     examplesDir / "pos",
+    examplesDir / "benchmarks",
   )
 
   lazy val bugs: List[File] = List(
     examplesDir / "pos" / "issue108.effekt", // seg faults!
-
-    // boxing
-    examplesDir / "benchmarks" / "church_exponentiation.effekt", // ... are used as type parameters but would require boxing.
-    examplesDir / "llvm" / "not-boxed.effekt", // Unboxing is performed on not-boxed int, leading to program termination
-
 
     // unsure
     examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
@@ -101,6 +97,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "lambdas" / "scheduler.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
     examplesDir / "pos" / "file.effekt",
+    examplesDir / "benchmarks" / "generator.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
