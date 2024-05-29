@@ -534,7 +534,7 @@ object Transformer {
       case lifted.ValueType.Data(_, args) => {
         args.exists(requiresBoxing)
       }
-      case _ => true
+      case lifted.ValueType.Boxed(_) => false // TODO check somehow?
   }
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
