@@ -25,9 +25,14 @@ def main() = region this {
   // right now we do not infer unbox for a mutable variable since it
   // already is of block type.
   def gen() = (unbox generator)()
-  inspect(gen())
-  inspect(gen())
-  inspect(gen())
-  inspect(gen())
-  inspect(gen())
+  println(gen())
+  println(gen())
+  println(gen())
+  println(gen())
+  println(gen())
+}
+
+def println(g: Result): Unit = g match {
+  case Done()  => println("Done()")
+  case Next(n) => println("Next(" ++ show(n) ++ ")")
 }

@@ -4,10 +4,15 @@ import dequeue
 
 def main() = {
     val dq = emptyQueue[Int]();
-    inspect(dq.pushFront(1).pushFront(2));
-    inspect(dq.pushFront(1).pushFront(2).popFront);
-    inspect(dq.pushFront(1).pushFront(2).pushBack(3).popFront);
-    inspect(dq.pushFront(1).pushFront(2).pushBack(3).popBack);
-    inspect(dq.pushFront(1).pushFront(2).pushBack(3).first);
-    inspect(dq.pushFront(1).pushFront(2).pushBack(3).last)
+    println(dq.pushFront(1).pushFront(2));
+    println(dq.pushFront(1).pushFront(2).popFront.show);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).popFront.show);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).popBack.show);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).first);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).last)
 }
+
+def show(popResult: Option[(Int, Dequeue[Int])]): String =
+  popResult.show {
+    case (el, rest) => "Tuple2(" ++ el.show ++ ", " ++ rest.show ++ ")"
+  }

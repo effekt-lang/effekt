@@ -405,6 +405,21 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
     case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
     case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => BottomCoercer(unboxed)
+    case (core.ValueType.Boxed(bt1,cs1), core.ValueType.Boxed(bt2, cs2)) =>
+      // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
+      val bcoercer = coercer[Block](bt1, bt2)
+      if (bcoercer.isIdentity) then { IdentityCoercer(from, to) } else {
+        val _fr = from
+        val _to = to
+        new Coercer[ValueType, Pure] {
+          val from: ValueType = _fr
+          val to: ValueType = _to
+          override def isIdentity: Boolean = false
+          override def apply(t: Pure): Pure = {
+            Pure.Box(bcoercer(Block.Unbox(t)), cs2)
+          }
+        }
+      }
     case _ =>
       //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
       new IdentityCoercer(from, to)

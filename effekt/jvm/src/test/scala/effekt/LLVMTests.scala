@@ -12,12 +12,35 @@ class LLVMTests extends EffektTests {
 
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
+    examplesDir / "pos",
+    examplesDir / "benchmarks",
+  )
+
+  lazy val bugs: List[File] = List(
+    examplesDir / "pos" / "issue108.effekt", // seg faults!
+
+    // unsure
+    examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
+    examplesDir / "ml" / "probabilistic.effekt", // crashes with "PANIC: Reached a hole in the program"
+
+    // names not sanitized (even?)
+    examplesDir / "pos" / "special_names.effekt",
+
+    // *** MALLOC PANIC
+    examplesDir / "pos" / "get_put.effekt",
+
+    // showing of strings with escaped " is wrong / different from other backends
+    examplesDir / "pos" / "escaped_linebreaks.effekt",
+    examplesDir / "pos" / "multiline_string.effekt",
+
+    // unclear
+    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
   )
 
   /**
-   * Documentation of currently failing tests in pos and their reason
+   * Documentation of currently failing tests and their reason
    */
-  lazy val failingTestsInPos: List[File] = List(
+  lazy val missingFeatures: List[File] = List(
 
     // now show instance for records / datatypes
     examplesDir / "pos" / "builtins.effekt",
@@ -25,92 +48,63 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "triples.effekt",
     examplesDir / "pos" / "either.effekt",
 
-    // missing dealiasing of `def f = g`
-    examplesDir / "pos" / "defdef.effekt",
-
-    // option
-    examplesDir / "pos" / "raytracer.effekt",
-
-    // lists
-    examplesDir / "pos" / "higherorder_io_control.effekt",
-    examplesDir / "pos" / "type_parameters_blocks.effekt",
-    examplesDir / "pos" / "withstatement.effekt",
-    examplesDir / "pos" / "build.effekt",
-    examplesDir / "pos" / "overloading.effekt",
-    examplesDir / "pos" / "matchblock.effekt",
-    examplesDir / "pos" / "sideeffects.effekt",
+    // inspect
+    examplesDir / "pos" / "probabilistic.effekt",
+    examplesDir / "pos" / "nim.effekt",
+    examplesDir / "pos" / "exists.effekt",
 
     // arrays
     examplesDir / "pos" / "arrays.effekt",
+    examplesDir / "pos" / "raytracer.effekt",
+    examplesDir / "pos" / "issue319.effekt",
+    examplesDir / "pos" / "array",
 
-    // text/string & string concatenation
-    examplesDir / "pos" / "matchdef.effekt",
+    // Regex
     examplesDir / "pos" / "simpleparser.effekt",
-    examplesDir / "pos" / "parametrized.effekt",
-    examplesDir / "pos" / "probabilistic.effekt",
-    examplesDir / "pos" / "parser.effekt",
 
     // tuples
     examplesDir / "pos" / "records.effekt",
-    examplesDir / "pos" / "existentials.effekt",
-
-    // holes
-    examplesDir / "pos" / "infer" / "infer_blockvars.effekt",
-    examplesDir / "pos" / "emptymatch.effekt",
-
-    // multi handlers
-    examplesDir / "pos" / "multieffects.effekt",
-
-    // multiple methods
-    examplesDir / "pos" / "effectalias.effekt",
 
     // toplevel def and let bindings
     examplesDir / "pos" / "toplevelval.effekt",
+    examplesDir / "pos" / "capture" / "mbed.effekt",
+    examplesDir / "pos" / "lib_test.effekt",
 
     // foreign functions with block arguments
     examplesDir / "pos" / "liftinference.effekt",
 
-    // probably issue 207
-    examplesDir / "pos" / "stream_push.effekt",
-    examplesDir / "pos" / "matching.effekt",
-
-    // boxing
-    examplesDir / "benchmarks" / "church_exponentiation.effekt",
-    examplesDir / "benchmarks" / "variadic_combinators.effekt",
-
-    // others
-    examplesDir / "pos" / "issue108.effekt",
+    // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
-    examplesDir / "pos" / "nim.effekt",
     examplesDir / "pos" / "unsafe_cont.effekt",
-    examplesDir / "pos" / "dequeue.effekt",
-    examplesDir / "pos" / "stream_pull.effekt",
-    examplesDir / "pos" / "matchhandler.effekt",
-    examplesDir / "pos" / "mutualrecursion.effekt",
+
+    // Only JS (tests should be moved to a JS folder)
+    examplesDir / "pos" / "genericcompare.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
     examplesDir / "pos" / "maps.effekt",
-    examplesDir / "pos" / "state.effekt",
-    examplesDir / "pos" / "bug1.effekt",
-
-    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
-
-    // whole folders
-    examplesDir / "pos" / "bidirectional",
-    examplesDir / "pos" / "capture",
-    examplesDir / "pos" / "lambdas",
+    examplesDir / "pos" / "capture" / "resources.effekt",
     examplesDir / "pos" / "io",
-    examplesDir / "pos" / "infer",
-    examplesDir / "pos" / "polymorphic",
-  )
 
-  override lazy val ignored: List[File] = List(
-    // Issue #207
-    examplesDir / "llvm" / "polymorphism_blockparams.effekt",
+    // Bidirectional effects do not work in general
+    examplesDir / "pos" / "bidirectional",
+    examplesDir / "pos" / "type_omission_op.effekt",
+    examplesDir / "pos" / "object"/ "higher_order_compose_op.effekt",
+
+    // first class functions closing over capabilities
+    examplesDir / "pos" / "capture" / "borrows.effekt",
+    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
+    examplesDir / "pos" / "capture" / "regions.effekt",
+    examplesDir / "pos" / "lambdas" / "annotated.effekt",
+    examplesDir / "pos" / "lambdas" / "scheduler.effekt",
+    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+    examplesDir / "pos" / "file.effekt",
+    examplesDir / "benchmarks" / "generator.effekt",
+
+    // higher order foreign functions are not supported
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
 
     // See PR #355
     examplesDir / "llvm" / "string_toint.effekt",
-
-    // no pseudo-extern definitions
-    examplesDir / "llvm" / "feature-flags-ffi.effekt",
   )
+
+  override lazy val ignored: List[File] = bugs ++ missingFeatures
 }

@@ -1,0 +1,10 @@
+
+
+def main() = {
+
+  val f = box { (n: Int) => println(n) };
+
+  f(1)
+  f(2)
+
+}

@@ -400,8 +400,12 @@ object normal {
         clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
           .map(body => app(body, Nil, vargs, Nil))
           .orElse { default }.getOrElse { sys error "Pattern not exhaustive. This should not happen" }
-      case other =>
-        Match(scrutinee, clauses, default)
+      case other => (clauses, default) match {
+        // Unit-like types: there is only one case and it is just a tag.
+        //   sc match { case Unit() => body }   ==>   body
+        case ((id, lit) :: Nil, None) if lit.vparams.isEmpty => lit.body
+        case _ => Match(scrutinee, clauses, default)
+      }
     }
 
 

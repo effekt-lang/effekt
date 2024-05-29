@@ -1,3 +1,6 @@
-[error] examples/neg/match_nested.effekt:9:20: Non exhaustive pattern matching, missing case for Mul
+[error] examples/neg/match_nested.effekt:9:20: Non-exhaustive pattern matching, missing case Add(Mul(_, Mul(_, _)), _)
+def test(l: Exp) = l match {
+                   ^
+[error] examples/neg/match_nested.effekt:9:20: Non-exhaustive pattern matching, scrutinees of type Int require a default case Add(Mul(_, Lit(_)), _)
 def test(l: Exp) = l match {
                    ^
