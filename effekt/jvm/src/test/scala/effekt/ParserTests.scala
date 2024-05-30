@@ -17,23 +17,24 @@ class ParserTests extends munit.FunSuite {
     val source = StringSource(input)
     val lexer = Lexer(input)
     val (tokens, error) = lexer.run()
+    println(tokens)
 
     if (error.nonEmpty) fail(s"Lexer errors: ${error}")
 
     val positions = Positions()
     val p = new EffektParsers(positions)
-    p.parseAll(p.expr <~ EOF, TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
+    p.parseAll(p.expr, TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
 
   def assertSuccessExpr(input: String, expected: Term)(using Location): Unit =
     parseExpr(input) match {
-      case Success(result, next) => assertEquals(result, expected)
+      case Success(result, next) => println(result); assertEquals(result, expected)
       case failure: Failure[_] => fail(s"Expected ${expected}, but got error: ${failure.message}")
       case error: ParseError[_] => fail(s"Expected ${expected}, but got error: ${error.message}")
     }
 
   def assertSuccessExpr(input: String)(using Location): Unit =
     parseExpr(input) match {
-      case Success(result, next) =>
+      case Success(result, next) => println(result)
       case failure: Failure[_] => fail(s"Expected expression, but got error: ${failure.message}")
       case error: ParseError[_] => fail(s"Expected expression, but got error: ${error.message}")
     }
@@ -52,7 +53,6 @@ class ParserTests extends munit.FunSuite {
     assertSuccessExpr("true", Literal(true, builtins.TBoolean))
     assertSuccessExpr("1 + 1")
     assertFailureExpr("1 +- 1")
-
-    // assertSuccessExpr("box { () => f }")
+    assertSuccessExpr("box { () => def f(x: Int): Int = x; val x = y + 1; someFunction(x) }")
   }
 }
