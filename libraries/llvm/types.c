@@ -10,6 +10,11 @@ struct Pos {
     void *obj; // pointer into the heap
 };
 
+struct Neg {
+    void *vtable;
+    void *obj;
+};
+
 static const struct Pos Unit = (struct Pos) { .tag = 0, .obj = NULL, };
 static const struct Pos BooleanFalse = (struct Pos) { .tag = 0, .obj = NULL, };
 static const struct Pos BooleanTrue = (struct Pos) { .tag = 1, .obj = NULL, };

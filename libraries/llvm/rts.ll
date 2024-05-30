@@ -226,6 +226,12 @@ define void @eraseNegative(%Neg %val) alwaysinline {
     ret void
 }
 
+define ptr @allocNeg(%Neg %val) alwaysinline {
+    %ref = call ptr @malloc(i64 16) ; two pointers, so 16 byte
+    store %Neg %val, ptr %ref
+    ret ptr %ref
+}
+
 
 ; Arena management
 define ptr @getRegionPointer(i64 %evidence) alwaysinline {

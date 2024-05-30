@@ -26,6 +26,49 @@ void c_io_println_String(String text) {
 
 // libuv
 
+extern struct Pos run(struct Neg);
+
+/**
+ * Allocates memory for a uv_fs_t
+ */
+uv_fs_t* fresh_fs_req() {
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+    return req;
+}
+
+void on_timer(uv_timer_t* handle) {
+    struct Neg* neg = (struct Neg*)handle->data;
+    uv_timer_stop(handle);
+    free(handle);
+    // finally call the callback
+    run(*neg);
+}
+
+void timer(int64_t n, struct Neg callback) {
+
+    // Get the default loop
+    uv_loop_t* loop = uv_default_loop();
+
+    // Allocate memory for the timer handle
+    uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+
+    // // Initialize the timer handle
+    uv_timer_init(loop, timer);
+
+    // Allocate memory for the callback (of type Neg)
+    struct Neg* neg = (struct Neg*) malloc(sizeof(struct Neg));
+    neg->vtable = callback.vtable;
+    neg->obj    = callback.obj;
+
+    // Store the Neg pointer in the timer's data field
+    timer->data = (void*) neg;
+
+    // Start the timer to call the callback after n ms
+    uv_timer_start(timer, on_timer, n, 0);
+}
+
+
+
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
  *

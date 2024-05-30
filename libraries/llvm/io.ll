@@ -40,6 +40,10 @@ declare void @uv_fs_req_cleanup(ptr) #1
 declare i32 @uv_fs_read(ptr, ptr, i32, ptr, i32, i64, ptr) #1
 declare i32 @uv_fs_open(ptr, ptr, ptr, i32, i32, ptr) #1
 
+; Helpers
+declare ptr @fresh_fs_req()
+declare void @timer(i64, %Neg)
+
 
 ; Lib UV Types
 ; ... copy and pasted from C compiled to LLVM IR, then simplified. Where do we get this from, other than writing the bindings in C???
@@ -78,26 +82,15 @@ declare [2 x i64] @uv_buf_init(ptr, i32) #1
 ; Opening a File
 ; --------------
 
-; Result type (defined for async IO in Effekt) of the file-open operation
-; - a pointer to the 0-terminated string (only used for memory management at the moment)
-; - the callback as a closure
-%fs_open_payload = type { ptr, %Neg }
-
 define i64 @openFile(%Pos %path, %Neg %callback) {
-    %req = call ptr @malloc(i64 440) ; 440 happens to be sizeof(uv_fs_t)
+    %req = call ptr @fresh_fs_req()
 
     ; Convert the Effekt String to a 0-terminated string
     %path_str = call ptr @c_buffer_as_null_terminated_string(%Pos %path)
     call void @c_buffer_refcount_decrement(%Pos %path)
 
-    ; Allocate memory for %fs_open_payload and store the path and callback into it
-    %payload = call ptr @malloc(i64 24) ; three pointers, so 24 byte
-
-    %payload_path = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 0
-    store ptr %path_str, ptr %payload_path, align 8
-
-    %payload_callback = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 1
-    store %Neg %callback, ptr %payload_callback, align 8
+    ; Allocate %Neg on the heap and get a pointer to it
+    %payload = call ptr @allocNeg(%Neg %callback)
 
     ; Store the payload in the req's data field
     %req_data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
@@ -109,26 +102,21 @@ define i64 @openFile(%Pos %path, %Neg %callback) {
     %result_i32 = call i32 @uv_fs_open(ptr %loop, ptr %req, ptr %path_str, i32 0, i32 0, ptr @on_open)
     %result_i64 = sext i32 %result_i32 to i64
 
+    ; we can free the string, since libuv copies it into req
+    call void @free(ptr %path_str)
+
     ret i64 %result_i64
 }
 
 define void @on_open(ptr %req) {
-entry:
     ; Extract the file descriptor from the uv_fs_t structure
     %result_ptr = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 6
     %fd = load i64, i64* %result_ptr, align 8
 
-    ; Load the payload
+    ; Load the callback
     %req_data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
     %payload = load ptr, ptr %req_data, align 8
-
-    ; Extract the callback from the payload
-    %payload_callback = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 1
-    %f = load %Neg, ptr %payload_callback, align 8
-
-    ; Extract the path string from the payload
-    %payload_path = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 0
-    %path = load ptr, ptr %payload_path, align 8
+    %callback = load %Neg, ptr %payload, align 8
 
     ; Free request structure
     call void @uv_fs_req_cleanup(ptr %req)
@@ -137,11 +125,8 @@ entry:
     ; Free the payload memory
     call void @free(ptr %payload)
 
-    ; Free the path string
-    call void @free(ptr %path)
-
     ; Call callback
-    %res = tail call fastcc %Pos @run_i64(%Neg %f, i64 %fd)
+    %res = tail call fastcc %Pos @run_i64(%Neg %callback, i64 %fd)
 
     ret void
 }
@@ -167,15 +152,14 @@ define %Pos @readFile(i64 %fd, %Pos %buffer, i64 %offset, %Neg %callback) {
     ; Convert fd from 64bit to 32bit
     %fd32 = trunc i64 %fd to i32
 
-    %req = call ptr @malloc(i64 440) ; 440 happens to be sizeof(uv_fs_t)
+    %req = call ptr @fresh_fs_req()
 
     ; Allocate memory for the callback (of type %Neg)
-    %neg = call ptr @malloc(i64 16) ; two pointers, so 16 byte
-    store %Neg %callback, ptr %neg
+    %payload = call ptr @allocNeg(%Neg %callback)
 
     ; Store the Neg pointer in the req's data field
-    %data_ptr = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
-    store ptr %neg, ptr %data_ptr, align 8
+    %req_data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
+    store ptr %payload, ptr %req_data, align 8
 
     ; Argument `1` here means: we pass exactly one buffer
     %result = call i32 @uv_fs_read(ptr %loop, ptr %req, i32 %fd32, ptr %buf, i32 1, i64 %offset, ptr @on_read)
@@ -185,68 +169,24 @@ define %Pos @readFile(i64 %fd, %Pos %buffer, i64 %offset, %Neg %callback) {
 }
 
 define void @on_read(ptr %req) {
-entry:
     ; Extract the number of read bytes from the uv_fs_t structure
     %result_ptr = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 6
     %result = load i64, ptr %result_ptr, align 8
 
-    ; Get the callback
-    %data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
-    %f_ptr = load ptr, ptr %data, align 8
-    %f_struct = load %Neg, ptr %f_ptr, align 8
+    ; Load the callback
+    %req_data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
+    %payload = load ptr, ptr %req_data, align 8
+    %callback = load %Neg, ptr %payload, align 8
 
     ; Free request structure
     call void @uv_fs_req_cleanup(ptr %req)
     call void @free(ptr %req)
 
+    ; Free the payload memory
+    call void @free(ptr %payload)
+
     ; Call callback
-    %res = tail call fastcc %Pos @run_i64(%Neg %f_struct, i64 %result)
-
-    ret void
-}
-
-
-; Timer
-; -----
-
-define %Pos @timer(i64 %n, %Neg %callback) {
-    ; Get the default loop
-    %loop = call %struct.uv_loop_s* @uv_default_loop()
-
-    ; Allocate memory for the timer handle
-    %timer = call ptr @malloc(i64 152) #3 ; Here, 152 is a magic number generated by Clang from SIZE_OF struct.uv_timer_s
-
-    ; Initialize the timer handle
-    %init_result = call i32 @uv_timer_init(%struct.uv_loop_s* %loop, ptr %timer)
-
-    ; Allocate memory for the callback (of type %Neg)
-    %neg = call ptr @malloc(i64 16) ; two pointers, so 16 byte
-    store %Neg %callback, ptr %neg
-
-    ; Cast the Neg pointer to ptr and store it in the timer's data field
-    %data_ptr = getelementptr inbounds %struct.uv_timer_s, ptr %timer, i32 0, i32 0
-    store ptr %neg, ptr %data_ptr, align 8
-
-    ; Start the timer to call the callback after n ms
-    %start_result = call i32 @uv_timer_start(ptr %timer, ptr @on_timer, i64 %n, i64 0)
-
-    ; Return Unit
-    ret %Pos zeroinitializer
-}
-
-define void @on_timer(ptr %handle) {
-entry:
-    ; Load the callback
-    %data = getelementptr inbounds %struct.uv_timer_s, ptr %handle, i32 0, i32 0
-    %f_ptr = load ptr, ptr %data, align 8
-    %f_struct = load %Neg, ptr %f_ptr, align 8
-
-    ; Free handle and stop this timer instance
-    %stop_result = call i32 @uv_timer_stop(ptr %handle)
-    call void @free(ptr %handle)
-
-    ; Call the function with the Neg struct
-    %res = tail call fastcc %Pos @run(%Neg %f_struct)
+    %res = tail call fastcc %Pos @run_i64(%Neg %callback, i64 %result)
 
     ret void
 }
