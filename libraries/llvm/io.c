@@ -24,24 +24,31 @@ void c_io_println_String(String text) {
 }
 
 
-// libuv
+// ; Lib UV Bindings
+// ; ---------------
 
-extern struct Pos run(struct Neg);
 
-/**
- * Allocates memory for a uv_fs_t
- */
-uv_fs_t* fresh_fs_req() {
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-    return req;
-}
+// Defined in rts.ll
+
+extern void run(struct Neg);
+extern void run_i64(struct Neg, int64_t);
+extern struct Neg* allocNeg(struct Neg);
+
+
+// ; Timers
+// ; ------
 
 void on_timer(uv_timer_t* handle) {
-    struct Neg* neg = (struct Neg*)handle->data;
+    // Load callback
+    struct Neg callback = *(struct Neg*)handle->data;
+
+    // Clean up
     uv_timer_stop(handle);
+    free(handle->data);
     free(handle);
-    // finally call the callback
-    run(*neg);
+
+    // Finally call the callback
+    run(callback);
 }
 
 void timer(int64_t n, struct Neg callback) {
@@ -56,15 +63,96 @@ void timer(int64_t n, struct Neg callback) {
     uv_timer_init(loop, timer);
 
     // Allocate memory for the callback (of type Neg)
-    struct Neg* neg = (struct Neg*) malloc(sizeof(struct Neg));
-    neg->vtable = callback.vtable;
-    neg->obj    = callback.obj;
+    struct Neg* payload = allocNeg(callback);
 
     // Store the Neg pointer in the timer's data field
-    timer->data = (void*) neg;
+    timer->data = (void*) payload;
 
     // Start the timer to call the callback after n ms
     uv_timer_start(timer, on_timer, n, 0);
+}
+
+
+// ; Opening a File
+// ; --------------
+
+void on_open(uv_fs_t* req) {
+    // Extract the file descriptor from the uv_fs_t structure
+    int64_t fd = req->result;
+
+    // Load the callback
+    struct Neg callback = *(struct Neg*)req->data;
+
+    // Free payload and request structure
+    free(req->data);
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    // Call callback
+    run_i64(callback, fd);
+}
+
+int64_t openFile(struct Pos path, struct Neg callback) {
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Convert the Effekt String to a 0-terminated string
+    char* path_str = c_buffer_as_null_terminated_string(path);
+    c_buffer_refcount_decrement(path);
+
+    // Allocate %Neg on the heap and get a pointer to it
+    struct Neg* payload = allocNeg(callback);
+
+    // Store the payload in the req's data field
+    req->data = payload;
+
+    // Get the default loop and call fs_open
+    uv_loop_t* loop = uv_default_loop();
+
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, 0, 0, on_open);
+    int64_t result_i64 = (int64_t)result_i32;
+
+    // We can free the string, since libuv copies it into req
+    free(path_str);
+
+    return result_i64;
+}
+
+
+// ; Reading a File
+// ; --------------
+
+void on_read(uv_fs_t* req) {
+    // Extract the file descriptor from the uv_fs_t structure
+    int64_t result = req->result;
+
+    // Load the callback
+    struct Neg callback = *(struct Neg*)req->data;
+
+    // Free payload and request structure
+    free(req->data);
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    // Call callback
+    run_i64(callback, result);
+}
+
+void readFile(int64_t fd, struct Pos buffer, int64_t offset, struct Neg callback) {
+    // Get the default loop
+    uv_loop_t* loop = uv_default_loop();
+
+    uint8_t* buffer_data = c_buffer_bytes(buffer);
+    int32_t len = (int32_t)c_buffer_length(buffer);
+
+    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
+
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Store the allocated callback in the req's data field
+    req->data = allocNeg(callback);
+
+    // Argument `1` here means: we pass exactly one buffer
+    uv_fs_read(loop, req, (int32_t)fd, &buf, 1, offset, on_read);
 }
 
 

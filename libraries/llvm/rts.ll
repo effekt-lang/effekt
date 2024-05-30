@@ -628,7 +628,7 @@ define fastcc void @topLevelEraser(%Env %env) {
     ret void
 }
 
-define fastcc %Pos @run_i64(%Neg %f, i64 %arg) {
+define fastcc void @run_i64(%Neg %f, i64 %arg) {
     ; backup stack
     %base = load %Base, ptr @base
 
@@ -661,11 +661,10 @@ define fastcc %Pos @run_i64(%Neg %f, i64 %arg) {
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
 
-    ; return Unit
-    ret %Pos %result
+    ret void
 }
 
-define fastcc %Pos @run(%Neg %f) {
+define fastcc void @run(%Neg %f) {
     ; backup stack
     %base = load %Base, ptr @base
 
@@ -694,6 +693,5 @@ define fastcc %Pos @run(%Neg %f) {
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
 
-    ; return Unit
-    ret %Pos %result
+    ret void
 }
