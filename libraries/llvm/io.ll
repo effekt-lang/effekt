@@ -67,17 +67,88 @@ declare [2 x i64] @uv_buf_init(ptr, i32) #1
 ; - the callback as a closure
 %fs_rw_result = type { %struct.uv_buf_t, i64, %Neg }
 
-; Result type (defined for async IO in Effekt) of the file-open operation
-; - the file descriptor (extended to 64bit)
-; - the callback as a closure
-%fs_open_result = type { i64, %Neg }
-
 %struct.uv_fs_s = type { ptr, i32, [6 x ptr], i32, ptr, {}*, i64, ptr, ptr, %struct.uv_stat_t, ptr, i32, i32, i16, i32, ptr, i64, i32, i32, double, double, %struct.uv__work, [4 x %struct.uv_buf_t] }
 
 %struct.uv_stat_t = type { i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, %struct.uv_timespec_t, %struct.uv_timespec_t, %struct.uv_timespec_t, %struct.uv_timespec_t }
 %struct.uv_timespec_t = type { i64, i64 }
 %struct.uv__work = type { ptr, ptr, ptr, %struct.uv__queue }
 
+
+
+; Opening a File
+; --------------
+
+; Result type (defined for async IO in Effekt) of the file-open operation
+; - a pointer to the 0-terminated string (only used for memory management at the moment)
+; - the callback as a closure
+%fs_open_payload = type { ptr, %Neg }
+
+define i64 @openFile(%Pos %path, %Neg %callback) {
+    %req = call ptr @malloc(i64 440) ; 440 happens to be sizeof(uv_fs_t)
+
+    ; Convert the Effekt String to a 0-terminated string
+    %path_str = call ptr @c_buffer_as_null_terminated_string(%Pos %path)
+    call void @c_buffer_refcount_decrement(%Pos %path)
+
+    ; Allocate memory for %fs_open_payload and store the path and callback into it
+    %payload = call ptr @malloc(i64 24) ; three pointers, so 24 byte
+
+    %payload_path = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 0
+    store ptr %path_str, ptr %payload_path, align 8
+
+    %payload_callback = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 1
+    store %Neg %callback, ptr %payload_callback, align 8
+
+    ; Store the payload in the req's data field
+    %req_data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
+    store ptr %payload, ptr %req_data, align 8
+
+    ; Get the default loop and call fs_open
+    %loop = call ptr @uv_default_loop()
+
+    %result_i32 = call i32 @uv_fs_open(ptr %loop, ptr %req, ptr %path_str, i32 0, i32 0, ptr @on_open)
+    %result_i64 = sext i32 %result_i32 to i64
+
+    ret i64 %result_i64
+}
+
+define void @on_open(ptr %req) {
+entry:
+    ; Extract the file descriptor from the uv_fs_t structure
+    %result_ptr = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 6
+    %fd = load i64, i64* %result_ptr, align 8
+
+    ; Load the payload
+    %req_data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
+    %payload = load ptr, ptr %req_data, align 8
+
+    ; Extract the callback from the payload
+    %payload_callback = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 1
+    %f = load %Neg, ptr %payload_callback, align 8
+
+    ; Extract the path string from the payload
+    %payload_path = getelementptr inbounds %fs_open_payload, ptr %payload, i32 0, i32 0
+    %path = load ptr, ptr %payload_path, align 8
+
+    ; Free request structure
+    call void @uv_fs_req_cleanup(ptr %req)
+    call void @free(ptr %req)
+
+    ; Free the payload memory
+    call void @free(ptr %payload)
+
+    ; Free the path string
+    call void @free(ptr %path)
+
+    ; Call callback
+    %res = tail call fastcc %Pos @run_i64(%Neg %f, i64 %fd)
+
+    ret void
+}
+
+
+; Reading a File
+; --------------
 
 define %Pos @readFile(i64 %fd, %Pos %buffer, i64 %offset, %Neg %callback) {
     ; Get the default loop, stop and close it.
@@ -135,52 +206,8 @@ entry:
 }
 
 
-define i64 @openFile(%Pos %path, %Neg %callback) {
-    %req = call ptr @malloc(i64 440) ; 440 happens to be sizeof(uv_fs_t)
-
-    ; TODO this leaks memory: store the string (together with the callback) in the data-field
-    %path_str = call ptr @c_buffer_as_null_terminated_string(%Pos %path)
-    call void @c_buffer_refcount_decrement(%Pos %path)
-
-    ; Allocate memory for the callback (of type %Neg)
-    %neg = call ptr @malloc(i64 16) ; two pointers, so 16 byte
-    store %Neg %callback, ptr %neg
-
-    ; Cast the Neg pointer to ptr and store it in the eq's data field
-    %data_ptr = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
-    store ptr %neg, ptr %data_ptr, align 8
-
-    ; Get the default loop and call fs_open
-    %loop = call ptr @uv_default_loop()
-
-    %result_i32 = call i32 @uv_fs_open(ptr %loop, ptr %req, ptr %path_str, i32 0, i32 0, ptr @on_open)
-    %result_i64 = sext i32 %result_i32 to i64
-
-    ret i64 %result_i64
-}
-
-define void @on_open(ptr %req) {
-entry:
-    ; Extract the file descriptor from the uv_fs_t structure
-    %result_ptr = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 6
-    %fd = load i64, i64* %result_ptr, align 8
-
-    ; Get the callback
-    %data = getelementptr inbounds %struct.uv_fs_s, ptr %req, i32 0, i32 0
-    %f_ptr = load ptr, ptr %data, align 8
-    %f_struct = load %Neg, ptr %f_ptr, align 8
-
-    ; Free request structure
-    call void @uv_fs_req_cleanup(ptr %req)
-    call void @free(ptr %req)
-
-    ; Call callback
-    %res = tail call fastcc %Pos @run_i64(%Neg %f_struct, i64 %fd)
-
-    ret void
-}
-
-
+; Timer
+; -----
 
 define %Pos @timer(i64 %n, %Neg %callback) {
     ; Get the default loop
