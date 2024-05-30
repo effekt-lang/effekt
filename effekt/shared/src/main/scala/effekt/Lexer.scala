@@ -37,7 +37,7 @@ enum TokenKind {
   // literals
   case Integer(n: Int)
   case Float(d: Double)
-  case Str(s: String)
+  case Str(s: String, multiline: Boolean)
   case QuotedStr(ts: List[Token])
   case Char(c: Char)
   // identifiers
@@ -45,6 +45,8 @@ enum TokenKind {
   case IdentQualified(id: String)
   // misc
   case Comment(msg: String)
+  case Newline
+  case Space
   case EOF
   case Error(err: LexerError)
   // symbols
@@ -281,7 +283,8 @@ class Lexer(source: String) {
         case TokenKind.EOF =>
           eof = true
           // EOF has the position of one after the last character
-          tokens += Token(current + 1, current + 1, TokenKind.EOF)
+          // this may be useful for a streaming lexer
+          //tokens += Token(current + 1, current + 1, TokenKind.EOF)
         case TokenKind.Error(e) =>
           err = Some(e)
         case k =>
@@ -315,7 +318,6 @@ class Lexer(source: String) {
    * expressions.
    */
   def matchString(): TokenKind = {
-    def sliceStr(start: Int, end: Int): TokenKind.Str = TokenKind.Str(slice(start, end))
     var endString = false
     val stringStart = start
     var multiline = false
@@ -331,7 +333,9 @@ class Lexer(source: String) {
     import Delimiter.*
 
     if (nextMatches("\"\"")) multiline = true
-    if (multiline && nextMatches("\"\"\"") || !multiline && nextMatches("\"")) return TokenKind.Str("")
+    if (multiline && nextMatches("\"\"\"") || !multiline && nextMatches("\"")) return TokenKind.Str("", multiline)
+
+    def sliceStr(start: Int, end: Int): TokenKind.Str = TokenKind.Str(slice(start, end), multiline)
 
     val delimOffset =
       if (multiline) 3
@@ -436,20 +440,33 @@ class Lexer(source: String) {
     TokenKind.Comment(comment)
   }
 
-  @tailrec
-  final def skipWhitespaces(): Unit = {
-    peek() match {
-      case Some(' ') | Some('\t') | Some('\r') | Some('\n') => {
-        consume()
-        skipWhitespaces()
+  final def matchWhitespaces(): Unit = {
+      peek() match {
+        case Some(' ') | Some('\t') => {
+          consume()
+          // currently, we ignore any whitespace other than newlines
+          // tokens += makeToken(TokenKind.Space)
+          matchWhitespaces()
+        }
+        case Some('\n') => {
+          consume()
+          tokens += makeToken(TokenKind.Newline)
+          matchWhitespaces()
+        }
+        // windows, of course, has to do things differently. A newline there is represented by \r\n
+        case Some('\r') => {
+          consume()
+          nextMatches("\n")
+          tokens += makeToken(TokenKind.Newline)
+          matchWhitespaces()
+        }
+        case _ => start = current
       }
-      case _ => start = current
-    }
   }
 
   def nextToken(): TokenKind = {
     import TokenKind.*
-    skipWhitespaces()
+    matchWhitespaces()
     val maybeChar = consume()
     if (maybeChar.isEmpty) return EOF
     val c = maybeChar.get
