@@ -3,7 +3,7 @@ module effekt
 extern include hvm "effekt.hvm"
 
 //String ops
-
+/*
 extern io def println[R](r: R): Unit =
   hvm "(HVM.print ${r} ${r})"
 
@@ -12,6 +12,7 @@ extern io def println[R](r: R): Unit =
 extern pure def show[R](value: R): String =
   hvm "(HVM.log ${value} ${value})"
 
+*/
 //extern pure def infixConcat(s1: String, s2: String): String =
 //  "${s1} + ${s2}"
 
@@ -35,6 +36,7 @@ extern def infixSub(x: Int, y: Int): Int =
 extern def mod(x: Int, y: Int): Int =
   hvm "(% ${x} ${y})"
 
+/*
 extern def infixAdd(x: Double, y: Double): Double =
   hvm "(+ ${x} ${y})"
 
@@ -46,6 +48,7 @@ extern def infixDiv(x: Double, y: Double): Double =
 
 extern def infixSub(x: Double, y: Double): Double =
   hvm "(- ${x} ${y})"
+*/
 
 def min(n: Int, m: Int): Int =
   if (n < m) n else m
@@ -65,14 +68,15 @@ extern def infixLt(x: Int, y: Int): Bool =
   hvm "(< ${x} ${y})"
 
 extern def infixLte(x: Int, y: Int): Bool =
-  hvm "(<= ${x} ${y})"
+  hvm "(| (< ${x} ${y}) (== ${x} ${y}))"
 
 extern def infixGt(x: Int, y: Int): Bool =
   hvm "(> ${x} ${y})"
 
 extern def infixGte(x: Int, y: Int): Bool =
-  hvm "(>= ${x} ${y})"
+  hvm "(| (> ${x} ${y}) (== ${x} ${y}))"
 
+/*
 extern def infixLt(x: Double, y: Double): Bool =
   hvm "(< ${x} ${y})"
 
@@ -84,7 +88,7 @@ extern def infixGt(x: Double, y: Double): Bool =
 
 extern def infixGte(x: Double, y: Double): Bool =
   hvm "(>= ${x} ${y})"
-
+*/
 //Bool ops
 
 def not(b: Bool): Bool =
