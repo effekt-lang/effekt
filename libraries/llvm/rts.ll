@@ -1,5 +1,8 @@
 ; Run-Time System
 
+
+%Evi = type i64
+
 ; Basic types
 
 %Env = type ptr
@@ -64,7 +67,7 @@
 ;
 %Region = type [ 3 x %Mem ]
 
-; The "meta" stack (a stack of stacks)
+; The "meta" stack (a stack of stacks) -- a pointer to a %StkVal
 %Stk = type ptr
 
 ; This is used for two purposes:
@@ -74,14 +77,22 @@
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Obj}
-%Bool = type %Pos
-%Unit = type %Pos
 
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Obj}
 
 ; Offset within the arena
 %Ref = type i64
+
+; Builtin Types
+
+%Int = type i64
+%Double = type double
+%Byte = type i8
+%Char = type i64
+%Bool = type %Pos
+%Unit = type %Pos
+%String = type %Pos
 
 ; Global locations
 
@@ -611,9 +622,72 @@ define fastcc void @topLevelEraser(%Env %env) {
     ret void
 }
 
-; Primitive Types
+define fastcc %Pos @run_i64(%Neg %f, i64 %arg) {
+    ; backup stack
+    %base = load %Base, ptr @base
 
-%Int = type i64
-%Double = type double
+    ; Create an empty stack (TODO is all of this really necessary???)
+    %env = call %Env @malloc(i64 1048576)
 
-%Evi = type i64
+    %sp = call %Sp @malloc(i64 268435456)
+    store %Sp %sp, ptr @base
+    %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
+    %sharerp_2 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 1
+    %eraserp_3 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 2
+    store %RetAdr @topLevel, ptr %retadrp_1
+    store %Sharer @topLevelSharer, ptr %sharerp_2
+    store %Eraser @topLevelEraser, ptr %eraserp_3
+    %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+
+    ; prepare call
+    %arrayp = extractvalue %Neg %f, 0
+    %obj = extractvalue %Neg %f, 1
+    %fpp = getelementptr ptr, ptr %arrayp, i64 0
+    %fp = load ptr, ptr %fpp
+
+    ; Store the argument (0th index is evidence)
+    %ev2 = getelementptr {%Int, %Int}, %Env %env, i64 0, i32 1
+    store i64 %arg, ptr %ev2
+
+    ; call
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp2)
+
+    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
+    store %Sp %base, ptr @base
+
+    ; return Unit
+    ret %Pos %result
+}
+
+define fastcc %Pos @run(%Neg %f) {
+    ; backup stack
+    %base = load %Base, ptr @base
+
+    ; Create an empty stack (TODO is all of this really necessary???)
+    %env = call %Env @malloc(i64 1048576)
+
+    %sp = call %Sp @malloc(i64 268435456)
+    store %Sp %sp, ptr @base
+    %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
+    %sharerp_2 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 1
+    %eraserp_3 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 2
+    store %RetAdr @topLevel, ptr %retadrp_1
+    store %Sharer @topLevelSharer, ptr %sharerp_2
+    store %Eraser @topLevelEraser, ptr %eraserp_3
+    %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+
+    ; prepare call
+    %arrayp = extractvalue %Neg %f, 0
+    %obj = extractvalue %Neg %f, 1
+    %fpp = getelementptr ptr, ptr %arrayp, i64 0
+    %fp = load ptr, ptr %fpp
+
+    ; call
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp2)
+
+    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
+    store %Sp %base, ptr @base
+
+    ; return Unit
+    ret %Pos %result
+}
