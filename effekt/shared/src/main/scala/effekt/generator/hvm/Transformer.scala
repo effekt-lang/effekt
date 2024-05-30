@@ -25,7 +25,7 @@ def transform(id: cps.Id, operations: List[cps.Property], map: MutableMap[Name, 
   val newMap = map
   operations.foreach(operation => 
   map += (Name(id.toString + "." + operation.id.toString) -> 
-        Definition(id.toString + "." + operation.id.toString, List(Rule(List(Ctr(id.toString, (operations map (x => x match {case cps.Property(operation.id, _) => VarPattern(Some(operation.id.toString)); case _ => VarPattern(Some("_"))})))), Var(operation.id.toString))), false)))
+        Definition(id.toString + "." + operation.id.toString, List(Rule(List(Ctr(id.toString + "/" + id.toString, (operations map (x => x match {case cps.Property(operation.id, _) => VarPattern(Some(operation.id.toString)); case _ => VarPattern(Some("_"))})))), Var(operation.id.toString))), false)))
   map
 
 def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): MutableMap[Name, Adt]= decls match {
@@ -92,7 +92,7 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Make(data, tag, vargs) => chainApp(idToVar(data), vargs map transform)
   case cps.Expr.Select(target, field) => ???
   case cps.Member(interface, field, tpe) => App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
-  case cps.New(impl) => chainApp(idToVar(impl.interface._1), impl.operations map (x => transform(x.implementation: cps.Expr)))
+  case cps.New(impl) => chainApp(Var(impl.interface._1.name.name + "/" + impl.interface._1.name), impl.operations map (x => transform(x.implementation: cps.Expr)))
 }
 
 def transform(constructors: List[cps.Constructor], adt: Adt): Adt = constructors match {

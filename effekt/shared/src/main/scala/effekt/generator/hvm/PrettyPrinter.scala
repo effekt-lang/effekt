@@ -114,7 +114,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(adt: Adt): Doc = hsep(adt.ctrs.map{case (Name(name), Nil) => parens(string(name)); case (Name(name), lst) => parens(string(name)<+>(hsep(lst map (x => string(x)))))}.toSeq, string(" |"))
   
-  def toDoc(name: Name, adt: Adt): Doc = string("data") <+> string(name.name) <+> string("=") <+> toDoc(adt)
+  def toDoc(name: Name, adt: Adt): Doc = adt match {
+    case Adt(ctrs, _) if ctrs.isEmpty => string("type") <+> string(name.name) <+> string("=") <+> string(name.name)
+    case _ => string("type") <+> string(name.name) <+> string("=") <+> toDoc(adt)
+  }
+    
 
   def toDoc(adts: MutableMap[Name, Adt]): Doc = vsep(adts.map{case (name, adt) => toDoc(name, adt)}.toSeq)
 
