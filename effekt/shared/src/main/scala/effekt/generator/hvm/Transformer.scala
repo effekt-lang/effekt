@@ -66,8 +66,8 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
-  case cps.Term.Reset(ev, body) => println(term); chainApp(chainLam(List("ev", "k"), transform(body)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
-  case cps.Term.Shift(ev, cont, body) => App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body))))//(ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body))
+  case cps.Term.Reset(ev, body) => chainApp(chainLam(List("ev", "k"), transform(body)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
+  case cps.Term.Shift(ev, cont, body) => App(Auto, App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body)))), Var("k"))//((ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body)) k)
 }
 
 def transform(blockLit: cps.BlockLit): Rule = blockLit match {
@@ -91,7 +91,7 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.BlockLit(params, body) => chainLam(params map (x => x.toString()), transform(body))
   case cps.Expr.Make(data, tag, vargs) => chainApp(idToVar(data), vargs map transform)
   case cps.Expr.Select(target, field) => ???
-  case cps.Member(interface, field, tpe) => println(expr); App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
+  case cps.Member(interface, field, tpe) => App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
   case cps.New(impl) => chainApp(idToVar(impl.interface._1), impl.operations map (x => transform(x.implementation: cps.Expr)))
 }
 

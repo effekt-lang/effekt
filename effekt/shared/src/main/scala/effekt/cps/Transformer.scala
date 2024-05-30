@@ -27,6 +27,7 @@ object Transformer extends Phase[PhaseResult.CoreLifted, PhaseResult.CpsTransfor
 }
 
 def transform(core: lifted.ModuleDecl): ModuleDecl = {
+  println(core)
   ModuleDecl(core.path, core.includes, core.decls map transform, core.externs map transform, core.definitions map transform, core.exports)
 }
 def transform(decl: lifted.Declaration): Declaration = decl match {
@@ -123,7 +124,7 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Put(id, ev, value) => ???
 
   case lifted.Stmt.Try(lifted.BlockLit(_, params, body), List(handler)) => params match {
-    case ev :: cap :: Nil => println(stmt); Reset(transform(ev), Let(transform(cap), New(transform(handler)), transform(body)))
+    case ev :: cap :: Nil => Reset(transform(ev), Let(transform(cap), New(transform(handler)), transform(body)))
     case _ => ???
   }
   case lifted.Stmt.Try(body, handler) => ???
