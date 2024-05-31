@@ -1,5 +1,3 @@
-import string
-import args
 
 // TODO: map uses `var` and therefore fails in ML with "Effect polymorphic recursion is not allowed."
 def vfix(lst: List[List[=> (Int => Int at {}) at {}] => (Int => Int at {}) at {}]): List[=> (Int => Int at {}) at {}] = {
@@ -49,7 +47,5 @@ def run(n: Int) = {
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 999 };
-  val r = run(n);
-  println(r)
+  println(run(999))
 }

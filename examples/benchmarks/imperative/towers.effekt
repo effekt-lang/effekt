@@ -1,7 +1,5 @@
-import io/args
-import text/string
-import mutable/array
-import immutable/list
+import array
+import list
 
 type Disk = Int
 type Pile = List[Disk]
@@ -66,7 +64,5 @@ def run(n: Int) = {
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 13 };
-  val r = run(n);
-  println(r)
+  println(run(13))
 }

@@ -1,6 +1,4 @@
-import io/args
-import text/string
-import mutable/array
+import array
 
 type Tree {
   Leaf(arr: Array[Int])
@@ -48,7 +46,5 @@ def run(n: Int) = {
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 1 };
-  val r = run(n);
-  println(r)
+  println(run(1))
 }

@@ -1,6 +1,4 @@
-import io/args
-import text/string
-import mutable/array
+import array
 
 interface Break[T] {
   def break(result: T): Nothing
@@ -49,7 +47,5 @@ def run(n: Int) = {
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 8 };
-  val r = run(n);
-  println(r)
+  println(run(8))
 }

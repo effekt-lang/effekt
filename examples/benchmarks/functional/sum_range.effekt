@@ -1,7 +1,4 @@
-import immutable/list
-import immutable/option
-import io/args
-import text/string
+import list
 
 def range(i: Int, n: Int): List[Int] =
   if (i < n) {
@@ -20,7 +17,5 @@ def run(n: Int) =
   sum(range(0, n))
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
-  val r = run(n);
-  println(r)
+  println(run(5))
 }

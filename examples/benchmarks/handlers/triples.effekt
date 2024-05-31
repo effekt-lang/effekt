@@ -1,7 +1,3 @@
-import io/args
-import immutable/list
-import immutable/option
-import text/string
 
 record Triple(a: Int, b: Int, c: Int)
 
@@ -38,9 +34,9 @@ def hash(triple: Triple): Int = triple match {
   case Triple(a, b, c) => mod(((53 * a) + 2809 * b + 148877 * c), 1000000007)
 }
 
-def run(n: Int, s: Int): Int =
+def run(n: Int) =
   try {
-    hash(triple(n, s))
+    hash(triple(n, n))
   } with Flip {
     def flip() = mod(resume(true) + resume(false), 1000000007)
   } with Fail {
@@ -48,7 +44,5 @@ def run(n: Int, s: Int): Int =
   }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 10 };
-  val r = run(n, n);
-  println(r)
+  println(run(10))
 }

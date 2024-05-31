@@ -1,7 +1,3 @@
-import immutable/list
-import immutable/option
-import io/args
-import text/string
 
 def abs(i: Int): Int = if (i < 0) { 0 - i } else { i }
 
@@ -15,27 +11,23 @@ def loop(i: Int, s: Int): Int / Operator =
     loop(i - 1, s)
   }
 
-def run(n: Int, s: Int): Int =
-  try {
-    loop(n, s)
-  } with Operator { (x: Int) =>
-    val y = resume(());
-    mod(abs(x - (503 * y) + 37), 1009)
-  }
-
-def repeat(n: Int): Int = {
+def run(n: Int) = {
   def step(l: Int, s: Int): Int = {
     if (l == 0) {
       s
     } else {
-      step(l - 1, run(n,s))
+      val r = try {
+          loop(n, s)
+        } with Operator { (x: Int) =>
+          val y = resume(());
+          mod(abs(x - (503 * y) + 37), 1009)
+        }
+      step(l - 1, r)
     }
   }
   step(1000, 0)
 }
 
 def main() = {
-  val n = commandLineArgs().headOption.getOrElse { "" }.toInt.getOrElse { 5 };
-  val r = repeat(n);
-  println(r)
+  println(run(5))
 }
