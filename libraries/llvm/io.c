@@ -25,6 +25,11 @@ void c_io_println_String(String text) {
 
 typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
 
+typedef struct Callbacks {
+    struct Neg callback;
+    struct Callbacks* next;
+} Callbacks;
+
 typedef struct {
     uint64_t rc;
     void* eraser;
@@ -32,9 +37,12 @@ typedef struct {
     // state of {
     //   case UNRESOLVED => NULL
     //   case RESOLVED   => Pos (the result)
-    //   case AWAITED    => Neg (the callback)
+    //   case AWAITED    => Nonempty list of callbacks
     // }
-    union { struct Pos pos; struct Neg neg; } payload;
+    union {
+        struct Pos pos;
+        Callbacks* callbacks;
+    } payload;
 } Promise;
 
 void erasePromise(struct Pos promise) {
@@ -46,7 +54,17 @@ void erasePromise(struct Pos promise) {
         case UNRESOLVED:
             return;
         case AWAITED:
-            eraseNegative(p->payload.neg);
+            {
+                Callbacks* current = p->payload.callbacks;
+                // Free all callbacks
+                while (current != NULL) {
+                    Callbacks* k = current;
+                    current = current->next;
+                    eraseNegative(k->callback);
+                    free(k);
+                }
+                p->payload.callbacks = NULL;
+            }
             return;
         case RESOLVED:
             erasePositive(p->payload.pos);
@@ -68,11 +86,18 @@ void resolvePromise(struct Pos promise, struct Pos value) {
             exit(1);
         case AWAITED: {
             puts("DEBUG Resolving awaited promise...");
-            struct Neg callback = p->payload.neg; // Extract neg payload as callback
+            Callbacks* current = p->payload.callbacks;
             p->state = RESOLVED;
-            sharePositive(value);
-            p->payload.pos = value; // Store value in payload
-            run_Pos(callback, value); // Call the callback
+            p->payload.pos = value;
+
+             // Call each callback
+            while (current != NULL) {
+                sharePositive(value);
+                run_Pos(current->callback, value);
+                Callbacks* temp = current;
+                current = current->next;
+                free(temp);
+            }
             break;
         }
     }
@@ -87,16 +112,29 @@ void awaitPromise(struct Pos promise, struct Neg callback) {
         case UNRESOLVED:
             puts("DEBUG Awaiting unresolved promise...");
             p->state = AWAITED;
-            p->payload.neg = callback; // Store value in payload
+            p->payload.callbacks = (Callbacks*)malloc(sizeof(Callbacks));
+            p->payload.callbacks->callback = callback;
+            p->payload.callbacks->next = NULL;
             break;
         case RESOLVED:
             puts("DEBUG Awaiting resolved promise...");
-            struct Pos value = p->payload.pos; // Extract neg payload as argument
+            struct Pos value = p->payload.pos; // Extract pos payload as argument
             run_Pos(callback, value); // Call the callback
             break;
         case AWAITED: {
-            fprintf(stderr, "ERROR: Promise already awaited\n");
-            exit(1);
+            puts("DEBUG Adding callback to awaited promise...");
+            Callbacks* new_node = (Callbacks*)malloc(sizeof(Callbacks));
+            new_node->callback = callback;
+            new_node->next = NULL;
+
+            // We traverse the callbacks to attach this last (O(n) -- but how many callbacks will there be?)
+            // If really necessary, we can store a second pointer that points to the last one...
+            Callbacks* current = p->payload.callbacks;
+            while (current->next != NULL) {
+                current = current->next;
+            }
+            current->next = new_node;
+            break;
         }
     }
     // do we need to erase promise now? Is it shared before?
