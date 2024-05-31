@@ -63,7 +63,8 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
         None
     }
 
-  lazy val whitespace = many(Space | Newline)
+  lazy val whitespace = many(Space | Newline | comment)
+  lazy val comment = accept("comment") { case c: TokenKind.Comment => c }
 
   /**
    * Names
@@ -345,22 +346,22 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    */
   lazy val stmts: P[Stmt] =
     ( withStmt
-    | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
-    | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply
+    | (expr <~ `;;`) ~ stmts ^^ ExprStmt.apply
+    | (definition <~ `;;`) ~ stmts ^^ DefStmt.apply
+    | (varDef  <~ `;;`) ~ stmts ^^ DefStmt.apply
+    | (`return`.? ~> expr <~ `;;`.?) ^^ Return.apply
     | matchDef
     | failure("Expected a statement")
     )
 
   lazy val withStmt: P[Stmt] =
     ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => List(p) withPositionOf p }) ~
-          (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;`  ~> stmts) ^^ {
+          (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
           Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
        }
-    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
+    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;;` ~> stmts) ^^ {
         case id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
           Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
@@ -383,7 +384,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
-     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;` ~> stmts) ^^ {
+     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;;` ~> stmts) ^^ {
        case p ~ guards ~ sc ~ default ~ body =>
         Return(Match(sc, List(MatchClause(p, guards, body)), default)) withPositionOf p
      }
@@ -395,7 +396,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     `effect` ~> idDef ~ maybeTypeParams ~ (`=` ~/> effects) ^^ EffectDef.apply
 
   lazy val dataDef: P[Def] =
-    `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef.apply
+    `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;;`) <~ `}`) ^^ DataDef.apply
 
   lazy val recordDef: P[Def] =
     `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef.apply
@@ -677,13 +678,11 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    * Since Kiama already consumes whitespace:
    * the idea is to scroll back whitespaces until we find a newline
    */
-  /*
   lazy val `;;` = new Parser[Unit] {
 
-    def apply(in: In): ParseResult[_, Unit] = {
+    def apply(in: In): ParseResult[In, Unit] = {
       var pos = in.offset
       // TODO do not use substring -- use content.startWith(s, offset)
-      val tokens = in.tokens
       val Token(_, _, kind) =
         if (in.first.isEmpty) {
           return Success((), in)
@@ -700,13 +699,10 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
         case _ =>
           // \n   while
           //      ^
-          pos -= 1
-          while (pos > 0 && (tokens(pos) == Whitespace)) {
-            pos -= 1
-          }
+          val previous = in.offset - 1
           // \n   while
           //  ^
-          if (tokens(pos) == NewLine) {
+          if (in.get(previous).get.kind == Newline) {
             Success((), in)
           } else {
             Failure(s"Expected ;", in)
@@ -714,7 +710,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
       }
     }
   }
-  */
+
   /**
    * Parses the contents of a string and searches for unquotes ${ ... }
    *
@@ -724,7 +720,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    *      ^^^^^^^^^^^^  ^^^
    *        prefix     unquote
    */
-  /*
+/*
   import scala.collection.mutable
   import scala.util.boundary
   import scala.util.boundary.break
@@ -800,7 +796,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
         Success(Template(strings.toList, arguments.toList), Input(in.source, pos))
       }
     }
-   */
+*/
 
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
