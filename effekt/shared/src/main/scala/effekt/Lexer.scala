@@ -38,7 +38,7 @@ enum TokenKind {
   case Integer(n: Int)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
-  case QuotedStr(ts: List[Token])
+  case TemplateStr(ts: List[Token])
   case Char(c: Char)
   // identifiers
   case Ident(id: String)
@@ -189,10 +189,13 @@ class Lexer(source: String) {
   val chars: BufferedIterator[Char] = source.iterator.buffered
 
   lazy val whitespace: Regex = """([ \t\r\n])""".r // single whitespace characters
-  lazy val nameFirst: Regex = """[a-zA-Z_]""".r
-  lazy val nameRest: Regex = """[a-zA-Z0-9_!?$]""".r
-  lazy val nameBoundary: Regex = """(?!%s)""".format(nameRest).r
-  lazy val name: Regex = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
+  //lazy val nameFirst: Regex = """[a-zA-Z_]""".r
+  //lazy val nameRest: Regex = """[a-zA-Z0-9_!?$]""".r
+  //lazy val nameBoundary: Regex = """(?!%s)""".format(nameRest).r
+  //lazy val name: Regex = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
+  //val whitespace = Set(' ', '\t', '\r')
+  val nameFirst = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ List('_').iterator).toSet
+  val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
 
   def isEOF: Boolean =
     current >= source.length
@@ -404,7 +407,7 @@ class Lexer(source: String) {
     }
     // reset starting location to original position of opening "
     start = stringStart
-    if (quoted) TokenKind.QuotedStr(stringTokens.toList)
+    if (quoted) TokenKind.TemplateStr(stringTokens.toList)
     else stringTokens.head.kind
   }
 
@@ -511,22 +514,15 @@ class Lexer(source: String) {
       case '\"' => matchString()
       case c if c.isDigit => matchNumber()
       // --- keywords & identifiers ---
-      case c if c.isLetter => {
+      case c if nameFirst.contains(c) => {
         // since keywords are a subclass of identifiers and we want to match either keywords or identifiers,
         // we look for valid names
-        consumeWhile { c => name.matches(c.toString) }
+        consumeWhile { c => nameRest.contains(c) }
         val s = slice()
         // check if the slice matches any know keyword, otherwise it is necessarily an identifier
-        Lexer.keywords.get(s) match {
-          case Some(tok) => tok
-          // identifier
-          case _ =>
-            if (name.matches(s)) TokenKind.Ident(s)
-            // cannot occur
-            else err(LexerError.InvalidKeywordIdent(s))
-        }
+        Lexer.keywords.getOrElse(s, TokenKind.Ident(s))
       }
-      case _ => err(LexerError.InvalidKeywordIdent(c.toString))
+      case c => TokenKind.Error(LexerError.InvalidKeywordIdent(c.toString))
     }
   }
 }
