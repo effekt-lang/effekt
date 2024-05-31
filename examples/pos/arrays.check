@@ -1,7 +1,5 @@
-Some(hello)
-Some(world)
-None()
-Some(foo)
+hello
+world
 Array(Hello World, Hello World, Hello World, Hello World)
 Array(0, 1, 2, 3, 4)
 Array(1, 5, 17)

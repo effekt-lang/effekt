@@ -48,7 +48,7 @@ def main() = {
   listToArrayAndBack(list)
 
   println("empty array")
-  val emptyArray = array::emptyArray[Int](0)
+  val emptyArray = array::unsafeNew[Int](0)
   arrayToListAndBack(emptyArray)
 
   println("nonempty array")
