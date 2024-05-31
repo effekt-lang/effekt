@@ -40,18 +40,18 @@ typedef struct {
 void erasePromise(struct Pos promise) {
     puts("DEBUG Eraser on promise called.");
 
-    // Promise* p = (Promise*)promise.obj;
+    Promise* p = (Promise*)promise.obj;
 
-    // switch (p->state) {
-    //     case UNRESOLVED:
-    //         return;
-    //     case AWAITED:
-    //         eraseNegative(p->payload.neg);
-    //         return;
-    //     case RESOLVED:
-    //         erasePositive(p->payload.pos);
-    //         return;
-    // }
+    switch (p->state) {
+        case UNRESOLVED:
+            return;
+        case AWAITED:
+            eraseNegative(p->payload.neg);
+            return;
+        case RESOLVED:
+            erasePositive(p->payload.pos);
+            return;
+    }
 }
 
 void resolvePromise(struct Pos promise, struct Pos value) {
@@ -70,6 +70,7 @@ void resolvePromise(struct Pos promise, struct Pos value) {
             puts("DEBUG Resolving awaited promise...");
             struct Neg callback = p->payload.neg; // Extract neg payload as callback
             p->state = RESOLVED;
+            sharePositive(value);
             p->payload.pos = value; // Store value in payload
             run_Pos(callback, value); // Call the callback
             break;
@@ -84,12 +85,12 @@ void awaitPromise(struct Pos promise, struct Neg callback) {
 
     switch (p->state) {
         case UNRESOLVED:
-            puts("Awaiting unresolved promise...");
+            puts("DEBUG Awaiting unresolved promise...");
             p->state = AWAITED;
             p->payload.neg = callback; // Store value in payload
             break;
         case RESOLVED:
-            puts("Awaiting resolved promise...");
+            puts("DEBUG Awaiting resolved promise...");
             struct Pos value = p->payload.pos; // Extract neg payload as argument
             run_Pos(callback, value); // Call the callback
             break;

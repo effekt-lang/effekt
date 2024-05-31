@@ -41,4 +41,7 @@ extern struct Neg* allocNeg(struct Neg);
 extern void eraseNegative(struct Neg);
 extern void erasePositive(struct Pos);
 
+extern void shareNegative(struct Neg);
+extern void sharePositive(struct Pos);
+
 #endif
