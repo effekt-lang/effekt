@@ -408,6 +408,13 @@ extern pure def _pi(): Double =
 
 val PI: Double = _pi()
 
+extern pure def toByte(n: Int): Byte =
+  llvm """
+    %res = trunc i64 %n to i8
+    ret i8 %res
+  """
+  js "${n}"
+
 extern pure def toInt(d: Double): Int =
   js "Math.round(${d})"
   chez "(round ${d})"

@@ -15,11 +15,19 @@ struct Neg {
     void *obj;
 };
 
+struct Buffer {
+    // together these are 64bit and thus fit into the "tag" of Pos
+    uint32_t offset;
+    uint32_t length;
+
+    void *data;
+};
+
 static const struct Pos Unit = (struct Pos) { .tag = 0, .obj = NULL, };
 static const struct Pos BooleanFalse = (struct Pos) { .tag = 0, .obj = NULL, };
 static const struct Pos BooleanTrue = (struct Pos) { .tag = 1, .obj = NULL, };
 
-typedef struct Pos String;
+typedef struct Buffer String;
 
 
 #endif

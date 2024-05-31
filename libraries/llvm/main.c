@@ -21,7 +21,7 @@ extern void effektMain();
 int program_argc;
 char** program_argv;
 
-struct Pos c_get_arg(uint64_t idx) {
+struct Buffer c_get_arg(uint64_t idx) {
     if(idx < program_argc) {
         return c_buffer_construct_from_null_terminated_string(program_argv[idx]);
     } else {

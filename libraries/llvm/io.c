@@ -24,9 +24,30 @@ void c_io_println_String(String text) {
 }
 
 
-// ; Lib UV Bindings
-// ; ---------------
-
+// Lib UV Bindings
+// ---------------
+// Ideas behind the LLVM / libuv implementation.
+//
+// Share memory between Effekt-buffers and libuv buffers
+// -----------------------------------------------------
+// A libuv buffer is a {ptr, i64} where i64 is the capacity
+// while our buffer (from buffer.c, which is ref-counted) is a %Pos with a
+// pointer and a length. The data ptr is shared between the two such that
+// libuv (and underlying mechanisms) can directly write into our buffer without
+// copying. Since our buffer is ref-counted, this has the advantage that we
+// do not need to manually memory manage the buffer.
+//
+//
+// Callbacks in Data-fields
+// ------------------------
+// In order to call Effekt-functions as a callback, we store a pointer
+// to their closure into the user-definable data-field (at address 0)
+// in each request object.
+//
+//
+// TODO
+// - Error reporting
+// - pooling of request objects (benchmark first!)
 
 // Defined in rts.ll
 
@@ -92,7 +113,7 @@ void on_open(uv_fs_t* req) {
     run_i64(callback, fd);
 }
 
-int64_t openFile(struct Pos path, struct Neg callback) {
+int64_t openFile(struct Buffer path, struct Neg callback) {
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
     // Convert the Effekt String to a 0-terminated string
@@ -137,7 +158,7 @@ void on_read(uv_fs_t* req) {
     run_i64(callback, result);
 }
 
-void readFile(int64_t fd, struct Pos buffer, int64_t offset, struct Neg callback) {
+void readFile(int64_t fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 

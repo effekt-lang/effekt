@@ -13,24 +13,28 @@
 // with clang-generated LLVM from this file's entire translation unit.
 
 
-// Eight bytes for the reference counter.
+// - 8 bytes for the reference counter.
 // E.g. capacity could later also be stored in the header.
 #define BUFFER_HEADER_WIDTH (8)
 
-uint64_t c_buffer_length(const struct Pos buffer) {
-    return buffer.tag;
+uint64_t c_buffer_offset(const struct Buffer buffer) {
+    return buffer.offset;
+}
+
+uint64_t c_buffer_length(const struct Buffer buffer) {
+    return buffer.length;
 }
 
 // NOTE: This assumes a homogenously used byte order.
-uint64_t *c_buffer_refcount(const struct Pos buffer) {
-    return (uint64_t *) (buffer.obj + 0);
+uint64_t *c_buffer_refcount(const struct Buffer buffer) {
+    return (uint64_t *) (buffer.data + 0);
 }
 
-uint8_t *c_buffer_bytes(const struct Pos buffer) {
-    return (uint8_t *) (buffer.obj + BUFFER_HEADER_WIDTH);
+uint8_t *c_buffer_bytes(const struct Buffer buffer) {
+    return (uint8_t *) (buffer.data + BUFFER_HEADER_WIDTH + buffer.offset);
 }
 
-struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
+struct Buffer c_buffer_construct(const uint64_t n, const uint8_t *data) {
     uint8_t *obj = malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
     ASSERT_NON_NULL(obj)
 
@@ -42,56 +46,58 @@ struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     for (uint64_t j = 0; j < n; ++j)
         obj[BUFFER_HEADER_WIDTH + j] = data[j];
 
-    return (struct Pos) {
-        .tag = n,
-        .obj = obj,
+    return (struct Buffer) {
+        .offset = 0,
+        .length = n,
+        .data = obj,
     };
 }
 
 // TODO this allocates, copies, and frees immediately... improve this
-struct Pos c_buffer_construct_zeroed(const uint64_t n) {
+struct Buffer c_buffer_construct_zeroed(const uint64_t n) {
     uint8_t *zeroes = calloc(n, sizeof *zeroes);
     ASSERT_NON_NULL(zeroes)
-    const struct Pos buffer = c_buffer_construct(n, zeroes);
+    const struct Buffer buffer = c_buffer_construct(n, zeroes);
     free(zeroes);
     return buffer;
 }
 
-struct Pos c_buffer_construct_uninitialized(const uint64_t n) {
-    uint8_t *obj = malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
-    ASSERT_NON_NULL(obj)
+struct Buffer c_buffer_construct_uninitialized(const uint64_t n) {
+    uint8_t *data = malloc(BUFFER_HEADER_WIDTH + n * sizeof *data);
+    ASSERT_NON_NULL(data)
 
     // reference count (a reference count of zero means one sole owner)
     for (uint64_t j = 0; j < BUFFER_HEADER_WIDTH; ++j)
-        obj[j] = 0;
+        data[j] = 0;
 
-    return (struct Pos) {
-        .tag = n,
-        .obj = obj,
+    return (struct Buffer) {
+        .offset = 0,
+        .length = n,
+        .data = data,
     };
 }
 
-void c_buffer_destruct(const struct Pos buffer) {
-    free(buffer.obj);
+void c_buffer_destruct(const struct Buffer buffer) {
+    free(buffer.data);
 }
 
 
-void c_buffer_refcount_increment(const struct Pos buffer) {
+void c_buffer_refcount_increment(const struct Buffer buffer) {
     if (DEBUG_REFCOUNT) {
-        fprintf(stderr, "c_buffer_refcount_increment((struct Pos) "
-            "{ .tag = %" PRIu64 ", .obj = %p }): from %" PRIu64 "\n",
-            buffer.tag, buffer.obj, *(c_buffer_refcount(buffer)));
+        fprintf(stderr, "c_buffer_refcount_increment((struct Buffer) "
+            "{ .offset = %" PRIu32 ", .length = %" PRIu32 ", .data = %p }): from %" PRIu64 "\n",
+            buffer.offset, buffer.length, buffer.data, *(c_buffer_refcount(buffer)));
         fflush(stderr);
     }
 
     (*c_buffer_refcount(buffer))++;
 }
 
-void c_buffer_refcount_decrement(const struct Pos buffer) {
+void c_buffer_refcount_decrement(const struct Buffer buffer) {
     if (DEBUG_REFCOUNT) {
-        fprintf(stderr, "c_buffer_refcount_decrement((struct Pos) "
-            "{ .tag = %" PRIu64 ", .obj = %p }): from %" PRIu64 "\n",
-            buffer.tag, buffer.obj, *(c_buffer_refcount(buffer)));
+        fprintf(stderr, "c_buffer_refcount_decrement((struct Buffer) "
+            "{ .offset = %" PRIu32 ", .length = %" PRIu32 ", .data = %p }): from %" PRIu64 "\n",
+            buffer.offset, buffer.length, buffer.data, *(c_buffer_refcount(buffer)));
         fflush(stderr);
     }
 
@@ -99,27 +105,30 @@ void c_buffer_refcount_decrement(const struct Pos buffer) {
         c_buffer_destruct(buffer);
 }
 
+struct Buffer c_buffer_slice(struct Buffer buffer, const uint64_t offset, const uint64_t length) {
 
-void c_buffer_truncate(struct Pos buffer, const uint64_t n) {
-    if (n > c_buffer_length(buffer))
-        return;
-    buffer.tag = n;
+    if ((c_buffer_offset(buffer) + offset + length) > c_buffer_length(buffer))
+        return buffer;
+
+    buffer.offset = c_buffer_offset(buffer) + offset;
+    buffer.length = length;
+    return buffer;
 }
 
-struct Pos c_buffer_copy(const struct Pos buffer) {
+struct Buffer c_buffer_copy(const struct Buffer buffer) {
     return c_buffer_construct(c_buffer_length(buffer), c_buffer_bytes(buffer));
 }
 
 
 /**
- * Converts a Pos buffer to a null-terminated string, handling zero bytes by encoding them as non-minimal UTF-8 sequences.
+ * Converts a buffer to a null-terminated string, handling zero bytes by encoding them as non-minimal UTF-8 sequences.
  *
  * Note: the returned pointer needs to be managed manually!
  *
- * @param buffer The Pos buffer to convert.
+ * @param buffer The buffer to convert.
  * @return A null-terminated string representing the contents of the buffer.
  */
-char* c_buffer_as_null_terminated_string(const struct Pos buffer) {
+char* c_buffer_as_null_terminated_string(const struct Buffer buffer) {
     uint64_t length = c_buffer_length(buffer);
     uint64_t zero_runes = 0;
     uint8_t* bytes = c_buffer_bytes(buffer);
@@ -149,7 +158,7 @@ char* c_buffer_as_null_terminated_string(const struct Pos buffer) {
     return buf;
 }
 
-struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
+struct Buffer c_buffer_construct_from_null_terminated_string(const char *data_nt) {
     uint64_t n = 0;
     while (data_nt[++n]);
 
@@ -157,8 +166,8 @@ struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
 }
 
 
-struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
-    const struct Pos concatenated = c_buffer_construct_zeroed(
+struct Buffer c_buffer_concatenate(const struct Buffer left, const struct Buffer right) {
+    const struct Buffer concatenated = c_buffer_construct_zeroed(
         c_buffer_length(left) + c_buffer_length(right));
     for (uint64_t j = 0; j < c_buffer_length(concatenated); ++j)
         c_buffer_bytes(concatenated)[j]
@@ -168,39 +177,39 @@ struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
     return concatenated;
 }
 
-struct Pos c_buffer_eq(const struct Pos left, const struct Pos right) {
+struct Pos c_buffer_eq(const struct Buffer left, const struct Buffer right) {
     uint64_t left_len = c_buffer_length(left);
     uint64_t right_len = c_buffer_length(right);
-    if(left_len != right_len) return BooleanFalse;
-    for(uint64_t j = 0; j < left_len; ++j) {
-        if(c_buffer_bytes(left)[j] != c_buffer_bytes(right)[j]) {
+    if (left_len != right_len) return BooleanFalse;
+    for (uint64_t j = 0; j < left_len; ++j) {
+        if (c_buffer_bytes(left)[j] != c_buffer_bytes(right)[j]) {
             return BooleanFalse;
         }
     }
     return BooleanTrue;
 }
 
-struct Pos c_buffer_substring(const struct Pos str, uint64_t start, uint64_t end) {
-    const struct Pos substr = c_buffer_construct_zeroed(end - start);
+struct Buffer c_buffer_substring(const struct Buffer str, uint64_t start, uint64_t end) {
+    const struct Buffer substr = c_buffer_construct_zeroed(end - start);
     for (uint64_t j = 0; j < c_buffer_length(substr); ++j) {
         c_buffer_bytes(substr)[j] = c_buffer_bytes(str)[start+j];
     }
     return substr;
 }
 
-struct Pos c_buffer_show_Int(const Int n) {
+struct Buffer c_buffer_show_Int(const Int n) {
     char str[24];
     sprintf(str, "%" PRId64, n);
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Pos c_buffer_show_Byte(const uint8_t n) {
+struct Buffer c_buffer_show_Byte(const uint8_t n) {
     char str[4];  // Byte values range from 0 to 255, 3 characters + null terminator
     sprintf(str, "%" PRIu8, n);
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Pos c_buffer_show_Char(const uint64_t n) {
+struct Buffer c_buffer_show_Char(const uint64_t n) {
     char str[5] = {0};  // Max 4 bytes for UTF-8 + 1 for null terminator
     unsigned char *buf = (unsigned char *)str;
 
@@ -223,21 +232,21 @@ struct Pos c_buffer_show_Char(const uint64_t n) {
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Pos c_buffer_show_Double(const Double x) {
+struct Buffer c_buffer_show_Double(const Double x) {
     char str[64]; // TODO is this large enough? Possibly use snprintf first
     sprintf(str, "%g", x);
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-uint64_t c_buffer_index(const struct Pos str, const uint64_t index) {
-    return ((uint8_t *) (str.obj + BUFFER_HEADER_WIDTH))[index];
+uint64_t c_buffer_index(const struct Buffer buffer, const uint64_t index) {
+    return ((uint8_t *) (buffer.data + BUFFER_HEADER_WIDTH + buffer.offset))[index];
 }
 
-void c_buffer_set(struct Pos str, const uint64_t index, uint8_t value) {
-    ((uint8_t *) (str.obj + BUFFER_HEADER_WIDTH))[index] = value;
+void c_buffer_set(struct Buffer buffer, const uint64_t index, uint8_t value) {
+    ((uint8_t *) (buffer.data + BUFFER_HEADER_WIDTH + buffer.offset))[index] = value;
 }
 
-uint32_t c_buffer_character_at(const struct Pos buffer, const uint64_t index) {
+uint32_t c_buffer_character_at(const struct Buffer buffer, const uint64_t index) {
     const uint8_t *bytes = c_buffer_bytes(buffer);
     uint8_t first_byte = bytes[index];
     uint32_t character = 0;
@@ -247,20 +256,20 @@ uint32_t c_buffer_character_at(const struct Pos buffer, const uint64_t index) {
         character = first_byte;
     } else if ((first_byte & 0xE0) == 0xC0) {
         // Two-byte character (110xxxxx 10xxxxxx)
-        if (index + 1 < buffer.tag) {
+        if (index + 1 < buffer.length) {
             character = ((first_byte & 0x1F) << 6) |
                         (bytes[index + 1] & 0x3F);
         }
     } else if ((first_byte & 0xF0) == 0xE0) {
         // Three-byte character (1110xxxx 10xxxxxx 10xxxxxx)
-        if (index + 2 < buffer.tag) {
+        if (index + 2 < buffer.length) {
             character = ((first_byte & 0x0F) << 12) |
                         ((bytes[index + 1] & 0x3F) << 6) |
                         (bytes[index + 2] & 0x3F);
         }
     } else if ((first_byte & 0xF8) == 0xF0) {
         // Four-byte character (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
-        if (index + 3 < buffer.tag) {
+        if (index + 3 < buffer.length) {
             character = ((first_byte & 0x07) << 18) |
                         ((bytes[index + 1] & 0x3F) << 12) |
                         ((bytes[index + 2] & 0x3F) << 6) |
