@@ -38,20 +38,20 @@ typedef struct {
 } Promise;
 
 void erasePromise(struct Pos promise) {
-    puts("Erasing promise...");
+    puts("DEBUG Eraser on promise called.");
 
-    Promise* p = (Promise*)promise.obj;
+    // Promise* p = (Promise*)promise.obj;
 
-    switch (p->state) {
-        case UNRESOLVED:
-            return;
-        case AWAITED:
-            eraseNegative(p->payload.neg);
-            return;
-        case RESOLVED:
-            erasePositive(p->payload.pos);
-            return;
-    }
+    // switch (p->state) {
+    //     case UNRESOLVED:
+    //         return;
+    //     case AWAITED:
+    //         eraseNegative(p->payload.neg);
+    //         return;
+    //     case RESOLVED:
+    //         erasePositive(p->payload.pos);
+    //         return;
+    // }
 }
 
 void resolvePromise(struct Pos promise, struct Pos value) {
@@ -59,7 +59,7 @@ void resolvePromise(struct Pos promise, struct Pos value) {
 
     switch (p->state) {
         case UNRESOLVED:
-            puts("Resolving unresolved promise...");
+            puts("DEBUG Resolving unresolved promise...");
             p->state = RESOLVED;
             p->payload.pos = value; // Store value in payload
             break;
@@ -67,7 +67,7 @@ void resolvePromise(struct Pos promise, struct Pos value) {
             fprintf(stderr, "ERROR: Promise already resolved\n");
             exit(1);
         case AWAITED: {
-            puts("Resolving awaited promise...");
+            puts("DEBUG Resolving awaited promise...");
             struct Neg callback = p->payload.neg; // Extract neg payload as callback
             p->state = RESOLVED;
             p->payload.pos = value; // Store value in payload
