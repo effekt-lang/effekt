@@ -664,6 +664,43 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
     ret void
 }
 
+
+define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
+    ; backup stack
+    %base = load %Base, ptr @base
+
+    ; Create an empty stack (TODO is all of this really necessary???)
+    %env = call %Env @malloc(i64 1048576)
+
+    %sp = call %Sp @malloc(i64 268435456)
+    store %Sp %sp, ptr @base
+    %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
+    %sharerp_2 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 1
+    %eraserp_3 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 2
+    store %RetAdr @topLevel, ptr %retadrp_1
+    store %Sharer @topLevelSharer, ptr %sharerp_2
+    store %Eraser @topLevelEraser, ptr %eraserp_3
+    %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+
+    ; prepare call
+    %arrayp = extractvalue %Neg %f, 0
+    %obj = extractvalue %Neg %f, 1
+    %fpp = getelementptr ptr, ptr %arrayp, i64 0
+    %fp = load ptr, ptr %fpp
+
+    ; Store the argument (0th index is evidence)
+    %arg_pos = getelementptr {%Int, %Pos}, %Env %env, i64 0, i32 1
+    store %Pos %arg, ptr %arg_pos
+
+    ; call
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp2)
+
+    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
+    store %Sp %base, ptr @base
+
+    ret void
+}
+
 define fastcc void @run(%Neg %f) {
     ; backup stack
     %base = load %Base, ptr @base

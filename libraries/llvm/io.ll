@@ -10,3 +10,7 @@ declare void @uv_loop_close(ptr)
 declare void @timer(i64, %Neg)
 declare i64 @openFile(%Pos, %Neg)
 declare i64 @readFile(i64, %Pos, i64, %Neg)
+
+declare %Pos @makePromise()
+declare void @resolvePromise(%Pos, %Pos)
+declare void @awaitPromise(%Pos, %Neg)

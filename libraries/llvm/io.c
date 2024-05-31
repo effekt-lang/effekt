@@ -23,6 +23,98 @@ void c_io_println_String(String text) {
     putchar('\n');
 }
 
+typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
+
+typedef struct {
+    uint64_t rc;
+    void* eraser;
+    promise_state_t state;
+    // state of {
+    //   case UNRESOLVED => NULL
+    //   case RESOLVED   => Pos (the result)
+    //   case AWAITED    => Neg (the callback)
+    // }
+    union { struct Pos pos; struct Neg neg; } payload;
+} Promise;
+
+void erasePromise(struct Pos promise) {
+    puts("Erasing promise...");
+
+    Promise* p = (Promise*)promise.obj;
+
+    switch (p->state) {
+        case UNRESOLVED:
+            return;
+        case AWAITED:
+            eraseNegative(p->payload.neg);
+            return;
+        case RESOLVED:
+            erasePositive(p->payload.pos);
+            return;
+    }
+}
+
+void resolvePromise(struct Pos promise, struct Pos value) {
+    Promise* p = (Promise*)promise.obj;
+
+    switch (p->state) {
+        case UNRESOLVED:
+            puts("Resolving unresolved promise...");
+            p->state = RESOLVED;
+            p->payload.pos = value; // Store value in payload
+            break;
+        case RESOLVED:
+            fprintf(stderr, "ERROR: Promise already resolved\n");
+            exit(1);
+        case AWAITED: {
+            puts("Resolving awaited promise...");
+            struct Neg callback = p->payload.neg; // Extract neg payload as callback
+            p->state = RESOLVED;
+            p->payload.pos = value; // Store value in payload
+            run_Pos(callback, value); // Call the callback
+            break;
+        }
+    }
+    // do we need to erase promise now? Is it shared before?
+    erasePositive(promise);
+}
+
+void awaitPromise(struct Pos promise, struct Neg callback) {
+    Promise* p = (Promise*)promise.obj;
+
+    switch (p->state) {
+        case UNRESOLVED:
+            puts("Awaiting unresolved promise...");
+            p->state = AWAITED;
+            p->payload.neg = callback; // Store value in payload
+            break;
+        case RESOLVED:
+            puts("Awaiting resolved promise...");
+            struct Pos value = p->payload.pos; // Extract neg payload as argument
+            run_Pos(callback, value); // Call the callback
+            break;
+        case AWAITED: {
+            fprintf(stderr, "ERROR: Promise already awaited\n");
+            exit(1);
+        }
+    }
+    // do we need to erase promise now? Is it shared before?
+    erasePositive(promise);
+}
+
+
+struct Pos makePromise() {
+    Promise* promise = (Promise*)malloc(sizeof(Promise));
+
+    promise->rc = 0;
+    promise->eraser = (void*)erasePromise;
+    promise->state = UNRESOLVED;
+    promise->payload.pos = Unit;
+
+    return (struct Pos) { .tag = 0, .obj = promise, };
+}
+
+
 
 // Lib UV Bindings
 // ---------------
@@ -48,12 +140,6 @@ void c_io_println_String(String text) {
 // TODO
 // - Error reporting
 // - pooling of request objects (benchmark first!)
-
-// Defined in rts.ll
-
-extern void run(struct Neg);
-extern void run_i64(struct Neg, int64_t);
-extern struct Neg* allocNeg(struct Neg);
 
 
 // ; Timers

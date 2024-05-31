@@ -30,4 +30,15 @@ static const struct Pos BooleanTrue = (struct Pos) { .tag = 1, .obj = NULL, };
 typedef struct Buffer String;
 
 
+// Defined in rts.ll
+
+extern void run(struct Neg);
+extern void run_i64(struct Neg, int64_t);
+extern void run_Pos(struct Neg, struct Pos);
+extern struct Neg* allocNeg(struct Neg);
+
+// Reference counting primitives defined in LLVM
+extern void eraseNegative(struct Neg);
+extern void erasePositive(struct Pos);
+
 #endif
