@@ -25,6 +25,10 @@ declare %Pos @c_buffer_show_Double(%Pos)
 declare %Int @c_buffer_index(%Pos, i64)
 declare %Int @c_buffer_character_at(%Pos, i64)
 
+declare %Pos @c_ref_fresh(%Pos)
+declare %Pos @c_ref_get(%Pos)
+declare %Pos @c_ref_set(%Pos, %Pos)
+
 declare %Pos @c_array_new(%Int)
 declare %Int @c_array_size(%Pos)
 declare %Pos @c_array_get(%Pos, %Int)

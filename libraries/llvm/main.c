@@ -14,6 +14,7 @@
 #include "buffer.c"
 #include "io.c"
 #include "hole.c"
+#include "ref.c"
 #include "array.c"
 
 
