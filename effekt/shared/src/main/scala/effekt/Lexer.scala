@@ -175,6 +175,8 @@ object Lexer {
  * @param source A string of a Effekt program to be lexed.
  */
 class Lexer(source: String) {
+  import Lexer.*
+
   /** The absolute starting index in the source string of the currently scanned token */
   var start: Int = 0
   /** The absolute index of the lexer's reading 'head' in the source string. Example
@@ -185,6 +187,8 @@ class Lexer(source: String) {
   var current: Int = 0
   /** The sequence of tokens the source strings contains. Returned as the result by [[Lexer.run()]] */
   val tokens: mutable.ListBuffer[Token] = mutable.ListBuffer.empty
+  // For future improvement, this is probably more performant than using substring on the source
+  val currLexeme: mutable.StringBuilder = mutable.StringBuilder()
   /** A peekable iterator of the source string. This is used instead of directly indexing the source string. */
   val chars: BufferedIterator[Char] = source.iterator.buffered
 
@@ -193,7 +197,7 @@ class Lexer(source: String) {
   //lazy val nameRest: Regex = """[a-zA-Z0-9_!?$]""".r
   //lazy val nameBoundary: Regex = """(?!%s)""".format(nameRest).r
   //lazy val name: Regex = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
-  //val whitespace = Set(' ', '\t', '\r')
+  val whitespaces = Set(' ', '\t', '\r', '\n')
   val nameFirst = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ List('_').iterator).toSet
   val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
 
@@ -417,7 +421,7 @@ class Lexer(source: String) {
     while (!closed) {
       consume() match {
         // end comment on */
-        case Some('*') if nextMatches("/") => closed = true
+        case Some('*') if nextMatches('/') => closed = true
         case Some(_) => ()
         // reached EOF without encountering */
         case None => return err(LexerError.UnterminatedComment)
@@ -443,6 +447,7 @@ class Lexer(source: String) {
     TokenKind.Comment(comment)
   }
 
+  @tailrec
   final def matchWhitespaces(): Unit = {
       peek() match {
         case Some(' ') | Some('\t') => {
@@ -475,39 +480,39 @@ class Lexer(source: String) {
     val c = maybeChar.get
     c match {
       // --- symbols & pre- and infix operations ---
-      case '=' if nextMatches(">") => `=>`
-      case '=' if nextMatches("=") => `===`
+      case '=' if nextMatches('>') => `=>`
+      case '=' if nextMatches('=') => `===`
       case '=' => `=`
-      case ':' if nextMatches(":") => `::`
+      case ':' if nextMatches(':') => `::`
       case ':' => `:`
       case ';' => `;`
       case '@' => `@`
-      case '<' if nextMatches("{") => `<{`
+      case '<' if nextMatches('{') => `<{`
+      case '<' if nextMatches('>') => `<>`
+      case '<' if nextMatches('=') => `<=`
+      case '<' => `<`
+      case '>' if nextMatches('=') => `>=`
+      case '>' => `>`
       case '{' => `{`
-      case '}' if nextMatches(">") => `}>`
+      case '}' if nextMatches('>') => `}>`
       case '}' => `}`
       case '(' => `(`
       case ')' => `)`
       case '[' => `[`
       case ']' => `]`
-      case '<' if nextMatches(">") => `<>`
-      case '<' if nextMatches("=") => `<=`
-      case '<' => `<`
-      case '>' if nextMatches("=") => `>=`
-      case '>' => `>`
       case ',' => `,`
       case '.' => `.`
-      case '/' if nextMatches("*") => matchMultilineComment()
-      case '/' if nextMatches("/")  => matchComment()
+      case '/' if nextMatches('*') => matchMultilineComment()
+      case '/' if nextMatches('/')  => matchComment()
       case '/' => `/`
-      case '!' if nextMatches("=") => TokenKind.`!==`
+      case '!' if nextMatches('=') => `!==`
       case '!' => `!`
-      case '|' if nextMatches("|") => `||`
+      case '|' if nextMatches('|') => `||`
       case '|' => `|`
-      case '&' if nextMatches("&") => `&&`
+      case '&' if nextMatches('&') => `&&`
       case '&' => `&`
       case '*' => `*`
-      case '+' if nextMatches("+") => `++`
+      case '+' if nextMatches('+') => `++`
       case '+' => `+`
       case '-' => `-`
       // --- literals ---
@@ -520,7 +525,7 @@ class Lexer(source: String) {
         consumeWhile { c => nameRest.contains(c) }
         val s = slice()
         // check if the slice matches any know keyword, otherwise it is necessarily an identifier
-        Lexer.keywords.getOrElse(s, TokenKind.Ident(s))
+        keywords.getOrElse(s, TokenKind.Ident(s))
       }
       case c => TokenKind.Error(LexerError.InvalidKeywordIdent(c.toString))
     }
