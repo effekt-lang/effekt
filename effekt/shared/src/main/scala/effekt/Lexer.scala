@@ -39,6 +39,8 @@ enum TokenKind {
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
   case TemplateStr(ts: List[Token])
+  case StrBegin
+  case StrEnd
   case Char(c: Char)
   // identifiers
   case Ident(id: String)
@@ -168,6 +170,11 @@ object Lexer {
     "namespace" -> `namespace`,
     "pure" -> `pure`
   )
+
+  enum Mode {
+    case Normal
+    case Interpolated
+  }
 }
 
 /**
@@ -238,6 +245,11 @@ class Lexer(source: String) {
 
   def peekMatches(pred: Char => Boolean): Boolean = peek().exists(pred)
 
+  def peekN(lookahead: Int): Option[Char] = {
+    if (current - 1 + lookahead < source.length) Some(source.charAt(current - 1 + lookahead))
+    else None
+  }
+
   /** Convenience function for creating a token.
    * Assumed Invariant: When making a token, the lexer's head [[current]] is pointing not at the token's
    * last position but at the next one.
@@ -271,6 +283,13 @@ class Lexer(source: String) {
   /** Like [[Lexer.matches]] but starts matching at the lexer's current head [[current]]. */
   def nextMatches(expected: String): Boolean = matches(expected, current)
 
+  def nextMatches(expected: Char): Boolean =
+    peek().exists { c =>
+      val eq = c == expected
+      if (eq) consume()
+      eq
+    }
+
   def matchesRegex(r: Regex): Boolean = {
     val rest = source.substring(start)
     val candidate = rest.takeWhile { c => !whitespace.matches(c.toString) }
@@ -285,7 +304,11 @@ class Lexer(source: String) {
     var err: Option[LexerError] = None
     var eof = false
     while (!eof && err.isEmpty) {
-      val kind = nextToken()
+      val kind =
+        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.pop() == `${{`) {
+          val delim = delimiters.pop().asInstanceOf[StrDelim]
+          matchString(delim, true)
+        } else nextToken()
       kind match {
         case TokenKind.EOF =>
           eof = true
@@ -320,99 +343,77 @@ class Lexer(source: String) {
     }
   }
 
+  val delimiters = mutable.Stack[Delimiter]()
+  sealed trait Delimiter
+  sealed trait InterpolateDelim extends Delimiter
+  case object `${{` extends InterpolateDelim
+  case object `{{` extends InterpolateDelim
+  sealed trait StrDelim extends Delimiter {
+    def offset: Int =
+      this match {
+        case `"` => 1
+        case `"""` => 3
+      }
+
+    override def toString: String =
+      this match {
+        case `"` => "\""
+        case `"""` => "\"\"\""
+      }
+
+    def isMultiline: Boolean =
+      this match {
+        case `"` => false
+        case `"""` => true
+      }
+  }
+  case object `"` extends StrDelim
+  case object `"""` extends StrDelim
+
   /** Matches a string literal -- both single- and multi-line strings. Strings may contain arbitrary escaped
    * characters, these are not validated. Strings may also contain quotes, i.e., "f = ${x + 1}" that include arbitrary
    * expressions.
    */
-  def matchString(): TokenKind = {
+  def matchString(delim: StrDelim, continued: Boolean = false): TokenKind = {
+    if (nextMatches(delim.toString)) return TokenKind.Str("", delim.isMultiline)
+    val offset = delim.offset
+    val st = if (continued) start else start + offset
     var endString = false
-    val stringStart = start
-    var multiline = false
-    var quoted = false
-    val stringTokens = mutable.ListBuffer[Token]()
-    // each opening brace gets pushed and each closing brace pops the matching brace from the stack
-    // to determine whether the quote has ended, while allowing for nested braces.
-    val delimiters = mutable.Stack[Delimiter]()
-    enum Delimiter {
-      case `${`
-      case `{{`
-    }
-    import Delimiter.*
-
-    if (nextMatches("\"\"")) multiline = true
-    if (multiline && nextMatches("\"\"\"") || !multiline && nextMatches("\"")) return TokenKind.Str("", multiline)
-
-    def sliceStr(start: Int, end: Int): TokenKind.Str = TokenKind.Str(slice(start, end), multiline)
-
-    val delimOffset =
-      if (multiline) 3
-      else 1
-    start += delimOffset
-
+    delimiters.push(delim)
     while (!endString) {
-      consume() match {
-        // escaped character, allow arbitrary next character
-        case Some('\\') => consume()
-        // check for termination
-        case Some('"') if !multiline => endString = true
-        case Some('"') if multiline && nextMatches("\"\"") => endString = true
-        // quoted string
-        case Some('$') if nextMatches("{") => {
-          quoted = true
-          // string before the quote
-          if (current - 2 > start)
-            stringTokens += Token(start, current - 3, sliceStr(start, current - 2))
-          // set start to $
-          start = current - 2
-          stringTokens += makeToken(TokenKind.`${`)
-
-          delimiters.push(`${`)
-          var endQuote = false
-          while (!endQuote) {
-            val token = makeToken(nextToken())
-            token.kind match {
-              case TokenKind.`}` => {
-                delimiters.pop() match {
-                  // check if quote has been terminated
-                  case `${` => {
-                    endQuote = true
-                    stringTokens += Token(token.start, token.end, TokenKind.`}$`)
-                  }
-                  case `{{` =>
-                    stringTokens += token
-                }
+      peek() match {
+        case Some('\"') => {
+          consume()
+          delim match {
+            case `"""` => {
+              if (peekN(1).contains('\"') && peekN(2).contains('\"')) {
+                consume(); consume()
+                delimiters.pop()
+                endString = true
               }
-              // additional nested level of braces
-              case TokenKind.`{` => {
-                delimiters.push(`{{`)
-                stringTokens += token
-              }
-              // reached EOF without closing quote
-              case TokenKind.EOF => return err(LexerError.UnterminatedQuote)
-              case _ => stringTokens += token
+            }
+            case `"` => {
+              delimiters.pop()
+              endString = true
             }
           }
-          start = current
         }
-        // anything that is not escaped or terminates the string is allowed
-        case Some(_) => ()
-        // reached EOF without encountering "
-        case None => return err(LexerError.UnterminatedString)
+        case Some('\\') => {
+          consume()
+          consume()
+        }
+        case Some('$') if peekN(2).contains('{') => {
+          val s = slice(st, current)
+          return TokenKind.Str(s, delim.isMultiline)
+        }
+        case None =>
+          return err(LexerError.UnterminatedString)
+        case _ =>
+          consume()
       }
     }
-    // add remaining string after potential quote. Check if non-empty first.
-    if (current - delimOffset > start) {
-      stringTokens += Token(
-        start,
-        current - delimOffset - 1,
-        // exclude " symbols
-        sliceStr(start, current - delimOffset)
-      )
-    }
-    // reset starting location to original position of opening "
-    start = stringStart
-    if (quoted) TokenKind.TemplateStr(stringTokens.toList)
-    else stringTokens.head.kind
+    val s = slice(st, current - offset)
+    TokenKind.Str(s, delim.isMultiline)
   }
 
   /** Matches a mult-line comment delimited by /* and */. */
@@ -493,7 +494,10 @@ class Lexer(source: String) {
       case '<' => `<`
       case '>' if nextMatches('=') => `>=`
       case '>' => `>`
-      case '{' => `{`
+      case '{' => {
+        delimiters.push(`{{`)
+        `{`
+      }
       case '}' if nextMatches('>') => `}>`
       case '}' => `}`
       case '(' => `(`
@@ -515,8 +519,14 @@ class Lexer(source: String) {
       case '+' if nextMatches('+') => `++`
       case '+' => `+`
       case '-' => `-`
+      case '$' if nextMatches('{') => {
+        delimiters.push(`${{`)
+        TokenKind.`${`
+      }
+      case '$' => TokenKind.`${`
       // --- literals ---
-      case '\"' => matchString()
+      case '\"' if nextMatches("\"\"") => matchString(`"""`)
+      case '\"' => matchString(`"`)
       case c if c.isDigit => matchNumber()
       // --- keywords & identifiers ---
       case c if nameFirst.contains(c) => {
