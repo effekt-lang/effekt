@@ -1,6 +1,14 @@
 #ifndef EFFEKT_REF_C
 #define EFFEKT_REF_C
 
+/** We represent references like positive types.
+ *  The tag is 0 and the obj points to memory with the following layout:
+ *
+ *   +--[ Header ]--+------------+
+ *   | Rc  | Eraser | Field      |
+ *   +--------------+------------+
+ */
+
 void c_ref_erase_field(void *envPtr) {
   struct Pos *fieldPtr = envPtr;
   struct Pos element = *fieldPtr;

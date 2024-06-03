@@ -14,7 +14,7 @@ extern type Array[T]
 /**
  * Violated Postcondition: Fields contain values
  */
-extern pure def unsafeNew[T](size: Int): Array[T] =
+extern pure def unsafeFresh[T](size: Int): Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -44,7 +44,7 @@ extern io def unsafeGet[T](arr: Array[T], index: Int): T =
   """
 
 extern js """
-function setArray(arr, index, value) {
+function array$set(arr, index, value) {
   arr[index] = value;
   return $effekt.unit
 }
@@ -54,7 +54,7 @@ function setArray(arr, index, value) {
  * Unchecked Precondition: Index in bounds
  */
 extern io def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
-  js "setArray(${arr}, ${index}, ${value})"
+  js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   ml "Array.update (${arr}, ${index}, ${value})"
   llvm """
@@ -81,7 +81,7 @@ def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
  * and returns a value that will be on that position in the resulting array
  */
 def build[T](size: Int) { index: Int => T }: Array[T] = {
-  val arr = unsafeNew[T](size);
+  val arr = unsafeFresh[T](size);
   each(0, size) { i =>
     unsafeSet(arr, i, index(i))
   };
@@ -101,7 +101,7 @@ def fill[T](size: Int, default: T): Array[T] =
  */
 def fromList[T](list: List[T]): Array[T] = {
   val listSize = list.size();
-  val arr = unsafeNew(listSize);
+  val arr = unsafeFresh(listSize);
 
   foreachIndex(list) { (i, head) =>
     unsafeSet(arr, i, head)

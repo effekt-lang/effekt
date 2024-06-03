@@ -1,6 +1,14 @@
 #ifndef EFFEKT_ARRAY_C
 #define EFFEKT_ARRAY_C
 
+/** We represent arrays like positive types.
+ *  The tag is 0 and the obj points to memory with the following layout:
+ *
+ *   +--[ Header ]--+------+------------+
+ *   | Rc  | Eraser | Size | Fields ... |
+ *   +--------------+------+------------+
+ */
+
 void c_array_erase_fields(void *envPtr) {
   uint64_t *sizePtr = envPtr;
   struct Pos *dataPtr = envPtr + sizeof(uint64_t);
