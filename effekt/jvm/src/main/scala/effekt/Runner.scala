@@ -152,7 +152,6 @@ object JSRunner extends Runner[String] {
       case OS.Windows =>
         val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
         val exePath = jsFilePath.stripSuffix(s".$extension")
-        val batScript = s"node $jsMainFilePath"
         IO.createFile(jsMainFilePath, jsScript)
         createScript(exePath, "node", jsMainFilePath)
     }
