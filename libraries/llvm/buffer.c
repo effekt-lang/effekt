@@ -5,6 +5,7 @@
 
 #include "stdlib.h"
 #include <stdint.h>
+#include <string.h> // For memcopy
 
 // TODO It may be performance-advantageous to implement this C file's semantics
 // in LLVM, since the linker cannot realistically be asked to satisfactorily
@@ -35,16 +36,14 @@ uint8_t *c_buffer_bytes(const struct Buffer buffer) {
 }
 
 struct Buffer c_buffer_construct(const uint64_t n, const uint8_t *data) {
-    uint8_t *obj = malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
-    ASSERT_NON_NULL(obj)
+    uint8_t *obj = (uint8_t *)malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
+    ASSERT_NON_NULL(obj);
 
-    // reference count (a reference count of zero means one sole owner)
-    for (uint64_t j = 0; j < BUFFER_HEADER_WIDTH; ++j)
-        obj[j] = 0;
+    // Initialize reference count (a reference count of zero means one sole owner)
+    memset(obj, 0, BUFFER_HEADER_WIDTH);
 
-    // data
-    for (uint64_t j = 0; j < n; ++j)
-        obj[BUFFER_HEADER_WIDTH + j] = data[j];
+    // Copy data
+    memcpy(obj + BUFFER_HEADER_WIDTH, data, n);
 
     return (struct Buffer) {
         .offset = 0,
@@ -115,8 +114,22 @@ struct Buffer c_buffer_slice(struct Buffer buffer, const uint64_t offset, const 
     return buffer;
 }
 
-struct Buffer c_buffer_copy(const struct Buffer buffer) {
+struct Buffer c_buffer_clone(const struct Buffer buffer) {
     return c_buffer_construct(c_buffer_length(buffer), c_buffer_bytes(buffer));
+}
+
+void c_buffer_copy(const struct Buffer from, struct Buffer to, uint64_t startFrom, uint64_t startTo, uint64_t length) {
+    // Check bounds
+    if (startFrom < 0 || startTo < 0 || (startFrom + length > c_buffer_length(from)) || (startTo + length > c_buffer_length(to))) {
+        return;
+    }
+
+    // Get pointers to the source and destination slices
+    uint8_t *from_bytes = c_buffer_bytes(from) + startFrom;
+    uint8_t *to_bytes = c_buffer_bytes(to) + startTo;
+
+    // Copy bytes from `from` to `to`
+    memcpy(to_bytes, from_bytes, length);
 }
 
 

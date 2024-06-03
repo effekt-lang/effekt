@@ -18,8 +18,15 @@ extern io def empty(capacity: Int): Bytes =
 extern io def copy(b: Bytes): Bytes =
   js "bytes$copy$impl(${b})"
   llvm """
-    %copy = call %Pos @c_buffer_copy(%Pos %b)
+    %copy = call %Pos @c_buffer_clone(%Pos %b)
     ret %Pos %copy
+  """
+
+extern io def copy(from: Bytes, to: Bytes, startFrom: Int, startTo: Int, length: Int): Unit =
+  llvm """
+    call void @c_buffer_copy(%Pos %from, %Pos %to, i64 %startFrom, i64 %startTo, i64 %length)
+    ; return Unit
+    ret %Pos zeroinitializer
   """
 
 extern pure def size(b: Bytes): Int =
@@ -67,7 +74,7 @@ extern pure def show(b: Bytes): String =
   js "(new TextDecoder('utf-8').decode(${b}))"
   // assuming the buffer is already in UTF-8
   llvm """
-    %copy = call %Pos @c_buffer_copy(%Pos %b)
+    %copy = call %Pos @c_buffer_clone(%Pos %b)
     ret %Pos %copy
   """
 
