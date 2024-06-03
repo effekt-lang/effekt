@@ -9,6 +9,7 @@ import scala.util.matching.Regex
 /** An error encountered during lexing a source string. */
 enum LexerError {
   case MalformedFloat
+  case MalformedStringInterpolation
   case InvalidKeywordIdent(s: String)
   case UnterminatedString
   case UnterminatedComment
@@ -38,13 +39,9 @@ enum TokenKind {
   case Integer(n: Int)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
-  case TemplateStr(ts: List[Token])
-  case StrBegin
-  case StrEnd
   case Char(c: Char)
   // identifiers
   case Ident(id: String)
-  case IdentQualified(id: String)
   // misc
   case Comment(msg: String)
   case Newline
@@ -52,6 +49,7 @@ enum TokenKind {
   case EOF
   case Error(err: LexerError)
   // symbols
+  case `__`
   case `=`
   case `===`
   case `!==`
@@ -306,6 +304,7 @@ class Lexer(source: String) {
     while (!eof && err.isEmpty) {
       val kind =
         if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.pop() == `${{`) {
+          // TODO: catch error
           val delim = delimiters.pop().asInstanceOf[StrDelim]
           matchString(delim, true)
         } else nextToken()
@@ -398,6 +397,8 @@ class Lexer(source: String) {
             }
           }
         }
+        case Some('\n') if delim == `"` =>
+          return err(LexerError.Custom("linebreaks are not allowed in single-line strings"))
         case Some('\\') => {
           consume()
           consume()
@@ -481,6 +482,7 @@ class Lexer(source: String) {
     val c = maybeChar.get
     c match {
       // --- symbols & pre- and infix operations ---
+      case '_' if peek().exists(!nameRest.contains(_)) => `__`
       case '=' if nextMatches('>') => `=>`
       case '=' if nextMatches('=') => `===`
       case '=' => `=`
@@ -507,7 +509,7 @@ class Lexer(source: String) {
       case ',' => `,`
       case '.' => `.`
       case '/' if nextMatches('*') => matchMultilineComment()
-      case '/' if nextMatches('/')  => matchComment()
+      case '/' if nextMatches('/') => matchComment()
       case '/' => `/`
       case '!' if nextMatches('=') => `!==`
       case '!' => `!`
@@ -518,6 +520,7 @@ class Lexer(source: String) {
       case '*' => `*`
       case '+' if nextMatches('+') => `++`
       case '+' => `+`
+      case '-' if peek().exists(_.isDigit) => matchNumber()
       case '-' => `-`
       case '$' if nextMatches('{') => {
         delimiters.push(`${{`)
