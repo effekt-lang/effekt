@@ -235,7 +235,9 @@ void on_open(uv_fs_t* req) {
     run_i64(callback, fd);
 }
 
-int64_t openFile(struct Buffer path, struct Neg callback) {
+int64_t openFile(struct Buffer path, int64_t flags, struct Neg callback) {
+    int mode = 0666;  // rw-rw-rw- permissions
+
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
     // Convert the Effekt String to a 0-terminated string
@@ -251,7 +253,7 @@ int64_t openFile(struct Buffer path, struct Neg callback) {
     // Get the default loop and call fs_open
     uv_loop_t* loop = uv_default_loop();
 
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, 0, 0, on_open);
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, (int32_t)flags, (int32_t)mode, on_open);
     int64_t result_i64 = (int64_t)result_i32;
 
     // We can free the string, since libuv copies it into req

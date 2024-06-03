@@ -8,8 +8,10 @@ declare void @uv_loop_close(ptr)
 
 ; Helpers defined in C
 declare void @timer(i64, %Neg)
-declare i64 @openFile(%Pos, %Neg)
+declare i64 @openFile(%Pos, i64, %Neg)
+declare void @closeFile(i64)
 declare i64 @readFile(i64, %Pos, i64, %Neg)
+declare i64 @writeFile(i64, %Pos, i64, %Neg)
 
 declare %Pos @makePromise()
 declare void @resolvePromise(%Pos, %Pos)
