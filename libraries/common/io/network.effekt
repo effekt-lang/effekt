@@ -37,7 +37,7 @@ interface Socket {
   def end(): Unit
 }
 
-def server(host: String, port: Int, handler: () => Unit / { Socket, IO } at {io, global}): Unit / { Process, AsyncIO } = {
+def server(host: String, port: Int, handler: () => Unit / { Socket, IO } at {io, global}): Unit / IO = {
   val server = js::server();
   def connections: Queue[js::JSSocket] = emptyQueue()
   js::listen(server, port, host, box { socket =>
@@ -48,7 +48,8 @@ def server(host: String, port: Int, handler: () => Unit / { Socket, IO } at {io,
   loop {
     connections.popBack match {
       case Some(socket) =>
-        do fork(box {
+        println("New connection")
+        do promise(box {
           try { handler() } with Socket {
             def send(message) = {
               do performIO[Unit](box { k =>
@@ -68,9 +69,10 @@ def server(host: String, port: Int, handler: () => Unit / { Socket, IO } at {io,
               resume(())
             }
           }
-        })
+        });
+        ()
       case None() =>
-        do yield()
+       do yield()
     }
   }
 }
@@ -80,9 +82,9 @@ namespace examples {
   def helloWorldApp(): Unit / Socket = {
     val request = do receive();
 
-    println("Received a request: " ++ request.toString)
+    println("Received a request: " ++ request.show)
 
-    if (request.toString.startsWith("GET /")) {
+    if (request.show.startsWith("GET /")) {
       do send(toBytes("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!"))
     } else {
       do send("HTTP/1.1 400 Bad Request\r\n\r\n".toBytes)
