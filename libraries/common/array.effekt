@@ -37,7 +37,7 @@ extern pure def size[T](arr: Array[T]): Int =
 extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
-  ml "SOME (Array.sub (${arr}, ${index}))"
+  ml "Array.sub (${arr}, ${index})"
   llvm """
     %z = call %Pos @c_array_get(%Pos %arr, %Int %index)
     ret %Pos %z
@@ -70,13 +70,15 @@ extern global def copy[T](arr: Array[T]): Array[T] =
 /**
  * Creates a new Array of size `size` filled with the value `init`
  */
-def fresh[T](size: Int, init: T): Array[T] = {
-  val arr = unsafeFresh[T](size);
-  each(0, size) { i =>
-    unsafeSet(arr, i, init)
-  };
-  arr
-}
+extern global def fresh[T](size: Int, init: T): Array[T] =
+ ml "Array.array (${size}, ${init})"
+ default {
+    val arr = unsafeFresh[T](size);
+    each(0, size) { i =>
+      unsafeSet(arr, i, init)
+    };
+    arr
+  }
 
 def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
   if (index >= 0 && index < arr.size) arr.unsafeGet(index)
