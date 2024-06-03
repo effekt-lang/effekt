@@ -470,25 +470,20 @@ void on_open(uv_fs_t* req) {
 
     // Load the callbacks
     Callbacks* callbacks = (Callbacks*)req->data;
+    struct Neg success = callbacks->on_success;
+    struct Neg failure = callbacks->on_failure;
 
     // Free request structure
     uv_fs_req_cleanup(req);
     free(req);
+    free(callbacks);
 
     // Check if file descriptor is valid
     if (fd >= 0) {
-        // Memory management
-        eraseNegative(callbacks->on_failure);
-        struct Neg success = callbacks->on_success;
-        free(callbacks);
-        // Call success callback
+        eraseNegative(failure);
         run_Pos(success, filedescriptor_to_pos(fd));
     } else {
-        // Memory management
-        eraseNegative(callbacks->on_success);
-        struct Neg failure = callbacks->on_failure;
-        free(callbacks);
-        // Call failure callback
+        eraseNegative(success);
         run_i64(failure, uv_error_to_errno(fd));
     }
 }
@@ -535,19 +530,28 @@ void on_read(uv_fs_t* req) {
     // Extract the file descriptor from the uv_fs_t structure
     int64_t result = req->result;
 
-    // Load the callback
-    struct Neg callback = *(struct Neg*)req->data;
+    // Load the callbacks
+    Callbacks* callbacks = (Callbacks*)req->data;
+    struct Neg success = callbacks->on_success;
+    struct Neg failure = callbacks->on_failure;
 
-    // Free payload and request structure
-    free(req->data);
+    // Free request structure
     uv_fs_req_cleanup(req);
     free(req);
+    free(callbacks);
 
-    // Call callback
-    run_i64(callback, result);
+    if (result >= 0) {
+        // Memory management
+        eraseNegative(callbacks->on_failure);
+        run_i64(success, result);
+    } else {
+        // Memory management
+        eraseNegative(callbacks->on_success);
+        run_i64(failure, uv_error_to_errno(result));
+    }
 }
 
-void readFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
+void readFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg success, struct Neg failure) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -558,8 +562,13 @@ void readFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg ca
 
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
-    // Store the allocated callback in the req's data field
-    req->data = allocNeg(callback);
+    // Allocate Callbacks on the heap
+    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
+    callbacks->on_success = success;
+    callbacks->on_failure = failure;
+
+    // Store the callbacks in the req's data field
+    req->data = callbacks;
 
     // Argument `1` here means: we pass exactly one buffer
     uv_fs_read(loop, req, pos_to_filedescriptor(fd), &buf, 1, offset, on_read);
@@ -573,19 +582,28 @@ void on_write(uv_fs_t* req) {
     // Extract the result from the uv_fs_t structure
     int64_t result = req->result;
 
-    // Load the callback
-    struct Neg callback = *(struct Neg*)req->data;
+    // Load the callbacks
+    Callbacks* callbacks = (Callbacks*)req->data;
+    struct Neg success = callbacks->on_success;
+    struct Neg failure = callbacks->on_failure;
 
-    // Free payload and request structure
-    free(req->data);
+    // Free request structure
     uv_fs_req_cleanup(req);
     free(req);
+    free(callbacks);
 
-    // Call callback
-    run_i64(callback, result);
+    if (result >= 0) {
+        // Memory management
+        eraseNegative(callbacks->on_failure);
+        run_i64(success, result);
+    } else {
+        // Memory management
+        eraseNegative(callbacks->on_success);
+        run_i64(failure, uv_error_to_errno(result));
+    }
 }
 
-void writeFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
+void writeFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg success, struct Neg failure) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -596,8 +614,13 @@ void writeFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg c
 
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
-    // Store the allocated callback in the req's data field
-    req->data = allocNeg(callback);
+    // Allocate Callbacks on the heap
+    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
+    callbacks->on_success = success;
+    callbacks->on_failure = failure;
+
+    // Store the callbacks in the req's data field
+    req->data = callbacks;
 
     // Argument `1` here means: we pass exactly one buffer
     uv_fs_write(loop, req, pos_to_filedescriptor(fd), &buf, 1, offset, on_write);

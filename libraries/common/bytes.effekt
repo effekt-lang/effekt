@@ -69,6 +69,10 @@ def truncated(b: Bytes, n: Int): Bytes =
 
 extern pure def toBytes(s: String): Bytes =
   js "(new TextEncoder().encode(${s}))"
+  llvm """
+    %copy = call %Pos @c_buffer_clone(%Pos %s)
+    ret %Pos %copy
+  """
 
 extern pure def show(b: Bytes): String =
   js "(new TextDecoder('utf-8').decode(${b}))"
