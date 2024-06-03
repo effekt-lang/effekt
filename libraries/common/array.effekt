@@ -14,7 +14,7 @@ extern type Array[T]
 /**
  * Violated Postcondition: Fields contain values
  */
-extern pure def unsafeFresh[T](size: Int): Array[T] =
+extern global def unsafeFresh[T](size: Int): Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -34,7 +34,7 @@ extern pure def size[T](arr: Array[T]): Int =
 /**
  * Unchecked Precondition: Index in bounds
  */
-extern io def unsafeGet[T](arr: Array[T], index: Int): T =
+extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
   ml "SOME (Array.sub (${arr}, ${index}))"
@@ -53,7 +53,7 @@ function array$set(arr, index, value) {
 /**
  * Unchecked Precondition: Index in bounds
  */
-extern io def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
+extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   ml "Array.update (${arr}, ${index}, ${value})"
@@ -62,7 +62,7 @@ extern io def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
     ret %Pos %z
   """
 
-extern pure def copy[T](arr: Array[T]): Array[T] =
+extern global def copy[T](arr: Array[T]): Array[T] =
   js "[...${arr}]"
 
 // Derived operations:
