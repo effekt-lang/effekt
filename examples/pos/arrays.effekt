@@ -8,7 +8,7 @@ def main() = {
     println(arr.unsafeGet(0));
     println(arr.unsafeGet(2));
 
-    val arrWithVals: Array[String] = array::fill(4, "Hello World");
+    val arrWithVals: Array[String] = array::fresh(4, "Hello World");
     println(arrWithVals)
 
     val arrByF: Array[Int] = array::build(5){ i => i };

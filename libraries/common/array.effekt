@@ -62,11 +62,21 @@ extern io def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
     ret %Pos %z
   """
 
-
 extern pure def copy[T](arr: Array[T]): Array[T] =
   js "[...${arr}]"
 
 // Derived operations:
+
+/**
+ * Creates a new Array of size `size` filled with the value `init`
+ */
+def fresh[T](size: Int, init: T): Array[T] = {
+  val arr = unsafeFresh[T](size);
+  each(0, size) { i =>
+    unsafeSet(arr, i, init)
+  };
+  arr
+}
 
 def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
   if (index >= 0 && index < arr.size) arr.unsafeGet(index)
@@ -89,12 +99,6 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
 }
 
 // Utility functions:
-
-/**
- * Creates a new Array of size `size` filled with the value `default`
- */
-def fill[T](size: Int, default: T): Array[T] =
-  build(size) { _ => default }
 
 /**
  * Converts a List `list` to an Array

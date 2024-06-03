@@ -12,6 +12,14 @@ function set$impl(ref, value) {
  */
 extern type Ref[T]
 
+extern global def unsafeFresh[T](): Ref[T] =
+  js "{ value: undefined }"
+  chez "(box #f)"
+  llvm """
+    %z = call %Pos @c_ref_fresh(%Pos zeroinitializer)
+    ret %Pos %z
+  """
+
 extern global def fresh[T](init: T): Ref[T] =
   js "{ value: ${init} }"
   chez "(box ${init})"
