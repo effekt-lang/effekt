@@ -29,13 +29,15 @@ extern pure def size(b: Bytes): Int =
     ret i64 %size
   """
 
-extern io def get(b: Bytes, index: Int): Byte =
+extern io def read(b: Bytes, index: Int): Byte =
+  js "(${b})[${index}]"
   llvm """
     %byte = call i8 @c_buffer_index(%Pos %b, i64 %index)
     ret i8 %byte
   """
 
 extern io def write(b: Bytes, index: Int, value: Byte): Unit =
+  js "bytes$set(${b}, ${index}, ${value})"
   llvm """
     call void @c_buffer_set(%Pos %b, i64 %index, i8 %value)
     ; return Unit
@@ -71,6 +73,11 @@ extern pure def show(b: Bytes): String =
 
 
 extern js """
+  function bytes$set(bytes, index, value) {
+    bytes[index] = value;
+    return $effekt.unit;
+  }
+
   function bytes$copy$impl(original) {
     let copy = new Uint8Array(original.length);
     copy.set(original);
