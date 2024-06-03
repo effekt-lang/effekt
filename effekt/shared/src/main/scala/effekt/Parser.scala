@@ -28,17 +28,19 @@ object Parser extends Phase[Source, Parsed] {
    */
   def parser(implicit C: Context) = new EffektParsers(C.positions)
 
-  def run(source: Source)(implicit C: Context) = source match {
+  def run(source: Source)(implicit C: Context): Option[PhaseResult.Parsed] = source match {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
       //println(s"parsing ${source.name}")
       Context.timed(phaseName, source.name) {
         val lexer = effekt.lexer.Lexer(source.content)
-        val (tokens, errs) = lexer.run()
+        val (tokens, err) = lexer.run()
+        if (err.isDefined) C.abort(err.get.toString)
         parser.parse(TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
-        //parser.parse(???)
       }
-  } map { tree => Parsed(source, tree) }
+  } map { tree =>
+    Parsed(source, tree)
+  }
 }
 
 /**
@@ -84,27 +86,6 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     val ids = path.split("::").toList
     IdRef(ids.init, ids.last)
   }
-
-
-  /*
-  lazy val nameFirst = """[a-zA-Z_]""".r
-  lazy val nameRest = """[a-zA-Z0-9_!?$]""".r
-  lazy val nameBoundary = """(?!%s)""".format(nameRest).r
-  lazy val name = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
-  lazy val moduleName = "%s([/]%s)*%s".format(name, name, nameBoundary).r
-  lazy val qualifiedName = "%s(::%s)*%s".format(name, name, nameBoundary).r
-
-  lazy val ident =
-    (not(anyKeyword) ~> name
-      | failure("Expected an identifier")
-      )
-
-  lazy val identRef =
-    (not(anyKeyword) ~> qualifiedName
-      | failure("Expected an identifier")
-      )
-   */
-
 
   /**
    * Main entry point
@@ -217,10 +198,11 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   lazy val externBody: P[Template[Term]] =
-    ( accept("multiline string") { case Str(s, true) => Template(List(s), Nil) }
-    //| guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
+    ( accept("multi-line string") { case Str(s, true) => s } ^^ { s => Template(List(s), Nil) }
+    | templateString
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
     )
+
 
   lazy val externCapture: P[CaptureSet] =
     ( `pure` ^^^ CaptureSet(Nil)
@@ -231,7 +213,8 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
   lazy val externInclude: P[Def] =
     ( `extern` ~> `include` ~/> accept("single-line string") { case Str(s, false) => s } ^^ { s => ExternInclude(s, None) }
-    | `extern` ~> accept("multi-line string") { case Str(s, true) => s } ^^ { contents => ExternInclude("", Some(contents)) })
+    | `extern` ~> accept("multi-line string") { case Str(s, true) => s } ^^ { contents => ExternInclude("", Some(contents)) }
+    )
 
   /**
    * Parameters
@@ -529,13 +512,14 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     someSep(matchGuard, `and`)
 
   lazy val matchPattern: P[MatchPattern] =
-    //( "_" ^^^ IgnorePattern()
-    literals ^^ { l => LiteralPattern(l) }
+    ( `__` ^^^ IgnorePattern()
+    | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
     | TokenKind.`(` ~> matchPattern ~ (some(`,` ~> matchPattern) <~ `)`) ^^ { case f ~ r =>
         TagPattern(IdRef(List("effekt"), s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
+    )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 
@@ -682,7 +666,6 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
     def apply(in: In): ParseResult[In, Unit] = {
       var pos = in.offset
-      // TODO do not use substring -- use content.startWith(s, offset)
       val Token(_, _, kind) =
         if (in.first.isEmpty) {
           return Success((), in)
@@ -702,7 +685,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
           val previous = in.offset - 1
           // \n   while
           //  ^
-          if (in.get(previous).get.kind == Newline) {
+          if (in.get(previous).contains(Newline)) {
             Success((), in)
           } else {
             Failure(s"Expected ;", in)
@@ -710,6 +693,15 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
       }
     }
   }
+
+  lazy val templateString: Parser[Template[Term]] =
+    accept("string") { case Str(s, _) => s } ~ many((`${` ~> expr <~ `}`) ~ accept("string") { case Str(s, _) => s })  ^^ {
+      case prefix ~ suffix => {
+        Template(prefix :: suffix.collect { case _ ~ s => s }, suffix.collect { case e ~ _ => e })
+      }
+    }
+
+  def templateString[T](contents: Parser[T]): Parser[Template[T]] = ???
 
   /**
    * Parses the contents of a string and searches for unquotes ${ ... }
