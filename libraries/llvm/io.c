@@ -30,10 +30,10 @@ void c_io_println_String(String text) {
 
 typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
 
-typedef struct Callbacks {
-    struct Neg callback;
-    struct Callbacks* next;
-} Callbacks;
+typedef struct Listeners {
+    struct Neg listeners;
+    struct Listeners* next;
+} Listeners;
 
 typedef struct {
     uint64_t rc;
@@ -42,11 +42,11 @@ typedef struct {
     // state of {
     //   case UNRESOLVED => NULL
     //   case RESOLVED   => Pos (the result)
-    //   case AWAITED    => Nonempty list of callbacks
+    //   case AWAITED    => Nonempty list of listenerss
     // }
     union {
         struct Pos pos;
-        Callbacks* callbacks;
+        Listeners* listenerss;
     } payload;
 } Promise;
 
@@ -58,15 +58,15 @@ void erasePromise(struct Pos promise) {
             return;
         case AWAITED:
             {
-                Callbacks* current = p->payload.callbacks;
-                // Free all callbacks
+                Listeners* current = p->payload.listenerss;
+                // Free all listenerss
                 while (current != NULL) {
-                    Callbacks* k = current;
+                    Listeners* k = current;
                     current = current->next;
-                    eraseNegative(k->callback);
+                    eraseNegative(k->listeners);
                     free(k);
                 }
-                p->payload.callbacks = NULL;
+                p->payload.listenerss = NULL;
             }
             return;
         case RESOLVED:
@@ -87,15 +87,15 @@ void resolvePromise(struct Pos promise, struct Pos value) {
             fprintf(stderr, "ERROR: Promise already resolved\n");
             exit(1);
         case AWAITED: {
-            Callbacks* current = p->payload.callbacks;
+            Listeners* current = p->payload.listenerss;
             p->state = RESOLVED;
             p->payload.pos = value;
 
-             // Call each callback
+             // Call each listeners
             while (current != NULL) {
                 sharePositive(value);
-                run_Pos(current->callback, value);
-                Callbacks* temp = current;
+                run_Pos(current->listeners, value);
+                Listeners* temp = current;
                 current = current->next;
                 free(temp);
             }
@@ -106,29 +106,29 @@ void resolvePromise(struct Pos promise, struct Pos value) {
     erasePositive(promise);
 }
 
-void awaitPromise(struct Pos promise, struct Neg callback) {
+void awaitPromise(struct Pos promise, struct Neg listeners) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
         case UNRESOLVED:
             p->state = AWAITED;
-            p->payload.callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-            p->payload.callbacks->callback = callback;
-            p->payload.callbacks->next = NULL;
+            p->payload.listenerss = (Listeners*)malloc(sizeof(Listeners));
+            p->payload.listenerss->listeners = listeners;
+            p->payload.listenerss->next = NULL;
             break;
         case RESOLVED:
-            run_Pos(callback, p->payload.pos);
+            run_Pos(listeners, p->payload.pos);
             break;
         case AWAITED: {
-            Callbacks* new_node = (Callbacks*)malloc(sizeof(Callbacks));
-            new_node->callback = callback;
+            Listeners* new_node = (Listeners*)malloc(sizeof(Listeners));
+            new_node->listeners = listeners;
             new_node->next = NULL;
 
-            // We traverse the callbacks to attach this last .
+            // We traverse the listenerss to attach this last .
             // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
-            // But how many callbacks will there be?
+            // But how many listenerss will there be?
             // If really necessary, we can store a second pointer that points to the last one...
-            Callbacks* current = p->payload.callbacks;
+            Listeners* current = p->payload.listenerss;
             while (current->next != NULL) {
                 current = current->next;
             }
@@ -178,216 +178,6 @@ struct Pos makePromise() {
 // - Error reporting
 // - pooling of request objects (benchmark first!)
 
-
-// Timers
-// ------
-
-void on_timer(uv_timer_t* handle) {
-    // Load callback
-    struct Neg callback = *(struct Neg*)handle->data;
-
-    // Clean up
-    uv_timer_stop(handle);
-    free(handle->data);
-    free(handle);
-
-    // Finally call the callback
-    run(callback);
-}
-
-void timer(int64_t n, struct Neg callback) {
-
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    // Allocate memory for the timer handle
-    uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
-
-    // // Initialize the timer handle
-    uv_timer_init(loop, timer);
-
-    // Allocate memory for the callback (of type Neg)
-    struct Neg* payload = allocNeg(callback);
-
-    // Store the Neg pointer in the timer's data field
-    timer->data = (void*) payload;
-
-    // Start the timer to call the callback after n ms
-    uv_timer_start(timer, on_timer, n, 0);
-}
-
-
-// Opening a File
-// --------------
-
-int modeToFlags(const char* flags) {
-    if (strcmp(flags, "r") == 0) {
-        return UV_FS_O_RDONLY;
-    } else if (strcmp(flags, "r+") == 0) {
-        return UV_FS_O_RDWR;
-    } else if (strcmp(flags, "rs") == 0) {
-        return UV_FS_O_RDONLY | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "rs+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "w") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-    } else if (strcmp(flags, "wx") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "w+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-    } else if (strcmp(flags, "wx+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "a") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
-    } else if (strcmp(flags, "ax") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "a+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
-    } else if (strcmp(flags, "ax+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "as") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "as+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-    } else {
-        // Invalid flags string
-        return -1;
-    }
-}
-
-void on_open(uv_fs_t* req) {
-
-    // Extract the file descriptor from the uv_fs_t structure
-    int64_t fd = req->result;
-
-    // Load the callback
-    struct Neg callback = *(struct Neg*)req->data;
-
-    // Free payload and request structure
-    free(req->data);
-    uv_fs_req_cleanup(req);
-    free(req);
-
-    // Call callback
-    run_i64(callback, fd);
-}
-
-int64_t openFile(struct Buffer path, struct Buffer modeString, struct Neg callback) {
-    int permissions = 0666;  // rw-rw-rw- permissions
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Convert the Effekt String to a 0-terminated string
-    char* path_str = c_buffer_as_null_terminated_string(path);
-    c_buffer_refcount_decrement(path);
-
-    // Convert the Effekt String representing the opening mode to libuv flags
-    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
-    c_buffer_refcount_decrement(modeString);
-
-    // Allocate %Neg on the heap and get a pointer to it
-    struct Neg* payload = allocNeg(callback);
-
-    // Store the payload in the req's data field
-    req->data = payload;
-
-    // Get the default loop and call fs_open
-    uv_loop_t* loop = uv_default_loop();
-
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, on_open);
-    int64_t result_i64 = (int64_t)result_i32;
-
-    // We can free the string, since libuv copies it into req
-    free(path_str);
-
-    return result_i64;
-}
-
-
-// Reading a File
-// --------------
-
-void on_read(uv_fs_t* req) {
-    // Extract the file descriptor from the uv_fs_t structure
-    int64_t result = req->result;
-
-    // Load the callback
-    struct Neg callback = *(struct Neg*)req->data;
-
-    // Free payload and request structure
-    free(req->data);
-    uv_fs_req_cleanup(req);
-    free(req);
-
-    // Call callback
-    run_i64(callback, result);
-}
-
-void readFile(int64_t fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Store the allocated callback in the req's data field
-    req->data = allocNeg(callback);
-
-    // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, (int32_t)fd, &buf, 1, offset, on_read);
-}
-
-
-// Writing to a File
-// -----------------
-
-void on_write(uv_fs_t* req) {
-    // Extract the result from the uv_fs_t structure
-    int64_t result = req->result;
-
-    // Load the callback
-    struct Neg callback = *(struct Neg*)req->data;
-
-    // Free payload and request structure
-    free(req->data);
-    uv_fs_req_cleanup(req);
-    free(req);
-
-    // Call callback
-    run_i64(callback, result);
-}
-
-void writeFile(int64_t fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Store the allocated callback in the req's data field
-    req->data = allocNeg(callback);
-
-    // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, (int32_t)fd, &buf, 1, offset, on_write);
-}
-
-// ; Closing a File
-// ; --------------
-
-
-void closeFile(int64_t fd) {
-    uv_fs_t req;
-    uv_loop_t* loop = uv_default_loop();
-    uv_fs_close(loop, &req, (int32_t)fd, NULL);
-}
 
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
@@ -569,5 +359,259 @@ int errno_to_uv_error(int errno_value) {
         default:   return UV_UNKNOWN;  // Unknown error
     }
 }
+
+
+// File Descriptors
+// ----------------
+// Extern type defs at the moment are always treated as %Pos.
+// For this reason, we need to translate the 32bit integer into
+// a %Pos in the following way:
+//
+// +----------------+-------+
+// | filedescriptor | Obj   |
+// | 32bit -> 64bit | NULL  |
+// +----------------+-------+
+struct Pos filedescriptor_to_pos(int32_t fd) {
+    return (struct Pos) { .tag = (int64_t) fd, .obj = NULL, };
+}
+
+int32_t pos_to_filedescriptor(struct Pos fd) {
+    return (int32_t) fd.tag;
+}
+
+struct Buffer showFiledescriptor(struct Pos fd) {
+  return c_buffer_show_Int(pos_to_filedescriptor(fd));
+}
+
+// Timers
+// ------
+
+void on_timer(uv_timer_t* handle) {
+    // Load callback
+    struct Neg callback = *(struct Neg*)handle->data;
+
+    // Clean up
+    uv_timer_stop(handle);
+    free(handle->data);
+    free(handle);
+
+    // Finally call the callback
+    run(callback);
+}
+
+void timer(int64_t n, struct Neg callback) {
+
+    // Get the default loop
+    uv_loop_t* loop = uv_default_loop();
+
+    // Allocate memory for the timer handle
+    uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+
+    // // Initialize the timer handle
+    uv_timer_init(loop, timer);
+
+    // Allocate memory for the callback (of type Neg)
+    struct Neg* payload = allocNeg(callback);
+
+    // Store the Neg pointer in the timer's data field
+    timer->data = (void*) payload;
+
+    // Start the timer to call the callback after n ms
+    uv_timer_start(timer, on_timer, n, 0);
+}
+
+
+// Opening a File
+// --------------
+
+int modeToFlags(const char* flags) {
+    if (strcmp(flags, "r") == 0) {
+        return UV_FS_O_RDONLY;
+    } else if (strcmp(flags, "r+") == 0) {
+        return UV_FS_O_RDWR;
+    } else if (strcmp(flags, "rs") == 0) {
+        return UV_FS_O_RDONLY | UV_FS_O_SYNC;
+    } else if (strcmp(flags, "rs+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_SYNC;
+    } else if (strcmp(flags, "w") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+    } else if (strcmp(flags, "wx") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "w+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+    } else if (strcmp(flags, "wx+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "a") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
+    } else if (strcmp(flags, "ax") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "a+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
+    } else if (strcmp(flags, "ax+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "as") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+    } else if (strcmp(flags, "as+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+    } else {
+        // Invalid flags string
+        return -1;
+    }
+}
+
+typedef struct Callbacks {
+    struct Neg on_success;
+    struct Neg on_failure;
+} Callbacks;
+
+void on_open(uv_fs_t* req) {
+    // Extract the file descriptor from the uv_fs_t structure
+    int64_t fd = req->result;
+
+    // Load the callbacks
+    Callbacks* callbacks = (Callbacks*)req->data;
+
+    // Free request structure
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    // Check if file descriptor is valid
+    if (fd >= 0) {
+        // Memory management
+        eraseNegative(callbacks->on_failure);
+        struct Neg success = callbacks->on_success;
+        free(callbacks);
+        // Call success callback
+        run_Pos(success, filedescriptor_to_pos(fd));
+    } else {
+        // Memory management
+        eraseNegative(callbacks->on_success);
+        struct Neg failure = callbacks->on_failure;
+        free(callbacks);
+        // Call failure callback
+        run_i64(failure, uv_error_to_errno(fd));
+    }
+}
+
+
+int64_t openFile(struct Buffer path, struct Buffer modeString, struct Neg success, struct Neg failure) {
+    int permissions = 0666;  // rw-rw-rw- permissions
+
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Convert the Effekt String to a 0-terminated string
+    char* path_str = c_buffer_as_null_terminated_string(path);
+    c_buffer_refcount_decrement(path);
+
+    // Convert the Effekt String representing the opening mode to libuv flags
+    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
+    c_buffer_refcount_decrement(modeString);
+
+    // Allocate Callbacks on the heap
+    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
+    callbacks->on_success = success;
+    callbacks->on_failure = failure;
+
+    // Store the callbacks in the req's data field
+    req->data = callbacks;
+
+    // Get the default loop and call fs_open
+    uv_loop_t* loop = uv_default_loop();
+
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, on_open);
+    int64_t result_i64 = (int64_t)result_i32;
+
+    // We can free the string, since libuv copies it into req
+    free(path_str);
+
+    return result_i64;
+}
+
+
+// Reading a File
+// --------------
+
+void on_read(uv_fs_t* req) {
+    // Extract the file descriptor from the uv_fs_t structure
+    int64_t result = req->result;
+
+    // Load the callback
+    struct Neg callback = *(struct Neg*)req->data;
+
+    // Free payload and request structure
+    free(req->data);
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    // Call callback
+    run_i64(callback, result);
+}
+
+void readFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
+    // Get the default loop
+    uv_loop_t* loop = uv_default_loop();
+
+    uint8_t* buffer_data = c_buffer_bytes(buffer);
+    int32_t len = (int32_t)c_buffer_length(buffer);
+
+    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
+
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Store the allocated callback in the req's data field
+    req->data = allocNeg(callback);
+
+    // Argument `1` here means: we pass exactly one buffer
+    uv_fs_read(loop, req, pos_to_filedescriptor(fd), &buf, 1, offset, on_read);
+}
+
+
+// Writing to a File
+// -----------------
+
+void on_write(uv_fs_t* req) {
+    // Extract the result from the uv_fs_t structure
+    int64_t result = req->result;
+
+    // Load the callback
+    struct Neg callback = *(struct Neg*)req->data;
+
+    // Free payload and request structure
+    free(req->data);
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    // Call callback
+    run_i64(callback, result);
+}
+
+void writeFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
+    // Get the default loop
+    uv_loop_t* loop = uv_default_loop();
+
+    uint8_t* buffer_data = c_buffer_bytes(buffer);
+    int32_t len = (int32_t)c_buffer_length(buffer);
+
+    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
+
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Store the allocated callback in the req's data field
+    req->data = allocNeg(callback);
+
+    // Argument `1` here means: we pass exactly one buffer
+    uv_fs_write(loop, req, pos_to_filedescriptor(fd), &buf, 1, offset, on_write);
+}
+
+// ; Closing a File
+// ; --------------
+
+
+void closeFile(struct Pos fd) {
+    uv_fs_t req;
+    uv_loop_t* loop = uv_default_loop();
+    uv_fs_close(loop, &req, pos_to_filedescriptor(fd), NULL);
+}
+
 
 #endif
