@@ -2,6 +2,7 @@
 #define EFFEKT_IO_C
 
 #include <uv.h>
+#include <string.h> // to compare flag names
 
 // println
 
@@ -219,7 +220,43 @@ void timer(int64_t n, struct Neg callback) {
 // Opening a File
 // --------------
 
+int modeToFlags(const char* flags) {
+    if (strcmp(flags, "r") == 0) {
+        return UV_FS_O_RDONLY;
+    } else if (strcmp(flags, "r+") == 0) {
+        return UV_FS_O_RDWR;
+    } else if (strcmp(flags, "rs") == 0) {
+        return UV_FS_O_RDONLY | UV_FS_O_SYNC;
+    } else if (strcmp(flags, "rs+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_SYNC;
+    } else if (strcmp(flags, "w") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+    } else if (strcmp(flags, "wx") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "w+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+    } else if (strcmp(flags, "wx+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "a") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
+    } else if (strcmp(flags, "ax") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "a+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
+    } else if (strcmp(flags, "ax+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+    } else if (strcmp(flags, "as") == 0) {
+        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+    } else if (strcmp(flags, "as+") == 0) {
+        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+    } else {
+        // Invalid flags string
+        return -1;
+    }
+}
+
 void on_open(uv_fs_t* req) {
+
     // Extract the file descriptor from the uv_fs_t structure
     int64_t fd = req->result;
 
@@ -235,14 +272,18 @@ void on_open(uv_fs_t* req) {
     run_i64(callback, fd);
 }
 
-int64_t openFile(struct Buffer path, int64_t flags, struct Neg callback) {
-    int mode = 0666;  // rw-rw-rw- permissions
+int64_t openFile(struct Buffer path, struct Buffer modeString, struct Neg callback) {
+    int permissions = 0666;  // rw-rw-rw- permissions
 
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
     // Convert the Effekt String to a 0-terminated string
     char* path_str = c_buffer_as_null_terminated_string(path);
     c_buffer_refcount_decrement(path);
+
+    // Convert the Effekt String representing the opening mode to libuv flags
+    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
+    c_buffer_refcount_decrement(modeString);
 
     // Allocate %Neg on the heap and get a pointer to it
     struct Neg* payload = allocNeg(callback);
@@ -253,7 +294,7 @@ int64_t openFile(struct Buffer path, int64_t flags, struct Neg callback) {
     // Get the default loop and call fs_open
     uv_loop_t* loop = uv_default_loop();
 
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, (int32_t)flags, (int32_t)mode, on_open);
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, on_open);
     int64_t result_i64 = (int64_t)result_i32;
 
     // We can free the string, since libuv copies it into req

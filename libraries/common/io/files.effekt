@@ -20,6 +20,45 @@ interface Files {
 }
 
 /**
+ * Represents the file opening modes with their respective flags
+ */
+type Mode {
+  // Most common modes
+  Append()              // 'a'  created if does not exist
+  ReadAppend()          // 'a+' created if does not exist
+  ReadOnly()            // 'r'  exception if does not exist
+  ReadWrite()           // 'w+' created if does not exist, truncated if exists
+  Write()               // 'w'  created if does not exist, truncated if exists
+
+  // Other modes
+  AppendExclusive()     // 'ax' created if does not exist, fails if exists
+  ReadAppendExclusive() // 'ax+' created if does not exist, fails if exists
+  AppendSync()          // 'as' created if does not exist, append in synchronous mode
+  ReadAppendSync()      // 'as+' created if does not exist, append in synchronous mode
+  ReadSync()            // 'rs' exception if does not exist, read in synchronous mode
+  ReadWriteSync()       // 'rs+' exception if does not exist, read/write in synchronous mode
+  WriteExclusive()      // 'wx' created if does not exist, truncated if exists, fails if exists
+  ReadWriteExclusive()  // 'wx+' created if does not exist, truncated if exists, fails if exists
+}
+
+def modeName(modes: Mode): String = modes match {
+  case Append()              => "a"
+  case ReadAppend()          => "a+"
+  case ReadOnly()            => "r"
+  case ReadWrite()           => "w+"
+  case Write()               => "w"
+  case AppendExclusive()     => "ax"
+  case ReadAppendExclusive() => "ax+"
+  case AppendSync()          => "as"
+  case ReadAppendSync()      => "as+"
+  case ReadSync()            => "rs"
+  case ReadWriteSync()       => "rs+"
+  case WriteExclusive()      => "wx"
+  case ReadWriteExclusive()  => "wx+"
+}
+
+
+/**
  * Using the file system via node.js
  */
 def filesystem[R] { program: => R / Files }: R / AsyncIO =
