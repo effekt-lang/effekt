@@ -57,7 +57,6 @@ namespace promise {
 // ------------------
 // mostly used as an implementation detail.
 namespace callback {
-
   /**
    * Also see: <https://github.com/nodejs/node/blob/main/src/node_file.cc#L2382>
    * Also see: <https://nodejs.org/api/fs.html#fsreadfilepath-options-callback>
@@ -67,7 +66,6 @@ namespace callback {
 
   extern io def writeFile(path: String, contents: String, onSuccess: () => Unit at {io, global}): Unit =
     js "fs.writeFile(${path}, ${contents}, (err) => { if (!!err) { throw err } else { (${onSuccess})().run() } })"
-
 }
 
 namespace examples {

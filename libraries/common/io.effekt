@@ -3,6 +3,8 @@ module io
 import ref
 import queue
 
+extern include llvm "../llvm/io.ll"
+
 // Asynchronous I/O
 // ----------------
 
@@ -19,125 +21,137 @@ interface AsyncIO {
   def performIO[T](computation: (T => Unit at {io, global}) => Unit at {io, global}): T
 }
 
-namespace AsyncIO {
-  /**
-   * Run an IO computation (that uses callbacks) here.
-   */
-  def run(program: () => Unit / AsyncIO at {io, global}): Unit =
-    try { program() }
-    with AsyncIO {
-      def performIO[T](computation) = computation(resume)
-    }
-}
+/**
+  * Run an IO computation (that uses callbacks) here.
+  */
+def blocking(program: () => Unit / AsyncIO at {io, global}): Unit =
+  try { program() }
+  with AsyncIO {
+    def performIO[T](computation) = computation(resume)
+  }
 
 
-interface Process {
-  def fork(p: Task[Unit]): Unit
+interface Concurrent {
   def yield(): Unit
-  def exit(): Nothing
+  def abort(): Nothing
 }
 
 // Promises
 // --------
+
+extern type Promise[T]
+  // = js "{promise: Promise, resolve: ƒ}"
+  // = llvm "Promise"
 
 interface Promises {
   def promise[T](p: Task[T]): Promise[T]
   def await[T](p: Promise[T]): T
 }
 
-type PromiseState[T] {
-  Unresolved()
-  Resolved(value: T)
-  Awaited(callbacks: List[T => Unit at {io, global}])
+namespace promise {
+  extern js """
+    function promise$make() {
+      let resolve;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+      });
+      return { resolve: resolve, promise: promise };
+    }
+  """
+
+  extern io def make[T](): Promise[T] =
+    js "promise$make()"
+    llvm """
+      ; Get the default loop and run it.
+      %promise = call %Pos @makePromise()
+      ret %Pos %promise
+    """
+
+  extern io def resolve[T](p: Promise[T], value: T): Unit =
+    js "${p}.resolve(${value})"
+    llvm """
+      ; Get the default loop and run it.
+      call void @resolvePromise(%Pos %p, %Pos %value)
+      ret %Pos zeroinitializer
+    """
+
+  extern io def await[T](p: Promise[T], callback: T => Unit at {io, global}): Unit =
+    js "${p}.promise.then(res => (${callback})(res).run())"
+    llvm """
+      ; Get the default loop and run it.
+      call void @awaitPromise(%Pos %p, %Neg %callback)
+      ret %Pos zeroinitializer
+    """
 }
 
-// In Haskell this is called `IVar`
-type Promise[T] = Ref[PromiseState[T]]
 
 // TODO we cannot add effects Files, Console, etc. to Task since modules cannot be recursive, at the moment.
-effect IO = { AsyncIO, Process, Promises }
+effect IO = { AsyncIO, Concurrent, Promises }
 
 type Task[T] = () => T / IO at {io, global}
+
 
 // Event Loop
 // ----------
 
-extern io def schedule(k: () => Unit at {io, global}): Unit =
-  js "setTimeout(() => (${k})().run(), 0)"
-
-
 def eventloop(prog: Task[Unit]) = {
-
-  def queue: Queue[() => Unit at {io, global}] = emptyQueue(32);
-
-  var openIOTasks in global = 0;
-
-  def run(): Unit =
-    queue.popBack() match {
-      case Some(k) =>
-        schedule(box { k(); run() })
-      case None() and openIOTasks > 0 =>
-        // Busy waiting
-        // Using openIOTasks and busy waiting is mostly for instructive purposes.
-        // Instead, we could also make sure a call to `run()` is part of the captured continuation
-        // of the IO task to "wake up" the scheduler.
-        schedule(run)
-      case _ => ()
-    }
 
   def handle(p: Task[Unit]): Unit =
     try { p() }
-    with Process {
-      def yield() = {
-        queue.pushFront(box { resume(()) })
-      }
-
-      def fork(task) = {
-        queue.pushFront(box { resume(()) })
-        handle(task)
-      }
-
-      def exit() = {
-        ()
-      }
-    }
-    with AsyncIO {
-      def performIO[T](computation) = {
-        openIOTasks = openIOTasks + 1
-        computation(box { res =>
-          openIOTasks = openIOTasks - 1;
-          // Move task to the ready-queue
-          queue.pushFront(box { resume(res) })
+    with Concurrent {
+      def yield() = eventloop::schedule(box { resume(()) })
+      def abort() = ()
+    } with AsyncIO {
+      // TODO there is a bug in our LLVM backend where eta-reducing the following will break
+      def performIO[T](computation) = computation(box { t =>
+        eventloop::schedule(box { resume(t) })
+      })
+    } with Promises {
+      def promise[T](task: Task[T]) = {
+        val p = promise::make[T]();
+        handle(box {
+          val t = task()
+          promise::resolve(p, t)
         })
+        eventloop::schedule( box { resume(p) })
       }
-    }
-    with Promises {
-      def promise[T](task) = {
-        def resolve[T](p: Promise[T], v: T): Unit = p.get match {
-          case Unresolved() => p.set(Resolved(v))
-          case Resolved(v) => panic("Promise already resolved")
-          case Awaited(ks) =>
-            p.set(Resolved(v))
-            ks.foreach { k =>
-              queue.pushBack(box { k(v) })
-            }
-        }
-
-        val promise: Promise[T] = fresh(Unresolved());
-        queue.pushFront(box {  resume(promise) })
-        handle(box { resolve(promise, task()) })
-      }
-      def await[T](promise) = promise.get match {
-        case Unresolved() => promise.set(Awaited(Cons(resume, Nil())))
-        case Resolved(v) => resume(v)
-        case Awaited(ks) => promise.set(Awaited(Cons(resume, ks)))
-      }
+      def await[T](p: Promise[T]) = promise::await(p, box { t => resume(t) })
     }
 
+  handle(prog)
 
-  // implement the concurrency / io actions (collecting tasks)
-  handle(prog);
+  eventloop::start()
+  eventloop::stop()
+}
 
-  // run the scheduler
-  run()
+namespace eventloop {
+  extern io def schedule(program: () => Unit at {io, global}): Unit =
+    js "setTimeout(() => (${program})().run(), 0)"
+    llvm """
+      call void @timer(i64 0, %Neg %program)
+      ret %Pos zeroinitializer
+    """
+
+  extern io def start(): Unit =
+    js "$effekt.unit"
+    llvm """
+      ; Get the default loop and run it.
+      %loop = call ptr @uv_default_loop()
+      %run_result = call i32 @uv_run(ptr %loop, i32 0)
+
+      ; return Unit
+      ret %Pos zeroinitializer
+    """
+
+  extern io def stop(): Unit =
+    js "$effekt.unit"
+    llvm """
+      ; Get the default loop, stop and close it.
+      %loop = call ptr @uv_default_loop()
+      call void @uv_stop(ptr %loop)
+      call void @uv_loop_close(ptr %loop)
+
+      ; return Unit
+      ret %Pos zeroinitializer
+    """
 }

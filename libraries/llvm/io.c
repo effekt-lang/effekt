@@ -23,6 +23,10 @@ void c_io_println_String(String text) {
     putchar('\n');
 }
 
+
+// Promises
+// --------
+
 typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
 
 typedef struct Callbacks {
@@ -46,8 +50,6 @@ typedef struct {
 } Promise;
 
 void erasePromise(struct Pos promise) {
-    puts("DEBUG Eraser on promise called.");
-
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
@@ -77,7 +79,6 @@ void resolvePromise(struct Pos promise, struct Pos value) {
 
     switch (p->state) {
         case UNRESOLVED:
-            puts("DEBUG Resolving unresolved promise...");
             p->state = RESOLVED;
             p->payload.pos = value; // Store value in payload
             break;
@@ -85,7 +86,6 @@ void resolvePromise(struct Pos promise, struct Pos value) {
             fprintf(stderr, "ERROR: Promise already resolved\n");
             exit(1);
         case AWAITED: {
-            puts("DEBUG Resolving awaited promise...");
             Callbacks* current = p->payload.callbacks;
             p->state = RESOLVED;
             p->payload.pos = value;
@@ -110,24 +110,22 @@ void awaitPromise(struct Pos promise, struct Neg callback) {
 
     switch (p->state) {
         case UNRESOLVED:
-            puts("DEBUG Awaiting unresolved promise...");
             p->state = AWAITED;
             p->payload.callbacks = (Callbacks*)malloc(sizeof(Callbacks));
             p->payload.callbacks->callback = callback;
             p->payload.callbacks->next = NULL;
             break;
         case RESOLVED:
-            puts("DEBUG Awaiting resolved promise...");
-            struct Pos value = p->payload.pos; // Extract pos payload as argument
-            run_Pos(callback, value); // Call the callback
+            run_Pos(callback, p->payload.pos);
             break;
         case AWAITED: {
-            puts("DEBUG Adding callback to awaited promise...");
             Callbacks* new_node = (Callbacks*)malloc(sizeof(Callbacks));
             new_node->callback = callback;
             new_node->next = NULL;
 
-            // We traverse the callbacks to attach this last (O(n) -- but how many callbacks will there be?)
+            // We traverse the callbacks to attach this last .
+            // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
+            // But how many callbacks will there be?
             // If really necessary, we can store a second pointer that points to the last one...
             Callbacks* current = p->payload.callbacks;
             while (current->next != NULL) {
@@ -137,7 +135,6 @@ void awaitPromise(struct Pos promise, struct Neg callback) {
             break;
         }
     }
-    // do we need to erase promise now? Is it shared before?
     erasePositive(promise);
 }
 
@@ -181,8 +178,8 @@ struct Pos makePromise() {
 // - pooling of request objects (benchmark first!)
 
 
-// ; Timers
-// ; ------
+// Timers
+// ------
 
 void on_timer(uv_timer_t* handle) {
     // Load callback
@@ -219,8 +216,8 @@ void timer(int64_t n, struct Neg callback) {
 }
 
 
-// ; Opening a File
-// ; --------------
+// Opening a File
+// --------------
 
 void on_open(uv_fs_t* req) {
     // Extract the file descriptor from the uv_fs_t structure
@@ -264,8 +261,8 @@ int64_t openFile(struct Buffer path, struct Neg callback) {
 }
 
 
-// ; Reading a File
-// ; --------------
+// Reading a File
+// --------------
 
 void on_read(uv_fs_t* req) {
     // Extract the file descriptor from the uv_fs_t structure
@@ -302,6 +299,52 @@ void readFile(int64_t fd, struct Buffer buffer, int64_t offset, struct Neg callb
 }
 
 
+// Writing to a File
+// -----------------
+
+void on_write(uv_fs_t* req) {
+    // Extract the result from the uv_fs_t structure
+    int64_t result = req->result;
+
+    // Load the callback
+    struct Neg callback = *(struct Neg*)req->data;
+
+    // Free payload and request structure
+    free(req->data);
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    // Call callback
+    run_i64(callback, result);
+}
+
+void writeFile(int64_t fd, struct Buffer buffer, int64_t offset, struct Neg callback) {
+    // Get the default loop
+    uv_loop_t* loop = uv_default_loop();
+
+    uint8_t* buffer_data = c_buffer_bytes(buffer);
+    int32_t len = (int32_t)c_buffer_length(buffer);
+
+    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
+
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Store the allocated callback in the req's data field
+    req->data = allocNeg(callback);
+
+    // Argument `1` here means: we pass exactly one buffer
+    uv_fs_write(loop, req, (int32_t)fd, &buf, 1, offset, on_write);
+}
+
+// ; Closing a File
+// ; --------------
+
+
+void closeFile(int64_t fd) {
+    uv_fs_t req;
+    uv_loop_t* loop = uv_default_loop();
+    uv_fs_close(loop, &req, (int32_t)fd, NULL);
+}
 
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
