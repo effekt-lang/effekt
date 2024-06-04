@@ -4,6 +4,7 @@ import ref
 import queue
 
 extern include llvm "../llvm/io.ll"
+extern include js "../js/io.js"
 
 // Asynchronous I/O
 // ----------------

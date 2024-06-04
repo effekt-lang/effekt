@@ -42,11 +42,11 @@ typedef struct {
     // state of {
     //   case UNRESOLVED => NULL
     //   case RESOLVED   => Pos (the result)
-    //   case AWAITED    => Nonempty list of listenerss
+    //   case AWAITED    => Nonempty list of listeners
     // }
     union {
         struct Pos pos;
-        Listeners* listenerss;
+        Listeners* listeners;
     } payload;
 } Promise;
 
@@ -58,15 +58,15 @@ void erasePromise(struct Pos promise) {
             return;
         case AWAITED:
             {
-                Listeners* current = p->payload.listenerss;
-                // Free all listenerss
+                Listeners* current = p->payload.listeners;
+                // Free all listeners
                 while (current != NULL) {
                     Listeners* k = current;
                     current = current->next;
                     eraseNegative(k->listeners);
                     free(k);
                 }
-                p->payload.listenerss = NULL;
+                p->payload.listeners = NULL;
             }
             return;
         case RESOLVED:
@@ -87,7 +87,7 @@ void resolvePromise(struct Pos promise, struct Pos value) {
             fprintf(stderr, "ERROR: Promise already resolved\n");
             exit(1);
         case AWAITED: {
-            Listeners* current = p->payload.listenerss;
+            Listeners* current = p->payload.listeners;
             p->state = RESOLVED;
             p->payload.pos = value;
 
@@ -112,9 +112,9 @@ void awaitPromise(struct Pos promise, struct Neg listeners) {
     switch (p->state) {
         case UNRESOLVED:
             p->state = AWAITED;
-            p->payload.listenerss = (Listeners*)malloc(sizeof(Listeners));
-            p->payload.listenerss->listeners = listeners;
-            p->payload.listenerss->next = NULL;
+            p->payload.listeners = (Listeners*)malloc(sizeof(Listeners));
+            p->payload.listeners->listeners = listeners;
+            p->payload.listeners->next = NULL;
             break;
         case RESOLVED:
             run_Pos(listeners, p->payload.pos);
@@ -124,11 +124,11 @@ void awaitPromise(struct Pos promise, struct Neg listeners) {
             new_node->listeners = listeners;
             new_node->next = NULL;
 
-            // We traverse the listenerss to attach this last .
+            // We traverse the listeners to attach this last .
             // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
-            // But how many listenerss will there be?
+            // But how many listeners will there be?
             // If really necessary, we can store a second pointer that points to the last one...
-            Listeners* current = p->payload.listenerss;
+            Listeners* current = p->payload.listeners;
             while (current->next != NULL) {
                 current = current->next;
             }
@@ -268,95 +268,6 @@ int uv_error_to_errno(int uv_err) {
         case UV_ESHUTDOWN:        return 220;  // Fresh unique value
 
         default:                  return -1;   // Unknown error
-    }
-}
-
-/**
- * Maps the stable (platform independent) numeric value back to the libuv error code.
- */
-int errno_to_uv_error(int errno_value) {
-    switch (errno_value) {
-        case 1:    return UV_EPERM;
-        case 2:    return UV_ENOENT;
-        case 3:    return UV_ESRCH;
-        case 4:    return UV_EINTR;
-        case 5:    return UV_EIO;
-        case 6:    return UV_ENXIO;
-        case 7:    return UV_E2BIG;
-        case 9:    return UV_EBADF;
-        case 11:   return UV_EAGAIN;
-        case 12:   return UV_ENOMEM;
-        case 13:   return UV_EACCES;
-        case 14:   return UV_EFAULT;
-        case 16:   return UV_EBUSY;
-        case 17:   return UV_EEXIST;
-        case 18:   return UV_EXDEV;
-        case 19:   return UV_ENODEV;
-        case 20:   return UV_ENOTDIR;
-        case 21:   return UV_EISDIR;
-        case 22:   return UV_EINVAL;
-        case 23:   return UV_ENFILE;
-        case 24:   return UV_EMFILE;
-        case 25:   return UV_ENOTTY;
-        case 26:   return UV_ETXTBSY;
-        case 27:   return UV_EFBIG;
-        case 28:   return UV_ENOSPC;
-        case 29:   return UV_ESPIPE;
-        case 30:   return UV_EROFS;
-        case 31:   return UV_EMLINK;
-        case 32:   return UV_EPIPE;
-        case 34:   return UV_ERANGE;
-        case 36:   return UV_ENAMETOOLONG;
-        case 40:   return UV_ELOOP;
-        case 75:   return UV_EOVERFLOW;
-        case 79:   return UV_EFTYPE;
-        case 84:   return UV_EILSEQ;
-        case 88:   return UV_ENOTSOCK;
-        case 89:   return UV_EDESTADDRREQ;
-        case 90:   return UV_EMSGSIZE;
-        case 91:   return UV_EPROTOTYPE;
-        case 92:   return UV_ENOPROTOOPT;
-        case 93:   return UV_EPROTONOSUPPORT;
-        case 94:   return UV_ESOCKTNOSUPPORT;
-        case 95:   return UV_ENOTSUP;
-        case 97:   return UV_EAFNOSUPPORT;
-        case 98:   return UV_EADDRINUSE;
-        case 99:   return UV_EADDRNOTAVAIL;
-        case 100:  return UV_ENETDOWN;
-        case 101:  return UV_ENETUNREACH;
-        case 103:  return UV_ECONNABORTED;
-        case 104:  return UV_ECONNRESET;
-        case 105:  return UV_ENOBUFS;
-        case 106:  return UV_EISCONN;
-        case 107:  return UV_ENOTCONN;
-        case 110:  return UV_ETIMEDOUT;
-        case 111:  return UV_ECONNREFUSED;
-        case 113:  return UV_EHOSTUNREACH;
-        case 114:  return UV_EALREADY;
-        case 125:  return UV_ECANCELED;
-
-        case 200:  return UV_EAI_ADDRFAMILY;
-        case 201:  return UV_EAI_AGAIN;
-        case 202:  return UV_EAI_BADFLAGS;
-        case 203:  return UV_EAI_BADHINTS;
-        case 204:  return UV_EAI_CANCELED;
-        case 205:  return UV_EAI_FAIL;
-        case 206:  return UV_EAI_FAMILY;
-        case 207:  return UV_EAI_MEMORY;
-        case 208:  return UV_EAI_NODATA;
-        case 209:  return UV_EAI_NONAME;
-        case 210:  return UV_EAI_OVERFLOW;
-        case 211:  return UV_EAI_PROTOCOL;
-        case 212:  return UV_EAI_SERVICE;
-        case 213:  return UV_EAI_SOCKTYPE;
-        case 215:  return UV_ECHARSET;
-        case 216:  return UV_ENONET;
-        case 217:  return UV_UNKNOWN;
-        case 218:  return UV_EOF;
-        case 219:  return UV_EUNATCH;
-        case 220:  return UV_ESHUTDOWN;
-
-        default:   return UV_UNKNOWN;  // Unknown error
     }
 }
 

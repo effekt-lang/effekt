@@ -16,13 +16,14 @@ extern io def empty(capacity: Int): Bytes =
   """
 
 extern io def copy(b: Bytes): Bytes =
-  js "bytes$copy$impl(${b})"
+  js "bytes$clone(${b})"
   llvm """
     %copy = call %Pos @c_buffer_clone(%Pos %b)
     ret %Pos %copy
   """
 
 extern io def copy(from: Bytes, to: Bytes, startFrom: Int, startTo: Int, length: Int): Unit =
+  js "bytes$copy(${from}, ${to}, ${startFrom}, ${startTo}, ${length})"
   llvm """
     call void @c_buffer_copy(%Pos %from, %Pos %to, i64 %startFrom, i64 %startTo, i64 %length)
     ; return Unit
@@ -54,12 +55,13 @@ extern io def write(b: Bytes, index: Int, value: Byte): Unit =
 /**
  * Returns an *aliased* slice of b starting at offset with the given length
  */
-extern io def slice(b: Bytes, offset: Int, length: Int): Bytes =
-  js "new Uint8Array(${b}.buffer, ${offset}, ${length})"
-  llvm """
-    %buf = call %Pos @c_buffer_slice(%Pos %b, i64 %offset, i64 %length)
-    ret %Pos %buf
-  """
+def slice(b: Bytes, offset: Int, length: Int): Bytes = {
+  def validOffset() = offset >= 0 && offset < b.size
+  def validLength() = length >= 0 && (offset + length) <= b.size
+  if (validOffset() && validLength()) unsafe::slice(b, offset, length)
+  else panic("Invalid slice of bytes (size: " ++ b.size.show ++ ", offset: " ++ offset.show ++ ", length: " ++ length.show ++ ")")
+}
+
 
 /**
  * Returns a view into the buffer, with the length truncated to n
@@ -82,6 +84,19 @@ extern pure def show(b: Bytes): String =
     ret %Pos %copy
   """
 
+namespace unsafe {
+  /**
+   * Unsafe: offset and length are not checked.
+   */
+  extern io def slice(b: Bytes, offset: Int, length: Int): Bytes =
+    js "new Uint8Array(${b}.buffer, ${offset}, ${length})"
+    llvm """
+      %buf = call %Pos @c_buffer_slice(%Pos %b, i64 %offset, i64 %length)
+      ret %Pos %buf
+    """
+
+}
+
 
 extern js """
   function bytes$set(bytes, index, value) {
@@ -89,9 +104,19 @@ extern js """
     return $effekt.unit;
   }
 
-  function bytes$copy$impl(original) {
+  function bytes$clone(original) {
     let copy = new Uint8Array(original.length);
     copy.set(original);
     return copy;
   }
+
+  function bytes$copy(from, to, startFrom, startTo, length) {
+    // Check bounds
+    if (startFrom + length > from.length || startTo + length > to.length) {
+        throw new RangeError('Index out of bounds');
+    }
+
+    // Create a subarray of 'from' and set it into 'to'
+    to.set(from.subarray(startFrom, startFrom + length), startTo);
+}
 """
