@@ -41,8 +41,8 @@ jobs:
     - name: Install Chez Scheme
       run: sudo apt-get install chezscheme
 
-    - name: Install LLVM 15
-      run: sudo apt-get install llvm-15
+    - name: Install LLVM 15 and libuv
+      run: sudo apt-get install llvm-15 libuv1-dev
 
     - name: Set up NodeJS
       uses: actions/setup-node@v1
