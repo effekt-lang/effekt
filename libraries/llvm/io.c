@@ -264,8 +264,11 @@ int uv_error_to_errno(int uv_err) {
         case UV_ENONET:           return 216;  // Fresh unique value
         case UV_UNKNOWN:          return 217;  // Fresh unique value
         case UV_EOF:              return 218;  // Fresh unique value
-        case UV_EUNATCH:          return 219;  // Fresh unique value
+
         case UV_ESHUTDOWN:        return 220;  // Fresh unique value
+
+        // Not available in libuv1-dev on ubuntu
+        //case UV_EUNATCH:          return 219;  // Fresh unique value
 
         default:                  return -1;   // Unknown error
     }
