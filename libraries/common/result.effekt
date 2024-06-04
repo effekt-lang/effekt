@@ -21,6 +21,11 @@ def result[A, E] { f: => A / Exception[E] }: Result[A, E] = try {
 } with Exception[E] {
   def raise(exc, msg) = Error(exc, msg)
 }
+def result[A, E](proxy: on[E]) { f: => A / Exception[E] }: Result[A, E] = try {
+  Success(f())
+} with Exception[E] {
+  def raise(exc, msg) = Error(exc, msg)
+}
 
 /**
  * Extracts the value of a result, if available
