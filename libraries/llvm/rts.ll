@@ -629,8 +629,11 @@ define fastcc void @topLevelEraser(%Env %env) {
 }
 
 define fastcc void @run_i64(%Neg %f, i64 %arg) {
-    ; backup stack
+    ; backup globals
     %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
 
     ; Create an empty stack (TODO is all of this really necessary???)
     %env = call %Env @malloc(i64 1048576)
@@ -660,14 +663,20 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
+    store %Region %region, ptr @region
+    store %Limit %limit, ptr @limit
+    store %Stk %rest, ptr @rest
 
     ret void
 }
 
 
 define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
-    ; backup stack
+    ; backup globals
     %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
 
     ; Create an empty stack (TODO is all of this really necessary???)
     %env = call %Env @malloc(i64 1048576)
@@ -697,13 +706,19 @@ define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
+    store %Region %region, ptr @region
+    store %Limit %limit, ptr @limit
+    store %Stk %rest, ptr @rest
 
     ret void
 }
 
-define fastcc void @run(%Neg %f) {
-    ; backup stack
+define void @run(%Neg %f) {
+    ; backup globals
     %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
 
     ; Create an empty stack (TODO is all of this really necessary???)
     %env = call %Env @malloc(i64 1048576)
@@ -729,6 +744,9 @@ define fastcc void @run(%Neg %f) {
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
+    store %Region %region, ptr @region
+    store %Limit %limit, ptr @limit
+    store %Stk %rest, ptr @rest
 
     ret void
 }
