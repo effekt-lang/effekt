@@ -16,18 +16,6 @@ def assertFalse(condition: Bool, msg: String) =
 def assertFalse(condition: Bool) =
   do assert(not(condition), "Assertion failed")
 
-def assertTrue(condition: Bool, msg: String) =
-  do assert(condition, msg)
-
-def assertTrue(condition: Bool) =
-  do assert(condition, "Assertion failed")
-
-def assertFalse(condition: Bool, msg: String) =
-  do assert(not(condition), msg)
-
-def assertFalse(condition: Bool) =
-  do assert(not(condition), "Assertion failed")
-
 def assert(obtained: Int, expected: Int, msg: String): Unit / Assertion =
   assertEqual(obtained, expected, msg) { (x, y) => x == y }
 
