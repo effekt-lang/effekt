@@ -14,7 +14,7 @@ object PrettyPrinter {
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
-define fastcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define tailcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
@@ -57,9 +57,9 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Call(_, _, nonglobal, _) => C.abort(s"cannot call non-global operand: $nonglobal")
 
     case TailCall(LocalReference(_, name), arguments) =>
-      s"tail call fastcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
+      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
     case TailCall(ConstantGlobal(_, name), arguments) =>
-      s"tail call fastcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case TailCall(nonglobal, _) => C.abort(s"can only tail call references, not: $nonglobal")
     // TODO [jfrech, 2022-07-26] Why does tail call even have a return type if we do not use it?
 

@@ -24,7 +24,6 @@ object Transformer {
       given BC: BlockContext = BlockContext();
 
       // TODO proper initialization of runtime
-      emit(Call("environment", environmentType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Call("stackPointer", stackPointerType, malloc, List(ConstantInt(256 * 1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(), "base"), LocalReference(stackPointerType, "stackPointer")));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
@@ -74,9 +73,9 @@ object Transformer {
     statement match {
 
       case machine.Def(machine.Label(name, environment), body, rest) =>
-        defineFunction(name, List(Parameter(environmentType, "environment"), Parameter(stackPointerType, "stackPointer"))) {
+        val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        defineFunction(name, parameters :+ Parameter(stackPointerType, "stackPointer")) {
           emit(Comment("statement definition"))
-          loadEnvironment(initialEnvironmentPointer, environment)
           eraseValues(environment, freeVariables(body))
           transform(body)
         }
@@ -86,9 +85,9 @@ object Transformer {
       case machine.Jump(label) =>
         emit(Comment("statement jump"))
         shareValues(label.environment, Set())
-        storeEnvironment(initialEnvironmentPointer, label.environment)
 
-        emit(TailCall(transform(label), List(LocalReference(environmentType, "environment"), getStackPointer())))
+        val arguments = label.environment.map(transform)
+        emit(TailCall(transform(label), arguments :+ getStackPointer()))
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
@@ -150,6 +149,7 @@ object Transformer {
 
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
+        // this
       case machine.New(variable, clauses, rest) =>
         emit(Comment("statement new"))
         val closureEnvironment = freeVariables(clauses).toList;
@@ -177,6 +177,7 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
+        // this
       case machine.Invoke(value, tag, values) =>
         emit(Comment("statement invoke"))
         shareValues(value :: values, Set());
@@ -253,11 +254,11 @@ object Transformer {
         val frameEnvironment = freeVariables(frame).toList;
 
         val returnAddressName = freshName("returnAddress");
-        defineFunction(returnAddressName, List(Parameter(environmentType, "environment"), Parameter(stackPointerType, "stackPointer"))) {
+        val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        defineFunction(returnAddressName, parameters :+ Parameter(stackPointerType, "stackPointer")) {
           emit(Comment("statement pushFrame / return address"))
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
-          loadEnvironment(initialEnvironmentPointer, frame.parameters);
           eraseValues(frame.parameters, freeVariables(frame.body))
 
           transform(frame.body);
@@ -292,12 +293,12 @@ object Transformer {
       case machine.Return(values) =>
         emit(Comment("statement return"))
         shareValues(values, Set())
-        storeEnvironment(initialEnvironmentPointer, values);
 
         val returnAddress = popReturnAddress();
-        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentPointer, getStackPointer())));
+        emit(TailCall(LocalReference(returnAddressType, returnAddress), values.map(transform) :+ getStackPointer()));
         RetVoid()
 
+        // this
       case machine.NewStack(variable, frame, rest) =>
         emit(Comment("statement newStack"))
         emit(Call(variable.name, transform(variable.tpe), newStack, List()));

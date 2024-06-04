@@ -596,7 +596,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 
 ; RTS initialization
 
-define fastcc void @topLevel(%Environment %environment, %StackPointer noalias %stackPointer) {
+define fastcc void @topLevel(%Pos %val, %StackPointer noalias %stackPointer) {
     %base = load %Base, ptr @base
     call void @free(%Base %base)
 
@@ -609,7 +609,6 @@ define fastcc void @topLevel(%Environment %environment, %StackPointer noalias %s
     call void @free(%Base %base.1)
     call void @free(%Base %base.2)
 
-    call void @free(%Environment %environment)
     ret void
 }
 
