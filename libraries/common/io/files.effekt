@@ -158,7 +158,6 @@ def openFile(path: String, flags: Mode): FileDescriptor / { AsyncIO, Exception[I
       box { fd => k(Success(fd)) },
       box { error => k(Error(error, "Error opening file: " ++ error.message)) });
     ()
-    //if (res != 0) panic("Unexpected problem opening file '" ++ path ++ "'\nError Code: " ++ show(res))
   }).value
 
 def readFile(fd: FileDescriptor, buffer: Bytes, offset: Int): Int / { AsyncIO, Exception[IOError] } =
