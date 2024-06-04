@@ -32,7 +32,7 @@ void c_io_println_String(String text) {
 typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
 
 typedef struct Listeners {
-    struct Neg listeners;
+    struct Neg listener;
     struct Listeners* next;
 } Listeners;
 
@@ -64,7 +64,7 @@ void erasePromise(struct Pos promise) {
                 while (current != NULL) {
                     Listeners* k = current;
                     current = current->next;
-                    eraseNegative(k->listeners);
+                    eraseNegative(k->listener);
                     free(k);
                 }
                 p->payload.listeners = NULL;
@@ -95,7 +95,7 @@ void resolvePromise(struct Pos promise, struct Pos value) {
              // Call each listeners
             while (current != NULL) {
                 sharePositive(value);
-                run_Pos(current->listeners, value);
+                run_Pos(current->listener, value);
                 Listeners* temp = current;
                 current = current->next;
                 free(temp);
@@ -107,22 +107,22 @@ void resolvePromise(struct Pos promise, struct Pos value) {
     erasePositive(promise);
 }
 
-void awaitPromise(struct Pos promise, struct Neg listeners) {
+void awaitPromise(struct Pos promise, struct Neg listener) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
         case UNRESOLVED:
             p->state = AWAITED;
             p->payload.listeners = (Listeners*)malloc(sizeof(Listeners));
-            p->payload.listeners->listeners = listeners;
+            p->payload.listeners->listener = listener;
             p->payload.listeners->next = NULL;
             break;
         case RESOLVED:
-            run_Pos(listeners, p->payload.pos);
+            run_Pos(listener, p->payload.pos);
             break;
         case AWAITED: {
             Listeners* new_node = (Listeners*)malloc(sizeof(Listeners));
-            new_node->listeners = listeners;
+            new_node->listener = listener;
             new_node->next = NULL;
 
             // We traverse the listeners to attach this last .
@@ -456,11 +456,9 @@ void on_read(uv_fs_t* req) {
     free(callbacks);
 
     if (result >= 0) {
-        // Memory management
         eraseNegative(failure);
         run_i64(success, result);
     } else {
-        // Memory management
         eraseNegative(success);
         run_i64(failure, uv_error_to_errno(result));
     }
@@ -508,11 +506,9 @@ void on_write(uv_fs_t* req) {
     free(callbacks);
 
     if (result >= 0) {
-        // Memory management
         eraseNegative(failure);
         run_i64(success, result);
     } else {
-        // Memory management
         eraseNegative(success);
         run_i64(failure, uv_error_to_errno(result));
     }
