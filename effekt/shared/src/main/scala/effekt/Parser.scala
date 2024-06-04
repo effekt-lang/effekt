@@ -401,7 +401,9 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   /**
    * Expressions
    */
-  lazy val expr:    P[Term] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
+  lazy val expr: P[Term] = "?(" ~/> matchGuards <~ ")" ^^ { mgs =>
+    If(mgs, Stmt.Return(Literal(true, symbols.builtins.TBoolean)), Stmt.Return(Literal(false, symbols.builtins.TBoolean)))
+  } | matchExpr | assignExpr | orExpr | failure("Expected an expression")
   lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ thunkedBinaryOp | andExpr
   lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ thunkedBinaryOp | eqExpr
   lazy val eqExpr:  P[Term] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
