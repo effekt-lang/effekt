@@ -1,7 +1,7 @@
 module examples/pos/array/sum
 
 def main() = {
-  val emptyArray: Array[Int] = emptyArray(0)
+  val emptyArray: Array[Int] = array::unsafeFresh(0)
   println(emptyArray.sum())
 
   val array: Array[Int] = build(3) { i => i + 1 } // Array(1, 2, 3)

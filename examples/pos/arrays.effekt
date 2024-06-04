@@ -1,22 +1,14 @@
 module examples/pos/arrays
 
-def show(o: Option[String]) = o match {
-    case None() => "None()"
-    case Some(v) => "Some(" ++ show(v) ++ ")"
-}
-
 def main() = {
-    val arr = emptyArray[String](5);
+    val arr = array::unsafeFresh[String](5);
 
-    arr.put(0, "hello");
-    arr.put(2, "world");
-    println(show(arr.get(0)));
-    println(show(arr.get(2)));
-    println(show(arr.get(4)));
-    arr.put(4, "foo");
-    println(show(arr.get(4)))
+    arr.unsafeSet(0, "hello");
+    arr.unsafeSet(2, "world");
+    println(arr.unsafeGet(0));
+    println(arr.unsafeGet(2));
 
-    val arrWithVals: Array[String] = array::fill(4, "Hello World");
+    val arrWithVals: Array[String] = array::fresh(4, "Hello World");
     println(arrWithVals)
 
     val arrByF: Array[Int] = array::build(5){ i => i };
