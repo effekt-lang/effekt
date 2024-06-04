@@ -457,11 +457,11 @@ void on_read(uv_fs_t* req) {
 
     if (result >= 0) {
         // Memory management
-        eraseNegative(callbacks->on_failure);
+        eraseNegative(failure);
         run_i64(success, result);
     } else {
         // Memory management
-        eraseNegative(callbacks->on_success);
+        eraseNegative(success);
         run_i64(failure, uv_error_to_errno(result));
     }
 }
@@ -509,11 +509,11 @@ void on_write(uv_fs_t* req) {
 
     if (result >= 0) {
         // Memory management
-        eraseNegative(callbacks->on_failure);
+        eraseNegative(failure);
         run_i64(success, result);
     } else {
         // Memory management
-        eraseNegative(callbacks->on_success);
+        eraseNegative(success);
         run_i64(failure, uv_error_to_errno(result));
     }
 }
