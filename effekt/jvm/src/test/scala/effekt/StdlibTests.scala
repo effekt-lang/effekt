@@ -17,20 +17,20 @@ abstract class StdlibTests extends EffektTests {
 class StdlibJavaScriptTests extends StdlibTests {
   def backendName: String = "js"
 }
-abstract class StdliChezTests extends StdlibTests {
+abstract class StdlibChezTests extends StdlibTests {
   override def ignored: List[File] = List(
     // Not implemented yet
     examplesDir / "stdlib" / "bytes",
     examplesDir / "stdlib" / "io"
   )
 }
-class StdlibChezSchemeMonadicTests extends StdliChezTests {
+class StdlibChezSchemeMonadicTests extends StdlibChezTests {
   def backendName: String = "chez-monadic"
 }
-class StdlibChezSchemeCallCCTests extends StdliChezTests {
+class StdlibChezSchemeCallCCTests extends StdlibChezTests {
   def backendName: String = "chez-callcc"
 }
-class StdlibChezSchemeLiftTests extends StdliChezTests {
+class StdlibChezSchemeLiftTests extends StdlibChezTests {
   def backendName: String = "chez-lift"
 }
 class StdlibMLTests extends StdlibTests {
