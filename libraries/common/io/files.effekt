@@ -178,7 +178,7 @@ def writeFile(fd: FileDescriptor, buffer: Bytes, offset: Int): Int / { AsyncIO, 
   }).value
 
 extern io def closeFile(fd: FileDescriptor): Unit =
-  js "fs.close(${fd})"
+  js "fs.close(${fd}, () => $effekt.unit)"
   llvm """
     call void @closeFile(%Pos %fd)
     ret %Pos zeroinitializer
