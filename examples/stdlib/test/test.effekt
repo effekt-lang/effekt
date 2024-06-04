@@ -1,0 +1,24 @@
+import test
+
+def main() = {
+  suite("Test test suite") {
+    test("Test test assertTrue") {
+      assertTrue(true)
+      assertTrue(true, "true")
+    }
+    test("Test test assertFalse") {
+      assertFalse(false)
+      assertFalse(false, "false")
+    }
+    test("Test test assert") {
+      assert(0,0)
+      assert(0,0,"0 == 0")
+      assert(true,true)
+      assert(true,true, "true is true")
+      assert("A","A")
+      assert("A","A", "string A is A")
+      assert('A','A')
+      assert('A','A', "char A is A")
+    }
+  }
+}
