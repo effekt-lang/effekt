@@ -82,11 +82,26 @@ function remove(arr, index) {
 }
 """
 
+extern chez """
+(define (vector-copy from start end to offset)
+  (let loop ((i start) (j offset))
+    (when (< i end)
+      (vector-set! to j (vector-ref from i))
+      (loop (+ i 1) (+ j 1)))))
+
+(define (remove-element vec index)
+  (let ((res (vector-ref vec index)))
+    (vector-set! vec index #f)
+    res))
+"""
+
+
 def remove[T](arr: Array[T], index: Int): Option[T] =
   unsafeRemove(arr, index).undefinedToOption
 
 extern global def unsafeRemove[T](arr: Array[T], index: Int): T =
   js "remove(${arr}, ${index})"
+  chez "(remove-element ${arr} ${index})"
 
 def put[T](arr: Array[T], index: Int, value: T): Unit =
   if (index >= 0 && index < arr.size) unsafePut(arr, index, value)
@@ -106,6 +121,7 @@ def copy[T](arr: Array[T]): Array[T] = {
 // Copies elements from `start` to `end` in the source array `from` to `offset` in the target array `to`
 extern global def copy[T](from: Array[T], start: Int, end: Int, to: Array[T], offset: Int): Unit =
   js "copy(${from}, ${start}, ${end}, ${to}, ${offset})"
+  chez "(vector-copy ${from} ${start} ${end} ${to} ${offset})"
 
 // Utility functions:
 
