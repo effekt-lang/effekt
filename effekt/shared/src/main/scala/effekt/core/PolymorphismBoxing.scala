@@ -8,6 +8,7 @@ import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
 import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TChar, TState, TUnit }
 import effekt.symbols.ErrorMessageInterpolator
+import scala.util.boundary
 
 import scala.annotation.targetName
 
@@ -27,10 +28,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   /**
    * Describes how to box/unbox values
    * @param tpe The type of the values to be boxed
-   * @param constructor The constructor to box the values with
-   * @param field The field to access for unboxing
+   * @param boxFn The extern function to call to box
+   * @param unboxFn The extern function to call to unbox
    */
-  case class Boxer(tpe: ValueType.Data, constructor: Id, field: Id)
+  case class Boxer(tpe: ValueType, boxFn: Block.BlockVar, unboxFn: Block.BlockVar)
 
   /**
    * Partial function to describe which values to box and how.
@@ -73,22 +74,58 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     lazy val prelude = Context.module.findPrelude
 
     /**
+     * Find a pure extern def named [[name]] in the prelude (or some namespace in the prelude).
+     */
+    def findPureExternFn(name: String): Option[Block.BlockVar] = boundary {
+      def findDef(defs: List[source.Def]): Option[source.Def] =
+        defs.find{ d => d.id.name == name }.orElse {
+          defs.flatMap {
+            case source.NamespaceDef(_, ndefs) => findDef(ndefs)
+            case _ => None
+          }.headOption
+        }
+      val id = Context.symbolOf(findDef(prelude.decl.defs).getOrElse {
+        boundary.break(None)
+      }) match {
+        case b: symbols.BlockSymbol => b
+        case _ => boundary.break(None)
+      }
+      val tpe = Context.blockTypeOf(id)
+      val tTpe = Transformer.transform(tpe)
+      if(!Transformer.asConcreteCaptureSet(Context.captureOf(id)).pure) {
+        boundary.break(None)
+      }
+      return Some(Block.BlockVar(id, tTpe, Set.empty))
+    }
+
+    /**
      * Finds the corresponding boxer for a primitive type.
      *
      * @param name The name of the [[ValueType]]
      * @return a [[Boxer]] that describes how to box values of that type
      */
-    def boxer(name: String): Boxer = prelude.types.get("Boxed" + name) match {
-      case Some(value) => value match {
-        case tpeCns @ symbols.TypeConstructor.Record(_, List(), cns @ symbols.Constructor(_, List(), List(field), _)) =>
-          Boxer(ValueType.Data(tpeCns, List()), cns, field)
-        case tpeCns @ symbols.TypeConstructor.DataType(_, List(), List(cns @ symbols.Constructor(_, List(), List(field), _))) =>
-          Boxer(ValueType.Data(tpeCns, List()), cns, field)
-        case _ =>
-          Context.abort(s"No appropriate Boxed${name} type, but ${name} used as type parameter.")
+    def boxer(name: String): Boxer = {
+      import effekt.source.Def
+      val box = findPureExternFn("box" ++ name).getOrElse {
+        Context.abort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
+          s"corresponding pure extern ${"box" + name} was defined in the prelude.")
       }
-      case None =>
-        Context.abort(s"Primitive ${name} is used as type parameter but Boxed${name} is not defined.")
+      val unbox = findPureExternFn("unbox" ++ name).getOrElse{
+        Context.abort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
+          s"corresponding pure extern ${"unbox" + name} was defined in the prelude.")
+      }
+      val boxRet = box.annotatedTpe match {
+        case BlockType.Function(_, _, _, _, result) => result
+        case _ => Context.abort(pp"${box} is not of function type.")
+      }
+      unbox.annotatedTpe match {
+        case BlockType.Function(_, _, List(unboxArg), List(), _) =>
+          if(unboxArg != boxRet) {
+            Context.abort(pp"Argument type of ${unbox} and return type of ${box} do not match up.")
+          }
+        case _ => Context.abort(pp"${unbox} is not of function type.")
+      }
+      Boxer(boxRet, box, unbox)
     }
   }
   def PContext(using ctx: PContext): PContext = ctx
@@ -365,7 +402,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.Make(boxer.tpe, boxer.constructor, List(t))
+      Pure.PureApp(boxer.boxFn, List(), List(t))
     }
   }
   case class UnboxCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
@@ -374,7 +411,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.Select(t, boxer.field, to)
+      Pure.PureApp(boxer.unboxFn, List(), List(t))
     }
   }
   case class BottomCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
