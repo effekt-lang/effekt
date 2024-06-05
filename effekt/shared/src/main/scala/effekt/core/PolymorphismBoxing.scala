@@ -78,8 +78,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   class PContext(declarations: List[Declaration], externs: List[Extern])(using val Context: Context) extends DeclarationContext(declarations, externs){
-    lazy val prelude = Context.module.findPrelude
-
     /**
      * Find a pure extern def with one value parameter named [[name]] in the prelude (or some namespace in the prelude).
      */
