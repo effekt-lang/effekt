@@ -613,11 +613,29 @@ namespace internal {
 
     extern type BoxedInt
     extern pure def boxInt(n: Int): BoxedInt =
+      llvm """
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
     extern pure def unboxInt(b: BoxedInt): Int =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        ret %Int %unboxed
+      """
 
     extern type BoxedChar
     extern pure def boxChar(c: Char): BoxedChar =
+      llvm """
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %c, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
     extern pure def unboxChar(b: BoxedChar): Char =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        ret %Int %unboxed
+      """
 
     extern type BoxedBool
     extern pure def boxBool(b: Bool): BoxedBool =
