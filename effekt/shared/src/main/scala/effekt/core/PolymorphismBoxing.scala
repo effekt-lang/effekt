@@ -43,9 +43,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt     => PContext.boxer("Int")
     case core.Type.TChar    => PContext.boxer("Char")
-    case core.Type.TBoolean => PContext.boxer("Bool")
     case core.Type.TDouble  => PContext.boxer("Double")
-    case core.Type.TUnit    => PContext.boxer("Unit")
     // Do strings need to be boxed? Really?
     case core.Type.TString  => PContext.boxer("String")
   }
@@ -421,9 +419,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     override def apply(t: Pure): Pure = {
       to match {
         case core.Type.TInt => Pure.Literal(1337L, core.Type.TInt)
-        case core.Type.TBoolean => Pure.Literal(false, core.Type.TBoolean)
         case core.Type.TDouble  => Pure.Literal(13.37, core.Type.TDouble)
-        case core.Type.TUnit    => Pure.Literal((), core.Type.TUnit)
         // Do strings need to be boxed? Really?
         case core.Type.TString  => Pure.Literal("<?nothing>", core.Type.TString)
         case t if box.isDefinedAt(t) => sys error s"No default value defined for ${t}"
