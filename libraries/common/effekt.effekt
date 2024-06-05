@@ -643,7 +643,18 @@ namespace internal {
 
     extern type BoxedDouble
     extern pure def boxDouble(d: Double): BoxedDouble =
+      llvm """
+        %n = bitcast double %d to i64
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
     extern pure def unboxDouble(b: BoxedDouble): Double =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        %d = bitcast i64 %unboxed to double
+        ret %Double %d
+      """
 
     extern type BoxedString
     extern pure def boxString(s: String): BoxedString =
