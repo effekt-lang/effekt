@@ -123,9 +123,9 @@ object Transformer {
     case core.Stmt.Scope(definitions, body) =>
       jit.LetRec(definitions map transform, transform(body))
     case core.Stmt.Return(expr) => transform(expr)
-    case core.Stmt.Val(id, binding, body) =>
+    case core.Stmt.Val(id, tpe, binding, body) =>
       jit.Let(List(jit.Definition(
-          jit.Var(id, transform(core.Type.inferType(binding))),
+          jit.Var(id, transform(tpe)),
           transform(binding))),
         transform(body))
     case core.Stmt.App(callee, targs, vargs, bargs) =>
@@ -190,7 +190,7 @@ object Transformer {
   }
   def transform(d: core.Definition)(using core.DeclarationContext, ErrorReporter): jit.Definition = d match {
     case core.Definition.Def(id, block) => jit.Definition(jit.Var(id, transform(core.Type.inferType(block))), transform(block))
-    case core.Definition.Let(id, binding) => jit.Definition(jit.Var(id, transform(core.Type.inferType(binding))), transform(binding))
+    case core.Definition.Let(id, tpe, binding) => jit.Definition(jit.Var(id, transform(tpe)), transform(binding))
   }
   def transform(e: core.Extern)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Definition = e match {
     case Extern.Def(id, tparams, cparams, vparams, bparams, retTpe, annotatedCapture,
