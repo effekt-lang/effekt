@@ -48,52 +48,21 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case core.Type.TString  => PContext.boxer("String")
   }
 
-  class PContext(val declarations: List[Declaration])(using val Context: Context){
-    def findDeclarations(id: Id): List[Declaration] = {
-      declarations.filter(_.id == id)
-    }
-    def getDataLikeDeclaration(id: Id): Declaration.Data = id match {
-      case x if x == effekt.symbols.builtins.BottomSymbol =>
-        Declaration.Data(id, Nil, Nil)
-      case _ =>
-        val decls: List[Declaration.Data] = declarations.flatMap{
-          case d : Declaration.Data if d.id == id =>
-            Some(d)
-          case _ => None
-        }
-        if (decls.length != 1) {
-          Context.abort(s"No unique declaration for ${id}. Options: \n" +
-            (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n"))
-        } else {
-          decls.head
-        }
-    }
-
+  class PContext(declarations: List[Declaration], externs: List[Extern])(using val Context: Context) extends DeclarationContext(declarations, externs){
     lazy val prelude = Context.module.findPrelude
 
     /**
      * Find a pure extern def named [[name]] in the prelude (or some namespace in the prelude).
      */
-    def findPureExternFn(name: String): Option[Block.BlockVar] = boundary {
-      def findDef(defs: List[source.Def]): Option[source.Def] =
-        defs.find{ d => d.id.name == name }.orElse {
-          defs.flatMap {
-            case source.NamespaceDef(_, ndefs) => findDef(ndefs)
-            case _ => None
-          }.headOption
-        }
-      val id = Context.symbolOf(findDef(prelude.decl.defs).getOrElse {
-        boundary.break(None)
-      }) match {
-        case b: symbols.BlockSymbol => b
-        case _ => boundary.break(None)
-      }
-      val tpe = Context.blockTypeOf(id)
-      val tTpe = Transformer.transform(tpe)
-      if(!Transformer.asConcreteCaptureSet(Context.captureOf(id)).pure) {
-        boundary.break(None)
-      }
-      return Some(Block.BlockVar(id, tTpe, Set.empty))
+    def findPureExternFn(name: String): Option[Block.BlockVar] = {
+       this.externs.collectFirst {
+        case d@effekt.core.Extern.Def(id, List(), List(), List(vparam), List(), ret, capts, body)
+          if id.name.name == name && capts.isEmpty => d
+      }.map { definition =>
+         val id = definition.id
+         val tpe = core.BlockType.Function(Nil, Nil, definition.vparams.map(_.tpe), Nil, definition.ret)
+         Block.BlockVar(id, tpe, Set.empty)
+       }
     }
 
     /**
@@ -103,7 +72,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
      * @return a [[Boxer]] that describes how to box values of that type
      */
     def boxer(name: String): Boxer = {
-      import effekt.source.Def
       val box = findPureExternFn("box" ++ name).getOrElse {
         Context.abort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
           s"corresponding pure extern ${"box" + name} was defined in the prelude.")
@@ -131,7 +99,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {
-      implicit val pctx: PContext = new PContext(core.declarations)
+      implicit val pctx: PContext = new PContext(core.declarations, core.externs)
       Context.module = mod
       val transformed = Context.timed(phaseName, source.name) { transform(core) }
       Some(CoreTransformed(source, tree, mod, transformed))
@@ -261,7 +229,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Match(scrutinee, clauses, default) =>
       scrutinee.tpe match {
         case ValueType.Data(symbol, targs) =>
-          val Declaration.Data(tpeId, tparams, constructors) = PContext.getDataLikeDeclaration(symbol)
+          val Declaration.Data(tpeId, tparams, constructors) = PContext.getData(symbol)
           Stmt.Match(transform(scrutinee), clauses.map {
             case (id, clause: Block.BlockLit) =>
               val constructor = constructors.find(_.id == id).get
@@ -315,7 +283,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val fcoercer = coercer[Block](tpe, itpe, targs)
       fcoercer.callPure(b, (vcoercers zip tVargs).map(_(_)))
     case Pure.Make(data, tag, vargs) =>
-      val dataDecl = PContext.getDataLikeDeclaration(data.name)
+      val dataDecl = PContext.getData(data.name)
       val ctorDecl = dataDecl.constructors.find(_.id == tag).getOrElse {
         Context.panic(pp"No constructor found for tag ${tag} in data type: ${data}")
       }
@@ -333,7 +301,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case ValueType.Data(symbol, targs) => (symbol, targs)
         case t => Context.abort(s"Select on value of type ${PrettyPrinter.format(t)} is not supported.")
       }
-      PContext.getDataLikeDeclaration(symbol) match {
+      PContext.getData(symbol) match {
         case Declaration.Data(id, tparams, List(Constructor(cns, fields))) =>
           val f = fields.find(_.id == field).getOrElse{
             Context.abort(s"${id} has no field ${field}.")
