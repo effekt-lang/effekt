@@ -98,9 +98,9 @@ def propagators { net: => Unit / Net }: Unit = {
 
   try { net(); run() } with Net {
     def unknown[R]() =
-      resume(fresh((None(), Nil())))
+      resume(ref((None(), Nil())))
     def make[R](value) =
-      resume(fresh((Some(value), Nil())))
+      resume(ref((Some(value), Nil())))
     def learn[A](cell, value) = get(cell) match {
       case (None(), k) =>
         // update network with new information

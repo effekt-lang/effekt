@@ -27,7 +27,7 @@ def emptyQueue[T](): Queue[T] at {global} =
 
 def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
 
-  var contents in global = fresh[Option[T]](initialCapacity, None())
+  var contents in global = array[Option[T]](initialCapacity, None())
   var head in global = 0
   var tail in global = 0
   var size in global = 0
@@ -51,7 +51,7 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
       val oldSize = capacity
       val newSize = capacity * 2
       val oldContents = contents
-      val newContents = unsafeFresh[Option[T]](newSize)
+      val newContents = allocate[Option[T]](newSize)
 
       if (head < tail) {
         // The queue does not wrap around; direct copy is possible.

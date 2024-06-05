@@ -2,7 +2,7 @@ import bytes
 
 def main() = {
 
-  val b = bytes::empty(16);
+  val b = bytes::allocate(16);
   b.write(0, 104.toByte)
   b.write(1, 101.toByte)
   b.write(2, 108.toByte)

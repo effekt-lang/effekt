@@ -12,7 +12,11 @@ function set$impl(ref, value) {
  */
 extern type Ref[T]
 
-extern global def unsafeFresh[T](): Ref[T] =
+/**
+ * Allocates a new reference of size `size`, keeping its value _undefined_.
+ * Prefer using `ref` constructor instead to ensure that the value is defined.
+ */
+extern global def allocate[T](): Ref[T] =
   js "{ value: undefined }"
   chez "(box #f)"
   llvm """
@@ -20,7 +24,10 @@ extern global def unsafeFresh[T](): Ref[T] =
     ret %Pos %z
   """
 
-extern global def fresh[T](init: T): Ref[T] =
+/**
+ * Creates a new reference with the initial value `init`.
+ */
+extern global def ref[T](init: T): Ref[T] =
   js "{ value: ${init} }"
   chez "(box ${init})"
   ml "ref ${init}"
@@ -29,6 +36,9 @@ extern global def fresh[T](init: T): Ref[T] =
     ret %Pos %z
   """
 
+/**
+ * Gets the referenced element of the `ref` in constant time.
+ */
 extern global def get[T](ref: Ref[T]): T =
   js "${ref}.value"
   chez "(unbox ${ref})"
@@ -38,6 +48,9 @@ extern global def get[T](ref: Ref[T]): T =
     ret %Pos %z
   """
 
+/**
+ * Sets the referenced element of the `ref` to `value` in constant time.
+ */
 extern global def set[T](ref: Ref[T], value: T): Unit =
   js "set$impl(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"
