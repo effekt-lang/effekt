@@ -71,7 +71,7 @@ trait Runner[Executable] {
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
 
-    val exitCode = Process(execFile).run(new ProcessLogger {
+    val exitCode = Process(execFile, Context.config.runArgs()).run(new ProcessLogger {
 
       override def out(s: => String): Unit = {
         C.config.output().emitln(s)
