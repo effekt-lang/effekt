@@ -552,6 +552,10 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
   lazy val double = accept("double") { case Float(d) => DoubleLit(d) }
   lazy val string = accept("string") { case Str(s, _) => StringLit(s) }
 
+  lazy val multilineString: P[String] = accept("multi-line string") { case Str(s, true) => s }
+  lazy val singlelineString: P[String] = accept("single-line string") { case Str(s, false) => s }
+  lazy val anyString: P[String] = accept("single-line or multi-line string") { case Str(s, _) => s }
+
   lazy val boxedExpr: P[Term] =
     `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
 
@@ -695,13 +699,15 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
   }
 
   lazy val templateString: Parser[Template[Term]] =
-    accept("string") { case Str(s, _) => s } ~ many((`${` ~> expr <~ `}`) ~ accept("string") { case Str(s, _) => s })  ^^ {
+    anyString ~/ many((`${` ~/> expr <~/ `}`) ~/ anyString)  ^^ {
       case prefix ~ suffix => {
-        Template(prefix :: suffix.collect { case _ ~ s => s }, suffix.collect { case e ~ _ => e })
+        val strs = prefix :: suffix.collect { case _ ~ s => s }
+        val splices = suffix.collect { case e ~ _ => e }
+        Template(strs, splices)
       }
     }
 
-  def templateString[T](contents: Parser[T]): Parser[Template[T]] = ???
+  //def templateString[T](contents: Parser[T]): Parser[Template[T]] = ???
 
   /**
    * Parses the contents of a string and searches for unquotes ${ ... }
