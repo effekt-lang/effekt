@@ -656,8 +656,6 @@ namespace internal {
         ret %Double %d
       """
 
-    extern type BoxedString
-    extern pure def boxString(s: String): BoxedString =
-    extern pure def unboxString(b: BoxedString): String =
+    record BoxedString(unboxString: String)
   }
 }
