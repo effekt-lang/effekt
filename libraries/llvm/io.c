@@ -52,7 +52,7 @@ typedef struct {
     } payload;
 } Promise;
 
-void erasePromise(struct Pos promise) {
+void c_promise_erase_listeners(struct Pos promise) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
@@ -77,7 +77,7 @@ void erasePromise(struct Pos promise) {
     }
 }
 
-void resolvePromise(struct Pos promise, struct Pos value) {
+void c_promise_resolve(struct Pos promise, struct Pos value) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
@@ -108,7 +108,7 @@ void resolvePromise(struct Pos promise, struct Pos value) {
     erasePositive(promise);
 }
 
-void awaitPromise(struct Pos promise, struct Neg listener) {
+void c_promise_await(struct Pos promise, struct Neg listener) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
@@ -142,11 +142,11 @@ void awaitPromise(struct Pos promise, struct Neg listener) {
 }
 
 
-struct Pos makePromise() {
+struct Pos c_promise_make() {
     Promise* promise = (Promise*)malloc(sizeof(Promise));
 
     promise->rc = 0;
-    promise->eraser = (void*)erasePromise;
+    promise->eraser = (void*)c_promise_erase_listeners;
     promise->state = UNRESOLVED;
     promise->payload.pos = Unit;
 
@@ -296,14 +296,14 @@ int32_t pos_to_filedescriptor(struct Pos fd) {
     return (int32_t) fd.tag;
 }
 
-struct Pos showFiledescriptor(struct Pos fd) {
+struct Pos c_filedescriptor_show(struct Pos fd) {
   return c_buffer_show_Int(pos_to_filedescriptor(fd));
 }
 
 // Timers
 // ------
 
-void on_timer(uv_timer_t* handle) {
+void c_timer_handler(uv_timer_t* handle) {
     // Load callback
     struct Neg callback = *(struct Neg*)handle->data;
 
@@ -316,7 +316,7 @@ void on_timer(uv_timer_t* handle) {
     run(callback);
 }
 
-void timer(int64_t n, struct Neg callback) {
+void c_timer_wait(int64_t n, struct Neg callback) {
 
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
@@ -336,7 +336,7 @@ void timer(int64_t n, struct Neg callback) {
     timer->data = (void*) payload;
 
     // Start the timer to call the callback after n ms
-    uv_timer_start(timer, on_timer, n, 0);
+    uv_timer_start(timer, c_timer_handler, n, 0);
 }
 
 
@@ -383,7 +383,7 @@ typedef struct Callbacks {
     struct Neg on_failure;
 } Callbacks;
 
-void on_open(uv_fs_t* req) {
+void c_file_open_handler(uv_fs_t* req) {
     // Extract the file descriptor from the uv_fs_t structure
     int64_t fd = req->result;
 
@@ -408,7 +408,7 @@ void on_open(uv_fs_t* req) {
 }
 
 
-void openFile(struct Pos path, struct Pos modeString, struct Neg* success, struct Neg* failure) {
+void c_file_open(struct Pos path, struct Pos modeString, struct Neg* success, struct Neg* failure) {
     int permissions = 0666;  // rw-rw-rw- permissions
 
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
@@ -432,7 +432,7 @@ void openFile(struct Pos path, struct Pos modeString, struct Neg* success, struc
     // Get the default loop and call fs_open
     uv_loop_t* loop = uv_default_loop();
 
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, on_open);
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_file_open_handler);
     int64_t result_i64 = (int64_t)result_i32;
 
     // We can free the string, since libuv copies it into req
@@ -445,7 +445,7 @@ void openFile(struct Pos path, struct Pos modeString, struct Neg* success, struc
 // Reading a File
 // --------------
 
-void on_read(uv_fs_t* req) {
+void c_file_read_handler(uv_fs_t* req) {
     // Extract the file descriptor from the uv_fs_t structure
     int64_t result = req->result;
 
@@ -473,7 +473,7 @@ void on_read(uv_fs_t* req) {
  * stack-allocated). This is to work around an issue with the C ABI where
  * late arguments are scrambled.
  */
-void readFile(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
+void c_file_read(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
 
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
@@ -494,14 +494,14 @@ void readFile(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success
     req->data = callbacks;
 
     // // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, fd, &buf, 1, offset, on_read);
+    uv_fs_read(loop, req, fd, &buf, 1, offset, c_file_read_handler);
 }
 
 
 // Writing to a File
 // -----------------
 
-void on_write(uv_fs_t* req) {
+void c_file_write_handler(uv_fs_t* req) {
     // Extract the result from the uv_fs_t structure
     int64_t result = req->result;
 
@@ -529,7 +529,7 @@ void on_write(uv_fs_t* req) {
  * stack-allocated). This is to work around an issue with the C ABI where
  * late arguments are scrambled.
  */
-void writeFile(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
+void c_file_write(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -549,14 +549,14 @@ void writeFile(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* succes
     req->data = callbacks;
 
     // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, fd, &buf, 1, offset, on_write);
+    uv_fs_write(loop, req, fd, &buf, 1, offset, c_file_write_handler);
 }
 
 // ; Closing a File
 // ; --------------
 
 
-void closeFile(int32_t fd) {
+void c_file_close(int32_t fd) {
     uv_fs_t req;
     uv_loop_t* loop = uv_default_loop();
     uv_fs_close(loop, &req, fd, NULL);

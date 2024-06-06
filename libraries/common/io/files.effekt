@@ -184,7 +184,7 @@ extern io def closeFile(fd: FileDescriptor): Unit =
     %tag = extractvalue %Pos %fd, 0
     %fd_int = trunc i64 %tag to i32
 
-    call void @closeFile(i32 %fd_int)
+    call void @c_file_close(i32 %fd_int)
     ret %Pos zeroinitializer
   """
 
@@ -218,7 +218,7 @@ namespace callback {
       %onFailure_ptr = alloca %Neg
       store %Neg %onFailure, %Neg* %onFailure_ptr
 
-      call void @openFile(%Pos %path, %Pos %mode, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      call void @c_file_open(%Pos %path, %Pos %mode, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 
@@ -238,7 +238,7 @@ namespace callback {
       %onFailure_ptr = alloca %Neg
       store %Neg %onFailure, %Neg* %onFailure_ptr
 
-      call void @readFile(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      call void @c_file_read(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 

@@ -64,7 +64,7 @@ namespace promise {
     js "promise$make()"
     llvm """
       ; Get the default loop and run it.
-      %promise = call %Pos @makePromise()
+      %promise = call %Pos @c_promise_make()
       ret %Pos %promise
     """
 
@@ -72,7 +72,7 @@ namespace promise {
     js "${p}.resolve(${value})"
     llvm """
       ; Get the default loop and run it.
-      call void @resolvePromise(%Pos %p, %Pos %value)
+      call void @c_promise_resolve(%Pos %p, %Pos %value)
       ret %Pos zeroinitializer
     """
 
@@ -80,7 +80,7 @@ namespace promise {
     js "${p}.promise.then(res => (${callback})(res).run())"
     llvm """
       ; Get the default loop and run it.
-      call void @awaitPromise(%Pos %p, %Neg %callback)
+      call void @c_promise_await(%Pos %p, %Neg %callback)
       ret %Pos zeroinitializer
     """
 }
@@ -129,7 +129,7 @@ namespace eventloop {
   extern io def schedule(program: () => Unit at {io, global}): Unit =
     js "setTimeout(() => (${program})().run(), 0)"
     llvm """
-      call void @timer(i64 0, %Neg %program)
+      call void @c_timer_wait(i64 0, %Neg %program)
       ret %Pos zeroinitializer
     """
 
