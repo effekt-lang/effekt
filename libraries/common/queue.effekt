@@ -26,30 +26,40 @@ def emptyQueue[T](): Queue[T] at {global} =
   emptyQueue[T](64)
 
 def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
-  var contents in global = emptyArray[T](initialCapacity)
+
+  var contents in global = fresh[Option[T]](initialCapacity, None())
   var head in global = 0
   var tail in global = 0
   var size in global = 0
   var capacity in global = initialCapacity
 
-  def nonEmpty[T] { p: => Option[T] }: Option[T] =
-    if (size <= 0) None() else p()
+  def remove(arr: Array[Option[T]], index: Int): Option[T] = {
+    with on[OutOfBounds].default { None() };
+    val value = arr.get(index);
+    arr.set(index, None());
+    value
+  }
+
+  def nonEmpty[T] { p: => Option[T] / Exception[OutOfBounds] }: Option[T] =
+    if (size <= 0) None() else on[OutOfBounds].default { None() } { p() }
 
   // Exponential back-off
   def resizeTo(requiredSize: Int): Unit =
     if (requiredSize <= capacity) () else {
+      with on[OutOfBounds].ignore // should not happen
+
       val oldSize = capacity
       val newSize = capacity * 2
       val oldContents = contents
-      val newContents = emptyArray[T](newSize)
+      val newContents = unsafeFresh[Option[T]](newSize)
 
       if (head < tail) {
         // The queue does not wrap around; direct copy is possible.
-        copy(oldContents, head, tail, newContents, 0)
+        copy(oldContents, head, newContents, 0, size) // changed tail to size
       } else if (size > 0) {
         // The queue wraps around; copy in two segments.
-        copy(oldContents, head, oldSize, newContents, 0)
-        copy(oldContents, 0, tail, newContents, oldSize - head)
+        copy(oldContents, head, newContents, 0, oldSize - head) // changed oldSize to oldSize - head
+        copy(oldContents, 0, newContents, oldSize - head, tail) // changed oldSize - head to oldSize - head
       }
 
       contents = newContents
@@ -85,12 +95,12 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
       resizeTo(size + 1);
       head = mod(head - 1 + capacity, capacity);
       size = size + 1;
-      contents.put(head, el)
+      contents.unsafeSet(head, Some(el))
     }
 
     def pushBack(el: T) = {
       resizeTo(size + 1);
-      contents.put(tail, el);
+      contents.unsafeSet(tail, Some(el));
       size = size + 1;
       tail = mod(tail + 1, capacity)
     }

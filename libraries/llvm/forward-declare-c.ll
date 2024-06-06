@@ -30,6 +30,16 @@ declare %Pos @c_buffer_show_Double(double)
 declare %Int @c_buffer_index(%Pos, i64)
 declare void @c_buffer_set(%Pos, i64, i8)
 declare %Int @c_buffer_character_at(%Pos, i64)
+
 declare %Pos @c_buffer_slice(%Pos, i64, i64)
 
 declare void @hole()
+
+declare %Pos @c_ref_fresh(%Pos)
+declare %Pos @c_ref_get(%Pos)
+declare %Pos @c_ref_set(%Pos, %Pos)
+
+declare %Pos @c_array_new(%Int)
+declare %Int @c_array_size(%Pos)
+declare %Pos @c_array_get(%Pos, %Int)
+declare %Pos @c_array_set(%Pos, %Int, %Pos)

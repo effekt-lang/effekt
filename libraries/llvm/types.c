@@ -5,6 +5,11 @@
 typedef int64_t Int;
 typedef double Double;
 
+struct Header {
+  uint64_t rc;
+  void (*eraser)(void *);
+};
+
 struct Pos {
     uint64_t tag; // type-local tag
     void *obj; // pointer into the heap

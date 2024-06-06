@@ -618,11 +618,58 @@ def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
 
 def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
 
+namespace internal {
+  namespace boxing {
+    // For boxing polymorphic values
+    extern type BoxedUnit
+    extern pure def boxUnit(u: Unit): Unit =
+    extern pure def unboxUnit(u: Unit): Unit =
 
-// For boxing polymorphic values
-record BoxedUnit(unboxUnit: Unit)
-record BoxedInt(unboxInt: Int)
-record BoxedChar(unboxChar: Char)
-record BoxedBool(unboxBool: Bool)
-record BoxedDouble(unboxDouble: Double)
-record BoxedString(unboxString: String)
+    extern type BoxedInt
+    extern pure def boxInt(n: Int): BoxedInt =
+      llvm """
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxInt(b: BoxedInt): Int =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        ret %Int %unboxed
+      """
+
+    extern type BoxedChar
+    extern pure def boxChar(c: Char): BoxedChar =
+      llvm """
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %c, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxChar(b: BoxedChar): Char =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        ret %Int %unboxed
+      """
+
+    extern type BoxedBool
+    extern pure def boxBool(b: Bool): BoxedBool =
+    extern pure def unboxBool(b: BoxedBool): Bool =
+
+    extern type BoxedDouble
+    extern pure def boxDouble(d: Double): BoxedDouble =
+      llvm """
+        %n = bitcast double %d to i64
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxDouble(b: BoxedDouble): Double =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        %d = bitcast i64 %unboxed to double
+        ret %Double %d
+      """
+
+    record BoxedString(unboxString: String)
+  }
+}

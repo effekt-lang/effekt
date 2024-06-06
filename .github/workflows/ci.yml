@@ -7,6 +7,31 @@ on:
   pull_request:
 
 jobs:
+  run-hello-world:
+    strategy:
+      matrix:
+        os: [windows-latest]
+
+    name: Build Effekt compiler and run one test
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'true'
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v1
+      with:
+        java-version: 11
+
+    - name: Set up NodeJS
+      uses: actions/setup-node@v1
+      with:
+        node-version: '12.x'
+
+    - name: Run tests
+      run: sbt "effektJVM/clean; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\\/]*coverage.*"
+
   build-jar:
     strategy:
       matrix:
@@ -25,6 +50,7 @@ jobs:
         java-version: 11
 
     - name: Install MLton
+      if: matrix.os != 'windows-latest'
       run: |
         curl -L https://github.com/MLton/mlton/releases/download/on-20210117-release/mlton-20210117-1.amd64-linux-glibc2.31.tgz --output mlton.tgz
         tar -xzf mlton.tgz
@@ -36,12 +62,15 @@ jobs:
         echo "$GITHUB_WORKSPACE/mlton/bin" >> $GITHUB_PATH
 
     - name: Update apt database
+      if: matrix.os != 'windows-latest'
       run: sudo apt-get update
 
     - name: Install Chez Scheme
+      if: matrix.os != 'windows-latest'
       run: sudo apt-get install chezscheme
 
     - name: Install LLVM 15
+      if: matrix.os != 'windows-latest'
       run: sudo apt-get install llvm-15
 
     - name: Install libuv

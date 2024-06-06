@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
-import effekt.util.getOrElseAborting
+import effekt.util.{getOrElseAborting, escape, OS, os}
 import kiama.util.IO
 
 /**
@@ -38,6 +38,20 @@ trait Runner[Executable] {
    * Modules this backend loads by default
    */
   def prelude: List[String] = List("effekt")
+
+  /**
+   * Creates a OS-specific script file that will execute the command when executed.
+   * @return the actual name of the generated script (might be `!= name`)
+   */
+  def createScript(name: String, command: String*): String = os match {
+    case OS.POSIX =>
+      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")}", true)
+      name
+    case OS.Windows =>
+      val batName = name + ".bat"
+      IO.createFile(batName, "@echo off\r\n" + command.mkString(" "))
+      batName
+  }
 
   /**
    * Should check whether everything is installed for this backend
@@ -125,13 +139,22 @@ object JSRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val jsFilePath = (out / path).unixPath
+    val jsFilePath = (out / path).canonicalPath.escape
     // create "executable" using shebang besides the .js file
-    val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
     val jsScript = s"require('${jsFilePath}').main()"
-    val shebang = "#!/usr/bin/env node"
-    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
-    jsScriptFilePath
+    os match {
+      case OS.POSIX =>
+        val shebang = "#!/usr/bin/env node"
+        val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
+        IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
+        jsScriptFilePath
+
+      case OS.Windows =>
+        val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
+        val exePath = jsFilePath.stripSuffix(s".$extension")
+        IO.createFile(jsMainFilePath, jsScript)
+        createScript(exePath, "node", jsMainFilePath)
+    }
 }
 
 trait ChezRunner extends Runner[String] {
@@ -151,11 +174,9 @@ trait ChezRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val schemeFilePath = (out / path).unixPath
-    val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
-    val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
-    IO.createFile(bashScriptPath, bashScript, true)
-    bashScriptPath
+    val schemeFilePath = (out / path).canonicalPath.escape
+    val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
+    createScript(exeScriptPath, "scheme", "--script", schemeFilePath)
 }
 
 object ChezMonadicRunner extends ChezRunner {
