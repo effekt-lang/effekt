@@ -638,6 +638,21 @@ namespace internal {
         ret %Int %unboxed
       """
 
+    extern type BoxedByte
+    extern pure def boxByte(n: Byte): BoxedByte =
+      llvm """
+        %extended = sext i8 %n to i64
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxByte(b: BoxedByte): Byte =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        %truncated = trunc i64 %unboxed to i8
+        ret i8 %truncated
+      """
+
     extern type BoxedChar
     extern pure def boxChar(c: Char): BoxedChar =
       llvm """
