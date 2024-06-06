@@ -623,16 +623,7 @@ define fastcc void @topLevelEraser(%Env %env) {
     ret void
 }
 
-define fastcc void @run_i64(%Neg %f, i64 %arg) {
-    ; backup globals
-    %base = load %Base, ptr @base
-    %region = load %Region, ptr @region
-    %limit = load %Limit, ptr @limit
-    %rest = load %Stk, ptr @rest
-
-    ; Create an empty stack (TODO is all of this really necessary???)
-    %env = call %Env @malloc(i64 1048576)
-
+define %Sp @withEmptyStack() {
     %sp = call %Sp @malloc(i64 268435456)
     store %Sp %sp, ptr @base
     %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
@@ -642,6 +633,18 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
     store %Sharer @topLevelSharer, ptr %sharerp_2
     store %Eraser @topLevelEraser, ptr %eraserp_3
     %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+    ret %Sp %sp2
+}
+
+define fastcc void @run_i64(%Neg %f, i64 %arg) {
+    ; backup globals
+    %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
+
+    ; fresh stack
+    %sp = call %Sp @withEmptyStack()
 
     ; prepare call
     %arrayp = extractvalue %Neg %f, 0
@@ -650,11 +653,12 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
     %fp = load ptr, ptr %fpp
 
     ; Store the argument (0th index is evidence)
+    %env = call %Env @malloc(i64 1048576)
     %ev2 = getelementptr {%Int, %Int}, %Env %env, i64 0, i32 1
     store i64 %arg, ptr %ev2
 
     ; call
-    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp2)
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
@@ -673,18 +677,8 @@ define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
     %limit = load %Limit, ptr @limit
     %rest = load %Stk, ptr @rest
 
-    ; Create an empty stack (TODO is all of this really necessary???)
-    %env = call %Env @malloc(i64 1048576)
-
-    %sp = call %Sp @malloc(i64 268435456)
-    store %Sp %sp, ptr @base
-    %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
-    %sharerp_2 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 1
-    %eraserp_3 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 2
-    store %RetAdr @topLevel, ptr %retadrp_1
-    store %Sharer @topLevelSharer, ptr %sharerp_2
-    store %Eraser @topLevelEraser, ptr %eraserp_3
-    %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+    ; fresh stack
+    %sp = call %Sp @withEmptyStack()
 
     ; prepare call
     %arrayp = extractvalue %Neg %f, 0
@@ -693,11 +687,12 @@ define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
     %fp = load ptr, ptr %fpp
 
     ; Store the argument (0th index is evidence)
+    %env = call %Env @malloc(i64 1048576)
     %arg_pos = getelementptr {%Int, %Pos}, %Env %env, i64 0, i32 1
     store %Pos %arg, ptr %arg_pos
 
     ; call
-    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp2)
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
@@ -715,18 +710,8 @@ define void @run(%Neg %f) {
     %limit = load %Limit, ptr @limit
     %rest = load %Stk, ptr @rest
 
-    ; Create an empty stack (TODO is all of this really necessary???)
-    %env = call %Env @malloc(i64 1048576)
-
-    %sp = call %Sp @malloc(i64 268435456)
-    store %Sp %sp, ptr @base
-    %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
-    %sharerp_2 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 1
-    %eraserp_3 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 2
-    store %RetAdr @topLevel, ptr %retadrp_1
-    store %Sharer @topLevelSharer, ptr %sharerp_2
-    store %Eraser @topLevelEraser, ptr %eraserp_3
-    %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+    ; fresh stack
+    %sp = call %Sp @withEmptyStack()
 
     ; prepare call
     %arrayp = extractvalue %Neg %f, 0
@@ -735,7 +720,8 @@ define void @run(%Neg %f) {
     %fp = load ptr, ptr %fpp
 
     ; call
-    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp2)
+    %env = call %Env @malloc(i64 1048576)
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
