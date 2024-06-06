@@ -1,5 +1,6 @@
 ; Run-Time System
 
+attributes #0 = { "ccc" }
 
 %Evi = type i64
 
@@ -224,12 +225,6 @@ define void @eraseNegative(%Neg %val) alwaysinline {
     %obj = extractvalue %Neg %val, 1
     tail call void @eraseObject(%Obj %obj)
     ret void
-}
-
-define ptr @allocNeg(%Neg %val) alwaysinline {
-    %ref = call ptr @malloc(i64 16) ; two pointers, so 16 byte
-    store %Neg %val, ptr %ref
-    ret ptr %ref
 }
 
 

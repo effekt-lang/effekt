@@ -178,6 +178,7 @@ struct Pos makePromise() {
 // TODO
 // - Error reporting
 // - pooling of request objects (benchmark first!)
+// - always pass by-reference, not by-value? (to work around C ABI issues)
 
 
 /**
@@ -326,7 +327,9 @@ void timer(int64_t n, struct Neg callback) {
     uv_timer_init(loop, timer);
 
     // Allocate memory for the callback (of type Neg)
-    struct Neg* payload = allocNeg(callback);
+    struct Neg* payload = (struct Neg*)malloc(sizeof(struct Neg));
+    payload->vtable = callback.vtable;
+    payload->obj = callback.obj;
 
     // Store the Neg pointer in the timer's data field
     timer->data = (void*) payload;
@@ -404,7 +407,7 @@ void on_open(uv_fs_t* req) {
 }
 
 
-int64_t openFile(struct Buffer path, struct Buffer modeString, struct Neg success, struct Neg failure) {
+void openFile(struct Buffer path, struct Buffer modeString, struct Neg* success, struct Neg* failure) {
     int permissions = 0666;  // rw-rw-rw- permissions
 
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
@@ -419,8 +422,8 @@ int64_t openFile(struct Buffer path, struct Buffer modeString, struct Neg succes
 
     // Allocate Callbacks on the heap
     Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = success;
-    callbacks->on_failure = failure;
+    callbacks->on_success = *success;
+    callbacks->on_failure = *failure;
 
     // Store the callbacks in the req's data field
     req->data = callbacks;
@@ -434,7 +437,7 @@ int64_t openFile(struct Buffer path, struct Buffer modeString, struct Neg succes
     // We can free the string, since libuv copies it into req
     free(path_str);
 
-    return result_i64;
+    return; // result_i64;
 }
 
 
@@ -464,7 +467,13 @@ void on_read(uv_fs_t* req) {
     }
 }
 
-void readFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg success, struct Neg failure) {
+/**
+ * Here we require success and failure to be passed by reference (can be
+ * stack-allocated). This is to work around an issue with the C ABI where
+ * late arguments are scrambled.
+ */
+void readFile(int32_t fd, struct Buffer buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
+
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -477,14 +486,14 @@ void readFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg su
 
     // Allocate Callbacks on the heap
     Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = success;
-    callbacks->on_failure = failure;
+    callbacks->on_success = *success;
+    callbacks->on_failure = *failure;
 
-    // Store the callbacks in the req's data field
+    // // Store the callbacks in the req's data field
     req->data = callbacks;
 
-    // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, pos_to_filedescriptor(fd), &buf, 1, offset, on_read);
+    // // Argument `1` here means: we pass exactly one buffer
+    uv_fs_read(loop, req, fd, &buf, 1, offset, on_read);
 }
 
 
@@ -514,7 +523,12 @@ void on_write(uv_fs_t* req) {
     }
 }
 
-void writeFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg success, struct Neg failure) {
+/**
+ * Here we require success and failure to be passed by reference (can be
+ * stack-allocated). This is to work around an issue with the C ABI where
+ * late arguments are scrambled.
+ */
+void writeFile(int32_t fd, struct Buffer buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -527,24 +541,24 @@ void writeFile(struct Pos fd, struct Buffer buffer, int64_t offset, struct Neg s
 
     // Allocate Callbacks on the heap
     Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = success;
-    callbacks->on_failure = failure;
+    callbacks->on_success = *success;
+    callbacks->on_failure = *failure;
 
     // Store the callbacks in the req's data field
     req->data = callbacks;
 
     // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, pos_to_filedescriptor(fd), &buf, 1, offset, on_write);
+    uv_fs_write(loop, req, fd, &buf, 1, offset, on_write);
 }
 
 // ; Closing a File
 // ; --------------
 
 
-void closeFile(struct Pos fd) {
+void closeFile(int32_t fd) {
     uv_fs_t req;
     uv_loop_t* loop = uv_default_loop();
-    uv_fs_close(loop, &req, pos_to_filedescriptor(fd), NULL);
+    uv_fs_close(loop, &req, fd, NULL);
 }
 
 

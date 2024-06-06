@@ -180,7 +180,11 @@ def writeFile(fd: FileDescriptor, buffer: Bytes, offset: Int): Int / { AsyncIO, 
 extern io def closeFile(fd: FileDescriptor): Unit =
   js "fs.close(${fd}, () => $effekt.unit)"
   llvm """
-    call void @closeFile(%Pos %fd)
+    ; extract the filedescriptor from the tag of the Pos
+    %tag = extractvalue %Pos %fd, 0
+    %fd_int = trunc i64 %tag to i32
+
+    call void @closeFile(i32 %fd_int)
     ret %Pos zeroinitializer
   """
 
@@ -207,7 +211,14 @@ namespace callback {
       onFailure: (Int) => Unit at {io, global}): Unit =
     js "openFile(${path}, ${mode}, ${onSuccess}, ${onFailure})"
     llvm """
-      %res = call i64 @openFile(%Pos %path, %Pos %mode, %Neg %onSuccess, %Neg %onFailure)
+      ; stack allocate
+      %onSuccess_ptr = alloca %Neg
+      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+
+      %onFailure_ptr = alloca %Neg
+      store %Neg %onFailure, %Neg* %onFailure_ptr
+
+      call void @openFile(%Pos %path, %Pos %mode, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 
@@ -216,7 +227,18 @@ namespace callback {
       onFailure: (Int) => Unit at {io, global}): Unit =
     js "readFile(${fd}, ${buffer}, ${offset}, ${onSuccess}, ${onFailure})"
     llvm """
-      call %Pos @readFile(%Pos %fd, %Pos %buffer, i64 %offset, %Neg %onSuccess, %Neg %onFailure)
+      ; extract the filedescriptor from the tag of the Pos
+      %tag = extractvalue %Pos %fd, 0
+      %fd_int = trunc i64 %tag to i32
+
+      ; stack allocate
+      %onSuccess_ptr = alloca %Neg
+      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+
+      %onFailure_ptr = alloca %Neg
+      store %Neg %onFailure, %Neg* %onFailure_ptr
+
+      call void @readFile(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 
@@ -225,7 +247,18 @@ namespace callback {
       onFailure: (Int) => Unit at {io, global}): Unit =
     js "writeFile(${fd}, ${buffer}, ${offset}, ${onSuccess}, ${onFailure})"
     llvm """
-      call %Pos @writeFile(%Pos %fd, %Pos %buffer, i64 %offset, %Neg %onSuccess, %Neg %onFailure)
+      ; extract the filedescriptor from the tag of the Pos
+      %tag = extractvalue %Pos %fd, 0
+      %fd_int = trunc i64 %tag to i32
+
+      ; stack allocate
+      %onSuccess_ptr = alloca %Neg
+      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+
+      %onFailure_ptr = alloca %Neg
+      store %Neg %onFailure, %Neg* %onFailure_ptr
+
+      call void @writeFile(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 }

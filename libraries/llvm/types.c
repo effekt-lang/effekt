@@ -35,7 +35,6 @@ typedef struct Buffer String;
 extern void run(struct Neg);
 extern void run_i64(struct Neg, int64_t);
 extern void run_Pos(struct Neg, struct Pos);
-extern struct Neg* allocNeg(struct Neg);
 
 // Reference counting primitives defined in LLVM
 extern void eraseNegative(struct Neg);
