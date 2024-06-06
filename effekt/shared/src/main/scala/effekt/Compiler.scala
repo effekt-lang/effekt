@@ -318,5 +318,5 @@ trait Compiler[Executable] {
    * Path relative to the output folder
    */
   def path(m: symbols.Module)(using C: Context): String =
-    (m.path.replace('/', '_').replace('-', '_')) + extension
+    (m.path.split('/').last.replace('-', '_')) + extension
 }
