@@ -441,7 +441,7 @@ define %Region @copyRegion(%Region %region) alwaysinline {
 
     %stringsbase = extractvalue %Region %region, 2, 1
     %stringssp = extractvalue %Region %region, 2, 0
-    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @c_buffer_refcount_increment)
+    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @sharePositive)
 
     %newmem.0 = call %Mem @copyMem(%Mem %mem.0)
     %newmem.1 = call %Mem @copyMem(%Mem %mem.1)
@@ -588,7 +588,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 
     %stringsbase = extractvalue %Region %region, 2, 1
     %stringssp = extractvalue %Region %region, 2, 0
-    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @c_buffer_refcount_decrement)
+    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @erasePositive)
     call void @free(%Base %stringsbase)
 
     ret void

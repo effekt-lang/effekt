@@ -1,11 +1,22 @@
 #ifndef EFFEKT_BUFFER_C
 #define EFFEKT_BUFFER_C
 
-// NOTE: Buffers are NOT 0-terminated!
-
 #include "stdlib.h"
 #include <stdint.h>
 #include <string.h> // For memcopy
+
+/** We represent buffers like positive types.
+ *
+ *  - The field `tag` contains offset (32bit) and length (32bit), which is equal to
+ *    the tag (64bit) in Pos;
+ *  - The field `obj` points to memory with the following layout:
+ *
+ *       +--[ Header ]--+--------------+
+ *       | Rc  | Eraser | Contents ... |
+ *       +--------------+--------------+
+ *
+ * The eraser is always a null pointer since it does not need to do anything.
+ */
 
 // TODO It may be performance-advantageous to implement this C file's semantics
 // in LLVM, since the linker cannot realistically be asked to satisfactorily
@@ -14,111 +25,76 @@
 // with clang-generated LLVM from this file's entire translation unit.
 
 
-// - 8 bytes for the reference counter.
-// E.g. capacity could later also be stored in the header.
-#define BUFFER_HEADER_WIDTH (8)
-
-uint64_t c_buffer_offset(const struct Buffer buffer) {
-    return buffer.offset;
-}
-
-uint64_t c_buffer_length(const struct Buffer buffer) {
-    return buffer.length;
-}
-
-// NOTE: This assumes a homogenously used byte order.
-uint64_t *c_buffer_refcount(const struct Buffer buffer) {
-    return (uint64_t *) (buffer.data + 0);
-}
-
-uint8_t *c_buffer_bytes(const struct Buffer buffer) {
-    return (uint8_t *) (buffer.data + BUFFER_HEADER_WIDTH + buffer.offset);
-}
-
-struct Buffer c_buffer_construct(const uint64_t n, const uint8_t *data) {
-    uint8_t *obj = (uint8_t *)malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
-    ASSERT_NON_NULL(obj);
-
-    // Initialize reference count (a reference count of zero means one sole owner)
-    memset(obj, 0, BUFFER_HEADER_WIDTH);
-
-    // Copy data
-    memcpy(obj + BUFFER_HEADER_WIDTH, data, n);
-
-    return (struct Buffer) {
-        .offset = 0,
-        .length = n,
-        .data = obj,
+struct Pos c_buffer(const uint32_t offset, const uint32_t length, void* obj) {
+    return (struct Pos) {
+        .tag = ((uint64_t)offset << 32) | (uint32_t)length,
+        .obj = obj,
     };
 }
 
+void c_buffer_erase_noop(void *envPtr) {}
+
+uint64_t c_buffer_offset(const struct Pos buffer) {
+    return (uint32_t)(buffer.tag >> 32); // Extract offset from the upper 32 bits
+}
+
+// Function to get the length from Pos
+uint64_t c_buffer_length(const struct Pos buffer) {
+    return (uint32_t)(buffer.tag & 0xFFFFFFFF); // Extract length from the lower 32 bits
+}
+
+uint8_t *c_buffer_bytes(const struct Pos buffer) {
+    return (uint8_t *) (buffer.obj + sizeof(struct Header) + c_buffer_offset(buffer));
+}
+
+struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
+    uint8_t *obj = (uint8_t *)malloc(sizeof(struct Header) + n * sizeof *obj);
+    ASSERT_NON_NULL(obj);
+
+    struct Header *header = (void*) obj;
+    *header = (struct Header) { .rc = 0, .eraser = c_buffer_erase_noop, };
+
+    // Initialize reference count (a reference count of zero means one sole owner)
+    memset(obj, 0, sizeof(struct Header));
+
+    // Copy data
+    memcpy(obj + sizeof(struct Header), data, n);
+
+    return c_buffer(0, n, obj);
+}
+
 // TODO this allocates, copies, and frees immediately... improve this
-struct Buffer c_buffer_construct_zeroed(const uint64_t n) {
+struct Pos c_buffer_construct_zeroed(const uint64_t n) {
     uint8_t *zeroes = calloc(n, sizeof *zeroes);
     ASSERT_NON_NULL(zeroes)
-    const struct Buffer buffer = c_buffer_construct(n, zeroes);
+    const struct Pos buffer = c_buffer_construct(n, zeroes);
     free(zeroes);
     return buffer;
 }
 
-struct Buffer c_buffer_construct_uninitialized(const uint64_t n) {
-    uint8_t *data = malloc(BUFFER_HEADER_WIDTH + n * sizeof *data);
+struct Pos c_buffer_construct_uninitialized(const uint64_t n) {
+    uint8_t *data = malloc(sizeof(struct Header) + n * sizeof *data);
     ASSERT_NON_NULL(data)
 
-    // reference count (a reference count of zero means one sole owner)
-    for (uint64_t j = 0; j < BUFFER_HEADER_WIDTH; ++j)
-        data[j] = 0;
+    struct Header *header = (void*) data;
+    *header = (struct Header) { .rc = 0, .eraser = c_buffer_erase_noop, };
 
-    return (struct Buffer) {
-        .offset = 0,
-        .length = n,
-        .data = data,
-    };
+    return c_buffer(0, n, data);
 }
 
-void c_buffer_destruct(const struct Buffer buffer) {
-    free(buffer.data);
-}
-
-
-void c_buffer_refcount_increment(const struct Buffer buffer) {
-    if (DEBUG_REFCOUNT) {
-        fprintf(stderr, "c_buffer_refcount_increment((struct Buffer) "
-            "{ .offset = %" PRIu32 ", .length = %" PRIu32 ", .data = %p }): from %" PRIu64 "\n",
-            buffer.offset, buffer.length, buffer.data, *(c_buffer_refcount(buffer)));
-        fflush(stderr);
-    }
-
-    (*c_buffer_refcount(buffer))++;
-}
-
-void c_buffer_refcount_decrement(const struct Buffer buffer) {
-    if (DEBUG_REFCOUNT) {
-        fprintf(stderr, "c_buffer_refcount_decrement((struct Buffer) "
-            "{ .offset = %" PRIu32 ", .length = %" PRIu32 ", .data = %p }): from %" PRIu64 "\n",
-            buffer.offset, buffer.length, buffer.data, *(c_buffer_refcount(buffer)));
-        fflush(stderr);
-    }
-
-    if (!(*c_buffer_refcount(buffer))--)
-        c_buffer_destruct(buffer);
-}
-
-struct Buffer c_buffer_slice(struct Buffer buffer, const uint64_t offset, const uint64_t length) {
+struct Pos c_buffer_slice(struct Pos buffer, const uint64_t offset, const uint64_t length) {
 
     if ((c_buffer_offset(buffer) + offset + length) > c_buffer_length(buffer))
         return buffer;
 
-    buffer.offset = c_buffer_offset(buffer) + offset;
-    buffer.length = length;
-    return buffer;
+    return c_buffer(c_buffer_offset(buffer) + offset, length, buffer.obj);
 }
 
-struct Buffer c_buffer_clone(const struct Buffer buffer) {
+struct Pos c_buffer_clone(const struct Pos buffer) {
     return c_buffer_construct(c_buffer_length(buffer), c_buffer_bytes(buffer));
 }
 
-void c_buffer_copy(const struct Buffer from, struct Buffer to, uint64_t startFrom, uint64_t startTo, uint64_t length) {
+void c_buffer_copy(const struct Pos from, struct Pos to, uint64_t startFrom, uint64_t startTo, uint64_t length) {
     // Check bounds
     if (startFrom < 0 || startTo < 0 || (startFrom + length > c_buffer_length(from)) || (startTo + length > c_buffer_length(to))) {
         return;
@@ -141,7 +117,7 @@ void c_buffer_copy(const struct Buffer from, struct Buffer to, uint64_t startFro
  * @param buffer The buffer to convert.
  * @return A null-terminated string representing the contents of the buffer.
  */
-char* c_buffer_as_null_terminated_string(const struct Buffer buffer) {
+char* c_buffer_as_null_terminated_string(const struct Pos buffer) {
     uint64_t length = c_buffer_length(buffer);
     uint64_t zero_runes = 0;
     uint8_t* bytes = c_buffer_bytes(buffer);
@@ -171,7 +147,7 @@ char* c_buffer_as_null_terminated_string(const struct Buffer buffer) {
     return buf;
 }
 
-struct Buffer c_buffer_construct_from_null_terminated_string(const char *data_nt) {
+struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
     uint64_t n = 0;
     while (data_nt[++n]);
 
@@ -179,50 +155,58 @@ struct Buffer c_buffer_construct_from_null_terminated_string(const char *data_nt
 }
 
 
-struct Buffer c_buffer_concatenate(const struct Buffer left, const struct Buffer right) {
-    const struct Buffer concatenated = c_buffer_construct_zeroed(
+struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
+    const struct Pos concatenated = c_buffer_construct_zeroed(
         c_buffer_length(left) + c_buffer_length(right));
     for (uint64_t j = 0; j < c_buffer_length(concatenated); ++j)
         c_buffer_bytes(concatenated)[j]
             = j < c_buffer_length(left)
             ? c_buffer_bytes(left)[j]
             : c_buffer_bytes(right)[j - c_buffer_length(left)];
+
+    erasePositive(left);
+    erasePositive(right);
     return concatenated;
 }
 
-struct Pos c_buffer_eq(const struct Buffer left, const struct Buffer right) {
+struct Pos c_buffer_eq(const struct Pos left, const struct Pos right) {
     uint64_t left_len = c_buffer_length(left);
     uint64_t right_len = c_buffer_length(right);
     if (left_len != right_len) return BooleanFalse;
     for (uint64_t j = 0; j < left_len; ++j) {
         if (c_buffer_bytes(left)[j] != c_buffer_bytes(right)[j]) {
+            erasePositive(left);
+            erasePositive(right);
             return BooleanFalse;
         }
     }
+    erasePositive(left);
+    erasePositive(right);
     return BooleanTrue;
 }
 
-struct Buffer c_buffer_substring(const struct Buffer str, uint64_t start, uint64_t end) {
-    const struct Buffer substr = c_buffer_construct_zeroed(end - start);
+struct Pos c_buffer_substring(const struct Pos str, uint64_t start, uint64_t end) {
+    const struct Pos substr = c_buffer_construct_zeroed(end - start);
     for (uint64_t j = 0; j < c_buffer_length(substr); ++j) {
         c_buffer_bytes(substr)[j] = c_buffer_bytes(str)[start+j];
     }
+    erasePositive(str);
     return substr;
 }
 
-struct Buffer c_buffer_show_Int(const Int n) {
+struct Pos c_buffer_show_Int(const Int n) {
     char str[24];
     sprintf(str, "%" PRId64, n);
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Buffer c_buffer_show_Byte(const uint8_t n) {
+struct Pos c_buffer_show_Byte(const uint8_t n) {
     char str[4];  // Byte values range from 0 to 255, 3 characters + null terminator
     sprintf(str, "%" PRIu8, n);
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Buffer c_buffer_show_Char(const uint64_t n) {
+struct Pos c_buffer_show_Char(const uint64_t n) {
     char str[5] = {0};  // Max 4 bytes for UTF-8 + 1 for null terminator
     unsigned char *buf = (unsigned char *)str;
 
@@ -245,44 +229,46 @@ struct Buffer c_buffer_show_Char(const uint64_t n) {
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-struct Buffer c_buffer_show_Double(const Double x) {
+struct Pos c_buffer_show_Double(const Double x) {
     char str[64]; // TODO is this large enough? Possibly use snprintf first
     sprintf(str, "%g", x);
     return c_buffer_construct_from_null_terminated_string(str);
 }
 
-uint64_t c_buffer_index(const struct Buffer buffer, const uint64_t index) {
-    return ((uint8_t *) (buffer.data + BUFFER_HEADER_WIDTH + buffer.offset))[index];
+uint64_t c_buffer_index(const struct Pos buffer, const uint64_t index) {
+    return c_buffer_bytes(buffer)[index];
 }
 
-void c_buffer_set(struct Buffer buffer, const uint64_t index, uint8_t value) {
-    ((uint8_t *) (buffer.data + BUFFER_HEADER_WIDTH + buffer.offset))[index] = value;
+void c_buffer_set(struct Pos buffer, const uint64_t index, uint8_t value) {
+    c_buffer_bytes(buffer)[index] = value;
 }
 
-uint32_t c_buffer_character_at(const struct Buffer buffer, const uint64_t index) {
+uint32_t c_buffer_character_at(const struct Pos buffer, const uint64_t index) {
     const uint8_t *bytes = c_buffer_bytes(buffer);
     uint8_t first_byte = bytes[index];
     uint32_t character = 0;
+
+    uint32_t length = c_buffer_length(buffer);
 
     if (first_byte < 0x80) {
         // Single-byte character (0xxxxxxx)
         character = first_byte;
     } else if ((first_byte & 0xE0) == 0xC0) {
         // Two-byte character (110xxxxx 10xxxxxx)
-        if (index + 1 < buffer.length) {
+        if (index + 1 < length) {
             character = ((first_byte & 0x1F) << 6) |
                         (bytes[index + 1] & 0x3F);
         }
     } else if ((first_byte & 0xF0) == 0xE0) {
         // Three-byte character (1110xxxx 10xxxxxx 10xxxxxx)
-        if (index + 2 < buffer.length) {
+        if (index + 2 < length) {
             character = ((first_byte & 0x0F) << 12) |
                         ((bytes[index + 1] & 0x3F) << 6) |
                         (bytes[index + 2] & 0x3F);
         }
     } else if ((first_byte & 0xF8) == 0xF0) {
         // Four-byte character (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
-        if (index + 3 < buffer.length) {
+        if (index + 3 < length) {
             character = ((first_byte & 0x07) << 18) |
                         ((bytes[index + 1] & 0x3F) << 12) |
                         ((bytes[index + 2] & 0x3F) << 6) |
@@ -290,6 +276,7 @@ uint32_t c_buffer_character_at(const struct Buffer buffer, const uint64_t index)
         }
     }
 
+    erasePositive(buffer);
     return character;
 }
 

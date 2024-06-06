@@ -26,4 +26,5 @@ def main() = {
   b2.write(0, 101.toByte)
 
   println(b1.toUTF8) // hello
+
 }

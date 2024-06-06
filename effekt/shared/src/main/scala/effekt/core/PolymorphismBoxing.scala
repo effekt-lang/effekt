@@ -72,10 +72,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case core.Type.TChar    => PContext.boxer("Char")
     case core.Type.TByte    => PContext.boxer("Byte")
     case core.Type.TDouble  => PContext.boxer("Double")
-    // Do strings need to be boxed? Really?
-    case core.Type.TString  =>
-      val b = PContext.boxer("String")
-      b
   }
 
   class PContext(declarations: List[Declaration], externs: List[Extern])(using val Context: Context) extends DeclarationContext(declarations, externs){

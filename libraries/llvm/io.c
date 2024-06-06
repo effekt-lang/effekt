@@ -22,6 +22,7 @@ void c_io_println_Double(const Double x) {
 void c_io_println_String(String text) {
     for (uint64_t j = 0; j < c_buffer_length(text); ++j)
         putchar(c_buffer_bytes(text)[j]);
+    erasePositive(text);
     putchar('\n');
 }
 
@@ -295,7 +296,7 @@ int32_t pos_to_filedescriptor(struct Pos fd) {
     return (int32_t) fd.tag;
 }
 
-struct Buffer showFiledescriptor(struct Pos fd) {
+struct Pos showFiledescriptor(struct Pos fd) {
   return c_buffer_show_Int(pos_to_filedescriptor(fd));
 }
 
@@ -407,18 +408,18 @@ void on_open(uv_fs_t* req) {
 }
 
 
-void openFile(struct Buffer path, struct Buffer modeString, struct Neg* success, struct Neg* failure) {
+void openFile(struct Pos path, struct Pos modeString, struct Neg* success, struct Neg* failure) {
     int permissions = 0666;  // rw-rw-rw- permissions
 
     uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
     // Convert the Effekt String to a 0-terminated string
     char* path_str = c_buffer_as_null_terminated_string(path);
-    c_buffer_refcount_decrement(path);
+    erasePositive((struct Pos) path);
 
     // Convert the Effekt String representing the opening mode to libuv flags
     int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
-    c_buffer_refcount_decrement(modeString);
+    erasePositive((struct Pos) modeString);
 
     // Allocate Callbacks on the heap
     Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
@@ -472,7 +473,7 @@ void on_read(uv_fs_t* req) {
  * stack-allocated). This is to work around an issue with the C ABI where
  * late arguments are scrambled.
  */
-void readFile(int32_t fd, struct Buffer buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
+void readFile(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
 
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
@@ -528,7 +529,7 @@ void on_write(uv_fs_t* req) {
  * stack-allocated). This is to work around an issue with the C ABI where
  * late arguments are scrambled.
  */
-void writeFile(int32_t fd, struct Buffer buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
+void writeFile(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 

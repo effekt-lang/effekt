@@ -56,7 +56,6 @@ extern io def panic[R](msg: String): R =
   ml "raise Fail ${msg}"
   llvm """
     call void @c_io_println_String(%Pos %msg)
-    call void @c_buffer_refcount_decrement(%Pos %msg)
     call void @exit(i32 1)
     ret %Pos zeroinitializer ; Unit
   """

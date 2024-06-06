@@ -700,14 +700,14 @@ object Transformer {
   def shareNegative = ConstantGlobal(PointerType(), "shareNegative");
   def shareStack = ConstantGlobal(PointerType(), "shareStack");
   def shareFrames = ConstantGlobal(PointerType(), "shareFrames");
-  def shareString = ConstantGlobal(PointerType(), "c_buffer_refcount_increment");
+  def shareString = ConstantGlobal(PointerType(), "sharePositive");
 
   def eraseObject = ConstantGlobal(PointerType(), "eraseObject");
   def erasePositive = ConstantGlobal(PointerType(), "erasePositive");
   def eraseNegative = ConstantGlobal(PointerType(), "eraseNegative");
   def eraseStack = ConstantGlobal(PointerType(), "eraseStack");
   def eraseFrames = ConstantGlobal(PointerType(), "eraseFrames");
-  def eraseString = ConstantGlobal(PointerType(), "c_buffer_refcount_decrement");
+  def eraseString = ConstantGlobal(PointerType(), "erasePositive");
 
   def alloc = ConstantGlobal(PointerType(), "alloc")
   def getPtr = ConstantGlobal(PointerType(), "getPtr")

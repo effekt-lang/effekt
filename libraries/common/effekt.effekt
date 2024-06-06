@@ -47,7 +47,6 @@ extern def println(value: String): Unit =
   chez "(println_impl ${value})"
   llvm """
     call void @c_io_println_String(%Pos %value)
-    call void @c_buffer_refcount_decrement(%Pos %value)
     ret %Pos zeroinitializer ; Unit
   """
   ml { print(value); print("\n") }
@@ -119,8 +118,6 @@ extern pure def infixConcat(s1: String, s2: String): String =
   ml "${s1} ^ ${s2}"
   llvm """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
-    call void @c_buffer_refcount_decrement(%Pos %s1)
-    call void @c_buffer_refcount_decrement(%Pos %s2)
     ret %Pos %spz
   """
 
@@ -130,7 +127,6 @@ extern pure def length(str: String): Int =
   ml "String.size ${str}"
   llvm """
     %x = call %Int @c_buffer_length(%Pos %str)
-    call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Int %x
   """
 
@@ -140,7 +136,6 @@ extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
   llvm """
     %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
-    call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Pos %x
   """
 
@@ -268,8 +263,6 @@ extern pure def infixEq(x: String, y: String): Bool =
   ml "${x} = ${y}"
   llvm """
     %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
-    call void @c_buffer_refcount_decrement(%Pos %x)
-    call void @c_buffer_refcount_decrement(%Pos %y)
     ret %Pos %res
   """
 
@@ -684,7 +677,5 @@ namespace internal {
         %d = bitcast i64 %unboxed to double
         ret %Double %d
       """
-
-    record BoxedString(unboxString: String)
   }
 }
