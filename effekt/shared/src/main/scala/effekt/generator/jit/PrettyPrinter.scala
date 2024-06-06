@@ -244,7 +244,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition(name, binding) => jsonObject(ListMap("name" -> toDoc(name), "value" -> toDoc(binding)))
+    case Definition(name, binding) => jsonObject(ListMap(
+      "name" -> toDoc(name), "value" -> toDoc(binding),
+      "export_as" -> jsonListSmall(List(toDoc(name.name.toString)))
+    ))
   }
 
   def toDoc(p: Program): Doc = p match {
