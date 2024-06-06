@@ -15,12 +15,12 @@ extern io def empty(capacity: Int): Bytes =
     ret %Pos %buf
   """
 
-extern io def copy(b: Bytes): Bytes =
-  js "bytes$clone(${b})"
-  llvm """
-    %copy = call %Pos @c_buffer_clone(%Pos %b)
-    ret %Pos %copy
-  """
+def copy(b: Bytes): Bytes = {
+  val len = b.size
+  val clone = empty(len)
+  copy(b, clone, 0, 0, len)
+  clone
+}
 
 extern io def copy(from: Bytes, to: Bytes, startFrom: Int, startTo: Int, length: Int): Unit =
   js "bytes$copy(${from}, ${to}, ${startFrom}, ${startTo}, ${length})"
@@ -44,6 +44,7 @@ extern io def read(b: Bytes, index: Int): Byte =
     ret i8 %byte
   """
 
+// TODO should return the number of bytes written.
 extern io def write(b: Bytes, index: Int, value: Byte): Unit =
   js "bytes$set(${b}, ${index}, ${value})"
   llvm """
@@ -69,14 +70,14 @@ def slice(b: Bytes, offset: Int, length: Int): Bytes = {
 def truncated(b: Bytes, n: Int): Bytes =
   b.slice(0, n)
 
-extern pure def toBytes(s: String): Bytes =
+extern pure def fromUTF8(s: String): Bytes =
   js "(new TextEncoder().encode(${s}))"
   llvm """
     %copy = call %Pos @c_buffer_clone(%Pos %s)
     ret %Pos %copy
   """
 
-extern pure def show(b: Bytes): String =
+extern pure def toUTF8(b: Bytes): String =
   js "(new TextDecoder('utf-8').decode(${b}))"
   // assuming the buffer is already in UTF-8
   llvm """

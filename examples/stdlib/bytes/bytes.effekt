@@ -9,17 +9,21 @@ def main() = {
   b.write(3, 108.toByte)
   b.write(4, 111.toByte)
 
+  val c = b.copy.slice(0, 5)
+
   val b1 = b.slice(0, 5)
-  println(b1.show) // hello
+  println(b1.toUTF8) // hello
 
   val b2 = b.slice(1, 3)
-  println(b2.show) // ell
+  println(b2.toUTF8) // ell
 
   b.write(1, 102.toByte)
 
-  println(b2.show) // fll
+  println(b2.toUTF8) // fll
+
+  println(c.toUTF8) // hello
 
   b2.write(0, 101.toByte)
 
-  println(b1.show) // hello
+  println(b1.toUTF8) // hello
 }

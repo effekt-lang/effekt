@@ -101,7 +101,7 @@ def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
   def go(): String = {
     readFile(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
       case 0 =>
-        buffer.slice(0, offset).show
+        buffer.slice(0, offset).toUTF8
       case n and n < 0 => panic("Error!")
       case n =>
         offset = offset + n
@@ -131,7 +131,7 @@ def writeFile(path: String, contents: String): Unit / { AsyncIO, Exception[IOErr
   val writeSize = 1048576 // 1MB
 
   // this induces a memcpy that is not strictly necessary, since we use the buffer read-only
-  val buffer = contents.toBytes
+  val buffer = contents.fromUTF8
   val size = buffer.size
 
   var offset = 0;
