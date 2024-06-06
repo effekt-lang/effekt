@@ -44,9 +44,10 @@ object Transformer {
     case core.ValueType.Boxed(tpe, capt) => transform(tpe)
   }
   def capabilityParamsFor(cparams: List[core.Id])(using DC: core.DeclarationContext, C: ErrorReporter): List[jit.LhsOperand] = Nil
+  def capabilityParamTypesFor(cparams: List[core.Id])(using DC: core.DeclarationContext, C: ErrorReporter): List[Type] = Nil
   def transform(t: core.BlockType)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Type = t match {
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      jit.Function((vparams map transform) ++ (bparams map transform) ++ (cparams map {_ => jit.Base.Label}),
+      jit.Function((vparams map transform) ++ (bparams map transform) ++ capabilityParamTypesFor(cparams),
         transform(result),
         Purity.Effectful) // FIXME
     case core.BlockType.Interface(symbols.builtins.RegionSymbol, _) => jit.Region
