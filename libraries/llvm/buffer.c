@@ -54,9 +54,6 @@ struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     struct Header *header = (void*) obj;
     *header = (struct Header) { .rc = 0, .eraser = c_buffer_erase_noop, };
 
-    // Initialize reference count (a reference count of zero means one sole owner)
-    memset(obj, 0, sizeof(struct Header));
-
     // Copy data
     memcpy(obj + sizeof(struct Header), data, n);
 
