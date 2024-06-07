@@ -76,6 +76,13 @@ def test = try {
   //  val p2 = parser("[helloWorld, true, 42]")
   //  println(p2.expr())
 
+  val p2 = parser(
+    """val x = 42;
+      |val y = f(x);
+      |y
+      |""".stripMargin)
+  println(p2.stmts())
+
 
 
 } catch {
@@ -95,6 +102,10 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def peek: Token = tokens(position)
   def peek(offset: Int): Token = tokens(position + 1)
+  def peek(kind: TokenKind): Boolean =
+    peek.kind == kind
+  def peek(offset: Int, kind: TokenKind): Boolean =
+    peek(offset).kind == kind
 
   def next(): Token =
     val t = tokens(position)
@@ -114,9 +125,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ => ()
   }
 
-  def peek(kind: TokenKind): Boolean =
-    peek.kind == kind
-
   def consume(kind: TokenKind): Unit =
     val t = next()
     if (t.kind != kind) fail(s"Expected ${kind}, but got ${t}")
@@ -127,9 +135,53 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     if f.isDefinedAt(kind) then f(kind) else fail(s"Expected ${expected}")
 
 
+  /**
+   * Statements
+   */
+  def stmts(): Stmt = peek.kind match {
+    case _ if isDefinition => DefStmt(definition(), { semi(); stmts() })
+    case _ => opt(`return`); Return(expr())
+  }
+
+  def opt(kind: TokenKind): Unit =
+    if peek(kind) then skip();
+
   // TODO
-  def stmts(): Stmt = Return(expr())
-  def stmt(): Stmt = Return(expr())
+  def semi(): Unit =
+    consume(`;`)
+
+
+  //  lazy val stmts: P[Stmt] =
+  //    ( withStmt
+  //    | (expr <~ `;;`) ~ stmts ^^ ExprStmt.apply
+  //    | (definition <~ `;;`) ~ stmts ^^ DefStmt.apply
+  //    | (varDef  <~ `;;`) ~ stmts ^^ DefStmt.apply
+  //    | (`return`.? ~> expr <~ `;;`.?) ^^ Return.apply
+  //    | matchDef
+  //    | failure("Expected a statement")
+  //    )
+
+  def stmt(): Stmt =
+    if peek(`{`) then braces { stmts() }
+    else Return(expr())
+
+  def isDefinition: Boolean = peek.kind match {
+    case `val` | `fun` | `def` | `type` | `effect` | `namespace` => true
+    case `extern` | `effect` | `interface` | `type` | `record` =>
+      val kw = peek.kind
+      fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
+    case _ => false
+  }
+
+  def definition(): Def = peek.kind match {
+    case `val` => valDef()
+    case _ => fail("Expected definition")
+  }
+
+  // TODO type annotations
+  def valDef(): Def =
+    consume(`val`);
+    ValDef(idDef(), None, { consume(`=`); stmt() })
 
   def expr(): Term = peek.kind match {
     case `if`     => ifExpr()
@@ -146,23 +198,17 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def ifExpr(): Term =
     consume(`if`)
-    val guard = parens(matchGuards())
-    val thn = stmts()
-    val els =
+    If(parens { matchGuards() },
+      stmts(),
       if peek(`else`) then { consume(`else`); stmts() }
-      else Return(UnitLit())
-
-    If(guard, thn, els)
+      else Return(UnitLit()))
 
   def whileExpr(): Term =
     consume(`while`)
-    val guard = parens(matchGuards())
-    val thn = stmt()
-    val els =
+    While(parens { matchGuards() },
+      stmt(),
       if peek(`else`) then { consume(`else`); Some(stmt()) }
-      else None
-
-    While(guard, thn, els)
+      else None)
 
   def doExpr(): Term =
     consume(`do`)
@@ -256,10 +302,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   private def ConsTree(el: Term, rest: Term): Term =
     Call(IdTarget(IdRef(List(), "Cons")), Nil, List(el, rest), Nil)
 
-  def isTupleOrGroup: Boolean = peek.kind match {
-    case `(` => true
-    case _ => false
-  }
+  def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
     some(expr, `(`, `,`, `)`) match {
       case e :: Nil => e
@@ -267,14 +310,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
 
   // TODO complex holes, named holes, etc.
-  def isHole: Boolean = peek.kind match {
-    case `<>` => true
-    case _ => false
-  }
-  def hole(): Term = peek.kind match {
-    case `<>` => skip(); Hole(Return(UnitLit()))
-    case t => fail("Expected a hole")
-  }
+  def isHole: Boolean = peek(`<>`)
+  def hole(): Term = { consume(`<>`); Hole(Return(UnitLit())) }
 
   def isLiteral: Boolean = peek.kind match {
     case _: (Integer | Float | Str) => true
@@ -293,14 +330,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   }
 
   // Will also recognize ( ) as unit if we do not emit space in the lexer...
-  private def isUnitLiteral: Boolean = peek.kind match {
-    case `(` => peek(1).kind match {
-      case `)` => true
-      case _ => false
-    }
-    case _ => false
-  }
-
+  private def isUnitLiteral: Boolean = peek(`(`) && peek(1, `)`)
 
   def isVariable: Boolean = isIdRef
   def variable(): Term = Var(idRef())
@@ -309,6 +339,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   // TODO also parse paths
   def idRef(): IdRef = IdRef(Nil, ident())
+  def idDef(): IdDef = IdDef(ident())
 
   //  identRef ^^ { path =>
   //    val ids = path.split("::").toList
@@ -340,6 +371,12 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     consume(`(`)
     val res = p
     consume(`)`)
+    res
+
+  inline def braces[T](p: => T): T =
+    consume(`{`)
+    val res = p
+    consume(`}`)
     res
 
   inline def many[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
