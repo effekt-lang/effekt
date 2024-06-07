@@ -5,6 +5,7 @@ extern io def commandLineArgs(): List[String] =
   chez { chez::commandLineArgs() }
   llvm { llvm::commandLineArgs() }
   vm { Nil() }
+  jit { jit::commandLineArgs() }
 
 namespace js {
   extern type Args // = Array[String]
@@ -62,6 +63,21 @@ namespace llvm {
   def commandLineArgs(): List[String] = {
     def toList(start: Int, acc: List[String]): List[String] =
       if (start < 1) { acc }
+      else toList(start - 1, Cons(argument(start), acc))
+
+    toList(argCount() - 1, Nil())
+  }
+}
+
+namespace jit {
+  extern io def argCount(): Int =
+    jit "get_argc(): Int"
+  extern io def argument(i: Int): String =
+    jit "get_arg(Int): String"
+
+  def commandLineArgs(): List[String] = {
+    def toList(start: Int, acc: List[String]): List[String] =
+      if (start < 0) { acc }
       else toList(start - 1, Cons(argument(start), acc))
 
     toList(argCount() - 1, Nil())

@@ -354,7 +354,9 @@ object JITRunner extends Runner[String] {
 
   val extension = "mcore.json"
 
-  override def standardLibraryPath(root: File): File = root / "libraries" / "jit"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def platform = {
     val arch = Process(Seq(s"uname", "-m")).!!.trim

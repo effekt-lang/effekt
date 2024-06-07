@@ -1,3 +1,5 @@
+import bench
+
 def assert(b: Bool, msg: String) = {
   if(b) {
     println("OK")
@@ -13,7 +15,7 @@ def assertNot(b: Bool, msg: String) = {
   }
 }
 def main() = {
-    val start = currentTimeNanos();
+    val start = timestamp();
     println(0);
     val x = 2;
     val y = 40;
@@ -28,6 +30,5 @@ def main() = {
     assertNot(x>y, ">");
     assert(x != y, "!=");
     assertNot(x>=y, ">=");
-    assert(random() != random(), "random");
-    assert((currentTimeNanos()-start) > 0, "time did not pass");
+    assert((timestamp()-start) > 0, "time did not pass");
 }

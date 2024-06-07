@@ -28,6 +28,7 @@ object Transformer {
     case core.ValueType.Data(symbols.builtins.TopSymbol, Nil) => jit.Top
     case core.ValueType.Data(symbols.builtins.BottomSymbol, Nil) => jit.Bottom
     case core.ValueType.Data(symbols.builtins.StringSymbol, Nil) => jit.Base.String
+    case core.ValueType.Data(symbols.builtins.CharSymbol, Nil) => jit.Base.String
     case core.ValueType.Data(name, _) if symbols.builtins.rootTypes.values.exists(_ == name) =>
       C.error(s"Unsupported builtin type ${core.PrettyPrinter.format(t)}.")
       jit.Top
@@ -142,6 +143,8 @@ object Transformer {
     case core.Pure.Literal(value: Long, ValueType.Data(symbols.builtins.IntSymbol, Nil)) => jit.Literal.Int(value.toInt)
     case core.Pure.Literal(value: Double, ValueType.Data(symbols.builtins.DoubleSymbol, Nil)) => jit.Literal.Double(value)
     case core.Pure.Literal(value: String, ValueType.Data(symbols.builtins.StringSymbol, Nil)) => jit.Literal.String(value)
+    case core.Pure.Literal(value: Int, ValueType.Data(symbols.builtins.CharSymbol, Nil)) =>
+      jit.Literal.String(Character.toString(value)) // will be escaped in pretty-printer
     case core.Pure.Literal(_, ValueType.Data(symbols.builtins.UnitSymbol, Nil)) => jit.Literal.Unit
     case core.Pure.Literal(value: Boolean, ValueType.Data(symbols.builtins.BooleanSymbol, Nil)) =>
       jit.Literal.Int(if value then 1 else 0)
@@ -232,6 +235,15 @@ object Transformer {
         if annotatedCapture.isEmpty then Purity.Pure else Purity.Effectful)
       jit.Definition(jit.Var(id, tpe), jit.Abs(args,
         jit.Primitive(body, args, List(ret), ret)))
+    case Extern.Def(id, tparams, cparams, vparams, bparams, retTpe,
+           annotatedCapture,core.ExternBody.Unsupported(err)) =>
+      C.report(err)
+      val args = ((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams)
+      val ret = jit.Var(TmpValue(), transform(retTpe))
+      val tpe = jit.Function(args.map(_.tpe), transform(retTpe),
+        if annotatedCapture.isEmpty then Purity.Pure else Purity.Effectful)
+      jit.Definition(jit.Var(id, tpe), jit.Abs(args,
+        jit.Primitive(s"!undefined:${id.name.toString}", args, List(ret), ret)))
     case Extern.Include(_, contents) =>
       C.abort("Extern includes are not supported in the JIT backend.")
     case e => C.abort(s"Unsupported extern: ${e}")

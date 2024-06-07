@@ -45,7 +45,7 @@ extern def println(value: String): Unit =
     call void @c_io_println_String(%Pos ${value})
     ret %Pos zeroinitializer ; Unit
   """
-  vm "effekt::println(String)"
+  jit "println(String): Unit"
 
 def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
@@ -56,6 +56,7 @@ def println(value: Byte): Unit = println(value.show)
 extern pure def show(value: Int): String =
   js "'' + ${value}"
   chez "(show-number ${value})"
+  jit "show(Int): String"
   llvm """
     %z = call %Pos @c_bytearray_show_Int(%Int ${value})
     ret %Pos %z
@@ -67,6 +68,7 @@ def show(value: Unit): String = "()"
 extern pure def show(value: Double): String =
   js "'' + ${value}"
   chez "(show-number ${value})"
+  jit "show(Double): String"
   llvm """
     %z = call %Pos @c_bytearray_show_Double(%Double ${value})
     ret %Pos %z
@@ -82,6 +84,7 @@ def show(value: Bool): String =
 extern pure def show(value: Char): String =
   js "String.fromCodePoint(${value})"
   chez "(string (integer->char ${value}))"
+  jit "!sexp:$arg0:str"
   llvm """
     %z = call %Pos @c_bytearray_show_Char(%Int ${value})
     ret %Pos %z
@@ -112,6 +115,7 @@ extern io def inspect[R](value: R): Unit =
 extern pure def infixConcat(s1: String, s2: String): String =
   js "((${s1}) + (${s2}))"
   chez "(string-append ${s1} ${s2})"
+  jit "infixConcat(String, String): String"
   llvm """
     %spz = call %Pos @c_bytearray_concatenate(%Pos ${s1}, %Pos ${s2})
     ret %Pos %spz
@@ -121,6 +125,7 @@ extern pure def infixConcat(s1: String, s2: String): String =
 extern pure def length(str: String): Int =
   js "${str}.length"
   chez "(string-length ${str})"
+  jit "length(String): Int"
   llvm """
     %x = call %Int @c_bytearray_size(%Pos ${str})
     ret %Int %x
@@ -130,6 +135,7 @@ extern pure def length(str: String): Int =
 extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   js "${str}.substring(${from}, ${to})"
   chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
+  jit "substring(String, Int, Int): String"
   llvm """
     %x = call %Pos @c_bytearray_substring(%Pos ${str}, i64 ${from}, i64 ${to})
     ret %Pos %x
@@ -144,6 +150,7 @@ extern io def random(): Double =
   js "Math.random()"
   chez "(random 1.0)"
   vm "effekt::random()"
+  jit "random(): Double"
 
 // References and state
 // ====================
@@ -215,6 +222,7 @@ extern pure def infixEq(x: Unit, y: Unit): Bool =
 extern pure def infixEq(x: Int, y: Int): Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
+  jit "infixEq(Int, Int): Boolean"
   llvm """
     %z = icmp eq %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -226,6 +234,7 @@ extern pure def infixEq(x: Int, y: Int): Bool =
 extern pure def infixNeq(x: Int, y: Int): Bool =
   js "${x} !== ${y}"
   chez "(not (equal? ${x} ${y}))"
+  jit "infixNeq(Int, Int): Boolean"
   llvm """
     %z = icmp ne %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -237,6 +246,7 @@ extern pure def infixNeq(x: Int, y: Int): Bool =
 extern pure def infixEq(x: Char, y: Char): Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
+  jit "infixEq(String, String): Boolean"
   llvm """
     %z = icmp eq %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -248,6 +258,7 @@ extern pure def infixEq(x: Char, y: Char): Bool =
 extern pure def infixNeq(x: Char, y: Char): Bool =
   js "${x} !== ${y}"
   chez "(not (equal? ${x} ${y}))"
+  jit "infixNeq(String, String): Boolean"
   llvm """
     %z = icmp ne %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -258,6 +269,7 @@ extern pure def infixNeq(x: Char, y: Char): Bool =
 extern pure def infixEq(x: String, y: String): Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
+  jit "infixEq(String, String): Boolean"
   llvm """
     %res = call %Pos @c_bytearray_equal(%Pos ${x}, %Pos ${y})
     ret %Pos %res
@@ -269,6 +281,7 @@ def infixNeq(x: String, y: String): Bool = not(x == y)
 extern pure def infixEq(x: Bool, y: Bool): Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
+  jit "infixEq(Int, Int): Boolean"
   llvm """
     %slim_x = extractvalue %Pos ${x}, 0
     %slim_y = extractvalue %Pos ${y}, 0
@@ -282,6 +295,7 @@ extern pure def infixEq(x: Bool, y: Bool): Bool =
 extern pure def infixNeq(x: Bool, y: Bool): Bool =
   js "${x} !== ${y}"
   chez "(not (equal? ${x} ${y}))"
+  jit "infixNeq(Int, Int): Boolean"
   llvm """
     %slim_x = extractvalue %Pos ${x}, 0
     %slim_y = extractvalue %Pos ${y}, 0
@@ -297,54 +311,63 @@ extern pure def infixNeq(x: Bool, y: Bool): Bool =
 extern pure def infixAdd(x: Int, y: Int): Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
+  jit "infixAdd(Int, Int): Int"
   llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixAdd(Int, Int)"
 
 extern pure def infixMul(x: Int, y: Int): Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
+  jit "infixMul(Int, Int): Int"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixMul(Int, Int)"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
   js "Math.floor(${x} / ${y})"
   chez "(floor (/ ${x} ${y}))"
+  jit "infixDiv(Int, Int): Int"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixDiv(Int, Int)"
 
 extern pure def infixSub(x: Int, y: Int): Int =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
+  jit "infixSub(Int, Int): Int"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
   vm "effekt::infixSub(Int, Int)"
 
 extern pure def mod(x: Int, y: Int): Int =
   js "(${x} % ${y})"
   chez "(modulo ${x} ${y})"
+  jit "mod(Int, Int): Int"
   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
   vm "effekt::mod(Int, Int)"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
+  jit "infixAdd(Double, Double): Double"
   llvm "%z = fadd %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixAdd(Double, Double)"
 
 extern pure def infixMul(x: Double, y: Double): Double =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
+  jit "infixMul(Double, Double): Double"
   llvm "%z = fmul %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixMul(Double, Double)"
 
 extern pure def infixSub(x: Double, y: Double): Double =
   js "(${x} - ${y})"
   chez "(- ${x} ${y})"
+  jit "infixSub(Double, Double): Double"
   llvm "%z = fsub %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixSub(Double, Double)"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
   js "(${x} / ${y})"
   chez "(/ ${x} ${y})"
+  jit "infixDiv(Double, Double): Double"
   llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixDiv(Double, Double)"
 
@@ -353,30 +376,35 @@ extern pure def cos(x: Double): Double =
   chez "(cos ${x})"
   vm "effekt::cos(Double)"
   llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
+  jit "cos(Double): Double"
 
 extern pure def sin(x: Double): Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
   vm "effekt::sin(Double)"
   llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
+  jit "sin(Double): Double"
 
 extern pure def atan(x: Double): Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
   vm "effekt::atan(Double)"
   llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
+  jit "atan(Double): Double"
 
 extern pure def tan(x: Double): Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
   vm "effekt::tan(Double)"
   llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
+  jit "tan(Double): Double"
 
 extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
   chez "(sqrt ${x})"
   llvm "%z = call %Double @llvm.sqrt.f64(double ${x}) ret %Double %z"
   vm "effekt::sqrt(Double)"
+  jit "sqrt(Double): Double"
 
 def square(x: Double): Double = x * x
 
@@ -394,17 +422,20 @@ extern pure def log(x: Double): Double =
   chez "(log ${x})"
   vm "effekt::log(Double)"
   llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
+  jit "log(Double): Double"
 
 extern pure def log1p(x: Double): Double =
   js "Math.log1p(${x})"
   chez "(log (+ ${x} 1))"
   llvm "%z = call %Double @log1p(double ${x}) ret %Double %z"
+  jit "log1p(Double): Double"
 
 extern pure def exp(x: Double): Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
   vm "effekt::exp(Double)"
   llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
+  jit "exp(Double): Double"
 
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {
@@ -439,13 +470,14 @@ extern pure def toInt(d: Double): Int =
   chez "(flonum->fixnum ${d})"
   llvm "%z = fptosi double ${d} to %Int ret %Int %z"
   vm "effekt::toInt(Double)"
+  jit "toInt(Double): Int"
 
 extern pure def toDouble(d: Int): Double =
   js "${d}"
   chez "${d}"
   llvm "%z = sitofp i64 ${d} to double ret double %z"
   vm "effekt::toDouble(Int)"
-
+  jit "toDouble(Int): Double"
 
 extern pure def round(d: Double): Int =
   js "Math.round(${d})"
@@ -468,6 +500,7 @@ extern pure def floor(d: Double): Int =
     %i = call %Double @llvm.floor.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
+  jit "floor(Double): Double"
 
 extern pure def ceil(d: Double): Int =
   js "Math.ceil(${d})"
@@ -476,6 +509,7 @@ extern pure def ceil(d: Double): Int =
     %i = call %Double @llvm.ceil.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
+  jit "ceil(Double): Double"
 
 def min(n: Int, m: Int): Int =
   if (n < m) n else m
@@ -493,6 +527,7 @@ def abs(n: Int): Int =
 extern pure def infixLt(x: Int, y: Int): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
+  jit "infixLt(Int, Int): Boolean"
   llvm """
     %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -504,6 +539,7 @@ extern pure def infixLt(x: Int, y: Int): Bool =
 extern pure def infixLte(x: Int, y: Int): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
+  jit "infixLte(Int, Int): Boolean"
   llvm """
     %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -515,6 +551,7 @@ extern pure def infixLte(x: Int, y: Int): Bool =
 extern pure def infixGt(x: Int, y: Int): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
+  jit "infixGt(Int, Int): Boolean"
   llvm """
     %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -526,6 +563,7 @@ extern pure def infixGt(x: Int, y: Int): Bool =
 extern pure def infixGte(x: Int, y: Int): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
+  jit "infixGte(Int, Int): Boolean"
   llvm """
     %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -554,11 +592,13 @@ extern pure def infixLt(x: Double, y: Double): Bool =
     ret %Pos %adt_boolean
   """
   vm "effekt::infixLt(Double, Double)"
+  jit "infixLt(Double, Double): Boolean"
 
 extern pure def infixLte(x: Double, y: Double): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
   vm "effekt::infixLte(Double, Double)"
+  jit "infixLte(Double, Double): Boolean"
 
 extern pure def infixGt(x: Double, y: Double): Bool =
   js "(${x} > ${y})"
@@ -570,28 +610,34 @@ extern pure def infixGt(x: Double, y: Double): Bool =
     ret %Pos %adt_boolean
   """
   vm "effekt::infixGt(Double, Double)"
+  jit "infixGt(Double, Double): Boolean"
 
 extern pure def infixGte(x: Double, y: Double): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
   vm "effekt::infixGte(Double, Double)"
+  jit "infixGte(Double, Double): Boolean"
 
 // TODO do we really need those? if yes, move to string.effekt
 extern pure def infixLt(x: String, y: String): Bool =
   js "(${x} < ${y})"
   chez "(string<? ${x} ${y})"
+  jit "infixLt(String, String): Boolean"
 
 extern pure def infixLte(x: String, y: String): Bool =
   js "(${x} <= ${y})"
   chez "(string<=? ${x} ${y})"
+  jit "infixLte(String, String): Boolean"
 
 extern pure def infixGt(x: String, y: String): Bool =
   js "(${x} > ${y})"
   chez "(string>? ${x} ${y})"
+  jit "infixGt(String, String): Boolean"
 
 extern pure def infixGte(x: String, y: String): Bool =
   js "(${x} >= ${y})"
   chez "(string>=? ${x} ${y})"
+  jit "infixGte(String, String): Boolean"
 
 
 // Boolean operations
@@ -599,6 +645,7 @@ extern pure def infixGte(x: String, y: String): Bool =
 extern pure def not(b: Bool): Bool =
   js "!${b}"
   chez "(not ${b})"
+  jit "not(Boolean): Boolean"
   llvm """
     %p = extractvalue %Pos ${b}, 0
     %q = xor i64 1, %p

@@ -20,6 +20,7 @@ extern io def timestamp(): Nanos =
     %result = add nsw i64 %time_seconds_nanoseconds, %time_nanoseconds
     ret %Int %result
   """
+  jit "currentTimeNanos(): Int"
 
 extern llvm """
   declare i32 @clock_gettime(i32, ptr)

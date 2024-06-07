@@ -42,6 +42,7 @@ def fromList[T](list: List[T]): Array[T] = {
 extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
+  jit "length(Array[Ptr]): Int"
   llvm """
     %z = call %Int @c_array_size(%Pos ${arr})
     ret %Int %z
@@ -55,6 +56,7 @@ extern pure def size[T](arr: Array[T]): Int =
 extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
+  jit "unsafeIndex(Array[Ptr], Int): Ptr"
   llvm """
     %z = call %Pos @c_array_get(%Pos ${arr}, %Int ${index})
     ret %Pos %z

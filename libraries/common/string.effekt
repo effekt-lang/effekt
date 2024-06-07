@@ -179,6 +179,7 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
 extern pure def unsafeToInt(str: String): Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
   chez "(string->number ${str})"
+  jit "read(String): Int"
 
 
 /// Returns the index of the first occurrence of `sub` in `str`
@@ -233,15 +234,18 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
   chez "(string (integer->char ${ch}))"
+  jit "!sexp:$arg0:str"
   llvm """
     %z = call %Pos @c_bytearray_show_Char(%Int ${ch})
     ret %Pos %z
   """
 
 // Since we currently represent Char by integers in all backends, we could reuse comparison
+// (not true in jit)
 extern pure def toInt(ch: Char): Int =
   js "${ch}"
   chez "${ch}"
+  jit "charCode(String): Int"
   llvm "ret %Int ${ch}"
   vm "string::toInt(Char)"
 
@@ -255,6 +259,7 @@ extern pure def toChar(codepoint: Int): Char =
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
+  jit "infixLt(String, String): Boolean"
   llvm """
     %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -266,6 +271,7 @@ extern pure def infixLt(x: Char, y: Char): Bool =
 extern pure def infixLte(x: Char, y: Char): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
+  jit "infixLte(String, String): Boolean"
   llvm """
     %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -277,6 +283,7 @@ extern pure def infixLte(x: Char, y: Char): Bool =
 extern pure def infixGt(x: Char, y: Char): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
+  jit "infixGt(String, String): Boolean"
   llvm """
     %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -288,6 +295,7 @@ extern pure def infixGt(x: Char, y: Char): Bool =
 extern pure def infixGte(x: Char, y: Char): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
+  jit "infixGte(String, String): Boolean"
   llvm """
     %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -329,6 +337,7 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
+  jit "charAt(Int, String): String"
   llvm """
     %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
