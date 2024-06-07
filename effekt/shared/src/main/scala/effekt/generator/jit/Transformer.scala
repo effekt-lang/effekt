@@ -76,14 +76,52 @@ object Transformer {
       }.get
       jit.Abs(args, jit.Invoke(transform(block), ifceTag, field, args))
     case core.Block.Unbox(pure) => transform(pure)
-    case core.Block.New(core.Implementation(interface, operations)) =>
-      val core.Declaration.Interface(id, tparams, properties) = DC.getInterface(interface.name)
-      jit.New(interface.name, operations map { case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-        (name, jit.Clause(
-          ((resume.toList ++ vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams), // TODO resume is first? or last?
-          transform(body)))
-      })
+    case core.Block.New(impl: core.Implementation) =>
+      transform(impl, None)
   }
+
+  def transform(implementation: core.Implementation, prompt: Option[jit.Var])(using core.DeclarationContext, ErrorReporter): jit.Term = implementation match {
+    case core.Implementation(interface, operations) =>
+      val name = interface.name.show ++ "_" ++ interface.targs.map(_.toString).mkString("_")
+      jit.New(name, operations.map(transform(_, prompt)))
+  }
+  def transform(op: core.Operation, prompt: Option[jit.Var])(using DC: core.DeclarationContext, C: ErrorReporter): (Id, jit.Clause) = op match {
+    case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      val tBody = (prompt, resume) match {
+        case (Some(prompt), Some(resume)) =>
+          val k = jit.Var(TmpValue(), jit.Ptr) // TODO transform type more precisely
+          val (resumeFn, resumeResultTpe) = resume.tpe match {
+
+            case core.BlockType.Function(_, _, List(vparam), List(), result) =>
+              // resume(value)
+              val resumeArg = jit.Var(TmpValue(), transform(vparam))
+              (jit.Abs(List(resumeArg),
+                 jit.Resume(k, List(resumeArg))),
+               transform(vparam))
+
+            case core.BlockType.Function(_, _, List(), List(bparam: core.BlockType.Function), result) =>
+              // resume{ block }
+              val resumeArg = jit.Var(TmpBlock(), transform(bparam))
+              (jit.Abs(List(resumeArg),
+                 jit.Resumed(k, jit.App(resumeArg, bparams map transform))),
+               transform(bparam.result))
+
+            case t => C.abort(s"resume parameter has unsupported type ${core.PrettyPrinter.format(t)}")
+          }
+
+          jit.Shift(prompt, Literal.Int(0), k,
+            jit.Let(List(jit.Definition(transform(resume), resumeFn)),
+              transform(body)),
+            resumeResultTpe)
+        case (None, None) => transform(body)
+        case _ =>
+          C.abort("Exactly the operations with a resume should get defined using Try.")
+      }
+      (name, jit.Clause(
+        ((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams),
+        tBody))
+  }
+
   def transform(p: core.Param)(using core.DeclarationContext, ErrorReporter): jit.LhsOperand = p match {
     case Param.ValueParam(id, tpe) => jit.Var(id, transform(tpe))
     case Param.BlockParam(id, tpe, capt) => jit.Var(id, transform(tpe))
@@ -120,7 +158,7 @@ object Transformer {
       C.abort(s"Unsupported record select on value of type ${core.PrettyPrinter.format(annotatedType)}")
     case core.Pure.Box(b, annotatedCapture) => transform(b)
   }
-  def transform(stmt: core.Stmt)(using core.DeclarationContext, ErrorReporter): jit.Term = stmt match {
+  def transform(stmt: core.Stmt)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Term = stmt match {
     case core.Stmt.Scope(definitions, body) =>
       jit.LetRec(definitions map transform, transform(body))
     case core.Stmt.Return(expr) => transform(expr)
@@ -162,31 +200,23 @@ object Transformer {
       jit.Store(jit.Var(id, jit.Ref(transform(core.Type.inferType(value)))), transform(value))
     case core.Stmt.Try(core.BlockLit(tparams, cparams, vparams, bparams, body), handlers) =>
       assert(vparams.isEmpty, "Only block parameters for body of Try")
-      val promptIds = cparams.map{ _ => TmpValue() }
+      val prompt = jit.Var(TmpValue(), jit.Ptr)
+      val retVal = jit.Var(TmpValue(), transform(body.tpe))
+      val region = jit.Var(TmpValue(), jit.Ptr)
       val tBody = transform(body)
-      jit.LetRec(promptIds.map{ x =>
-        jit.Definition(jit.Var(x, jit.Base.Label), jit.FreshLabel())
-      } ++ (cparams zip promptIds zip (handlers zip bparams)).map{ case ((c, p), (h, bc)) =>
-        jit.Definition(jit.Var(bc.id, transform(bc.tpe)), jit.New(c, h.operations.map {
-          case core.Operation(name, tparams, cparams, vparams, bparams, resume, obody) =>
-            val args = (((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams))
-            val rtpe = resume.map(_.tpe) match {
-              case Some(core.BlockType.Function(_, _, List(r), _, _)) => transform(r)
-              case _ => jit.Top
-            }
-            val r = jit.Var(TmpValue(), rtpe)
-            (name, jit.Clause(args, jit.DOp(jit.Var(p, jit.Base.Label), name, args, jit.Clause(List(r), r), rtpe)))
-        }))
-      }, handlers.zip(promptIds).foldRight(tBody){ case ((core.Implementation(itpe, ops), id), b) =>
-        jit.DHandle(jit.HandlerType.Deep, jit.Var(id, jit.Base.Label),
-          ops.map{ case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-            val params = ((resume.toList ++ vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams)
-            (name, jit.Clause(params,
-              transform(body)))
-          },
-          None, b)
-      })
-    case core.Stmt.Try(body, handlers) => ???
+
+      val capabilityDefs = (bparams zip handlers).map { (bparam, handler) =>
+        jit.Definition(transform(bparam),
+          transform(handler, Some(prompt)))
+      }
+
+      jit.Let(List(jit.Definition(prompt, jit.FreshLabel())),
+        jit.Reset(prompt, region,
+          jit.Let(capabilityDefs, tBody),
+          jit.Clause(List(retVal), retVal))
+      )
+    case core.Stmt.Try(body, handlers) =>
+      C.abort("Body of a Try should be a block literal.")
     case core.Stmt.Hole() => jit.Primitive("hole", Nil, Nil, jit.Literal.Unit)
   }
   def transform(d: core.Definition)(using core.DeclarationContext, ErrorReporter): jit.Definition = d match {

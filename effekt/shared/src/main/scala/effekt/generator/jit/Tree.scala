@@ -5,7 +5,7 @@ package jit
 import effekt.context.Context
 import effekt.symbols.{BlockSymbol, Symbol, ValueSymbol}
 
-type Id = core.Id
+type Id = core.Id | String
 case class Clause(params: List[LhsOperand], body: Term) extends Tree
 
 sealed trait Tree
@@ -21,6 +21,7 @@ case class Seq(ts: List[Term]) extends Term
 case class Let(defs: List[Definition], body: Term) extends Term
 case class LetRec(defs: List[Definition], body: Term) extends Term
 case class IfZero(cond: Term, thn: Term, els: Term) extends Term
+case class The(tpe: Type, body: Term) extends Term
 
 // Data
 case class Construct(tpe_tag: Id, tag: Id, args: List[Term]) extends Term

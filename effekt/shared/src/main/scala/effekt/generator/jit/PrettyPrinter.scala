@@ -43,7 +43,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(s: String): Doc = string(s"\"${escape(s)}\"")
 
 
-  def toDoc(id: Id): Doc = toDoc(id.show)
+  def toDoc(id: Id): Doc = id match {
+    case id: core.Id => toDoc(id.show)
+    case str: String => toDoc(str)
+  }
 
   def toDoc(m: Method): Doc = m match {
     case Method(tag, params, ret) => jsonObjectSmall(ListMap(
@@ -234,6 +237,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "k" -> toDoc(k),
       "rtpe" -> toDoc(rtpe)
     ))
+    case The(tpe, body) => jsonObject(ListMap("op" -> "\"The\"", "type" -> toDoc(tpe), "term" -> toDoc(body)))
   }
 
   def toDoc(c: Clause): Doc = c match {
