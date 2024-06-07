@@ -5,7 +5,7 @@ import effekt.util.paths.file
 import kiama.util.REPLConfig
 import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
 
-class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
+class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--")) {
 
   // Common
   // ------
@@ -57,6 +57,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true,
     group = common
   ).map(Backend.backend)
+
+  def runArgs(): Seq[String] = args.dropWhile(_ != "--").drop(1)
 
   // Advanced
   // --------
