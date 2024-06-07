@@ -15,7 +15,7 @@ extern type FileDescriptor
 
 extern pure def show(fd: FileDescriptor): String =
   llvm """
-    %res = call %Pos @showFiledescriptor(%Pos %fd)
+    %res = call %Pos @c_filedescriptor_show(%Pos %fd)
     ret %Pos %res
   """
 
@@ -258,7 +258,7 @@ namespace callback {
       %onFailure_ptr = alloca %Neg
       store %Neg %onFailure, %Neg* %onFailure_ptr
 
-      call void @writeFile(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      call void @c_file_write(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 }
