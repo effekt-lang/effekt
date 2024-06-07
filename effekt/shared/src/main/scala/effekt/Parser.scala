@@ -2,13 +2,14 @@ package effekt
 
 import effekt.context.Context
 import effekt.lexer.TokenKind.{ `::` as _, * }
-import effekt.lexer.{ TokenKind, Token }
+import effekt.lexer.{ Token, TokenKind }
 import effekt.source.*
-import effekt.util.{SourceTask, VirtualSource}
+import effekt.util.{ SourceTask, VirtualSource }
 import effekt.util.messages.ParseError
-import kiama.parsing.{CharParsers, Failure, Input, NoSuccess, ParseResult, Parsers, SourceInput, Success, TokenInput}
-import kiama.util.{Position, Positions, Range, Source, StringSource}
+import kiama.parsing.{ CharParsers, Failure, Input, NoSuccess, ParseResult, Parsers, SourceInput, Success, TokenInput }
+import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
+import scala.annotation.{ tailrec, targetName }
 import scala.util.matching.Regex
 import scala.language.implicitConversions
 
@@ -41,6 +42,322 @@ object Parser extends Phase[Source, Parsed] {
   } map { tree =>
     Parsed(source, tree)
   }
+}
+
+@main
+def test = try {
+
+  def parser(input: String): RecursiveDescentParsers = {
+    val lexer = effekt.lexer.Lexer(input)
+    val (tokens, err) = lexer.run()
+    if (err.isDefined) sys.error(err.get.toString)
+    println(tokens)
+    println(tokens.size)
+    new RecursiveDescentParsers(new Positions, tokens)
+  }
+
+  //  val p = parser("helloWorld () true 42")
+  //  println(p.primExpr())
+  //  p.spaces()
+  //  println(p.primExpr())
+  //  p.spaces()
+  //  println(p.primExpr())
+  //  p.spaces()
+  //  println(p.primExpr())
+  //  p.spaces()
+
+  //val p1 = parser("(helloWorld, true, 42)")
+  //  val p1 = parser("f(helloWorld)(42)(43).foo.bar(42)")
+  val p1 = parser("if (42) if (42) x else y")
+  println(p1.expr())
+  println(p1.position)
+  println(s"Parsed all: ${p1.peek(TokenKind.EOF)}")
+
+  //  val p2 = parser("[helloWorld, true, 42]")
+  //  println(p2.expr())
+
+
+
+} catch {
+  case ParseError2(msg, pos) => println(s"Error at position ${pos}: ${msg}")
+}
+
+case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
+
+class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
+
+  import scala.collection.mutable.ListBuffer
+
+  def fail(message: String): Nothing = throw ParseError2(message, position)
+
+  // always points to the latest non-space position
+  var position: Int = 0
+
+  def peek: Token = tokens(position)
+  def peek(offset: Int): Token = tokens(position + 1)
+
+  def next(): Token =
+    val t = tokens(position)
+    skip()
+    t
+
+  /**
+   * Skips the current token and then all subsequent whitespace
+   */
+  def skip(): Unit = { position += 1; spaces() }
+
+  @tailrec
+  final def spaces(): Unit = peek.kind match {
+    case TokenKind.Space => position += 1; spaces()
+    case TokenKind.Comment(_) => position += 1; spaces()
+    case TokenKind.Newline => position += 1; spaces()
+    case _ => ()
+  }
+
+  def peek(kind: TokenKind): Boolean =
+    peek.kind == kind
+
+  def consume(kind: TokenKind): Unit =
+    val t = next()
+    if (t.kind != kind) fail(s"Expected ${kind}, but got ${t}")
+
+  private def expect[T](expected: String)(f: PartialFunction[TokenKind, T]): T =
+    val t = next()
+    val kind = t.kind
+    if f.isDefinedAt(kind) then f(kind) else fail(s"Expected ${expected}")
+
+
+  // TODO
+  def stmts(): Stmt = Return(expr())
+  def stmt(): Stmt = Return(expr())
+
+  def expr(): Term = peek.kind match {
+    case `if`     => ifExpr()
+    case `while`  => whileExpr()
+    case `do`     => doExpr()
+    case `try`    => ???
+    case `region` => ???
+    case `fun`    => ???
+    case `box`    => ???
+    case `unbox`  => ???
+    case `new`    => ???
+    case _ => callExpr()
+  }
+
+  def ifExpr(): Term =
+    consume(`if`)
+    val guard = parens(matchGuards())
+    val thn = stmts()
+    val els =
+      if peek(`else`) then { consume(`else`); stmts() }
+      else Return(UnitLit())
+
+    If(guard, thn, els)
+
+  def whileExpr(): Term =
+    consume(`while`)
+    val guard = parens(matchGuards())
+    val thn = stmt()
+    val els =
+      if peek(`else`) then { consume(`else`); Some(stmt()) }
+      else None
+
+    While(guard, thn, els)
+
+  def doExpr(): Term =
+    consume(`do`)
+    val op = idRef()
+    val (targs, vargs, bargs) = arguments()
+    Do(None, op, targs, vargs, bargs)
+
+  def matchGuards() = some(matchGuard, `and`)
+  def matchGuard(): MatchGuard =
+    MatchGuard.BooleanGuard(expr())
+
+//    ( expr ~ (`is` ~/> matchPattern) ^^ MatchGuard.PatternGuard.apply
+//    | expr ^^ MatchGuard.BooleanGuard.apply
+//    )
+
+  /**
+   * This is a compound production for
+   *  - member selection <EXPR>.<NAME>
+   *  - method calls <EXPR>.<NAME>(...)
+   *  - function calls <EXPR>(...)
+   *
+   * This way expressions like `foo.bar.baz()(x).bam.boo()` are
+   * parsed with the correct left-associativity.
+   */
+  def callExpr(): Term = {
+    var e = primExpr()
+
+    while (peek(`.`) || isArguments)
+      peek.kind match {
+        // member selection (or method call)
+        //   <EXPR>.<NAME>
+        // | <EXPR>.<NAME>( ... )
+        case `.` =>
+          consume(`.`)
+          val member = idRef()
+          // method call
+          if (isArguments) {
+            val (targs, vargs, bargs) = arguments()
+            e = Term.MethodCall(e, member, targs, vargs, bargs)
+          } else {
+            e = Term.Select(e, member)
+          }
+
+        // function call
+        case _ if isArguments =>
+          val callee = e match {
+            case Term.Var(id) => IdTarget(id)
+            case other => ExprTarget(other)
+          }
+          val (targs, vargs, bargs) = arguments()
+          e = Term.Call(callee, Nil, vargs, Nil)
+
+        // nothing to do
+        case _ => ()
+      }
+
+    e
+  }
+
+  // TODO right now we only parse value arguments
+  def isArguments: Boolean = peek(`(`) || peek(`[`) || peek(`{`)
+  def arguments(): (List[ValueType], List[Term], List[Term]) =
+    val vargs = many(expr, `(`, `,`, `)`)
+    (Nil, vargs, Nil)
+
+  //  lazy val arguments: P[(List[ValueType] ~ List[Term] ~ List[Term])] =
+  //      ( maybeTypeArgs ~ valueArgs ~ blockArgs
+  //      | maybeTypeArgs ~ valueArgs ~ success(List.empty[Term])
+  //      | maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs
+  //      )
+
+  def primExpr(): Term = peek.kind match {
+    case _ if isLiteral      => literal()
+    case _ if isVariable     => variable()
+    case _ if isHole         => hole()
+    case _ if isTupleOrGroup => tupleOrGroup()
+    case _ if isListLiteral  => listLiteral()
+    case _ => fail("Expected variables, literals, tuples, lists, holes or group.")
+  }
+
+  def isListLiteral: Boolean = peek.kind match {
+    case `[` => true
+    case _ => false
+  }
+  def listLiteral(): Term =
+    many(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+
+  private def NilTree: Term =
+    Call(IdTarget(IdRef(List(), "Nil")), Nil, Nil, Nil)
+
+  private def ConsTree(el: Term, rest: Term): Term =
+    Call(IdTarget(IdRef(List(), "Cons")), Nil, List(el, rest), Nil)
+
+  def isTupleOrGroup: Boolean = peek.kind match {
+    case `(` => true
+    case _ => false
+  }
+  def tupleOrGroup(): Term =
+    some(expr, `(`, `,`, `)`) match {
+      case e :: Nil => e
+      case xs => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}")), Nil, xs.toList, Nil)
+    }
+
+  // TODO complex holes, named holes, etc.
+  def isHole: Boolean = peek.kind match {
+    case `<>` => true
+    case _ => false
+  }
+  def hole(): Term = peek.kind match {
+    case `<>` => skip(); Hole(Return(UnitLit()))
+    case t => fail("Expected a hole")
+  }
+
+  def isLiteral: Boolean = peek.kind match {
+    case _: (Integer | Float | Str) => true
+    case `true` => true
+    case `false` => true
+    case _ => isUnitLiteral
+  }
+  def literal(): Literal = peek.kind match {
+    case Integer(v)         => skip(); IntLit(v)
+    case Float(v)           => skip(); DoubleLit(v)
+    case Str(s, multiline)  => skip(); StringLit(s)
+    case `true`             => skip(); BooleanLit(true)
+    case `false`            => skip(); BooleanLit(false)
+    case t if isUnitLiteral => skip(); skip(); UnitLit()
+    case t => fail("Expected a literal")
+  }
+
+  // Will also recognize ( ) as unit if we do not emit space in the lexer...
+  private def isUnitLiteral: Boolean = peek.kind match {
+    case `(` => peek(1).kind match {
+      case `)` => true
+      case _ => false
+    }
+    case _ => false
+  }
+
+
+  def isVariable: Boolean = isIdRef
+  def variable(): Term = Var(idRef())
+
+  def isIdRef: Boolean = isIdent
+
+  // TODO also parse paths
+  def idRef(): IdRef = IdRef(Nil, ident())
+
+  //  identRef ^^ { path =>
+  //    val ids = path.split("::").toList
+  //    IdRef(ids.init, ids.last)
+  //  }
+
+  def isIdent: Boolean = peek.kind match {
+    case Ident(id) => true
+    case _ => false
+  }
+  def ident(): String = expect("identifier") { case Ident(id) => id }
+
+  inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
+    consume(before)
+    val res = some(p, sep)
+    consume(after)
+    res
+
+  inline def some[T](p: () => T, sep: TokenKind): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
+    components += p()
+    while (peek(sep)) {
+      consume(sep)
+      components += p()
+    }
+    components.toList
+
+  inline def parens[T](p: => T): T =
+    consume(`(`)
+    val res = p
+    consume(`)`)
+    res
+
+  inline def many[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
+    consume(before)
+    if (peek(after)) {
+      consume(after)
+      Nil
+    } else {
+      val components: ListBuffer[T] = ListBuffer.empty
+      components += p()
+      while (peek(sep)) {
+        consume(sep)
+        components += p()
+      }
+      consume(after)
+      components.toList
+    }
+
 }
 
 /**

@@ -313,7 +313,7 @@ class Lexer(source: String) {
           eof = true
           // EOF has the position of one after the last character
           // this may be useful for a streaming lexer
-          //tokens += Token(current + 1, current + 1, TokenKind.EOF)
+          tokens += Token(current + 1, current + 1, TokenKind.EOF)
         case TokenKind.Error(e) =>
           err = Some(e)
         case k =>
