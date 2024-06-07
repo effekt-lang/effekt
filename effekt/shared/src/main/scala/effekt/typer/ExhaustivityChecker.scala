@@ -278,7 +278,7 @@ object ExhaustivityChecker {
     tpe match {
       case ValueType.ValueTypeApp(DataType(_, _, ctors), _) => checkDatatype(ctors)
       case ValueType.ValueTypeApp(Record(_, _, ctor), _)    => checkDatatype(List(ctor))
-      case tpe @ (builtins.TInt | builtins.TDouble | builtins.TString | builtins.TBoolean | builtins.TUnit | builtins.TBottom | builtins.TChar) =>
+      case tpe @ (builtins.TInt | builtins.TDouble | builtins.TString | builtins.TBoolean | builtins.TUnit | builtins.TBottom | builtins.TChar | builtins.TByte) =>
         checkLiteral(tpe)
 
         // missing.add(trace);

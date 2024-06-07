@@ -70,6 +70,20 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     group = advanced
   )
 
+  val gccIncludes: ScallopOption[File] = opt[File](
+    "gcc-includes",
+    descr = "Additional include path for gcc (necessary for libuv on the llvm backend)",
+    noshort = true,
+    group = advanced
+  )
+
+  val gccLibraries: ScallopOption[File] = opt[File](
+    "gcc-libraries",
+    descr = "Additional library path for gcc (necessary for libuv on the llvm backend)",
+    noshort = true,
+    group = advanced
+  )
+
   val preludePath: ScallopOption[List[String]] = opt[List[String]](
     "prelude",
     descr = "Modules to be automatically imported in every file",

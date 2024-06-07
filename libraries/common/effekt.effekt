@@ -47,7 +47,6 @@ extern def println(value: String): Unit =
   chez "(println_impl ${value})"
   llvm """
     call void @c_io_println_String(%Pos %value)
-    call void @c_buffer_refcount_decrement(%Pos %value)
     ret %Pos zeroinitializer ; Unit
   """
   ml { print(value); print("\n") }
@@ -59,6 +58,7 @@ def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
 def println(value: Bool): Unit = println(value.show)
+def println(value: Byte): Unit = println(value.show)
 
 extern pure def show(value: Int): String =
   js "'' + ${value}"
@@ -95,6 +95,12 @@ extern pure def show(value: Char): String =
     ret %Pos %z
   """
 
+extern pure def show(value: Byte): String =
+  llvm """
+    %z = call %Pos @c_buffer_show_Byte(i8 %value)
+    ret %Pos %z
+  """
+
 extern pure def genericShow[R](value: R): String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
@@ -112,8 +118,6 @@ extern pure def infixConcat(s1: String, s2: String): String =
   ml "${s1} ^ ${s2}"
   llvm """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
-    call void @c_buffer_refcount_decrement(%Pos %s1)
-    call void @c_buffer_refcount_decrement(%Pos %s2)
     ret %Pos %spz
   """
 
@@ -123,7 +127,6 @@ extern pure def length(str: String): Int =
   ml "String.size ${str}"
   llvm """
     %x = call %Int @c_buffer_length(%Pos %str)
-    call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Int %x
   """
 
@@ -133,7 +136,6 @@ extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
   llvm """
     %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
-    call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Pos %x
   """
 
@@ -261,8 +263,6 @@ extern pure def infixEq(x: String, y: String): Bool =
   ml "${x} = ${y}"
   llvm """
     %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
-    call void @c_buffer_refcount_decrement(%Pos %x)
-    call void @c_buffer_refcount_decrement(%Pos %y)
     ret %Pos %res
   """
 
@@ -400,6 +400,13 @@ extern pure def _pi(): Double =
   ml "Math.pi"
 
 val PI: Double = _pi()
+
+extern pure def toByte(n: Int): Byte =
+  llvm """
+    %res = trunc i64 %n to i8
+    ret i8 %res
+  """
+  js "${n}"
 
 extern pure def toInt(d: Double): Int =
   js "Math.round(${d})"
@@ -624,6 +631,21 @@ namespace internal {
         ret %Int %unboxed
       """
 
+    extern type BoxedByte
+    extern pure def boxByte(n: Byte): BoxedByte =
+      llvm """
+        %extended = sext i8 %n to i64
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxByte(b: BoxedByte): Byte =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        %truncated = trunc i64 %unboxed to i8
+        ret i8 %truncated
+      """
+
     extern type BoxedChar
     extern pure def boxChar(c: Char): BoxedChar =
       llvm """
@@ -655,7 +677,5 @@ namespace internal {
         %d = bitcast i64 %unboxed to double
         ret %Double %d
       """
-
-    record BoxedString(unboxString: String)
   }
 }

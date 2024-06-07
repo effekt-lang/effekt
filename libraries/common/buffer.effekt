@@ -1,0 +1,123 @@
+module buffer
+
+import array
+
+// TODO (in Effekt compiler)
+// - [ ] fix allocating into actually global region
+// - [ ] fix exceptions on objects
+// - [X] allow omitting braces after `at` for singleton regions
+
+record BufferOverflow()
+
+/**
+ * Fixed-size ring buffers (queues) where one can write
+ * elements to the head and read from the tail.
+ */
+interface Buffer[T] {
+  /**
+   * The remaining capacity
+   */
+  def capacity(): Int
+
+  /**
+   * Is this buffer full?
+   */
+  def full?(): Bool
+
+  /**
+   * Is this buffer empty?
+   */
+  def empty?(): Bool
+
+  /**
+   * Read an element from the tail of the buffer
+   */
+  def read(): Option[T]
+
+  /**
+   * Write an element to the head of the buffer
+   */
+  def write(el: T): Unit / Exception[BufferOverflow]
+}
+
+def emptyBuffer[T](capacity: Int): Buffer[T] at {global} = {
+  if (capacity == 1) refBuffer()
+  else arrayBuffer(capacity)
+}
+def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
+  // TODO allocate buffer (and array) into a region r.
+  val contents = emptyArray[T](initialCapacity)
+  var head in global = 0
+  var tail in global = 0
+
+  def size(): Int =
+    if (tail >= head) { tail - head }
+    else { initialCapacity - head + tail }
+
+  def capacity(): Int = initialCapacity - size()
+
+  def buffer = new Buffer[T] {
+    def capacity() = capacity()
+    def full?() = capacity() <= 0
+    def empty?() = size() <= 0
+    def read() = {
+      if (buffer.empty?) None()
+      else {
+        val result: T = contents.remove(head).getOrElse { <> };
+        head = mod(head + 1, initialCapacity)
+        Some(result)
+      }
+    }
+    def write(el: T) = {
+      if (buffer.full?) <> // raise(BufferOverflow())
+
+      contents.put(tail, el)
+      tail = mod(tail + 1, initialCapacity)
+    }
+  }
+  buffer
+}
+def refBuffer[T](): Buffer[T] at {global} = {
+  var content: Option[T] in global = None()
+  new Buffer[T] {
+    def capacity() = if (content.isEmpty) 1 else 0
+    def full?() = content.isDefined
+    def empty?() = isEmpty(content)
+    def read() = {
+      val res = content
+      content = None()
+      res
+    }
+    def write(el: T) = content match {
+      case Some(v) =>
+        <> // do raise(BufferOverflow(), "Cannot read element from buffer")
+      case None() =>
+        content = Some(el)
+    }
+  }
+}
+
+namespace examples {
+  def main() = ignore[BufferOverflow] {
+    // Buffer with capacity 1
+    def b = emptyBuffer[Int](1);
+    println(b.capacity);
+    println(b.full?);
+
+    b.write(17);
+    println(b.read());
+
+    // buffer with capacity 3
+    def ringbuffer = emptyBuffer[Int](3);
+    ringbuffer.write(1);
+    ringbuffer.write(2);
+    println(ringbuffer.read());
+    ringbuffer.write(3);
+    println(ringbuffer.read());
+    println(ringbuffer.read());
+    ringbuffer.write(4);
+    ringbuffer.write(5);
+    println(ringbuffer.read());
+    println(ringbuffer.read());
+  }
+}

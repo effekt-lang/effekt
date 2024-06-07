@@ -1,0 +1,282 @@
+module io/files
+
+import bytes
+
+import io
+import io/error
+
+extern js """
+  const fs = require("fs");
+"""
+
+extern type FileDescriptor
+  // = llvm:  32bit integer extended to 64bit and stored into the "tag" of "Pos"
+  // = js: FileHandle (https://nodejs.org/api/fs.html#class-filehandle)
+
+extern pure def show(fd: FileDescriptor): String =
+  llvm """
+    %res = call %Pos @showFiledescriptor(%Pos %fd)
+    ret %Pos %res
+  """
+
+
+/**
+ * An abstract interface applications can program against.
+ *
+ * Can be interpreted into AsyncIO with the `filesystem`
+ * handler, or virtualized etc.
+ *
+ * See example below.
+ */
+interface Files {
+  def readFile(path: String): String
+  def writeFile(path: String, contents: String): Unit
+}
+
+/**
+ * Represents the file opening modes with their respective flags
+ */
+type Mode {
+  // Most common modes
+  Append()              // 'a'  created if does not exist
+  ReadAppend()          // 'a+' created if does not exist
+  ReadOnly()            // 'r'  exception if does not exist
+  ReadWrite()           // 'w+' created if does not exist, truncated if exists
+  Write()               // 'w'  created if does not exist, truncated if exists
+
+  // Other modes
+  AppendExclusive()     // 'ax' created if does not exist, fails if exists
+  ReadAppendExclusive() // 'ax+' created if does not exist, fails if exists
+  AppendSync()          // 'as' created if does not exist, append in synchronous mode
+  ReadAppendSync()      // 'as+' created if does not exist, append in synchronous mode
+  ReadSync()            // 'rs' exception if does not exist, read in synchronous mode
+  ReadWriteSync()       // 'rs+' exception if does not exist, read/write in synchronous mode
+  WriteExclusive()      // 'wx' created if does not exist, truncated if exists, fails if exists
+  ReadWriteExclusive()  // 'wx+' created if does not exist, truncated if exists, fails if exists
+}
+
+def modeName(modes: Mode): String = modes match {
+  case Append()              => "a"
+  case ReadAppend()          => "a+"
+  case ReadOnly()            => "r"
+  case ReadWrite()           => "w+"
+  case Write()               => "w"
+  case AppendExclusive()     => "ax"
+  case ReadAppendExclusive() => "ax+"
+  case AppendSync()          => "as"
+  case ReadAppendSync()      => "as+"
+  case ReadSync()            => "rs"
+  case ReadWriteSync()       => "rs+"
+  case WriteExclusive()      => "wx"
+  case ReadWriteExclusive()  => "wx+"
+}
+
+
+/**
+ * Using the file system via node.js
+ */
+def filesystem[R] { program: => R / Files }: R / { AsyncIO, Exception[IOError] } = // TODO move Exception to be bidirectional
+  try { program() }
+  with Files {
+    def readFile(path) = resume(readFile(path))
+    def writeFile(path, contents) = resume(writeFile(path, contents))
+  }
+
+
+// AsyncIO-based API (default)
+// ---------------------------
+
+/**
+ * Reads a file at given path as utf8 encoded string.
+ */
+def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
+  val fd = openFile(path, ReadOnly());
+  with on[IOError].finalize { closeFile(fd) }
+
+  val readSize = 1048576 // 1MB
+  var size = readSize
+  var buffer = bytes::empty(size)
+  var offset = 0;
+
+  def go(): String = {
+    readFile(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
+      case 0 =>
+        buffer.slice(0, offset).toUTF8
+      case n and n < 0 => panic("Error!")
+      case n =>
+        offset = offset + n
+
+        // we are at maximum capacity
+        if (n == readSize && (offset + readSize) > size) {
+          val newSize   = size * 2
+          val newBuffer = bytes::empty(newSize)
+          copy(buffer, newBuffer, 0, 0, size)
+          buffer = newBuffer
+          size = newSize
+        }
+        go()
+    }
+  }
+
+  go()
+}
+
+/**
+ * Writes the (utf8 encoded) string `contents` into the specified file.
+ */
+def writeFile(path: String, contents: String): Unit / { AsyncIO, Exception[IOError] } = {
+  val fd = openFile(path, Write());
+  with on[IOError].finalize { closeFile(fd) }
+
+  val writeSize = 1048576 // 1MB
+
+  // this induces a memcpy that is not strictly necessary, since we use the buffer read-only
+  val buffer = contents.fromUTF8
+  val size = buffer.size
+
+  var offset = 0;
+  def remaining() = size - offset
+
+  def go(): Unit =
+    writeFile(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
+      case 0 => ()
+      case n and n < 0 => panic("Error!")
+      case n =>
+        offset = offset + n;
+        if (remaining() > 0) go()
+    }
+
+  go()
+}
+
+/**
+ * Opens the file at given path using the specified mode (read, write, etc.)
+ */
+def openFile(path: String, flags: Mode): FileDescriptor / { AsyncIO, Exception[IOError] } =
+  do performIO(box { k =>
+    val res = callback::openFile(path, flags,
+      box { fd => k(Success(fd)) },
+      box { error => k(Error(error, "Error opening file: " ++ error.message)) });
+    ()
+  }).value
+
+def readFile(fd: FileDescriptor, buffer: Bytes, offset: Int): Int / { AsyncIO, Exception[IOError] } =
+  do performIO(box { k =>
+    callback::readFile(fd, buffer, offset,
+      box { n => k(Success(n)) },
+      box { error => k(Error(error, "Error reading from file: " ++ error.message)) })
+  }).value
+
+def writeFile(fd: FileDescriptor, buffer: Bytes, offset: Int): Int / { AsyncIO, Exception[IOError] } =
+  do performIO(box { k =>
+    callback::writeFile(fd, buffer, offset,
+      box { n => k(Success(n)) },
+      box { n =>
+        val error = n.fromCode
+        k(Error(error, "Error writing to file: " ++ error.message))
+      })
+  }).value
+
+extern io def closeFile(fd: FileDescriptor): Unit =
+  js "fs.close(${fd}, () => $effekt.unit)"
+  llvm """
+    ; extract the filedescriptor from the tag of the Pos
+    %tag = extractvalue %Pos %fd, 0
+    %fd_int = trunc i64 %tag to i32
+
+    call void @c_file_close(i32 %fd_int)
+    ret %Pos zeroinitializer
+  """
+
+
+// Callback-based API
+// ------------------
+// mostly used as an implementation detail.
+namespace callback {
+
+  def openFile(path: String, mode: Mode,
+      onSuccess: FileDescriptor => Unit at {io, global},
+      onFailure: IOError => Unit at {io, global}): Unit =
+    openFile(path, modeName(mode), onSuccess, box { code => onFailure(fromCode(code)) })
+
+  def readFile(fd: FileDescriptor, buffer: Bytes, offset: Int,
+      onSuccess: (Int) => Unit at {io, global},
+      onFailure: IOError => Unit at {io, global}): Unit =
+    readFile(fd, buffer, offset, onSuccess, box { code => onFailure(fromCode(code)) })
+
+  // The following are supposed to be internal
+
+  extern io def openFile(path: String, mode: String,
+      onSuccess: (FileDescriptor) => Unit at {io, global},
+      onFailure: (Int) => Unit at {io, global}): Unit =
+    js "openFile(${path}, ${mode}, ${onSuccess}, ${onFailure})"
+    llvm """
+      ; stack allocate
+      %onSuccess_ptr = alloca %Neg
+      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+
+      %onFailure_ptr = alloca %Neg
+      store %Neg %onFailure, %Neg* %onFailure_ptr
+
+      call void @c_file_open(%Pos %path, %Pos %mode, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      ret %Pos zeroinitializer
+    """
+
+  extern io def readFile(fd: FileDescriptor, buffer: Bytes, offset: Int,
+      onSuccess: (Int) => Unit at {io, global},
+      onFailure: (Int) => Unit at {io, global}): Unit =
+    js "readFile(${fd}, ${buffer}, ${offset}, ${onSuccess}, ${onFailure})"
+    llvm """
+      ; extract the filedescriptor from the tag of the Pos
+      %tag = extractvalue %Pos %fd, 0
+      %fd_int = trunc i64 %tag to i32
+
+      ; stack allocate
+      %onSuccess_ptr = alloca %Neg
+      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+
+      %onFailure_ptr = alloca %Neg
+      store %Neg %onFailure, %Neg* %onFailure_ptr
+
+      call void @c_file_read(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      ret %Pos zeroinitializer
+    """
+
+  extern io def writeFile(fd: FileDescriptor, buffer: Bytes, offset: Int,
+      onSuccess: (Int) => Unit at {io, global},
+      onFailure: (Int) => Unit at {io, global}): Unit =
+    js "writeFile(${fd}, ${buffer}, ${offset}, ${onSuccess}, ${onFailure})"
+    llvm """
+      ; extract the filedescriptor from the tag of the Pos
+      %tag = extractvalue %Pos %fd, 0
+      %fd_int = trunc i64 %tag to i32
+
+      ; stack allocate
+      %onSuccess_ptr = alloca %Neg
+      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+
+      %onFailure_ptr = alloca %Neg
+      store %Neg %onFailure, %Neg* %onFailure_ptr
+
+      call void @writeFile(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      ret %Pos zeroinitializer
+    """
+}
+
+
+namespace examples {
+
+  // Example illustrating using abstract files interface
+  // and interpreting it into asynchronous IO
+  def copy(from: String, to: String): Unit / Files = {
+    val contents = do readFile(from)
+    do writeFile(to, contents)
+  }
+
+  def main() = eventloop(box {
+    with on[IOError].panic;
+    with filesystem;
+
+    copy("README.md", "out/test.md")
+  })
+}

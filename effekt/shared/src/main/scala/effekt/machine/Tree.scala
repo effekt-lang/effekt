@@ -222,6 +222,7 @@ enum Type {
   case Negative()
   case Stack()
   case Int()
+  case Byte()
   case Double()
   case String()
   case Reference(tpe: Type)

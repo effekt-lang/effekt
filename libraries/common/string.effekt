@@ -344,6 +344,5 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
   ml "(Char.ord (String.sub (${str}, ${n})))"
   llvm """
     %x = call %Int @c_buffer_character_at(%Pos %str, i64 %n)
-    call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Int %x
   """

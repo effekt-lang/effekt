@@ -218,6 +218,31 @@ object LLVMRunner extends Runner[String] {
     optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
+  def libuvArgs(using C: Context): Seq[String] =
+    val OS = System.getProperty("os.name").toLowerCase
+    val libraries = C.config.gccLibraries.toOption.map(file).orElse {
+      OS match {
+        case os if os.contains("mac")  => Some(file("/opt/homebrew/lib"))
+        case os if os.contains("win") => None
+        case os if os.contains("linux") => Some(file("/usr/local/lib"))
+        case os => None
+      }
+    }
+    val includes = C.config.gccIncludes.toOption.map(file).orElse {
+      OS match {
+        case os if os.contains("mac")  => Some(file("/opt/homebrew/include"))
+        case os if os.contains("win") => None
+        case os if os.contains("linux") => Some(file("/usr/local/include"))
+        case os => None
+      }
+    }
+    (libraries, includes) match {
+      case (Some(lib), Some(include)) => Seq(s"-L${lib.unixPath}", "-luv", s"-I${include.unixPath}")
+      case _ =>
+        C.warning(s"Cannot find libuv on ${OS}; please use --gcc-libraries and --gcc-includes to configure the paths for the libuv dylib and header files, respectively.")
+        Seq()
+    }
+
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -241,7 +266,9 @@ object LLVMRunner extends Runner[String] {
 
     val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    exec(gcc, gccMainFile, "-o", executableFile, objPath)
+    val gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+    exec(gccArgs: _*)
+
     executableFile
 }
 
