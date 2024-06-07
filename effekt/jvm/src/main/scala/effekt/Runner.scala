@@ -176,7 +176,7 @@ trait ChezRunner extends Runner[String] {
     val out = C.config.outputPath().getAbsolutePath
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
-    createScript(exeScriptPath, "scheme", "--script", schemeFilePath, "\"$@\"")
+    createScript(exeScriptPath, "scheme", "--script", schemeFilePath)
 }
 
 object ChezMonadicRunner extends ChezRunner {
