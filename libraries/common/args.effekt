@@ -9,7 +9,7 @@ extern io def commandLineArgs(): List[String] =
 namespace js {
   extern type Args // = Array[String]
 
-  extern io def nativeArgs(): Args = js "process.argv.slice(2)"
+  extern io def nativeArgs(): Args = js "process.argv.slice(1)"
 
   extern io def argCount(args: Args): Int = js "${args}.length"
 
