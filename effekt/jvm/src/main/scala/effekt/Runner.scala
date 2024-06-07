@@ -40,16 +40,17 @@ trait Runner[Executable] {
   def prelude: List[String] = List("effekt")
 
   /**
-   * Creates a OS-specific script file that will execute the command when executed.
+   * Creates a OS-specific script file that will execute the command when executed,
+   * forwarding command line arguments.
    * @return the actual name of the generated script (might be `!= name`)
    */
   def createScript(name: String, command: String*): String = os match {
     case OS.POSIX =>
-      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")}", true)
+      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")} \"$$@\"", true)
       name
     case OS.Windows =>
       val batName = name + ".bat"
-      IO.createFile(batName, "@echo off\r\n" + command.mkString(" "))
+      IO.createFile(batName, "@echo off\r\n" + command.mkString(" ") + " %*")
       batName
   }
 
