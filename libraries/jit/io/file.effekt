@@ -1,4 +1,0 @@
-module io/file
-
-// TODO make safe
-extern def getFileContents(filename: String): String = jit "unsafeGetFileContents(String): String"

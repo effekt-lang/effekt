@@ -337,7 +337,7 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
-  jit "charAt(Int, String): String"
+  jit """!sexp:("charAt(Int, String): String" $arg1:int $arg0:str)"""
   llvm """
     %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
