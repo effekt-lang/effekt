@@ -52,11 +52,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     val t = next()
     if (t.kind != kind) fail(s"Expected ${kind}, but got ${t}")
 
-  private def expect[T](expected: String)(f: PartialFunction[TokenKind, T]): T =
-    val t = next()
-    val kind = t.kind
-    if f.isDefinedAt(kind) then f(kind) else fail(s"Expected ${expected}")
-
   /**
    * Guards `thn` by token `t` and consumes the token itself, if present.
    */
@@ -384,7 +379,10 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case Ident(id) => true
     case _ => false
   }
-  def ident(): String = expect("identifier") { case Ident(id) => id }
+  def ident(): String = next().kind match {
+    case Ident(id) => id
+    case _ => fail(s"Expected identifier")
+  }
 
   inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
     consume(before)
