@@ -141,4 +141,13 @@ class RecursiveDescentTests extends munit.FunSuite {
       IgnorePattern())
     parseMatchPattern("Cons(x, Cons(x, Nil()))")
   }
+
+  test("Block arguments") {
+    parseExpr("map {f}")
+    parseExpr("map {f} {g}")
+    parseExpr("map { f } { g }")
+    parseExpr("map(x) { f } { g }")
+    parseExpr("map(x) { return 42 }")
+    parseExpr("map(x) { map(x) { return 42 } }")
+  }
 }

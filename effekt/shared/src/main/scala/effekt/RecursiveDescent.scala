@@ -58,6 +58,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   inline def when[T](t: TokenKind)(thn: => T)(els: => T): T =
     if peek(t) then { consume(t); thn } else els
 
+  inline def backtrack[T](p: => T): Option[T] =
+    val before = position
+    try { Some(p) } catch {
+      case ParseError2(_, _) => position = before; None
+    }
 
   /**
    * Tiny combinator DSL to sequence parsers
@@ -308,11 +313,30 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def typeArgs(): List[ValueType] = some(valueType, `[`, `,`, `]`)
   def valueArgs(): List[Term] = many(expr, `(`, `,`, `)`)
-  def blockArgs(): List[Term] = Nil // TODO
+  def blockArgs(): List[Term] = someWhile(blockArg, `{`)
 
-  def blockArg(): Term = ???
-  def functionArg(): BlockLiteral = ???
+  /**
+   * Note: for this nonterminal, we need some backtracking.
+   */
+  def blockArg(): Term =
+    backtrack { `{` ~> Var(idRef()) <~ `}` } getOrElse { functionArg() }
 
+  def functionArg(): BlockLiteral = braces {
+    peek.kind match {
+      // { case ... => ... }
+      case `case` => ??? // `{` ~> some(matchClause) <~ `}` ...
+      case _ =>
+        // { (x: Int) => ... }
+        backtrack { lambdaParams() <~ `=>` } map {
+          case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts()) : BlockLiteral
+        } getOrElse {
+          // { <STMTS> }
+          BlockLiteral(Nil, Nil, Nil, stmts()) : BlockLiteral
+        }
+    }
+  }
+
+  def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) = fail("NOT IMPLEMENTED")
 
   def primExpr(): Term = peek.kind match {
     case _ if isLiteral      => literal()
@@ -415,6 +439,14 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     components += p()
     while (peek(sep)) {
       consume(sep)
+      components += p()
+    }
+    components.toList
+
+  inline def someWhile[T](p: () => T, lookahead: TokenKind): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
+    components += p()
+    while (peek(lookahead)) {
       components += p()
     }
     components.toList
