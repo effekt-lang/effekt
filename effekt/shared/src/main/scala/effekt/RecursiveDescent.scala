@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.lexer.*
-import effekt.lexer.TokenKind.{ `::` as _, * }
+import effekt.lexer.TokenKind.{ `::` as PathSep, * }
 
 import effekt.source.*
 
@@ -74,7 +74,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   extension [A](self: A) {
     @targetName("seq")
     inline def ~[B](other: B): (A ~ B) = new ~(self, other)
-    inline def <~[R](t: TokenKind): R = { consume(t); self }
+    inline def <~(t: TokenKind): A = { consume(t); self }
   }
 
   extension (self: TokenKind) {
@@ -346,7 +346,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def isHole: Boolean = peek(`<>`) || peek(`<{`)
   def hole(): Term = peek.kind match {
     case `<>` => `<>` ~> Hole(Return(UnitLit()))
-    case `<{` =>  `<{` ~> Hole(stmts()) <~ `}>`
+    case `<{` => `<{` ~> Hole(stmts()) <~ `}>`
+    case _ => fail("Expected hole")
   }
 
   def isLiteral: Boolean = peek.kind match {
@@ -373,14 +374,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def isIdRef: Boolean = isIdent
 
-  // TODO also parse paths
-  def idRef(): IdRef = IdRef(Nil, ident())
-  def idDef(): IdDef = IdDef(ident())
+  def idRef(): IdRef = some(ident, PathSep) match {
+    case ids => IdRef(ids.init, ids.last)
+  }
 
-  //  identRef ^^ { path =>
-  //    val ids = path.split("::").toList
-  //    IdRef(ids.init, ids.last)
-  //  }
+  def idDef(): IdDef = IdDef(ident())
 
   def isIdent: Boolean = peek.kind match {
     case Ident(id) => true
