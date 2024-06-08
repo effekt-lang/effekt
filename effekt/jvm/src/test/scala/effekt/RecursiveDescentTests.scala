@@ -44,6 +44,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseValueType(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
     parse(input, _.valueType())
 
+  def parseBlockType(input: String, positions: Positions = new Positions())(using munit.Location): BlockType =
+    parse(input, _.blockType())
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -162,5 +165,11 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")
     parseValueType("list::List[effekt::Int]")
+  }
+
+  test("Value types") {
+    parseBlockType("Exc")
+    parseBlockType("State[S]")
+    parseBlockType("State[Int]")
   }
 }

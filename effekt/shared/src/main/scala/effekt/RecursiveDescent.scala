@@ -463,13 +463,58 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ => ValueTypeRef(idRef(), maybeTypeArgs())
   }
 
-  def blockType(): BlockType = ???
+  def blockType(): BlockType = interfaceType()
+
+
+  //
+  //  lazy val blockType: P[BlockType] =
+  //    // []?()?
+  //    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ {
+  //      case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+  //    }
+  //    | some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, Nil, tpes, ret, eff) }
+  //    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(Nil, List(t), Nil, ret, eff) }
+  //    | (valueType <~ guard(`/`)) !!! "Effects not allowed here. Maybe you mean to use a function type `() => T / E`?"
+  //    // TODO only allow this on parameters, not elsewhere...
+  //    | interfaceType
+  //    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, Nil, ret, eff) }
+  //    | failure("Expected either a function type (e.g., (A) => B / {E} or => B) or an interface type (e.g., State[T]).")
+  //    )
+
+
+
 
   def interfaceType(): BlockTypeRef =
     BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef
     // TODO error "Expected an interface type"
 
-  def maybeTypeParams(): List[Id] = ???
+  def maybeTypeParams(): List[Id] = if peek(`[`) then typeParams() else Nil
+
+  def typeParams(): List[Id] = some(idDef, `[`, `,`, `]`)
+
+  def maybeBlockTypeParams(): List[(Option[IdDef], BlockType)] = if peek(`{`) then blockTypeParams() else Nil
+
+  def blockTypeParams(): List[(Option[IdDef], BlockType)] = someWhile(blockTypeParam, `{`)
+
+  def blockTypeParam(): (Option[IdDef], BlockType) = ???
+
+
+  def maybeValueTypes(): List[ValueType] = if peek(`(`) then valueTypes() else Nil
+
+  def valueTypes(): List[ValueType] = many(valueType, `(`, `,`, `)`)
+
+  def captureSet(): CaptureSet = CaptureSet(many(idRef, `{`, `,` , `}`))
+
+  def effectful(): Effectful = Effectful(valueType(), maybeEffects())
+
+  def maybeEffects(): Effects = when(`/`) { effects() } { Effects.Pure }
+
+  // TODO error "Expected an effect set"
+  def effects(): Effects =
+    if peek(`{`) then Effects(many(interfaceType, `{`, `,`, `}`))
+    else Effects(interfaceType())
+
+
 
   /**
    * Helpers
