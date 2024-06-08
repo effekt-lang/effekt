@@ -22,6 +22,9 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def fail(message: String): Nothing = throw ParseError2(message, position)
 
+  def expect[T](message: String)(p: => T): T =
+    try { p } catch { case e: ParseError2 => throw ParseError2(s"Expected $message but failed: ${e.message}", position) }
+
   // always points to the latest non-space position
   var position: Int = 0
 
@@ -156,6 +159,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ => fail("Expected definition")
   }
 
+  def functionBody: Stmt = expect("the body of a function definition")(stmt())
+
   // TODO matchdef
   //  lazy val matchDef: P[Stmt] =
   //     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;;` ~> stmts) ^^ {
@@ -210,7 +215,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   <implementation ::= <interfaceType> { <defClause>+ }
   */
   def tryExpr(): Term =
-    `try` ~> stmt() ~ some(handler()) match {
+    `try` ~> stmt() ~ someWhile(handler, `with`) match {
       case s ~ hs => TryHandle(s, hs)
     }
 
@@ -222,16 +227,25 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       }
     }
 
-  def implementation(): Implementation =
-    (interfaceType() ~ (`{` ~> some(defClause()) <~ `}`) match {
-      case effect ~ clauses => Implementation(effect, clauses)
-    })
-    | (idRef() ~ maybeTypeParams() ~ implicitResume ~ functionArg() match {
-      case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, bparams, body) => ???
-    })
+  def implementation(): Implementation = {
+    backtrack(interfaceType()) match {
+      // Interface[...] { def ... = { ... } def ... = { ... } }
+      // Interface[...] {}
+      case Some(intType) => Implementation(intType, manyWhile(defClause, `def`))
+      // Interface[...] { (...) { ... } => ... }
+      case None => idRef() ~ maybeTypeParams() ~ implicitResume ~ functionArg() match {
+        case id ~ tps ~ resume ~ BlockLiteral(_, vps, bps, body) =>
+          val synthesizedId = IdRef(Nil, id.name)
+          val interface = BlockTypeRef(id, Nil): BlockTypeRef
+          Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, resume)))
+      }
+    }
+  }
 
-
-  def defClause(): OpClause = ???
+  def defClause(): OpClause =
+    (`def` ~> idRef()) ~ operationParams() ~ backtrack(`:` ~> effectful()) ~ implicitResume ~ (`=` ~> stmt()) match {
+      case id ~ (tps ~ vps ~ bps) ~ ret ~ resume ~ body => OpClause(id, tps, vps, bps, ret, body, resume)
+    }
 
   lazy val implicitResume: IdDef = IdDef("resume")
 
@@ -381,7 +395,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
-    case _ => fail("Expected variables, literals, tuples, lists, holes or group.")
+    case t => fail(s"Expected variables, literals, tuples, lists, holes or group but found")
   }
 
   def isListLiteral: Boolean = peek.kind match {
@@ -498,6 +512,36 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def blockTypeParam(): (Option[IdDef], BlockType) = ???
 
+  /*
+  naming convention?:
+    maybe[...]s: zero or more times
+    [...]s: one or more times
+    [...]opt: optional type annotation
+  */
+
+  def operationParams(): List[Id] ~ List[ValueParam] ~ List[BlockParam] =
+    maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams()
+
+  def maybeValueParamsOpt(): List[ValueParam] =
+    many(valueParamOpt, `(`, `,`, `)`)    
+
+  def maybeValueParams(): List[ValueParam] =
+    many(valueParam, `(`, `,`, `)`)
+
+  def valueParam(): ValueParam =
+    ValueParam(idDef(), Some(`:` ~> valueType()))
+
+  def valueParamOpt(): ValueParam =
+    ValueParam(idDef(), when(`:`)(Some(valueType()))(None))
+
+  def maybeBlockParams(): List[BlockParam] =
+    manyWhile({ () => `{` ~> blockParam() <~ `}` }, `{`)
+
+  def blockParams(): List[BlockParam] =
+    someWhile({ () => `{` ~> blockParam() <~ `}` }, `{`)
+
+  def blockParam(): BlockParam =
+    BlockParam(idDef(), `:` ~> blockType())
 
   def maybeValueTypes(): List[ValueType] = if peek(`(`) then valueTypes() else Nil
 
@@ -539,22 +583,16 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
     components.toList
 
-  inline def some[T](p: => T): List[T] =
-    val components: ListBuffer[T] = ListBuffer.empty
-    components += p
-    boundary {
-      while (true) {
-        backtrack(p) match {
-          case Some(x) => components += x
-          case None => break()
-        }
-      }
-    }
-    components.toList
-
   inline def someWhile[T](p: () => T, lookahead: TokenKind): List[T] =
     val components: ListBuffer[T] = ListBuffer.empty
     components += p()
+    while (peek(lookahead)) {
+      components += p()
+    }
+    components.toList
+
+  inline def manyWhile[T](p: () => T, lookahead: TokenKind): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
     while (peek(lookahead)) {
       components += p()
     }
