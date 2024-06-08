@@ -55,7 +55,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   }
 
   def consume(kind: TokenKind): Unit =
-    if !hasNext() then fail(s"Expected ${kind}, but reached end of file")
+    // if !hasNext() then fail(s"Expected ${kind}, but reached end of file")
     val t = next()
     if (t.kind != kind) fail(s"Expected ${kind}, but got ${t}")
 
@@ -235,18 +235,18 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       // Interface[...] {}
       case Some(intType) => Implementation(intType, manyWhile(defClause, `def`))
       // Interface[...] { (...) { ... } => ... }
-      case None => idRef() ~ maybeTypeParams() ~ implicitResume ~ functionArg() match {
-        case id ~ tps ~ resume ~ BlockLiteral(_, vps, bps, body) =>
+      case None => idRef() ~ maybeTypeParams() ~ functionArg() match {
+        case id ~ tps ~ BlockLiteral(_, vps, bps, body) =>
           val synthesizedId = IdRef(Nil, id.name)
           val interface = BlockTypeRef(id, Nil): BlockTypeRef
-          Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, resume)))
+          Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, implicitResume)))
       }
     }
   }
 
   def defClause(): OpClause =
-    (`def` ~> idRef()) ~ operationParams() ~ backtrack(`:` ~> effectful()) ~ implicitResume ~ (`=` ~> stmt()) match {
-      case id ~ (tps ~ vps ~ bps) ~ ret ~ resume ~ body => OpClause(id, tps, vps, bps, ret, body, resume)
+    (`def` ~> idRef()) ~ operationParams() ~ backtrack(`:` ~> effectful()) ~ (`=` ~> stmt()) match {
+      case id ~ (tps ~ vps ~ bps) ~ ret ~ body => OpClause(id, tps, vps, bps, ret, body, implicitResume)
     }
 
   lazy val implicitResume: IdDef = IdDef("resume")
@@ -466,6 +466,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ => fail(s"Expected identifier")
   }
 
+
   /**
    * Types
    */
@@ -529,7 +530,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def blockTypeParams(): List[(Option[IdDef], BlockType)] = someWhile(blockTypeParam, `{`)
 
   def blockTypeParam(): (Option[IdDef], BlockType) =
-    braces { (backtrack { Some(idDef()) <~ `:` } getOrElse { None }, blockType()) }
+    braces { (backtrack { idDef() <~ `:` }, blockType()) }
 
   /*
   naming convention?:
@@ -644,5 +645,4 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       consume(after)
       components.toList
     }
-
 }
