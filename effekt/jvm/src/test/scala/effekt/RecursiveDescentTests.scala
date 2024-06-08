@@ -167,9 +167,35 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseValueType("list::List[effekt::Int]")
   }
 
-  test("Value types") {
+  test("Block types") {
     parseBlockType("Exc")
     parseBlockType("State[S]")
     parseBlockType("State[Int]")
+    parseBlockType("() => Int")
+    parseBlockType("(Int) => Int")
+    parseBlockType("(Int, String) => Int")
+    parseBlockType("(Int, String) => Int / Exc")
+    parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")
+    parseBlockType("=> Int")
+    parseBlockType("{Exc} => Int")
+    parseBlockType("{Exc} {Amb} => Int")
+    parseBlockType("({Exc} {Amb} => Int)")
+    parseBlockType("{Exc} {amb : Amb} => Int")
+    parseBlockType("{exc:Exc} => Int")
+    parseBlockType("[T] => T") // Not sure we want this...
+
+    parseValueType("Exc at { a, b, c }")
+    parseValueType("() => (Exc at {}) / {} at { a, b, c }")
+
+    assertEquals(
+      parseValueType("() => Int at { a, b, c }"),
+      parseValueType("(() => Int) at { a, b, c }"))
+
+    // we purposefully cannot parse this:
+    intercept[Throwable] { parseValueType("() => Int at { a, b, c } at {}") }
+
+    parseValueType("() => (Int at { a, b, c }) at {}")
+    parseValueType("(() => Int) at { a, b, c }")
+    parseValueType("(() => Int at {}) => Int at { a, b, c }")
   }
 }
