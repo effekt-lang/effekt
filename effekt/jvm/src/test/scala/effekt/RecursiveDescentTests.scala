@@ -78,5 +78,15 @@ class RecursiveDescentTests extends munit.FunSuite {
       """with foo().baz;
         |bar()
         |""".stripMargin)
+
+    parseStmts(
+      """var x = baz;
+        |return x
+        |""".stripMargin)
+
+    parseStmts(
+      """var x in r = baz;
+        |return x
+        |""".stripMargin)
   }
 }

@@ -150,13 +150,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def valDef(): Def =
     ValDef(`val` ~> idDef(), typeAnnotationOpt(), `=` ~> stmt())
 
-  def varDef(): Def = {
+  def varDef(): Def =
     (`var` ~> idDef()) ~ typeAnnotationOpt() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
       case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
       case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
     }
-    ???
-  }
 
   def typeAnnotationOpt(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
