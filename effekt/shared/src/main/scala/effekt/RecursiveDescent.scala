@@ -130,7 +130,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
     // \n   while
     //      ^
-    case _ if peek(-1).kind == Newline => ()
+    case _ if peek(-1, Newline) => ()
 
     case _ => fail("Expected ;")
   }
@@ -202,11 +202,24 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def matchGuards() = some(matchGuard, `and`)
   def matchGuard(): MatchGuard =
-    MatchGuard.BooleanGuard(expr())
+    expr() ~ when(`is`) { Some(matchPattern()) } { None } match {
+      case e ~ Some(p) => MatchGuard.PatternGuard(e, p)
+      case e ~ None    => MatchGuard.BooleanGuard(e)
+    }
 
-//    ( expr ~ (`is` ~/> matchPattern) ^^ MatchGuard.PatternGuard.apply
-//    | expr ^^ MatchGuard.BooleanGuard.apply
-//    )
+  def matchPattern(): MatchPattern = peek.kind match {
+    case `__` => skip(); IgnorePattern()
+    case `(` => some(matchPattern, `(`, `,`, `)`) match {
+      case p :: Nil => fail("Pattern matching on tuples requires more than one element")
+      case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size + 1}"), ps)
+    }
+    case _ if isVariable && peek(1, `(`) =>
+      TagPattern(idRef(), many(matchPattern, `(`, `,`, `)`))
+    case _ if isVariable =>
+      AnyPattern(idDef())
+    case _ if isLiteral => LiteralPattern(literal())
+    case _ => fail("Expected pattern")
+  }
 
   def orExpr(): Term = infix(andExpr, `||`)
   def andExpr(): Term = infix(eqExpr, `&&`)

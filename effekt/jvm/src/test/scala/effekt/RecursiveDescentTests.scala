@@ -39,6 +39,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseStmts(input: String, positions: Positions = new Positions())(using munit.Location): Stmt =
     parse(input, _.stmts())
 
+  def parseMatchPattern(input: String, positions: Positions = new Positions())(using munit.Location): MatchPattern =
+    parse(input, _.matchPattern())
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -122,5 +125,14 @@ class RecursiveDescentTests extends munit.FunSuite {
         """f();
           |return g()
           |""".stripMargin))
+  }
+
+  test("Simple patterns") {
+    parseMatchPattern("x")
+    parseMatchPattern("Cons(x, y)")
+    assertEquals(
+      parseMatchPattern("_"),
+      IgnorePattern())
+    parseMatchPattern("Cons(x, Cons(x, Nil()))")
   }
 }
