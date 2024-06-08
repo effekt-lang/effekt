@@ -300,14 +300,16 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   // TODO right now we only parse value arguments
   def isArguments: Boolean = peek(`(`) || peek(`[`) || peek(`{`)
   def arguments(): (List[ValueType], List[Term], List[Term]) =
-    val vargs = many(expr, `(`, `,`, `)`)
-    (Nil, vargs, Nil)
+    if (!isArguments) fail("Expected at least one argument section (types, values, or blocks)")
+    (maybeTypeArgs(), maybeValueArgs(), maybeBlockArgs())
 
-  //  lazy val arguments: P[(List[ValueType] ~ List[Term] ~ List[Term])] =
-  //      ( maybeTypeArgs ~ valueArgs ~ blockArgs
-  //      | maybeTypeArgs ~ valueArgs ~ success(List.empty[Term])
-  //      | maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs
-  //      )
+  def maybeTypeArgs(): List[ValueType] = if peek(`[`) then typeArgs() else Nil
+  def maybeValueArgs(): List[Term] = if peek(`(`) then valueArgs() else Nil
+  def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
+
+  def typeArgs(): List[ValueType] = Nil // TODO
+  def valueArgs(): List[Term] = many(expr, `(`, `,`, `)`)
+  def blockArgs(): List[Term] = Nil // TODO
 
   def primExpr(): Term = peek.kind match {
     case _ if isLiteral      => literal()
