@@ -54,6 +54,22 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseExpr("(f(a, 42))()"))
   }
 
+  test("Operator precedence") {
+    parseExpr("1 + 1")
+
+    assertEquals(
+      parseExpr("1 + 2 + 3"),
+      parseExpr("(1 + 2) + 3"))
+
+    assertEquals(
+      parseExpr("1 + 2 * 3"),
+      parseExpr("1 + (2 * 3)"))
+
+    assertEquals(
+      parseExpr("1 + 2 * 3 == 4 + 5"),
+      parseExpr("(1 + (2 * 3)) == (4 + 5)"))
+  }
+
   test("Dangling else") {
     assertEquals(
       parseExpr("if (42) if (42) x else y"),

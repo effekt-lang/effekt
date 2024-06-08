@@ -171,7 +171,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case `box`    => ???
     case `unbox`  => ???
     case `new`    => ???
-    case _ => callExpr()
+    case _ => orExpr()
   }
 
   def ifExpr(): Term =
@@ -196,6 +196,42 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 //    ( expr ~ (`is` ~/> matchPattern) ^^ MatchGuard.PatternGuard.apply
 //    | expr ^^ MatchGuard.BooleanGuard.apply
 //    )
+
+  def orExpr(): Term = infix(andExpr, `||`)
+  def andExpr(): Term = infix(eqExpr, `&&`)
+  def eqExpr(): Term = infix(relExpr, `===`, `!==`)
+  def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
+  def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
+  def mulExpr(): Term = infix(callExpr, `*`, `/`)
+
+  inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
+    var left = nonTerminal()
+    while (ops.contains(peek.kind)) {
+       val op = next().kind
+       val right = nonTerminal()
+       left = binaryOp(left, op, right)
+    }
+    left
+
+  private def binaryOp(lhs: Term, op: TokenKind, rhs: Term): Term =
+    Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+
+  private def opName(op: TokenKind): String = op match {
+    case `||` => "infixOr"
+    case `&&` => "infixAnd"
+    case `===` => "infixEq"
+    case `!==` => "infixNeq"
+    case `<` => "infixLt"
+    case `>` => "infixGt"
+    case `<=` => "infixLte"
+    case `>=` => "infixGte"
+    case `+` => "infixAdd"
+    case `-` => "infixSub"
+    case `*` => "infixMul"
+    case `/` => "infixDiv"
+    case `++` => "infixConcat"
+    case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
+  }
 
   /**
    * This is a compound production for
