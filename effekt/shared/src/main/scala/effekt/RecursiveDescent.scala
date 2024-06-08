@@ -10,6 +10,8 @@ import kiama.util.Positions
 import scala.annotation.{ tailrec, targetName }
 import scala.util.matching.Regex
 import scala.language.implicitConversions
+import scala.util.boundary
+import scala.util.boundary.break
 
 
 case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
@@ -75,6 +77,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     @targetName("seq")
     inline def ~[B](other: B): (A ~ B) = new ~(self, other)
     inline def <~(t: TokenKind): A = { consume(t); self }
+    inline def |(other: A): A = { backtrack(self).getOrElse(other) }
   }
 
   extension (self: TokenKind) {
@@ -200,6 +203,39 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     (`do` ~> idRef()) ~ arguments() match {
       case id ~ (targs, vargs, bargs) => Do(None, id, targs, vargs, bargs)
     }
+
+  /*
+  <tryExpr> ::= try <stmts> <handler>+
+  <handler> ::= with (<idDef> :)? <implementation>
+  <implementation ::= <interfaceType> { <defClause>+ }
+  */
+  def tryExpr(): Term =
+    `try` ~> stmt() ~ some(handler()) match {
+      case s ~ hs => TryHandle(s, hs)
+    }
+
+  def handler(): Handler =
+    `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
+      case capabilityName ~ impl => {
+        val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
+        Handler(capability, impl)
+      }
+    }
+
+  def implementation(): Implementation =
+    (interfaceType() ~ (`{` ~> some(defClause()) <~ `}`) match {
+      case effect ~ clauses => Implementation(effect, clauses)
+    })
+    | (idRef() ~ maybeTypeParams ~ implicitResume ~ functionArg match {
+      case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, bparams, body) => ???
+    })
+
+
+  def defClause(): OpClause = ???
+
+  def interfaceType(): BlockTypeRef = ???
+
+  lazy val implicitResume: IdDef = IdDef("resume")
 
   def matchGuards() = some(matchGuard, `and`)
   def matchGuard(): MatchGuard =
@@ -419,6 +455,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def valueType(): ValueType = ???
   def blockType(): BlockType = ???
+  def maybeTypeParams(): List[Id] = ???
 
   /**
    * Helpers
@@ -440,6 +477,19 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     while (peek(sep)) {
       consume(sep)
       components += p()
+    }
+    components.toList
+
+  inline def some[T](p: => T): List[T] =
+    val components: ListBuffer[T] = ListBuffer.empty
+    components += p
+    boundary {
+      while (true) {
+        backtrack(p) match {
+          case Some(x) => components += x
+          case None => break()
+        }
+      }
     }
     components.toList
 
