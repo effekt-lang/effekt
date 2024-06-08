@@ -1,7 +1,6 @@
 package effekt
 
 import effekt.source.*
-import effekt.symbols.*
 
 import effekt.lexer.{ Lexer, Position, Token, TokenKind }
 import effekt.lexer.TokenKind.*
@@ -41,6 +40,9 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   def parseMatchPattern(input: String, positions: Positions = new Positions())(using munit.Location): MatchPattern =
     parse(input, _.matchPattern())
+
+  def parseValueType(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
+    parse(input, _.valueType())
 
   test("Simple expressions") {
     parseExpr("42")
@@ -144,10 +146,21 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   test("Block arguments") {
     parseExpr("map {f}")
+    parseExpr("map {list::f}")
     parseExpr("map {f} {g}")
     parseExpr("map { f } { g }")
     parseExpr("map(x) { f } { g }")
     parseExpr("map(x) { return 42 }")
     parseExpr("map(x) { map(x) { return 42 } }")
+  }
+
+  test("Value types") {
+    assertEquals(
+      parseValueType("Int"),
+      ValueTypeRef(IdRef(Nil, "Int"), Nil))
+
+    parseValueType("List[Int]")
+    parseValueType("list::List[Int]")
+    parseValueType("list::List[effekt::Int]")
   }
 }

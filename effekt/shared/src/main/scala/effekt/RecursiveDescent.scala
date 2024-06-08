@@ -226,14 +226,12 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     (interfaceType() ~ (`{` ~> some(defClause()) <~ `}`) match {
       case effect ~ clauses => Implementation(effect, clauses)
     })
-    | (idRef() ~ maybeTypeParams ~ implicitResume ~ functionArg match {
+    | (idRef() ~ maybeTypeParams() ~ implicitResume ~ functionArg() match {
       case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, bparams, body) => ???
     })
 
 
   def defClause(): OpClause = ???
-
-  def interfaceType(): BlockTypeRef = ???
 
   lazy val implicitResume: IdDef = IdDef("resume")
 
@@ -293,6 +291,9 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case `++` => "infixConcat"
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
+
+  private def TupleTypeTree(tps: List[ValueType]): ValueType =
+    ValueTypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
 
   /**
    * This is a compound production for
@@ -453,8 +454,21 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
    * Types
    */
 
-  def valueType(): ValueType = ???
+  // TODO boxed types
+  def valueType(): ValueType = peek.kind match {
+    case `(` => some(valueType, `(`, `,`, `)`) match {
+      case tpe :: Nil => tpe
+      case tpes => TupleTypeTree(tpes)
+    }
+    case _ => ValueTypeRef(idRef(), maybeTypeArgs())
+  }
+
   def blockType(): BlockType = ???
+
+  def interfaceType(): BlockTypeRef =
+    BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef
+    // TODO error "Expected an interface type"
+
   def maybeTypeParams(): List[Id] = ???
 
   /**
