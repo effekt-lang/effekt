@@ -297,7 +297,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     e
   }
 
-  // TODO right now we only parse value arguments
   def isArguments: Boolean = peek(`(`) || peek(`[`) || peek(`{`)
   def arguments(): (List[ValueType], List[Term], List[Term]) =
     if (!isArguments) fail("Expected at least one argument section (types, values, or blocks)")
@@ -307,9 +306,13 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def maybeValueArgs(): List[Term] = if peek(`(`) then valueArgs() else Nil
   def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
 
-  def typeArgs(): List[ValueType] = Nil // TODO
+  def typeArgs(): List[ValueType] = some(valueType, `[`, `,`, `]`)
   def valueArgs(): List[Term] = many(expr, `(`, `,`, `)`)
   def blockArgs(): List[Term] = Nil // TODO
+
+  def blockArg(): Term = ???
+  def functionArg(): BlockLiteral = ???
+
 
   def primExpr(): Term = peek.kind match {
     case _ if isLiteral      => literal()
@@ -386,6 +389,21 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ => fail(s"Expected identifier")
   }
 
+  /**
+   * Types
+   */
+
+  def valueType(): ValueType = ???
+  def blockType(): BlockType = ???
+
+  /**
+   * Helpers
+   */
+
+
+  /**
+   * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]]
+   */
   inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
     consume(before)
     val res = some(p, sep)
