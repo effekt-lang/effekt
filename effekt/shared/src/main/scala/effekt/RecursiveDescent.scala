@@ -12,63 +12,6 @@ import scala.util.matching.Regex
 import scala.language.implicitConversions
 
 
-@main
-def test = try {
-
-  def parser(input: String): RecursiveDescentParsers = {
-    val lexer = effekt.lexer.Lexer(input)
-    val (tokens, err) = lexer.run()
-    if (err.isDefined) sys.error(err.get.toString)
-    println(tokens)
-    println(tokens.size)
-    new RecursiveDescentParsers(new Positions, tokens)
-  }
-
-  //  val p = parser("helloWorld () true 42")
-  //  println(p.primExpr())
-  //  p.spaces()
-  //  println(p.primExpr())
-  //  p.spaces()
-  //  println(p.primExpr())
-  //  p.spaces()
-  //  println(p.primExpr())
-  //  p.spaces()
-
-  //val p1 = parser("(helloWorld, true, 42)")
-  //  val p1 = parser("f(helloWorld)(42)(43).foo.bar(42)")
-  val p1 = parser("if (42) if (42) x else y")
-  println(p1.expr())
-  println(p1.position)
-  assert(p1.peek(TokenKind.EOF))
-
-  //  val p2 = parser("[helloWorld, true, 42]")
-  //  println(p2.expr())
-
-  //  val p2 = parser(
-  //    """{ 42; 43 }
-  //      |""".stripMargin)
-  //  println(p2.stmt())
-  //  println(s"Parsed all: ${p2.peek(TokenKind.EOF)}")
-
-  val p2 = parser(
-    """val x = { 42; 43 };
-      |val y = f(x);
-      |y
-      |""".stripMargin)
-  println(p2.stmts())
-  assert(p2.peek(TokenKind.EOF))
-
-  val p3 = parser(
-  """with foo().baz;
-    |bar()
-    |""".stripMargin)
-  println(p3.stmts())
-  assert(p3.peek(TokenKind.EOF))
-
-} catch {
-  case ParseError2(msg, pos) => println(s"Error at position ${pos}: ${msg}")
-}
-
 case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
 
 class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
@@ -121,6 +64,27 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     if peek(t) then { consume(t); thn } else els
 
 
+  /**
+   * Tiny combinator DSL to sequence parsers
+   */
+  case class ~[+T, +U](_1: T, _2: U) {
+    override def toString = s"(${_1}~${_2})"
+  }
+
+  extension [A](self: A) {
+    @targetName("seq")
+    inline def ~[B](other: B): (A ~ B) = new ~(self, other)
+  }
+
+  extension (self: TokenKind) {
+    @targetName("seqRightToken")
+    inline def ~>[R](other: => R): R = { consume(self); other }
+  }
+
+  extension (self: Unit) {
+    @targetName("seqRightUnit")
+    inline def ~>[R](other: => R): R = { other }
+  }
 
   /**
    * Statements
@@ -137,6 +101,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       else ExprStmt(e, { semi(); stmts() })
   }
 
+  // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
   // with val <ID> (: <TYPE>)? = <EXPR>; <STMTS>
   // with val (<ID> (: <TYPE>)?...) = <EXPR>
   // with <EXPR>; <STMTS>
@@ -161,7 +126,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def stmt(): Stmt =
     if peek(`{`) then braces { stmts() }
-    else Return(expr())
+    else when(`return`) { Return(expr()) } { Return(expr()) }
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` => true
@@ -191,23 +156,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
     }
     ???
-  }
-  case class ~[+T, +U](_1: T, _2: U) {
-    override def toString = s"(${_1}~${_2})"
-  }
-
-  extension [A](self: A) {
-    @targetName("seq")
-    inline def ~[B](other: B): (A ~ B) = new ~(self, other)
-  }
-
-  extension (self: TokenKind) {
-    @targetName("seqRightToken")
-    inline def ~>[R](other: => R): R = { consume(self); other }
-  }
-  extension (self: Unit) {
-    @targetName("seqRightUnit")
-    inline def ~>[R](other: => R): R = { other }
   }
 
   def typeAnnotationOpt(): Option[ValueType] =
