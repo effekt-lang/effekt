@@ -74,6 +74,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   extension [A](self: A) {
     @targetName("seq")
     inline def ~[B](other: B): (A ~ B) = new ~(self, other)
+    inline def <~[R](t: TokenKind): R = { consume(t); self }
   }
 
   extension (self: TokenKind) {
@@ -342,9 +343,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       case xs => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}")), Nil, xs.toList, Nil)
     }
 
-  // TODO complex holes, named holes, etc.
-  def isHole: Boolean = peek(`<>`)
-  def hole(): Term = `<>` ~> Hole(Return(UnitLit()))
+  def isHole: Boolean = peek(`<>`) || peek(`<{`)
+  def hole(): Term = peek.kind match {
+    case `<>` => `<>` ~> Hole(Return(UnitLit()))
+    case `<{` =>  `<{` ~> Hole(stmts()) <~ `}>`
+  }
 
   def isLiteral: Boolean = peek.kind match {
     case _: (Integer | Float | Str) => true
