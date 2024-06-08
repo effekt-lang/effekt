@@ -24,7 +24,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   var position: Int = 0
 
   def peek: Token = tokens(position)
-  def peek(offset: Int): Token = tokens(position + 1)
+  def peek(offset: Int): Token = tokens(position + offset)
   def peek(kind: TokenKind): Boolean =
     peek.kind == kind
   def peek(offset: Int, kind: TokenKind): Boolean =
@@ -120,9 +120,20 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
   }
 
-  // TODO
-  def semi(): Unit =
-    consume(`;`)
+  def semi(): Unit = peek.kind match {
+    // \n   ; while
+    //
+    case `;` => consume(`;`)
+    // foo }
+    //     ^
+    case `}` | `case` => ()
+
+    // \n   while
+    //      ^
+    case _ if peek(-1).kind == Newline => ()
+
+    case _ => fail("Expected ;")
+  }
 
   def stmt(): Stmt =
     if peek(`{`) then braces { stmts() }

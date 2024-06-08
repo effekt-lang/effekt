@@ -105,4 +105,22 @@ class RecursiveDescentTests extends munit.FunSuite {
         |return x
         |""".stripMargin)
   }
+
+  test("Semicolon insertion") {
+    parseStmts("f(); return x")
+    parseStmts(
+      """var x = { baz }
+        |return x
+        |""".stripMargin)
+
+    assertEquals(
+      parseStmts(
+        """f()
+          |g()
+          |""".stripMargin),
+      parseStmts(
+        """f();
+          |return g()
+          |""".stripMargin))
+  }
 }
