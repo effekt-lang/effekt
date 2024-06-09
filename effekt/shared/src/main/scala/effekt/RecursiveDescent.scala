@@ -266,9 +266,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       }
     }
 
-  // TODO probably most peek(N, ...) usages are wrong since they do not skip spaces!
-  //   Maybe change the implementation of peek(N, ...) to skip spaces and make it more robust.
-
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.
   def implementation(): Implementation = {
 

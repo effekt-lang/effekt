@@ -284,7 +284,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseImplementation("Foo[T] { case Get(x) => 43 }")
 
     // Doesn't work yet
-    // parseImplementation("Foo { x => 43 }".stripMargin)
+    parseImplementation("Foo { x => 43 }".stripMargin)
 
     assertEquals(
       parseImplementation("Foo { 43 }"),
@@ -294,7 +294,8 @@ class RecursiveDescentTests extends munit.FunSuite {
           Return(Literal(43, symbols.builtins.TInt)), IdDef("resume")))))
   }
 
-  test("Try exressions") {
+  test("Try expressions") {
+    parseTry("try 42 with Eff { 42 }")
     parseTry("try { 42 } with Eff { 42 }")
     parseTry("try { 42 } with Empty {}")
     parseTry("try { 42 } with Eff { def op(x) = x + 42 }")
