@@ -214,7 +214,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   /*
   <tryExpr> ::= try <stmts> <handler>+
   <handler> ::= with (<idDef> :)? <implementation>
-  <implementation ::= <interfaceType> { <defClause>+ }
+  <implementation ::= <interfaceType> { <opClause>+ }
   */
   def tryExpr(): Term =
     `try` ~> stmt() ~ someWhile(handler(), `with`) match {
@@ -241,7 +241,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     backtrack(interfaceType()) match {
       // Interface[...] { def ... = { ... } def ... = { ... } }
       // Interface[...] {}
-      case Some(intType) => Implementation(intType, manyWhile(defClause(), `def`))
+      case Some(intType) => Implementation(intType, manyWhile(opClause(), `def`))
       // Interface[...] { (...) { ... } => ... }
       case None => idRef() ~ maybeTypeParams() ~ functionArg() match {
         case id ~ tps ~ BlockLiteral(_, vps, bps, body) =>
@@ -252,12 +252,14 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
   }
 
-  def defClause(): OpClause =
-    (`def` ~> idRef()) ~ operationParams() ~ backtrack(`:` ~> effectful()) ~ (`=` ~> stmt()) match {
-      case id ~ (tps ~ vps ~ bps) ~ ret ~ body => OpClause(id, tps, vps, bps, ret, body, implicitResume)
+  def opClause(): OpClause =
+    (`def` ~> idRef()) ~ paramsOpt() ~ when(`:`) { Some(effectful()) } { None } ~ (`=` ~> stmt()) match {
+      case id ~ (tps, vps, bps) ~ ret ~ body =>
+        // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
+        OpClause(id, tps, vps, bps, ret, body, implicitResume)
     }
 
-  lazy val implicitResume: IdDef = IdDef("resume")
+  def implicitResume: IdDef = IdDef("resume")
 
   def matchClause(): MatchClause =
     MatchClause(`case` ~> matchPattern(), manyWhile(`and` ~> matchGuard(), `and`), `=>` ~> stmts())
@@ -566,13 +568,20 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     [...]opt: optional type annotation
   */
 
-  def operationParams(): List[Id] ~ List[ValueParam] ~ List[BlockParam] =
-    maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams()
+  def paramsOpt(): (List[Id], List[ValueParam], List[BlockParam]) =
+    maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams() match {
+      case (tps ~ vps ~ bps) =>
+        // fail("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
+        (tps, vps, bps)
+    }
 
   def maybeValueParamsOpt(): List[ValueParam] =
+    if peek(`(`) then valueParamsOpt() else Nil
+
+  def valueParamsOpt(): List[ValueParam] =
     many(valueParamOpt, `(`, `,`, `)`)
 
-  def maybeValueParams(): List[ValueParam] =
+  def valueParams(): List[ValueParam] =
     many(valueParam, `(`, `,`, `)`)
 
   def valueParam(): ValueParam =
@@ -590,7 +599,13 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def blockParam(): BlockParam =
     BlockParam(idDef(), `:` ~> blockType())
 
-  def maybeValueTypes(): List[ValueType] = if peek(`(`) then valueTypes() else Nil
+  // TODO this needs to be implemented, once the PR is rebased onto master
+  //  def blockParamOpt: BlockParam =
+  //    BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
+
+
+  def maybeValueTypes(): List[ValueType] =
+    if peek(`(`) then valueTypes() else Nil
 
   def valueTypes(): List[ValueType] = many(valueType, `(`, `,`, `)`)
 

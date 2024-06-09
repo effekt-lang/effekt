@@ -50,6 +50,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseBlockType(input: String, positions: Positions = new Positions())(using munit.Location): BlockType =
     parse(input, _.blockType())
 
+  def parseOpClause(input: String, positions: Positions = new Positions())(using munit.Location): OpClause =
+    parse(input, _.opClause())
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -210,4 +213,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseMatchClause("case _ => 42")
     parseMatchClause("case a and a is Foo(bar) => 42")
   }
+
+    test("Op clauses") {
+      parseOpClause("def foo() = 42")
+      parseOpClause("def foo[T]() = 42")
+      parseOpClause("def foo[T](a) = 42")
+      parseOpClause("def foo[T](a: Int) = 42")
+      parseOpClause("def foo[T](a: Int, b) = 42")
+      // TODO rebase!
+      // parseOpClause("def foo[T](){f} = 42")
+    }
 }
