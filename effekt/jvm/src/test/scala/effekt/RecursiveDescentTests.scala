@@ -53,6 +53,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseOpClause(input: String, positions: Positions = new Positions())(using munit.Location): OpClause =
     parse(input, _.opClause())
 
+  def parseImplementation(input: String, positions: Positions = new Positions())(using munit.Location): Implementation =
+    parse(input, _.implementation())
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -214,13 +217,39 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseMatchClause("case a and a is Foo(bar) => 42")
   }
 
-    test("Op clauses") {
-      parseOpClause("def foo() = 42")
-      parseOpClause("def foo[T]() = 42")
-      parseOpClause("def foo[T](a) = 42")
-      parseOpClause("def foo[T](a: Int) = 42")
-      parseOpClause("def foo[T](a: Int, b) = 42")
-      // TODO rebase!
-      // parseOpClause("def foo[T](){f} = 42")
-    }
+  test("Op clauses") {
+    parseOpClause("def foo() = 42")
+    parseOpClause("def foo[T]() = 42")
+    parseOpClause("def foo[T](a) = 42")
+    parseOpClause("def foo[T](a: Int) = 42")
+    parseOpClause("def foo[T](a: Int, b) = 42")
+    // TODO rebase!
+    // parseOpClause("def foo[T](){f} = 42")
+  }
+
+  test("Implementations") {
+    assertEquals(
+      parseImplementation("Foo {}"),
+      Implementation(BlockTypeRef(IdRef(Nil, "Foo"), Nil), Nil))
+
+    parseImplementation("Foo[T] {}")
+    parseImplementation("Foo[T] { def bar() = 42 }")
+    parseImplementation(
+      """Foo[T] {
+        |  def bar() = 42
+        |  def baz() = 42
+        |}""".stripMargin)
+
+    parseImplementation("Foo[T] { case Get(x) => 43 }")
+
+    // Doesn't work yet
+    // parseImplementation("Foo { x => 43 }".stripMargin)
+
+    assertEquals(
+      parseImplementation("Foo { 43 }"),
+      Implementation(
+        BlockTypeRef(IdRef(Nil, "Foo"), Nil),
+        List(OpClause(IdRef(Nil, "Foo"), Nil, Nil, Nil, None,
+          Return(Literal(43, symbols.builtins.TInt)), IdDef("resume")))))
+  }
 }

@@ -237,19 +237,35 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       }
     }
 
+  // TODO probably most peek(N, ...) usages are wrong since they do not skip spaces!
+  //   Maybe change the implementation of peek(N, ...) to skip spaces and make it more robust.
+
+  // This nonterminal uses limited backtracking: It parses the interface type multiple times.
   def implementation(): Implementation = {
-    backtrack(interfaceType()) match {
-      // Interface[...] { def ... = { ... } def ... = { ... } }
-      // Interface[...] {}
-      case Some(intType) => Implementation(intType, manyWhile(opClause(), `def`))
-      // Interface[...] { (...) { ... } => ... }
-      case None => idRef() ~ maybeTypeParams() ~ functionArg() match {
-        case id ~ tps ~ BlockLiteral(_, vps, bps, body) =>
-          val synthesizedId = IdRef(Nil, id.name)
-          val interface = BlockTypeRef(id, Nil): BlockTypeRef
-          Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, implicitResume)))
-      }
+
+    // Interface[...] {}
+    def emptyImplementation() = backtrack { Implementation(interfaceType(), `{` ~> Nil <~ `}`) }
+
+    // Interface[...] { def <NAME> = ... }
+    def interfaceImplementation() = backtrack {
+      val tpe = interfaceType()
+      consume(`{`)
+      if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
+      tpe
+    } map { tpe =>
+      Implementation(tpe, manyWhile(opClause(), `def`)) <~ `}`
     }
+
+    // Interface[...] { () => ... }
+    // Interface[...] { case ... => ... }
+    def operationImplementation() = idRef() ~ maybeTypeParams() ~ functionArg() match {
+      case (id ~ tps ~ BlockLiteral(_, vps, bps, body)) =>
+        val synthesizedId = IdRef(Nil, id.name)
+        val interface = BlockTypeRef(id, Nil): BlockTypeRef
+        Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, implicitResume)))
+    }
+
+    emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()
   }
 
   def opClause(): OpClause =
