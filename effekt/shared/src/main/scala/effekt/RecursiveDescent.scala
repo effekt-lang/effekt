@@ -238,7 +238,12 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def regionExpr(): Term = Region(`region` ~> idDef(), stmt())
 
-  def boxExpr(): Term = ???
+  def boxExpr(): Term = {
+    val captures = `box` ~> backtrack(captureSet())
+    val block = if (peek(`{`)) functionArg()
+    else Var(idRef())
+    Box(captures, block)
+  }
 
   def unboxExpr(): Term = Unbox(`unbox` ~> expr())
 
