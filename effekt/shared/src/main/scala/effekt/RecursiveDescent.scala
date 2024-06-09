@@ -181,7 +181,15 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   }
 
   def definition(): Def = peek.kind match {
-    case `val` => valDef()
+    case `val`       => valDef()
+    case `def`       => defDef()
+    case `type`      => typeDef()
+    case `effect`    => effectDef()
+    case `namespace` => namespaceDef()
+    // TODO
+    //     (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
+    //        failure(s"Only supported on the toplevel: ${kw} declaration.")
+    //      }
     case _ => fail("Expected definition")
   }
 
@@ -201,6 +209,32 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
       case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
     }
+
+
+  def defDef(): Def = ???
+
+  // right now: data type definitions (should be renamed to `data`) and type aliases
+  def typeDef(): Def =
+    val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
+
+    next().kind match {
+      case `=` => TypeDef(id, tps, valueType())
+      case `{` if peek(`}`) => DataDef(id, tps, Nil)
+      case `{` => DataDef(id, tps, some(constructor, `;`) <~ `}`)
+      case _ => ??? // TODO error message
+    }
+
+  def constructor(): Constructor =
+    Constructor(idDef(), maybeTypeParams(), valueParams())
+
+  def effectDef(): Def =
+    EffectDef(`effect` ~> idDef(), maybeTypeParams(), `=` ~> effects())
+
+  def namespaceDef(): Def =
+    NamespaceDef(`namespace` ~> idDef(), `{` ~> definitions() <~ `}`)
+
+  def definitions(): List[Def] = ???
+
 
   def maybeTypeAnnotation(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
