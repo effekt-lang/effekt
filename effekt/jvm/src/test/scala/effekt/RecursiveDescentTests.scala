@@ -22,7 +22,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     try {
       val p = parser(input, positions)
       val result = f(p)
-      assert(p.peek(TokenKind.EOF), "Did not consume everything")
+      assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
       result
     } catch {
       case ParseError2(msg, pos) =>
@@ -55,6 +55,9 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   def parseImplementation(input: String, positions: Positions = new Positions())(using munit.Location): Implementation =
     parse(input, _.implementation())
+
+  def parseTry(input: String, positions: Positions = new Positions())(using munit.Location): Term =
+    parse(input, _.tryExpr())
 
   test("Simple expressions") {
     parseExpr("42")
@@ -251,5 +254,27 @@ class RecursiveDescentTests extends munit.FunSuite {
         BlockTypeRef(IdRef(Nil, "Foo"), Nil),
         List(OpClause(IdRef(Nil, "Foo"), Nil, Nil, Nil, None,
           Return(Literal(43, symbols.builtins.TInt)), IdDef("resume")))))
+  }
+
+  test("Try exressions") {
+    parseTry("try { 42 } with Eff { 42 }")
+    parseTry("try { 42 } with Empty {}")
+    parseTry("try { 42 } with Eff { def op(x) = x + 42 }")
+    parseTry(
+      """try {
+      |  val x = 42
+      |  do op(x + 1)
+      |} with Eff[A] {
+      |  def op(x: A) = x
+      |}
+      """.stripMargin
+    )
+    parseTry(
+      """try { do op(42) }
+      with Eff1 {}
+      with Eff2 { case Get(x) => x + 1 }
+      with Eff3 { def op(x, y) = { x } def op2() = { () }}
+      """
+    )
   }
 }

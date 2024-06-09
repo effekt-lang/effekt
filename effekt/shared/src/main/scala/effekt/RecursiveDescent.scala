@@ -29,11 +29,22 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   var position: Int = 0
 
   def peek: Token = tokens(position)
-  def peek(offset: Int): Token = tokens(position + offset)
+  def peek(offset: Int, skipWhitespace: Boolean): Token =
+    if (skipWhitespace) {
+      var realOffset = 0
+      var noSpaceOffset = 0
+      while (noSpaceOffset < offset && (position + realOffset) < tokens.length) {
+        val token = tokens(position + realOffset)
+        if (!isSpace(token.kind)) noSpaceOffset += 1
+        realOffset += 1
+      }
+      if ((position + realOffset) >= tokens.length) fail("encountered EOF while peeking")
+      else tokens(position + realOffset)
+    } else tokens(position + offset)
   def peek(kind: TokenKind): Boolean =
     peek.kind == kind
-  def peek(offset: Int, kind: TokenKind): Boolean =
-    peek(offset).kind == kind
+  def peek(offset: Int, kind: TokenKind, skipWhitespace: Boolean = true): Boolean =
+    peek(offset, skipWhitespace).kind == kind
 
   def hasNext(): Boolean = position < tokens.length
   def next(): Token =
@@ -46,11 +57,15 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
    */
   def skip(): Unit = { position += 1; spaces() }
 
+  def isSpace(kind: TokenKind): Boolean =
+    kind match {
+      case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
+      case _ => false
+    }
+
   @tailrec
   final def spaces(): Unit = if hasNext() then peek.kind match {
-    case TokenKind.Space => position += 1; spaces()
-    case TokenKind.Comment(_) => position += 1; spaces()
-    case TokenKind.Newline => position += 1; spaces()
+    case kind if isSpace(kind) => position += 1; spaces()
     case _ => ()
   }
 
@@ -139,7 +154,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
     // \n   while
     //      ^
-    case _ if peek(-1, Newline) => ()
+    case _ if peek(-1, Newline, skipWhitespace = false) => ()
 
     case _ => fail("Expected ;")
   }
@@ -212,7 +227,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
 
   /*
-  <tryExpr> ::= try <stmts> <handler>+
+  <tryExpr> ::= try { <stmts> } <handler>+
   <handler> ::= with (<idDef> :)? <implementation>
   <implementation ::= <interfaceType> { <opClause>+ }
   */
@@ -442,7 +457,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
-    case t => fail(s"Expected variables, literals, tuples, lists, holes or group but found")
+    case _ => fail(s"Expected variables, literals, tuples, lists, holes or group")
   }
 
   def isListLiteral: Boolean = peek.kind match {
