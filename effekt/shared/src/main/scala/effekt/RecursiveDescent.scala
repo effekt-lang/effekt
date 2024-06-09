@@ -217,7 +217,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   <implementation ::= <interfaceType> { <defClause>+ }
   */
   def tryExpr(): Term =
-    `try` ~> stmt() ~ someWhile(handler, `with`) match {
+    `try` ~> stmt() ~ someWhile(handler(), `with`) match {
       case s ~ hs => TryHandle(s, hs)
     }
 
@@ -241,7 +241,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     backtrack(interfaceType()) match {
       // Interface[...] { def ... = { ... } def ... = { ... } }
       // Interface[...] {}
-      case Some(intType) => Implementation(intType, manyWhile(defClause, `def`))
+      case Some(intType) => Implementation(intType, manyWhile(defClause(), `def`))
       // Interface[...] { (...) { ... } => ... }
       case None => idRef() ~ maybeTypeParams() ~ functionArg() match {
         case id ~ tps ~ BlockLiteral(_, vps, bps, body) =>
@@ -259,7 +259,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   lazy val implicitResume: IdDef = IdDef("resume")
 
+  def matchClause(): MatchClause =
+    MatchClause(`case` ~> matchPattern(), manyWhile(`and` ~> matchGuard(), `and`), `=>` ~> stmts())
+
   def matchGuards() = some(matchGuard, `and`)
+
   def matchGuard(): MatchGuard =
     expr() ~ when(`is`) { Some(matchPattern()) } { None } match {
       case e ~ Some(p) => MatchGuard.PatternGuard(e, p)
@@ -380,7 +384,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def typeArgs(): List[ValueType] = some(valueType, `[`, `,`, `]`)
   def valueArgs(): List[Term] = many(expr, `(`, `,`, `)`)
-  def blockArgs(): List[Term] = someWhile(blockArg, `{`)
+  def blockArgs(): List[Term] = someWhile(blockArg(), `{`)
 
   /**
    * Note: for this nonterminal, we need some backtracking.
@@ -391,7 +395,16 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def functionArg(): BlockLiteral = braces {
     peek.kind match {
       // { case ... => ... }
-      case `case` => ??? // `{` ~> some(matchClause) <~ `}` ...
+      case `case` => someWhile(matchClause(), `case`) match { case cs =>
+        // TODO positions should be improved here and fresh names should be generated for the scrutinee
+        // also mark the temp name as synthesized to prevent it from being listed in VSCode
+        val name = "__tmpRes"
+        BlockLiteral(
+          Nil,
+          List(ValueParam(IdDef(name), None)),
+          Nil,
+          Return(Match(Var(IdRef(Nil, name)), cs, None))) : BlockLiteral
+      }
       case _ =>
         // { (x: Int) => ... }
         backtrack { lambdaParams() <~ `=>` } map {
@@ -541,7 +554,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def maybeBlockTypeParams(): List[(Option[IdDef], BlockType)] = if peek(`{`) then blockTypeParams() else Nil
 
-  def blockTypeParams(): List[(Option[IdDef], BlockType)] = someWhile(blockTypeParam, `{`)
+  def blockTypeParams(): List[(Option[IdDef], BlockType)] = someWhile(blockTypeParam(), `{`)
 
   def blockTypeParam(): (Option[IdDef], BlockType) =
     braces { (backtrack { idDef() <~ `:` }, blockType()) }
@@ -569,10 +582,10 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     ValueParam(idDef(), when(`:`)(Some(valueType()))(None))
 
   def maybeBlockParams(): List[BlockParam] =
-    manyWhile({ () => `{` ~> blockParam() <~ `}` }, `{`)
+    manyWhile(`{` ~> blockParam() <~ `}`, `{`)
 
   def blockParams(): List[BlockParam] =
-    someWhile({ () => `{` ~> blockParam() <~ `}` }, `{`)
+    someWhile(`{` ~> blockParam() <~ `}`, `{`)
 
   def blockParam(): BlockParam =
     BlockParam(idDef(), `:` ~> blockType())
@@ -617,18 +630,18 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
     components.toList
 
-  inline def someWhile[T](p: () => T, lookahead: TokenKind): List[T] =
+  inline def someWhile[T](p: => T, lookahead: TokenKind): List[T] =
     val components: ListBuffer[T] = ListBuffer.empty
-    components += p()
+    components += p
     while (peek(lookahead)) {
-      components += p()
+      components += p
     }
     components.toList
 
-  inline def manyWhile[T](p: () => T, lookahead: TokenKind): List[T] =
+  def manyWhile[T](p: => T, lookahead: TokenKind): List[T] =
     val components: ListBuffer[T] = ListBuffer.empty
     while (peek(lookahead)) {
-      components += p()
+      components += p
     }
     components.toList
 

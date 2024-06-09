@@ -41,6 +41,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseMatchPattern(input: String, positions: Positions = new Positions())(using munit.Location): MatchPattern =
     parse(input, _.matchPattern())
 
+  def parseMatchClause(input: String, positions: Positions = new Positions())(using munit.Location): MatchClause =
+    parse(input, _.matchClause())
+
   def parseValueType(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
     parse(input, _.valueType())
 
@@ -197,5 +200,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseValueType("() => (Int at { a, b, c }) at {}")
     parseValueType("(() => Int) at { a, b, c }")
     parseValueType("(() => Int at {}) => Int at { a, b, c }")
+  }
+
+  test("Match clauses") {
+    parseMatchClause("case x => 42")
+    parseMatchClause("case Foo(x, y) => 42")
+    parseMatchClause("case Foo(x, y) and x == 43 => 42")
+    parseMatchClause("case Foo(Bar(42, true), _) and x == 43 => 42")
+    parseMatchClause("case _ => 42")
+    parseMatchClause("case a and a is Foo(bar) => 42")
   }
 }
