@@ -170,18 +170,19 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   //        Return(Match(sc, List(MatchClause(p, guards, body)), default)) withPositionOf p
   //     }
   def valDef(): Def =
-    ValDef(`val` ~> idDef(), typeAnnotationOpt(), `=` ~> stmt())
+    ValDef(`val` ~> idDef(), maybeTypeAnnotation(), `=` ~> stmt())
 
   def varDef(): Def =
-    (`var` ~> idDef()) ~ typeAnnotationOpt() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
+    (`var` ~> idDef()) ~ maybeTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
       case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
       case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
     }
 
-  def typeAnnotationOpt(): Option[ValueType] =
+  def maybeTypeAnnotation(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
 
-  def typeAnnotation(): ValueType = ???
+  // TODO fail "Expected a type annotation"
+  def typeAnnotation(): ValueType = `:` ~> valueType()
 
   def expr(): Term = peek.kind match {
     case `if`     => ifExpr()
