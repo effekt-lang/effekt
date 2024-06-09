@@ -187,12 +187,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case `if`     => ifExpr()
     case `while`  => whileExpr()
     case `do`     => doExpr()
-    case `try`    => ???
-    case `region` => ???
-    case `fun`    => ???
-    case `box`    => ???
-    case `unbox`  => ???
-    case `new`    => ???
+    case `try`    => tryExpr()
+    case `region` => regionExpr()
+    case `box`    => boxExpr()
+    case `unbox`  => unboxExpr()
+    case `new`    => newExpr()
     case _ => orExpr()
   }
 
@@ -220,6 +219,14 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     `try` ~> stmt() ~ someWhile(handler, `with`) match {
       case s ~ hs => TryHandle(s, hs)
     }
+
+  def regionExpr(): Term = Region(`region` ~> idDef(), stmt())
+
+  def boxExpr(): Term = ???
+
+  def unboxExpr(): Term = Unbox(`unbox` ~> expr())
+
+  def newExpr(): Term = New(`new` ~> implementation())
 
   def handler(): Handler =
     `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
@@ -288,8 +295,14 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
     left
 
+  // === AST Helpers ===
+
   private def binaryOp(lhs: Term, op: TokenKind, rhs: Term): Term =
-    Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+    // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
+    if op == `||` || op == `&&` then
+      Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+    else
+      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
   private def opName(op: TokenKind): String = op match {
     case `||` => "infixOr"
