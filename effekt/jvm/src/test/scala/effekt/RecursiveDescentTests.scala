@@ -74,6 +74,20 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseExpr("(f(a, 42))()"))
   }
 
+  test("boxing") {
+    parseExpr("box f")
+    parseExpr("unbox f")
+    assertEquals(
+      parseExpr("unbox box f"),
+      parseExpr("unbox (box f)")
+    )
+    assertNotEquals(
+      parseExpr("box { 42 }"),
+      parseExpr("box {} { 42 }")
+    )
+    parseExpr("box { (x: Int) => x }")
+  }
+
   test("Qualified names") {
     assertEquals(parseExpr("map"), Var(IdRef(List(), "map")))
     assertEquals(parseExpr("list::map"), Var(IdRef(List("list"), "map")))

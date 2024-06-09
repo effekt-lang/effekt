@@ -454,8 +454,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
   }
 
-  def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) = fail("NOT IMPLEMENTED")
-
   def primExpr(): Term = peek.kind match {
     case _ if isLiteral      => literal()
     case _ if isVariable     => variable()
@@ -603,6 +601,23 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     [...]s: one or more times
     [...]opt: optional type annotation
   */
+
+  def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) = {
+    type Params = (List[Id], List[ValueParam], List[BlockParam])
+    // x
+    def singleValueParam(): Params = (Nil, List(ValueParam(idDef(), None)), Nil)
+    // (x, y: Int)
+    def vpsOpt(): Params = (Nil, valueParamsOpt(), Nil)
+    // [A, ...](x: A, ...) { f: ... }
+    def ps(): Params = params()
+
+    backtrack(singleValueParam()) orElse backtrack(vpsOpt()) getOrElse ps()
+  }
+
+  def params(): (List[Id], List[ValueParam], List[BlockParam]) =
+    maybeTypeParams() ~ valueParams() ~ maybeBlockParams() match {
+      case tps ~ vps ~ bps => (tps, vps, bps)
+    }
 
   def paramsOpt(): (List[Id], List[ValueParam], List[BlockParam]) =
     maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams() match {
