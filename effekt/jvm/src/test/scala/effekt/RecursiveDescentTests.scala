@@ -62,6 +62,25 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
     parse(input, _.params())
 
+  test("Peeking") {
+    implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
+    def peek(tokens: Seq[Token], offset: Int, skip: Boolean): Token =
+      new RecursiveDescentParsers(new Positions, tokens).peek(offset, skip)
+
+    val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
+    assertEquals(peek(tokens, 0, false).kind, `(`)
+    assertEquals(peek(tokens, 1, false).kind, Space)
+    assertEquals(peek(tokens, 2, false).kind, Newline)
+    assertEquals(peek(tokens, 3, false).kind, `)`)
+    assertEquals(peek(tokens, 4, false).kind, Space)
+    assertEquals(peek(tokens, 5, false).kind, `=>`)
+
+    assertEquals(peek(tokens, 0, true).kind, `(`)
+    assertEquals(peek(tokens, 1, true).kind, `)`)
+    assertEquals(peek(tokens, 2, true).kind, `=>`)
+    assertEquals(peek(tokens, 3, true).kind, EOF)
+  }
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -232,7 +251,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseParams("()")
     intercept[Throwable] { parseParams("(x, y)") }
     parseParams("[A, B](x: A, y: B)")
-    intercept[Throwable] { parseParams("[]") }    
+    intercept[Throwable] { parseParams("[]") }
     // is this desirable?
     parseParams("[A]")
   }

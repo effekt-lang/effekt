@@ -29,18 +29,26 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   var position: Int = 0
 
   def peek: Token = tokens(position)
+
+  /**
+   * Peeks n tokens ahead of the current one.
+   */
   def peek(offset: Int, skipWhitespace: Boolean): Token =
-    if (skipWhitespace) {
-      var realOffset = 0
-      var noSpaceOffset = 0
-      while (noSpaceOffset < offset && (position + realOffset) < tokens.length) {
-        val token = tokens(position + realOffset)
-        if (!isSpace(token.kind)) noSpaceOffset += 1
-        realOffset += 1
+
+    if !skipWhitespace then return tokens(position + offset)
+
+    @tailrec
+    def go(position: Int, offset: Int): Token =
+      if position >= tokens.length then fail("Unexpected end of file")
+
+      tokens(position) match {
+        case token if isSpace(token.kind) => go(position + 1, offset)
+        case token if offset <= 0 => token
+        case _ => go(position + 1, offset - 1)
       }
-      if ((position + realOffset) >= tokens.length) fail("encountered EOF while peeking")
-      else tokens(position + realOffset)
-    } else tokens(position + offset)
+
+    go(position, offset)
+
   def peek(kind: TokenKind): Boolean =
     peek.kind == kind
   def peek(offset: Int, kind: TokenKind, skipWhitespace: Boolean = true): Boolean =
