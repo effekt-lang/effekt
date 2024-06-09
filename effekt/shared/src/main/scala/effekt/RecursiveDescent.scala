@@ -30,13 +30,14 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def peek: Token = tokens(position)
 
+  // Negative lookahead
+  def lookbehind(offset: Int): Token =
+    tokens(position - offset)
+
   /**
    * Peeks n tokens ahead of the current one.
    */
-  def peek(offset: Int, skipWhitespace: Boolean): Token =
-
-    if !skipWhitespace then return tokens(position + offset)
-
+  def peek(offset: Int): Token =
     @tailrec
     def go(position: Int, offset: Int): Token =
       if position >= tokens.length then fail("Unexpected end of file")
@@ -51,8 +52,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def peek(kind: TokenKind): Boolean =
     peek.kind == kind
-  def peek(offset: Int, kind: TokenKind, skipWhitespace: Boolean = true): Boolean =
-    peek(offset, skipWhitespace).kind == kind
+  def peek(offset: Int, kind: TokenKind): Boolean =
+    peek(offset).kind == kind
 
   def hasNext(): Boolean = position < tokens.length
   def next(): Token =
@@ -162,7 +163,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
     // \n   while
     //      ^
-    case _ if peek(-1, Newline, skipWhitespace = false) => ()
+    case _ if lookbehind(1).kind == Newline => ()
 
     case _ => fail("Expected ;")
   }

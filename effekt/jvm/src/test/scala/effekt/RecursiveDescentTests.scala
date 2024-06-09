@@ -64,21 +64,14 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
-    def peek(tokens: Seq[Token], offset: Int, skip: Boolean): Token =
-      new RecursiveDescentParsers(new Positions, tokens).peek(offset, skip)
+    def peek(tokens: Seq[Token], offset: Int): Token =
+      new RecursiveDescentParsers(new Positions, tokens).peek(offset)
 
     val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
-    assertEquals(peek(tokens, 0, false).kind, `(`)
-    assertEquals(peek(tokens, 1, false).kind, Space)
-    assertEquals(peek(tokens, 2, false).kind, Newline)
-    assertEquals(peek(tokens, 3, false).kind, `)`)
-    assertEquals(peek(tokens, 4, false).kind, Space)
-    assertEquals(peek(tokens, 5, false).kind, `=>`)
-
-    assertEquals(peek(tokens, 0, true).kind, `(`)
-    assertEquals(peek(tokens, 1, true).kind, `)`)
-    assertEquals(peek(tokens, 2, true).kind, `=>`)
-    assertEquals(peek(tokens, 3, true).kind, EOF)
+    assertEquals(peek(tokens, 0).kind, `(`)
+    assertEquals(peek(tokens, 1).kind, `)`)
+    assertEquals(peek(tokens, 2).kind, `=>`)
+    assertEquals(peek(tokens, 3).kind, EOF)
   }
 
   test("Simple expressions") {
