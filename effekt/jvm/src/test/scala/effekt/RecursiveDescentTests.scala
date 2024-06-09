@@ -59,6 +59,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseTry(input: String, positions: Positions = new Positions())(using munit.Location): Term =
     parse(input, _.tryExpr())
 
+  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
+    parse(input, _.params())
+
   test("Simple expressions") {
     parseExpr("42")
     parseExpr("f")
@@ -223,6 +226,15 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseValueType("() => (Int at { a, b, c }) at {}")
     parseValueType("(() => Int) at { a, b, c }")
     parseValueType("(() => Int at {}) => Int at { a, b, c }")
+  }
+
+  test("Params") {
+    parseParams("()")
+    intercept[Throwable] { parseParams("(x, y)") }
+    parseParams("[A, B](x: A, y: B)")
+    intercept[Throwable] { parseParams("[]") }    
+    // is this desirable?
+    parseParams("[A]")
   }
 
   test("Match clauses") {

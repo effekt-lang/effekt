@@ -615,7 +615,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   }
 
   def params(): (List[Id], List[ValueParam], List[BlockParam]) =
-    maybeTypeParams() ~ valueParams() ~ maybeBlockParams() match {
+    maybeTypeParams() ~ maybeValueParams() ~ maybeBlockParams() match {
       case tps ~ vps ~ bps => (tps, vps, bps)
     }
 
@@ -631,6 +631,9 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def valueParamsOpt(): List[ValueParam] =
     many(valueParamOpt, `(`, `,`, `)`)
+
+  def maybeValueParams(): List[ValueParam] =
+    if peek(`(`) then valueParams() else Nil
 
   def valueParams(): List[ValueParam] =
     many(valueParam, `(`, `,`, `)`)
