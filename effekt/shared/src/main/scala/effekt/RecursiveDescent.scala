@@ -769,17 +769,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     [...]opt: optional type annotation
   */
 
-  def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) = {
-    type Params = (List[Id], List[ValueParam], List[BlockParam])
-    // x
-    def singleValueParam(): Params = (Nil, List(ValueParam(idDef(), None)), Nil)
-    // (x, y: Int)
-    def vpsOpt(): Params = (Nil, valueParamsOpt(), Nil)
-    // [A, ...](x: A, ...) { f: ... }
-    def ps(): Params = params()
-
-    backtrack(singleValueParam()) orElse backtrack(vpsOpt()) getOrElse ps()
-  }
+  def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
+    if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
 
   def params(): (List[Id], List[ValueParam], List[BlockParam]) =
     maybeTypeParams() ~ maybeValueParams() ~ maybeBlockParams() match {

@@ -62,6 +62,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
     parse(input, _.params())
 
+  def parseLambdaParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
+    parse(input, _.lambdaParams())
+
   def parseDefinition(input: String, positions: Positions = new Positions())(using munit.Location): Def =
     parse(input, _.definition())
 
@@ -267,6 +270,16 @@ class RecursiveDescentTests extends munit.FunSuite {
     intercept[Throwable] { parseParams("[]") }
     // is this desirable?
     parseParams("[A]")
+
+
+    parseLambdaParams("a")
+    parseLambdaParams("(a)")
+    parseLambdaParams("(a: Int)")
+    parseLambdaParams("[T](a: Int)")
+    parseLambdaParams("[T](a)")
+    parseLambdaParams("[T]")
+    parseLambdaParams("{f: Exc}")
+    parseLambdaParams("[T]{f: Exc}")
   }
 
   test("Match clauses") {
