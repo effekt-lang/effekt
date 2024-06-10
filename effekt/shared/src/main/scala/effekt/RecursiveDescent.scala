@@ -588,7 +588,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
             case other => ExprTarget(other)
           }
           val (targs, vargs, bargs) = arguments()
-          e = Term.Call(callee, Nil, vargs, Nil)
+          e = Term.Call(callee, targs, vargs, bargs)
 
         // nothing to do
         case _ => ()
