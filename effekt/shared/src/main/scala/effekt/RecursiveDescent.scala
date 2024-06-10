@@ -172,17 +172,26 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     if peek(`{`) then braces { stmts() }
     else when(`return`) { Return(expr()) } { Return(expr()) }
 
+  def isToplevel: Boolean = peek.kind match {
+    case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
+         `extern` | `effect` | `interface` | `type` | `record` => true
+    case _ => false
+  }
 
   def toplevel(): Def = peek.kind match {
     case `val`       => valDef()
     case `def`       => defDef()
     case `interface` => interfaceDef()
-    case `type`      => typeDef()
+    case `type`      => typeOrAliasDef()
+    case `record`    => recordDef()
+    case `extern`    => externDef()
     case `effect`    => effectOrOperationDef()
     case `namespace` => namespaceDef()
     case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
     case _ => fail("Expected a top-level definition")
   }
+
+  def toplevels(): List[Def] = manyWhile(toplevel(), isToplevel)
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` => true
@@ -195,7 +204,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def definition(): Def = peek.kind match {
     case `val`       => valDef()
     case `def`       => defDef()
-    case `type`      => typeDef()
+    case `type`      => typeOrAliasDef()
     case `effect`    => effectDef()
     case `namespace` => namespaceDef()
     // TODO
@@ -204,6 +213,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     //      }
     case _ => fail("Expected definition")
   }
+
+  def definitions(): List[Def] = manyWhile(definition(), isDefinition)
 
   def functionBody: Stmt = expect("the body of a function definition")(stmt())
 
@@ -238,7 +249,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
-  def typeDef(): Def =
+  def typeOrAliasDef(): Def =
     val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
     next().kind match {
@@ -247,6 +258,9 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       case `{` => DataDef(id, tps, some(constructor, `;`) <~ `}`)
       case _ => ??? // TODO error message
     }
+
+  def recordDef(): Def =
+    RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams())
 
   def constructor(): Constructor =
     Constructor(idDef(), maybeTypeParams(), valueParams())
@@ -289,7 +303,22 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     // <DEFINITION>*
     else { semi(); NamespaceDef(id, definitions()) }
 
-  def definitions(): List[Def] = manyWhile(definition(), isDefinition)
+
+  def externDef(): Def = { peek(`extern`); peek(1).kind } match {
+    case `type`      => externType()
+    case `interface` => externInterface()
+    case `resource`  => externResource()
+    case `include`   => externInclude()
+    case _ => ???
+  }
+
+  def externType(): Def =
+    ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams())
+  def externInterface(): Def =
+    ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams())
+  def externResource(): Def =
+    ExternResource(`extern` ~> `resource` ~> idDef(), `:` ~> blockType())
+  def externInclude(): Def = ???
 
   def maybeTypeAnnotation(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
@@ -299,6 +328,8 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   // TODO fail "Expected a type annotation"
   def typeAnnotation(): ValueType = `:` ~> valueType()
+
+
 
   def expr(): Term = peek.kind match {
     case `if`     => ifExpr()
