@@ -462,5 +462,9 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     parseToplevel("extern type Foo[S]")
     parseToplevel("extern resource foo: Foo")
+
+    parseToplevel(
+      """extern "function() { console.log('hey!'); }"
+        |""".stripMargin)
   }
 }

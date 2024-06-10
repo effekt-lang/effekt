@@ -309,6 +309,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case `interface` => externInterface()
     case `resource`  => externResource()
     case `include`   => externInclude()
+    case s: Str      => externString()
     case _ => externFun()
   }
 
@@ -321,7 +322,29 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def externInclude(): Def =
     ExternInclude(`extern` ~> `include` ~> path())
 
-  def externFun(): Def = ???
+  def externString(): Def =
+    consume(`extern`)
+    next().kind match {
+      case Str(contents, _) => ExternInclude("", Some(contents))
+      case _ => fail("Expected string literal")
+    }
+
+  def externFun(): Def =
+    (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (`:` ~> effectful()) ~ (`=` ~> externBody()) match {
+      case capt ~ id ~ (tps, vps, bps) ~ ret ~ body => ExternDef(capt, id, tps, vps, bps, ret, body)
+    }
+
+  def externBody(): Template[Term] = ???
+
+  def maybeExternCapture(): CaptureSet =
+    if peek(`{`) || isVariable then externCapture()
+    else CaptureSet(List(IdRef(List("effekt"), "io")))
+
+  def externCapture(): CaptureSet =
+    if peek(`{`) then captureSet() else idRef() match {
+      case IdRef(Nil, "pure") => CaptureSet(Nil)
+      case id : IdRef => CaptureSet(List(id))
+    }
 
   def path(): String = next().kind match {
     case Str(s, false) => s
