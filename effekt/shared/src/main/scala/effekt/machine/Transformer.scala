@@ -431,9 +431,10 @@ object Transformer {
       }
 
     case lifted.Literal(javastring: String, _) =>
+      val escapedJavastring = StringContext.processEscapes(javastring)
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
-        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+        LiteralUTF8String(literal_binding, escapedJavastring.getBytes("utf-8"), k(literal_binding))
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>
