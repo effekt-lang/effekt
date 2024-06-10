@@ -211,7 +211,19 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
 
 
-  def defDef(): Def = ???
+  def defDef(): Def =
+    val id = consume(`def`) ~> idDef()
+
+    def isBlockDef: Boolean = peek(`:`) || peek(`=`)
+
+    if isBlockDef then
+      // (: <VALUETYPE>)? `=` <EXPR>
+      DefDef(id, when(`:`) { Some(blockType()) } { None }, `=` ~> expr())
+    else
+      // [...](<PARAM>...) {...} `=` <STMT>>
+      val (tps, vps, bps) = params()
+      FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmt())
+
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
   def typeDef(): Def =
@@ -243,6 +255,9 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def maybeTypeAnnotation(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
+
+  def maybeReturnAnnotation(): Option[Effectful] =
+    when(`:`) { Some(effectful()) } { None }
 
   // TODO fail "Expected a type annotation"
   def typeAnnotation(): ValueType = `:` ~> valueType()
@@ -334,7 +349,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   }
 
   def opClause(): OpClause =
-    (`def` ~> idRef()) ~ paramsOpt() ~ when(`:`) { Some(effectful()) } { None } ~ (`=` ~> stmt()) match {
+    (`def` ~> idRef()) ~ paramsOpt() ~ maybeReturnAnnotation() ~ (`=` ~> stmt()) match {
       case id ~ (tps, vps, bps) ~ ret ~ body =>
         // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
         OpClause(id, tps, vps, bps, ret, body, implicitResume)
@@ -687,7 +702,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     ValueParam(idDef(), Some(`:` ~> valueType()))
 
   def valueParamOpt(): ValueParam =
-    ValueParam(idDef(), when(`:`)(Some(valueType()))(None))
+    ValueParam(idDef(), when(`:`) { Some(valueType()) } { None })
 
   def maybeBlockParams(): List[BlockParam] =
     manyWhile(`{` ~> blockParam() <~ `}`, `{`)

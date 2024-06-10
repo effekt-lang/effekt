@@ -404,4 +404,32 @@ class RecursiveDescentTests extends munit.FunSuite {
         |}
         |""".stripMargin)
   }
+
+  test("Function definitions") {
+    assertEquals(
+      parseDefinition(
+        """def foo = f
+          |""".stripMargin),
+      DefDef(IdDef("foo"), None, Var(IdRef(Nil, "f"))))
+
+    parseDefinition(
+        """def foo: Exc = f
+          |""".stripMargin)
+
+    parseDefinition(
+        """def foo() = e
+          |""".stripMargin)
+
+    parseDefinition(
+        """def foo[T] = e
+          |""".stripMargin)
+
+    parseDefinition(
+        """def foo[T](x: Int) = e
+          |""".stripMargin)
+
+    parseDefinition(
+        """def foo[T](x: Int): String / {} = e
+          |""".stripMargin)
+  }
 }
