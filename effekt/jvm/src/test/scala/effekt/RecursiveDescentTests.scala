@@ -455,5 +455,12 @@ class RecursiveDescentTests extends munit.FunSuite {
         |  def set(n: T): Unit
         |}
         |""".stripMargin)
+
+    parseToplevel(
+      """extern include "foo/text.txt"
+        |""".stripMargin)
+
+    parseToplevel("extern type Foo[S]")
+    parseToplevel("extern resource foo: Foo")
   }
 }

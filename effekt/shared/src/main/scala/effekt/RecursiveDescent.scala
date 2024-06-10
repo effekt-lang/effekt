@@ -309,7 +309,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case `interface` => externInterface()
     case `resource`  => externResource()
     case `include`   => externInclude()
-    case _ => ???
+    case _ => externFun()
   }
 
   def externType(): Def =
@@ -318,7 +318,22 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams())
   def externResource(): Def =
     ExternResource(`extern` ~> `resource` ~> idDef(), `:` ~> blockType())
-  def externInclude(): Def = ???
+  def externInclude(): Def =
+    ExternInclude(`extern` ~> `include` ~> path())
+
+  def externFun(): Def = ???
+
+  def path(): String = next().kind match {
+    case Str(s, false) => s
+    case _ => fail("Expected path as string literal.")
+  }
+
+  // TODO uncomment after rebase:
+  //  def featureFlag(): FeatureFlag =
+  //    ident() match {
+  //      case "default" => FeatureFlag.Default
+  //      case flag => FeatureFlag.NamedFeatureFlag(flag)
+  //    }
 
   def maybeTypeAnnotation(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
