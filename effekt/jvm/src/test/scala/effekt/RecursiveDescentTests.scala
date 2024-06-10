@@ -101,7 +101,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseExpr("(f(a, 42))()"))
   }
 
-  test("boxing") {
+  test("Boxing") {
     parseExpr("box f")
     parseExpr("unbox f")
     assertEquals(
@@ -116,6 +116,19 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     // { f } is parsed as a capture set and not backtracked.
     intercept[Throwable] { parseExpr("box { f }") }
+  }
+
+  test("Pattern matching") {
+    parseExpr(
+      """do raise(RuntimeError(), msg) match {}
+        |""".stripMargin)
+
+    parseExpr(
+      """x match {
+        |  case 0 => 42
+        |  case _ => <{ "Test" }>
+        |}
+        |""".stripMargin)
   }
 
   test("Qualified names") {
@@ -138,6 +151,8 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(
       parseExpr("1 + 2 * 3 == 4 + 5"),
       parseExpr("(1 + (2 * 3)) == (4 + 5)"))
+
+    parseExpr("i = i + 1")
   }
 
   test("Dangling else") {

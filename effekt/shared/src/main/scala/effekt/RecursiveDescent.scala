@@ -129,7 +129,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     case `return` => `return` ~> Return(expr())
     case _ =>
       val e = expr()
-      val returnPosition = peek(`}`) || peek(`case`) || peek(EOF) // TODO EOF is just for testing
+      val returnPosition = peek(`}`) || peek(`case`) || peek(`}>`) || peek(EOF) // TODO EOF is just for testing
       if returnPosition then Return(e)
       else ExprStmt(e, { semi(); stmts() })
   }
@@ -228,11 +228,10 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     ValDef(`val` ~> idDef(), maybeTypeAnnotation(), `=` ~> stmt())
 
   def varDef(): Def =
-    (`var` ~> idDef()) ~ maybeTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
-      case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
-      case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
-    }
-
+      (`var` ~> idDef()) ~ maybeTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
+        case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
+        case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
+      }
 
   def defDef(): Def =
     val id = consume(`def`) ~> idDef()
@@ -334,21 +333,28 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       case capt ~ id ~ (tps, vps, bps) ~ ret ~ body => ExternDef(capt, id, tps, vps, bps, ret, body)
     }
 
-  def externBody(): Template[Term] = ???
+  def externBody(): Template[Term] =
+    val first = string()
+    val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}`, string()), `${`).unzip
+    Template(first :: strs, exprs)
 
   def maybeExternCapture(): CaptureSet =
-    if peek(`{`) || isVariable then externCapture()
+    if peek(`{`) || peek(`pure`) || isVariable then externCapture()
     else CaptureSet(List(IdRef(List("effekt"), "io")))
 
   def externCapture(): CaptureSet =
-    if peek(`{`) then captureSet() else idRef() match {
-      case IdRef(Nil, "pure") => CaptureSet(Nil)
-      case id : IdRef => CaptureSet(List(id))
-    }
+    if peek(`{`) then captureSet()
+    else if peek(`pure`) then `pure` ~> CaptureSet(Nil)
+    else CaptureSet(List(idRef()))
 
   def path(): String = next().kind match {
     case Str(s, false) => s
     case _ => fail("Expected path as string literal.")
+  }
+
+  def string(): String = next().kind match {
+    case Str(s, _) => s
+    case _ => fail("Expected string literal.")
   }
 
   // TODO uncomment after rebase:
@@ -372,13 +378,12 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def expr(): Term = peek.kind match {
     case `if`     => ifExpr()
     case `while`  => whileExpr()
-    case `do`     => doExpr()
     case `try`    => tryExpr()
     case `region` => regionExpr()
     case `box`    => boxExpr()
     case `unbox`  => unboxExpr()
     case `new`    => newExpr()
-    case _ => orExpr()
+    case _ => matchExpr()
   }
 
   def ifExpr(): Term =
@@ -487,6 +492,20 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
       AnyPattern(idDef())
     case _ if isLiteral => LiteralPattern(literal())
     case _ => fail("Expected pattern")
+  }
+
+  def matchExpr(): Term =
+    var sc = assignExpr()
+    while (peek(`match`)) {
+       val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
+       val default = when(`else`) { Some(stmt()) } { None }
+       sc = Match(sc, clauses, default)
+    }
+    sc
+
+  def assignExpr(): Term = orExpr() match {
+    case x @ Term.Var(id) => when(`=`) { Assign(id, expr()) } { x }
+    case other => other
   }
 
   def orExpr(): Term = infix(andExpr, `||`)
@@ -622,6 +641,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   }
 
   def primExpr(): Term = peek.kind match {
+    case `do`                => doExpr()
     case _ if isLiteral      => literal()
     case _ if isVariable     => variable()
     case _ if isHole         => hole()
