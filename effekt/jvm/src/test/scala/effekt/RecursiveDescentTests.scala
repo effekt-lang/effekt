@@ -65,6 +65,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseDefinition(input: String, positions: Positions = new Positions())(using munit.Location): Def =
     parse(input, _.definition())
 
+  def parseDefinitions(input: String, positions: Positions = new Positions())(using munit.Location): List[Def] =
+    parse(input, _.definitions())
+
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
@@ -104,6 +107,9 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseExpr("box {} { 42 }")
     )
     parseExpr("box { (x: Int) => x }")
+
+    // { f } is parsed as a capture set and not backtracked.
+    intercept[Throwable] { parseExpr("box { f }") }
   }
 
   test("Qualified names") {
@@ -161,6 +167,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseStmts(
       """var x in r = baz;
         |return x
+        |""".stripMargin)
+  }
+
+  test("Definition statements") {
+    parseStmts(
+      """val x = 42
+        |type T = Int
+        |()
         |""".stripMargin)
   }
 
@@ -328,6 +342,65 @@ class RecursiveDescentTests extends munit.FunSuite {
       """type A[X] {
         |  Foo();
         |  Bar()
+        |}
+        |""".stripMargin)
+  }
+
+  test("Namespaces") {
+    parseDefinitions(
+      """val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    val nested = parseDefinitions(
+      """namespace list {
+        |  val x = 4
+        |  val y = 5
+        |}
+        |""".stripMargin)
+
+    val semi = parseDefinitions(
+      """namespace list;
+        |val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    assertEquals(nested, semi)
+
+    val nested2 = parseDefinitions(
+      """namespace list {
+        |  namespace internal {
+        |
+        |    val x = 4
+        |    val y = 5
+        |  }
+        |}
+        |""".stripMargin)
+
+    val semi2 = parseDefinitions(
+      """namespace list;
+        |namespace internal;
+        |
+        |val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    val semiInsertion = parseDefinitions(
+      """namespace list
+        |namespace internal
+        |
+        |val x = 4
+        |val y = 5
+        |""".stripMargin)
+
+    assertEquals(nested2, semi2)
+    assertEquals(nested2, semiInsertion)
+
+    parseDefinitions(
+      """val x = {
+        |  namespace foo;
+        |  val y = 4;
+        |  foo::y
         |}
         |""".stripMargin)
   }

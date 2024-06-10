@@ -231,10 +231,15 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     EffectDef(`effect` ~> idDef(), maybeTypeParams(), `=` ~> effects())
 
   def namespaceDef(): Def =
-    NamespaceDef(`namespace` ~> idDef(), `{` ~> definitions() <~ `}`)
+    consume(`namespace`)
+    val id = idDef()
+    // namespace foo { <DEFINITION>* }
+    if peek(`{`) then braces { NamespaceDef(id, definitions()) }
+    // namespace foo
+    // <DEFINITION>*
+    else { semi(); NamespaceDef(id, definitions()) }
 
-  def definitions(): List[Def] = ???
-
+  def definitions(): List[Def] = manyWhile(definition(), isDefinition)
 
   def maybeTypeAnnotation(): Option[ValueType] =
     if peek(`:`) then Some(typeAnnotation()) else None
@@ -747,9 +752,12 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
     components.toList
 
-  def manyWhile[T](p: => T, lookahead: TokenKind): List[T] =
+  inline def manyWhile[T](p: => T, lookahead: TokenKind): List[T] =
+    manyWhile(p, peek(lookahead))
+
+  inline def manyWhile[T](p: => T, predicate: => Boolean): List[T] =
     val components: ListBuffer[T] = ListBuffer.empty
-    while (peek(lookahead)) {
+    while (predicate) {
       components += p
     }
     components.toList
