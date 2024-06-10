@@ -68,6 +68,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseDefinitions(input: String, positions: Positions = new Positions())(using munit.Location): List[Def] =
     parse(input, _.definitions())
 
+  def parseToplevel(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+    parse(input, _.toplevel())
+
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
@@ -431,5 +434,26 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseDefinition(
         """def foo[T](x: Int): String / {} = e
           |""".stripMargin)
+  }
+
+  test("Toplevel definitions") {
+    parseToplevel("def foo() = ()")
+    parseToplevel("effect Foo = {}")
+    parseToplevel("effect Foo(): Int")
+    parseToplevel("interface Foo {}")
+
+    parseToplevel(
+      """interface State {
+        |  def get(): Int
+        |  def set(n: Int): Unit
+        |}
+        |""".stripMargin)
+
+    parseToplevel(
+      """interface State[T] {
+        |  def get(): T
+        |  def set(n: T): Unit
+        |}
+        |""".stripMargin)
   }
 }

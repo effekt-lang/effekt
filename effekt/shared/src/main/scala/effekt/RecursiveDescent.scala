@@ -172,6 +172,18 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     if peek(`{`) then braces { stmts() }
     else when(`return`) { Return(expr()) } { Return(expr()) }
 
+
+  def toplevel(): Def = peek.kind match {
+    case `val`       => valDef()
+    case `def`       => defDef()
+    case `interface` => interfaceDef()
+    case `type`      => typeDef()
+    case `effect`    => effectOrOperationDef()
+    case `namespace` => namespaceDef()
+    case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
+    case _ => fail("Expected a top-level definition")
+  }
+
   def isDefinition: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` => true
     case `extern` | `effect` | `interface` | `type` | `record` =>
@@ -239,8 +251,34 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
   def constructor(): Constructor =
     Constructor(idDef(), maybeTypeParams(), valueParams())
 
+  // On the top-level both
+  //    effect Foo = {}
+  // and
+  //    effect Foo(): Int
+  // are allowed. Here we simply backtrack, since effect definitions shouldn't be
+  // very long and cannot be nested.
+  def effectOrOperationDef(): Def =
+    backtrack { effectDef() } getOrElse { operationDef() }
+
   def effectDef(): Def =
+    // effect <NAME> = <EFFECTS>
     EffectDef(`effect` ~> idDef(), maybeTypeParams(), `=` ~> effects())
+
+  // effect <NAME>[...](...): ...
+  def operationDef(): Def =
+    `effect` ~> operation() match {
+      case op =>
+        // TODO is the `true` flag used at all anymore???
+        InterfaceDef(IdDef(op.id.name), Nil, List(op), true)
+    }
+
+  def operation(): Operation =
+    idDef() ~ params() ~ (`:` ~> effectful()) match {
+      case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret)
+    }
+
+  def interfaceDef(): InterfaceDef =
+    InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`, true)
 
   def namespaceDef(): Def =
     consume(`namespace`)
