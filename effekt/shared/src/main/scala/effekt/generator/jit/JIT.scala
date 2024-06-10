@@ -42,7 +42,7 @@ class JIT() extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => JIT
-  lazy val Compile = allToCore(Core) andThen Aggregate map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer map {
     case CoreTransformed(source, tree, mod, core) =>
       (mod, jit.Transformer.transform(core, mod))
   }
