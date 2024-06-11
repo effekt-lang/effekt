@@ -176,7 +176,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     parseExpr("compare(x, y) && go(next)")
 
-    println(parseExpr("foo || bar"))
+    parseExpr("foo || bar")
   }
 
   test("Dangling else") {
@@ -260,6 +260,12 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseMatchPattern("_"),
       IgnorePattern())
     parseMatchPattern("Cons(x, Cons(x, Nil()))")
+
+    assertEquals(
+      parseMatchPattern("(left, Cons(x, right))"),
+        TagPattern(IdRef(List("effekt"), "Tuple2"),
+          List(AnyPattern(IdDef("left")),
+          TagPattern(IdRef(List(), "Cons"), List(AnyPattern(IdDef("x")), AnyPattern(IdDef("right")))))))
   }
 
   test("Block arguments") {
@@ -289,7 +295,12 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseBlockType("() => Int")
     parseBlockType("(Int) => Int")
     parseBlockType("Int => Int")
-    parseBlockType("(Int, String) => Int")
+
+    assertEquals(
+      parseBlockType("(Int, String) => Int"),
+      FunctionType(Nil, List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
+        ValueTypeRef(IdRef(Nil,"String"), Nil)), Nil, ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
+
     parseBlockType("(Int, String) => Int / Exc")
     parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")
     parseBlockType("=> Int")

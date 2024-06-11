@@ -187,7 +187,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
   }
 
   def stmt(): Stmt =
-    if peek(`{`) then braces { stmts() }
+    if peek(`{`) then braces { BlockStmt(stmts()) }
     else when(`return`) { Return(expr()) } { Return(expr()) }
 
   /**
@@ -437,13 +437,6 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
 
 
   def expr(): Term = peek.kind match {
-    case `if`     => ifExpr()
-    case `while`  => whileExpr()
-    case `try`    => tryExpr()
-    case `region` => regionExpr()
-    case `box`    => boxExpr()
-    case `unbox`  => unboxExpr()
-    case `new`    => newExpr()
     case _ => matchExpr()
   }
 
@@ -545,7 +538,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     case Ident("_") => skip(); IgnorePattern()
     case `(` => some(matchPattern, `(`, `,`, `)`) match {
       case p :: Nil => fail("Pattern matching on tuples requires more than one element")
-      case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size + 1}"), ps)
+      case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
     }
     case _ if isVariable && peek(1, `(`) =>
       TagPattern(idRef(), many(matchPattern, `(`, `,`, `)`))
@@ -704,6 +697,13 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
   }
 
   def primExpr(): Term = peek.kind match {
+    case `if`     => ifExpr()
+    case `while`  => whileExpr()
+    case `try`    => tryExpr()
+    case `region` => regionExpr()
+    case `box`    => boxExpr()
+    case `unbox`  => unboxExpr()
+    case `new`    => newExpr()
     case `do`                => doExpr()
     case _ if isLiteral      => literal()
     case _ if isVariable     => variable()
@@ -824,7 +824,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
   private def blockType2(boxedAllowed: Boolean): BlockType =
 
     def simpleFunType = backtrack {
-      atomicValueType() <~ `=>`
+      ValueTypeRef(idRef(), maybeTypeArgs()) <~ `=>`
     } map { tpe =>
       FunctionType(Nil, List(tpe), Nil, valueType2(boxedAllowed), maybeEffects())
     }
