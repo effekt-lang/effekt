@@ -175,6 +175,32 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     if peek(`{`) then braces { stmts() }
     else when(`return`) { Return(expr()) } { Return(expr()) }
 
+  /**
+   * Main entry point
+   */
+   def program(): ModuleDecl =
+     // skip spaces at the start
+     spaces()
+     val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevels())
+     if peek(`EOF`) then res else fail("Unexpected input")
+     // failure("Required at least one top-level function or effect definition")
+
+  def moduleDecl(): String =
+    when(`module`) { moduleName() } { defaultModulePath }
+
+  // we are purposefully not using File here since the parser needs to work both
+  // on the JVM and in JavaScript
+  def defaultModulePath: String =
+    val baseWithExt = filename.split("[\\\\/]").last
+    baseWithExt.split('.').head
+
+
+  def includeDecl(): Include =
+    Include(`import` ~> moduleName())
+
+  def moduleName(): String =
+    some(ident, `/`).mkString("/")
+
   def isToplevel: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
          `extern` | `effect` | `interface` | `type` | `record` => true

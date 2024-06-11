@@ -122,6 +122,8 @@ def foreach[A](l: List[A]) { f: A => Unit / Control } : Unit = {
   }
 }
 
+
+
 // Traverse a list, applying the given action on every element and its (zero-based) index.
 //
 // O(N)

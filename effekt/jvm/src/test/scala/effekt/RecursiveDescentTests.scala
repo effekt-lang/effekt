@@ -74,6 +74,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseToplevel(input: String, positions: Positions = new Positions())(using munit.Location): Def =
     parse(input, _.toplevel())
 
+  def parseProgram(input: String, positions: Positions = new Positions())(using munit.Location): ModuleDecl =
+    parse(input, _.program())
+
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
@@ -514,6 +517,32 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     parseToplevel(
       """extern "function() { console.log('hey!'); }"
+        |""".stripMargin)
+
+    parseToplevel(
+      """extern def foo(): Int = "bar ${test} baz ${bam}"
+        |""".stripMargin)
+  }
+
+  test("Programs") {
+    // this is from examples/pos/builtins
+    parseProgram(
+      """module examples/pos/builtins
+        |
+        |type Color { Red(); Green(); Blue() }
+        |
+        |def main() = {
+        |    println(1);
+        |    println("foo");
+        |    println(true);
+        |    println(1 == 2);
+        |    inspect(Red())
+        |}
+        |""".stripMargin)
+
+    parseProgram(
+      """// test comment
+        |def foo() = 42
         |""".stripMargin)
   }
 }
