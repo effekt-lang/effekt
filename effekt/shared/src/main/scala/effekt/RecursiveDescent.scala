@@ -622,7 +622,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
             val (targs, vargs, bargs) = arguments()
             e = Term.MethodCall(e, member, targs, vargs, bargs)
           } else {
-            e = Term.Select(e, member)
+            e = Term.MethodCall(e, member, Nil, Nil, Nil)
           }
 
         // function call

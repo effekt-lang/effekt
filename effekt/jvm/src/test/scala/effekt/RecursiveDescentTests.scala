@@ -108,6 +108,11 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(
       parseExpr("f(a, 42)()"),
       parseExpr("(f(a, 42))()"))
+
+    assertEquals(
+      parseExpr("foo.bar"),
+      // At the moment uniform function call syntax is always a method call
+      MethodCall(Var(IdRef(Nil, "foo")), IdRef(Nil, "bar"),Nil, Nil, Nil))
   }
 
   test("Boxing") {
