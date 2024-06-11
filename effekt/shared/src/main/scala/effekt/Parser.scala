@@ -53,17 +53,29 @@ object Parser extends Phase[Source, Parsed] {
 class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
   type Elem = Token
+
   type P[Out] = PackratParser[Out]
 
-  def parse(inpt: TokenInput[Elem])(implicit C: Context): Option[ModuleDecl] =
-    parseAll(program, inpt) match {
-      case Success(ast, _) =>
-        Some(ast)
+  def parse(input: TokenInput[Elem])(implicit C: Context): Option[ModuleDecl] =
 
-      case res: NoSuccess[_] =>
-        val input = res.next
-        val range = Range(input.position, input.nextPosition)
-        C.report(ParseError(res.message, Some(range)))
+    val p = new RecursiveDescentParsers(positions, input.tokens.toIndexedSeq)
+    try {
+      //println(input.tokens)
+      val before = System.currentTimeMillis()
+      val res = Some(p.program())
+      val after = System.currentTimeMillis()
+      println(s"${input.source.name}: ${after - before}ms")
+
+      res
+    } catch {
+      case ParseError2(msg, pos) =>
+        val source = input.source
+        val position = input.get(pos) match {
+          case Some(value) => source.offsetToPosition(input.toPosition(value))
+          case None => Position(0, 0, source)
+        }
+
+        C.report(ParseError(msg, Some(Range(position, position)))) // fix error reporting
         None
     }
 

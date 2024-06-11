@@ -2,10 +2,8 @@ package effekt
 
 import effekt.lexer.*
 import effekt.lexer.TokenKind.{ `::` as PathSep, * }
-
 import effekt.source.*
-
-import kiama.util.Positions
+import kiama.util.{ Positions, Source, StringSource }
 
 import scala.annotation.{ tailrec, targetName }
 import scala.util.matching.Regex
@@ -16,7 +14,7 @@ import scala.util.boundary.break
 
 case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
 
-class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
+class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename: String = "") {
 
   import scala.collection.mutable.ListBuffer
 
