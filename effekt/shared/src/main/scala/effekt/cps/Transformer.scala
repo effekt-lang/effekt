@@ -27,7 +27,6 @@ object Transformer extends Phase[PhaseResult.CoreLifted, PhaseResult.CpsTransfor
 }
 
 def transform(core: lifted.ModuleDecl): ModuleDecl = {
-  println(core)
   ModuleDecl(core.path, core.includes, core.decls map transform, core.externs map transform, core.definitions map transform, core.exports)
 }
 def transform(decl: lifted.Declaration): Declaration = decl match {
@@ -127,6 +126,10 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
     case ev :: cap :: Nil => Reset(transform(ev), Let(transform(cap), New(transform(handler)), transform(body)))
     case _ => ???
   }
+  case lifted.Stmt.Try(lifted.BlockLit(_, params, body), handlers) => params match {
+    case ev :: caps => Reset(transform(ev), transform(caps, handlers, body)) 
+    case _ => ???
+  }
   case lifted.Stmt.Try(body, handler) => ???
 
   case lifted.Stmt.Reset(body) => Reset(Id("evidence"), transform(body))
@@ -136,6 +139,12 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Hole() => ???
 
   case _ => ???
+}
+
+//assuming caps and handlers have the same size
+def transform(caps: List[lifted.Param], handlers: List[lifted.Implementation], body: lifted.Stmt): Term = caps match {
+  case Nil => transform(body)
+  case head :: next => Let(transform(head), New(transform(handlers.head)), transform(next, handlers.tail, body))
 }
 
 def transform(definitions: List[lifted.Definition], rest: Term): Term = definitions match {
