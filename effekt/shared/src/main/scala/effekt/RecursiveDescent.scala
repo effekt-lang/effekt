@@ -571,11 +571,13 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
   // === AST Helpers ===
 
   private def binaryOp(lhs: Term, op: TokenKind, rhs: Term): Term =
+    // TODO after rebasing!
     // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
-    if op == `||` || op == `&&` then
-      Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
-    else
-      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+    //    if op == `||` || op == `&&` then
+    //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+    //    else
+    //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+    Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
   private def opName(op: TokenKind): String = op match {
     case `||` => "infixOr"

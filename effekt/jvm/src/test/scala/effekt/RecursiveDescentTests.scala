@@ -175,6 +175,8 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("i = i + 1")
 
     parseExpr("compare(x, y) && go(next)")
+
+    println(parseExpr("foo || bar"))
   }
 
   test("Dangling else") {
