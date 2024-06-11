@@ -438,14 +438,14 @@ class Lexer(source: String) {
   def matchComment(): TokenKind = {
     var newline = false
     while (!newline) {
-      consume() match {
+      peek() match {
         // comment is terminated when encountering a new line
         case Some('\n') => newline = true
-        case _ => ()
+        case _ => consume()
       }
     }
     // exclude // and \n
-    val comment = slice(start + 2, current - 1)
+    val comment = slice(start + 2, current)
     TokenKind.Comment(comment)
   }
 

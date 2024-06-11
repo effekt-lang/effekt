@@ -9,15 +9,15 @@ import munit.Location
 
 class LexerTests extends munit.FunSuite {
 
-  def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
+  def lex(prog: String): List[Token] = {
     val (tokens, err) = Lexer(prog).run()
-    val tokensWithoutWhite = tokens.filter {
-      case Token(_, _, Newline) | Token(_, _, Space) => false
-      case _ => true
-    }
     if (err.isDefined) fail(s"Lexing failed with error ${err.get}")
-    //assert(tokensWithoutWhite.length == expected.length, s"wrong number of tokens: obtained ${tokensWithoutWhite.length}, expected ${expected.length}")
-    tokensWithoutWhite.zip(expected).foreach((t1, t2) => assertEquals(t1.kind, t2))
+    tokens
+  }
+
+  def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
+    val tokens = lex(prog)
+    tokens.zipAll(expected, null, null).foreach((t1, t2) => assertEquals(t1.kind, t2))
   }
 
   def assertSuccess(prog: String)(using Location): Unit = {
@@ -36,8 +36,9 @@ class LexerTests extends munit.FunSuite {
       prog,
       `def`, Ident("f"), `[`, Ident("A"), `]`,
       `(`, Ident("x"), `:`, Ident("A"), `,`, Ident("y"), `:`, Ident("A"), `)`,
-      `:`, `(`, `)`, `=>`, `(`, Ident("A"), `,`, Ident("A"), `)`, `at`, `{`, `}`, `=`,
-      `return`, `box`, `{`, `(`, `)`, `=>`, `(`, Ident("x"), `,`, Ident("y"), `)`, `}`
+      `:`, `(`, `)`, `=>`, `(`, Ident("A"), `,`, Ident("A"), `)`, `at`, `{`, `}`, `=`, Newline,
+      `return`, `box`, `{`, `(`, `)`, `=>`, `(`, Ident("x"), `,`, Ident("y"), `)`, `}`, Newline,
+      EOF
     )
   }
 
@@ -46,7 +47,8 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq(
       num,
       Float(12.34), Float(100.0), Integer(200), Float(123.345), Integer(1),
-      Float(-12.34), Float(-100), Float(-123.345), Integer(-1)
+      Float(-12.34), Float(-100), Float(-123.345), Integer(-1),
+      EOF
     )
   }
 
@@ -54,7 +56,7 @@ class LexerTests extends munit.FunSuite {
     val prog = "=> <= < >= > / * - && ++ +"
     assertTokensEq(
       prog,
-      `=>`, `<=`, `<`, `>=`, `>`, `/`, `*`, `-`, `&&`, `++`, `+`
+      `=>`, `<=`, `<`, `>=`, `>`, `/`, `*`, `-`, `&&`, `++`, `+`, EOF
     )
   }
 
@@ -64,7 +66,8 @@ class LexerTests extends munit.FunSuite {
       prog,
       Str("hello, world", false),
       Str("", false),
-      Str("\\\"hello\\\"", false)
+      Str("\\\"hello\\\"", false),
+      EOF
     )
   }
 
@@ -76,7 +79,8 @@ class LexerTests extends munit.FunSuite {
       " \"\"\""
     assertTokensEq(
       prog,
-      Str("val def interface \"\" \"\ncontinues here \t \r\n and is end\n ", true)
+      Str("val def interface \"\" \"\ncontinues here \t \r\n and is end\n ", true),
+      EOF
     )
   }
 
@@ -89,7 +93,8 @@ class LexerTests extends munit.FunSuite {
       `{`, Ident("x"), `=>`, Str(" ",false),
       `${`, Ident("x"), `+`, Integer(1), TokenKind.`}`,
       Str("",false), TokenKind.`}`, TokenKind.`}`,
-      Str(" after the quote",false)
+      Str(" after the quote",false),
+      EOF
     )
   }
 
@@ -101,7 +106,8 @@ class LexerTests extends munit.FunSuite {
       `${`, Ident("x"), `+`, Integer(1), TokenKind.`}`,
       Str("", false),
       `${`, Ident("x"), `+`, Integer(2), TokenKind.`}`,
-      Str("", false)
+      Str("", false),
+      EOF
     )
   }
 
@@ -112,7 +118,9 @@ class LexerTests extends munit.FunSuite {
       "\"\"\""
     assertTokensEq(
       prog,
-      Str("multi-line quote\n", true)
+      Str("multi-line quote\n", true),
+      `${`, Ident("x"), `+`, Integer(1), `}`, Str(", ", true), `${`, Ident("y"), `+`, Integer(1), `}`, Str(" \n", true),
+      EOF
     )
   }
 
@@ -128,9 +136,10 @@ class LexerTests extends munit.FunSuite {
         |val x = 2""".stripMargin
     assertTokensEq(
       prog,
-      `interface`, Ident("Eff"), `{`, `def`, Ident("operation"), `(`, `)`, `:`, Ident("Unit"), `}`,
-      Comment(" val x = 1 def while / \\t still\\n comment"),
-      `val`, Ident("x"), `=`, Integer(2)
+      `interface`, Ident("Eff"), `{`, `def`, Ident("operation"), `(`, `)`, `:`, Ident("Unit"), `}`, Newline,
+      Comment(" val x = 1 def while / \\t still\\n comment"), Newline,
+      `val`, Ident("x"), `=`, Integer(2),
+      EOF
     )
   }
 
@@ -145,15 +154,29 @@ class LexerTests extends munit.FunSuite {
 
     assertTokensEq(
       prog,
-      `val`, Ident("x"), `=`, Integer(42),
-      Comment(" comment begin def return /* * /\nstill comment\nhere's the end\n"),
-      `def`, Ident("main"), `(`, `)`, `:`, Ident("Unit"), `=`, `(`, `)`
+      `val`, Ident("x"), `=`, Integer(42), Newline,
+      Comment(" comment begin def return /* * /\nstill comment\nhere's the end\n"), Newline,
+      `def`, Ident("main"), `(`, `)`, `:`, Ident("Unit"), `=`, `(`, `)`,
+      EOF
+    )
+  }
+
+  test("newline") {
+    val prog =
+      """ val next = f() // Comment
+      |g()
+      |""".stripMargin
+    assertTokensEq(
+      prog,
+      `val`, Ident("next"), `=`, Ident("f"), `(`, `)`, Comment(" Comment"), Newline,
+      Ident("g"), `(`, `)`, Newline,
+      EOF
     )
   }
 
   test("empty") {
     val prog = ""
-    assertTokensEq(prog)
+    assertTokensEq(prog, EOF)
   }
 
   test("ignore whitespace") {
@@ -172,10 +195,12 @@ class LexerTests extends munit.FunSuite {
         |""".stripMargin
     assertTokensEq(
       prog,
-      Comment(" interface definition"),
-      `interface`, Ident("Eff"), `[`, Ident("A"), `,`, Ident("B"), `]`, `{`,
-      `def`, Ident("operation"), `[`, Ident("C"), `]`, `(`, Ident("x"), `:`, Ident("C"), `)`, `:`, `(`, Ident("A"), `,`, Ident("B"), `)`,
-      `}`
+      Comment(" interface definition"), Newline,
+      `interface`, Newline, Newline, Ident("Eff"), `[`, Ident("A"), `,`, Newline, Ident("B"), `]`, `{`,
+      `def`, Ident("operation"), Newline, `[`, Ident("C"), `]`, Newline, `(`, Ident("x"), `:`, Ident("C"), `)`, `:`, Newline, Newline, `(`, Ident("A"), `,`, Ident("B"), `)`, Newline,
+      Newline,
+      `}`, Newline,
+      EOF
     )
   }
 
