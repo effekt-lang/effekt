@@ -782,18 +782,18 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     def boxedBlock = backtrack {
       BoxedType(blockType2(false), `at` ~> captureSet())
     }
-    def atomicValueType = {
-      peek.kind match {
-        case `(` => some(valueType, `(`, `,`, `)`) match {
-          case tpe :: Nil => tpe
-          case tpes => TupleTypeTree(tpes)
-        }
-        case _ => ValueTypeRef(idRef(), maybeTypeArgs())
-      }
-    }
-    if (boxedAllowed) { boxedBlock getOrElse atomicValueType }
-    else atomicValueType
+    if (boxedAllowed) { boxedBlock getOrElse atomicValueType() }
+    else atomicValueType()
   }
+
+  def atomicValueType(): ValueType = peek.kind match {
+    case `(` => some(valueType, `(`, `,`, `)`) match {
+      case tpe :: Nil => tpe
+      case tpes => TupleTypeTree(tpes)
+    }
+    case _ => ValueTypeRef(idRef(), maybeTypeArgs())
+  }
+
 
   /**
    * Uses backtracking!
@@ -803,13 +803,21 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
    */
   def blockType(): BlockType = blockType2(true)
   private def blockType2(boxedAllowed: Boolean): BlockType =
+
+    def simpleFunType = backtrack {
+      atomicValueType() <~ `=>`
+    } map { tpe =>
+      FunctionType(Nil, List(tpe), Nil, valueType2(boxedAllowed), maybeEffects())
+    }
+
     def funType = backtrack {
       maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ valueType2(boxedAllowed) ~ maybeEffects() match {
         case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
       }
     }
     def parenthesized = backtrack { parens { blockType() } }
-    funType orElse parenthesized getOrElse interfaceType()
+
+    simpleFunType orElse funType orElse parenthesized getOrElse interfaceType()
 
   def interfaceType(): BlockTypeRef =
     BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef

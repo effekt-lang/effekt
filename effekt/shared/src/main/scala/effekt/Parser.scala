@@ -58,7 +58,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
   def parse(input: TokenInput[Elem])(implicit C: Context): Option[ModuleDecl] =
 
-    val p = new RecursiveDescentParsers(positions, input.tokens.toIndexedSeq)
+    val p = new RecursiveDescentParsers(positions, input.tokens)
     try {
       //println(input.tokens)
       val before = System.currentTimeMillis()

@@ -276,6 +276,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseBlockType("State[Int]")
     parseBlockType("() => Int")
     parseBlockType("(Int) => Int")
+    parseBlockType("Int => Int")
     parseBlockType("(Int, String) => Int")
     parseBlockType("(Int, String) => Int / Exc")
     parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")
