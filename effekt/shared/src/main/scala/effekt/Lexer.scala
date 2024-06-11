@@ -298,7 +298,7 @@ class Lexer(source: String) {
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.
    */
-  def run(): (List[Token], Option[LexerError]) = {
+  def run(): (Vector[Token], Option[LexerError]) = {
     var err: Option[LexerError] = None
     var eof = false
     while (!eof && err.isEmpty) {
@@ -321,7 +321,7 @@ class Lexer(source: String) {
       }
       start = current
     }
-    (tokens.toList, err)
+    (tokens.toVector, err)
   }
 
   // --- Literal and comment matchers ---

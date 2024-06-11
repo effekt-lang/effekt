@@ -9,7 +9,7 @@ import munit.Location
 
 class LexerTests extends munit.FunSuite {
 
-  def lex(prog: String): List[Token] = {
+  def lex(prog: String): Vector[Token] = {
     val (tokens, err) = Lexer(prog).run()
     if (err.isDefined) fail(s"Lexing failed with error ${err.get}")
     tokens
