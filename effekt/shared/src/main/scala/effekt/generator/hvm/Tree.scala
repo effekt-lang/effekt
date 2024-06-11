@@ -11,6 +11,8 @@ import scala.collection.mutable.{Map => MutableMap}
  
 case class Rule(pats: List[Pattern], body: Term)
 
+//case class MatchRule(constructor: Option[String], body: Term)
+
 case class Definition(name: String, rules: List[Rule], builtin: Boolean)
 
 enum Verbatim {
@@ -102,6 +104,7 @@ enum Term {
    case Lst(els: List[Term])
    case Opx(op: Op, fst: Term, snd: Term)
    case Mat(args: List[Term], rules: List[Rule])//patternmatching with adts
+   //case NewMAtch(arg: Term, arms: MatchRule)
    case Swt(args: List[Term], rules: List[Rule])//pattern matching with numbers
    case Ref(nam: String)
    case Era
