@@ -49,7 +49,6 @@ enum TokenKind {
   case EOF
   case Error(err: LexerError)
   // symbols
-  case `__`
   case `=`
   case `===`
   case `!==`
@@ -483,7 +482,6 @@ class Lexer(source: String) {
     val c = maybeChar.get
     c match {
       // --- symbols & pre- and infix operations ---
-      case '_' if peek().forall(x => !nameRest.contains(x)) => `__`
       case '=' if nextMatches('>') => `=>`
       case '=' if nextMatches('=') => `===`
       case '=' => `=`

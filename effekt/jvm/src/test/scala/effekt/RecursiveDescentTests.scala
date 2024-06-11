@@ -92,6 +92,12 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("f(a)")
     parseExpr("f(a, 42)")
 
+    parseExpr("l.foreach { _ => 42 }")
+
+    assertEquals(
+      parseExpr("loop { f }"),
+      Call(IdTarget(IdRef(Nil, "loop")), Nil, Nil, List(Var(IdRef(Nil, "f")))))
+
     assertNotEquals(
       parseExpr("f.m(a, 42)"),
       parseExpr("(f.m)(a, 42)"))
@@ -129,6 +135,12 @@ class RecursiveDescentTests extends munit.FunSuite {
         |  case _ => <{ "Test" }>
         |}
         |""".stripMargin)
+
+    parseExpr(
+      """x match {
+        |  case Some(b) => acc = Cons(b, acc)
+        |}
+        |""".stripMargin)
   }
 
   test("Qualified names") {
@@ -153,6 +165,8 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseExpr("(1 + (2 * 3)) == (4 + 5)"))
 
     parseExpr("i = i + 1")
+
+    parseExpr("compare(x, y) && go(next)")
   }
 
   test("Dangling else") {
@@ -197,6 +211,8 @@ class RecursiveDescentTests extends munit.FunSuite {
         |type T = Int
         |()
         |""".stripMargin)
+
+    parseStmts("val (left, right) = list; return left")
   }
 
   test("Semicolon insertion") {
@@ -215,6 +231,11 @@ class RecursiveDescentTests extends munit.FunSuite {
         """f();
           |return g()
           |""".stripMargin))
+
+      parseStmts(
+        """ val next = f() // Comment
+          | g()
+          |""".stripMargin)
   }
 
   test("Simple patterns") {

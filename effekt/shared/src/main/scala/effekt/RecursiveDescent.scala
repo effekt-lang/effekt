@@ -119,17 +119,20 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     inline def ~>[R](other: => R): R = { other }
   }
 
+  // tokens that delimit a statement
+  def returnPosition: Boolean = peek(`}`) || peek(`case`) || peek(`}>`) || peek(EOF)
+
   /**
    * Statements
    */
   def stmts(): Stmt = peek.kind match {
+    case `val`  => valStmt()
     case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
     case `with` => withStmt()
     case `var`  => DefStmt(varDef(), semi() ~> stmts())
     case `return` => `return` ~> Return(expr())
     case _ =>
       val e = expr()
-      val returnPosition = peek(`}`) || peek(`case`) || peek(`}>`) || peek(EOF) // TODO EOF is just for testing
       if returnPosition then Return(e)
       else ExprStmt(e, { semi(); stmts() })
   }
@@ -218,14 +221,31 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
 
   def functionBody: Stmt = expect("the body of a function definition")(stmt())
 
-  // TODO matchdef
-  //  lazy val matchDef: P[Stmt] =
-  //     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;;` ~> stmts) ^^ {
-  //       case p ~ guards ~ sc ~ default ~ body =>
-  //        Return(Match(sc, List(MatchClause(p, guards, body)), default)) withPositionOf p
-  //     }
   def valDef(): Def =
     ValDef(`val` ~> idDef(), maybeTypeAnnotation(), `=` ~> stmt())
+
+  /**
+   * In statement position, val-definitions can also be destructing:
+   *   i.e. val (l, r) = point(); ...
+   */
+  def valStmt(): Stmt =
+    def simpleLhs() = backtrack {
+      `val` ~> idDef() ~ maybeTypeAnnotation() <~ `=`
+    } map {
+      case id ~ tpe => DefStmt(ValDef(id, tpe, stmt()), { semi(); stmts() })
+    }
+    def matchLhs() =
+      `val` ~> matchPattern() ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
+        case AnyPattern(id) ~ Nil => DefStmt(ValDef(id, None, stmt()), { semi(); stmts() })
+        case p ~ guards =>
+          val sc = expr()
+          val default = when(`else`) { Some(stmt()) } { None }
+          val body = semi() ~> stmts()
+          Return(Match(sc, List(MatchClause(p, guards, body)), default))
+      }
+
+    simpleLhs() getOrElse matchLhs()
+
 
   def varDef(): Def =
       (`var` ~> idDef()) ~ maybeTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
@@ -481,7 +501,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token]) {
     }
 
   def matchPattern(): MatchPattern = peek.kind match {
-    case `__` => skip(); IgnorePattern()
+    case Ident("_") => skip(); IgnorePattern()
     case `(` => some(matchPattern, `(`, `,`, `)`) match {
       case p :: Nil => fail("Pattern matching on tuples requires more than one element")
       case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size + 1}"), ps)

@@ -514,7 +514,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     someSep(matchGuard, `and`)
 
   lazy val matchPattern: P[MatchPattern] =
-    ( `__` ^^^ IgnorePattern()
+    ( Ident("_") ^^^ IgnorePattern()
     | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
