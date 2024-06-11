@@ -213,6 +213,11 @@ class RecursiveDescentTests extends munit.FunSuite {
       """var x in r = baz;
         |return x
         |""".stripMargin)
+
+    // trailing semicolon
+    parseStmts(
+      """return x;
+        |""".stripMargin)
   }
 
   test("Definition statements") {

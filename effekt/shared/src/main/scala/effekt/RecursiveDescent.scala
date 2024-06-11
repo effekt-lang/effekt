@@ -128,11 +128,15 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
     case `with` => withStmt()
     case `var`  => DefStmt(varDef(), semi() ~> stmts())
-    case `return` => `return` ~> Return(expr())
+    case `return` =>
+      val result = `return` ~> Return(expr())
+      maybeSemi()
+      result
     case _ =>
       val e = expr()
+      semi()
       if returnPosition then Return(e)
-      else ExprStmt(e, { semi(); stmts() })
+      else ExprStmt(e, stmts())
   }
 
   // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
@@ -154,13 +158,26 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     }
   }
 
+  def maybeSemi(): Unit = if isSemi then semi()
+  def isSemi: Boolean = peek.kind match {
+    // \n   ; while
+    //
+    case `;` => true
+    // foo }
+    //     ^
+    case t if returnPosition => true
+
+    // \n   while
+    //      ^
+    case _ => lookbehind(1).kind == Newline
+  }
   def semi(): Unit = peek.kind match {
     // \n   ; while
     //
     case `;` => consume(`;`)
     // foo }
     //     ^
-    case `}` | `case` => ()
+    case t if returnPosition => ()
 
     // \n   while
     //      ^
