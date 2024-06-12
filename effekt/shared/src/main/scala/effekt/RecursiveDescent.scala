@@ -175,18 +175,26 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   // with val (<ID> (: <TYPE>)?...) = <EXPR>
   // with <EXPR>; <STMTS>
   def withStmt(): Stmt = `with` ~> peek.kind match {
-    case `val` => ???
-    case _ => expr() ~ (semi() ~> stmts()) match {
-       case m@MethodCall(receiver, id, tps, vargs, bargs) ~ body =>
-         Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, Nil, Nil, body))))
-       case c@Call(callee, tps, vargs, bargs) ~ body =>
-         Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, Nil, Nil, body))))
-       case Var(id) ~ body =>
-         val tgt = IdTarget(id)
-         Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, Nil, Nil, body)) :: Nil))
-       case term ~ body =>
-         Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, Nil, Nil, body)) :: Nil))
-    }
+    case `val` =>
+      val params = (`val` ~> peek.kind match {
+        case `(` => valueParamsOpt()
+        case _ => List(valueParam()) // TODO copy position
+      })
+      desugarWith(params, `=` ~> expr(), semi() ~> stmts())
+
+    case _ => desugarWith(Nil, expr(), semi() ~> stmts())
+  }
+
+  def desugarWith(params: List[ValueParam], call: Term, body: Stmt): Stmt = call match {
+     case m@MethodCall(receiver, id, tps, vargs, bargs) =>
+       Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, params, Nil, body))))
+     case c@Call(callee, tps, vargs, bargs) =>
+       Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, params, Nil, body))))
+     case Var(id) =>
+       val tgt = IdTarget(id)
+       Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, params, Nil, body)) :: Nil))
+     case term =>
+       Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, params, Nil, body)) :: Nil))
   }
 
   def maybeSemi(): Unit = if isSemi then semi()
