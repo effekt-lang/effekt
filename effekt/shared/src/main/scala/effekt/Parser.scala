@@ -22,13 +22,6 @@ object Parser extends Phase[Source, Parsed] {
 
   val phaseName = "parser"
 
-  /**
-   * Note: The parser needs to be created freshly since otherwise the memo tables will maintain wrong results for
-   * new input sources. Even though the contents differ, two sources are considered equal since only the paths are
-   * compared.
-   */
-  def parser(implicit C: Context) = new EffektParsers(C.positions)
-
   def run(source: Source)(implicit C: Context): Option[PhaseResult.Parsed] = source match {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
@@ -37,6 +30,7 @@ object Parser extends Phase[Source, Parsed] {
         val lexer = effekt.lexer.Lexer(source.content)
         val (tokens, err) = lexer.run()
         if (err.isDefined) C.abort(err.get.toString)
+        val parser = RecursiveDescentParsers(C.positions, tokens, source.name)
         parser.parse(TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
       }
   } map { tree =>
@@ -56,28 +50,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
   type P[Out] = PackratParser[Out]
 
-  def parse(input: TokenInput[Elem])(implicit C: Context): Option[ModuleDecl] =
-
-    val p = new RecursiveDescentParsers(positions, input.tokens)
-    try {
-      //println(input.tokens)
-      val before = System.currentTimeMillis()
-      val res = Some(p.program())
-      val after = System.currentTimeMillis()
-      println(s"${input.source.name}: ${after - before}ms")
-
-      res
-    } catch {
-      case ParseError2(msg, pos) =>
-        val source = input.source
-        val position = input.get(pos) match {
-          case Some(value) => source.offsetToPosition(input.toPosition(value))
-          case None => Position(0, 0, source)
-        }
-
-        C.report(ParseError(msg, Some(Range(position, position)))) // fix error reporting
-        None
-    }
+  def parse(input: TokenInput[Elem])(implicit C: Context): Option[ModuleDecl] = ???
 
   lazy val whitespace = many(Space | Newline | comment)
   lazy val comment = accept("comment") { case c: TokenKind.Comment => c }

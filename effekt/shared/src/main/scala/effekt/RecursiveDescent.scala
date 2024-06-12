@@ -3,7 +3,9 @@ package effekt
 import effekt.lexer.*
 import effekt.lexer.TokenKind.{ `::` as PathSep, * }
 import effekt.source.*
-import kiama.util.{ Positions, Source, StringSource }
+import effekt.context.Context
+import kiama.parsing.TokenInput
+import kiama.util.{ Positions, Source, StringSource, Range, Position }
 
 import scala.annotation.{ tailrec, targetName }
 import scala.util.matching.Regex
@@ -17,6 +19,30 @@ case class ParseError2(message: String, position: Int) extends Throwable(message
 class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename: String = "") {
 
   import scala.collection.mutable.ListBuffer
+
+  def parse(input: TokenInput[Token])(using C: Context): Option[ModuleDecl] =
+
+    val p = new RecursiveDescentParsers(positions, input.tokens)
+    try {
+      //println(input.tokens)
+      //val before = System.currentTimeMillis()
+      val res = Some(p.program())
+      //val after = System.currentTimeMillis()
+      //println(s"${input.source.name}: ${after - before}ms")
+
+      res
+    } catch {
+      case ParseError2(msg, pos) =>
+        val source = input.source
+        val position = input.get(pos) match {
+          case Some(value) => source.offsetToPosition(input.toPosition(value))
+          case None => Position(0, 0, source)
+        }
+
+        C.report(effekt.util.messages.ParseError(msg, Some(Range(position, position)))) // fix error reporting
+        None
+    }
+
 
   def fail(message: String): Nothing = throw ParseError2(message, position)
 
