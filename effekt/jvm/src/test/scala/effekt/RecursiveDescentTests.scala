@@ -116,6 +116,8 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     parseExpr("resume(42)")
     parseExpr("in(42)")
+
+    parseExpr("fun() { foo(()) }")
   }
 
   test("Boxing") {

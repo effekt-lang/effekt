@@ -503,6 +503,11 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     Box(captures, block)
   }
 
+  // TODO deprecate
+  def funExpr(): Term =
+    `fun` ~> Box(None, BlockLiteral(Nil, valueParams(), Nil, braces { stmts() }))
+    // TODO positions
+
   def unboxExpr(): Term = Unbox(`unbox` ~> expr())
 
   def newExpr(): Term = New(`new` ~> implementation())
@@ -735,6 +740,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     case `region` => regionExpr()
     case `box`    => boxExpr()
     case `unbox`  => unboxExpr()
+    case `fun`    => funExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
     case _ if isLiteral      => literal()
