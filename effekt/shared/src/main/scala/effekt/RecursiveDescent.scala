@@ -16,17 +16,16 @@ import scala.util.boundary.break
 
 case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
 
-class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename: String = "") {
+class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename: String) {
 
   import scala.collection.mutable.ListBuffer
 
   def parse(input: TokenInput[Token])(using C: Context): Option[ModuleDecl] =
 
-    val p = new RecursiveDescentParsers(positions, input.tokens)
     try {
       //println(input.tokens)
       //val before = System.currentTimeMillis()
-      val res = Some(p.program())
+      val res = Some(program())
       //val after = System.currentTimeMillis()
       //println(s"${input.source.name}: ${after - before}ms")
 
