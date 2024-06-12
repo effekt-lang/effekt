@@ -269,7 +269,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   def toplevels(): List[Def] = manyWhile(toplevel(), isToplevel)
 
   def isDefinition: Boolean = peek.kind match {
-    case `val` | `fun` | `def` | `type` | `effect` | `namespace` => true
+    case `val` | `def` | `type` | `effect` | `namespace` => true
     case `extern` | `effect` | `interface` | `type` | `record` =>
       val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")

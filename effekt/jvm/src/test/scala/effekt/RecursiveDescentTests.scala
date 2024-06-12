@@ -225,6 +225,8 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseStmts(
       """return x;
         |""".stripMargin)
+
+    parseStmts("fun() { x = x + 1; x }")
   }
 
   test("Definition statements") {
