@@ -11,14 +11,14 @@ import munit.Location
 
 class RecursiveDescentTests extends munit.FunSuite {
 
-  def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescentParsers = {
+  def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescent = {
     val lexer = effekt.lexer.Lexer(input)
     val (tokens, error) = lexer.run()
     if (error.nonEmpty) fail(s"Lexer errors: ${error}")
-    new RecursiveDescentParsers(positions, tokens, "test")
+    new RecursiveDescent(positions, tokens, "test")
   }
 
-  def parse[R](input: String, f: RecursiveDescentParsers => R, positions: Positions = new Positions())(using munit.Location): R =
+  def parse[R](input: String, f: RecursiveDescent => R, positions: Positions = new Positions())(using munit.Location): R =
     try {
       val p = parser(input, positions)
       val result = f(p)
@@ -80,7 +80,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
-      new RecursiveDescentParsers(new Positions, tokens, "test").peek(offset)
+      new RecursiveDescent(new Positions, tokens, "test").peek(offset)
 
     val tokens = List[Token](`(`, Space, Newline, `)`, Space, `=>`, EOF)
     assertEquals(peek(tokens, 0).kind, `(`)

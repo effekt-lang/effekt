@@ -16,7 +16,7 @@ import scala.util.boundary.break
 
 case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
 
-class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename: String) {
+class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: String) {
 
   import scala.collection.mutable.ListBuffer
 
