@@ -73,6 +73,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
     go(position, offset)
 
+  // the previously consumed token
+  var previous = tokens(position)
+
   def peek(kind: TokenKind): Boolean =
     peek.kind == kind
   def peek(offset: Int, kind: TokenKind): Boolean =
@@ -87,7 +90,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Skips the current token and then all subsequent whitespace
    */
-  def skip(): Unit = { position += 1; spaces() }
+  def skip(): Unit =
+    previous = tokens(position)
+    position += 1;
+    spaces()
 
   def isSpace(kind: TokenKind): Boolean =
     kind match {
@@ -1167,10 +1173,20 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // Positions
 
-  inline def nonterminal[T](inline p: => T): T = {
-    val start = peek.start
+  inline def nonterminal[T](p: => T): T = {
+    val startToken = peek
+    val start = startToken.start
     val res = p
-    val end = peek.end
+    val endToken = previous
+    val end = endToken.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
+
+    //    val resString = res.toString
+    //    if resString.startsWith("MatchClause") && resString.contains("world") then {
+    //      println(res)
+    //      println(s"start: ${startToken.kind} (${source.offsetToPosition(start)})")
+    //      println(s"end: ${endToken} (${source.offsetToPosition(end)})")
+    //      println(s"peek: ${peek}")
+    //    }
 
     positions.setStart(res, source.offsetToPosition(start))
     positions.setFinish(res, source.offsetToPosition(end))

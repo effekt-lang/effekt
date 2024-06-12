@@ -21,22 +21,13 @@ class JavaScriptTests extends EffektTests {
   )
 
   override def negatives: List[File] = List(
-    // Currently, parser does not attach positions
-    // examplesDir / "neg"
+    examplesDir / "neg"
   )
 
   override def ignored: List[File] = List(
     // we deprecated locally defined type and effect declarations, for now.
     examplesDir / "neg" / "existential_effect_leaks.effekt",
     examplesDir / "neg" / "scoped.effekt",
-
-    // Error messages differ due to missing positions
-    examplesDir / "pos" / "patternmatching" / "matching-defaults.effekt",
-    examplesDir / "pos" / "unused_effects.effekt",
-    examplesDir / "pos" / "twice-explicit.effekt",
-    examplesDir / "pos" / "state.effekt",
-    examplesDir / "pos" / "bidirectional" / "selfrecursion.effekt",
-    examplesDir / "pos" / "capture" / "regions.effekt",
   )
 }
 

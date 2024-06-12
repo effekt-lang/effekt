@@ -10,12 +10,12 @@ Possible overload: effekt::infixAdd of type (Int, Int) => Int
 Possible overload: effekt::infixAdd of type (Double, Double) => Double
   Cannot typecheck call.
   There are multiple overloads, which all fail to check:
-  
+
   Possible overload: ambiguous_overload::foo of type Int => Int
     Expected Double but got Int.
-  
+
   Possible overload: ambiguous_overload::foo of type [A](A) => A
     Expected Double but got Int.
 
 def main() = foo(1) + 2 // nested overload!
-             ^^^^^^^
+             ^^^^^^

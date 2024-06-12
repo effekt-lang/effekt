@@ -19,17 +19,6 @@ abstract class ChezSchemeTests extends EffektTests {
   // Test files which are to be ignored (since features are missing or known bugs exist)
   override def ignored: List[File] = List(
 
-
-    // Error messages differ due to missing positions
-    examplesDir / "pos" / "patternmatching" / "matching-defaults.effekt",
-    examplesDir / "pos" / "unused_effects.effekt",
-    examplesDir / "pos" / "twice-explicit.effekt",
-    examplesDir / "pos" / "state.effekt",
-    examplesDir / "pos" / "bidirectional" / "selfrecursion.effekt",
-    examplesDir / "pos" / "capture" / "regions.effekt",
-
-
-
     examplesDir / "llvm",
 
     examplesDir / "ml",
