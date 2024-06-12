@@ -426,6 +426,13 @@ class RecursiveDescentTests extends munit.FunSuite {
         |  Bar()
         |}
         |""".stripMargin)
+
+    parseDefinition(
+      """type DATATYPE[X] {
+        |  Foo()
+        |  Bar()
+        |}
+        |""".stripMargin)
   }
 
   test("Namespaces") {

@@ -103,7 +103,13 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
   extension [A](self: A) {
     @targetName("seq")
     inline def ~[B](other: B): (A ~ B) = new ~(self, other)
+
+    @targetName("seqLeftToken")
     inline def <~(t: TokenKind): A = { consume(t); self }
+
+    @targetName("seqLeftUnit")
+    inline def <~(t: Unit): A = { self }
+
     inline def |(other: A): A = { backtrack(self).getOrElse(other) }
   }
 
@@ -312,11 +318,9 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
   def typeOrAliasDef(): Def =
     val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
-    next().kind match {
-      case `=` => TypeDef(id, tps, valueType())
-      case `{` if peek(`}`) => DataDef(id, tps, Nil)
-      case `{` => DataDef(id, tps, some(constructor, `;`) <~ `}`)
-      case _ => ??? // TODO error message
+    peek.kind match {
+      case `=` => `=` ~> TypeDef(id, tps, valueType())
+      case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`))) }
     }
 
   def recordDef(): Def =
