@@ -657,7 +657,10 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     e
   }
 
-  def isArguments: Boolean = peek(`(`) || peek(`[`) || peek(`{`)
+  // argument lists cannot follow a linebreak:
+  //   foo      ==    foo;
+  //   ()             ()
+  def isArguments: Boolean = lookbehind(1).kind != Newline && (peek(`(`) || peek(`[`) || peek(`{`))
   def arguments(): (List[ValueType], List[Term], List[Term]) =
     if (!isArguments) fail("Expected at least one argument section (types, values, or blocks)")
     (maybeTypeArgs(), maybeValueArgs(), maybeBlockArgs())

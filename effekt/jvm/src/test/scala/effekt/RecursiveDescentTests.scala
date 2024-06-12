@@ -254,6 +254,18 @@ class RecursiveDescentTests extends munit.FunSuite {
         """ val next = f() // Comment
           | g()
           |""".stripMargin)
+
+      assertEquals(
+        parseStmts(
+          """f()
+            |
+            |()
+            |""".stripMargin),
+        parseStmts(
+          """f();
+            |
+            |()
+            |""".stripMargin))
   }
 
   test("Simple patterns") {
