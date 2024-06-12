@@ -43,7 +43,7 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("numbers") {
-    val num = "12.34 100. 200 123.345 1 -12.34 -100. -123.345 -1"
+    val num = "12.34 100 200 123.345 1 -12.34 -100 -123.345 -1"
     assertTokensEq(
       num,
       Float(12.34), Float(100.0), Integer(200), Float(123.345), Integer(1),

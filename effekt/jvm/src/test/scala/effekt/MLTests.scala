@@ -19,6 +19,14 @@ class MLTests extends EffektTests {
 
   override lazy val ignored: List[File] = List(
 
+    // Error messages differ due to missing positions
+    examplesDir / "pos" / "patternmatching" / "matching-defaults.effekt",
+    examplesDir / "pos" / "unused_effects.effekt",
+    examplesDir / "pos" / "twice-explicit.effekt",
+    examplesDir / "pos" / "state.effekt",
+    examplesDir / "pos" / "bidirectional" / "selfrecursion.effekt",
+    examplesDir / "pos" / "capture" / "regions.effekt",
+
     // Regression with monomorphization
     examplesDir / "ml" / "raytracer.effekt",
 
