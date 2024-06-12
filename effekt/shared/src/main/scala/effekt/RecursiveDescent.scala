@@ -574,8 +574,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
       case p :: Nil => fail("Pattern matching on tuples requires more than one element")
       case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
     }
-    case _ if isVariable && peek(1, `(`) =>
-      TagPattern(idRef(), many(matchPattern, `(`, `,`, `)`))
+    case _ if isVariable  =>
+      idRef() match {
+        case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`))
+        case IdRef(Nil, name) => AnyPattern(IdDef(name)) // TODO positions
+        case IdRef(_, name) => fail("Cannot use qualified names to bind a pattern variable")
+      }
     case _ if isVariable =>
       AnyPattern(idDef())
     case _ if isLiteral => LiteralPattern(literal())

@@ -373,6 +373,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseMatchClause("case Foo(Bar(42, true), _) and x == 43 => 42")
     parseMatchClause("case _ => 42")
     parseMatchClause("case a and a is Foo(bar) => 42")
+    parseMatchClause("case outer::inner::Constructor(x) => x + 1")
   }
 
   test("Op clauses") {
