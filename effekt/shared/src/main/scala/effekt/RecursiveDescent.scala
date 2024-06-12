@@ -570,10 +570,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
 
   def matchPattern(): MatchPattern = peek.kind match {
     case `__` => skip(); IgnorePattern()
-    case `(` => some(matchPattern, `(`, `,`, `)`) match {
-      case p :: Nil => fail("Pattern matching on tuples requires more than one element")
-      case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
-    }
     case _ if isVariable  =>
       idRef() match {
         case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`))
@@ -583,6 +579,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
     case _ if isVariable =>
       AnyPattern(idDef())
     case _ if isLiteral => LiteralPattern(literal())
+    case `(` => some(matchPattern, `(`, `,`, `)`) match {
+      case p :: Nil => fail("Pattern matching on tuples requires more than one element")
+      case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
+    }
     case _ => fail("Expected pattern")
   }
 

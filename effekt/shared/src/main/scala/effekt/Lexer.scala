@@ -447,6 +447,7 @@ class Lexer(source: String) {
       peek() match {
         // comment is terminated when encountering a new line
         case Some('\n') => newline = true
+        case None => newline = true
         case _ => consume()
       }
     }

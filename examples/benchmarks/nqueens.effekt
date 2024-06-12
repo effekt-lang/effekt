@@ -33,7 +33,7 @@ def findOneSolution(size: Int, queen: Int) : Solution / Search = {
   if (queen == 0) {
     Nil()
   } else {
-    val sol = findOneSolution(size, queen-1)
+    val sol = findOneSolution(size, queen - 1)
     val next = do pick(size)
     if (safe(next, 1, sol)) {
       Cons(next, sol)

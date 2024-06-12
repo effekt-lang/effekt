@@ -374,6 +374,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseMatchClause("case _ => 42")
     parseMatchClause("case a and a is Foo(bar) => 42")
     parseMatchClause("case outer::inner::Constructor(x) => x + 1")
+    parseMatchClause("case () => 2")
   }
 
   test("Op clauses") {
@@ -597,5 +598,12 @@ class RecursiveDescentTests extends munit.FunSuite {
       """// test comment
         |def foo() = 42
         |""".stripMargin)
+
+    println(parseProgram(
+      """module trailing_comment
+        |
+        |def main() = ()
+        |
+        |// foo""".stripMargin))
   }
 }
