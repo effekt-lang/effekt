@@ -8,9 +8,9 @@ extern type Bytes
   // = js "Uint8Array"
 
 /**
- * Allocates new bytes with the given `capacity`, keeping its values _undefined_.
+ * Allocates new bytes with the given `capacity`, setting its values to `0`.
  */
-extern io def allocate(capacity: Int): Bytes =
+extern io def bytes(capacity: Int): Bytes =
   js "(new Uint8Array(${capacity}))"
   llvm """
     %buf = call %Pos @c_buffer_construct_uninitialized(i64 %capacity)
@@ -19,7 +19,7 @@ extern io def allocate(capacity: Int): Bytes =
 
 def copy(b: Bytes): Bytes = {
   val len = b.size
-  val clone = allocate(len)
+  val clone = bytes(len)
   copy(b, clone, 0, 0, len)
   clone
 }
