@@ -102,7 +102,6 @@ enum TokenKind {
   case `case`
   case `do`
   case `fun`
-  case `resume`
   case `match`
   case `def`
   case `module`
@@ -145,7 +144,6 @@ object Lexer {
     "case" -> `case`,
     "do" -> `do`,
     "fun" -> `fun`,
-    "resume" -> `resume`,
     "match" -> `match`,
     "def" -> `def`,
     "module" -> `module`,
