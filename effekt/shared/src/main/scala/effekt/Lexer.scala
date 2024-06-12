@@ -110,8 +110,6 @@ enum TokenKind {
   case `extern`
   case `include`
   case `record`
-  case `at`
-  case `in`
   case `box`
   case `unbox`
   case `return`
@@ -123,6 +121,14 @@ enum TokenKind {
   case `namespace`
   case `pure`
 }
+object TokenKind {
+  // "Soft" keywords
+  val `resume` = TokenKind.Ident("resume")
+  val `in` = TokenKind.Ident("in")
+  val `at` = TokenKind.Ident("at")
+  val `__` = Ident("_")
+}
+
 
 object Lexer {
   import TokenKind.*
@@ -152,8 +158,6 @@ object Lexer {
     "extern" -> `extern`,
     "include" -> `include`,
     "record" -> `record`,
-    "at" -> `at`,
-    "in" -> `in`,
     "box" -> `box`,
     "unbox" -> `unbox`,
     "return" -> `return`,

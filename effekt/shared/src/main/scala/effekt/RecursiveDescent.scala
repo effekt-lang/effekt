@@ -535,7 +535,7 @@ class RecursiveDescentParsers(positions: Positions, tokens: Seq[Token], filename
     }
 
   def matchPattern(): MatchPattern = peek.kind match {
-    case Ident("_") => skip(); IgnorePattern()
+    case `__` => skip(); IgnorePattern()
     case `(` => some(matchPattern, `(`, `,`, `)`) match {
       case p :: Nil => fail("Pattern matching on tuples requires more than one element")
       case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
