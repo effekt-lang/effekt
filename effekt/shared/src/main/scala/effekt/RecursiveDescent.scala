@@ -16,7 +16,7 @@ import scala.util.boundary.break
 
 case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
 
-class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: String) {
+class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
 
   import scala.collection.mutable.ListBuffer
 
@@ -233,11 +233,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
    * Main entry point
    */
    def program(): ModuleDecl =
-     // skip spaces at the start
-     spaces()
-     val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevels())
-     if peek(`EOF`) then res else fail("Unexpected input")
-     // failure("Required at least one top-level function or effect definition")
+     nonterminal:
+       // skip spaces at the start
+       spaces()
+       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevels())
+       if peek(`EOF`) then res else fail("Unexpected input")
+       // failure("Required at least one top-level function or effect definition")
 
   def moduleDecl(): String =
     when(`module`) { moduleName() } { defaultModulePath }
@@ -245,12 +246,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   // we are purposefully not using File here since the parser needs to work both
   // on the JVM and in JavaScript
   def defaultModulePath: String =
-    val baseWithExt = filename.split("[\\\\/]").last
+    val baseWithExt = source.name.split("[\\\\/]").last
     baseWithExt.split('.').head
 
 
   def includeDecl(): Include =
-    Include(`import` ~> moduleName())
+    nonterminal:
+      Include(`import` ~> moduleName())
 
   def moduleName(): String =
     some(ident, `/`).mkString("/")
@@ -261,20 +263,24 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
     case _ => false
   }
 
-  def toplevel(): Def = peek.kind match {
-    case `val`       => valDef()
-    case `def`       => defDef()
-    case `interface` => interfaceDef()
-    case `type`      => typeOrAliasDef()
-    case `record`    => recordDef()
-    case `extern`    => externDef()
-    case `effect`    => effectOrOperationDef()
-    case `namespace` => namespaceDef()
-    case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
-    case _ => fail("Expected a top-level definition")
-  }
+  def toplevel(): Def =
+    nonterminal:
+      peek.kind match {
+        case `val`       => valDef()
+        case `def`       => defDef()
+        case `interface` => interfaceDef()
+        case `type`      => typeOrAliasDef()
+        case `record`    => recordDef()
+        case `extern`    => externDef()
+        case `effect`    => effectOrOperationDef()
+        case `namespace` => namespaceDef()
+        case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
+        case _ => fail("Expected a top-level definition")
+      }
 
-  def toplevels(): List[Def] = manyWhile(toplevel(), isToplevel)
+  def toplevels(): List[Def] =
+    nonterminal:
+      manyWhile(toplevel(), isToplevel)
 
   def isDefinition: Boolean = peek.kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
@@ -284,83 +290,94 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
     case _ => false
   }
 
-  def definition(): Def = peek.kind match {
-    case `val`       => valDef()
-    case `def`       => defDef()
-    case `type`      => typeOrAliasDef()
-    case `effect`    => effectDef()
-    case `namespace` => namespaceDef()
-    // TODO
-    //     (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
-    //        failure(s"Only supported on the toplevel: ${kw} declaration.")
-    //      }
-    case _ => fail("Expected definition")
-  }
+  def definition(): Def =
+    nonterminal:
+      peek.kind match {
+        case `val`       => valDef()
+        case `def`       => defDef()
+        case `type`      => typeOrAliasDef()
+        case `effect`    => effectDef()
+        case `namespace` => namespaceDef()
+        // TODO
+        //     (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
+        //        failure(s"Only supported on the toplevel: ${kw} declaration.")
+        //      }
+        case _ => fail("Expected definition")
+      }
 
-  def definitions(): List[Def] = manyWhile(definition(), isDefinition)
+  def definitions(): List[Def] =
+    nonterminal:
+      manyWhile(definition(), isDefinition)
 
   def functionBody: Stmt = expect("the body of a function definition")(stmt())
 
   def valDef(): Def =
-    ValDef(`val` ~> idDef(), maybeTypeAnnotation(), `=` ~> stmt())
+    nonterminal:
+      ValDef(`val` ~> idDef(), maybeTypeAnnotation(), `=` ~> stmt())
 
   /**
    * In statement position, val-definitions can also be destructing:
    *   i.e. val (l, r) = point(); ...
    */
   def valStmt(): Stmt =
-    def simpleLhs() = backtrack {
-      `val` ~> idDef() ~ maybeTypeAnnotation() <~ `=`
-    } map {
-      case id ~ tpe => DefStmt(ValDef(id, tpe, stmt()), { semi(); stmts() })
-    }
-    def matchLhs() =
-      `val` ~> matchPattern() ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
-        case AnyPattern(id) ~ Nil => DefStmt(ValDef(id, None, stmt()), { semi(); stmts() })
-        case p ~ guards =>
-          val sc = expr()
-          val default = when(`else`) { Some(stmt()) } { None }
-          val body = semi() ~> stmts()
-          Return(Match(sc, List(MatchClause(p, guards, body)), default))
+    nonterminal:
+      def simpleLhs() = backtrack {
+        `val` ~> idDef() ~ maybeTypeAnnotation() <~ `=`
+      } map {
+        case id ~ tpe => DefStmt(ValDef(id, tpe, stmt()), { semi(); stmts() })
       }
+      def matchLhs() =
+        `val` ~> matchPattern() ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
+          case AnyPattern(id) ~ Nil => DefStmt(ValDef(id, None, stmt()), { semi(); stmts() })
+          case p ~ guards =>
+            val sc = expr()
+            val default = when(`else`) { Some(stmt()) } { None }
+            val body = semi() ~> stmts()
+            Return(Match(sc, List(MatchClause(p, guards, body)), default))
+        }
 
-    simpleLhs() getOrElse matchLhs()
+      simpleLhs() getOrElse matchLhs()
 
 
   def varDef(): Def =
+    nonterminal:
       (`var` ~> idDef()) ~ maybeTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
         case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
         case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
       }
 
   def defDef(): Def =
-    val id = consume(`def`) ~> idDef()
+    nonterminal:
+      val id = consume(`def`) ~> idDef()
 
-    def isBlockDef: Boolean = peek(`:`) || peek(`=`)
+      def isBlockDef: Boolean = peek(`:`) || peek(`=`)
 
-    if isBlockDef then
-      // (: <VALUETYPE>)? `=` <EXPR>
-      DefDef(id, when(`:`) { Some(blockType()) } { None }, `=` ~> expr())
-    else
-      // [...](<PARAM>...) {...} `=` <STMT>>
-      val (tps, vps, bps) = params()
-      FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmt())
+      if isBlockDef then
+        // (: <VALUETYPE>)? `=` <EXPR>
+        DefDef(id, when(`:`) { Some(blockType()) } { None }, `=` ~> expr())
+      else
+        // [...](<PARAM>...) {...} `=` <STMT>>
+        val (tps, vps, bps) = params()
+        FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmt())
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
   def typeOrAliasDef(): Def =
-    val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
+    nonterminal:
+      val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
-    peek.kind match {
-      case `=` => `=` ~> TypeDef(id, tps, valueType())
-      case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`))) }
-    }
+      peek.kind match {
+        case `=` => `=` ~> TypeDef(id, tps, valueType())
+        case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`))) }
+      }
 
   def recordDef(): Def =
-    RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams())
+    nonterminal:
+      RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams())
 
   def constructor(): Constructor =
-    Constructor(idDef(), maybeTypeParams(), valueParams())
+    nonterminal:
+      Constructor(idDef(), maybeTypeParams(), valueParams())
 
   // On the top-level both
   //    effect Foo = {}
@@ -369,91 +386,112 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   // are allowed. Here we simply backtrack, since effect definitions shouldn't be
   // very long and cannot be nested.
   def effectOrOperationDef(): Def =
-    backtrack { effectDef() } getOrElse { operationDef() }
+    nonterminal:
+      backtrack { effectDef() } getOrElse { operationDef() }
 
   def effectDef(): Def =
-    // effect <NAME> = <EFFECTS>
-    EffectDef(`effect` ~> idDef(), maybeTypeParams(), `=` ~> effects())
+    nonterminal:
+      // effect <NAME> = <EFFECTS>
+      EffectDef(`effect` ~> idDef(), maybeTypeParams(), `=` ~> effects())
 
   // effect <NAME>[...](...): ...
   def operationDef(): Def =
-    `effect` ~> operation() match {
-      case op =>
-        // TODO is the `true` flag used at all anymore???
-        InterfaceDef(IdDef(op.id.name), Nil, List(op), true)
-    }
+    nonterminal:
+      `effect` ~> operation() match {
+        case op =>
+          // TODO is the `true` flag used at all anymore???
+          InterfaceDef(IdDef(op.id.name), Nil, List(op), true)
+      }
 
   def operation(): Operation =
-    idDef() ~ params() ~ (`:` ~> effectful()) match {
-      case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret)
-    }
+    nonterminal:
+      idDef() ~ params() ~ (`:` ~> effectful()) match {
+        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret)
+      }
 
   def interfaceDef(): InterfaceDef =
-    InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`, true)
+    nonterminal:
+      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`, true)
 
   def namespaceDef(): Def =
-    consume(`namespace`)
-    val id = idDef()
-    // namespace foo { <DEFINITION>* }
-    if peek(`{`) then braces { NamespaceDef(id, definitions()) }
-    // namespace foo
-    // <DEFINITION>*
-    else { semi(); NamespaceDef(id, definitions()) }
+    nonterminal:
+      consume(`namespace`)
+      val id = idDef()
+      // namespace foo { <DEFINITION>* }
+      if peek(`{`) then braces { NamespaceDef(id, definitions()) }
+      // namespace foo
+      // <DEFINITION>*
+      else { semi(); NamespaceDef(id, definitions()) }
 
 
-  def externDef(): Def = { peek(`extern`); peek(1).kind } match {
-    case `type`      => externType()
-    case `interface` => externInterface()
-    case `resource`  => externResource()
-    case `include`   => externInclude()
-    case s: Str      => externString()
-    case _ => externFun()
-  }
+  def externDef(): Def =
+    nonterminal:
+      { peek(`extern`); peek(1).kind } match {
+        case `type`      => externType()
+        case `interface` => externInterface()
+        case `resource`  => externResource()
+        case `include`   => externInclude()
+        case s: Str      => externString()
+        case _ => externFun()
+      }
 
   def externType(): Def =
-    ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams())
+    nonterminal:
+      ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams())
   def externInterface(): Def =
-    ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams())
+    nonterminal:
+      ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams())
   def externResource(): Def =
-    ExternResource(`extern` ~> `resource` ~> idDef(), `:` ~> blockType())
+    nonterminal:
+      ExternResource(`extern` ~> `resource` ~> idDef(), `:` ~> blockType())
   def externInclude(): Def =
-    ExternInclude(`extern` ~> `include` ~> path())
+    nonterminal:
+      ExternInclude(`extern` ~> `include` ~> path())
 
   def externString(): Def =
-    consume(`extern`)
-    next().kind match {
-      case Str(contents, _) => ExternInclude("", Some(contents))
-      case _ => fail("Expected string literal")
-    }
+    nonterminal:
+      consume(`extern`)
+      next().kind match {
+        case Str(contents, _) => ExternInclude("", Some(contents))
+        case _ => fail("Expected string literal")
+      }
 
   def externFun(): Def =
-    (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (`:` ~> effectful()) ~ (`=` ~> externBody()) match {
-      case capt ~ id ~ (tps, vps, bps) ~ ret ~ body => ExternDef(capt, id, tps, vps, bps, ret, body)
-    }
+    nonterminal:
+      (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (`:` ~> effectful()) ~ (`=` ~> externBody()) match {
+        case capt ~ id ~ (tps, vps, bps) ~ ret ~ body => ExternDef(capt, id, tps, vps, bps, ret, body)
+      }
 
   def externBody(): Template[Term] =
-    val first = string()
-    val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}`, string()), `${`).unzip
-    Template(first :: strs, exprs)
+    nonterminal:
+      val first = string()
+      val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}`, string()), `${`).unzip
+      Template(first :: strs, exprs)
 
   def maybeExternCapture(): CaptureSet =
-    if peek(`{`) || peek(`pure`) || isVariable then externCapture()
-    else CaptureSet(List(IdRef(List("effekt"), "io")))
+    nonterminal:
+      if peek(`{`) || peek(`pure`) || isVariable then externCapture()
+      else CaptureSet(List(IdRef(List("effekt"), "io")))
 
   def externCapture(): CaptureSet =
-    if peek(`{`) then captureSet()
-    else if peek(`pure`) then `pure` ~> CaptureSet(Nil)
-    else CaptureSet(List(idRef()))
+    nonterminal:
+      if peek(`{`) then captureSet()
+      else if peek(`pure`) then `pure` ~> CaptureSet(Nil)
+      else CaptureSet(List(idRef()))
 
-  def path(): String = next().kind match {
-    case Str(s, false) => s
-    case _ => fail("Expected path as string literal.")
-  }
+  def path(): String =
+    nonterminal:
+      next().kind match {
+        case Str(s, false) => s
+        case _ => fail("Expected path as string literal.")
+      }
 
-  def string(): String = next().kind match {
-    case Str(s, _) => s
-    case _ => fail("Expected string literal.")
-  }
+  def string(): String =
+    nonterminal:
+      next().kind match {
+        case Str(s, _) => s
+        case _ => fail("Expected string literal.")
+      }
 
   // TODO uncomment after rebase:
   //  def featureFlag(): FeatureFlag =
@@ -463,10 +501,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   //    }
 
   def maybeTypeAnnotation(): Option[ValueType] =
-    if peek(`:`) then Some(typeAnnotation()) else None
+    nonterminal:
+      if peek(`:`) then Some(typeAnnotation()) else None
 
   def maybeReturnAnnotation(): Option[Effectful] =
-    when(`:`) { Some(effectful()) } { None }
+    nonterminal:
+      when(`:`) { Some(effectful()) } { None }
 
   // TODO fail "Expected a type annotation"
   def typeAnnotation(): ValueType = `:` ~> valueType()
@@ -478,19 +518,22 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   }
 
   def ifExpr(): Term =
-    If(`if` ~> parens { matchGuards() },
-      stmt(),
-      when(`else`) { stmt() } { Return(UnitLit()) })
+    nonterminal:
+      If(`if` ~> parens { matchGuards() },
+        stmt(),
+        when(`else`) { stmt() } { Return(UnitLit()) })
 
   def whileExpr(): Term =
-    While(`while` ~> parens { matchGuards() },
-      stmt(),
-      when(`else`) { Some(stmt()) } { None })
+    nonterminal:
+      While(`while` ~> parens { matchGuards() },
+        stmt(),
+        when(`else`) { Some(stmt()) } { None })
 
   def doExpr(): Term =
-    (`do` ~> idRef()) ~ arguments() match {
-      case id ~ (targs, vargs, bargs) => Do(None, id, targs, vargs, bargs)
-    }
+    nonterminal:
+      (`do` ~> idRef()) ~ arguments() match {
+        case id ~ (targs, vargs, bargs) => Do(None, id, targs, vargs, bargs)
+      }
 
   /*
   <tryExpr> ::= try { <stmts> } <handler>+
@@ -498,115 +541,135 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   <implementation ::= <interfaceType> { <opClause>+ }
   */
   def tryExpr(): Term =
-    `try` ~> stmt() ~ someWhile(handler(), `with`) match {
-      case s ~ hs => TryHandle(s, hs)
-    }
+    nonterminal:
+      `try` ~> stmt() ~ someWhile(handler(), `with`) match {
+        case s ~ hs => TryHandle(s, hs)
+      }
 
-  def regionExpr(): Term = Region(`region` ~> idDef(), stmt())
+  def regionExpr(): Term =
+    nonterminal:
+      Region(`region` ~> idDef(), stmt())
 
-  def boxExpr(): Term = {
-    val captures = `box` ~> backtrack(captureSet())
-    val block = if (peek(`{`)) functionArg()
-    else Var(idRef())
-    Box(captures, block)
-  }
+  def boxExpr(): Term =
+    nonterminal:
+      val captures = `box` ~> backtrack(captureSet())
+      val block = if (peek(`{`)) functionArg()
+      else Var(idRef())
+      Box(captures, block)
+
 
   // TODO deprecate
   def funExpr(): Term =
-    `fun` ~> Box(None, BlockLiteral(Nil, valueParams(), Nil, braces { stmts() }))
+    nonterminal:
+      `fun` ~> Box(None, BlockLiteral(Nil, valueParams(), Nil, braces { stmts() }))
     // TODO positions
 
-  def unboxExpr(): Term = Unbox(`unbox` ~> expr())
+  def unboxExpr(): Term =
+    nonterminal:
+      Unbox(`unbox` ~> expr())
 
-  def newExpr(): Term = New(`new` ~> implementation())
+  def newExpr(): Term =
+    nonterminal:
+      New(`new` ~> implementation())
 
   def handler(): Handler =
-    `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
-      case capabilityName ~ impl => {
-        val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
-        Handler(capability, impl)
+    nonterminal:
+      `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
+        case capabilityName ~ impl =>
+          val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
+          Handler(capability, impl)
       }
-    }
 
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.
-  def implementation(): Implementation = {
+  def implementation(): Implementation =
+    nonterminal:
+      // Interface[...] {}
+      def emptyImplementation() = backtrack { Implementation(interfaceType(), `{` ~> Nil <~ `}`) }
 
-    // Interface[...] {}
-    def emptyImplementation() = backtrack { Implementation(interfaceType(), `{` ~> Nil <~ `}`) }
+      // Interface[...] { def <NAME> = ... }
+      def interfaceImplementation() = backtrack {
+        val tpe = interfaceType()
+        consume(`{`)
+        if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
+        tpe
+      } map { tpe =>
+        Implementation(tpe, manyWhile(opClause(), `def`)) <~ `}`
+      }
 
-    // Interface[...] { def <NAME> = ... }
-    def interfaceImplementation() = backtrack {
-      val tpe = interfaceType()
-      consume(`{`)
-      if !peek(`def`) then fail("Expected at least one operation definition to implement this interface.")
-      tpe
-    } map { tpe =>
-      Implementation(tpe, manyWhile(opClause(), `def`)) <~ `}`
-    }
+      // Interface[...] { () => ... }
+      // Interface[...] { case ... => ... }
+      def operationImplementation() = idRef() ~ maybeTypeParams() ~ functionArg() match {
+        case (id ~ tps ~ BlockLiteral(_, vps, bps, body)) =>
+          val synthesizedId = IdRef(Nil, id.name)
+          val interface = BlockTypeRef(id, Nil): BlockTypeRef
+          Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, implicitResume)))
+      }
 
-    // Interface[...] { () => ... }
-    // Interface[...] { case ... => ... }
-    def operationImplementation() = idRef() ~ maybeTypeParams() ~ functionArg() match {
-      case (id ~ tps ~ BlockLiteral(_, vps, bps, body)) =>
-        val synthesizedId = IdRef(Nil, id.name)
-        val interface = BlockTypeRef(id, Nil): BlockTypeRef
-        Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, implicitResume)))
-    }
-
-    emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()
-  }
+      emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()
 
   def opClause(): OpClause =
-    (`def` ~> idRef()) ~ paramsOpt() ~ maybeReturnAnnotation() ~ (`=` ~> stmt()) match {
-      case id ~ (tps, vps, bps) ~ ret ~ body =>
-        // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
-        OpClause(id, tps, vps, bps, ret, body, implicitResume)
-    }
+    nonterminal:
+      (`def` ~> idRef()) ~ paramsOpt() ~ maybeReturnAnnotation() ~ (`=` ~> stmt()) match {
+        case id ~ (tps, vps, bps) ~ ret ~ body =>
+          // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
+          OpClause(id, tps, vps, bps, ret, body, implicitResume)
+      }
 
-  def implicitResume: IdDef = IdDef("resume")
+  def implicitResume: IdDef =
+    nonterminal:
+      IdDef("resume")
 
   def matchClause(): MatchClause =
-    MatchClause(`case` ~> matchPattern(), manyWhile(`and` ~> matchGuard(), `and`), `=>` ~> stmts())
+    nonterminal:
+      MatchClause(`case` ~> matchPattern(), manyWhile(`and` ~> matchGuard(), `and`), `=>` ~> stmts())
 
-  def matchGuards() = some(matchGuard, `and`)
+  def matchGuards() =
+    nonterminal:
+      some(matchGuard, `and`)
 
   def matchGuard(): MatchGuard =
-    expr() ~ when(`is`) { Some(matchPattern()) } { None } match {
-      case e ~ Some(p) => MatchGuard.PatternGuard(e, p)
-      case e ~ None    => MatchGuard.BooleanGuard(e)
-    }
-
-  def matchPattern(): MatchPattern = peek.kind match {
-    case `__` => skip(); IgnorePattern()
-    case _ if isVariable  =>
-      idRef() match {
-        case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`))
-        case IdRef(Nil, name) => AnyPattern(IdDef(name)) // TODO positions
-        case IdRef(_, name) => fail("Cannot use qualified names to bind a pattern variable")
+    nonterminal:
+      expr() ~ when(`is`) { Some(matchPattern()) } { None } match {
+        case e ~ Some(p) => MatchGuard.PatternGuard(e, p)
+        case e ~ None    => MatchGuard.BooleanGuard(e)
       }
-    case _ if isVariable =>
-      AnyPattern(idDef())
-    case _ if isLiteral => LiteralPattern(literal())
-    case `(` => some(matchPattern, `(`, `,`, `)`) match {
-      case p :: Nil => fail("Pattern matching on tuples requires more than one element")
-      case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
-    }
-    case _ => fail("Expected pattern")
-  }
+
+  def matchPattern(): MatchPattern =
+    nonterminal:
+      peek.kind match {
+        case `__` => skip(); IgnorePattern()
+        case _ if isVariable  =>
+          idRef() match {
+            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`))
+            case IdRef(Nil, name) => AnyPattern(IdDef(name)) // TODO positions
+            case IdRef(_, name) => fail("Cannot use qualified names to bind a pattern variable")
+          }
+        case _ if isVariable =>
+          AnyPattern(idDef())
+        case _ if isLiteral => LiteralPattern(literal())
+        case `(` => some(matchPattern, `(`, `,`, `)`) match {
+          case p :: Nil => fail("Pattern matching on tuples requires more than one element")
+          case ps => TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps)
+        }
+        case _ => fail("Expected pattern")
+      }
 
   def matchExpr(): Term =
-    var sc = assignExpr()
-    while (peek(`match`)) {
-       val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
-       val default = when(`else`) { Some(stmt()) } { None }
-       sc = Match(sc, clauses, default)
-    }
-    sc
+    nonterminal:
+      var sc = assignExpr()
+      while (peek(`match`)) {
+         val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
+         val default = when(`else`) { Some(stmt()) } { None }
+         sc = Match(sc, clauses, default)
+      }
+      sc
 
-  def assignExpr(): Term = orExpr() match {
-    case x @ Term.Var(id) => when(`=`) { Assign(id, expr()) } { x }
-    case other => other
-  }
+  def assignExpr(): Term =
+    nonterminal:
+      orExpr() match {
+        case x @ Term.Var(id) => when(`=`) { Assign(id, expr()) } { x }
+        case other => other
+      }
 
   def orExpr(): Term = infix(andExpr, `||`)
   def andExpr(): Term = infix(eqExpr, `&&`)
@@ -616,24 +679,26 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   def mulExpr(): Term = infix(callExpr, `*`, `/`)
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
-    var left = nonTerminal()
-    while (ops.contains(peek.kind)) {
-       val op = next().kind
-       val right = nonTerminal()
-       left = binaryOp(left, op, right)
-    }
-    left
+    nonterminal:
+      var left = nonTerminal()
+      while (ops.contains(peek.kind)) {
+         val op = next().kind
+         val right = nonTerminal()
+         left = binaryOp(left, op, right)
+      }
+      left
 
   // === AST Helpers ===
 
   private def binaryOp(lhs: Term, op: TokenKind, rhs: Term): Term =
-    // TODO after rebasing!
-    // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
-    //    if op == `||` || op == `&&` then
-    //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
-    //    else
-    //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
-    Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+    nonterminal:
+      // TODO after rebasing!
+      // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
+      //    if op == `||` || op == `&&` then
+      //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+      //    else
+      //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
   private def opName(op: TokenKind): String = op match {
     case `||` => "infixOr"
@@ -654,6 +719,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
     ValueTypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
+    // TODO positions!
 
   /**
    * This is a compound production for
@@ -664,7 +730,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
    * This way expressions like `foo.bar.baz()(x).bam.boo()` are
    * parsed with the correct left-associativity.
    */
-  def callExpr(): Term = {
+  def callExpr(): Term = nonterminal {
     var e = primExpr()
 
     while (peek(`.`) || isArguments)
@@ -711,39 +777,48 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   def maybeValueArgs(): List[Term] = if peek(`(`) then valueArgs() else Nil
   def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
 
-  def typeArgs(): List[ValueType] = some(valueType, `[`, `,`, `]`)
-  def valueArgs(): List[Term] = many(expr, `(`, `,`, `)`)
-  def blockArgs(): List[Term] = someWhile(blockArg(), `{`)
+  def typeArgs(): List[ValueType] =
+    nonterminal:
+      some(valueType, `[`, `,`, `]`)
+  def valueArgs(): List[Term] =
+    nonterminal:
+      many(expr, `(`, `,`, `)`)
+  def blockArgs(): List[Term] =
+    nonterminal:
+      someWhile(blockArg(), `{`)
 
   /**
    * Note: for this nonterminal, we need some backtracking.
    */
   def blockArg(): Term =
-    backtrack { `{` ~> Var(idRef()) <~ `}` } getOrElse { functionArg() }
+    nonterminal:
+      backtrack { `{` ~> Var(idRef()) <~ `}` } getOrElse { functionArg() }
 
-  def functionArg(): BlockLiteral = braces {
-    peek.kind match {
-      // { case ... => ... }
-      case `case` => someWhile(matchClause(), `case`) match { case cs =>
-        // TODO positions should be improved here and fresh names should be generated for the scrutinee
-        // also mark the temp name as synthesized to prevent it from being listed in VSCode
-        val name = "__tmpRes"
-        BlockLiteral(
-          Nil,
-          List(ValueParam(IdDef(name), None)),
-          Nil,
-          Return(Match(Var(IdRef(Nil, name)), cs, None))) : BlockLiteral
-      }
-      case _ =>
-        // { (x: Int) => ... }
-        backtrack { lambdaParams() <~ `=>` } map {
-          case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts()) : BlockLiteral
-        } getOrElse {
-          // { <STMTS> }
-          BlockLiteral(Nil, Nil, Nil, stmts()) : BlockLiteral
+  def functionArg(): BlockLiteral =
+    nonterminal:
+      braces {
+        peek.kind match {
+          // { case ... => ... }
+          case `case` => someWhile(matchClause(), `case`) match { case cs =>
+            // TODO positions should be improved here and fresh names should be generated for the scrutinee
+            // also mark the temp name as synthesized to prevent it from being listed in VSCode
+            val name = "__tmpRes"
+            BlockLiteral(
+              Nil,
+              List(ValueParam(IdDef(name), None)),
+              Nil,
+              Return(Match(Var(IdRef(Nil, name)), cs, None))) : BlockLiteral
+          }
+          case _ =>
+            // { (x: Int) => ... }
+            backtrack { lambdaParams() <~ `=>` } map {
+              case (tps, vps, bps) => BlockLiteral(tps, vps, bps, stmts()) : BlockLiteral
+            } getOrElse {
+              // { <STMTS> }
+              BlockLiteral(Nil, Nil, Nil, stmts()) : BlockLiteral
+            }
         }
-    }
-  }
+      }
 
   def primExpr(): Term = peek.kind match {
     case `if`     => ifExpr()
@@ -768,7 +843,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
     case _ => false
   }
   def listLiteral(): Term =
-    many(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+    nonterminal:
+      many(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
     Call(IdTarget(IdRef(List(), "Nil")), Nil, Nil, Nil)
@@ -796,38 +872,48 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
     case `false` => true
     case _ => isUnitLiteral
   }
-  def literal(): Literal = peek.kind match {
-    case Integer(v)         => skip(); IntLit(v)
-    case Float(v)           => skip(); DoubleLit(v)
-    case Str(s, multiline)  => skip(); StringLit(s)
-    case `true`             => skip(); BooleanLit(true)
-    case `false`            => skip(); BooleanLit(false)
-    case t if isUnitLiteral => skip(); skip(); UnitLit()
-    case t => fail("Expected a literal")
-  }
+  def literal(): Literal =
+    nonterminal:
+      peek.kind match {
+        case Integer(v)         => skip(); IntLit(v)
+        case Float(v)           => skip(); DoubleLit(v)
+        case Str(s, multiline)  => skip(); StringLit(s)
+        case `true`             => skip(); BooleanLit(true)
+        case `false`            => skip(); BooleanLit(false)
+        case t if isUnitLiteral => skip(); skip(); UnitLit()
+        case t => fail("Expected a literal")
+      }
 
   // Will also recognize ( ) as unit if we do not emit space in the lexer...
   private def isUnitLiteral: Boolean = peek(`(`) && peek(1, `)`)
 
   def isVariable: Boolean = isIdRef
-  def variable(): Term = Var(idRef())
+  def variable(): Term =
+    nonterminal:
+      Var(idRef())
 
   def isIdRef: Boolean = isIdent
 
-  def idRef(): IdRef = some(ident, PathSep) match {
-    case ids => IdRef(ids.init, ids.last)
-  }
+  def idRef(): IdRef =
+    nonterminal:
+      some(ident, PathSep) match {
+        case ids => IdRef(ids.init, ids.last)
+      }
 
-  def idDef(): IdDef = IdDef(ident())
+  def idDef(): IdDef =
+    nonterminal:
+      IdDef(ident())
 
   def isIdent: Boolean = peek.kind match {
     case Ident(id) => true
     case _ => false
   }
-  def ident(): String = next().kind match {
-    case Ident(id) => id
-    case _ => fail(s"Expected identifier")
-  }
+  def ident(): String =
+    nonterminal:
+      next().kind match {
+        case Ident(id) => id
+        case _ => fail(s"Expected identifier")
+      }
 
 
   /**
@@ -847,7 +933,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
    * can occur. This way we prevent parsing `() => S at {} at {}` and force users
    * to manually parenthesize.
    */
-  private def valueType2(boxedAllowed: Boolean): ValueType = {
+  private def valueType2(boxedAllowed: Boolean): ValueType = nonterminal {
     def boxedBlock = backtrack {
       BoxedType(blockType2(false), `at` ~> captureSet())
     }
@@ -855,13 +941,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
     else atomicValueType()
   }
 
-  def atomicValueType(): ValueType = peek.kind match {
-    case `(` => some(valueType, `(`, `,`, `)`) match {
-      case tpe :: Nil => tpe
-      case tpes => TupleTypeTree(tpes)
-    }
-    case _ => ValueTypeRef(idRef(), maybeTypeArgs())
-  }
+  def atomicValueType(): ValueType =
+    nonterminal:
+      peek.kind match {
+        case `(` => some(valueType, `(`, `,`, `)`) match {
+          case tpe :: Nil => tpe
+          case tpes => TupleTypeTree(tpes)
+        }
+        case _ => ValueTypeRef(idRef(), maybeTypeArgs())
+      }
 
 
   /**
@@ -872,36 +960,47 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
    */
   def blockType(): BlockType = blockType2(true)
   private def blockType2(boxedAllowed: Boolean): BlockType =
+    nonterminal:
 
-    def simpleFunType = backtrack {
-      ValueTypeRef(idRef(), maybeTypeArgs()) <~ `=>`
-    } map { tpe =>
-      FunctionType(Nil, List(tpe), Nil, valueType2(boxedAllowed), maybeEffects())
-    }
-
-    def funType = backtrack {
-      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ valueType2(boxedAllowed) ~ maybeEffects() match {
-        case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+      def simpleFunType = backtrack {
+        ValueTypeRef(idRef(), maybeTypeArgs()) <~ `=>`
+      } map { tpe =>
+        FunctionType(Nil, List(tpe), Nil, valueType2(boxedAllowed), maybeEffects())
       }
-    }
-    def parenthesized = backtrack { parens { blockType() } }
 
-    simpleFunType orElse funType orElse parenthesized getOrElse interfaceType()
+      def funType = backtrack {
+        maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ valueType2(boxedAllowed) ~ maybeEffects() match {
+          case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
+        }
+      }
+      def parenthesized = backtrack { parens { blockType() } }
+
+      simpleFunType orElse funType orElse parenthesized getOrElse interfaceType()
 
   def interfaceType(): BlockTypeRef =
-    BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef
+    nonterminal:
+      BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef
     // TODO error "Expected an interface type"
 
-  def maybeTypeParams(): List[Id] = if peek(`[`) then typeParams() else Nil
+  def maybeTypeParams(): List[Id] =
+    nonterminal:
+      if peek(`[`) then typeParams() else Nil
 
-  def typeParams(): List[Id] = some(idDef, `[`, `,`, `]`)
+  def typeParams(): List[Id] =
+    nonterminal:
+      some(idDef, `[`, `,`, `]`)
 
-  def maybeBlockTypeParams(): List[(Option[IdDef], BlockType)] = if peek(`{`) then blockTypeParams() else Nil
+  def maybeBlockTypeParams(): List[(Option[IdDef], BlockType)] =
+    nonterminal:
+      if peek(`{`) then blockTypeParams() else Nil
 
-  def blockTypeParams(): List[(Option[IdDef], BlockType)] = someWhile(blockTypeParam(), `{`)
+  def blockTypeParams(): List[(Option[IdDef], BlockType)] =
+    nonterminal:
+      someWhile(blockTypeParam(), `{`)
 
   def blockTypeParam(): (Option[IdDef], BlockType) =
-    braces { (backtrack { idDef() <~ `:` }, blockType()) }
+    nonterminal:
+      braces { (backtrack { idDef() <~ `:` }, blockType()) }
 
   /*
   naming convention?:
@@ -911,46 +1010,58 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
   */
 
   def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
-    if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
+    nonterminal:
+      if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
 
   def params(): (List[Id], List[ValueParam], List[BlockParam]) =
-    maybeTypeParams() ~ maybeValueParams() ~ maybeBlockParams() match {
-      case tps ~ vps ~ bps => (tps, vps, bps)
-    }
+    nonterminal:
+      maybeTypeParams() ~ maybeValueParams() ~ maybeBlockParams() match {
+        case tps ~ vps ~ bps => (tps, vps, bps)
+      }
 
   def paramsOpt(): (List[Id], List[ValueParam], List[BlockParam]) =
-    maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams() match {
-      case (tps ~ vps ~ bps) =>
-        // fail("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
-        (tps, vps, bps)
-    }
+    nonterminal:
+      maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams() match {
+        case (tps ~ vps ~ bps) =>
+          // fail("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
+          (tps, vps, bps)
+      }
 
   def maybeValueParamsOpt(): List[ValueParam] =
-    if peek(`(`) then valueParamsOpt() else Nil
+    nonterminal:
+      if peek(`(`) then valueParamsOpt() else Nil
 
   def valueParamsOpt(): List[ValueParam] =
-    many(valueParamOpt, `(`, `,`, `)`)
+    nonterminal:
+      many(valueParamOpt, `(`, `,`, `)`)
 
   def maybeValueParams(): List[ValueParam] =
-    if peek(`(`) then valueParams() else Nil
+    nonterminal:
+      if peek(`(`) then valueParams() else Nil
 
   def valueParams(): List[ValueParam] =
-    many(valueParam, `(`, `,`, `)`)
+    nonterminal:
+      many(valueParam, `(`, `,`, `)`)
 
   def valueParam(): ValueParam =
-    ValueParam(idDef(), Some(`:` ~> valueType()))
+    nonterminal:
+      ValueParam(idDef(), Some(`:` ~> valueType()))
 
   def valueParamOpt(): ValueParam =
-    ValueParam(idDef(), when(`:`) { Some(valueType()) } { None })
+    nonterminal:
+      ValueParam(idDef(), when(`:`) { Some(valueType()) } { None })
 
   def maybeBlockParams(): List[BlockParam] =
-    manyWhile(`{` ~> blockParam() <~ `}`, `{`)
+    nonterminal:
+      manyWhile(`{` ~> blockParam() <~ `}`, `{`)
 
   def blockParams(): List[BlockParam] =
-    someWhile(`{` ~> blockParam() <~ `}`, `{`)
+    nonterminal:
+      someWhile(`{` ~> blockParam() <~ `}`, `{`)
 
   def blockParam(): BlockParam =
-    BlockParam(idDef(), `:` ~> blockType())
+    nonterminal:
+      BlockParam(idDef(), `:` ~> blockType())
 
   // TODO this needs to be implemented, once the PR is rebased onto master
   //  def blockParamOpt: BlockParam =
@@ -958,20 +1069,30 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
 
 
   def maybeValueTypes(): List[ValueType] =
-    if peek(`(`) then valueTypes() else Nil
+    nonterminal:
+      if peek(`(`) then valueTypes() else Nil
 
-  def valueTypes(): List[ValueType] = many(valueType, `(`, `,`, `)`)
+  def valueTypes(): List[ValueType] =
+    nonterminal:
+      many(valueType, `(`, `,`, `)`)
 
-  def captureSet(): CaptureSet = CaptureSet(many(idRef, `{`, `,` , `}`))
+  def captureSet(): CaptureSet =
+    nonterminal:
+      CaptureSet(many(idRef, `{`, `,` , `}`))
 
-  def effectful(): Effectful = Effectful(valueType(), maybeEffects())
+  def effectful(): Effectful =
+    nonterminal:
+      Effectful(valueType(), maybeEffects())
 
-  def maybeEffects(): Effects = when(`/`) { effects() } { Effects.Pure }
+  def maybeEffects(): Effects =
+    nonterminal:
+      when(`/`) { effects() } { Effects.Pure }
 
   // TODO error "Expected an effect set"
   def effects(): Effects =
-    if peek(`{`) then Effects(many(interfaceType, `{`, `,`, `}`))
-    else Effects(interfaceType())
+    nonterminal:
+      if peek(`{`) then Effects(many(interfaceType, `{`, `,`, `}`))
+      else Effects(interfaceType())
 
 
 
@@ -1043,4 +1164,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], filename: Strin
       consume(after)
       components.toList
     }
+
+  // Positions
+
+  inline def nonterminal[T](inline p: => T): T = {
+    val start = peek.start
+    val res = p
+    val end = peek.end
+
+    positions.setStart(res, source.offsetToPosition(start))
+    positions.setFinish(res, source.offsetToPosition(end))
+
+    res
+  }
 }

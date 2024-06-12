@@ -30,7 +30,7 @@ object Parser extends Phase[Source, Parsed] {
         val lexer = effekt.lexer.Lexer(source.content)
         val (tokens, err) = lexer.run()
         if (err.isDefined) C.abort(err.get.toString)
-        val parser = RecursiveDescent(C.positions, tokens, source.name)
+        val parser = RecursiveDescent(C.positions, tokens, source)
         parser.parse(TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
       }
   } map { tree =>
