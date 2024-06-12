@@ -333,11 +333,15 @@ class Lexer(source: String) {
    */
   def matchNumber(): TokenKind = {
     consumeWhile(_.isDigit)
-    peek() match {
+    peekN(1) match {
       case Some('.') => {
-        consume()
-        consumeWhile(_.isDigit)
-        TokenKind.Float(slice().toDouble)
+        peekN(2) match {
+          case Some(c) if c.isDigit =>
+            consume()
+            consumeWhile(_.isDigit)
+            TokenKind.Float(slice().toDouble)
+          case _ => TokenKind.Integer(slice().toInt)
+        }
       }
       case _ => TokenKind.Integer(slice().toInt)
     }
