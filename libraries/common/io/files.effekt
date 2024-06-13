@@ -95,7 +95,7 @@ def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
 
   val readSize = 1048576 // 1MB
   var size = readSize
-  var buffer = bytes::empty(size)
+  var buffer = bytes(size)
   var offset = 0;
 
   def go(): String = {
@@ -109,7 +109,7 @@ def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
         // we are at maximum capacity
         if (n == readSize && (offset + readSize) > size) {
           val newSize   = size * 2
-          val newBuffer = bytes::empty(newSize)
+          val newBuffer = bytes(newSize)
           copy(buffer, newBuffer, 0, 0, size)
           buffer = newBuffer
           size = newSize

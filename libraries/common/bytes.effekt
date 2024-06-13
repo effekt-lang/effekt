@@ -1,14 +1,16 @@
 module bytes
 
 /**
- * A memory managed, mutable, fixed-length buffer of bytes
+ * A memory managed, mutable, fixed-length buffer of bytes.
  */
 extern type Bytes
   // = llvm "%Pos"
   // = js "Uint8Array"
 
-
-extern io def empty(capacity: Int): Bytes =
+/**
+ * Allocates new bytes with the given `capacity`, setting its values to `0`.
+ */
+extern io def bytes(capacity: Int): Bytes =
   js "(new Uint8Array(${capacity}))"
   llvm """
     %buf = call %Pos @c_buffer_construct_uninitialized(i64 %capacity)
@@ -17,7 +19,7 @@ extern io def empty(capacity: Int): Bytes =
 
 def copy(b: Bytes): Bytes = {
   val len = b.size
-  val clone = empty(len)
+  val clone = bytes(len)
   copy(b, clone, 0, 0, len)
   clone
 }
