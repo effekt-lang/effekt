@@ -3,7 +3,7 @@ package effekt
 import effekt.source.*
 import effekt.symbols.*
 
-import effekt.lexer.{ Lexer, Position, Token, TokenKind }
+import effekt.lexer.{ Lexer, Token, TokenKind }
 import effekt.lexer.TokenKind.*
 
 import kiama.util.{ Positions, StringSource }

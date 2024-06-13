@@ -21,14 +21,6 @@ enum LexerError {
   case Custom(msg: String)
 }
 
-/**
- * A position in the source string.
- * @param line depending on line breaks.
- * @param column in a line.
- * @param offset is the absolute offset in the source string without considering
- *               line breaks.
- */
-case class Position(line: Int, column: Int, offset: Int)
 
 /**
  * A token consist of the absolute starting position, the absolute end position in the source file

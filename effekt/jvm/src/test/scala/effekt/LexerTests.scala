@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, Position, Token, TokenKind, LexerError }
+import effekt.lexer.{Lexer, Token, TokenKind, LexerError }
 import effekt.lexer.LexerError.*
 
 import munit.Location
