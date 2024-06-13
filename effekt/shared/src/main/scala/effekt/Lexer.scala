@@ -127,48 +127,38 @@ object TokenKind {
   val `in` = TokenKind.Ident("in")
   val `at` = TokenKind.Ident("at")
   val `__` = Ident("_")
+
+  def explain(kind: TokenKind): String = kind match {
+    case t if keywords.contains(t) => s"keyword ${kind}"
+    case Ident(n)          => s"identifier ${n}"
+    case Integer(n)        => s"integer ${n}"
+    case Float(d)          => s"float ${d}"
+    case Str(s, true)      => s"multi-line string"
+    case Str(s, false)     => s"string \"${s}\""
+    case Char(c)           => s"character '${c}'"
+    case Comment(contents) => "comment"
+    case Newline           => "newline"
+    case Space             => "space"
+    case EOF               => "end of file"
+    case other             => other.toString
+  }
+
+  val keywords = Vector(
+    `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
+    `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
+    `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
+    `namespace`, `pure`)
+
 }
+
+
 
 
 object Lexer {
   import TokenKind.*
 
-  val keywords: immutable.HashMap[String, TokenKind] = immutable.HashMap(
-    "let" -> `let`,
-    "true" -> `true`,
-    "false" -> `false`,
-    "val" -> `val`,
-    "var" -> `var`,
-    "if" -> `if`,
-    "else" -> `else`,
-    "while" -> `while`,
-    "type" -> `type`,
-    "effect" -> `effect`,
-    "interface" -> `interface`,
-    "try" -> `try`,
-    "with" -> `with`,
-    "case" -> `case`,
-    "do" -> `do`,
-    "fun" -> `fun`,
-    "match" -> `match`,
-    "def" -> `def`,
-    "module" -> `module`,
-    "import" -> `import`,
-    "export" -> `export`,
-    "extern" -> `extern`,
-    "include" -> `include`,
-    "record" -> `record`,
-    "box" -> `box`,
-    "unbox" -> `unbox`,
-    "return" -> `return`,
-    "region" -> `region`,
-    "resource" -> `resource`,
-    "new" -> `new`,
-    "and" -> `and`,
-    "is" -> `is`,
-    "namespace" -> `namespace`,
-    "pure" -> `pure`
-  )
+  val keywordMap: immutable.HashMap[String, TokenKind] =
+    immutable.HashMap.from(TokenKind.keywords.map { case t => t.toString -> t })
 
   enum Mode {
     case Normal
@@ -544,7 +534,7 @@ class Lexer(source: String) {
         consumeWhile { c => nameRest.contains(c) }
         val s = slice()
         // check if the slice matches any know keyword, otherwise it is necessarily an identifier
-        keywords.getOrElse(s, TokenKind.Ident(s))
+        keywordMap.getOrElse(s, TokenKind.Ident(s))
       }
       case c => TokenKind.Error(LexerError.InvalidKeywordIdent(c.toString))
     }

@@ -114,8 +114,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def consume(kind: TokenKind): Unit =
     // if !hasNext() then fail(s"Expected ${kind}, but reached end of file")
+    val positionBefore = position
     val t = next()
-    if (t.kind != kind) fail(s"Expected ${kind}, but got ${t}")
+
+    if (t.kind != kind) {
+      // we need to fail at the position before consuming
+      position = positionBefore
+      fail(s"Expected ${explain(kind)} but got ${explain(t.kind)}")
+    }
 
   /**
    * Guards `thn` by token `t` and consumes the token itself, if present.
@@ -165,21 +171,23 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Statements
    */
-  def stmts(): Stmt = peek.kind match {
-    case `val`  => valStmt()
-    case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
-    case `with` => withStmt()
-    case `var`  => DefStmt(varDef(), semi() ~> stmts())
-    case `return` =>
-      val result = `return` ~> Return(expr())
-      maybeSemi()
-      result
-    case _ =>
-      val e = expr()
-      semi()
-      if returnPosition then Return(e)
-      else ExprStmt(e, stmts())
-  }
+  def stmts(): Stmt =
+    nonterminal:
+      peek.kind match {
+        case `val`  => valStmt()
+        case _ if isDefinition => DefStmt(definition(), semi() ~> stmts())
+        case `with` => withStmt()
+        case `var`  => DefStmt(varDef(), semi() ~> stmts())
+        case `return` =>
+          val result = `return` ~> Return(expr())
+          maybeSemi()
+          result
+        case _ =>
+          val e = expr()
+          semi()
+          if returnPosition then Return(e)
+          else ExprStmt(e, stmts())
+      }
 
   // ATTENTION: here the grammar changed (we added `with val` to disambiguate)
   // with val <ID> (: <TYPE>)? = <EXPR>; <STMTS>
@@ -237,8 +245,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def stmt(): Stmt =
-    if peek(`{`) then braces { BlockStmt(stmts()) }
-    else when(`return`) { Return(expr()) } { Return(expr()) }
+    nonterminal:
+      if peek(`{`) then braces { BlockStmt(stmts()) }
+      else when(`return`) { Return(expr()) } { Return(expr()) }
 
   /**
    * Main entry point
@@ -519,8 +528,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       when(`:`) { Some(effectful()) } { None }
 
-  // TODO fail "Expected a type annotation"
-  def typeAnnotation(): ValueType = `:` ~> valueType()
+  def typeAnnotation(): ValueType =
+    if peek(`:`) then  `:` ~> valueType()
+    else fail("Expected a type annotation")
 
 
 
@@ -609,11 +619,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       // Interface[...] { () => ... }
       // Interface[...] { case ... => ... }
-      def operationImplementation() = idRef() ~ maybeTypeParams() ~ functionArg() match {
-        case (id ~ tps ~ BlockLiteral(_, vps, bps, body)) =>
-          val synthesizedId = IdRef(Nil, id.name)
-          val interface = BlockTypeRef(id, Nil): BlockTypeRef
-          Implementation(interface, List(OpClause(synthesizedId, tps, vps, bps, None, body, implicitResume)))
+      def operationImplementation() = idRef() ~ maybeTypeParams() ~ implicitResume ~ functionArg() match {
+        case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body)) =>
+          val synthesizedId = IdRef(Nil, id.name).withPositionOf(id)
+          val interface = BlockTypeRef(id, Nil).withPositionOf(id): BlockTypeRef
+          val operation = OpClause(synthesizedId, tps, vps, bps, None, body, k).withRangeOf(id, body)
+          Implementation(interface, List(operation))
       }
 
       emptyImplementation() orElse interfaceImplementation() getOrElse operationImplementation()
@@ -695,7 +706,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       while (ops.contains(peek.kind)) {
          val op = next().kind
          val right = nonTerminal()
-         left = binaryOp(left, op, right)
+         left = binaryOp(left, op, right).withRangeOf(left, right)
       }
       left
 
@@ -1182,26 +1193,50 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       components.toList
     }
 
+
   // Positions
 
-  inline def nonterminal[T](p: => T): T = {
+  inline def nonterminal[T](inline p: => T): T = {
     val startToken = peek
     val start = startToken.start
     val res = p
     val endToken = previous
     val end = endToken.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
 
-    //    val resString = res.toString
-    //    if resString.startsWith("MatchClause") && resString.contains("world") then {
-    //      println(res)
-    //      println(s"start: ${startToken.kind} (${source.offsetToPosition(start)})")
-    //      println(s"end: ${endToken} (${source.offsetToPosition(end)})")
-    //      println(s"peek: ${peek}")
+    //    val sc: Any = res
+    //    if sc.isInstanceOf[Implementation] then sc match {
+    //      case Implementation(_, List(op)) =>
+    //        println(op)
+    //        println(positions.getStart(op))
+    //        println(positions.getFinish(op))
+    //
+    //        //        println(s"start: ${startToken.kind} (${source.offsetToPosition(start)})")
+    //        //        println(s"end: ${endToken} (${source.offsetToPosition(end)})")
+    //        //        println(s"peek: ${peek}")
+    //
+    //      case _ => ()
     //    }
 
     positions.setStart(res, source.offsetToPosition(start))
     positions.setFinish(res, source.offsetToPosition(end))
 
     res
+  }
+
+  extension [T](self: T) {
+    inline def withPositionOf(other: Any): self.type = { positions.dupPos(other, self); self }
+    inline def withRangeOf(first: Any, last: Any): self.type = { positions.dupRangePos(first, last, self); self }
+
+    // Why did we need those?
+    private def dupIfEmpty(from: Any, to: Any): Unit =
+      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
+
+    private def dupAll(from: Any, to: Any): Unit = to match {
+      case t: Tree =>
+        dupIfEmpty(from, t)
+        t.productIterator.foreach { dupAll(from, _) }
+      case t: Iterable[t] => t.foreach { dupAll(from, _) }
+      case _ => ()
+    }
   }
 }
