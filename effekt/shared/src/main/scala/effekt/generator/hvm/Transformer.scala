@@ -6,7 +6,7 @@ import effekt.core.Id
 
 import scala.collection.mutable.{Map => MutableMap}
 import effekt.util.intercalate
-import effekt.core.CoreParsers.definition
+import scala.annotation.targetName
 
 
 
@@ -14,19 +14,29 @@ def transform(mod: cps.ModuleDecl): Book = {
   val decls = transform(mod.decls, MutableMap()) //Adt
   val externs = mod.externs.map(transform)
   val defns = mod.definitions.map(transform)
-  val defMap: MutableMap[Name, Definition] = MutableMap()
+  val defMap: MutableMap[Name, Definition] = MutableMap() // Definitions
   defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
-  mod.decls.foreach({case cps.Declaration.InterfaceDecl(id, operations) => defMap ++ transform(id, operations, defMap); case _ => ()})
+  mod.decls.foreach({
+    case cps.Declaration.InterfaceDecl(id, operations) => defMap ++= transform(id, operations); 
+    case cps.Declaration.Data(id, ctors) => defMap ++= transform(id, ctors)
+  })
   Book(defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
 
 //destructor
-def transform(id: cps.Id, operations: List[cps.Property], map: MutableMap[Name, Definition]): MutableMap[Name, Definition] =
-  val newMap = map
+def transform(id: cps.Id, operations: List[cps.Property]): MutableMap[Name, Definition] =
+  val map: MutableMap[Name, Definition] = MutableMap() 
   operations.foreach(operation => 
   map += (Name(id.toString + "." + operation.id.toString) -> 
         Definition(id.toString + "." + operation.id.toString, List(Rule(List(Ctr(id.toString + "/" + id.toString, (operations map (x => x match {case cps.Property(operation.id, _) => VarPattern(Some(operation.id.toString)); case _ => VarPattern(Some("_"))})))), Var(operation.id.toString))), false)))
   map
+
+//ADT constructor
+@targetName("transformWithConstructors")
+def transform(data: cps.Id, ctors: List[cps.Constructor]): MutableMap[Name, Definition] = 
+  val defMap: MutableMap[Name, Definition] = MutableMap() 
+  ctors.foreach(x => defMap += (Name(x.id.toString) -> Definition(x.id.toString, List(Rule(x.fields map idToPattern, chainApp(Var(data.toString + "/" + x.id.toString), x.fields map idToVar))), false)))
+  defMap
 
 def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): MutableMap[Name, Adt]= decls match {
   case Nil => map
@@ -60,9 +70,12 @@ def transform(term: cps.Term): Term = term match {
     chainApp(transform(id), (args map transform):+idToVar(cont))
   case cps.Term.Scope(definitions, body) => transform(definitions, body)
   case cps.Term.If(cond, thn, els) => 
+    //println(term)
     Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
-  case cps.Term.Match(scrutinee, clauses, None) => Mat(List(transform(scrutinee)), clauses map ((_, blockLit) => transform(blockLit)))
-  case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((_, blockLit) => transform(blockLit))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
+  case cps.Term.Match(scrutinee, clauses, None) =>
+    println(term)
+    Mat(List(transform(scrutinee)), clauses map ((id, blockLit) => transform(id, blockLit, scrutinee)))
+  case cps.Term.Match(scrutinee, clauses, Some(default)) =>Mat(List(transform(scrutinee)), (clauses map ((id, blockLit) => transform(id, blockLit, scrutinee))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)), transform(rest)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
@@ -70,8 +83,8 @@ def transform(term: cps.Term): Term = term match {
   case cps.Term.Shift(ev, cont, body) => App(Auto, App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body)))), Var("k"))//((ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body)) k)
 }
 
-def transform(blockLit: cps.BlockLit): Rule = blockLit match {
-  case cps.Expr.BlockLit(params, body) => Rule(params map idToPattern, transform(body))
+def transform(id: cps.Id, blockLit: cps.BlockLit, scrutinee: cps.Expr): Rule = blockLit match {
+  case cps.Expr.BlockLit(params, body) => Rule(List(idToPattern(id)), transform(blockLit))
 }
 
 def transform(definitions: List[cps.Definition], body: cps.Term): Term = definitions match {
