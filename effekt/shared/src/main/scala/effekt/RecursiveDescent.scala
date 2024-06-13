@@ -333,7 +333,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def valDef(): Def =
     nonterminal:
-      ValDef(`val` ~> idDef(), maybeTypeAnnotation(), `=` ~> stmt())
+      ValDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt())
 
   /**
    * In statement position, val-definitions can also be destructing:
@@ -343,7 +343,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
-        `val` ~> idDef() ~ maybeTypeAnnotation() <~ `=`
+        `val` ~> idDef() ~ maybeValueTypeAnnotation() <~ `=`
       } map {
         case id ~ tpe =>
           val binding = stmt()
@@ -370,7 +370,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def varDef(): Def =
     nonterminal:
-      (`var` ~> idDef()) ~ maybeTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
+      (`var` ~> idDef()) ~ maybeValueTypeAnnotation() ~ when(`in`) { Some(idRef()) } { None } ~ (`=` ~> stmt()) match {
         case id ~ tpe ~ Some(reg) ~ expr => RegDef(id, tpe, reg, expr)
         case id ~ tpe ~ None ~ expr      => VarDef(id, tpe, expr)
       }
@@ -383,7 +383,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       if isBlockDef then
         // (: <VALUETYPE>)? `=` <EXPR>
-        DefDef(id, when(`:`) { Some(blockType()) } { None }, `=` ~> expr())
+        DefDef(id, maybeBlockTypeAnnotation(), `=` ~> expr())
       else
         // [...](<PARAM>...) {...} `=` <STMT>>
         val (tps, vps, bps) = params()
@@ -434,7 +434,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def operation(): Operation =
     nonterminal:
-      idDef() ~ params() ~ (`:` ~> effectful()) match {
+      idDef() ~ params() ~ returnAnnotation() match {
         case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret)
       }
 
@@ -472,7 +472,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams())
   def externResource(): Def =
     nonterminal:
-      ExternResource(`extern` ~> `resource` ~> idDef(), `:` ~> blockType())
+      ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation())
   def externInclude(): Def =
     nonterminal:
       ExternInclude(`extern` ~> `include` ~> path())
@@ -487,7 +487,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def externFun(): Def =
     nonterminal:
-      (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (`:` ~> effectful()) ~ (`=` ~> externBody()) match {
+      (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ returnAnnotation() ~ (`=` ~> externBody()) match {
         case capt ~ id ~ (tps, vps, bps) ~ ret ~ body => ExternDef(capt, id, tps, vps, bps, ret, body)
       }
 
@@ -529,19 +529,29 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   //      case flag => FeatureFlag.NamedFeatureFlag(flag)
   //    }
 
-  def maybeTypeAnnotation(): Option[ValueType] =
+  def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
-      if peek(`:`) then Some(typeAnnotation()) else None
+      if peek(`:`) then Some(valueTypeAnnotation()) else None
+
+  def maybeBlockTypeAnnotation(): Option[BlockType] =
+    nonterminal:
+      if peek(`:`) then Some(blockTypeAnnotation()) else None
 
   def maybeReturnAnnotation(): Option[Effectful] =
     nonterminal:
       when(`:`) { Some(effectful()) } { None }
 
-  def typeAnnotation(): ValueType =
+  def returnAnnotation(): Effectful =
+    if peek(`:`) then  `:` ~> effectful()
+    else fail("Expected return type annotation")
+
+  def valueTypeAnnotation(): ValueType =
     if peek(`:`) then  `:` ~> valueType()
     else fail("Expected a type annotation")
 
-
+  def blockTypeAnnotation(): BlockType =
+    if peek(`:`) then  `:` ~> blockType()
+    else fail("Expected a type annotation")
 
   def expr(): Term = peek.kind match {
     case _ => matchExpr()
@@ -1082,11 +1092,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def valueParam(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), Some(`:` ~> valueType()))
+      ValueParam(idDef(), Some(valueTypeAnnotation()))
 
   def valueParamOpt(): ValueParam =
     nonterminal:
-      ValueParam(idDef(), when(`:`) { Some(valueType()) } { None })
+      ValueParam(idDef(), maybeValueTypeAnnotation())
 
   def maybeBlockParams(): List[BlockParam] =
     nonterminal:
@@ -1098,7 +1108,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def blockParam(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), `:` ~> blockType())
+      BlockParam(idDef(), blockTypeAnnotation())
 
   // TODO this needs to be implemented, once the PR is rebased onto master
   //  def blockParamOpt: BlockParam =
