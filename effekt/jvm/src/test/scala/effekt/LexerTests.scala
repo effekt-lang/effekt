@@ -1,9 +1,8 @@
 package effekt
 
 import effekt.lexer.TokenKind.*
-import effekt.lexer.{Lexer, Position, Token, TokenKind}
-
-import scala.collection.mutable.ListBuffer
+import effekt.lexer.{Lexer, Position, Token, TokenKind, LexerError }
+import effekt.lexer.LexerError.*
 
 import munit.Location
 
@@ -27,6 +26,14 @@ class LexerTests extends munit.FunSuite {
     }
   }
 
+  def assertFailure(e: LexerError, prog: String)(using Location): Unit = {
+    val (tokens, err) = Lexer(prog).run()
+    err match {
+      case Some(err) if err == e => ()
+      case _ => fail(s"expected an lexer error $e but found none")
+    }
+  }
+
   test("function definition") {
     val prog =
       """def f[A](x: A, y: A): () => (A, A) at {} =
@@ -46,10 +53,19 @@ class LexerTests extends munit.FunSuite {
     val num = "12.34 100 200 123.345 1 -12.34 -100 -123.345 -1"
     assertTokensEq(
       num,
-      Float(12.34), Float(100.0), Integer(200), Float(123.345), Integer(1),
-      Float(-12.34), Float(-100), Float(-123.345), Integer(-1),
+      Float(12.34), Integer(100), Integer(200), Float(123.345), Integer(1),
+      Float(-12.34), Integer(-100), Float(-123.345), Integer(-1),
       EOF
     )
+  }
+
+  test("big numbers") {
+    assertFailure(LongOverflow, "9223372036854775808")
+    assertTokensEq("9223372036854775807", Integer(9223372036854775807L), EOF)
+    assertFailure(LongOverflow, "-9223372036854775809")
+    assertTokensEq("-9223372036854775808", Integer(-9223372036854775808L), EOF)
+    // the max double value is 1.7976931348623157E308, without "e notation/scientific notation" support in the lexer,
+    // we refrain from writing it down in full length here
   }
 
   test("symbols") {

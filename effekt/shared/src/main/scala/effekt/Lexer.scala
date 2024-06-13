@@ -10,6 +10,8 @@ import scala.util.matching.Regex
 enum LexerError {
   case MalformedFloat
   case MalformedStringInterpolation
+  case DoubleOverflow
+  case LongOverflow
   case InvalidKeywordIdent(s: String)
   case UnterminatedString
   case UnterminatedComment
@@ -36,7 +38,7 @@ case class Token(start: Int, end: Int, kind: TokenKind)
 
 enum TokenKind {
   // literals
-  case Integer(n: Int)
+  case Integer(n: Long)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
   case Char(c: Char)
@@ -329,11 +331,18 @@ class Lexer(source: String) {
           case Some(c) if c.isDigit =>
             consume()
             consumeWhile(_.isDigit)
-            TokenKind.Float(slice().toDouble)
+            slice().toDoubleOption match {
+              case None => err(LexerError.DoubleOverflow)
+              case Some(n) => TokenKind.Float(n)
+            }
           case _ => TokenKind.Integer(slice().toInt)
         }
       }
-      case _ => TokenKind.Integer(slice().toInt)
+      case _ =>
+        slice().toLongOption match {
+          case None => err(LexerError.LongOverflow)
+          case Some(n) => TokenKind.Integer(n)
+        }
     }
   }
 
