@@ -4,7 +4,7 @@ import effekt.lexer.*
 import effekt.lexer.TokenKind.{ `::` as PathSep, * }
 import effekt.source.*
 import effekt.context.Context
-import kiama.parsing.TokenInput
+import kiama.parsing.{ TokenInput, ParseResult, Input }
 import kiama.util.{ Positions, Source, StringSource, Range, Position }
 
 import scala.annotation.{ tailrec, targetName }
@@ -45,6 +45,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
         C.report(effekt.util.messages.ParseError(msg, range)) // fix error reporting
         None
+    }
+
+  // here we need to convert to kiamas error format since REPL is defined in kiama
+  def parseRepl(input: TokenInput[Token])(using C: Context): ParseResult[Input[Token], Tree] =
+    try { kiama.parsing.Success(repl(), input) } catch {
+      case ParseError2(msg, pos) => kiama.parsing.Error(msg, input.copy(offset = pos))
     }
 
 
@@ -249,6 +255,21 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       if peek(`{`) then braces { BlockStmt(stmts()) }
       else when(`return`) { Return(expr()) } { Return(expr()) }
 
+
+  /**
+   * Main entry point for the repl.
+   */
+  def repl(): Tree =
+    nonterminal:
+       // skip spaces at the start
+       spaces()
+       val res = peek.kind match {
+         case t if isToplevel => toplevel()
+         case `import` => includeDecl()
+         case _ => expr()
+       }
+       if peek(`EOF`) then res else fail("Unexpected end of input")
+
   /**
    * Main entry point
    */
@@ -257,7 +278,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
        // skip spaces at the start
        spaces()
        val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevels())
-       if peek(`EOF`) then res else fail("Unexpected input")
+       if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
 
   def moduleDecl(): String =

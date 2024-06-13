@@ -56,10 +56,11 @@ class Repl(driver: Driver) extends REPL[Token, Tree, EffektConfig, EffektError] 
   override def parse(source: Source): ParseResult[Input[Token], Tree] = {
     val lexer = effekt.lexer.Lexer(source.content)
     val (tokens, errs) = lexer.run()
-    val tokenkinds = tokens.map { case Token(_, _, tok) => tok }
-    val tokenPos = tokens.map { case Token(s, e, _) => (s, e) }
-    val parser = new EffektParsers(positions)
-    parser.parseAll(parser.repl, TokenInput(tokens, 0, source, { case Token(s, e, _) => s }))
+    // TODO report properly
+    if (errs.nonEmpty) context.abort(errs.get.toString)
+
+    val parser = RecursiveDescent(context.positions, tokens, source)
+    parser.parseRepl(TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
   }
 
   /**
