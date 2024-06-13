@@ -33,12 +33,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     } catch {
       case ParseError2(msg, pos) =>
         val source = input.source
-        val position = input.get(pos) match {
-          case Some(value) => source.offsetToPosition(input.toPosition(value))
-          case None => Position(0, 0, source)
+        val range = input.get(pos) match {
+          case Some(value) =>
+            val from = source.offsetToPosition(value.start)
+            val to = source.offsetToPosition(value.end + 1)
+            Some(Range(from, to))
+          case None =>
+            val pos = Position(0, 0, source)
+            Some(Range(pos, pos))
         }
 
-        C.report(effekt.util.messages.ParseError(msg, Some(Range(position, position)))) // fix error reporting
+        C.report(effekt.util.messages.ParseError(msg, range)) // fix error reporting
         None
     }
 
@@ -981,7 +986,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
       def parenthesized = backtrack { parens { blockType() } }
 
-      simpleFunType orElse funType orElse parenthesized getOrElse interfaceType()
+      def interface() =
+        val res = interfaceType()
+        if peek(`/`) then
+          fail("Effects not allowed here. Maybe you mean to use a function type `() => T / E`?")
+        else res
+
+      simpleFunType orElse funType orElse parenthesized getOrElse interface()
 
   def interfaceType(): BlockTypeRef =
     nonterminal:
