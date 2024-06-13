@@ -485,6 +485,16 @@ extern pure def infixGte(x: Int, y: Int): Bool =
     ret %Pos %adt_boolean
   """
 
+extern pure def infixEq(x: Double, y: Double): Bool =
+  js "${x} === ${y}"
+  chez "(= ${x} ${y})"
+  ml "(${x}: real) = ${y}"
+
+extern pure def infixNeq(x: Double, y: Double): Bool =
+  js "${x} !== ${y}"
+  chez "(not (= ${x} ${y}))"
+  ml "(${x}: real) <> ${y}"
+
 extern pure def infixLt(x: Double, y: Double): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
