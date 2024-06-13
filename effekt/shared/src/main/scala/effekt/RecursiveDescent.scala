@@ -341,19 +341,28 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def valStmt(): Stmt =
     nonterminal:
+      val startMarker = nonterminal { new {} }
       def simpleLhs() = backtrack {
         `val` ~> idDef() ~ maybeTypeAnnotation() <~ `=`
       } map {
-        case id ~ tpe => DefStmt(ValDef(id, tpe, stmt()), { semi(); stmts() })
+        case id ~ tpe =>
+          val binding = stmt()
+          val valDef = ValDef(id, tpe, binding).withRangeOf(startMarker, binding)
+          DefStmt(valDef, { semi(); stmts() })
       }
       def matchLhs() =
         `val` ~> matchPattern() ~ manyWhile(`and` ~> matchGuard(), `and`) <~ `=` match {
-          case AnyPattern(id) ~ Nil => DefStmt(ValDef(id, None, stmt()), { semi(); stmts() })
+          case AnyPattern(id) ~ Nil =>
+            val binding = stmt()
+            val valDef = ValDef(id, None, binding).withRangeOf(startMarker, binding)
+            DefStmt(valDef, { semi(); stmts() })
           case p ~ guards =>
             val sc = expr()
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts()
-            Return(Match(sc, List(MatchClause(p, guards, body)), default))
+            val clause = MatchClause(p, guards, body).withRangeOf(p, sc)
+            val matching = Match(sc, List(clause), default).withRangeOf(startMarker, sc)
+            Return(matching)
         }
 
       simpleLhs() getOrElse matchLhs()
