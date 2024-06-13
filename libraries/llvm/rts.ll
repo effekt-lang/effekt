@@ -1,5 +1,9 @@
 ; Run-Time System
 
+attributes #0 = { "ccc" }
+
+%Evi = type i64
+
 ; Basic types
 
 %Env = type ptr
@@ -64,7 +68,7 @@
 ;
 %Region = type [ 3 x %Mem ]
 
-; The "meta" stack (a stack of stacks)
+; The "meta" stack (a stack of stacks) -- a pointer to a %StkVal
 %Stk = type ptr
 
 ; This is used for two purposes:
@@ -74,14 +78,22 @@
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Obj}
-%Bool = type %Pos
-%Unit = type %Pos
 
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Obj}
 
 ; Offset within the arena
 %Ref = type i64
+
+; Builtin Types
+
+%Int = type i64
+%Double = type double
+%Byte = type i8
+%Char = type i64
+%Bool = type %Pos
+%Unit = type %Pos
+%String = type %Pos
 
 ; Global locations
 
@@ -429,7 +441,7 @@ define %Region @copyRegion(%Region %region) alwaysinline {
 
     %stringsbase = extractvalue %Region %region, 2, 1
     %stringssp = extractvalue %Region %region, 2, 0
-    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @c_buffer_refcount_increment)
+    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @sharePositive)
 
     %newmem.0 = call %Mem @copyMem(%Mem %mem.0)
     %newmem.1 = call %Mem @copyMem(%Mem %mem.1)
@@ -576,7 +588,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 
     %stringsbase = extractvalue %Region %region, 2, 1
     %stringssp = extractvalue %Region %region, 2, 0
-    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @c_buffer_refcount_decrement)
+    call void @forEachObject(%Base %stringsbase, %Sp %stringssp, %Eraser @erasePositive)
     call void @free(%Base %stringsbase)
 
     ret void
@@ -611,9 +623,111 @@ define fastcc void @topLevelEraser(%Env %env) {
     ret void
 }
 
-; Primitive Types
+define %Sp @withEmptyStack() {
+    %sp = call %Sp @malloc(i64 268435456)
+    store %Sp %sp, ptr @base
+    %retadrp_1 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 0
+    %sharerp_2 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 1
+    %eraserp_3 = getelementptr %FrameHeader, %Sp %sp, i64 0, i32 2
+    store %RetAdr @topLevel, ptr %retadrp_1
+    store %Sharer @topLevelSharer, ptr %sharerp_2
+    store %Eraser @topLevelEraser, ptr %eraserp_3
+    %sp2 = getelementptr %FrameHeader, %Sp %sp, i64 1
+    ret %Sp %sp2
+}
 
-%Int = type i64
-%Double = type double
+define fastcc void @run_i64(%Neg %f, i64 %arg) {
+    ; backup globals
+    %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
 
-%Evi = type i64
+    ; fresh stack
+    %sp = call %Sp @withEmptyStack()
+
+    ; prepare call
+    %arrayp = extractvalue %Neg %f, 0
+    %obj = extractvalue %Neg %f, 1
+    %fpp = getelementptr ptr, ptr %arrayp, i64 0
+    %fp = load ptr, ptr %fpp
+
+    ; Store the argument (0th index is evidence)
+    %env = call %Env @malloc(i64 1048576)
+    %ev2 = getelementptr {%Int, %Int}, %Env %env, i64 0, i32 1
+    store i64 %arg, ptr %ev2
+
+    ; call
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
+
+    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
+    store %Sp %base, ptr @base
+    store %Region %region, ptr @region
+    store %Limit %limit, ptr @limit
+    store %Stk %rest, ptr @rest
+
+    ret void
+}
+
+
+define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
+    ; backup globals
+    %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
+
+    ; fresh stack
+    %sp = call %Sp @withEmptyStack()
+
+    ; prepare call
+    %arrayp = extractvalue %Neg %f, 0
+    %obj = extractvalue %Neg %f, 1
+    %fpp = getelementptr ptr, ptr %arrayp, i64 0
+    %fp = load ptr, ptr %fpp
+
+    ; Store the argument (0th index is evidence)
+    %env = call %Env @malloc(i64 1048576)
+    %arg_pos = getelementptr {%Int, %Pos}, %Env %env, i64 0, i32 1
+    store %Pos %arg, ptr %arg_pos
+
+    ; call
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
+
+    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
+    store %Sp %base, ptr @base
+    store %Region %region, ptr @region
+    store %Limit %limit, ptr @limit
+    store %Stk %rest, ptr @rest
+
+    ret void
+}
+
+define void @run(%Neg %f) {
+    ; backup globals
+    %base = load %Base, ptr @base
+    %region = load %Region, ptr @region
+    %limit = load %Limit, ptr @limit
+    %rest = load %Stk, ptr @rest
+
+    ; fresh stack
+    %sp = call %Sp @withEmptyStack()
+
+    ; prepare call
+    %arrayp = extractvalue %Neg %f, 0
+    %obj = extractvalue %Neg %f, 1
+    %fpp = getelementptr ptr, ptr %arrayp, i64 0
+    %fp = load ptr, ptr %fpp
+
+    ; call
+    %env = call %Env @malloc(i64 1048576)
+    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
+
+    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
+    store %Sp %base, ptr @base
+    store %Region %region, ptr @region
+    store %Limit %limit, ptr @limit
+    store %Stk %rest, ptr @rest
+
+    ret void
+}

@@ -1,89 +1,145 @@
 module array
 
 import effekt
-import option
+import exception
 import list
 
+// Primitive operations:
+
 /**
- * A mutable 0-based indexed fixed-sized array.
+ * A mutable 0-indexed fixed-sized array.
  */
 extern type Array[T]
 
 /**
- * Creates a new Array of size `size` filled with the value `default`
+ * Violated Postcondition: Fields contain values
  */
-extern io def fill[T](size: Int, default: T): Array[T] =
-  ml "Array.array (${size}, ${default})"
-  default {
-    val arr = emptyArray[T](size)
-    each(0, size) { i =>
-      put(arr, i, default)
+extern global def unsafeFresh[T](size: Int): Array[T] =
+  js "(new Array(${size}))"
+  chez "(make-vector ${size})" // creates an array filled with 0s on CS
+  llvm """
+    %z = call %Pos @c_array_new(%Int %size)
+    ret %Pos %z
+  """
+
+extern pure def size[T](arr: Array[T]): Int =
+  js "${arr}.length"
+  chez "(vector-length ${arr})"
+  ml "Array.length ${arr}"
+  llvm """
+    %z = call %Int @c_array_size(%Pos %arr)
+    ret %Int %z
+  """
+
+/**
+ * Unchecked Precondition: Index in bounds
+ */
+extern global def unsafeGet[T](arr: Array[T], index: Int): T =
+  js "${arr}[${index}]"
+  chez "(vector-ref ${arr} ${index})"
+  ml "Array.sub (${arr}, ${index})"
+  llvm """
+    %z = call %Pos @c_array_get(%Pos %arr, %Int %index)
+    ret %Pos %z
+  """
+
+extern js """
+function array$set(arr, index, value) {
+  arr[index] = value;
+  return $effekt.unit
+}
+"""
+
+/**
+ * Unchecked Precondition: Index in bounds
+ */
+extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
+  js "array$set(${arr}, ${index}, ${value})"
+  chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
+  ml "Array.update (${arr}, ${index}, ${value})"
+  llvm """
+    %z = call %Pos @c_array_set(%Pos %arr, %Int %index, %Pos %value)
+    ret %Pos %z
+  """
+
+/**
+ * Creates a copy of `arr`
+ */
+def copy[T](arr: Array[T]): Array[T] = {
+  with on[OutOfBounds].default { <> }; // should not happen
+  val len = arr.size;
+  val newArray = unsafeFresh[T](len);
+  copy[T](arr, 0, newArray, 0, len);
+  newArray
+}
+
+/**
+ * Copies `length`-many elements from `from` to `to`
+ * starting at `start` (in `from`) and `offset` (in `to`)
+ */
+def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
+  val startValid  = start >= 0 && start + length <= from.size
+  val offsetValid = offset >= 0 && offset + length <= to.size
+
+  def go(i: Int, j: Int, length: Int): Unit =
+    if (length >= 0) {
+      to.unsafeSet(j, from.unsafeGet(i))
+      go(i + 1, j + 1, length - 1)
     }
-    return arr;
+
+  if (startValid && offsetValid) go(start, offset, length)
+  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
+}
+
+// Derived operations:
+
+/**
+ * Creates a new Array of size `size` filled with the value `init`
+ */
+extern global def fresh[T](size: Int, init: T): Array[T] =
+ ml "Array.array (${size}, ${init})"
+ default {
+    val arr = unsafeFresh[T](size);
+    each(0, size) { i =>
+      unsafeSet(arr, i, init)
+    };
+    arr
   }
+
+def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
+  if (index >= 0 && index < arr.size) arr.unsafeGet(index)
+  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
+
+def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
+  if (index >= 0 && index < arr.size) unsafeSet(arr, index, value)
+  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
 
 /**
  * Builds a new Array of size `size` from a computation `index` which gets an index
  * and returns a value that will be on that position in the resulting array
  */
 def build[T](size: Int) { index: Int => T }: Array[T] = {
-  val arr = emptyArray[T](size)
+  val arr = unsafeFresh[T](size);
   each(0, size) { i =>
-    put(arr, i, index(i))
-  }
-  return arr
+    unsafeSet(arr, i, index(i))
+  };
+  arr
 }
+
+// Utility functions:
 
 /**
  * Converts a List `list` to an Array
  */
 def fromList[T](list: List[T]): Array[T] = {
   val listSize = list.size();
-  val arr = emptyArray(listSize);
+  val arr = unsafeFresh(listSize);
 
   foreachIndex(list) { (i, head) =>
-    put(arr, i, head)
+    unsafeSet(arr, i, head)
   }
   return arr;
 }
-
-extern pure def emptyArray[T](size: Int): Array[T] =
-  js "(new Array(${size}))"
-  chez "(make-vector ${size})" // creates an array filled with 0s on CS
-
-def get[T](arr: Array[T], index: Int): Option[T] =
-  if (index < 0 || index >= arr.size) None()
-  else undefinedToOption(arr.unsafeGet(index))
-
-extern pure def size[T](arr: Array[T]): Int =
-  js "${arr}.length"
-  chez "(vector-length ${arr})"
-  ml "Array.length ${arr}"
-
-extern io def unsafeGet[T](arr: Array[T], index: Int): T =
-  js "${arr}[${index}]"
-  chez "(vector-ref ${arr} ${index})"
-  ml "SOME (Array.sub (${arr}, ${index}))"
-
-extern js """
-function put(arr, index, value) {
-  arr[index] = value;
-  return $effekt.unit
-}
-"""
-
-def put[T](arr: Array[T], index: Int, value: T): Unit =
-  if (index >= 0 && index < arr.size) unsafePut(arr, index, value)
-
-extern io def unsafePut[T](arr: Array[T], index: Int, value: T): Unit =
-  js "put(${arr}, ${index}, ${value})"
-  chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
-  ml "Array.update (${arr}, ${index}, ${value})"
-
-extern pure def copy[T](arr: Array[T]): Array[T] =
-  js "[...${arr}]"
-
-// Utility functions:
 
 def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
@@ -141,19 +197,3 @@ def println(l: Array[Int]): Unit = println(show(l))
 def println(l: Array[Double]): Unit = println(show(l))
 def println(l: Array[Bool]): Unit = println(show(l))
 def println(l: Array[String]): Unit = println(show(l))
-
-
-
-// Old from ML
-// -----------
-// def copy[T](arr: Array[T]): Array[T] =
-//     get(arr, 0) match {
-//         case None() => emptyArray()
-//         case Some(first) =>
-//             val dst = array(size(arr), first)
-//             copyInto(arr, dst);
-//             dst
-//     }
-
-// extern pure def copyInto[T](src: Array[T], dst: Array[T]): Unit =
-//     ml "Array.copy {src = ${src}, dst = ${dst}, di = 0}"

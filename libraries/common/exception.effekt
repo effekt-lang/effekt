@@ -56,7 +56,6 @@ extern io def panic[R](msg: String): R =
   ml "raise Fail ${msg}"
   llvm """
     call void @c_io_println_String(%Pos %msg)
-    call void @c_buffer_refcount_decrement(%Pos %msg)
     call void @exit(i32 1)
     ret %Pos zeroinitializer ; Unit
   """
@@ -90,6 +89,13 @@ def ignore[E] { prog: => Unit / Exception[E] }: Unit =
 def default[E, T] { default: => T } { prog: => T / Exception[E] }: T =
   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = default() }
 
+/**
+ * Runs the finalizer and rethrows E
+ */
+def finalize[E, T] { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exception[E] =
+  try { val res = prog(); finalizer(); res } with Exception[E] {
+    def raise(exception: E, msg: String) = { finalizer(); do raise(exception, msg) }
+  }
 
 /**
  * A proxy value to enable partial type applications, such as:
@@ -111,3 +117,6 @@ def panic[E, T](proxy: on[E]) { prog: => T / Exception[E] }: T =
 
 def report[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
   report[E] {prog}
+
+def finalize[E, T](proxy: on[E]) { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exception[E] =
+  finalize[E, T] {finalizer} {prog}

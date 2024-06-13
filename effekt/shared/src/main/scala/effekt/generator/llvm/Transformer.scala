@@ -417,8 +417,9 @@ object Transformer {
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive()          => positiveType
     case machine.Negative()          => negativeType
-    case machine.Type.Int()          => NamedType("Int")
-    case machine.Type.Double()       => NamedType("Double")
+    case machine.Type.Int()          => IntegerType64()
+    case machine.Type.Byte()         => IntegerType8()
+    case machine.Type.Double()       => DoubleType()
     case machine.Type.String()       => positiveType
     case machine.Type.Stack()        => stkType
     case machine.Type.Reference(tpe) => refType
@@ -432,6 +433,7 @@ object Transformer {
       case machine.Positive()        => 16
       case machine.Negative()        => 16
       case machine.Type.Int()        => 8 // TODO Make fat?
+      case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
       case machine.Type.Stack()      => 8 // TODO Make fat?
@@ -623,6 +625,7 @@ object Transformer {
       case machine.Negative()        => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
       case machine.Type.Stack()      => emit(Call("_", VoidType(), shareStack, List(transform(value))))
       case machine.Type.Int()        => ()
+      case machine.Type.Byte()       => ()
       case machine.Type.Double()     => ()
       case machine.Type.String()     => emit(Call("_", VoidType(), shareString, List(transform(value))))
       case machine.Type.Reference(_) => ()
@@ -635,6 +638,7 @@ object Transformer {
       case machine.Negative()        => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
       case machine.Type.Stack()      => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
       case machine.Type.Int()        => ()
+      case machine.Type.Byte()       => ()
       case machine.Type.Double()     => ()
       case machine.Type.String()     => emit(Call("_", VoidType(), eraseString, List(transform(value))))
       case machine.Type.Reference(_) => ()
@@ -696,14 +700,14 @@ object Transformer {
   def shareNegative = ConstantGlobal(PointerType(), "shareNegative");
   def shareStack = ConstantGlobal(PointerType(), "shareStack");
   def shareFrames = ConstantGlobal(PointerType(), "shareFrames");
-  def shareString = ConstantGlobal(PointerType(), "c_buffer_refcount_increment");
+  def shareString = ConstantGlobal(PointerType(), "sharePositive");
 
   def eraseObject = ConstantGlobal(PointerType(), "eraseObject");
   def erasePositive = ConstantGlobal(PointerType(), "erasePositive");
   def eraseNegative = ConstantGlobal(PointerType(), "eraseNegative");
   def eraseStack = ConstantGlobal(PointerType(), "eraseStack");
   def eraseFrames = ConstantGlobal(PointerType(), "eraseFrames");
-  def eraseString = ConstantGlobal(PointerType(), "c_buffer_refcount_decrement");
+  def eraseString = ConstantGlobal(PointerType(), "erasePositive");
 
   def alloc = ConstantGlobal(PointerType(), "alloc")
   def getPtr = ConstantGlobal(PointerType(), "getPtr")

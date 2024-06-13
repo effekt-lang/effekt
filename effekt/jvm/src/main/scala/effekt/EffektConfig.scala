@@ -5,7 +5,7 @@ import effekt.util.paths.file
 import kiama.util.REPLConfig
 import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
 
-class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
+class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--")) {
 
   // Common
   // ------
@@ -58,6 +58,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     group = common
   ).map(Backend.backend)
 
+  def runArgs(): Seq[String] = args.dropWhile(_ != "--").drop(1)
+
   // Advanced
   // --------
   private val advanced = group("Advanced Options")
@@ -66,6 +68,20 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     "llvm-version",
     descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 15)",
     default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "15")),
+    noshort = true,
+    group = advanced
+  )
+
+  val gccIncludes: ScallopOption[File] = opt[File](
+    "gcc-includes",
+    descr = "Additional include path for gcc (necessary for libuv on the llvm backend)",
+    noshort = true,
+    group = advanced
+  )
+
+  val gccLibraries: ScallopOption[File] = opt[File](
+    "gcc-libraries",
+    descr = "Additional library path for gcc (necessary for libuv on the llvm backend)",
     noshort = true,
     group = advanced
   )
