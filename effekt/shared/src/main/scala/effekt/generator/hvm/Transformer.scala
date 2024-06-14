@@ -9,6 +9,8 @@ import effekt.util.intercalate
 import scala.annotation.targetName
 
 
+//using enviroment lift (Context)
+
 
 def transform(mod: cps.ModuleDecl): Book = {
   val decls = transform(mod.decls, MutableMap()) //Adt
@@ -84,7 +86,9 @@ def transform(term: cps.Term): Term = term match {
 }
 
 def transform(id: cps.Id, blockLit: cps.BlockLit, scrutinee: cps.Expr): Rule = blockLit match {
-  case cps.Expr.BlockLit(params, body) => Rule(List(idToPattern(id)), transform(blockLit))
+  case cps.Expr.BlockLit(params, body) => 
+    //Rule(List(idToPattern(id)), transform(blockLit)) 
+    Rule(List(VarPattern(Some(id.toString + "/" + id.toString))), transform(blockLit)) //let params = scrutinee.fields, transform(body)
 }
 
 def transform(definitions: List[cps.Definition], body: cps.Term): Term = definitions match {
@@ -106,6 +110,11 @@ def transform(expr: cps.Expr): Term = expr match {
   case cps.Expr.Select(target, field) => ???
   case cps.Member(interface, field, tpe) => App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
   case cps.New(impl) => chainApp(Var(impl.interface._1.name.name + "/" + impl.interface._1.name), impl.operations map (x => transform(x.implementation: cps.Expr)))
+  case cps.Expr.Evidence(lifts) => lifts.foldRight(Var("here")) {(l,x) => l match { //rekursiv besser
+    case cps.Lift.Try() => ???
+    case cps.Lift.Reg() => ???
+    case cps.Lift.Var(ev) => App(Auto, App(Auto, Var("plus"), Var(ev.name.name)), x)
+  }}
 }
 
 def transform(constructors: List[cps.Constructor], adt: Adt): Adt = constructors match {

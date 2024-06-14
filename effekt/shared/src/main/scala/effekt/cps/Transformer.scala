@@ -54,7 +54,13 @@ def transform(arg: lifted.Argument): Expr =
   arg match {
   case expr: lifted.Expr => transform(expr)
   case block: lifted.Block => transform(block)
-  case lifted.Evidence(evList) => Expr.Var(Id("here"))
+  case lifted.Evidence(evList) => Evidence(evList map transform)
+}
+
+def transform(ev: lifted.Lift): cps.Lift = ev match {
+  case lifted.Lift.Reg() => cps.Lift.Reg()
+  case lifted.Lift.Try() => cps.Lift.Try()
+  case lifted.Lift.Var(ev) => cps.Lift.Var(Id(ev.name.name))
 }
 
 def transform(expr: lifted.Expr): Expr = expr match {
@@ -122,10 +128,6 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Get(id, ev, annotatedTpe) => ???
   case lifted.Stmt.Put(id, ev, value) => ???
 
-  case lifted.Stmt.Try(lifted.BlockLit(_, params, body), List(handler)) => params match {
-    case ev :: cap :: Nil => Reset(transform(ev), Let(transform(cap), New(transform(handler)), transform(body)))
-    case _ => ???
-  }
   case lifted.Stmt.Try(lifted.BlockLit(_, params, body), handlers) => params match {
     case ev :: caps => Reset(transform(ev), transform(caps, handlers, body)) 
     case _ => ???

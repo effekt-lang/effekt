@@ -63,6 +63,7 @@ enum Expr{
   case BlockLit(params: List[Id], body: Term)
   case Member(Interface: Expr, field: Id, tpe: Interface)
   case New(impl: Implementation)
+  case Evidence(lifts: List[Lift]) // expr als case Nil=> here, List(_) => plus
 }
 export Expr.*
 
@@ -98,17 +99,12 @@ case class Operation(name: Id, implementation: Expr.BlockLit)
 case class Interface(name: Id, args: List[Id])
 
 enum Lift {
-  case Var(ev: EvidenceSymbol)
+  case Var(ev: Id)
   case Try()
   case Reg() // used for local mutable state AND region based state
-}
+} 
 
-/**
- * Evidence for lifts
- */
-case class Evidence(lifts: List[Lift]) // expr als case Nil=> here, List(_) => plus
 
 def Here() = Evidence(Nil)
 
-class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
