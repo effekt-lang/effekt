@@ -1,17 +1,111 @@
 package effekt
 
 import effekt.context.Context
-import effekt.lexer.TokenKind.{ `::` as _, * }
 import effekt.lexer.{ Token, TokenKind }
 import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
 import effekt.util.messages.ParseError
-import kiama.parsing.{ CharParsers, Failure, Input, NoSuccess, ParseResult, Parsers, SourceInput, Success, TokenInput }
+import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
 import scala.annotation.{ tailrec, targetName }
 import scala.util.matching.Regex
 import scala.language.implicitConversions
+
+/* object BenchmarkParsers extends App {
+
+  def measure[T](p: => T): Double = {
+    val start = System.nanoTime()
+    p
+    val end = System.nanoTime()
+    (end - start) * 1e-6
+  }
+
+  def bench[T](runs: Int = 10, warmup: Int = 5)(p: => T): Unit = {
+    val times = scala.collection.mutable.ListBuffer.empty[Double]
+    for (_ <- 1 to warmup) {
+      p
+    }
+    for (_ <- 1 to runs) {
+      times += measure {
+        p
+      }
+    }
+    val total = times.fold(0.0)(_ + _)
+    val avg = total / runs
+    val diffs = times.map { x => scala.math.pow(x - avg, 2) }
+    val stdev = scala.math.sqrt((1.0 / times.length) * diffs.sum)
+    println(
+      s"$runs runs; ${total / runs}ms +- ${stdev}ms"
+    )
+  }
+
+  def lex(input: String): Vector[Token] = {
+    val lexer = effekt.lexer.Lexer(input)
+    val (tokens, error) = lexer.run()
+    if (error.nonEmpty) throw new Exception(s"Lexer errors: ${error}")
+    tokens
+  }
+
+  def rdparse[T](input: String)(p: RecursiveDescent => T): T = {
+    val tokens = lex(input)
+    p(RecursiveDescent(Positions(), tokens, StringSource(input, "")))
+  }
+
+  def stdparse[T](input: String)(p: EffektParsers => T): T = {
+    val tokens = lex(input)
+    p(EffektParsers(Positions()))
+  }
+
+  val complexExpr =
+    """(3.14 * (2.71 + 5.0) - (12.345 / 5.4321)) + 
+    ((-0.67 + 1.234) - (2.345 * 3.456) / 4.567) + 
+    (123456789 + 987654321) + ((23456.0 / 12345.0) * (7890.0 / 456.0)) - 
+    (876.0 + 9.876) + ((5.0 / 3.0) * (4.0 / 2.0)) + 
+    ((1.23 + 4.56) - (7.89 * (0.12 / 0.34 + 5.67))) + 
+    ((1.23 * (2.34 + 3.45) - (4.56 / 5.67)) + (6.78 * (7.89 - 8.90))) - 
+    ((1.23 + 4.56) - (7.89 * (0.12 / 0.34 + 5.67))) + 
+    ((1.23 * (2.34 + 3.45) - (4.56 / 5.67)) + (6.78 * (7.89 - 8.90))) - 
+    (1.23 / 3.45) + ((2.34 * 4.56) - (5.67 / 7.89)) + 
+    (9.01 + 1.23) - ((4.56 / 7.89) + (2.34 * 5.67)) - 
+    ((3.45 + 6.78) * (9.01 / 2.34)) + ((5.67 - 8.90) * (1.23 / 4.56)) *
+    ((-0.67 + 1.234) - (2.345 * 3.456) / 4.567) + 
+    (123456789 + 987654321) + ((23456.0 / 12345.0) * (7890.0 / 456.0)) - 
+    (876.0 + 9.876) + ((5.0 / 3.0) * (4.0 / 2.0)) + 
+    ((1.23 + 4.56) - (7.89 * (0.12 / 0.34 + 5.67))) + 
+    ((1.23 * (2.34 + 3.45) - (4.56 / 5.67)) + (6.78 * (7.89 - 8.90))) - 
+    ((1.23 + 4.56) - (7.89 * (0.12 / 0.34 + 5.67))) + 
+    ((1.23 * (2.34 + 3.45) - (4.56 / 5.67)) + (6.78 * (7.89 - 8.90))) - 
+    (1.23 / 3.45) + ((2.34 * 4.56) - (5.67 / 7.89)) + 
+    (9.01 + 1.23) - ((4.56 / 7.89) + (2.34 * 5.67)) - 
+    ((3.45 + 6.78) * (9.01 / 2.34)) + ((5.67 - 8.90) * (1.23 / 4.56))
+    """
+
+  val benchmarks = List(complexExpr)
+
+  def benchmarkRD(): Unit = {
+    for ((benchmark, i) <- benchmarks.zipWithIndex) {
+      print(s"$i: ")
+      bench(100, 5) {
+        rdparse(benchmark) { p => p.expr() }
+      }
+    }
+  }
+
+  benchmarkRD()
+
+  // def benchmarkStd(): Unit = {
+  //   for ((benchmark, i) <- benchmarks.zipWithIndex) {
+  //     print(s"$i: ")
+  //     bench(10, 5) {
+  //       stdparse(benchmark) { _.expr(???) }
+  //     }
+  //   }
+  // }
+
+  // benchmarkStd()
+
+} */
 
 /**
  * String templates containing unquotes `${... : T}`
@@ -31,7 +125,7 @@ object Parser extends Phase[Source, Parsed] {
         val (tokens, err) = lexer.run()
         if (err.isDefined) C.abort(err.get.toString)
         val parser = RecursiveDescent(C.positions, tokens, source)
-        parser.parse(TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
+        parser.parse(Input(source, 0))
       }
   } map { tree =>
     Parsed(source, tree)
@@ -44,34 +138,30 @@ object Parser extends Phase[Source, Parsed] {
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class EffektParsers(positions: Positions) extends ParserUtils(positions) {
+class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   type Elem = Token
 
   type P[Out] = PackratParser[Out]
 
-  def parse(input: TokenInput[Elem])(implicit C: Context): Option[ModuleDecl] = ???
-
-  lazy val whitespace = many(Space | Newline | comment)
-  lazy val comment = accept("comment") { case c: TokenKind.Comment => c }
+  def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
+    parseAll(program, source) match {
+      case Success(ast, _) =>
+        Some(ast)
+      case res: NoSuccess =>
+        val input = res.next
+        val range = Range(input.position, input.nextPosition)
+        C.report(ParseError(res.message, Some(range)))
+        None
+    }
 
   /**
    * Names
    */
-  lazy val ident: P[String] = accept("identifier") { case Ident(id) => id }
-  lazy val identRef =
-    ident ~ many(TokenKind.`::` ~> ident) ~ not(ident) ^^ {
-      case name ~ names ~ name2 => name ++ names.reduceLeftOption(_ ++ _).getOrElse("") ++ name2.toString()
-    }
-  lazy val moduleName =
-    ident ~ many(TokenKind.`/` ~> ident) ~ not(ident) ^^ {
-      case name ~ names ~ name2 => name ++ names.reduceLeftOption(_ ++ _).getOrElse("") ++ name2.toString()
-    }
-
-  lazy val idDef: P[IdDef] = ident ^^ { case id => IdDef(id) }
+  lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
   lazy val idRef: P[IdRef] = identRef ^^ { path =>
     val ids = path.split("::").toList
-    IdRef(ids.init, ids.last)
+    IdRef(ids.init, ids.last)    
   }
 
   /**
@@ -179,28 +269,26 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
         ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
     }
 
-  lazy val path: P[List[Ident]] = someSep(accept("identifier") { case id: Ident => id }, `/`)
-
   lazy val externResource: P[Def] =
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   lazy val externBody: P[Template[Term]] =
-    ( accept("multi-line string") { case Str(s, true) => s } ^^ { s => Template(List(s), Nil) }
-    | templateString
-    | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
+    ( multilineString ^^ { s => Template(List(s), Nil) }
+    | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
+    | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
 
   lazy val externCapture: P[CaptureSet] =
-    ( `pure` ^^^ CaptureSet(Nil)
+    ( "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
     | success(CaptureSet(List(IdRef(List("effekt"), "io"))))
     )
 
   lazy val externInclude: P[Def] =
-    ( `extern` ~> `include` ~/> accept("single-line string") { case Str(s, false) => s } ^^ { s => ExternInclude(s, None) }
-    | `extern` ~> accept("multi-line string") { case Str(s, true) => s } ^^ { contents => ExternInclude("", Some(contents)) }
+    ( `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""), None) }
+    | `extern` ~> multilineString ^^ { contents => ExternInclude("", Some(contents)) }
     )
 
   /**
@@ -388,12 +476,12 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    * Expressions
    */
   lazy val expr:    P[Term] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
-  lazy val orExpr:  P[Term] = orExpr  ~ `||` ~/ andExpr ^^ binaryOp | andExpr
-  lazy val andExpr: P[Term] = andExpr ~ `&&` ~/ eqExpr ^^ binaryOp | eqExpr
-  lazy val eqExpr:  P[Term] = eqExpr  ~ oneof(`===`, `!==`) ~/ relExpr ^^ binaryOp | relExpr
-  lazy val relExpr: P[Term] = relExpr ~ oneof(`<=`, `>=`, `<`, `>`) ~/ addExpr ^^ binaryOp | addExpr
-  lazy val addExpr: P[Term] = addExpr ~ oneof(`++`, `+`, `-`) ~/ mulExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Term] = mulExpr ~ oneof(`*`, `/`) ~/ accessExpr ^^ binaryOp | accessExpr
+  lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
+  lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
+  lazy val eqExpr:  P[Term] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
+  lazy val relExpr: P[Term] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
+  lazy val addExpr: P[Term] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
+  lazy val mulExpr: P[Term] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
   lazy val accessExpr: P[Term] =
     callExpr ~ many(`.` ~>
@@ -499,11 +587,11 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     someSep(matchGuard, `and`)
 
   lazy val matchPattern: P[MatchPattern] =
-    ( Ident("_") ^^^ IgnorePattern()
+    ( "_" ^^^ IgnorePattern()
     | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(matchPattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
-    | TokenKind.`(` ~> matchPattern ~ (some(`,` ~> matchPattern) <~ `)`) ^^ { case f ~ r =>
+    | `(` ~> matchPattern ~ (some(`,` ~> matchPattern) <~ `)`) ^^ { case f ~ r =>
         TagPattern(IdRef(List("effekt"), s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
@@ -533,15 +621,18 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
   lazy val literals =
     double | int | bool | unit | string
 
-  lazy val int = accept("integer") { case Integer(n) => IntLit(n) }
-  lazy val bool = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
-  lazy val unit = (`(` ~ `)`) ^^^ UnitLit()
-  lazy val double = accept("double") { case Float(d) => DoubleLit(d) }
-  lazy val string = accept("string") { case Str(s, _) => StringLit(s) }
-
-  lazy val multilineString: P[String] = accept("multi-line string") { case Str(s, true) => s }
-  lazy val singlelineString: P[String] = accept("single-line string") { case Str(s, false) => s }
-  lazy val anyString: P[String] = accept("single-line or multi-line string") { case Str(s, _) => s }
+  lazy val int    = integerLiteral.flatMap { n =>
+    try { val number = n.toLong;
+      success(IntLit(number).withPositionOf(n))
+    } catch { case e => failure("Not a 64bit integer literal.") }
+  }
+  lazy val bool   = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
+  lazy val unit   = literal("()") ^^^ UnitLit()
+  lazy val double = doubleLiteral ^^ { n => DoubleLit(n.toDouble) }
+  lazy val string = // we need to replace certain characters that would otherwise mess up the respective syntax emitted by the backends
+    ( multilineString ^^ { s => StringLit(s.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")) }
+    | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\\\n", "").replace("\\\r\n", "").replace("\t", "\\t")) }
+    )
 
   lazy val boxedExpr: P[Term] =
     `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
@@ -624,24 +715,23 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
 
   // === AST Helpers ===
 
-  private def binaryOp(lhs: Term, op: Elem, rhs: Term): Term =
+  private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
-  private def opName(op: Token): String = op.kind match {
-    case `||` => "infixOr"
-    case `&&` => "infixAnd"
-    case `===` => "infixEq"
-    case `!==` => "infixNeq"
-    case `<` => "infixLt"
-    case `>` => "infixGt"
-    case `<=` => "infixLte"
-    case `>=` => "infixGte"
-    case `+` => "infixAdd"
-    case `-` => "infixSub"
-    case `*` => "infixMul"
-    case `/` => "infixDiv"
-    case `++` => "infixConcat"
-    case _ => throw Exception("cannot occur")
+  private def opName(op: String): String = op match {
+    case "||" => "infixOr"
+    case "&&" => "infixAnd"
+    case "===" => "infixEq"
+    case "!==" => "infixNeq"
+    case "<" => "infixLt"
+    case ">" => "infixGt"
+    case "<=" => "infixLte"
+    case ">=" => "infixGte"
+    case "+" => "infixAdd"
+    case "-" => "infixSub"
+    case "*" => "infixMul"
+    case "/" => "infixDiv"
+    case "++" => "infixConcat"
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
@@ -655,46 +745,40 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    */
   lazy val `;;` = new Parser[Unit] {
 
-    def apply(in: In): ParseResult[In, Unit] = {
+
+    def apply(in: Input): ParseResult[Unit] = {
+      val content = in.source.content
       var pos = in.offset
-      val Token(_, _, kind) =
-        if (in.first.isEmpty) {
-          return Success((), in)
-        } else {
-          in.first.get
-        }
-      kind match {
-        // \n   ; while
-        //      ^
-        case `;` => Success((), in.rest)
+      val str = content.substring(pos)
+
+      // \n   ; while
+      //      ^
+      if (str.startsWith(";")) {
+        return Success((), Input(in.source, in.offset + 1))
+
         // foo }
         //     ^
-        case `}` | `case` => Success((), in)
-        case _ =>
-          // \n   while
-          //      ^
-          val previous = in.offset - 1
-          // \n   while
-          //  ^
-          if (in.get(previous).contains(Newline)) {
-            Success((), in)
-          } else {
-            Failure(s"Expected ;", in)
-          }
+      } else if (str.startsWith("}") || str.startsWith("case")) {
+        return Success((), in)
+      } else {
+        // \n   while
+        //      ^
+        pos = pos - 1
+        while (pos > 0 && (content.charAt(pos) == ' ' || content.charAt(pos) == '\t')) {
+          pos = pos - 1
+        }
+
+        // \n   while
+        //  ^
+        if (content.charAt(pos) == '\n') {
+          Success((), in)
+        } else {
+          Failure(s"Expected ;", in)
+        }
       }
     }
   }
 
-  lazy val templateString: Parser[Template[Term]] =
-    anyString ~/ many((`${` ~/> expr <~/ `}`) ~/ anyString)  ^^ {
-      case prefix ~ suffix => {
-        val strs = prefix :: suffix.collect { case _ ~ s => s }
-        val splices = suffix.collect { case e ~ _ => e }
-        Template(strs, splices)
-      }
-    }
-
-  //def templateString[T](contents: Parser[T]): Parser[Template[T]] = ???
 
   /**
    * Parses the contents of a string and searches for unquotes ${ ... }
@@ -705,7 +789,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
    *      ^^^^^^^^^^^^  ^^^
    *        prefix     unquote
    */
-/*
+
   import scala.collection.mutable
   import scala.util.boundary
   import scala.util.boundary.break
@@ -764,7 +848,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
             case Success(result, next) =>
               arguments.append(result)
               pos = next.offset
-            case error: NoSuccess[_] => break(error)
+            case error: NoSuccess => break(error)
           }
           skipWhitespace()
           skipUnquoteEnd()
@@ -781,12 +865,12 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
         Success(Template(strings.toList, arguments.toList), Input(in.source, pos))
       }
     }
-*/
+
 
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
-    override def apply(in: In): Result[String] = {
+    override def apply(in: Input): ParseResult[String] = {
       val filename = in.source.name
       val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
@@ -794,7 +878,7 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
     }
   }
 
-  def acceptToken[T](expected: String)(f: PartialFunction[Token, T]): P[T] = Parser { in =>
+  /* def acceptToken[T](expected: String)(f: PartialFunction[Token, T]): P[T] = Parser { in =>
     if (in.atEnd) Failure(s"End of input reached, expected $expected", in)
     else in.first match {
       case Some(token) if f.isDefinedAt(token) => Success(f(token), in.rest)
@@ -810,203 +894,12 @@ class EffektParsers(positions: Positions) extends ParserUtils(positions) {
   implicit def tok2Parser(kind: lexer.TokenKind): Parser[Elem] =
     acceptToken(kind.toString()) {
       case t@Token(_, _, kind1) if kind == kind1 => t
-    }
+    } */
 }
 
-abstract class ParserUtils(positions: Positions) extends Parsers(positions) {
-
-  // === Utils ===
-  def oneof[T](p: => Parser[T]*): Parser[T] = p.reduce(_ | _)
-
-  def many[T](p: => Parser[T]): Parser[List[T]] =
-    rep(p) ^^ { _.toList }
-
-  def some[T](p: => Parser[T]): Parser[List[T]] =
-    rep1(p) ^^ { _.toList }
-
-  def manySep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
-    repsep(p, sep) ^^ { _.toList }
-
-  def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
-    rep1sep(p, sep) ^^ { _.toList }
-
-  extension [T] (p: Parser[T]) {
-    def !!(errorMessage: T => String): Parser[Nothing] =
-      p.flatMap(t => error(errorMessage(t)))
-
-    def !!!(errorMessage: String): Parser[Nothing] =
-      p.flatMap(_ => error(errorMessage))
-  }
-
-  implicit class PositionOps[T](val self: T) {
-    def withPositionOf(other: Any): self.type = { dupAll(other, self); self }
-
-    private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
-
-    private def dupAll(from: Any, to: Any): Unit = to match {
-      case t: Tree =>
-        dupIfEmpty(from, t)
-        t.productIterator.foreach { dupAll(from, _) }
-      case t: Iterable[t] => t.foreach { dupAll(from, _) }
-      case _ => ()
-    }
-
-    def range: Option[Range] = for {
-      from <- positions.getStart(self)
-      to <- positions.getFinish(self)
-    } yield SourceRange(from, to)
-  }
-
-  trait Range {
-    def ++(other: Range): Range
-  }
-
-  case object EmptyRange extends Range {
-    def ++(other: Range) = other
-  }
-
-  case class SourceRange(val from: Position, val to: Position) extends Range {
-    // computes the envelope containing both ranges
-    def ++(other: Range) = other match {
-      case EmptyRange => this
-      case SourceRange(from2, to2) =>
-        SourceRange(if (from2 < from) from2 else from, if (to < to2) to2 else to)
-    }
-  }
-
-  /**
-   * Check positions of all subtrees, stopping at trees that already have positions
-   */
-  def checkPosition(t: Tree): Range = t.range.getOrElse {
-    t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
-      case EmptyRange => sys error s"Missing position for ${ t }. Cannot guess the source position from its children."
-      case rng @ SourceRange(from, to) =>
-        positions.setStart(t, from)
-        positions.setFinish(t, to)
-        rng
-    }
-  }
-
-  def checkPositions(t: Any): Range = t match {
-    case t: Tree => checkPosition(t)
-    case t: Iterable[t] => t.map(checkPositions).fold(EmptyRange)(_ ++ _)
-    case _ => EmptyRange
-  }
-
-  override implicit def memo[T](parser: => Parser[T]): PackratParser[T] =
-    new PackratParser[T](parser.map { t =>
-      checkPositions(t)
-      t
-    })
-}
-
-class EffektLexers(positions: Positions) extends CharParsers(positions) {
+class EffektLexers(positions: Positions) extends Parsers(positions) {
 
   type P[T] = PackratParser[T]
-
-  // === Utils ===
-
-  implicit def tok2Parser(tok: Elem): Parser[Elem] =
-    elem(tok)
-
-  def many[T](p: => Parser[T]): Parser[List[T]] =
-    rep(p) ^^ {
-      _.toList
-    }
-
-  def some[T](p: => Parser[T]): Parser[List[T]] =
-    rep1(p) ^^ {
-      _.toList
-    }
-
-  def manySep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
-    repsep(p, sep) ^^ {
-      _.toList
-    }
-
-  def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
-    rep1sep(p, sep) ^^ {
-      _.toList
-    }
-
-  extension [T](p: Parser[T]) {
-    def !!(errorMessage: T => String): Parser[Nothing] =
-      p.flatMap(t => error(errorMessage(t)))
-
-    def !!!(errorMessage: String): Parser[Nothing] =
-      p.flatMap(_ => error(errorMessage))
-  }
-
-  implicit class PositionOps[T](val self: T) {
-    def withPositionOf(other: Any): self.type = {
-      dupAll(other, self); self
-    }
-
-    private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) {
-        positions.dupPos(from, to)
-      }
-
-    private def dupAll(from: Any, to: Any): Unit = to match {
-      case t: Tree =>
-        dupIfEmpty(from, t)
-        t.productIterator.foreach {
-          dupAll(from, _)
-        }
-      case t: Iterable[t] => t.foreach {
-        dupAll(from, _)
-      }
-      case _ => ()
-    }
-
-    def range: Option[Range] = for {
-      from <- positions.getStart(self)
-      to <- positions.getFinish(self)
-    } yield SourceRange(from, to)
-  }
-
-  trait Range {
-    def ++(other: Range): Range
-  }
-
-  case object EmptyRange extends Range {
-    def ++(other: Range) = other
-  }
-
-  case class SourceRange(val from: Position, val to: Position) extends Range {
-    // computes the envelope containing both ranges
-    def ++(other: Range) = other match {
-      case EmptyRange => this
-      case SourceRange(from2, to2) =>
-        SourceRange(if (from2 < from) from2 else from, if (to < to2) to2 else to)
-    }
-  }
-
-  /**
-   * Check positions of all subtrees, stopping at trees that already have positions
-   */
-  def checkPosition(t: Tree): Range = t.range.getOrElse {
-    t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
-      case EmptyRange => sys error s"Missing position for ${t}. Cannot guess the source position from its children."
-      case rng@SourceRange(from, to) =>
-        positions.setStart(t, from)
-        positions.setFinish(t, to)
-        rng
-    }
-  }
-
-  def checkPositions(t: Any): Range = t match {
-    case t: Tree => checkPosition(t)
-    case t: Iterable[t] => t.map(checkPositions).fold(EmptyRange)(_ ++ _)
-    case _ => EmptyRange
-  }
-
-  override implicit def memo[T](parser: => Parser[T]): PackratParser[T] =
-    new PackratParser[T](parser.map { t =>
-      checkPositions(t)
-      t
-    })
 
   // === Lexing ===
 
@@ -1127,6 +1020,114 @@ class EffektLexers(positions: Positions) extends CharParsers(positions) {
     contents => contents.strip().stripPrefix(multi).stripSuffix(multi)
   }
 
-  def parseAll[T](p: Parser[T], input: String): Result[T] =
+
+  // === Utils ===
+
+  def oneof(strings: String*): Parser[String] =
+    strings.map(literal).reduce(_ | _)
+
+  def oneof[T](p: => Parser[T]*): Parser[T] = p.reduce(_ | _)
+
+  def many[T](p: => Parser[T]): Parser[List[T]] =
+    rep(p) ^^ {
+      _.toList
+    }
+
+  def some[T](p: => Parser[T]): Parser[List[T]] =
+    rep1(p) ^^ {
+      _.toList
+    }
+
+  def manySep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
+    repsep(p, sep) ^^ {
+      _.toList
+    }
+
+  def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
+    rep1sep(p, sep) ^^ {
+      _.toList
+    }
+
+  extension [T](p: Parser[T]) {
+    def !!(errorMessage: T => String): Parser[Nothing] =
+      p.flatMap(t => error(errorMessage(t)))
+
+    def !!!(errorMessage: String): Parser[Nothing] =
+      p.flatMap(_ => error(errorMessage))
+  }
+
+  implicit class PositionOps[T](val self: T) {
+    def withPositionOf(other: Any): self.type = {
+      dupAll(other, self); self
+    }
+
+    private def dupIfEmpty(from: Any, to: Any): Unit =
+      if (positions.getStart(to).isEmpty) {
+        positions.dupPos(from, to)
+      }
+
+    private def dupAll(from: Any, to: Any): Unit = to match {
+      case t: Tree =>
+        dupIfEmpty(from, t)
+        t.productIterator.foreach {
+          dupAll(from, _)
+        }
+      case t: Iterable[t] => t.foreach {
+        dupAll(from, _)
+      }
+      case _ => ()
+    }
+
+    def range: Option[Range] = for {
+      from <- positions.getStart(self)
+      to <- positions.getFinish(self)
+    } yield SourceRange(from, to)
+  }
+
+  trait Range {
+    def ++(other: Range): Range
+  }
+
+  case object EmptyRange extends Range {
+    def ++(other: Range) = other
+  }
+
+  case class SourceRange(val from: Position, val to: Position) extends Range {
+    // computes the envelope containing both ranges
+    def ++(other: Range) = other match {
+      case EmptyRange => this
+      case SourceRange(from2, to2) =>
+        SourceRange(if (from2 < from) from2 else from, if (to < to2) to2 else to)
+    }
+  }
+
+  /**
+   * Check positions of all subtrees, stopping at trees that already have positions
+   */
+  def checkPosition(t: Tree): Range = t.range.getOrElse {
+    t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
+      case EmptyRange => sys error s"Missing position for ${t}. Cannot guess the source position from its children."
+      case rng@SourceRange(from, to) =>
+        positions.setStart(t, from)
+        positions.setFinish(t, to)
+        rng
+    }
+  }
+
+  def checkPositions(t: Any): Range = t match {
+    case t: Tree => checkPosition(t)
+    case t: Iterable[t] => t.map(checkPositions).fold(EmptyRange)(_ ++ _)
+    case _ => EmptyRange
+  }
+
+  override implicit def memo[T](parser: => Parser[T]): PackratParser[T] =
+    new PackratParser[T](parser.map { t =>
+      checkPositions(t)
+      t
+    })
+
+  lazy val path = someSep(ident, `/`)
+
+  def parseAll[T](p: Parser[T], input: String): ParseResult[T] =
     parseAll(p, StringSource(input, "input-string"))
 }

@@ -8,9 +8,9 @@ import effekt.util.{AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrEls
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
 import kiama.util.{Console, REPL, Range, Source, StringSource}
-import kiama.parsing.{NoSuccess, ParseResult, Success, TokenInput, Input}
+import kiama.parsing.{NoSuccess, ParseResult, Success, Input}
 
-class Repl(driver: Driver) extends REPL[Token, Tree, EffektConfig, EffektError] {
+class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
 
@@ -53,14 +53,14 @@ class Repl(driver: Driver) extends REPL[Token, Tree, EffektConfig, EffektError] 
    * Use the special `repl` nonterminal to process the input. It recognizes expressions, statements
    * and everything else that can occur on the top-level.
    */
-  override def parse(source: Source): ParseResult[Input[Token], Tree] = {
+  override def parse(source: Source): ParseResult[Tree] = {
     val lexer = effekt.lexer.Lexer(source.content)
     val (tokens, errs) = lexer.run()
     // TODO report properly
     if (errs.nonEmpty) context.abort(errs.get.toString)
 
     val parser = RecursiveDescent(context.positions, tokens, source)
-    parser.parseRepl(TokenInput(tokens, 0, source, { case Token(s, _, _) => s }))
+    parser.parseRepl(Input(source, 0))
   }
 
   /**
@@ -136,7 +136,7 @@ class Repl(driver: Driver) extends REPL[Token, Tree, EffektConfig, EffektError] 
           output.emitln("Can only show type of expressions")
 
         // this is usually encapsulated in REPL.processline
-        case res: NoSuccess[_] =>
+        case res: NoSuccess =>
           val pos = res.next.position
           val messages = Vector(messaging.message(Range(pos, pos), res.message))
           report(source, messages, config)

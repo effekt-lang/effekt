@@ -23,7 +23,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
-      case res: NoSuccess[_] =>
+      case res: NoSuccess =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
         C.report(ParseError(res.message, Some(range)))
@@ -312,20 +312,20 @@ object CoreParsers {
     parsers
 
   // Some alternative main entry points for most common usages
-  def module(input: String, names: Map[String, Id] = Map.empty): ParseResult[_, ModuleDecl] =
+  def module(input: String, names: Map[String, Id] = Map.empty): ParseResult[ModuleDecl] =
     val in = StringSource(input, "input-string")
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.program, in)
 
-  def module(input: String, names: Names): ParseResult[_, ModuleDecl] =
+  def module(input: String, names: Names): ParseResult[ModuleDecl] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.program, input)
 
-  def statement(input: String, names: Names): ParseResult[_, Stmt] =
+  def statement(input: String, names: Names): ParseResult[Stmt] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.stmt, input)
 
-  def definition(input: String, names: Names): ParseResult[_, Definition] =
+  def definition(input: String, names: Names): ParseResult[Definition] =
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.definition, input)
 }

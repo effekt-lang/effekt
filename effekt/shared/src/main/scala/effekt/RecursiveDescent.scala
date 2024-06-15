@@ -4,7 +4,7 @@ import effekt.lexer.*
 import effekt.lexer.TokenKind.{ `::` as PathSep, * }
 import effekt.source.*
 import effekt.context.Context
-import kiama.parsing.{ TokenInput, ParseResult, Input }
+import kiama.parsing.{ ParseResult, Input }
 import kiama.util.{ Positions, Source, StringSource, Range, Position }
 
 import scala.annotation.{ tailrec, targetName }
@@ -20,7 +20,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   import scala.collection.mutable.ListBuffer
 
-  def parse(input: TokenInput[Token])(using C: Context): Option[ModuleDecl] =
+  def parse(input: Input)(using C: Context): Option[ModuleDecl] =
 
     try {
       //println(input.tokens)
@@ -33,7 +33,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     } catch {
       case ParseError2(msg, pos) =>
         val source = input.source
-        val range = input.get(pos) match {
+        val range = tokens.lift(pos) match {
           case Some(value) =>
             val from = source.offsetToPosition(value.start)
             val to = source.offsetToPosition(value.end + 1)
@@ -48,7 +48,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     }
 
   // here we need to convert to kiamas error format since REPL is defined in kiama
-  def parseRepl(input: TokenInput[Token])(using C: Context): ParseResult[Input[Token], Tree] =
+  def parseRepl(input: Input)(using C: Context): ParseResult[Tree] =
     try { kiama.parsing.Success(repl(), input) } catch {
       case ParseError2(msg, pos) => kiama.parsing.Error(msg, input.copy(offset = pos))
     }
