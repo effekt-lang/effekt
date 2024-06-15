@@ -140,8 +140,6 @@ object Parser extends Phase[Source, Parsed] {
  */
 class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
-  type Elem = Token
-
   type P[Out] = PackratParser[Out]
 
   def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
@@ -404,22 +402,22 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    */
   lazy val stmts: P[Stmt] =
     ( withStmt
-    | (expr <~ `;;`) ~ stmts ^^ ExprStmt.apply
-    | (definition <~ `;;`) ~ stmts ^^ DefStmt.apply
-    | (varDef  <~ `;;`) ~ stmts ^^ DefStmt.apply
-    | (`return`.? ~> expr <~ `;;`.?) ^^ Return.apply
+    | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
+    | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
+    | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
+    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply
     | matchDef
     | failure("Expected a statement")
     )
 
   lazy val withStmt: P[Stmt] =
     ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => List(p) withPositionOf p }) ~
-          (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;;`  ~> stmts) ^^ {
+          (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
           Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
        }
-    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;;` ~> stmts) ^^ {
+    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
           Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
@@ -442,7 +440,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
-     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;;` ~> stmts) ^^ {
+     `val` ~> matchPattern ~ many(`and` ~> matchGuard) ~ (`=` ~/> expr) ~ (`else` ~> stmt).? ~ (`;` ~> stmts) ^^ {
        case p ~ guards ~ sc ~ default ~ body =>
         Return(Match(sc, List(MatchClause(p, guards, body)), default)) withPositionOf p
      }
@@ -454,7 +452,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `effect` ~> idDef ~ maybeTypeParams ~ (`=` ~/> effects) ^^ EffectDef.apply
 
   lazy val dataDef: P[Def] =
-    `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;;`) <~ `}`) ^^ DataDef.apply
+    `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef.apply
 
   lazy val recordDef: P[Def] =
     `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef.apply
@@ -743,7 +741,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Since Kiama already consumes whitespace:
    * the idea is to scroll back whitespaces until we find a newline
    */
-  lazy val `;;` = new Parser[Unit] {
+  lazy val `;` = new Parser[Unit] {
 
 
     def apply(in: Input): ParseResult[Unit] = {
