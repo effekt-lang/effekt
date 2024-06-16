@@ -184,6 +184,8 @@ case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: so
   def tparams = Nil
 }
 
+case class Hole(name: Name, decl: source.Hole, var expectedType: Option[ValueType] = None, var innerTpe: Option[ValueType] = None) extends ValueSymbol
+
 /**
  * Binders represent local value and variable binders
  *

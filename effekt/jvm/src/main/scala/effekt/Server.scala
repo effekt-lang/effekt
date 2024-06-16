@@ -3,7 +3,8 @@ package effekt
 import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
-import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
+import effekt.source.{ FunDef, ModuleDecl, Tree }
+import effekt.symbols.Hole
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
 
@@ -94,7 +95,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   def getHoleHover(position: Position): Option[String] = for {
     trees <- getTreesAt(position)(context)
     tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(context)
+    info <- getHoleInfo(tree)(using context)
   } yield info
 
   // The implementation in kiama.Server does not support file sources
@@ -185,7 +186,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   def action(tree: Tree)(implicit C: Context): Option[TreeAction] = tree match {
     case f: FunDef => inferEffectsAction(f)
-    case h: Hole   => closeHoleAction(h)
+    case h: source.Hole => closeHoleAction(h)
     case _         => None
   }
 
@@ -215,18 +216,19 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     res <- CodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
   } yield res
 
-  def closeHoleAction(hole: Hole)(using C: Context): Option[TreeAction] = for {
-    holeTpe <- C.inferredTypeOption(hole)
-    contentTpe <- C.inferredTypeOption(hole.stmts)
+  def closeHoleAction(hole: source.Hole)(using C: Context): Option[TreeAction] = for {
+    h <- C.symbolOption(hole.id).asInstanceOf[Option[Hole]]
+    holeTpe <- h.expectedType
+    contentTpe = h.innerTpe
     if holeTpe == contentTpe
     res <- hole match {
-      case Hole(source.Return(exp)) => for {
+      case source.Hole(name, source.Return(exp)) => for {
         text <- positions.textOf(exp)
         res <- CodeAction("Close hole", hole, text)
       } yield res
 
       // <{ s1 ; s2; ... }>
-      case Hole(stmts) => for {
+      case source.Hole(name, stmts) => for {
         text <- positions.textOf(stmts)
         res <- CodeAction("Close hole", hole, s"locally { ${text} }")
       } yield res
@@ -241,15 +243,32 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   case class CaptureInfo(location: Location, captureText: String)
 
-  override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
-    if (params.getCommand == "inferredCaptures") {
+  case class HoleInfoLSP(name: String, range: LSPRange, tpe: String, terms: Array[TermBinding], types: Array[TypeBinding])
+
+  override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] = params.getCommand match {
+    case "inferredCaptures" =>
       val captures = getInferredCaptures(src)(using context).map {
         case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
       }
+      // TODO maybe always return Some(Nil)?
       if (captures.isEmpty) None else Some(captures.toArray)
-    } else {
+
+    case "holes" =>
+      try {
+        context.compiler.runFrontend(src)(using context).map { _ =>
+          val holes = getHoles(src)(using context)
+          holes.map {
+            case HoleInfo(hole, tpe, terms, types) =>
+              HoleInfoLSP(hole.name.name, rangeOfNode(hole.decl), tpe, terms, types)
+          }.toArray
+        }
+      } catch {
+        case e => Some(e.toString)
+      }
+
+    case _ =>
       None
-    }
+  }
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 

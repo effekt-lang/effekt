@@ -467,8 +467,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val cap: core.BlockParam = core.BlockParam(region, transform(tpe), Set(region.capture))
       Context.bind(Region(BlockLit(Nil, List(region.capture), Nil, List(cap), transform(body))))
 
-    case source.Hole(stmts) =>
-      Context.bind(Hole())
+    case source.Hole(id, stmts) =>
+      Context.bind(core.Hole())
 
     case a @ source.Assign(id, expr) => a.definition match {
       case sym: VarBinder => Context.bind(Put(sym, Set(sym.capture), transformAsPure(expr)))

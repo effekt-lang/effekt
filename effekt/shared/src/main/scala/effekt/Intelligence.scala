@@ -2,6 +2,8 @@ package effekt
 
 import effekt.context.{ Annotations, Context }
 import effekt.source.{ FunDef, ModuleDecl, Tree }
+import effekt.symbols.scopes.Scope
+
 import kiama.util.{ Position, Source }
 
 trait Intelligence {
@@ -86,9 +88,9 @@ trait Intelligence {
     case s             => s
   }
 
-  def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
-    outerTpe <- C.inferredTypeAndEffectOption(hole)
-    innerTpe <- C.inferredTypeAndEffectOption(hole.stmts)
+  def getHoleInfo(hole: source.Hole)(using C: Context): Option[String] = for {
+    (outerTpe, outerEff) <- C.inferredTypeAndEffectOption(hole)
+    (innerTpe, innerEff) <- C.inferredTypeAndEffectOption(hole.stmts)
   } yield pp"""| | Outside       | Inside        |
                | |:------------- |:------------- |
                | | `${outerTpe}` | `${innerTpe}` |
@@ -96,6 +98,52 @@ trait Intelligence {
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
+
+
+  case class HoleInfo(hole: Hole, tpe: String, terms: Array[TermBinding], types: Array[TypeBinding])
+  case class TermBinding(name: String, tpe: String)
+  case class TypeBinding(name: String, definition: String)
+
+  def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
+    (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+    tpe = hole.expectedType.map { t => pp"${t}" }.getOrElse { "Unknown type" }
+  } yield {
+    val (te, ty) = allBindings(scope)
+    HoleInfo(hole, tpe, te.toArray, ty.toArray)
+  }
+
+  def allBindings(scope: Scope)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+    scope match {
+      case Scope.Global(imports, bindings) =>
+        val (te1, ty1) = allBindings(imports)
+        val (te2, ty2) = allBindings(bindings)
+        (te2, ty1 ++ ty2)
+      case Scope.Named(name, bindings, outer) =>
+        val (te1, ty1) = allBindings(bindings)
+        val (te2, ty2) = allBindings(outer)
+        (te1 ++ te2, ty1 ++ ty2)
+      case Scope.Local(imports, bindings, outer) =>
+        val (te1, ty1) = allBindings(imports)
+        val (te2, ty2) = allBindings(bindings)
+        val (te3, ty3) = allBindings(outer)
+        (te2 ++ te3, ty1 ++ ty2 ++ ty3)
+    }
+
+  def allBindings(bindings: Namespace)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+    val types = bindings.types.flatMap {
+      case (name, sym) =>
+        // TODO this is extremely hacky, printing is not defined for all types at the moment
+        try { Some(TypeBinding(name, DeclPrinter(sym))) } catch { case e => None }
+    }
+    val terms = bindings.terms.flatMap { case (name, syms) =>
+      // TODO can crash
+      syms.collect {
+        case sym: ValueSymbol => TermBinding(name, C.valueTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
+        case sym: BlockSymbol => TermBinding(name, C.blockTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
+      }
+    }
+    // TODO look into outer scopes
+    (terms, types)
 
   // For now we only show captures of function definitions and calls to box
   def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =

@@ -161,8 +161,16 @@ object Annotations {
    * Used by LSP to list all captures
    */
   val CaptureForFile = Annotation[kiama.util.Source, List[(source.Tree, symbols.CaptureSet)]](
-    "CaptureSet",
+    "CaptureForFile",
     "all inferred captures for file"
+  )
+
+  /**
+   * Used by LSP to list all holes
+   */
+  val HolesForFile = Annotation[kiama.util.Source, List[(symbols.Hole, symbols.scopes.Scope)]](
+    "HolesForFile",
+    "all holes with information about the names in scope"
   )
 
   /**

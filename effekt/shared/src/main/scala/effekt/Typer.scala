@@ -4,10 +4,11 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{Annotation, Annotations, Context, ContextOps}
+import effekt.context.{ Annotation, Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, symbol}
-import effekt.source.Term.BlockLiteral
+import effekt.source.Term.{ BlockLiteral, Hole }
+
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -317,8 +318,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // we can unify with everything.
         Result(Context.join(tpes: _*), resEff)
 
-      case source.Hole(stmt) =>
+      case source.Hole(id, stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
+        val h = id.symbol.asHole
+
+        h.expectedType = expected
+        h.innerTpe = Some(tpe)
+
         Result(expected.getOrElse(TBottom), Pure)
 
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
@@ -1396,6 +1402,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       wellformed(got)
       wellformed(effs.toEffects)
       expected foreach { matchExpected(got, _) }
+
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)

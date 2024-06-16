@@ -395,6 +395,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
+    case hole @ source.Hole(id, stmts) =>
+      val h = Hole(Name.local(id), hole)
+      Context.addHole(h)
+      Context.define(id, h)
+      Context scoped { resolveGeneric(stmts) }
+
     case tree @ source.TryHandle(body, handlers) =>
       resolveAll(handlers)
 
@@ -750,7 +756,10 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private var scope: Scoping = _
 
-  private[namer] def initNamerstate(s: Scoping): Unit = scope = s
+  private[namer] def initNamerstate(s: Scoping): Unit = {
+    annotate(Annotations.HolesForFile, module.source, Nil)
+    scope = s
+  }
 
   /**
    * Override the dynamically scoped `in` to also reset namer state.
@@ -963,6 +972,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     assignSymbol(id, sym)
     sym
   }
+
+  private[namer] def addHole(h: Hole): Unit =
+    val src = module.source
+    val holesSoFar = annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+    annotate(Annotations.HolesForFile, src, holesSoFar :+ (h, scope.scope))
 
   private[namer] def scoped[R](block: => R): R = Context in {
     scope.scoped { block }

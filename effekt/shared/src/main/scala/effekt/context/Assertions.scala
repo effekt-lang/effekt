@@ -85,6 +85,11 @@ object assertions {
       case t: BlockSymbol => t
       case _ => reporter.panic("Expected a block symbol")
     }
+
+    def asHole: Hole = s match {
+      case t: Hole => t
+      case _ => reporter.abort("Expected a hole symbol")
+    }
   }
 
   extension(t: symbols.Type)(using reporter: ErrorReporter) {

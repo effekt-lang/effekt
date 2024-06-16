@@ -541,11 +541,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idRef ^^ Var.apply
 
   lazy val hole: P[Term] =
-    ( namedHole ^^^ Hole(Return(UnitLit()))
-    | `<{` ~> stmts <~ `}>` ^^ Hole.apply
+    ( namedHole ^^ { holeText =>
+      val withoutBrackets = holeText.stripPrefix("<").stripSuffix(">")
+      val name = if withoutBrackets.isEmpty then "hole" else withoutBrackets
+      Hole(IdDef(name).withPositionOf(holeText), Return(UnitLit()))
+    }
+    | `<{` ~> stmts <~ `}>` ^^ { body => Hole(IdDef("hole"), body) }
     )
 
-  lazy val namedHole = """<[\w]*>""".r
+  lazy val namedHole: P[String] = regex("""<[\w]*>""".r)
 
   lazy val literals: P[Literal] =
     double | int | bool | unit | char | string

@@ -328,7 +328,7 @@ enum Term extends Tree {
   case Assign(id: IdRef, expr: Term) extends Term, Reference
 
   case Literal(value: Any, tpe: symbols.ValueType)
-  case Hole(stmts: Stmt)
+  case Hole(id: IdDef, stmts: Stmt)
 
   // Boxing and unboxing to represent first-class values
   case Box(capt: Option[CaptureSet], block: Term)
@@ -574,7 +574,7 @@ object Named {
   type Params = ValueParam | BlockParam
   type Externs = ExternDef | ExternResource | ExternInterface | ExternType
   type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
-  type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
+  type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern | Hole
 
   type Types = ValueTypeRef | BlockTypeRef
   type Vars = Var | Assign
@@ -609,6 +609,7 @@ object Named {
     case Constructor => symbols.Constructor
     case Region      => symbols.TrackedParam
     case AnyPattern  => symbols.ValueParam
+    case Hole        => symbols.Hole
   }
 
   type ResolvedReferences[T <: References] = T match {
