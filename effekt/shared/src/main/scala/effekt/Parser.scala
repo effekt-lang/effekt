@@ -44,8 +44,6 @@ object Parser extends Phase[Source, Parsed] {
  */
 class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
-  type P[Out] = PackratParser[Out]
-
   def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parseAll(program, source) match {
       case Success(ast, _) =>
@@ -63,7 +61,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
   lazy val idRef: P[IdRef] = identRef ^^ { path =>
     val ids = path.split("::").toList
-    IdRef(ids.init, ids.last)    
+    IdRef(ids.init, ids.last)
   }
 
   /**
@@ -120,8 +118,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | typeAliasDef
     | effectAliasDef
     | namespaceDef
-    | (`extern` | `effect` | `interface` | `type` | `record`).into { kw =>
-        failure(s"Only supported on the toplevel: ${kw.toString()} declaration.")
+    | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
+        failure(s"Only supported on the toplevel: ${kw} declaration.")
       }
     | failure("Expected a definition")
     )
@@ -180,7 +178,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
 
-
   lazy val externCapture: P[CaptureSet] =
     ( "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
@@ -192,6 +189,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""), None) }
     | `extern` ~> multilineString ^^ { contents => ExternInclude("", Some(contents)) }
     )
+
 
   /**
    * Parameters
@@ -520,7 +518,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | `<{` ~> stmts <~ `}>` ^^ Hole.apply
     )
 
-  lazy val literals =
+  lazy val literals: P[Literal] =
     double | int | bool | unit | string
 
   lazy val int    = integerLiteral.flatMap { n =>
@@ -623,16 +621,16 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   private def opName(op: String): String = op match {
     case "||" => "infixOr"
     case "&&" => "infixAnd"
-    case "===" => "infixEq"
-    case "!==" => "infixNeq"
-    case "<" => "infixLt"
-    case ">" => "infixGt"
+    case "==" => "infixEq"
+    case "!=" => "infixNeq"
+    case "<"  => "infixLt"
+    case ">"  => "infixGt"
     case "<=" => "infixLte"
     case ">=" => "infixGte"
-    case "+" => "infixAdd"
-    case "-" => "infixSub"
-    case "*" => "infixMul"
-    case "/" => "infixDiv"
+    case "+"  => "infixAdd"
+    case "-"  => "infixSub"
+    case "*"  => "infixMul"
+    case "/"  => "infixDiv"
     case "++" => "infixConcat"
   }
 
@@ -646,7 +644,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * the idea is to scroll back whitespaces until we find a newline
    */
   lazy val `;` = new Parser[Unit] {
-
 
     def apply(in: Input): ParseResult[Unit] = {
       val content = in.source.content
@@ -680,7 +677,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       }
     }
   }
-
 
   /**
    * Parses the contents of a string and searches for unquotes ${ ... }
@@ -767,7 +763,6 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
         Success(Template(strings.toList, arguments.toList), Input(in.source, pos))
       }
     }
-
 
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
