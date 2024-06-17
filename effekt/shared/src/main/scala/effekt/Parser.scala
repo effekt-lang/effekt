@@ -121,9 +121,8 @@ object Parser extends Phase[Source, Parsed] {
     case source =>
       //println(s"parsing ${source.name}")
       Context.timed(phaseName, source.name) {
-        val lexer = effekt.lexer.Lexer(source.content)
-        val (tokens, err) = lexer.run()
-        if (err.isDefined) C.abort(err.get.toString)
+        val lexer = effekt.lexer.Lexer(source)
+        val tokens = lexer.lex()
         val parser = RecursiveDescent(C.positions, tokens, source)
         parser.parse(Input(source, 0))
       }
