@@ -7,7 +7,7 @@ package llvm
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Definition
  */
 enum Definition {
-  case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
+  case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock], cc: String = "tailcc")
   case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
   case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
@@ -21,7 +21,7 @@ case class BasicBlock(name: String, instructions: List[Instruction], terminator:
  */
 enum Instruction {
   case Call(result: String, resultType: Type, function: Operand, arguments: List[Operand])
-  case TailCall(function: Operand, arguments: List[Operand])
+  case TailCall(function: Operand, arguments: List[Operand], cc: String = "tailcc")
   case Load(result: String, tpe: Type, address: Operand)
   case Store(address: Operand, value: Operand)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])
