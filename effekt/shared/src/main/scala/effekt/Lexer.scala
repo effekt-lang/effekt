@@ -6,20 +6,12 @@ import scala.collection.immutable
 import scala.collection.BufferedIterator
 import scala.util.matching.Regex
 
+import effekt.context.Context
+
+import kiama.util.{ Source, Range }
+
 /** An error encountered during lexing a source string. */
-enum LexerError {
-  case MalformedFloat
-  case MalformedStringInterpolation
-  case DoubleOverflow
-  case LongOverflow
-  case InvalidKeywordIdent(s: String)
-  case UnterminatedString
-  case UnterminatedComment
-  case UnterminatedQuote
-  case Eof
-  case Expected(expected: String, got: String)
-  case Custom(msg: String)
-}
+case class LexerError(msg: String, start: Int, end: Int) extends Throwable(msg)
 
 
 /**
@@ -164,7 +156,7 @@ object Lexer {
  *
  * @param source A string of a Effekt program to be lexed.
  */
-class Lexer(source: String) {
+class Lexer(source: Source) {
   import Lexer.*
 
   /** The absolute starting index in the source string of the currently scanned token */
@@ -180,7 +172,9 @@ class Lexer(source: String) {
   // For future improvement, this is probably more performant than using substring on the source
   val currLexeme: mutable.StringBuilder = mutable.StringBuilder()
   /** A peekable iterator of the source string. This is used instead of directly indexing the source string. */
-  val chars: BufferedIterator[Char] = source.iterator.buffered
+  val chars: BufferedIterator[Char] = source.content.iterator.buffered
+
+  val str: String = source.content
 
   lazy val whitespace: Regex = """([ \t\r\n])""".r // single whitespace characters
   //lazy val nameFirst: Regex = """[a-zA-Z_]""".r
@@ -192,7 +186,7 @@ class Lexer(source: String) {
   val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
 
   def isEOF: Boolean =
-    current >= source.length
+    current >= str.length
 
   /** Advance the [[Lexer.chars]] iterator and [[Lexer.current]] index. Returns [[None]] if EOF is reached. */
   def consume(): Option[Char] = {
@@ -204,23 +198,23 @@ class Lexer(source: String) {
     }
   }
 
-  def expect(c: Char, err: LexerError): Either[LexerError, Unit] = {
+  def expect(c: Char): Unit = {
     val copt = consume()
     copt match {
-      case Some(c1) if c == c1 => Right(())
-      case None => Left(LexerError.Eof)
-      case _ => Left(err)
+      case Some(c1) =>
+        if (c == c1) ()
+        else err(s"Expected $c but found $c1 instead.")
+      case None => err(s"Expected $c but reached end of file.")
     }
 
   }
 
   /** Advance the [[Lexer.chars]] iterator while the next character matches the given predicate. */
   @tailrec
-  final def consumeWhile(pred: Char => Boolean): Either[LexerError, Unit] =
+  final def consumeWhile(pred: Char => Boolean): Unit =
     peek() match {
       case Some(c) if pred(c) => consume(); consumeWhile(pred)
-      case Some(_) => Right(())
-      case _ => Left(LexerError.Eof)
+      case _ => ()
     }
 
   /** Peek at the next character. Returns [[None]] if EOF is reached. */
@@ -229,7 +223,7 @@ class Lexer(source: String) {
   def peekMatches(pred: Char => Boolean): Boolean = peek().exists(pred)
 
   def peekN(lookahead: Int): Option[Char] = {
-    if (current - 1 + lookahead < source.length) Some(source.charAt(current - 1 + lookahead))
+    if (current - 1 + lookahead < str.length) Some(str.charAt(current - 1 + lookahead))
     else None
   }
 
@@ -240,8 +234,8 @@ class Lexer(source: String) {
   def makeToken(kind: TokenKind): Token =
     Token(start, current - 1, kind)
 
-  def err(err: LexerError): TokenKind =
-    TokenKind.Error(err)
+  def err(msg: String, start: Int = start, end: Int = current): Nothing =
+    throw LexerError(msg, start, end)
 
   /** Checks if the characters starting at [[start]] match the expected string and only then
    * consumes all corresponding characters. That is, if there's no match, no characters are consumed.
@@ -249,8 +243,8 @@ class Lexer(source: String) {
   def matches(expected: String, start: Int = start): Boolean = {
     val len = expected.length
     val end = start + len - 1
-    if (end >= source.length) return false
-    val slice = source.substring(start, end + 1)
+    if (end >= str.length) return false
+    val slice = str.substring(start, end + 1)
     if (slice == expected) {
       (start to end).foreach(_ => consume())
       true
@@ -261,7 +255,7 @@ class Lexer(source: String) {
 
   /** Extract a slice of the source string delimited by the starting and (exclusive) current index */
   def slice(start: Int = start, end: Int = current): String =
-    source.substring(start, end)
+    str.substring(start, end)
 
   /** Like [[Lexer.matches]] but starts matching at the lexer's current head [[current]]. */
   def nextMatches(expected: String): Boolean = matches(expected, current)
@@ -274,16 +268,29 @@ class Lexer(source: String) {
     }
 
   def matchesRegex(r: Regex): Boolean = {
-    val rest = source.substring(start)
+    val rest = str.substring(start)
     val candidate = rest.takeWhile { c => !whitespace.matches(c.toString) }
     r.matches(candidate)
   }
+
+  def lex()(using ctx: Context): Vector[Token] =
+    try {
+      run()
+    } catch {
+      case LexerError(msg, start, end) => {
+        val relativeStart = source.offsetToPosition(start)
+        val relativeEnd = source.offsetToPosition(end)
+        val range = Range(relativeStart, relativeEnd)
+        // TODO create separate error kind for lexer error
+        ctx.abort(effekt.util.messages.ParseError(msg, Some(range)))
+      }
+    }
 
   /** Main entry-point of the lexer. Whitespace is ignored and comments are collected.
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.
    */
-  def run(): (Vector[Token], Option[LexerError]) = {
+  def run(): Vector[Token] = {
     var err: Option[LexerError] = None
     var eof = false
     while (!eof && err.isEmpty) {
@@ -299,14 +306,12 @@ class Lexer(source: String) {
           // EOF has the position of one after the last character
           // this may be useful for a streaming lexer
           tokens += Token(current + 1, current + 1, TokenKind.EOF)
-        case TokenKind.Error(e) =>
-          err = Some(e)
         case k =>
           tokens += makeToken(k)
       }
       start = current
     }
-    (tokens.toVector, err)
+    tokens.toVector
   }
 
   // --- Literal and comment matchers ---
@@ -324,7 +329,7 @@ class Lexer(source: String) {
             consume()
             consumeWhile(_.isDigit)
             slice().toDoubleOption match {
-              case None => err(LexerError.DoubleOverflow)
+              case None => err("Not a 64bit floating point literal.")
               case Some(n) => TokenKind.Float(n)
             }
           case _ => TokenKind.Integer(slice().toInt)
@@ -332,7 +337,7 @@ class Lexer(source: String) {
       }
       case _ =>
         slice().toLongOption match {
-          case None => err(LexerError.LongOverflow)
+          case None => err("Not a 64bit integer literal.")
           case Some(n) => TokenKind.Integer(n)
         }
     }
@@ -394,7 +399,7 @@ class Lexer(source: String) {
           }
         }
         case Some('\n') if delim == `"` =>
-          return err(LexerError.Custom("linebreaks are not allowed in single-line strings"))
+          return err("Linebreaks are not allowed in single-line strings.")
         case Some('\\') => {
           consume()
           consume()
@@ -404,7 +409,7 @@ class Lexer(source: String) {
           return TokenKind.Str(s, delim.isMultiline)
         }
         case None =>
-          return err(LexerError.UnterminatedString)
+          return err("Unterminated string.", start, start + offset)
         case _ =>
           consume()
       }
@@ -422,7 +427,7 @@ class Lexer(source: String) {
         case Some('*') if nextMatches('/') => closed = true
         case Some(_) => ()
         // reached EOF without encountering */
-        case None => return err(LexerError.UnterminatedComment)
+        case None => return err("Unterminated multi-line comment; expected closing `*/`.")
       }
     }
     // exclude /* and */ from the comment's content
@@ -537,7 +542,7 @@ class Lexer(source: String) {
         // check if the slice matches any know keyword, otherwise it is necessarily an identifier
         keywordMap.getOrElse(s, TokenKind.Ident(s))
       }
-      case c => TokenKind.Error(LexerError.InvalidKeywordIdent(c.toString))
+      case c => err("Invalid keyword/identifier.")
     }
   }
 }
