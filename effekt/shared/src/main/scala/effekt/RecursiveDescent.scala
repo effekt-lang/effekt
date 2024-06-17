@@ -514,6 +514,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def externBody(): Template[Term] =
     nonterminal:
+      // TODO handle case where the body is not a string, e.g.
+      // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
       val first = string()
       val (exprs, strs) = manyWhile((`${` ~> expr() <~ `}`, string()), `${`).unzip
       Template(first :: strs, exprs)
