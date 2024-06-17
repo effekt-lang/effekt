@@ -251,19 +251,19 @@ object Transformer {
 
         // TODO cache based on environment
         val sharerName = freshName("sharer");
-        defineFunction(sharerName, List(Parameter(spType, "sp"))) {
+        defineFunction(sharerName, List(Parameter(spType, "sp")), cc="fastcc") {
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
-          emit(TailCall(shareFrames, List(getStackPointer())));
+          emit(TailCall(shareFrames, List(getStackPointer()), cc="fastcc"));
           RetVoid()
         }
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
-        defineFunction(eraserName, List(Parameter(spType, "sp"))) {
+        defineFunction(eraserName, List(Parameter(spType, "sp")), cc="fastcc") {
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
-          emit(TailCall(eraseFrames, List(getStackPointer())));
+          emit(TailCall(eraseFrames, List(getStackPointer()), cc="fastcc"));
           RetVoid()
         }
 
@@ -302,7 +302,7 @@ object Transformer {
 
         // TODO cache based on environment (this is different from other sharers)
         val sharerName = freshName("sharer");
-        defineFunction(sharerName, List(Parameter(spType, "sp"))) {
+        defineFunction(sharerName, List(Parameter(spType, "sp")), cc="fastcc") {
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           RetVoid()
@@ -310,7 +310,7 @@ object Transformer {
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
-        defineFunction(eraserName, List(Parameter(spType, "sp"))) {
+        defineFunction(eraserName, List(Parameter(spType, "sp")), cc="fastcc") {
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
           emit(Call("_", VoidType(), free, List(getStackPointer())));
@@ -448,7 +448,7 @@ object Transformer {
           case _ => ???
     }
 
-  def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
+  def defineFunction(name: String, parameters: List[Parameter], cc: String = "tailcc")(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
     implicit val FC = FunctionContext();
     implicit val BC = BlockContext();
 
@@ -458,7 +458,7 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(VoidType(), name, parameters, entryBlock :: basicBlocks);
+    val function = Function(VoidType(), name, parameters, entryBlock :: basicBlocks, cc);
 
     emit(function)
   }
@@ -489,7 +489,7 @@ object Transformer {
     val eraser = ConstantGlobal(eraserType, freshName("eraser"));
 
     C.erasers.getOrElseUpdate(types, {
-      defineFunction(eraser.name, List(Parameter(envType, "env"))) {
+      defineFunction(eraser.name, List(Parameter(envType, "env")), cc="fastcc") {
         // TODO avoid unnecessary loads
         loadEnvironmentAt(LocalReference(envType, "env"), freshEnvironment);
         eraseValues(freshEnvironment, Set());
