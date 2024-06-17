@@ -4,35 +4,31 @@ import effekt.lexer.TokenKind.*
 import effekt.lexer.{Lexer, Token, TokenKind, LexerError }
 import effekt.lexer.LexerError.*
 
+import kiama.util.{ StringSource }
+
 import munit.Location
 
 class LexerTests extends munit.FunSuite {
 
-  def lex(prog: String): Vector[Token] = {
-    val (tokens, err) = Lexer(prog).run()
-    if (err.isDefined) fail(s"Lexing failed with error ${err.get}")
-    tokens
-  }
-
   def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
-    val tokens = lex(prog)
+    val tokens = Lexer(StringSource(prog, "")).run()
     tokens.zipAll(expected, null, null).foreach((t1, t2) => assertEquals(t1.kind, t2))
   }
 
-  def assertSuccess(prog: String)(using Location): Unit = {
-    val (tokens, err) = Lexer(prog).run()
-    if (err.isDefined) {
-      fail(err.toString)
+  def assertSuccess(prog: String)(using Location): Unit =
+    try {
+      Lexer(StringSource(prog, "")).run()
+    } catch {
+        case LexerError(msg, _, _) => fail(msg)
     }
-  }
 
-  def assertFailure(e: LexerError, prog: String)(using Location): Unit = {
-    val (tokens, err) = Lexer(prog).run()
-    err match {
-      case Some(err) if err == e => ()
-      case _ => fail(s"expected an lexer error $e but found none")
+  def assertFailure(prog: String)(using Location): Unit =
+    try {
+      Lexer(StringSource(prog, "")).run()
+      fail(s"expected an lexer error but found none")
+    } catch {
+      case LexerError(_, _, _) => ()
     }
-  }
 
   test("function definition") {
     val prog =
@@ -60,9 +56,9 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("big numbers") {
-    assertFailure(LongOverflow, "9223372036854775808")
+    assertFailure("9223372036854775808")
     assertTokensEq("9223372036854775807", Integer(9223372036854775807L), EOF)
-    assertFailure(LongOverflow, "-9223372036854775809")
+    assertFailure("-9223372036854775809")
     assertTokensEq("-9223372036854775808", Integer(-9223372036854775808L), EOF)
     // the max double value is 1.7976931348623157E308, without "e notation/scientific notation" support in the lexer,
     // we refrain from writing it down in full length here
@@ -98,6 +94,9 @@ class LexerTests extends munit.FunSuite {
       Str("val def interface \"\" \"\ncontinues here \t \r\n and is end\n ", true),
       EOF
     )
+    assertTokensEq("\" \"\"\"", Str(" ", false), Str("", false), EOF)
+    assertFailure("\"\"\"")
+    assertFailure("\"\"\" \"")
   }
 
   test("quoted single-line string") {
