@@ -6,25 +6,25 @@ interface Break[T] {
 
 def run(n: Int) = {
 
-  val freeRows: Array[Bool] = fill(n, true);
-  val freeMaxs: Array[Bool] = fill(2 * n, true);
-  val freeMins: Array[Bool] = fill(2 * n, true);
-  val queenRows: Array[Int] = fill(n, -1);
+  val freeRows: Array[Bool] = array(n, true);
+  val freeMaxs: Array[Bool] = array(2 * n, true);
+  val freeMins: Array[Bool] = array(2 * n, true);
+  val queenRows: Array[Int] = array(n, -1);
 
   def getRowColumn(r: Int, c: Int): Bool =
     freeRows.unsafeGet(r) && freeMaxs.unsafeGet(c + r) && freeMins.unsafeGet(c - r + (n - 1))
 
   def setRowColumn(r: Int, c: Int, v: Bool) = {
-    freeRows.put(r, v);
-    freeMaxs.put(c + r, v);
-    freeMins.put(c - r + (n - 1), v)
+    freeRows.unsafeSet(r, v);
+    freeMaxs.unsafeSet(c + r, v);
+    freeMins.unsafeSet(c - r + (n - 1), v)
   }
 
   def placeQueen(c: Int): Bool =
     try {
       each(0, n) { r =>
         if (getRowColumn(r, c)) {
-          queenRows.put(r, c);
+          queenRows.unsafeSet(r, c);
           setRowColumn(r, c, false);
 
           if (c == (n - 1)) {

@@ -7,8 +7,8 @@ type Towers = Array[Pile]
 
 def run(n: Int) = {
 
-  var movesDone: Int in global = 0;
-  var towers: Towers in global = fill(3, Nil());
+  var movesDone: Int = 0;
+  var towers: Towers = array(3, Nil());
 
   def pushDisk(newTopDiskOnPile: Disk, pileIdx: Int): Unit = {
     val pile: Pile = towers.unsafeGet(pileIdx);
@@ -19,7 +19,7 @@ def run(n: Int) = {
         }
       case Nil() => ()
     }
-    towers.put(pileIdx, Cons(newTopDiskOnPile, pile));
+    towers.unsafeSet(pileIdx, Cons(newTopDiskOnPile, pile));
   }
 
   def popDisk(pileIdx: Int): Disk = {
@@ -29,7 +29,7 @@ def run(n: Int) = {
       case Nil() =>
         panic("Attempting to remove a disk from an empty pile");
       case Cons(disk, next) =>
-        put(towers, pileIdx, next)
+        towers.unsafeSet(pileIdx, next)
         disk
     }
   }

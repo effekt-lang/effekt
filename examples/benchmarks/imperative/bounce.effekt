@@ -47,15 +47,11 @@ def randomBall { rand: Random }: Ball at {global} = {
   }
 }
 
-def abs(n: Double): Double = if (n < 0.0) 0.0 - n else n
-
-def bitAnd(x: Int, y: Int) = mod(x, y + 1)
-
 def withRandom[R] { program: { Random } => R }: R = {
   var seed = 74755;
   def rand = new Random {
     def next() = {
-      seed = bitAnd((seed * 1309) + 13849, 65535);
+      seed = bitwiseAnd((seed * 1309) + 13849, 65535);
       seed
     }
   }
@@ -66,11 +62,7 @@ def run(n: Int) = {
   withRandom { {rand: Random} =>
     val ballCount = 100;
     var bounces = 0;
-    val balls = emptyArray[Ball at {global}](ballCount)
-
-    each(0, ballCount) { i =>
-      put(balls, i, randomBall() {rand} )
-    }
+    val balls = array::build(ballCount) { _ => randomBall(){rand} }
 
     each(0, n) { i =>
       each(0, ballCount) { i =>

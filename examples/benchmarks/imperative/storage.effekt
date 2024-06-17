@@ -28,7 +28,7 @@ def run(n: Int) = {
   def buildTreeDepth(depth: Int) { rand: Random }: Tree = {
     count = count + 1;
     if (depth == 1) {
-      Leaf(emptyArray(mod(rand.next, 10) + 1))
+      Leaf(allocate(mod(rand.next, 10) + 1))
     } else {
       Node(
         buildTreeDepth(depth - 1){ rand },

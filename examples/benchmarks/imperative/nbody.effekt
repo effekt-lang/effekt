@@ -1,9 +1,5 @@
 import array
 
-val PI = 3.141592653589793
-val SOLAR_MASS = 4.0 * PI * PI
-val DAYS_PER_YER = 365.24
-
 record Body(
   x: Double,
   y: Double,
@@ -14,68 +10,72 @@ record Body(
   mass: Double
 )
 
-def makeBody(
-    x: Double,
-    y: Double,
-    z: Double,
-    vx: Double,
-    vy: Double,
-    vz: Double,
-    mass: Double): Body =
-  Body(x, y, z, vx * DAYS_PER_YER, vy * DAYS_PER_YER, vz * DAYS_PER_YER, mass * SOLAR_MASS)
-
-val jupiter = makeBody(
-  4.84143144246472090,
-  -1.16032004402742839,
-  -0.10362204447112311,
-  0.001660076642744037,
-  0.007699011184197404,
-  -0.0000690460016972063,
-  0.0009547919384243266
-)
-
-val saturn = makeBody(
-  8.34336671824458,
-  4.124798564124305,
-  -0.4035234171143214,
-  -0.002767425107268624,
-  0.004998528012349172,
-  0.00002304172975737639,
-  0.0002858859806661308
-)
-
-val uranus = makeBody(
-  12.89436956213913,
-  -15.11115140169863,
-  -0.22330757889265574,
-  0.002964601375647616,
-  0.0023784717395948095,
-  -0.000029658956854023755,
-  0.00004366244043351563
-)
-
-val neptune = makeBody(
-  15.379697114850917,
-  -25.919314609987964,
-  0.17925877295037118,
-  0.002680677724903893,
-  0.001628241700382423,
-  -0.00009515922545197159,
-  0.00005151389020466115
-)
-
-val sun = makeBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
-
 def run(n: Int) = {
 
-  def createBodies(): Array[Body] = {
-    val bodies: Array[Body] = emptyArray[Body](5)
+  val PI = 3.141592653589793
+  val SOLAR_MASS = 4.0 * PI * PI
+  val DAYS_PER_YEAR = 365.24
 
-    bodies.put(0, sun);
-    bodies.put(1, jupiter);
-    bodies.put(2, saturn);
-    bodies.put(3, uranus);
-    bodies.put(4, neptune);
+  def makeBody(
+      x: Double,
+      y: Double,
+      z: Double,
+      vx: Double,
+      vy: Double,
+      vz: Double,
+      mass: Double): Body =
+    Body(x, y, z, vx * DAYS_PER_YEAR, vy * DAYS_PER_YEAR, vz * DAYS_PER_YEAR, mass * SOLAR_MASS)
+
+  val jupiter = makeBody(
+    4.84143144246472090,
+    -1.16032004402742839,
+    -0.10362204447112311,
+    0.001660076642744037,
+    0.007699011184197404,
+    -0.0000690460016972063,
+    0.0009547919384243266
+  )
+
+  val saturn = makeBody(
+    8.34336671824458,
+    4.124798564124305,
+    -0.4035234171143214,
+    -0.002767425107268624,
+    0.004998528012349172,
+    0.00002304172975737639,
+    0.0002858859806661308
+  )
+
+  val uranus = makeBody(
+    12.89436956213913,
+    -15.11115140169863,
+    -0.22330757889265574,
+    0.002964601375647616,
+    0.0023784717395948095,
+    -0.000029658956854023755,
+    0.00004366244043351563
+  )
+
+  val neptune = makeBody(
+    15.379697114850917,
+    -25.919314609987964,
+    0.17925877295037118,
+    0.002680677724903893,
+    0.001628241700382423,
+    -0.00009515922545197159,
+    0.00005151389020466115
+  )
+
+  val sun = makeBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+
+  def createBodies(): Array[Body] = {
+    val bodies = allocate[Body](5)
+
+    bodies.unsafeSet(0, sun);
+    bodies.unsafeSet(1, jupiter);
+    bodies.unsafeSet(2, saturn);
+    bodies.unsafeSet(3, uranus);
+    bodies.unsafeSet(4, neptune);
 
     var px = 0.0;
     var py = 0.0;
@@ -95,7 +95,7 @@ def run(n: Int) = {
         0.0 -(pz / SOLAR_MASS),
         body.mass)
 
-    bodies.put(0, sun.offsetMomentum(px, py, pz))
+    bodies.unsafeSet(0, sun.offsetMomentum(px, py, pz))
 
     bodies
   }
@@ -114,7 +114,7 @@ def run(n: Int) = {
         val distance = sqrt(dSquared);
         val mag = dt / (dSquared * distance);
 
-        bodies.put(i, Body(
+        bodies.unsafeSet(i, Body(
           iBody.x, iBody.y, iBody.z,
           iBody.vx - dx * jBody.mass * mag,
           iBody.vy - dy * jBody.mass * mag,
@@ -122,7 +122,7 @@ def run(n: Int) = {
           iBody.mass
         ));
 
-        bodies.put(j, Body(
+        bodies.unsafeSet(j, Body(
           jBody.x, jBody.y, jBody.z,
           jBody.vx + dx * iBody.mass * mag,
           jBody.vy + dy * iBody.mass * mag,
@@ -134,7 +134,7 @@ def run(n: Int) = {
 
     each(0, bodies.size) { i =>
       val body = bodies.unsafeGet(i);
-      bodies.put(i, Body(
+      bodies.unsafeSet(i, Body(
         body.x + dt * body.vx,
         body.y + dt * body.vy,
         body.z + dt * body.vz,

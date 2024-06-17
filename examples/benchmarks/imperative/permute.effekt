@@ -2,8 +2,8 @@ import array
 
 def swap(arr: Array[Int], i: Int, j: Int) = {
   val tmp = arr.unsafeGet(i);
-  arr.put(i, arr.unsafeGet(j));
-  arr.put(j, tmp)
+  arr.unsafeSet(i, arr.unsafeGet(j));
+  arr.unsafeSet(j, tmp)
 }
 
 def run(n: Int) = {
@@ -24,7 +24,7 @@ def run(n: Int) = {
     }
   }
 
-  fill(n, 1).permute(n);
+  array(n, 1).permute(n);
 
   count
 }
