@@ -1,3 +1,4 @@
+import ref
 import array
 
 interface Ball {
@@ -9,36 +10,36 @@ interface Random {
 }
 
 def randomBall { rand: Random }: Ball at {global} = {
-  var x in global = toDouble(rand.next().mod(500));
-  var y in global = toDouble(rand.next().mod(500));
-  var xVel in global = toDouble(rand.next().mod(300) - 150);
-  var yVel in global = toDouble(rand.next().mod(300) - 150);
+  val x = ref(toDouble(rand.next().mod(500)));
+  val y = ref(toDouble(rand.next().mod(500)));
+  val xVel = ref(toDouble(rand.next().mod(300) - 150));
+  val yVel = ref(toDouble(rand.next().mod(300) - 150));
   new Ball {
     def bounce() = {
       val xLimit = 500.0;
       val yLimit = 500.0;
       var bounced = false;
-      x = x + xVel;
-      y = y + yVel;
+      x.set(x.get + xVel.get);
+      y.set(y.get + yVel.get);
 
-      if (x > xLimit) {
-        x = xLimit; 
-        xVel = 0.0 - abs(xVel);
+      if (x.get > xLimit) {
+        x.set(xLimit);
+        xVel.set(neg(abs(xVel.get)));
         bounced = true;
       }
-      if (x < 0.0) {
-        x = 0.0;
-        xVel = abs(xVel)
+      if (x.get < 0.0) {
+        x.set(0.0);
+        xVel.set(abs(xVel.get))
         bounced = true;
       }
-      if (y > yLimit) {
-        y = yLimit;
-        yVel = 0.0 - abs(yVel);
+      if (y.get > yLimit) {
+        y.set(yLimit);
+        yVel.set(neg(abs(yVel.get)));
         bounced = true;
       }
-      if (y < 0.0) {
-        y = 0.0;
-        yVel = abs(yVel);
+      if (y.get < 0.0) {
+        y.set(0.0);
+        yVel.set(abs(yVel.get));
         bounced = true;
       }
 
