@@ -45,6 +45,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
+
       case res: NoSuccess =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
@@ -60,6 +61,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     val ids = path.split("::").toList
     IdRef(ids.init, ids.last)
   }
+
 
   /**
    * Main entry point
@@ -532,7 +534,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val boxedExpr: P[Term] =
-    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
+    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg | newExpr) ^^ { case capt ~ block => Box(capt, block) }
 
   lazy val lambdaExpr: P[Term] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
@@ -764,31 +766,13 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   object defaultModulePath extends Parser[String] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
-    override def apply(in: Input): ParseResult[String] = {
+    def apply(in: Input): ParseResult[String] = {
       val filename = in.source.name
       val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
       Success(base, in)
     }
   }
-
-  /* def acceptToken[T](expected: String)(f: PartialFunction[Token, T]): P[T] = Parser { in =>
-    if (in.atEnd) Failure(s"End of input reached, expected $expected", in)
-    else in.first match {
-      case Some(token) if f.isDefinedAt(token) => Success(f(token), in.rest)
-      case _ => Failure(s"Unexpected token ${in.first.get.kind}, expected $expected", in)
-    }
-  }
-
-  def accept[T](expected: String)(f: PartialFunction[TokenKind, T]): P[T] =
-    acceptToken[T](expected) {
-      case Token(start, end, kind) if f.isDefinedAt(kind) => f(kind)
-    }
-
-  implicit def tok2Parser(kind: lexer.TokenKind): Parser[Elem] =
-    acceptToken(kind.toString()) {
-      case t@Token(_, _, kind1) if kind == kind1 => t
-    } */
 }
 
 class EffektLexers(positions: Positions) extends Parsers(positions) {
@@ -806,13 +790,13 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
 
   lazy val ident =
     (not(anyKeyword) ~> name
-      | failure("Expected an identifier")
-      )
+    | failure("Expected an identifier")
+    )
 
   lazy val identRef =
     (not(anyKeyword) ~> qualifiedName
-      | failure("Expected an identifier")
-      )
+    | failure("Expected an identifier")
+    )
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
@@ -887,19 +871,19 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   /**
    * Whitespace Handling
    */
-  lazy val linebreak = """(\r\n|\n)""".r
-  lazy val singleline = """//[^\n]*(\n|\z)""".r
-  lazy val multiline = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
-  lazy val simplespace = """\s+""".r
+  lazy val linebreak      = """(\r\n|\n)""".r
+  lazy val singleline     = """//[^\n]*(\n|\z)""".r
+  lazy val multiline      = """/\*[^*]*\*+(?:[^/*][^*]*\*+)*/""".r
+  lazy val simplespace    = """\s+""".r
 
   override val whitespace = rep(simplespace | singleline | multiline | failure("Expected whitespace"))
 
   /**
    * Literals
    */
-  lazy val integerLiteral = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
-  lazy val doubleLiteral = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
-  lazy val stringLiteral = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
+  lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
+  lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
+  lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
   // TODO add escape sequences
   lazy val charLiteral = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
   lazy val unicodeChar = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
@@ -910,39 +894,24 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   val multi = "\"\"\""
 
   // multi-line strings `(?s)` sets multi-line mode.
-  lazy val multilineString: P[String] = regex(s"(?s)${multi}[\t\n\r ]*(.*?)[\t\n\r ]*${multi}".r) ^^ {
+  lazy val multilineString: P[String] = regex(s"(?s)${ multi }[\t\n\r ]*(.*?)[\t\n\r ]*${ multi }".r) ^^ {
     contents => contents.strip().stripPrefix(multi).stripSuffix(multi)
   }
 
-
   // === Utils ===
-
-  def oneof(strings: String*): Parser[String] =
-    strings.map(literal).reduce(_ | _)
-
-  def oneof[T](p: => Parser[T]*): Parser[T] = p.reduce(_ | _)
-
   def many[T](p: => Parser[T]): Parser[List[T]] =
-    rep(p) ^^ {
-      _.toList
-    }
+    rep(p) ^^ { _.toList }
 
   def some[T](p: => Parser[T]): Parser[List[T]] =
-    rep1(p) ^^ {
-      _.toList
-    }
+    rep1(p) ^^ { _.toList }
 
   def manySep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
-    repsep(p, sep) ^^ {
-      _.toList
-    }
+    repsep(p, sep) ^^ { _.toList }
 
   def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
-    rep1sep(p, sep) ^^ {
-      _.toList
-    }
+    rep1sep(p, sep) ^^ { _.toList }
 
-  extension [T](p: Parser[T]) {
+  extension [T] (p: Parser[T]) {
     def !!(errorMessage: T => String): Parser[Nothing] =
       p.flatMap(t => error(errorMessage(t)))
 
@@ -951,24 +920,16 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   }
 
   implicit class PositionOps[T](val self: T) {
-    def withPositionOf(other: Any): self.type = {
-      dupAll(other, self); self
-    }
+    def withPositionOf(other: Any): self.type = { dupAll(other, self); self }
 
     private def dupIfEmpty(from: Any, to: Any): Unit =
-      if (positions.getStart(to).isEmpty) {
-        positions.dupPos(from, to)
-      }
+      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
 
     private def dupAll(from: Any, to: Any): Unit = to match {
       case t: Tree =>
         dupIfEmpty(from, t)
-        t.productIterator.foreach {
-          dupAll(from, _)
-        }
-      case t: Iterable[t] => t.foreach {
-        dupAll(from, _)
-      }
+        t.productIterator.foreach { dupAll(from, _) }
+      case t: Iterable[t] => t.foreach { dupAll(from, _) }
       case _ => ()
     }
 
@@ -1000,8 +961,8 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
    */
   def checkPosition(t: Tree): Range = t.range.getOrElse {
     t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
-      case EmptyRange => sys error s"Missing position for ${t}. Cannot guess the source position from its children."
-      case rng@SourceRange(from, to) =>
+      case EmptyRange => sys error s"Missing position for ${ t }. Cannot guess the source position from its children."
+      case rng @ SourceRange(from, to) =>
         positions.setStart(t, from)
         positions.setFinish(t, to)
         rng
@@ -1020,8 +981,11 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
       t
     })
 
-  lazy val path = someSep(ident, `/`)
-
   def parseAll[T](p: Parser[T], input: String): ParseResult[T] =
     parseAll(p, StringSource(input, "input-string"))
+
+  lazy val path = someSep(ident, `/`)
+
+  def oneof(strings: String*): Parser[String] =
+    strings.map(literal).reduce(_ | _)
 }
