@@ -633,9 +633,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def boxExpr(): Term =
     nonterminal:
       val captures = `box` ~> backtrack(captureSet())
-      val block = if (peek(`{`)) functionArg()
-      else Var(idRef())
-      Box(captures, block)
+      val expr = if (peek(`{`)) functionArg()
+        else if (peek(`new`)) newExpr()
+        else Var(idRef())
+      Box(captures, expr)
 
 
   // TODO deprecate
