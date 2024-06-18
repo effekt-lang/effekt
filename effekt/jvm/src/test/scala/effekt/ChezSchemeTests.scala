@@ -80,7 +80,7 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
 
   override def ignored: List[File] = super.ignored ++ List(
     // regions are not yet supported
-    examplesDir / "benchmarks" / "generator.effekt",
+    examplesDir / "benchmarks" / "other" / "generator.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "selfregion.effekt",
     // boxing is not (yet) supported for lift-based backends
