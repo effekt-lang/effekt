@@ -1,15 +1,12 @@
 package effekt
 
 import effekt.context.Context
-import effekt.lexer.{ Token, TokenKind }
 import effekt.source.*
-import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.{ VirtualSource }
 import effekt.util.messages.ParseError
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
-import scala.annotation.{ tailrec, targetName }
-import scala.util.matching.Regex
 import scala.language.implicitConversions
 
 /**
