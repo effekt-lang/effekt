@@ -1,4 +1,4 @@
-import io/args
+import args
 
 def show(l: List[String]): String = l match {
     case Nil() => "Nil()"

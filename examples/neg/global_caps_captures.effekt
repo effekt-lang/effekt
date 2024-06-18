@@ -1,3 +1,5 @@
+import bench
+
 interface Exc { def throw(msg: String): Unit }
 interface Console { def myprintln(msg: String): Unit }
 interface Time { def now(): Int }

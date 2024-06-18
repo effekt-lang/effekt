@@ -1,9 +1,5 @@
 module examples/pos/list/get
 
-import immutable/option
-import immutable/list
-import immutable/result
-
 def main() = {
   val empty: List[Int] = Nil()
 

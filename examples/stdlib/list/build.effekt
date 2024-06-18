@@ -1,6 +1,6 @@
 module examples/pos/list/build
 
-import immutable/list
+import list
 
 def main() = {
   val empty: List[String] = build(0) { i => "Hello" }

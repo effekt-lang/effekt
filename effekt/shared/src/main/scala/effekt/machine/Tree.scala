@@ -218,10 +218,11 @@ export Statement.*
  * Types
  */
 enum Type {
-  case Positive(name: Predef.String)
-  case Negative(name: Predef.String)
+  case Positive()
+  case Negative()
   case Stack()
   case Int()
+  case Byte()
   case Double()
   case String()
   case Reference(tpe: Type)
@@ -241,11 +242,11 @@ object builtins {
   val Apply: Tag = 0
 
   val Unit: Tag = 0
-  val UnitType = Positive("Unit")
+  val UnitType = Positive()
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive("Bool")
+  val BooleanType = Positive()
 
   val SingletonRecord: Tag = 0
 }

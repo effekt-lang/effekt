@@ -3,6 +3,7 @@
     [(number? obj) (show-number obj)]
     [(string? obj) obj]
     [(boolean? obj) (if obj "true" "false")]
+    [(char? obj) (show-char obj)]
     ; [(record? obj)
     ;   (let* ([rtd (record-rtd obj)]
     ;          [name (symbol->string (record-type-name rtd))])
@@ -20,6 +21,9 @@
 ; conform with the JS way of printing numbers
 (define (show-number n)
   (if (integer? n) (number->string (exact n)) (number->string n)))
+
+(define (show-char c)
+  (string c))
 
 ; here we use eval to find the show function defined with the record...
 ; (define (show-record rec)
@@ -56,8 +60,8 @@
 
 
 
-(define (println_impl obj)
-  (display (show_impl obj))
+(define (println_impl str)
+  (display str)
   (newline))
 
 (define (equal_impl obj1 obj2)
@@ -78,6 +82,10 @@
 
 (define (seconds diff)
   (+ (time-second diff) (/ (time-nanosecond diff) 1000000000.0)))
+
+(define (timestamp)
+  (let ([t (current-time)])
+    (+ (* (time-second t) 1000000000) (time-nanosecond t))))
 
 (define (measure block warmup iterations)
   (define (run n)

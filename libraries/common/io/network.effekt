@@ -1,0 +1,105 @@
+module io/network
+
+import bytes
+import queue
+import io
+
+namespace js {
+  extern js """
+    const net = require('node:net');
+
+    function listen(server, port, host, listener) {
+      server.listen(port, host);
+      server.on('connection', listener);
+    }
+  """
+
+  extern type JSServer // = net.Server
+  extern type JSSocket // = net.Socket
+  extern io def server(): JSServer =
+    js "net.createServer()"
+  extern io def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, global}): Unit =
+    js "listen(${server}, ${port}, ${host}, (socket) => (${listener})(socket).run())"
+
+  extern io def send(socket: JSSocket, data: Bytes, callback: () => Unit at {io, global}): Unit =
+    js "${socket}.write(${data}, () => (${callback})().run())"
+
+  extern io def receive(socket: JSSocket, callback: Bytes => Unit at {io, global}): Unit =
+    js "${socket}.once('data', (data) => (${callback})(data).run())"
+
+  extern io def end(socket: JSSocket, callback: () => Unit at {io, global}): Unit =
+    js "${socket}.end(() => (${callback})().run())"
+}
+
+interface Socket {
+  def send(message: Bytes): Unit
+  def receive(): Bytes
+  def end(): Unit
+}
+
+def server(host: String, port: Int, handler: () => Unit / { Socket, IO } at {io, global}): Unit / IO = {
+  val server = js::server();
+  def connections: Queue[js::JSSocket] = emptyQueue()
+  js::listen(server, port, host, box { socket =>
+    connections.pushFront(socket)
+  })
+
+  // TODO Instead of polling, we should use Channels
+  loop {
+    connections.popBack match {
+      case Some(socket) =>
+        println("New connection")
+        do promise(box {
+          try { handler() } with Socket {
+            def send(message) = {
+              do performIO[Unit](box { k =>
+                js::send(socket, message, box { k(()) })
+              });
+              resume(())
+            }
+            def receive() = {
+              resume(do performIO[Bytes](box { k =>
+                js::receive(socket, k)
+              }))
+            }
+            def end() = {
+              do performIO[Unit](box { k =>
+                js::end(socket, box { k(()) })
+              });
+              resume(())
+            }
+          }
+        });
+        ()
+      case None() =>
+       do yield()
+    }
+  }
+}
+
+
+namespace examples {
+  def helloWorldApp(): Unit / Socket = {
+    val request = do receive();
+
+    println("Received a request: " ++ request.show)
+
+    if (request.show.startsWith("GET /")) {
+      do send(toBytes("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!"))
+    } else {
+      do send("HTTP/1.1 400 Bad Request\r\n\r\n".toBytes)
+    }
+    do end()
+  }
+
+  // A server that just shows "Hello from Effekt!" on localhost:8080
+  def main() = {
+    val port = 8080
+    println("Starting server on http://localhost:" ++ port.show)
+    eventloop(box {
+      server("localhost", port, box {
+        helloWorldApp()
+      })
+    })
+  }
+}

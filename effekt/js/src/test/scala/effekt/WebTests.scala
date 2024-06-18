@@ -47,6 +47,11 @@ object WebTests extends TestSuite {
       load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]
     }
 
+    test("Can read files from the stdlib") {
+      val contents = server.readFile("common/effekt.effekt")
+      assert(contents.length > 100)
+    }
+
     test("Evaluate simple expressions in REPL") {
       val result = evaluate[Int](List(), "1 + 2")
       assert(result == 3)
@@ -57,7 +62,7 @@ object WebTests extends TestSuite {
     }
 
     test("Evaluate expressions using stdlib in REPL") {
-      val result = evaluate[Int](List("immutable/list"), "Cons(1, Cons(2, Nil())).size")
+      val result = evaluate[Int](List("list"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
     }
 
@@ -71,7 +76,7 @@ object WebTests extends TestSuite {
     }
 
     test("Load file with multiline extern strings") {
-      val result = evaluate[Int](List("immutable/list", "mutable/heap"), "Cons(1, Cons(2, Nil())).size")
+      val result = evaluate[Int](List("list", "ref"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
     }
 

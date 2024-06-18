@@ -1,0 +1,365 @@
+module io/error
+
+/**
+ * Errors defined by libuv that can occur in IO operations.
+ *
+ * In addition to the named error codes, we also assign each error a
+ * (positive) integer value that is stable across the different platforms.
+ *
+ * For the mapping of IOError and code values, see function fromCode.
+ *
+ * While stable, this integer value is supposed to only be used internally.
+ * All user-facing operations should use values of type IOError, instead.
+ *
+ * see: https://docs.libuv.org/en/v1.x/errors.html
+ */
+type IOError {
+  E2BIG();
+  EACCES();
+  EADDRINUSE();
+  EADDRNOTAVAIL();
+  EAFNOSUPPORT();
+  EAGAIN();
+  EAI_ADDRFAMILY();
+  EAI_AGAIN();
+  EAI_BADFLAGS();
+  EAI_BADHINTS();
+  EAI_CANCELED();
+  EAI_FAIL();
+  EAI_FAMILY();
+  EAI_MEMORY();
+  EAI_NODATA();
+  EAI_NONAME();
+  EAI_OVERFLOW();
+  EAI_PROTOCOL();
+  EAI_SERVICE();
+  EAI_SOCKTYPE();
+  EALREADY();
+  EBADF();
+  EBUSY();
+  ECANCELED();
+  ECHARSET();
+  ECONNABORTED();
+  ECONNREFUSED();
+  ECONNRESET();
+  EDESTADDRREQ();
+  EEXIST();
+  EFAULT();
+  EFBIG();
+  EHOSTUNREACH();
+  EINTR();
+  EINVAL();
+  EIO();
+  EISCONN();
+  EISDIR();
+  ELOOP();
+  EMFILE();
+  EMSGSIZE();
+  ENAMETOOLONG();
+  ENETDOWN();
+  ENETUNREACH();
+  ENFILE();
+  ENOBUFS();
+  ENODEV();
+  ENOENT();
+  ENOMEM();
+  ENONET();
+  ENOPROTOOPT();
+  ENOSPC();
+  ENOSYS();
+  ENOTCONN();
+  ENOTDIR();
+  ENOTEMPTY();
+  ENOTSOCK();
+  ENOTSUP();
+  EOVERFLOW();
+  EPERM();
+  EPIPE();
+  EPROTO();
+  EPROTONOSUPPORT();
+  EPROTOTYPE();
+  ERANGE();
+  EROFS();
+  ESHUTDOWN();
+  ESPIPE();
+  ESRCH();
+  ETIMEDOUT();
+  ETXTBSY();
+  EXDEV();
+  UNKNOWN();
+  EOF();
+  ENXIO();
+  EMLINK();
+  ENOTTY();
+  EFTYPE();
+  EILSEQ();
+  ESOCKTNOSUPPORT();
+  EUNATCH()
+}
+
+/**
+ * Corresponding error message for a libuv error
+ *
+ * see: https://docs.libuv.org/en/v1.x/errors.html
+ */
+def message(error: IOError): String = error match {
+  case E2BIG() => "argument list too long"
+  case EACCES() => "permission denied"
+  case EADDRINUSE() => "address already in use"
+  case EADDRNOTAVAIL() => "address not available"
+  case EAFNOSUPPORT() => "address family not supported"
+  case EAGAIN() => "resource temporarily unavailable"
+  case EAI_ADDRFAMILY() => "address family not supported"
+  case EAI_AGAIN() => "temporary failure"
+  case EAI_BADFLAGS() => "bad ai_flags value"
+  case EAI_BADHINTS() => "invalid value for hints"
+  case EAI_CANCELED() => "request canceled"
+  case EAI_FAIL() => "permanent failure"
+  case EAI_FAMILY() => "ai_family not supported"
+  case EAI_MEMORY() => "out of memory"
+  case EAI_NODATA() => "no address"
+  case EAI_NONAME() => "unknown node or service"
+  case EAI_OVERFLOW() => "argument buffer overflow"
+  case EAI_PROTOCOL() => "resolved protocol is unknown"
+  case EAI_SERVICE() => "service not available for socket type"
+  case EAI_SOCKTYPE() => "socket type not supported"
+  case EALREADY() => "connection already in progress"
+  case EBADF() => "bad file descriptor"
+  case EBUSY() => "resource busy or locked"
+  case ECANCELED() => "operation canceled"
+  case ECHARSET() => "invalid Unicode character"
+  case ECONNABORTED() => "software caused connection abort"
+  case ECONNREFUSED() => "connection refused"
+  case ECONNRESET() => "connection reset by peer"
+  case EDESTADDRREQ() => "destination address required"
+  case EEXIST() => "file already exists"
+  case EFAULT() => "bad address in system call argument"
+  case EFBIG() => "file too large"
+  case EHOSTUNREACH() => "host is unreachable"
+  case EINTR() => "interrupted system call"
+  case EINVAL() => "invalid argument"
+  case EIO() => "i/o error"
+  case EISCONN() => "socket is already connected"
+  case EISDIR() => "illegal operation on a directory"
+  case ELOOP() => "too many symbolic links encountered"
+  case EMFILE() => "too many open files"
+  case EMSGSIZE() => "message too long"
+  case ENAMETOOLONG() => "name too long"
+  case ENETDOWN() => "network is down"
+  case ENETUNREACH() => "network is unreachable"
+  case ENFILE() => "file table overflow"
+  case ENOBUFS() => "no buffer space available"
+  case ENODEV() => "no such device"
+  case ENOENT() => "no such file or directory"
+  case ENOMEM() => "not enough memory"
+  case ENONET() => "machine is not on the network"
+  case ENOPROTOOPT() => "protocol not available"
+  case ENOSPC() => "no space left on device"
+  case ENOSYS() => "function not implemented"
+  case ENOTCONN() => "socket is not connected"
+  case ENOTDIR() => "not a directory"
+  case ENOTEMPTY() => "directory not empty"
+  case ENOTSOCK() => "socket operation on non-socket"
+  case ENOTSUP() => "operation not supported on socket"
+  case EOVERFLOW() => "value too large for defined data type"
+  case EPERM() => "operation not permitted"
+  case EPIPE() => "broken pipe"
+  case EPROTO() => "protocol error"
+  case EPROTONOSUPPORT() => "protocol not supported"
+  case EPROTOTYPE() => "protocol wrong type for socket"
+  case ERANGE() => "result too large"
+  case EROFS() => "read-only file system"
+  case ESHUTDOWN() => "cannot send after transport endpoint shutdown"
+  case ESPIPE() => "invalid seek"
+  case ESRCH() => "no such process"
+  case ETIMEDOUT() => "connection timed out"
+  case ETXTBSY() => "text file is busy"
+  case EXDEV() => "cross-device link not permitted"
+  case UNKNOWN() => "unknown error"
+  case EOF() => "end of file"
+  case ENXIO() => "no such device or address"
+  case EMLINK() => "too many links"
+  case ENOTTY() => "inappropriate ioctl for device"
+  case EFTYPE() => "inappropriate file type or format"
+  case EILSEQ() => "illegal byte sequence"
+  case ESOCKTNOSUPPORT() => "socket type not supported"
+  case EUNATCH() => "protocol driver not attached"
+}
+
+/**
+ * Corresponding name of a libuv error
+ *
+ * see: https://docs.libuv.org/en/v1.x/errors.html
+ */
+def name(error: IOError): String = error match {
+  case E2BIG() => "E2BIG"
+  case EACCES() => "EACCES"
+  case EADDRINUSE() => "EADDRINUSE"
+  case EADDRNOTAVAIL() => "EADDRNOTAVAIL"
+  case EAFNOSUPPORT() => "EAFNOSUPPORT"
+  case EAGAIN() => "EAGAIN"
+  case EAI_ADDRFAMILY() => "EAI_ADDRFAMILY"
+  case EAI_AGAIN() => "EAI_AGAIN"
+  case EAI_BADFLAGS() => "EAI_BADFLAGS"
+  case EAI_BADHINTS() => "EAI_BADHINTS"
+  case EAI_CANCELED() => "EAI_CANCELED"
+  case EAI_FAIL() => "EAI_FAIL"
+  case EAI_FAMILY() => "EAI_FAMILY"
+  case EAI_MEMORY() => "EAI_MEMORY"
+  case EAI_NODATA() => "EAI_NODATA"
+  case EAI_NONAME() => "EAI_NONAME"
+  case EAI_OVERFLOW() => "EAI_OVERFLOW"
+  case EAI_PROTOCOL() => "EAI_PROTOCOL"
+  case EAI_SERVICE() => "EAI_SERVICE"
+  case EAI_SOCKTYPE() => "EAI_SOCKTYPE"
+  case EALREADY() => "EALREADY"
+  case EBADF() => "EBADF"
+  case EBUSY() => "EBUSY"
+  case ECANCELED() => "ECANCELED"
+  case ECHARSET() => "ECHARSET"
+  case ECONNABORTED() => "ECONNABORTED"
+  case ECONNREFUSED() => "ECONNREFUSED"
+  case ECONNRESET() => "ECONNRESET"
+  case EDESTADDRREQ() => "EDESTADDRREQ"
+  case EEXIST() => "EEXIST"
+  case EFAULT() => "EFAULT"
+  case EFBIG() => "EFBIG"
+  case EHOSTUNREACH() => "EHOSTUNREACH"
+  case EINTR() => "EINTR"
+  case EINVAL() => "EINVAL"
+  case EIO() => "EIO"
+  case EISCONN() => "EISCONN"
+  case EISDIR() => "EISDIR"
+  case ELOOP() => "ELOOP"
+  case EMFILE() => "EMFILE"
+  case EMSGSIZE() => "EMSGSIZE"
+  case ENAMETOOLONG() => "ENAMETOOLONG"
+  case ENETDOWN() => "ENETDOWN"
+  case ENETUNREACH() => "ENETUNREACH"
+  case ENFILE() => "ENFILE"
+  case ENOBUFS() => "ENOBUFS"
+  case ENODEV() => "ENODEV"
+  case ENOENT() => "ENOENT"
+  case ENOMEM() => "ENOMEM"
+  case ENONET() => "ENONET"
+  case ENOPROTOOPT() => "ENOPROTOOPT"
+  case ENOSPC() => "ENOSPC"
+  case ENOSYS() => "ENOSYS"
+  case ENOTCONN() => "ENOTCONN"
+  case ENOTDIR() => "ENOTDIR"
+  case ENOTEMPTY() => "ENOTEMPTY"
+  case ENOTSOCK() => "ENOTSOCK"
+  case ENOTSUP() => "ENOTSUP"
+  case EOVERFLOW() => "EOVERFLOW"
+  case EPERM() => "EPERM"
+  case EPIPE() => "EPIPE"
+  case EPROTO() => "EPROTO"
+  case EPROTONOSUPPORT() => "EPROTONOSUPPORT"
+  case EPROTOTYPE() => "EPROTOTYPE"
+  case ERANGE() => "ERANGE"
+  case EROFS() => "EROFS"
+  case ESHUTDOWN() => "ESHUTDOWN"
+  case ESPIPE() => "ESPIPE"
+  case ESRCH() => "ESRCH"
+  case ETIMEDOUT() => "ETIMEDOUT"
+  case ETXTBSY() => "ETXTBSY"
+  case EXDEV() => "EXDEV"
+  case UNKNOWN() => "UNKNOWN"
+  case EOF() => "EOF"
+  case ENXIO() => "ENXIO"
+  case EMLINK() => "EMLINK"
+  case ENOTTY() => "ENOTTY"
+  case EFTYPE() => "EFTYPE"
+  case EILSEQ() => "EILSEQ"
+  case ESOCKTNOSUPPORT() => "ESOCKTNOSUPPORT"
+  case EUNATCH() => "EUNATCH"
+}
+
+/**
+ * Translates a integer code value to an IOError.
+ *
+ * See documentation of type IOError for further information.
+ */
+def fromCode(code: Int): IOError = code match {
+  case 1 => EPERM()
+  case 2 => ENOENT()
+  case 3 => ESRCH()
+  case 4 => EINTR()
+  case 5 => EIO()
+  case 6 => ENXIO()
+  case 7 => E2BIG()
+  case 9 => EBADF()
+  case 11 => EAGAIN()
+  case 12 => ENOMEM()
+  case 13 => EACCES()
+  case 14 => EFAULT()
+  case 16 => EBUSY()
+  case 17 => EEXIST()
+  case 18 => EXDEV()
+  case 19 => ENODEV()
+  case 20 => ENOTDIR()
+  case 21 => EISDIR()
+  case 22 => EINVAL()
+  case 23 => ENFILE()
+  case 24 => EMFILE()
+  case 25 => ENOTTY()
+  case 26 => ETXTBSY()
+  case 27 => EFBIG()
+  case 28 => ENOSPC()
+  case 29 => ESPIPE()
+  case 30 => EROFS()
+  case 31 => EMLINK()
+  case 32 => EPIPE()
+  case 34 => ERANGE()
+  case 36 => ENAMETOOLONG()
+  case 40 => ELOOP()
+  case 75 => EOVERFLOW()
+  case 79 => EFTYPE()
+  case 84 => EILSEQ()
+  case 88 => ENOTSOCK()
+  case 89 => EDESTADDRREQ()
+  case 90 => EMSGSIZE()
+  case 91 => EPROTOTYPE()
+  case 92 => ENOPROTOOPT()
+  case 93 => EPROTONOSUPPORT()
+  case 94 => ESOCKTNOSUPPORT()
+  case 95 => ENOTSUP()
+  case 97 => EAFNOSUPPORT()
+  case 98 => EADDRINUSE()
+  case 99 => EADDRNOTAVAIL()
+  case 100 => ENETDOWN()
+  case 101 => ENETUNREACH()
+  case 103 => ECONNABORTED()
+  case 104 => ECONNRESET()
+  case 105 => ENOBUFS()
+  case 106 => EISCONN()
+  case 107 => ENOTCONN()
+  case 110 => ETIMEDOUT()
+  case 111 => ECONNREFUSED()
+  case 113 => EHOSTUNREACH()
+  case 114 => EALREADY()
+  case 125 => ECANCELED()
+
+  case 200 => EAI_ADDRFAMILY()
+  case 201 => EAI_AGAIN()
+  case 202 => EAI_BADFLAGS()
+  case 203 => EAI_BADHINTS()
+  case 204 => EAI_CANCELED()
+  case 205 => EAI_FAIL()
+  case 206 => EAI_FAMILY()
+  case 207 => EAI_MEMORY()
+  case 208 => EAI_NODATA()
+  case 209 => EAI_NONAME()
+  case 210 => EAI_OVERFLOW()
+  case 211 => EAI_PROTOCOL()
+  case 212 => EAI_SERVICE()
+  case 213 => EAI_SOCKTYPE()
+  case 215 => ECHARSET()
+  case 216 => ENONET()
+  case 217 => UNKNOWN()
+  case 218 => EOF()
+  case 219 => EUNATCH()
+  case 220 => ESHUTDOWN()
+
+  case _ => panic("Not a valid error code: " ++ show(code))
+}

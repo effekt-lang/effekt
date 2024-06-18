@@ -13,12 +13,12 @@ def saveDiv(x: Int, y: Int): Int / Exception[DivByZero] =
     x / y
   }
 
-def report[E] { prog: => Unit / Exception[E] }: Unit =
+def report[E] { show: E => String } { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] {
-    def raise[A](e) = println(e.show)
+    def raise[A](e) = println(show(e))
   }
 
-def main() = report[DivByZero] {
+def main() = report[DivByZero] { d => "DivByZero()" } {
   println(saveDiv(4, 2))
   println(saveDiv(1, 0))
   println(saveDiv(1, 3))

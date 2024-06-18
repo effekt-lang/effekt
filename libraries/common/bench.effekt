@@ -1,0 +1,46 @@
+module bench
+
+/**
+ * The current time (since UNIX Epoch) in nanoseconds.
+ *
+ * The actual precision varies across the different backends.
+ * - js: Milliseconds
+ * - chez: Microseconds
+ * - ml: Microseconds
+ */
+extern io def timestamp(): Int =
+  js "Date.now() * 1000000"
+  chez "(timestamp)"
+  ml "IntInf.toInt (Time.toNanoseconds (Time.now ()))"
+
+/**
+ * High-precision timestamp in nanoseconds that should be for measurements.
+ *
+ * This timestamp should only be used for **relative** measurements,
+ * as gives no guarantees on the absolute time (unlike a UNIX timestamp).
+ */
+extern io def relativeTimestamp(): Int =
+  js "Math.round(performance.now() * 1000000)"
+  default { timestamp() }
+
+/**
+ * Runs the block and returns the time in nanoseconds
+ */
+def timed { block: => Unit }: Int = {
+  val before = relativeTimestamp()
+  block()
+  val after = relativeTimestamp()
+  after - before
+}
+
+def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
+  def run(n: Int, report: Bool): Unit = {
+    if (n <= 0) { () } else {
+      val time = timed { block() };
+      if (report) { println(time) } else { () };
+      run(n - 1, report)
+    }
+  }
+  run(warmup, false)
+  run(iterations, true)
+}

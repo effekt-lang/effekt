@@ -1,6 +1,6 @@
 module examples/pos/string/substring
 
-import text/string
+import string
 
 def printString(s: String): Unit = {
   val pretty =
@@ -30,4 +30,3 @@ def main() = {
   printString(bread.substring(4, 1))
   printString(bread.substring(100, -100))
 }
-

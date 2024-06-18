@@ -6,4 +6,7 @@ def eff = new Eff[Int] {
   def op(x) = x / 1
 }
 
-def main() = println(eff.op("hello"))
+def main() = {
+  val msg: String = eff.op("hello");
+  println(msg)
+}

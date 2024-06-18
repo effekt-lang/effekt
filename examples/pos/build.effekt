@@ -1,8 +1,5 @@
 module examples/pos/build
 
-import immutable/list
-import immutable/option
-
 type Key = String
 type Val = Int
 

@@ -165,7 +165,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       case (CaptureSet(lows), CaptureSet(ups)) =>
         val notAllowed = lows -- (ups ++ filter)
         if (notAllowed.nonEmpty)
-          error(pp"The following captures are not allowed: ${CaptureSet(notAllowed)}", ctx)
+          error(pp"Used captures ${CaptureSet(notAllowed)} are not in the allowed set ${upper}", ctx)
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
         constraints.connect(x, y, filter)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>

@@ -1,0 +1,6 @@
+[error] examples/neg/match_nested_literal.effekt:9:21: Non-exhaustive pattern matching, missing case Or(_, And(Lit(true), _))
+def test(b: BExp) = b match {
+                    ^
+[error] examples/neg/match_nested_literal.effekt:9:21: Non-exhaustive pattern matching, missing case Lit(false)
+def test(b: BExp) = b match {
+                    ^

@@ -53,7 +53,7 @@ trait Transformer {
 
     val other = freshName("other")
     def otherGet(field: JSName): js.Expr = js.Member(js.Variable(other), field)
-    def compare(field: JSName): js.Expr = js"${get(field)} !== ${otherGet(field)}"
+    def compare(field: JSName): js.Expr = js"!${$effekt.call("equals", get(field), otherGet(field))}"
     val noop    = js.Block(Nil)
     val abort   = js.Return(js"false")
     val succeed = js.Return(js"true")

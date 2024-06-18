@@ -17,13 +17,20 @@ abstract class StdlibTests extends EffektTests {
 class StdlibJavaScriptTests extends StdlibTests {
   def backendName: String = "js"
 }
-class StdlibChezSchemeMonadicTests extends StdlibTests {
+abstract class StdlibChezTests extends StdlibTests {
+  override def ignored: List[File] = List(
+    // Not implemented yet
+    examplesDir / "stdlib" / "bytes",
+    examplesDir / "stdlib" / "io"
+  )
+}
+class StdlibChezSchemeMonadicTests extends StdlibChezTests {
   def backendName: String = "chez-monadic"
 }
-class StdlibChezSchemeCallCCTests extends StdlibTests {
+class StdlibChezSchemeCallCCTests extends StdlibChezTests {
   def backendName: String = "chez-callcc"
 }
-class StdlibChezSchemeLiftTests extends StdlibTests {
+class StdlibChezSchemeLiftTests extends StdlibChezTests {
   def backendName: String = "chez-lift"
 }
 class StdlibMLTests extends StdlibTests {
@@ -34,6 +41,13 @@ class StdlibMLTests extends StdlibTests {
     // [error] Effect polymorphic recursion is not allowed. The following definition is effect polymorphic since unification variable X occurs in instantiation ...
     examplesDir / "stdlib" / "list" / "join.effekt",
     examplesDir / "stdlib" / "list" / "flatmap.effekt",
+
+    // unicode is not supported in the ML backend
+    examplesDir / "stdlib" / "string" / "unicode.effekt",
+
+    // Not implemented yet
+    examplesDir / "stdlib" / "bytes",
+    examplesDir / "stdlib" / "io"
   )
 }
 class StdlibLLVMTests extends StdlibTests {
@@ -44,5 +58,7 @@ class StdlibLLVMTests extends StdlibTests {
     // [error] Unsupported coercion from Exception47234[E48288] to Exception47234[OutOfBounds47515]
     examplesDir / "stdlib" / "list" / "get.effekt",
     examplesDir / "stdlib" / "list" / "modifyat.effekt",
+    // Toplevel let-bindings (for ANSI-color-codes in output) not supported
+    examplesDir / "stdlib" / "test" / "test.effekt",
   )
 }

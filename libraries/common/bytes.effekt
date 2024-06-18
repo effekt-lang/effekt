@@ -1,0 +1,125 @@
+module bytes
+
+/**
+ * A memory managed, mutable, fixed-length buffer of bytes.
+ */
+extern type Bytes
+  // = llvm "%Pos"
+  // = js "Uint8Array"
+
+/**
+ * Allocates new bytes with the given `capacity`, setting its values to `0`.
+ */
+extern io def bytes(capacity: Int): Bytes =
+  js "(new Uint8Array(${capacity}))"
+  llvm """
+    %buf = call %Pos @c_buffer_construct_uninitialized(i64 %capacity)
+    ret %Pos %buf
+  """
+
+def copy(b: Bytes): Bytes = {
+  val len = b.size
+  val clone = bytes(len)
+  copy(b, clone, 0, 0, len)
+  clone
+}
+
+extern io def copy(from: Bytes, to: Bytes, startFrom: Int, startTo: Int, length: Int): Unit =
+  js "bytes$copy(${from}, ${to}, ${startFrom}, ${startTo}, ${length})"
+  llvm """
+    call void @c_buffer_copy(%Pos %from, %Pos %to, i64 %startFrom, i64 %startTo, i64 %length)
+    ; return Unit
+    ret %Pos zeroinitializer
+  """
+
+extern pure def size(b: Bytes): Int =
+  js "${b}.length"
+  llvm """
+    %size = call i64 @c_buffer_length(%Pos %b)
+    ret i64 %size
+  """
+
+extern io def read(b: Bytes, index: Int): Byte =
+  js "(${b})[${index}]"
+  llvm """
+    %byte = call i8 @c_buffer_index(%Pos %b, i64 %index)
+    ret i8 %byte
+  """
+
+// TODO should return the number of bytes written.
+extern io def write(b: Bytes, index: Int, value: Byte): Unit =
+  js "bytes$set(${b}, ${index}, ${value})"
+  llvm """
+    call void @c_buffer_set(%Pos %b, i64 %index, i8 %value)
+    ; return Unit
+    ret %Pos zeroinitializer
+  """
+
+/**
+ * Returns an *aliased* slice of b starting at offset with the given length
+ */
+def slice(b: Bytes, offset: Int, length: Int): Bytes = {
+  def validOffset() = offset >= 0 && offset < b.size
+  def validLength() = length >= 0 && (offset + length) <= b.size
+  if (validOffset() && validLength()) unsafe::slice(b, offset, length)
+  else panic("Invalid slice of bytes (size: " ++ b.size.show ++ ", offset: " ++ offset.show ++ ", length: " ++ length.show ++ ")")
+}
+
+
+/**
+ * Returns a view into the buffer, with the length truncated to n
+ */
+def truncated(b: Bytes, n: Int): Bytes =
+  b.slice(0, n)
+
+extern pure def fromUTF8(s: String): Bytes =
+  js "(new TextEncoder().encode(${s}))"
+  llvm """
+    %copy = call %Pos @c_buffer_clone(%Pos %s)
+    ret %Pos %copy
+  """
+
+extern pure def toUTF8(b: Bytes): String =
+  js "(new TextDecoder('utf-8').decode(${b}))"
+  // assuming the buffer is already in UTF-8
+  llvm """
+    %copy = call %Pos @c_buffer_clone(%Pos %b)
+    ret %Pos %copy
+  """
+
+namespace unsafe {
+  /**
+   * Unsafe: offset and length are not checked.
+   */
+  extern io def slice(b: Bytes, offset: Int, length: Int): Bytes =
+    js "new Uint8Array(${b}.buffer, ${offset}, ${length})"
+    llvm """
+      %buf = call %Pos @c_buffer_slice(%Pos %b, i64 %offset, i64 %length)
+      ret %Pos %buf
+    """
+
+}
+
+
+extern js """
+  function bytes$set(bytes, index, value) {
+    bytes[index] = value;
+    return $effekt.unit;
+  }
+
+  function bytes$clone(original) {
+    let copy = new Uint8Array(original.length);
+    copy.set(original);
+    return copy;
+  }
+
+  function bytes$copy(from, to, startFrom, startTo, length) {
+    // Check bounds
+    if (startFrom + length > from.length || startTo + length > to.length) {
+        throw new RangeError('Index out of bounds');
+    }
+
+    // Create a subarray of 'from' and set it into 'to'
+    to.set(from.subarray(startFrom, startFrom + length), startTo);
+}
+"""

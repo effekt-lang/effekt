@@ -130,6 +130,12 @@ object Transformer {
     case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
       defineRecord(name(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
 
+    // SML does not support empty datatype declarations -- instead recursive definitions are used.
+    //   https://github.com/SMLFamily/Successor-ML/issues/32
+    case Declaration.Data(id, tparams, List()) =>
+      val constructor = freshName(id.name.name)
+      defineRecord(name(id), constructor, List(name(id)))
+
     case Declaration.Data(id, tparams, ctors) =>
       def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
         case Constructor(id, fields) =>
@@ -233,6 +239,9 @@ object Transformer {
       toMLExpr(binding).flatMap { value =>
         toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
+
+    // empty matches are translated to holes
+    case lifted.Match(scrutinee, Nil, None) => CPS.inline { k => ml.RawExpr("raise Absurd") }
 
     case lifted.Match(scrutinee, clauses, default) =>
       def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {

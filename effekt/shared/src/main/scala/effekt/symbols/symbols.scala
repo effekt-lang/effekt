@@ -62,7 +62,7 @@ case class Module(
     case e: Interface => e
   }
 
-  private def isPrelude: Boolean = name.name == "effekt"
+  def isPrelude: Boolean = name.name == "effekt"
 
   def findPrelude: Module = {
     // Either this module is already Prelude
@@ -74,6 +74,16 @@ case class Module(
     dependencies.find(_.isPrelude).getOrElse {
       sys error "Cannot find Prelude, this should not happen"
     }
+  }
+
+  def findDependency(path: QualifiedName): Option[Module] = {
+    // Either this module is already Prelude
+    if (name == path) {
+      return Some(this)
+    }
+
+    // ... or we try to find Prelude in our dependencies
+    dependencies.find(dep => dep.name == path)
   }
 
   /**

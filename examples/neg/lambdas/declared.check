@@ -1,6 +1,6 @@
-[error] examples/neg/lambdas/declared.effekt:16:9: The following captures are not allowed: {console}
+[error] examples/neg/lambdas/declared.effekt:16:9: Used captures {console} are not in the allowed set {time}
   myFun { (x: Yield at {time}) => () }; // ERROR
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] examples/neg/lambdas/declared.effekt:16:12: The following captures are not allowed: {console}
+[error] examples/neg/lambdas/declared.effekt:16:12: Used captures {console} are not in the allowed set {time}
   myFun { (x: Yield at {time}) => () }; // ERROR
            ^^^^^^^^^^^^^^^^^^

@@ -1,7 +1,5 @@
-import immutable/list
-import immutable/option
-import io/args
-import text/string
+import args
+import string
 
 // not used at the moment (see below).
 def range(a: Int, b: Int): List[Int] = {
@@ -64,9 +62,8 @@ def countSolutions(size: Int): Int =
 
 def main() = commandLineArgs() match {
   case Nil() => println(countSolutions(7))
-  case Cons(x, Nil()) => toInt(x) match {
-    case None() => println("Unexpected non-integer '" ++ show(x) ++ "'")
-    case Some(i) => println(countSolutions(i))
-  }
+  case Cons(x, Nil()) =>
+    with report[WrongFormat];
+    println(countSolutions(x.toInt))
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }

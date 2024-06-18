@@ -1,0 +1,72 @@
+module option
+
+import effekt
+import exception
+
+type Option[A] {
+  None();
+  Some(value: A)
+}
+
+def isDefined[A](self: Option[A]): Bool = self match {
+  case None()  => false
+  case Some(v) => true
+}
+
+def isEmpty[A](self: Option[A]): Bool =
+  self.isDefined.not
+
+def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {
+  case None()  => that()
+  case Some(v) => Some(v)
+}
+
+def getOrElse[A](self: Option[A]) { that: => A }: A = self match {
+  case None() => that()
+  case Some(v) => v
+}
+
+def map[A, B](self: Option[A]) { f: A => B }: Option[B] = self match {
+  case None()  => None()
+  case Some(v) => Some(f(v))
+}
+
+def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
+  case None()  => ()
+  case Some(v) => f(v)
+}
+
+def value[A](self: Option[A]): A / Exception[MissingValue] = self match {
+  case None() => do raise(MissingValue(), "Trying to get the value of an empty option")
+  case Some(v) => v
+}
+
+def option[A] { p: => A / Exception[MissingValue] }: Option[A] =
+  try { Some(p()) }
+  with Exception[MissingValue] { def raise(_, _) = None() }
+
+def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
+  try { Some(p()) }
+  with Exception[E] { def raise(_, _) = None() }
+
+// Interop with FFI
+// ---------------
+// These functions should only be used by libraries that interface with FFI
+def undefinedToOption[A](value: A): Option[A] =
+  if (value.isUndefined) { None() } else { Some(value) }
+
+
+// Show Instances
+// --------------
+
+def show[A](o: Option[A]) { showA: A => String }: String = o match {
+  case None() => "None()"
+  case Some(v) => "Some(" ++ showA(v) ++ ")"
+}
+def show(o: Option[Int]): String = show(o) { e => show(e) }
+def show(o: Option[Double]): String = show(o) { e => show(e) }
+def show(o: Option[Bool]): String = show(o) { e => show(e) }
+
+def println(o: Option[Int]): Unit = println(show(o))
+def println(o: Option[Double]): Unit = println(show(o))
+def println(o: Option[Bool]): Unit = println(show(o))

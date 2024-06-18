@@ -107,7 +107,6 @@ trait CorePhaseTests[P <: Phase[CoreTransformed, CoreTransformed]](phase: P) ext
   }
   protected val theSourceModuleDecl: effekt.source.ModuleDecl = effekt.source.ModuleDecl("(core test)", Nil, Nil) // FIXME sentinel value
 
-  // TODO Maybe fix this up so we can do findPrelude. Cmp. PolymorphismBoxingTests for a hacky way to do this
   protected val theSourceModule: effekt.symbols.Module = effekt.symbols.Module(theSourceModuleDecl, theSource)
 
   override def transform(input: ModuleDecl): ModuleDecl = {

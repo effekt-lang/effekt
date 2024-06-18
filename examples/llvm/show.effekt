@@ -1,6 +1,4 @@
-import text/string
-import immutable/option
-import immutable/list
+module examples/llvm/show
 
 def main() = {
     println(show(12))

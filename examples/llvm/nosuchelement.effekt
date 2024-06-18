@@ -1,0 +1,15 @@
+// requires --no-optimize
+
+def g(k: (Int) => Unit at {io,global}): Unit = k(42)
+def hof { prog: [A]((A) => Unit at {io,global}) => Unit }: Unit =
+  prog(box g)
+
+def id[A](f: ((A) => Unit at {io, global}) => Unit at {io, global}): ((A) => Unit at {io, global}) => Unit at {io, global} = f
+
+// [error] java.util.NoSuchElementException: key not found: h
+def main() = {
+  val f = box { (n: Int) => println(n) }
+  def h = id(g);
+  val x = h(f);
+  println(x)
+}

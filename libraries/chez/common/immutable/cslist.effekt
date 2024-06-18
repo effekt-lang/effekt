@@ -1,6 +1,7 @@
 module immutable/cslist
 
-import immutable/list
+import list
+import array
 
 // a chez scheme cons list
 extern type CSList[A]
@@ -29,3 +30,8 @@ def toChez[A](l: List[A]): CSList[A] = l match {
 
 def fromChez[A](l: CSList[A]): List[A] =
   if (l.isEmpty) Nil() else Cons(l.head, l.tail.fromChez)
+
+// Old From Chez
+// -------------
+extern pure def toArray[A](l: CSList[A]): Array[A] =
+  chez "(list->vector ${l})"

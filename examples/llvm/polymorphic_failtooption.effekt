@@ -19,7 +19,7 @@ def runFail[A]{ f : => A / Fail }: Option[A] = {
 }
 
 def safeDiv(x: Int, y: Int): Int / Fail = {
-    if(y == 0){
+    if (y == 0){
         do Fail(); 0
     } else {
         x/y

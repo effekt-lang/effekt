@@ -1,5 +1,3 @@
-import immutable/option
-
 def main() = {
   var curr = Some(10)
   while (curr is Some(i)) {

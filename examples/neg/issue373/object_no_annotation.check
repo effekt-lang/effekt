@@ -1,3 +1,6 @@
-[error] examples/neg/issue373/object_no_annotation.effekt:9:29: Expected Int but got String.
-def main() = println(eff.op("hello"))
-                            ^^^^^^^
+[error] examples/neg/issue373/object_no_annotation.effekt:10:21: Expected String but got Int.
+  val msg: String = eff.op("hello");
+                    ^^^^^^^^^^^^^^^
+[error] examples/neg/issue373/object_no_annotation.effekt:10:28: Expected Int but got String.
+  val msg: String = eff.op("hello");
+                           ^^^^^^^

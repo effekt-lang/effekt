@@ -1,0 +1,7 @@
+module examples/pos/string_concat
+
+def main() = {
+  val s1 = "hello"
+  val s2 = " world"
+  println((s1 ++ s2).length)
+}

@@ -79,7 +79,7 @@ object DeclPrinter extends ParenPrettyPrinter {
 
     val valueParams = f.vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
-    val bps = f.bparams.map { b => pp"{ ${b.name}: ${b.tpe} }" }.mkString("")
+    val bps = f.bparams.map { b => pp"{ ${b.name}: ${b.tpe.get} }" }.mkString("")
 
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
 

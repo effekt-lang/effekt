@@ -268,10 +268,10 @@ trait TransformerMonadic extends Transformer {
    * Not all statement types can be printed in this context!
    */
   def toJSMonadic(s: core.Stmt)(using DeclarationContext, Context): monadic.Control = s match {
-    case Val(Wildcard(), binding, body) =>
+    case Val(Wildcard(), _, binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
-    case Val(id, binding, body) =>
+    case Val(id, _, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
     case Var(id, init, cap, body) =>
@@ -336,10 +336,10 @@ trait TransformerMonadic extends Transformer {
     case Definition.Def(id, block) =>
       js.Const(nameDef(id), toJS(block))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       js.ExprStmt(toJS(binding))
 
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       js.Const(nameDef(id), toJS(binding))
   }
 

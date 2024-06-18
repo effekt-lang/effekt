@@ -1,5 +1,3 @@
-import immutable/option
-
 def ex1(opt: Option[Int]) = opt match {
   case Some(v) and v > 0 and v <= 10 => "hello"
   case _ => "world"

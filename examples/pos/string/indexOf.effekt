@@ -1,6 +1,6 @@
 module examples/pos/string/indexOf
 
-import text/string
+import string
 
 // this is for backends that don't have a "universal" print
 def printOptInt(opt: Option[Int]): Unit = {

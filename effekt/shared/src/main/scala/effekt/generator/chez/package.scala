@@ -9,6 +9,8 @@ import effekt.symbols.{ Module, Symbol, Wildcard }
 import scala.language.implicitConversions
 import effekt.util.paths.*
 
+import scala.util.matching.Regex
+
 
 def uniqueName(id: Symbol): String = id.name.toString.replace("?", "").replace("!", "") + "_" + id.id
 
@@ -71,3 +73,16 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
 
   List(record, matcher)
 }
+
+
+private val unicodeRx = Regex("""[\\]u([0-9a-fA-F]{1,4})""")
+
+// unicode escape sequences \u001b need to be translated to \033
+// where 033 is an octal value left-padded with 0 to exactly three digits.
+def hexToOctal(str: String) =
+  val n = Integer.parseInt(str, 16)
+  val octal = Integer.toString(n, 8)
+  octal.reverse.padTo(3, '0').reverse
+
+def adaptEscapes(str: String) =
+  unicodeRx.replaceAllIn(str, m => "\\\\" + s"${hexToOctal(m.group(1))}")

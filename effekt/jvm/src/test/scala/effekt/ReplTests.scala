@@ -9,9 +9,7 @@ class ReplTests extends munit.FunSuite {
   def runRepl(input: String): String = {
     val compiler = new effekt.Driver {}
 
-    val configs = compiler.createConfig(Seq(
-      "--Koutput", "string",
-      "--lib", "libraries/js"))
+    val configs = compiler.createConfig(Seq("--Koutput", "string"))
 
     configs.verify()
 

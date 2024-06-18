@@ -34,6 +34,12 @@ object builtins {
   val StringSymbol = ExternType(name("String"), Nil)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
+  val CharSymbol = ExternType(name("Char"), Nil)
+  val TChar = ValueTypeApp(CharSymbol, Nil)
+
+  val ByteSymbol = ExternType(name("Byte"), Nil)
+  val TByte = ValueTypeApp(ByteSymbol, Nil)
+
   val TopSymbol = ExternType(name("Any"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
@@ -72,6 +78,8 @@ object builtins {
     "Int" -> IntSymbol,
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,
+    "Char" -> CharSymbol,
+    "Byte" -> ByteSymbol,
     "Any" -> TopSymbol,
     "Nothing" -> BottomSymbol,
     "IO" -> IOSymbol,
@@ -90,6 +98,9 @@ object builtins {
     "control" -> ControlCapability.capture,
     "global" -> globalRegion.capture
   )
+
+  // captures which are allowed on the toplevel
+  val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, globalRegion.capture)
 
   lazy val rootBindings: Bindings =
     Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures,

@@ -1,6 +1,6 @@
 module examples/pos/list/flatmap
 
-import immutable/list
+import list
 
 def main() = {
   val empty = Nil[Int]()
@@ -14,4 +14,3 @@ def main() = {
   val deepList = [[100, 200], [300], [400, 500, 600]]
   deepList.flatMap { x => x }.foreach { x => println(x) }
 }
-
