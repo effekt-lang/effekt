@@ -485,6 +485,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => externFun()
       }
 
+  def featureFlag(): FeatureFlag =
+    next().kind match {
+      case Ident("default") => FeatureFlag.Default
+      case Ident(flag)      => FeatureFlag.NamedFeatureFlag(flag)
+      case _                => fail("Expected identifier")
+    }
+
+  def maybeFeatureFlag(): FeatureFlag =
+    nonterminal:
+      backtrack(featureFlag()).getOrElse(FeatureFlag.Default)
+
   def externType(): Def =
     nonterminal:
       ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams())
@@ -496,23 +507,39 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation())
   def externInclude(): Def =
     nonterminal:
-      ExternInclude(`extern` ~> `include` ~> path())
+      `extern` ~> `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None)
 
   def externString(): Def =
     nonterminal:
       consume(`extern`)
+      val ff = maybeFeatureFlag()
       next().kind match {
-        case Str(contents, _) => ExternInclude("", Some(contents))
+        case Str(contents, _) => ExternInclude(ff, "", Some(contents))
         case _ => fail("Expected string literal")
       }
 
   def externFun(): Def =
     nonterminal:
-      (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ returnAnnotation() ~ (`=` ~> externBody()) match {
-        case capt ~ id ~ (tps, vps, bps) ~ ret ~ body => ExternDef(capt, id, tps, vps, bps, ret, body)
+      ((`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
+        case capt ~ id ~ (tps, vps, bps) ~ ret =>
+          val bodies =
+            manyWhile(
+              externBody(),
+              peek.kind match {
+                case Str(_, _) | Ident(_) => true
+                case _                    => false
+            })
+          ExternDef(capt, id, tps, vps, bps, ret, bodies)
       }
 
-  def externBody(): Template[Term] =
+  def externBody(): ExternBody =
+    nonterminal:
+      peek(1).kind match {
+        case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
+        case _   => ExternBody.StringExternBody(maybeFeatureFlag(), template())
+      }
+
+  def template(): Template[Term] =
     nonterminal:
       // TODO handle case where the body is not a string, e.g.
       // Expected an extern definition, which can either be a single-line string (e.g., "x + y") or a multi-line string (e.g., """...""")
@@ -639,7 +666,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
         case capabilityName ~ impl =>
-          val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
+          val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
           Handler(capability, impl)
       }
 
@@ -1131,7 +1158,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def blockParam(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), blockTypeAnnotation())
+      BlockParam(idDef(), Some(blockTypeAnnotation()))
+
+  def blockParamOpt(): BlockParam =
+    nonterminal:
+      BlockParam(idDef(), backtrack(blockTypeAnnotation()))
 
   // TODO this needs to be implemented, once the PR is rebased onto master
   //  def blockParamOpt: BlockParam =

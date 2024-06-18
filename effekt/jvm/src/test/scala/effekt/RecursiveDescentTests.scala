@@ -78,6 +78,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseProgram(input: String, positions: Positions = new Positions())(using munit.Location): ModuleDecl =
     parse(input, _.program())
 
+  def parseExternDef(input: String, positions: Positions = new Positions())(using munit.Location): Def =
+    parse(input, _.externDef())
+
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
     def peek(tokens: Seq[Token], offset: Int): Token =
@@ -606,5 +609,23 @@ class RecursiveDescentTests extends munit.FunSuite {
         |def main() = ()
         |
         |// foo""".stripMargin))
+  }
+
+  test("Extern body") {
+    parseExternDef("extern {io} def read(s: String): Int = default { 42 } js { 1 + 1 } chez { 42 }")
+    parseExternDef("extern \"console.log(42)\"")
+    parseExternDef("extern \"\"\"console.log(42)\"\"\"")
+    parseExternDef("extern type Complex")
+    parseExternDef("extern type State[A]")
+    parseExternDef("extern interface State[A]")
+    parseExternDef("extern resource withFile: [A](String) { () => A } => A")
+    parseExternDef("extern include \"path/to/file\"")
+    parseExternDef(
+      """extern def println(value: String): Unit =
+      | js "$effekt.println(${value})"
+      | chez "(println_impl ${value})"
+      | ml { print(value); print("\n") }
+      """.stripMargin
+    )
   }
 }
