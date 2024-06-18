@@ -651,13 +651,8 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer
 
-    ; Store the argument (0th index is evidence)
-    %environment = call %Environment @malloc(i64 1048576)
-    %evidence2 = getelementptr {%Int, %Int}, %Environment %environment, i64 0, i32 1
-    store i64 %arg, ptr %evidence2
-
     ; call
-    %result = call fastcc %Pos %functionPointer(%Object %object, %Environment %environment, %StackPointer %stackPointer)
+    %result = call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %arg, %StackPointer %stackPointer)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %StackPointer %base, ptr @base
@@ -685,13 +680,8 @@ define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer
 
-    ; Store the argument (0th index is evidence)
-    %environment = call %Environment @malloc(i64 1048576)
-    %arg_pos = getelementptr {%Int, %Pos}, %Environment %environment, i64 0, i32 1
-    store %Pos %arg, ptr %arg_pos
-
     ; call
-    %result = call fastcc %Pos %functionPointer(%Object %object, %Environment %environment, %StackPointer %stackPointer)
+    %result = call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %arg, %StackPointer %stackPointer)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %StackPointer %base, ptr @base
@@ -719,8 +709,7 @@ define void @run(%Neg %f) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    %environment = call %Environment @malloc(i64 1048576)
-    %result = call fastcc %Pos %functionPointer(%Object %object, %Environment %environment, %StackPointer %stackPointer)
+    %result = call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %StackPointer %stackPointer)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %StackPointer %base, ptr @base
