@@ -611,7 +611,7 @@ class RecursiveDescentTests extends munit.FunSuite {
         |// foo""".stripMargin))
   }
 
-  test("Extern body") {
+  test("Extern definition") {
     parseExternDef("extern {io} def read(s: String): Int = default { 42 } js { 1 + 1 } chez { 42 }")
     parseExternDef("extern \"console.log(42)\"")
     parseExternDef("extern \"\"\"console.log(42)\"\"\"")
@@ -620,12 +620,13 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExternDef("extern interface State[A]")
     parseExternDef("extern resource withFile: [A](String) { () => A } => A")
     parseExternDef("extern include \"path/to/file\"")
-    parseExternDef(
-      """extern def println(value: String): Unit =
-      | js "$effekt.println(${value})"
-      | chez "(println_impl ${value})"
-      | ml { print(value); print("\n") }
-      """.stripMargin
+    parseProgram(
+      "extern def println(value: String): Unit =" +
+      "js \"$effekt.println(${value})\"" +
+      "chez \"(println_impl ${value})\"" +
+      "ml { print(value); print(\"\\n\") }" +
+      "llvm \"\"\"call void @c_io_println_String(%Pos %value); ret %Pos zeroinitializer ; Unit\"\"\"" + "\n" +
+      "extern js \"\"\" function \"\"\""
     )
   }
 }

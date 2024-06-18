@@ -468,6 +468,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `resource`  => externResource()
         case `include`   => externInclude()
         case s: Str      => externString()
+        // could be either a capture set or a feature flag
+        case id: Ident   =>
+          if (peek(2, `def`)) externFun()
+          else externString()
         case _ => externFun()
       }
 
@@ -512,7 +516,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             manyWhile(
               externBody(),
               peek.kind match {
-                case Str(_, _) | Ident(_) => true
+                case Str(_, _) | Ident(_) | `{` => true
                 case _                    => false
             })
           ExternDef(capt, id, tps, vps, bps, ret, bodies)
