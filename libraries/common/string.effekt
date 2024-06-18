@@ -1,0 +1,348 @@
+module string
+
+import effekt
+import option
+import list
+import exception
+import result
+
+// TODO
+// - [ ] handle unicode codepoints (that can span two indices) correctly
+// - [ ] use string buffers or other buffers to implement repeated concatenation more efficiently (and `join`)
+// - [ ] maybe use native implementations for toInt, repeat, split, indexOf, etc.
+
+/**
+ * Strings
+ * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
+ * - ML: Strings are sequences of 8-bit characters (https://smlfamily.github.io/Basis/string.html)
+ * - Chez: Strings are sequences of unicode characters (?)
+ * - LLVM: UTF-8 (characters can take from 1-4 bytes).
+ */
+
+
+// Operations
+// ----------
+
+def substring(str: String, from: Int, to: Int): String = {
+  def clamp(lower: Int, x: Int, upper: Int) = max(lower, min(x, upper))
+  val lower = clamp(0, from, to)
+  val upper = clamp(0, to, str.length)
+  str.unsafeSubstring(lower, upper)
+}
+
+def substring(str: String, from: Int): String =
+  str.substring(from, str.length)
+
+
+/**
+ * Checks whether str starts with the given prefix at `from`
+ */
+def isSubstringAt(str: String, prefix: String, from: Int): Bool = {
+  with default[OutOfBounds, Bool] { false };
+
+  val stringLength = str.length
+  val prefixLength = prefix.length
+
+  def done?(index: Int): Bool = index >= prefixLength
+  def matches?(index: Int): Bool = prefix.charAt(index) == str.charAt(index + from)
+
+  def go(index: Int): Bool =
+    if (index.done?) true
+    else if (index.matches?) go(index + 1) else false
+
+  go(0)
+}
+
+def startsWith(str: String, prefix: String): Bool =
+  isSubstringAt(str, prefix, 0)
+
+def endsWith(str: String, suffix: String): Bool =
+  isSubstringAt(str, suffix, str.length - suffix.length)
+
+/**
+ * Repeats the given string n-times.
+ *
+ * TODO use a more efficient way of appending strings like a buffer
+ */
+def repeat(str: String, n: Int): String = {
+  def go(n: Int, result: String): String = {
+    if (n == 0) result
+    else go(n - 1, result ++ str)
+  }
+  go(n, "")
+}
+
+// TODO use .split() in JS
+def split(str: String, sep: String): List[String] = {
+  val strLength = str.length
+  val sepLength = sep.length
+
+  // special case: seperator is empty, just emit individual chars
+  def empty(index: Int, components: List[String]): List[String] =
+    if (index >= strLength) components.reverse
+    else empty(index + 1, Cons(str.substring(index, index + 1), components))
+
+  def go(lastIndex: Int, components: List[String]): List[String] =
+    indexOf(str, sep, lastIndex) match {
+      case None() =>
+        Cons(str.substring(lastIndex, strLength), components).reverse
+      case Some(index) =>
+        go(index + sepLength, Cons(str.substring(lastIndex, index), components))
+    }
+
+  if (sepLength == 0) empty(0, Nil())
+  else go(0, Nil())
+}
+
+def join(strings: List[String], sep: String): String = {
+  def go(strings: List[String], result: String): String = strings match {
+    case Nil() => result
+    case Cons(s, rest) => go(rest, result ++ sep ++ s)
+  }
+  strings match {
+    case Nil() => ""
+    case Cons(first, rest) => go(rest, first)
+  }
+}
+
+extern pure def trim(str: String): String =
+  js "${str}.trim()"
+
+// Parsing
+// -------
+def toBool(s: String): Bool / Exception[WrongFormat] = s match {
+  case "true"  => true
+  case "false" => false
+  case _ => wrongFormat("Not a boolean value: '" ++ s ++ "'")
+}
+
+// TODO optimize (right now this will be horribly slow (compared to the native JS version)
+def toInt(str: String): Int / Exception[WrongFormat] = {
+
+  val zero = '0'.toInt
+
+  def go(index: Int, acc: Int): Int = {
+    result[Char, OutOfBounds] { str.charAt(index) } match {
+      case Success(c) and c >= '0' and c <= '9' =>
+        go(index + 1, 10 * acc + (c.toInt - zero))
+      case Success(c) => wrongFormat("Not a valid number: '" ++ str ++ "'")
+      // wrong index means we are done parsing
+      case Error(_, _) => acc
+    }
+  }
+
+  with default[OutOfBounds, Int] { wrongFormat("Empty string is not a valid number") };
+
+  str.charAt(0) match {
+    case '-' => 0 - go(1, 0)
+    case _   => go(0, 0)
+  }
+}
+
+
+// Native versions of toInt (unused right now)
+//   ML: also accepts sml style `~2` for unary minus along with `+2` and `-2`
+extern pure def unsafeToInt(str: String): Int =
+  js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
+  chez "(string->number ${str})"
+  ml "Int.fromString ${str}"
+
+
+/**
+ * Returns the index of the first occurrence of `sub` in `str`
+ */
+def indexOf(str: String, sub: String): Option[Int] =
+  indexOf(str, sub, 0)
+
+def indexOf(str: String, sub: String, from: Int): Option[Int] = {
+  val len = str.length
+  def go(index: Int): Option[Int] =
+    if (index >= len) None()
+    else if (str.isSubstringAt(sub, index)) Some(index)
+    else go(index + 1)
+
+  go(from)
+}
+
+/**
+ * Returns the index of the last occurence of `sub` in `str`
+ */
+def lastIndexOf(str: String, sub: String): Option[Int] =
+  lastIndexOf(str, sub, str.length)
+
+def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
+  def go(index: Int): Option[Int] =
+    if (index < 0) None()
+    else if (str.isSubstringAt(sub, index)) Some(index)
+    else go(index - 1)
+
+  go(from)
+}
+
+// TODO more efficient (native) implementations could be integrated as follows
+
+// extern pure def indexOf(str: String, sub: String): Option[Int] =
+//   //js { nativeIndexOf(str, sub) }
+//   default { indexOf(str, sub, 0) }
+
+// def nativeIndexOf(str: String, sub: String): Option[Int] = {
+//   val index = str.unsafeIndexOf(sub)
+//   if (index < 0) { None() } else { Some(index) }
+// }
+
+// extern pure def unsafeIndexOf(str: String, sub: String): Int =
+//   js "${str}.indexOf(${sub})"
+
+interface Stream {
+  def emit(string: Char): Unit
+}
+
+def string[T] { prog: => T / Stream }: (T, String) = <>
+
+// TODO implement after concurrent IO (we need to stub `process.stdout` in JS for browsers).
+def printing[T] { prog: => T / Stream }: T = <>
+
+
+// ANSI escape codes
+namespace ANSI {
+  val BLACK = "\u001b[30m"
+  val RED = "\u001b[31m"
+  val GREEN = "\u001b[32m"
+  val YELLOW = "\u001b[33m"
+  val BLUE = "\u001b[34m"
+  val MAGENTA = "\u001b[35m"
+  val CYAN = "\u001b[36m"
+  val WHITE = "\u001b[37m"
+
+  val BG_BLACK = "\u001b[40m"
+  val BG_RED = "\u001b[41m"
+  val BG_GREEN = "\u001b[42m"
+  val BG_YELLOW = "\u001b[43m"
+  val BG_BLUE = "\u001b[44m"
+  val BG_MAGENTA = "\u001b[45m"
+  val BG_CYAN = "\u001b[46m"
+  val BG_WHITE = "\u001b[47m"
+
+  val RESET = "\u001b[0m"
+}
+
+
+// Characters
+// ----------
+//
+//   JS: Int (Unicode codepoints)
+//   CS: ?
+//   ML: 8-bit https://smlfamily.github.io/Basis/char.html
+//   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
+
+extern pure def toString(ch: Char): String =
+  js "String.fromCodePoint(${ch})"
+  chez "(string (integer->char ${ch}))"
+  llvm """
+    %z = call %Pos @c_buffer_show_Char(%Int %ch)
+    ret %Pos %z
+  """
+
+// Since we currently represent Char by integers in all backends, we could reuse comparison
+extern pure def toInt(ch: Char): Int =
+  js "${ch}"
+  chez "${ch}"
+  ml "${ch}"
+  llvm "ret %Int ${ch}"
+
+extern pure def infixLt(x: Char, y: Char): Bool =
+  js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
+  ml "(${x}: int) < ${y}"
+  llvm """
+    %z = icmp slt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixLte(x: Char, y: Char): Bool =
+  js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
+  ml "(${x}: int) <= ${y}"
+  llvm """
+    %z = icmp sle %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixGt(x: Char, y: Char): Bool =
+  js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
+  ml "(${x}: int) > ${y}"
+  llvm """
+    %z = icmp sgt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixGte(x: Char, y: Char): Bool =
+  js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+  ml "(${x}: int) >= ${y}"
+  llvm """
+    %z = icmp sge %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+// TODO iterator over codepoints (maybe use the JS primitive feature???)
+
+extern type StringIterator
+
+
+/**
+ * Determines the number of bytes needed by a codepoint
+ *
+ * Also see: https://en.wikipedia.org/wiki/UTF-8
+ */
+def utf8ByteCount(codepoint: Char): Int = codepoint match {
+  case c and c >= \u{0000}  and c <= \u{007F}   => 1
+  case c and c >= \u{0080}  and c <= \u{07FF}   => 2
+  case c and c >= \u{0800}  and c <= \u{FFFF}   => 3
+  case c and c >= \u{10000} and c <= \u{10FFFF} => 4
+  case c => panic("Not a valid code point")
+}
+
+def utf16UnitCount(codepoint: Char): Int = codepoint match {
+  case c and c >= \u{0000}  and c <= \u{FFFF}   => 1
+  case c and c >= \u{10000} and c <= \u{10FFFF} => 4
+  case c => panic("Not a valid code point")
+}
+
+// TODO this is copied from the LLVM-backend stdlib. Do we need this?
+// def showQuoted(s: String): String =
+//  "\x22" ++ s.map { c =>
+//    if(c == "\x22") {
+//     "\\\x22"
+//    } else if (c == "\\") {
+//     "\\\\"
+//    } else c
+//  } ++ "\x22"
+
+extern pure def charWidth(c: Char): Int =
+  // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
+  js "(${c} > 0xffff) ? 2 : 1"
+
+def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
+  if (index < 0 || index >= length(str))
+    do raise(OutOfBounds(), "Index out of bounds: " ++ show(index) ++ " in string: '" ++ str ++ "'")
+  else
+    unsafeCharAt(str, index)
+
+extern pure def unsafeCharAt(str: String, n: Int): Char =
+  js "${str}.codePointAt(${n})"
+  chez "(char->integer (string-ref ${str} ${n}))"
+  ml "(Char.ord (String.sub (${str}, ${n})))"
+  llvm """
+    %x = call %Int @c_buffer_character_at(%Pos %str, i64 %n)
+    ret %Int %x
+  """

@@ -1,46 +1,46 @@
-package effekt.core
+package effekt
+package core
 
 import effekt.{core, source, symbols}
 import effekt.context.Context
 import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
 import effekt.source.{IdDef, Include}
-import effekt.symbols.{Module, Name, TypeConstructor, TypeSymbol, ValueSymbol, ValueType}
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
 import kiama.parsing.{Failure, NoSuccess, Success}
 
 abstract class AbstractPolymorphismBoxingTests extends CorePhaseTests(PolymorphismBoxing) {
 
-  def boxDef(tpe: ValueType.ValueTypeApp): List[symbols.Symbol] = {
-    val tpeCns: symbols.TypeConstructor.Record =
-      symbols.TypeConstructor.Record(symbols.LocalName("Boxed" ++ tpe.constructor.name.name), List(), null)
-    tpeCns.constructor =
-      symbols.Constructor(symbols.LocalName("MkBoxed" ++ tpe.constructor.name.name), List(), null, tpeCns)
-    tpeCns.constructor.fields = List(
-      symbols.Field(symbols.LocalName("unbox" ++ tpe.constructor.name.name),
-        symbols.ValueParam(symbols.LocalName("value"), Some(tpe)), tpeCns.constructor))
-    List(tpeCns, tpeCns.constructor, tpeCns.constructor.fields.head)
+  override protected val defaultNames: Map[String, _root_.effekt.symbols.Symbol] = super.defaultNames ++ Map(
+    "BoxedInt" -> Id("BoxedInt"),
+    "BoxedString" -> Id("BoxedString"),
+    "MkBoxedString" -> Id("MkBoxedString"),
+    "boxInt" -> Id("boxInt"),
+    "unboxInt" -> Id("unboxInt"),
+    "unboxString" -> Id("unboxInt"),
+  )
+  val boxDecls = List(
+    Declaration.Data(defaultNames("BoxedString"), List(),
+      List(Constructor(defaultNames("MkBoxedString"),
+        List(Field(defaultNames("unboxString"), ValueType.Data(defaultNames("String"), Nil))))))
+  )
+  val boxExterns = List(
+    Extern.Def(defaultNames("boxInt"), Nil, Nil, List(ValueParam(Id("i"), ValueType.Data(defaultNames("Int"), Nil))), Nil,
+      ValueType.Data(defaultNames("BoxedInt"), Nil), Set.empty,
+      ExternBody.StringExternBody(source.FeatureFlag.Default, Template(List("<box int>"), Nil))),
+    Extern.Def(defaultNames("unboxInt"), Nil, Nil, List(ValueParam(Id("i"), ValueType.Data(defaultNames("BoxedInt"), Nil))), Nil,
+      ValueType.Data(defaultNames("Int"), Nil), Set.empty,
+      ExternBody.StringExternBody(source.FeatureFlag.Default, Template(List("<unbox int>"), Nil)))
+  )
+
+  override def transform(input: ModuleDecl): ModuleDecl = input match {
+    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+      super.transform(ModuleDecl(path, includes, boxDecls ++ declarations, boxExterns ++ externs, definitions, exports)) match {
+        case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+          ModuleDecl(path, includes, declarations.filterNot(boxDecls.contains), externs.filterNot(boxExterns.contains), definitions, exports)
+      }
   }
 
-  val boxtpes = symbols.builtins.rootTypes.values.flatMap {
-    case t: TypeConstructor.ExternType => boxDef(ValueType.ValueTypeApp(t, List()))
-    case _ => Nil
-  }.map { c => (c.name.name, c) }.toMap
-
-  /** Make sure that the stdlib module is found, with the appropriate `Boxed`... definitions */
-  val pseudoStdLib = Module(effekt.source.ModuleDecl("effekt", List(), List()), kiama.util.StringSource("", "effekt"))
-
-  pseudoStdLib.exports(Nil, symbols.Bindings(Map.empty, boxtpes.collect[String, symbols.TypeSymbol]{
-    case (k,t: symbols.TypeSymbol) => (k,t)
-  }, Map.empty, Map.empty))
-
-  override val theSourceModule = Module(source.ModuleDecl("test", List(Include("effekt")), List()), kiama.util.StringSource("", "test"))
-  theSourceModule.exports(List(pseudoStdLib), symbols.Bindings.empty)
-
-  override protected val defaultNames = boxtpes ++
-    symbols.builtins.rootTypes ++ Map(
-    // TODO maybe add used names
-  )
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
   test("simple non-polymorphic code should stay the same"){
@@ -87,7 +87,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
-        |def idInt = { (x: Int) => return (id: ['A]('A) => 'A @ {})[BoxedInt](make BoxedInt MkBoxedInt(x: Int)).unboxInt: Int }
+        |def idInt = { (x: Int) => return (unboxInt: (BoxedInt) => Int @ {})((id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int))) }
         |""".stripMargin
     assertTransformsTo(from, to)
   }
@@ -103,7 +103,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
       """module main
         |
         |def id = { ['A](a: 'A) => return a: 'A }
-        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt](make BoxedInt MkBoxedInt(x: Int)) ; return tmp:BoxedInt.unboxInt: Int }
+        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int)) ; return (unboxInt: (BoxedInt) => Int @ {})(tmp:BoxedInt) }
         |""".stripMargin
     assertTransformsTo(from, to)
   }
@@ -127,8 +127,8 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |def idInt = { (x: Int) =>
         |    {
         |        let res = run {
-        |            let boxedRes = !(id: ['A]('A) => 'A @ {})[BoxedInt](make BoxedInt MkBoxedInt(x: Int))
-        |            return boxedRes:BoxedInt.unboxInt: Int
+        |            let boxedRes = !(id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int))
+        |            return (unboxInt: (BoxedInt) => Int @ {})(boxedRes:BoxedInt)
         |        }
         |        return res: Int
         |    }
@@ -150,11 +150,11 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |    val r = (hof: ['A](){ b : ('A) => 'A } => 'A @ {} )[BoxedInt](){ (boxedX: BoxedInt) =>
         |      {
         |         def originalFn = { (x: Int) => return x: Int }
-        |         val result = (originalFn: (Int) => Int @ {})(boxedX: BoxedInt.unboxInt: Int);
-        |         return make BoxedInt MkBoxedInt(result: Int)
+        |         val result = (originalFn: (Int) => Int @ {})((unboxInt: (BoxedInt) => Int @ {})(boxedX: BoxedInt));
+        |         return (boxInt: (Int) => BoxedInt @ {})(result: Int)
         |      }
         |    };
-        |    return r:BoxedInt.unboxInt: Int
+        |    return (unboxInt: (BoxedInt) => Int @ {})(r:BoxedInt)
         |}
         |""".stripMargin
     assertTransformsTo(from, to)
@@ -182,14 +182,14 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |                  (hhofargarg: Int) =>
         |                      {
         |                        def tmp = hhofargB: ('A) => 'A @ {}
-        |                        val rres = (tmp: ('A) => 'A @ {})(make BoxedInt MkBoxedInt(hhofargarg: Int));
-        |                        return rres:BoxedInt.unboxInt: Int
+        |                        val rres:BoxedInt = (tmp: ('A) => 'A @ {})((boxInt: (Int) => BoxedInt @ {})(hhofargarg: Int));
+        |                        return (unboxInt: (BoxedInt) => Int @ {})(rres:BoxedInt)
         |                      }
         |              };
-        |              return make BoxedInt MkBoxedInt(res:Int)
+        |              return (boxInt: (Int) => BoxedInt @ {})(res:Int)
         |          }
         |    };
-        |    return result:BoxedInt.unboxInt: Int
+        |    return (unboxInt: (BoxedInt) => Int @ {})(result:BoxedInt)
         |}
         |""".stripMargin
     assertTransformsTo(from, to)

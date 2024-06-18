@@ -3,5 +3,7 @@ interface Eff[A] {
 }
 
 def main() =
-  try { println(eff.op[Int]("hello")) }
-  with eff: Eff[Int] { def op[B](x) = resume(x / 1) }
+  try {
+    val msg: String = eff.op[Int]("hello");
+    println(msg)
+  } with eff: Eff[Int] { def op[B](x) = resume(x / 1) }

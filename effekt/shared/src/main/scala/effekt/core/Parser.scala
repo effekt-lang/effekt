@@ -72,7 +72,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
         Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
           case ff ~ (body: String) =>
-            ExternBody(ff, Template(List(body), Nil))
+            ExternBody.StringExternBody(ff, Template(List(body), Nil))
         })
     })
 
@@ -104,7 +104,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Definitions
   // -----------
   lazy val definition: P[Definition] =
-  ( `let` ~> id ~ (`=` ~/> expr) ^^ Definition.Let.apply
+  ( `let` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ^^ {
+    case (name ~ tpe ~ binding) => Definition.Let(name, tpe.getOrElse(binding.tpe), binding)
+  }
   | `def` ~> id ~ (`=` ~/> block) ^^ Definition.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
@@ -119,7 +121,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   lazy val stmt: P[Stmt] =
     ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
     | `return` ~> pure ^^ Stmt.Return.apply
-    | `val` ~> id ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply
+    | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ {
+      case id ~ tpe ~ binding ~ body => Stmt.Val(id, tpe.getOrElse(binding.tpe), binding, body)
+    }
     | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
@@ -293,6 +297,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( `(` ~> manySep(valueType, `,`) <~ `)`
     | success(Nil)
     )
+
+  lazy val maybeTypeAnnotation: P[Option[ValueType]] =
+    (`:` ~> valueType).?
 
   // { f : S }
   // abbreviation { S } .= { _: S }

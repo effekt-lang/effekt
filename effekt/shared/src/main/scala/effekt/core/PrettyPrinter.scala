@@ -62,7 +62,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
       "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
-        case ExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
+        case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
+        case ExternBody.Unsupported(err) => s"unsupported(${err.toString})"
       })
     case Extern.Include(ff, contents) => emptyDoc // right now, do not print includes.
   }
@@ -159,7 +160,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
@@ -170,12 +171,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Val(Wildcard(), binding, body) =>
+    case Val(Wildcard(), _, binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, binding, body) =>
-      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+    case Val(id, tpe, binding, body) =>
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, vargs, bargs) =>

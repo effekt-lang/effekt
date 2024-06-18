@@ -1,8 +1,5 @@
-import immutable/list
-import immutable/option
-import io/args
-import text/string
-
+import args
+import string
 
 def abs(n: Int): Int = if (n < 0) 0 - n else n
 def max(n: Int, m: Int): Int = if (n > m) n else m
@@ -67,9 +64,8 @@ def sumPaths(tree: Tree[Int]): Int = {
 
 def main() = commandLineArgs() match {
   case Nil() => println(sumPaths(makeTree(10)))
-  case Cons(x, Nil()) => toInt(x) match {
-    case None() => println("Unexpected non-integer '" ++ show(x) ++ "'")
-    case Some(i) => println(sumPaths(makeTree(i)))
-  }
+  case Cons(x, Nil()) =>
+    with report[WrongFormat];
+    println(sumPaths(makeTree(x.toInt)))
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }

@@ -6,8 +6,8 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.source.Term.BlockLiteral
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -53,12 +53,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.timed(phaseName, source.name) {
         Context in {
           Context.withUnificationScope {
-            // No captures are allowed on the toplevel
-            flowingInto(CaptureSet()) {
+            flowingInto(builtins.toplevelCaptures) {
               // bring builtins into scope
               builtins.rootTerms.values.foreach {
                 case term: BlockParam =>
-                  Context.bind(term, term.tpe)
+                  Context.bind(term, term.tpe.getOrElse {
+                    INTERNAL_ERROR("Builtins should always be annotated with their types.")
+                  })
                   Context.bind(term, CaptureSet(term.capture))
                 case term: ExternResource =>
                   Context.bind(term, term.tpe)
@@ -215,7 +216,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
           val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
-          Context.bind(capability, capability.tpe, CaptureSet(capability.capture))
+          val tpe = capability.tpe.getOrElse { INTERNAL_ERROR("Block type annotation required") }
+          Context.bind(capability, tpe, CaptureSet(capability.capture))
           capability
         }
 
@@ -247,7 +249,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (4) Wellformedness checks
         val handlerFor = providedCapabilities.map { cap =>
           // all effects have to be concrete at this point in time
-          val concreteEffect = Context.unification(cap.tpe.asInterfaceType)
+          // safety: (1) ensures there's a type annotation
+          val concreteEffect = Context.unification(cap.tpe.getOrElse { INTERNAL_ERROR("Block type annotation required") }.asInterfaceType)
           (concreteEffect, cap)
         }
 
@@ -373,21 +376,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
           val declaredType = Context.lookupFunctionType(d.definition)
 
-          //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-          // The parameters C, D, ... are existentials
-          val existentials: List[ValueType] = tparams.map {
-            tparam => ValueTypeRef(tparam.symbol.asTypeParam)
-          }
-
           def assertArity(kind: String, got: Int, expected: Int): Unit =
             if (got != expected)
               Context.abort(pretty"Number of ${kind} (${got}) does not match declaration of '${op.name}', which expects ${expected}.")
 
-          assertArity("type parameters", existentials.size, declaredType.tparams.size - targs.size)
+          // if we have zero given type parameters, we synthesize them -- no need to check then
+          if (tparams.size != 0) assertArity("type parameters", tparams.size, declaredType.tparams.size - targs.size)
           assertArity("value parameters", vparams.size, declaredType.vparams.size)
 
-          val canonicalEffects = declaredType.effects.canonical
+          //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+          // The parameters C, D, ... are existentials
+          val existentials: List[ValueType] = if (tparams.size == declaredType.tparams.size - targs.size) {
+            tparams.map { tparam => ValueTypeRef(tparam.symbol.asTypeParam) }
+          } else {
+            // using the invariant that the universals are prepended to type parameters of the operation
+            declaredType.tparams.drop(targs.size).map { tp =>
+              // recreate "fresh" type variables
+              val name = tp.name
+              val newTp = TypeVar.TypeParam(name)
+              ValueTypeRef(newTp)
+            }
+          }
 
+          val canonicalEffects = declaredType.effects.canonical
 
           // distinguish between handler operation or object operation (which does not capture a cont.)
           val Result(_, effs) = continuationDetails match {
@@ -417,8 +428,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 case ((param, declaredType), capture) =>
                   val sym = param.symbol
                   val annotatedType = sym.tpe
-                  matchDeclared(annotatedType, declaredType, param)
-                  Context.bind(sym, annotatedType, CaptureSet(capture))
+                  annotatedType.foreach { matchDeclared(_, declaredType, param) }
+                  Context.bind(sym, annotatedType.getOrElse(declaredType), CaptureSet(capture))
               }
 
               // these capabilities are later introduced as parameters in capability passing
@@ -844,6 +855,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               body.args.foreach { arg => checkExpr(arg, None) }
             case source.ExternBody.EffektExternBody(ff, body) =>
               checkStmt(body, Some(expectedReturnType))
+            case u: source.ExternBody.Unsupported => u
           }
 
         }
@@ -893,6 +905,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val valueTypes = (vparams zip vps) map {
         case (param, expected) =>
           val adjusted = typeSubst substitute expected
+          // check given matches the expected, if given at all
           val tpe = param.symbol.tpe.map { got =>
             matchDeclared(got, adjusted, param);
             got
@@ -906,8 +919,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, expTpe) =>
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
-          val got = sym.tpe
-          matchDeclared(got, adjusted, param)
+          // check given matches the expected, if given at all
+          val got = sym.tpe.map { got =>
+            matchDeclared(got, adjusted, param)
+            got
+          } getOrElse { adjusted }
           // bind types to check body
           Context.bind(param.symbol, got, CaptureSet(sym.capture))
           got
@@ -946,14 +962,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val vps = vparams.map { p =>
         val param = p.symbol
         val tpe = p.symbol.tpe.getOrElse {
-          Context.abort("Expected type needs to be known for function arguments at the moment.")
+          INTERNAL_ERROR("Expected type needs to be known for function arguments at the moment.")
         }
         Context.bind(param, tpe)
         tpe
       }
       val bps = bparams.map { p =>
         val param = p.symbol
-        val tpe = param.tpe
+        val tpe = param.tpe.getOrElse {
+          INTERNAL_ERROR("Expected type need to be know for function arguments at the moment.")
+        }
         Context.bind(param, tpe)
         tpe
       }
@@ -1087,7 +1105,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case CallTarget(syms) => syms
       // already resolved by a previous attempt to typecheck
       case sym: BlockSymbol => List(Set(sym))
-      case _ => ???
+      case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
     }
 
     // TODO right now unhandled effects (via capability search) influences overload resolution.
@@ -1467,7 +1485,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
     bindCapabilities(binder, caps)
-    capabilityScope = BindSome(binder, caps.map { c => c.tpe.asInterfaceType -> c }.toMap, capabilityScope)
+    capabilityScope = BindSome(
+      binder,
+      caps.map { c => c.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType -> c }.toMap,
+      capabilityScope
+    )
     val result = f
     capabilityScope = capabilityScope.parent
     result
@@ -1475,7 +1497,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
-      assertConcrete(cap.tpe.asInterfaceType)
+      assertConcrete(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
       positions.dupPos(binder, cap)
       cap
     }
@@ -1500,7 +1522,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val capName = tpe.name.rename(_ + "$capability")
-    val param: BlockParam = BlockParam(capName, tpe)
+    val param: BlockParam = BlockParam(capName, Some(tpe))
     // TODO FIXME -- generated capabilities need to be ignored in LSP!
 //     {
 //      override def synthetic = true
@@ -1582,7 +1604,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
-    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s @ BlockParam(name, tpe) => bind(s, tpe.get, CaptureSet(p.capture))
     case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s : VarBinder => bind(s, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")

@@ -129,6 +129,9 @@ sealed trait ExternBody extends Tree {
 object ExternBody {
   case class StringExternBody(featureFlag: FeatureFlag, template: Template[source.Term]) extends ExternBody
   case class EffektExternBody(featureFlag: FeatureFlag, body: source.Stmt) extends ExternBody
+  case class Unsupported(message: util.messages.EffektError) extends ExternBody {
+    override def featureFlag: FeatureFlag = FeatureFlag.Default
+  }
 }
 
 
@@ -186,7 +189,7 @@ case class Include(path: String) extends Tree
  */
 enum Param extends Definition {
   case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: BlockType)
+  case BlockParam(id: IdDef, tpe: Option[BlockType])
 }
 export Param.*
 
@@ -394,6 +397,7 @@ def IntLit(value: Long): Literal = Literal(value, symbols.builtins.TInt)
 def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
 def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
 def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
+def CharLit(value: Int): Literal = Literal(value, symbols.builtins.TChar)
 
 type CallLike = Call | Do | Select | MethodCall
 

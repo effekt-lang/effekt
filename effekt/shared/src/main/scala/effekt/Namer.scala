@@ -47,9 +47,17 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     def importDependency(filePath: String) =
       val included = Context.moduleOf(filePath)
-      // include "effekt.effekt" as effekt
+
+      // Fully qualified:
+      //   include "foo/bar/baz.effekt" as foo::bar::baz
       scope.importAs(included.exports, included.namespace)
-      // import effekt::*
+
+      // Bind the module itself:
+      //   include "foo/bar/baz.effekt" as baz
+      scope.importAs(included.exports, List(included.name.name))
+
+      // Open it:
+      //   import baz::*
       scope.importAll(included.exports)
       included
 
@@ -209,10 +217,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case d @ source.ExternInclude(ff, path, None, _) =>
-      d.contents = Some(Context.contentsOf(path).getOrElse {
-        Context.abort(s"Missing include: ${path}")
-      })
-      ()
+      // only load include if it is required by the backend.
+      if (ff matches Context.compiler.supportedFeatureFlags) {
+        d.contents = Some(Context.contentsOf(path).getOrElse {
+          Context.abort(s"Missing include: ${path}")
+        })
+      } else {
+        d.contents = None
+      }
   }
 
   /**
@@ -238,7 +250,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), resolve(tpe))
+      val p = BlockParam(Name.local(id), tpe.map { resolve })
       Context.define(id, p)
       Context.bind(p.capture)
 
@@ -291,18 +303,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
-      if (!bodies.supportedByFeatureFlags(Context.compiler.supportedFeatureFlags)) {
-        val featureFlags = bodies.map(_.featureFlag)
-        Context.warning(pp"Extern definition ${id} is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
-          pp"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
-      }
-      bodies.foreach {
-        case source.ExternBody.StringExternBody(ff, _) if ff.isDefault =>
-          Context.warning(pp"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
-            + pp"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
-        case _ => ()
-      }
-
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -311,6 +311,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         bodies.foreach {
           case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolveGeneric)
           case source.ExternBody.EffektExternBody(ff, body) => resolveGeneric(body)
+          case u: source.ExternBody.Unsupported => u
         }
       }
 
@@ -381,13 +382,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
     case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(ff, path, _, _) =>
-      if (ff.isDefault) {
-        val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
-        Context.warning("Found extern include without feature flag. It is likely that this will fail in other backends, "
-          + s"please annotate it with a feature flag (Supported in current backend: ${supported})")
-      }
-      ()
+    case source.ExternInclude(ff, path, _, _) => ()
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
@@ -416,7 +411,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case tree @ source.Region(name, body) =>
-      val reg = BlockParam(Name.local(name.name), builtins.TRegion)
+      val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion))
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
@@ -583,7 +578,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym: BlockParam = BlockParam(Name.local(p.id), resolve(p.tpe))
+    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { resolve })
     Context.assignSymbol(p.id, sym)
     sym
   }

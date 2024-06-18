@@ -217,18 +217,19 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
-  lazy val operationParams: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
-    ( maybeTypeParams ~ valueParamsOpt ~ blockParams
+  // params with optional types, currently only allowed for block args and operation implementations
+  lazy val paramsOpt: P[List[Id] ~ List[ValueParam] ~ List[BlockParam]] =
+    ( maybeTypeParams ~ valueParamsOpt ~ blockParamsOpt
     | maybeTypeParams ~ valueParamsOpt ~ success(List.empty[BlockParam])
-    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParams
+    | maybeTypeParams ~ success(List.empty[ValueParam]) ~ blockParamsOpt
     | failure("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
     )
 
   lazy val blockParams: P[List[BlockParam]] =
     some(`{` ~/> blockParam <~ `}`)
 
-  lazy val maybeBlockParams: P[List[BlockParam]] =
-    blockParams.? ^^ { bs => bs getOrElse Nil }
+  lazy val blockParamsOpt: P[List[BlockParam]] =
+    some(`{` ~/> blockParamOpt <~ `}`)
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
@@ -248,7 +249,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe) : ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
+    idDef ~ (`:` ~/> blockType) ^^ { case id ~ tpe => BlockParam(id, Some(tpe)) : BlockParam }
+
+  lazy val blockParamOpt: P[BlockParam] =
+    idDef ~ (`:` ~> blockType).? ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -292,7 +296,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
 
   lazy val lambdaParams: P[(List[Id], List[ValueParam], List[BlockParam])] =
-    ( params ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
+    ( paramsOpt ^^ { case tps ~ vps ~ bps => (tps, vps, bps) }
     | valueParamsOpt ^^ { ps => (Nil, ps, Nil) }
     | idDef ^^ { id => (Nil, List(ValueParam(id, None) : ValueParam), Nil) }
     )
@@ -335,11 +339,17 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
           val tgt = IdTarget(id) withPositionOf(id)
           Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
        }
-    | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
-        case id ~ tps ~ vargs ~ body =>
-          val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
-       }
+    | `with` ~> expr ~ (`;` ~> stmts) ^^ {
+       case m@MethodCall(receiver, id, tps, vargs, bargs) ~ body =>
+         Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, Nil, Nil, body) withPositionOf m)))
+       case c@Call(callee, tps, vargs, bargs) ~ body =>
+         Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, Nil, Nil, body) withPositionOf c)))
+       case Var(id) ~ body =>
+         val tgt = IdTarget(id) withPositionOf(id)
+         Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, Nil, Nil, body) withPositionOf id) :: Nil))
+       case term ~ body =>
+         Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, Nil, Nil, body) withPositionOf term) :: Nil))
+    }
     )
 
   lazy val valDef: P[Def] =
@@ -444,6 +454,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( maybeTypeArgs ~ valueArgs ~ blockArgs
     | maybeTypeArgs ~ valueArgs ~ success(List.empty[Term])
     | maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs
+    | typeArgs ~ success(List.empty[Term]) ~ success(List.empty[Term])
     )
 
   lazy val callTarget: P[CallTarget] =
@@ -468,7 +479,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val handler: P[Handler] =
     ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
       case capabilityName ~ impl =>
-        val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
+        val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
         Handler(capability, impl)
       }
     )
@@ -487,7 +498,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ operationParams ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+    (`def` ~/> idRef) ~ paramsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
       case id ~ (tparams ~ vparams ~ bparams) ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, bparams, ret, body, resume)
     }
 
@@ -535,7 +546,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val literals: P[Literal] =
-    double | int | bool | unit | string
+    double | int | bool | unit | char | string
 
   lazy val int    = integerLiteral.flatMap { n =>
     try { val number = n.toLong;
@@ -548,6 +559,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val string = // we need to replace certain characters that would otherwise mess up the respective syntax emitted by the backends
     ( multilineString ^^ { s => StringLit(s.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")) }
     | stringLiteral ^^ { s => StringLit(s.substring(1, s.size - 1).replace("\\\n", "").replace("\\\r\n", "").replace("\t", "\\t")) }
+    )
+  lazy val char =
+    ( charLiteral ^^ { CharLit.apply }
+    | unicodeChar ^^ { CharLit.apply }
     )
 
   lazy val boxedExpr: P[Term] =
@@ -908,10 +923,9 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
   lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
-  // TODO add escape sequences
-  lazy val charLiteral = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
-  lazy val unicodeChar = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
-    case contents => java.lang.Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
+  lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
+  lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
+    case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)
   }
 
   // Delimiter for multiline strings

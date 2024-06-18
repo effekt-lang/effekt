@@ -35,7 +35,7 @@ object AnsiHighlight {
   )
 
   val string = Token(
-    """["][^"]*["]""".r,
+    """["].*["]""".r,
     Console.GREEN + _ + Console.RESET
   )
 

@@ -112,8 +112,14 @@ trait TransformerMonadic extends Transformer {
   def toJS(p: Param): JSName = nameDef(p.id)
 
   def toJS(e: core.Extern)(using DeclarationContext, Context): js.Stmt = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, ExternBody(featureFlag, contents)) =>
-      js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(contents))))
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
+      body match {
+        case ExternBody.StringExternBody(_, contents) =>
+          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(toJS(contents))))
+        case u: ExternBody.Unsupported =>
+          u.report
+          js.Function(nameDef(id), (vps ++ bps) map toJS, List(js.Return(monadic.Run(monadic.Builtin("hole")))))
+      }
 
     case Extern.Include(ff, contents) =>
       js.RawStmt(contents)
@@ -176,14 +182,26 @@ trait TransformerMonadic extends Transformer {
 
     case DirectApp(f: core.Block.BlockVar, targs, vargs, Nil) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.body.contents)
+      extern.body match {
+        case ExternBody.StringExternBody(_, contents) =>
+          inlineExtern(vargs, extern.vparams, contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          monadic.Run(monadic.Builtin("hole"))
+      }
 
     case DirectApp(f, targs, vargs, bargs) =>
       js.Call(toJS(f), vargs.map(toJS) ++ bargs.map(toJS))
 
     case PureApp(f: core.Block.BlockVar, targs, vargs) if canInline(f) =>
       val extern = D.getExternDef(f.id)
-      inlineExtern(vargs, extern.vparams, extern.body.contents)
+      extern.body match {
+        case ExternBody.StringExternBody(_, contents) =>
+          inlineExtern(vargs, extern.vparams, contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          monadic.Run(monadic.Builtin("hole"))
+      }
 
     case PureApp(f, targs, vargs) =>
       js.Call(toJS(f), vargs.map(toJS))
@@ -250,10 +268,10 @@ trait TransformerMonadic extends Transformer {
    * Not all statement types can be printed in this context!
    */
   def toJSMonadic(s: core.Stmt)(using DeclarationContext, Context): monadic.Control = s match {
-    case Val(Wildcard(), binding, body) =>
+    case Val(Wildcard(), _, binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
-    case Val(id, binding, body) =>
+    case Val(id, _, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
     case Var(id, init, cap, body) =>
@@ -318,10 +336,10 @@ trait TransformerMonadic extends Transformer {
     case Definition.Def(id, block) =>
       js.Const(nameDef(id), toJS(block))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       js.ExprStmt(toJS(binding))
 
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       js.Const(nameDef(id), toJS(binding))
   }
 

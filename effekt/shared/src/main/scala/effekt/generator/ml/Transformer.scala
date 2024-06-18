@@ -7,6 +7,7 @@ import effekt.lifted.*
 import effekt.core.Id
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.messages.ErrorReporter
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -52,7 +53,7 @@ object Transformer {
     case e: lifted.Evidence => toML(e)
   }
 
-  def toML(module: ModuleDecl)(using TransformerContext): List[ml.Binding] = {
+  def toML(module: ModuleDecl)(using TransformerContext, ErrorReporter): List[ml.Binding] = {
     val decls = sortDeclarations(module.decls).flatMap(toML)
     val externs = module.externs.map(toML)
     val rest = sortDefinitions(module.definitions).map(toML)
@@ -129,6 +130,12 @@ object Transformer {
     case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
       defineRecord(name(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
 
+    // SML does not support empty datatype declarations -- instead recursive definitions are used.
+    //   https://github.com/SMLFamily/Successor-ML/issues/32
+    case Declaration.Data(id, tparams, List()) =>
+      val constructor = freshName(id.name.name)
+      defineRecord(name(id), constructor, List(name(id)))
+
     case Declaration.Data(id, tparams, ctors) =>
       def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
         case Constructor(id, fields) =>
@@ -183,9 +190,15 @@ object Transformer {
     dataDecl :: accessors
   }
 
-  def toML(ext: Extern)(using TransformerContext): ml.Binding = ext match {
-    case Extern.Def(id, tparams, params, ret, ExternBody(featureFlag, body)) =>
-      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, toML(body))
+  def toML(ext: Extern)(using TransformerContext, ErrorReporter): ml.Binding = ext match {
+    case Extern.Def(id, tparams, params, ret, body) =>
+
+      ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, body match {
+        case ExternBody.StringExternBody(_, contents) => toML(contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          ml.RawExpr("raise Hole")
+      })
     case Extern.Include(ff, contents) =>
       RawBind(contents)
   }
@@ -226,6 +239,9 @@ object Transformer {
       toMLExpr(binding).flatMap { value =>
         toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
+
+    // empty matches are translated to holes
+    case lifted.Match(scrutinee, Nil, None) => CPS.inline { k => ml.RawExpr("raise Absurd") }
 
     case lifted.Match(scrutinee, clauses, default) =>
       def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {

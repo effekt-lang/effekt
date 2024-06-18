@@ -129,10 +129,10 @@ trait Compiler[Executable] {
 
   /**
    * Used by the server to typecheck, report type errors and show
-   * captures at boxes and definitions 
+   * captures at boxes and definitions
    */
   def runMiddleend(source: Source)(using Context): Option[Module] =
-    (Frontend andThen Middleend)(source).map { res => 
+    (Frontend andThen Middleend)(source).map { res =>
       validate(res.source, res.mod)
       res.mod
     }
@@ -318,5 +318,5 @@ trait Compiler[Executable] {
    * Path relative to the output folder
    */
   def path(m: symbols.Module)(using C: Context): String =
-    (m.path.replace('/', '_').replace('-', '_')) + extension
+    (m.path.split('/').last.replace('-', '_')) + extension
 }

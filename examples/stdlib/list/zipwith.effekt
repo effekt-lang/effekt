@@ -1,6 +1,6 @@
 module examples/pos/list/zipwith
 
-import immutable/list
+import list
 
 def main() = {
   // synchronized with doctest in `zipWith`

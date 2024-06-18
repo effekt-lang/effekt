@@ -7,9 +7,7 @@
 //
 module examples/pos/raytracer
 
-import immutable/option
-import immutable/list
-import mutable/array
+import bench
 
 // replacing all vector operations by `inline pure def` buys us 20%
 record Vector(x: Double, y: Double, z: Double)
@@ -143,10 +141,10 @@ def render(scene: Scene, image: Buffer) = {
   def storeAt(color: Color, x: Int, y: Int): Unit = {
     val opaque = 255;
     val index = x * 4 + y * width * 4;
-    put(image, index + 0, color.red);
-    put(image, index + 1, color.green);
-    put(image, index + 2, color.blue);
-    put(image, index + 3, opaque)
+    unsafeSet(image, index + 0, color.red);
+    unsafeSet(image, index + 1, color.green);
+    unsafeSet(image, index + 2, color.blue);
+    unsafeSet(image, index + 3, opaque)
   }
 
   // now this is a real stress-test of backtrackable state
@@ -256,14 +254,14 @@ def bench() = {
   val scene = exampleScene();
 
   measure(5, 10) {
-    val buffer: Buffer = emptyArray(scene.width * scene.height * 4);
+    val buffer: Buffer = array::allocate(scene.width * scene.height * 4);
     render(scene, buffer)
   }
 }
 
 def main() = {
   val scene = exampleScene();
-  val buffer: Buffer = emptyArray(scene.width * scene.height * 4);
+  val buffer: Buffer = array::allocate(scene.width * scene.height * 4);
   render(scene, buffer);
 
   var i = 0;

@@ -7,6 +7,7 @@ import effekt.context.Context
 import effekt.lifted.*
 import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
 import effekt.util.paths.*
+import effekt.util.messages.ErrorReporter
 import effekt.symbols.builtins
 
 import kiama.output.PrettyPrinterTypes.Document
@@ -25,7 +26,7 @@ object TransformerLift {
     if (monomorphized) chez.Call(chez.Call(main), List(CPS.id))
     else chez.Call(chez.Call(main, CPS.id), List(CPS.id))
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
@@ -38,7 +39,7 @@ object TransformerLift {
     case e: lifted.Evidence => toChez(e)
   }
 
-  def toChez(module: ModuleDecl): List[chez.Def] = {
+  def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.decls.flatMap(toChez)
     val externs = module.externs.map(toChez)
     // TODO FIXME, once there is a let _ = ... in there, we are doomed!
@@ -86,6 +87,8 @@ object TransformerLift {
           chez.Let(List(Binding(nameDef(id), value)), toChez(body, k))
         }
       }
+    // empty matches are translated to a hole in chez scheme
+    case Match(scrutinee, Nil, None) => CPS.inline { k => chez.Builtin("hole") }
     case Match(scrutinee, clauses, default) => CPS.join { k =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -195,13 +198,18 @@ object TransformerLift {
       generateConstructor(id, operations.map(_.id))
   }
 
-  def toChez(decl: lifted.Extern): chez.Def = decl match {
-    case Extern.Def(id, tparams, params, ret, ExternBody(_, body)) =>
+  def toChez(decl: lifted.Extern)(using ErrorReporter): chez.Def = decl match {
+    case Extern.Def(id, tparams, params, ret, body) =>
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None
           case p => Some(nameDef(p.id)) },
-          toChez(body)))
+          body match {
+            case ExternBody.StringExternBody(_, contents) => toChez(contents)
+            case u: ExternBody.Unsupported =>
+              u.report
+              chez.Builtin("hole")
+          }))
 
     case Extern.Include(ff, contents) =>
       RawDef(contents)
@@ -286,7 +294,7 @@ object TransformerLift {
 
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _) => chez.RawValue("#f")
-    case Literal(s: String, _) => ChezString(s)
+    case Literal(s: String, _) => ChezString(chez.adaptEscapes(s))
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
     case ValueVar(id, _)  => chez.Variable(nameRef(id))

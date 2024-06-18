@@ -6,10 +6,12 @@ import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.{ Module, Symbol, TermSymbol, Wildcard }
 import effekt.util.paths.*
+import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
 import util.messages.{ INTERNAL_ERROR, NOT_SUPPORTED }
 
 import scala.language.implicitConversions
+import scala.util.matching.Regex
 
 object TransformerMonadic extends Transformer {
 
@@ -50,14 +52,14 @@ trait Transformer {
   def state(id: ChezName, init: chez.Expr, body: chez.Block): chez.Expr =
     Builtin("state", init, chez.Lambda(List(id), body))
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 
-  def toChez(module: ModuleDecl): List[chez.Def] = {
+  def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.declarations.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
@@ -73,7 +75,9 @@ trait Transformer {
     case Return(e) => pure(toChez(e))
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    // empty matches are translated to a hole in chez scheme
+    case Match(scrutinee, Nil, None) => chez.Builtin("hole")
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -131,11 +135,17 @@ trait Transformer {
       generateConstructor(id, operations.map(op => op.id))
   }
 
-  def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, ExternBody(_, body)) =>
+  def toChez(decl: core.Extern)(using ErrorReporter): chez.Def = decl match {
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
+      val tBody = body match {
+        case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
+        case u: ExternBody.Unsupported =>
+          u.report
+          chez.Builtin("hole")
+      }
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
-          toChez(body)))
+          tBody))
 
     case Extern.Include(ff, contents) =>
       RawDef(contents)
@@ -148,7 +158,7 @@ trait Transformer {
     case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -158,7 +168,7 @@ trait Transformer {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 
@@ -205,7 +215,8 @@ trait Transformer {
 
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("#f")
-    case Literal(s: String, _)  => ChezString(s)
+
+    case Literal(s: String, _)  => ChezString(chez.adaptEscapes(s))
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))

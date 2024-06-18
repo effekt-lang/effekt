@@ -1,0 +1,15 @@
+type MyType {
+  MySingleCase()
+}
+
+record EmptyRecord()
+
+def main() = {
+  println(MySingleCase().equals(MySingleCase()))   // ~> true
+  println(EmptyRecord().equals(EmptyRecord()))    // ~> true
+
+  println(Some(MySingleCase()).equals(Some(MySingleCase()))) // ~> true
+  println(Some(EmptyRecord()).equals(Some(EmptyRecord())))   // ~> true
+
+  println([Some(EmptyRecord()), Some(EmptyRecord()), None()].equals([Some(EmptyRecord()), Some(EmptyRecord()), None()]))
+}

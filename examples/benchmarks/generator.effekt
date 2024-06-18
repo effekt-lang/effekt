@@ -1,7 +1,5 @@
-import immutable/list
-import immutable/option
-import text/string
-import io/args
+import string
+import args
 
 interface Yield {
   def yield(num: Int): Unit
@@ -65,9 +63,8 @@ def sumGenerator(n: Int): Int = region r {
 
 def main() = commandLineArgs() match {
   case Nil() => println(sumGenerator(10))
-  case Cons(x, Nil()) => toInt(x) match {
-    case None() => println("Unexpected non-integer '" ++ show(x) ++ "'")
-    case Some(i) => println(sumGenerator(i))
-  }
+  case Cons(x, Nil()) =>
+    with report[WrongFormat];
+    println(sumGenerator(x.toInt))
   case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }
