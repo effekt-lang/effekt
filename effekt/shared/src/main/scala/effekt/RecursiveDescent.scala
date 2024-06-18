@@ -14,7 +14,7 @@ import scala.util.boundary
 import scala.util.boundary.break
 
 
-case class ParseError2(message: String, position: Int) extends Throwable(message, null, false, false)
+case class Fail(message: String, position: Int) extends Throwable(message, null, false, false)
 
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
 
@@ -31,7 +31,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       res
     } catch {
-      case ParseError2(msg, pos) =>
+      case Fail(msg, pos) =>
         val source = input.source
         val range = tokens.lift(pos) match {
           case Some(value) =>
@@ -50,7 +50,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // here we need to convert to kiamas error format since REPL is defined in kiama
   def parseRepl(input: Input)(using C: Context): ParseResult[Tree] =
     try { kiama.parsing.Success(repl(), input) } catch {
-      case ParseError2(msg, pos) => kiama.parsing.Error(msg, input.copy(offset = pos))
+      case Fail(msg, pos) => kiama.parsing.Error(msg, input.copy(offset = pos))
     }
 
 
@@ -1184,7 +1184,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Aborts parsing with the given message
    */
-  def fail(message: String): Nothing = throw ParseError2(message, position)
+  def fail(message: String): Nothing = throw Fail(message, position)
 
   /**
    * Guards `thn` by token `t` and consumes the token itself, if present.
@@ -1195,7 +1195,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   inline def backtrack[T](inline p: => T): Option[T] =
     val before = position
     try { Some(p) } catch {
-      case ParseError2(_, _) => position = before; None
+      case Fail(_, _) => position = before; None
     }
 
   /**

@@ -26,7 +26,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
       result
     } catch {
-      case ParseError2(msg, pos) =>
+      case Fail(msg, pos) =>
         fail(s"Unexpected parse error (token index ${pos}): ${msg}")
     }
 
