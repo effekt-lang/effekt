@@ -1,4 +1,4 @@
-interface Amb { def flip(): Boolean }
+interface Amb { def flip(): Bool }
 interface Yield { def yield(): Unit }
 
 def ex1() = try {

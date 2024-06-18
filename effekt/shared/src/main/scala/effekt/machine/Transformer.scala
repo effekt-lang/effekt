@@ -47,21 +47,25 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, tps, params, ret, Template(strings, args)) =>
+    case lifted.Extern.Def(name, tps, params, ret, body) =>
       val transformedParams = params.flatMap {
         case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
         // for now, in machine we do not pass evidence to externs
         case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
-      noteBlockParams(name, params map transform, List.empty)
-      Extern(transform(name), transformedParams, transform(ret), Template(strings, args map {
-        case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
-        case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
-      }))
+      noteDefinition(name, params map transform, Nil)
+      val tBody = body match {
+        case lifted.ExternBody(ff, Template(strings, args)) =>
+          ExternBody(ff, Template(strings, args map {
+            case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
+            case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
+          }))
+      }
+      Extern(transform(name), transformedParams, transform(ret), tBody)
 
-    case lifted.Extern.Include(contents) =>
-      Include(contents)
+    case lifted.Extern.Include(ff, contents) =>
+      Include(ff, contents)
   }
 
   def transform(stmt: lifted.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
@@ -70,24 +74,31 @@ object Transformer {
 
         definitions.foreach {
           case Definition.Def(id,  block @ lifted.BlockLit(tparams, params, body)) =>
+
+            noteParameters(params)
+
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.toSet.flatMap {
               case lifted.ValueParam(id, tpe) => Set(Variable(transform(id), transform(tpe)))
+              case lifted.EvidenceParam(id) => Set(Variable(transform(id), builtins.Evidence))
+
+              // TODO is this necessary???
               case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
                 Set(Variable(transform(pid), Type.Reference(transform(stTpe))))
-              case lifted.BlockParam(resume: symbols.TrackedParam.ResumeParam, _) =>
-                // resume parameters are represented as Stacks in machine
-                // TODO How can we not match on the symbol here?
-                Set(Variable(transform(resume), Type.Stack()))
-              case lifted.BlockParam(pid, tpe)
-                if !BPC.blockParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
-                Set(Variable(transform(pid), transform(tpe)))
-              case lifted.BlockParam(pid, tpe) if BPC.freeParams.contains(pid) && id != pid =>
-                BPC.freeParams(pid).toSet
-              case lifted.EvidenceParam(id) => Set(Variable(transform(id), builtins.Evidence))
+
+              case lifted.BlockParam(pid, tpe) if pid != id => BPC.info(pid) match {
+                  case BlockInfo.Definition(freeParams, blockParams) =>
+                    BPC.freeParams(pid).toSet
+                  case BlockInfo.Parameter(tpe) =>
+                    Set(Variable(transform(pid), transform(tpe)))
+                  case BlockInfo.Resumption =>
+                    Set(Variable(transform(pid), Type.Stack()))
+                }
+
               case _ => Set.empty
             }
-            noteBlockParams(id, params.map(transform), freeParams.toList)
+
+            noteDefinition(id, params.map(transform), freeParams.toList)
           case _ => ()
         }
 
@@ -133,15 +144,23 @@ object Transformer {
           Clause(List(transform(lifted.ValueParam(id, binding.tpe))), transform(rest)),
             transform(binding)
         )
+
+      // TODO deal with BlockLit
       case lifted.App(lifted.BlockVar(id, tpe), targs, args) =>
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-        // TODO deal with BlockLit
-        id match {
-          case symbols.BlockParam(_, _) =>
+
+        BPC.info(id) match {
+          // Unknown Jump
+          case BlockInfo.Parameter(t : lifted.BlockType.Function) =>
             transform(args).run { values =>
               Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values)
             }
-          case symbols.ResumeParam(_) =>
+
+          case BlockInfo.Parameter(t : lifted.BlockType.Interface) =>
+            E.panic("Cannot call an object (need to select a member first)")
+
+          // Continuation Call
+          case BlockInfo.Resumption =>
             // TODO currently only scoped resumptions are supported
             // TODO assuming first parameter is evidence TODO actually use evidence?
             transform(args).run { values =>
@@ -149,8 +168,10 @@ object Transformer {
               PushStack(Variable(transform(id), Type.Stack()),
                 Return(returnedValues))
             }
-          case other =>
-            val environment = getBlocksParams(id)
+
+          // Known Jump
+          case BlockInfo.Definition(freeParams, blockParams) =>
+            val environment = blockParams ++ freeParams
             transform(args).run { values =>
               // Here we actually need a substitution to prepare the environment for the jump
               Substitute(environment.zip(values), Jump(Label(transform(id), environment)))
@@ -213,6 +234,9 @@ object Transformer {
         }
 
       case lifted.Try(lifted.BlockLit(tparams, ev :: ids, body), handlers) =>
+
+        noteParameters(ids)
+
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
@@ -227,6 +251,7 @@ object Transformer {
 
       // TODO what about the evidence passed to resume?
       case lifted.Shift(ev, lifted.Block.BlockLit(tparams, List(kparam), body)) =>
+        noteResumption(kparam.id)
         transform(ev).run { evValue =>
           PopStacks(Variable(transform(kparam).name, Type.Stack()), evValue,
             transform(body))
@@ -333,7 +358,7 @@ object Transformer {
   }
 
   def transform(block: lifted.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
-    case lifted.BlockVar(id, tpe) if BPC.blockParams.contains(id) =>
+    case lifted.BlockVar(id, tpe) if isDefinition(id) =>
       // passing a function directly, so we need to eta-expand
       // TODO cache the closure somehow to prevent it from being created on every call
       val parameters = BPC.blockParams(id)
@@ -350,6 +375,7 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.BlockLit(tparams, params, body) =>
+      noteParameters(params)
       val parameters = params.map(transform);
       val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
@@ -378,7 +404,7 @@ object Transformer {
       }
 
     case lifted.Literal(value: Boolean, _) =>
-      val variable = Variable(freshName("x"), Positive("Boolean"))
+      val variable = Variable(freshName("x"), Positive("Bool"))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
@@ -404,7 +430,6 @@ object Transformer {
           ForeignCall(variable, transform(blockName), values, k(variable))
         }
       }
-
 
     case lifted.Make(data, constructor, args) =>
       val variable = Variable(freshName("x"), transform(data));
@@ -455,7 +480,7 @@ object Transformer {
       Clause(params.map(transform), transform(body))
   }
 
-  def transform(param: lifted.Param)(using ErrorReporter): Variable =
+  def transform(param: lifted.Param)(using BlocksParamsContext, ErrorReporter): Variable =
     param match {
       case lifted.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
@@ -498,7 +523,8 @@ object Transformer {
   def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
       case Definition.Def(blockName, lifted.BlockLit(tparams, params, body)) =>
-        noteBlockParams(blockName, params.map(transform), Nil)
+        noteDefinition(blockName, params.map(transform), Nil)
+        noteParameters(params)
       case _ => ()
     }
 
@@ -508,21 +534,59 @@ object Transformer {
    */
 
   class BlocksParamsContext() {
-    var freeParams: Map[Symbol, Environment] = Map()
-    var blockParams: Map[Symbol, Environment] = Map()
+    var info: Map[Symbol, BlockInfo] = Map()
+
+    def definition(id: Symbol): BlockInfo.Definition = info(id) match {
+      case d : BlockInfo.Definition => d
+      case BlockInfo.Parameter(tpe) => sys error s"Expected a function definition, but got a block parameter: ${id}"
+      case BlockInfo.Resumption => sys error s"Expected a function definition, but got a continuation: ${id}"
+    }
+    def blockParams(id: Symbol): Environment = definition(id).blockParams
+    def freeParams(id: Symbol): Environment = definition(id).freeParams
+  }
+  enum BlockInfo {
+    case Definition(freeParams: Environment, blockParams: Environment)
+    case Parameter(tpe: lifted.BlockType)
+    case Resumption
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
-  def noteBlockParams(id: Symbol, blockParams: Environment, freeParams: Environment)(using BC: BlocksParamsContext): Unit = {
-    BC.blockParams = BC.blockParams + (id -> blockParams)
-    BC.freeParams = BC.freeParams + (id -> freeParams)
+  def noteDefinition(id: Symbol, blockParams: Environment, freeParams: Environment)(using BC: BlocksParamsContext): Unit =
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: BlockInfo)")
+    BC.info += (id -> BlockInfo.Definition(freeParams, blockParams))
+
+  def noteResumption(id: Symbol)(using BC: BlocksParamsContext): Unit =
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Resumption)")
+    BC.info += (id -> BlockInfo.Resumption)
+
+
+  def noteParameter(id: Symbol, tpe: lifted.BlockType)(using BC: BlocksParamsContext): Unit =
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
+    BC.info += (id -> BlockInfo.Parameter(tpe))
+
+  def noteParameters(ps: List[lifted.Param])(using BC: BlocksParamsContext): Unit =
+    ps.foreach {
+      case lifted.Param.BlockParam(id, tpe) => noteParameter(id, tpe)
+      case lifted.Param.ValueParam(id, tpe) => () // do not register value parameters
+      case lifted.Param.EvidenceParam(id) => () // do not register evidence parameters
+    }
+
+  def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
+    case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
   }
 
-  def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = {
-    // TODO what if this is not found?
-    BC.blockParams(id) ++ BC.freeParams(id)
-  }
+  def isResumption(id: Symbol)(using BC: BlocksParamsContext): Boolean =
+    BC.info(id) match {
+      case BlockInfo.Resumption => true
+      case _ => false
+    }
+
+  def isDefinition(id: Symbol)(using BC: BlocksParamsContext): Boolean =
+    BC.info(id) match {
+      case d: BlockInfo.Definition => true
+      case _ => false
+    }
 
   case class Binding[A](run: (A => Statement) => Statement) {
     def flatMap[B](rest: A => Binding[B]): Binding[B] = {

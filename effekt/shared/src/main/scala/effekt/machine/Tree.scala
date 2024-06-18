@@ -1,6 +1,8 @@
 package effekt
 package machine
 
+import effekt.source.FeatureFlag
+
 /**
  * Variables stand for values
  */
@@ -45,11 +47,12 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, body: Template[Variable])
-  case Include(contents: String)
+  case Extern(name: String, parameters: Environment, returnType: Type, body: ExternBody)
+  case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*
 
+case class ExternBody(featureFlag: FeatureFlag, contents: Template[Variable])
 
 /**
  * Clauses are parametrized statements
@@ -236,7 +239,7 @@ object builtins {
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive("Boolean")
+  val BooleanType = Positive("Bool")
 
   val SingletonRecord: Tag = 0
 }

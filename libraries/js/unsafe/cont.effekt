@@ -4,8 +4,8 @@ module unsafe/cont
 extern type Cont[A, B]
 
 // we mark this as {io} since pure functions should not take block parameters.
-extern io def cont[A, B] { r: A => B / {} }: Cont[A, B] = "${box r}"
+extern io def cont[A, B] { r: A => B / {} }: Cont[A, B] = js "${box r}"
 
 // This is unsafe if the continuation left the scope of the
 // capabilities it closed over
-extern control def apply[A, B](k: Cont[A, B], a: A): B / {} = "${k}(${a})"
+extern control def apply[A, B](k: Cont[A, B], a: A): B / {} = js "${k}(${a})"

@@ -2,7 +2,7 @@ module io/file
 
 effect IOException[A](msg: String): A
 
-extern include "file_include.js"
+extern include js "file_include.js"
 
 extern type FileDescriptor
 
@@ -16,7 +16,7 @@ type Result[A] {
 extern type Promise[T]
 
 extern io def readPromise(path: String): Promise[String] =
-  "$effekt.delayed(() => fsPromises.readFile(${path}, 'utf8'))"
+  js "$effekt.delayed(() => fsPromises.readFile(${path}, 'utf8'))"
 
 def await[T](p: Promise[T]): T / { IOException } =
   try { awaitImpl(p){exc} } with exc : IOException[A] {
@@ -24,7 +24,7 @@ def await[T](p: Promise[T]): T / { IOException } =
   }
 
 extern io def awaitImpl[T](p: Promise[T]){exc: IOException}: T =
-  "$effekt.callcc(k => ${p}.then(res => k($effekt.pure(res)), err => k(${box { (msg: String) => do IOException[T](msg) }}(err.message)))).then(c => c)"
+  js "$effekt.callcc(k => ${p}.then(res => k($effekt.pure(res)), err => k(${box { (msg: String) => do IOException[T](msg) }}(err.message)))).then(c => c)"
 
 def open(path: String, mode: String): FileDescriptor / { IOException } =
   try { openImpl(path, mode){exc} } with exc : IOException[A] {
@@ -32,14 +32,14 @@ def open(path: String, mode: String): FileDescriptor / { IOException } =
   }
 
 extern io def openImpl(path: String, mode: String){exc: IOException}: FileDescriptor =
-  "$effekt.delayed(() => { try { return $effekt.pure(fs.openSync(${path}, ${mode})); } catch (err) { return ${box { (msg: String) => do IOException[FileDescriptor](msg) }}(err.message); }}).then(c => c)"
+  js "$effekt.delayed(() => { try { return $effekt.pure(fs.openSync(${path}, ${mode})); } catch (err) { return ${box { (msg: String) => do IOException[FileDescriptor](msg) }}(err.message); }}).then(c => c)"
 
 extern io def close(fd: FileDescriptor): Unit =
-  "$effekt.delayed(() => fs.closeSync(${fd}))"
+  js "$effekt.delayed(() => fs.closeSync(${fd}))"
 
 // uses the asynchronous API of node
 extern io def readFile(path: String): Result[String] =
-  "$effekt.callcc(k => fs.readFile(${path}, 'utf8', (err, data) => k(err ? ${box Error}(err.message) : ${box Success}(data))))"
+  js "$effekt.callcc(k => fs.readFile(${path}, 'utf8', (err, data) => k(err ? ${box Error}(err.message) : ${box Success}(data))))"
 
 def read(path: String): String / { IOException } =
   getResult(readFile(path))

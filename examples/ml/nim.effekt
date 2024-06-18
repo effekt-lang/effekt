@@ -109,7 +109,7 @@ def pc  { prog: => Player / Move } = try { prog() } with Move { (p, n) =>
   }
 }
 
-effect Choose(): Boolean
+effect Choose(): Bool
 
 def bobChooses { prog: => Player / Move } =
   if (do Choose()) {

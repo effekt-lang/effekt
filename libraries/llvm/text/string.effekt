@@ -3,12 +3,12 @@ module text/string
 import immutable/option
 import immutable/list
 
-extern pure def length(s: String): Int = """
+extern pure def length(s: String): Int = llvm """
    %x = call %Int @c_buffer_length(%Pos %s)
    call void @c_buffer_refcount_decrement(%Pos %s)
    ret %Int %x
 """
-extern pure def substring(s: String, start: Int, end: Int): String = """
+extern pure def substring(s: String, start: Int, end: Int): String = llvm """
    %x = call %Pos @c_buffer_substring(%Pos %s, i64 %start, i64 %end)
    call void @c_buffer_refcount_decrement(%Pos %s)
    ret %Pos %x
@@ -23,7 +23,7 @@ def charAt(str: String, i: Int): Option[String] = {
     }
 }
 
-def startsWith(str: String, prefix: String): Boolean = {
+def startsWith(str: String, prefix: String): Bool = {
     if (length(str) < length(prefix)) {
         false
     } else {
@@ -110,7 +110,7 @@ def toInt(s: String): Option[Int] = {
     }
   }
 }
-def toBoolean(s: String): Option[Boolean] = {
+def toBool(s: String): Option[Bool] = {
   if(s == "true") {
     Some(true)
   } else if (s == "false") {
@@ -125,7 +125,7 @@ def toBoolean(s: String): Option[Boolean] = {
 type Bytes = String
 def bytes(s: String): Bytes = s
 // length(Bytes) = length(String)
-extern pure def unsafeIndex(s: Bytes, i: Int): Int = """
+extern pure def unsafeIndex(s: Bytes, i: Int): Int = llvm """
    %x = call %Int @c_buffer_index(%Pos %s, i64 %i)
    call void @c_buffer_refcount_decrement(%Pos %s)
    ret %Int %x
@@ -150,7 +150,7 @@ def each(b: Bytes){ fn: Int => Unit } = {
 }
 
 effect Abort(): Unit // TODO: Maybe use Control effect
-def occursAt(subb: Bytes, b: Bytes, i: Int): Boolean = {
+def occursAt(subb: Bytes, b: Bytes, i: Int): Bool = {
   if(i + subb.length <= b.length) {
     try{
       var x = 0;

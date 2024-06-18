@@ -6,7 +6,8 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, Effectful, IgnorePattern, MatchPattern, MatchGuard, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
+import effekt.source.Term.BlockLiteral
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -829,11 +830,23 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result((), effBinding)
         }
 
-      case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) => Context.withUnificationScope {
-        d.symbol.vparams foreach Context.bind
-        d.symbol.bparams foreach Context.bind
+      case d @ source.ExternDef(captures, id, tps, vps, bps, tpe, bodies) => Context.withUnificationScope {
+        val sym = d.symbol
+        sym.vparams foreach Context.bind
+        sym.bparams foreach Context.bind
 
-        body.args.foreach { arg => checkExpr(arg, None) }
+        flowingInto(Context.lookupCapture(sym)) {
+
+          // Note: Externs are always annotated with a type
+          val expectedReturnType = d.symbol.annotatedType.get.result
+          bodies.foreach {
+            case source.ExternBody.StringExternBody(ff, body) =>
+              body.args.foreach { arg => checkExpr(arg, None) }
+            case source.ExternBody.EffektExternBody(ff, body) =>
+              checkStmt(body, Some(expectedReturnType))
+          }
+
+        }
 
         Result((), Pure)
       }

@@ -6,7 +6,7 @@ import effekt.util.paths.file
 import kiama.util.REPLConfig
 
 import org.rogach.scallop.ScallopOption
-import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter, stringListConverter }
+import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter, stringListConverter, longConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
@@ -22,10 +22,24 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     default = Some(false)
   )
 
+  val showIR: ScallopOption[Option[Stage]] = choice(
+    choices = List("none", "core", "lifted", "machine", "target"),
+    name = "showIR",
+    descr = "The intermediate presentation that should be printed.",
+    default = Some("none"),
+    noshort = true
+  ).map(s => Stage.values.find(_.toString.toLowerCase == s))
+
+  val writeIRs: ScallopOption[Boolean] = toggle(
+    "writeIRs",
+    descrYes = "Write all IRs to files in the output directory",
+    default = Some(false),
+  )
+
   val time: ScallopOption[String] = choice(
     choices = Seq("text", "json"),
     name = "time",
-    descr = "Measure the time spent in each compilation phase.",
+    descr = "Measure the time spent in each compilation phase",
     required = false
   )
 
@@ -66,7 +80,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val preludePath: ScallopOption[List[String]] = opt[List[String]](
     "prelude",
-    descr = "Modules to be automatically imported in every file.",
+    descr = "Modules to be automatically imported in every file",
     default = None,
     noshort = true
   )
@@ -75,6 +89,20 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     "exit-on-error",
     descrYes = "Exit with non-zero exit code on error",
     default = Some(!repl() && !server()),
+    noshort = true
+  )
+
+  val optimize: ScallopOption[Boolean] = toggle(
+    "optimize",
+    descrYes = "Run optimizations (in particular the inliner) when compiling programs",
+    default = Some(true),
+    short = 'O'
+  )
+
+  val maxInlineSize: ScallopOption[Long] = opt(
+    "max-inline-size",
+    descr = "Maximum size (number of core tree-nodes) of a function considered by the inliner",
+    default = Some(50L),
     noshort = true
   )
 
@@ -136,7 +164,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def interpret(): Boolean = !server() && !compile() && !build()
 
   def repl(): Boolean = filenames().isEmpty && !server() && !compile()
-  
+
   def timed(): Boolean = time.isSupplied && !server()
 
   validateFilesIsDirectory(includePath)

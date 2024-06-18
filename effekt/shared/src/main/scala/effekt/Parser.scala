@@ -148,6 +148,16 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
       case id ~ (tps ~ vps ~ bps) ~ ret => Operation(id, tps, vps, bps, ret)
     }
 
+  lazy val featureFlag: P[FeatureFlag] =
+    ( "default" ^^ { _ => FeatureFlag.Default }
+    | ident ^^ { flag => FeatureFlag.NamedFeatureFlag(flag) }
+    )
+
+  lazy val maybeFeatureFlag: P[FeatureFlag] = opt(featureFlag) ^^ {
+    case Some(flag) => flag
+    case None => FeatureFlag.Default
+  }
+
   lazy val externDef: P[Def] =
     ( externType
     | externInterface
@@ -163,19 +173,26 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
-      case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ body =>
-        ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> many(externBody)) ^^ {
+      case pure ~ id ~ (tparams ~ vparams ~ bparams) ~ tpe ~ bodies =>
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, bodies)
     }
 
   lazy val externResource: P[Def] =
     (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
-  lazy val externBody: P[Template[Term]] =
-    ( multilineString ^^ { s => Template(List(s), Nil) }
-    | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
-    | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
+  lazy val externBody: P[ExternBody] =
+    (maybeFeatureFlag ~ ("""(?=[\"])""".r ~> commit(
+              multilineString ^^ { s => Template(List(s), Nil) }
+            | guard(regex(s"(?!${multi})".r)) ~> templateString(expr)
+            | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi), potentially qualified")
+            )) ^^ {
+                case ff ~ body => ExternBody.StringExternBody(ff, body)
+            }
+    | featureFlag ~ ("{" ~> stmts <~ "}") ^^ { case ff ~ body => ExternBody.EffektExternBody(ff, body) }
+    | featureFlag ~> failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
+
 
   lazy val externCapture: P[CaptureSet] =
     ( "pure" ^^^ CaptureSet(Nil)
@@ -185,8 +202,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val externInclude: P[Def] =
-    ( `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""), None) }
-    | `extern` ~> multilineString ^^ { contents => ExternInclude("", Some(contents)) }
+    ( `extern` ~> `include` ~/> maybeFeatureFlag ~ """\"([^\"]*)\"""".r ^^ { case ff ~ s => ExternInclude(ff, s.stripPrefix("\"").stripSuffix("\""), None) }
+    | `extern` ~> maybeFeatureFlag ~ multilineString ^^ { case ff ~ contents => ExternInclude(ff, "", Some(contents)) }
     )
 
 
@@ -375,8 +392,8 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
    * Expressions
    */
   lazy val expr:    P[Term] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
-  lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
-  lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
+  lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ thunkedBinaryOp | andExpr
+  lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ thunkedBinaryOp | eqExpr
   lazy val eqExpr:  P[Term] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
   lazy val relExpr: P[Term] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
   lazy val addExpr: P[Term] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
@@ -617,9 +634,16 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
 
-  private def opName(op: String): String = op match {
+  // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
+  private def thunkedBinaryOp(lhs: Term, op: String, rhs: Term): Term =
+     Call(IdTarget(IdRef(Nil, thunkedOpName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+
+  private def thunkedOpName(op: String): String = op match {
     case "||" => "infixOr"
     case "&&" => "infixAnd"
+  }
+
+  private def opName(op: String): String = op match {
     case "==" => "infixEq"
     case "!=" => "infixNeq"
     case "<"  => "infixLt"

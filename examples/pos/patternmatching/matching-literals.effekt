@@ -13,7 +13,7 @@ def ex2(n: Int) = n match {
   5
 }
 
-def ex3(cond: Boolean) = cond match {
+def ex3(cond: Bool) = cond match {
   case true => 2
   case false => 3
 }

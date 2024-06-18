@@ -1,6 +1,7 @@
 package effekt
 package core
 
+import effekt.source.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
 
@@ -64,7 +65,25 @@ import effekt.util.messages.INTERNAL_ERROR
  *
  * -------------------------------------------
  */
-sealed trait Tree
+sealed trait Tree extends Product {
+  /**
+   * The number of nodes of this tree (potentially used by inlining heuristics)
+   */
+  lazy val size: Int = {
+    var nodeCount = 1
+
+    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
+    def one(obj: Any): Unit = obj match {
+      case t: Tree => nodeCount += t.size
+      case s: effekt.symbols.Symbol => ()
+      case p: Product => all(p.productIterator)
+      case t: Iterable[t] => all(t)
+      case leaf           => ()
+    }
+    this.productIterator.foreach(one)
+    nodeCount
+  }
+}
 
 /**
  * In core, all symbols are supposed to be "just" names.
@@ -107,8 +126,17 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: Template[Pure])
-  case Include(contents: String)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Include(featureFlag: FeatureFlag, contents: String)
+}
+case class ExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends Tree
+
+extension(self: List[ExternBody]) {
+  def forFeatureFlags(flags: List[String]): Option[ExternBody] = flags match {
+    case Nil => self.find( _.featureFlag.isDefault )
+    case flag :: other =>
+      self.find( _.featureFlag.matches(flag, false) ) orElse { self.forFeatureFlags(other) }
+  }
 }
 
 
@@ -481,6 +509,7 @@ object Tree {
     def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
     def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
     def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
+    def externBody(using Ctx): PartialFunction[ExternBody, Res] = PartialFunction.empty
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -502,6 +531,7 @@ object Tree {
       if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
         case (id, lit) => query(lit)
     }
+    def query(b: ExternBody)(using Ctx): Res = structuralQuery(b, externBody)
   }
 
   class Rewrite extends Structural {
@@ -525,6 +555,7 @@ object Tree {
     def rewrite(p: Param): Param = rewriteStructurally(p, param)
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(b: ExternBody): ExternBody= rewrite(b)
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
     def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)

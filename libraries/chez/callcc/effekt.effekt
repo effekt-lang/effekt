@@ -1,12 +1,12 @@
 module effekt
 
 // shift-0 based implementation
-extern include "../common/effekt_primitives.ss"
-// extern include "datatype.ss"
-extern include "seq0.ss"
-extern include "tail0.ss"
-extern include "effekt.ss"
-extern include "../common/effekt_matching.ss"
+extern include chezCallCC "../common/effekt_primitives.ss"
+// extern include chezCallCC "datatype.ss"
+extern include chezCallCC "seq0.ss"
+extern include chezCallCC "tail0.ss"
+extern include chezCallCC "effekt.ss"
+extern include chezCallCC "../common/effekt_matching.ss"
 
 
 def locally[R] { f: => R }: R = f()
@@ -14,88 +14,88 @@ def locally[R] { f: => R }: R = f()
 // String ops
 // ==========
 extern pure def infixConcat(s1: String, s2: String): String =
-  "(string-append ${s1} ${s2})"
+  chezCallCC "(string-append ${s1} ${s2})"
 
 // TODO implement
 extern pure def show[R](value: R): String =
-  "(show_impl ${value})"
+  chezCallCC "(show_impl ${value})"
 
 extern io def println[R](r: R): Unit =
-  "(println_impl ${r})"
+  chezCallCC "(println_impl ${r})"
 
 extern io def error[R](msg: String): R =
-  "(raise ${msg})"
+  chezCallCC "(raise ${msg})"
 
 extern io def random(): Double =
-  "(random 1.0)"
+  chezCallCC "(random 1.0)"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(+ ${x} ${y})"
+  chezCallCC "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(* ${x} ${y})"
+  chezCallCC "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(floor (/ ${x} ${y}))"
+  chezCallCC "(floor (/ ${x} ${y}))"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(- ${x} ${y})"
+  chezCallCC "(- ${x} ${y})"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(modulo ${x} ${y})"
+  chezCallCC "(modulo ${x} ${y})"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(+ ${x} ${y})"
+  chezCallCC "(+ ${x} ${y})"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(* ${x} ${y})"
+  chezCallCC "(* ${x} ${y})"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(/ ${x} ${y})"
+  chezCallCC "(/ ${x} ${y})"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(- ${x} ${y})"
+  chezCallCC "(- ${x} ${y})"
 
 extern pure def cos(x: Double): Double =
-  "(cos ${x})"
+  chezCallCC "(cos ${x})"
 
 extern pure def sin(x: Double): Double =
-  "(sin ${x})"
+  chezCallCC "(sin ${x})"
 
 extern pure def atan(x: Double): Double =
-  "(atan ${x})"
+  chezCallCC "(atan ${x})"
 
 extern pure def tan(x: Double): Double =
-  "(tan ${x})"
+  chezCallCC "(tan ${x})"
 
 extern pure def sqrt(x: Double): Double =
-  "(sqrt ${x})"
+  chezCallCC "(sqrt ${x})"
 
 extern pure def square(x: Double): Double =
-  "(* ${x} ${x})"
+  chezCallCC "(* ${x} ${x})"
 
 extern pure def log(x: Double): Double =
-  "(log ${x})"
+  chezCallCC "(log ${x})"
 
 extern pure def log1p(x: Double): Double =
-  "(log (+ ${x} 1))"
+  chezCallCC "(log (+ ${x} 1))"
 
 extern pure def exp(x: Double): Double =
-  "(exp ${x})"
+  chezCallCC "(exp ${x})"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
-  "(* 4 (atan 1))"
+  chezCallCC "(* 4 (atan 1))"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "(round ${d})"
+  chezCallCC "(round ${d})"
 
 extern pure def toDouble(d: Int): Double =
-  "${d}"
+  chezCallCC "${d}"
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -105,51 +105,51 @@ def max(n: Int, m: Int): Int =
 
 // Comparison ops
 // ==============
-extern pure def infixEq[R](x: R, y: R): Boolean =
-  "(equal_impl ${x} ${y})"
+extern pure def infixEq[R](x: R, y: R): Bool =
+  chezCallCC "(equal_impl ${x} ${y})"
 
-extern pure def infixNeq[R](x: R, y: R): Boolean =
-  "(not (equal_impl ${x} ${y}))"
+extern pure def infixNeq[R](x: R, y: R): Bool =
+  chezCallCC "(not (equal_impl ${x} ${y}))"
 
-extern pure def infixLt(x: Int, y: Int): Boolean =
-  "(< ${x} ${y})"
+extern pure def infixLt(x: Int, y: Int): Bool =
+  chezCallCC "(< ${x} ${y})"
 
-extern pure def infixLte(x: Int, y: Int): Boolean =
-  "(<= ${x} ${y})"
+extern pure def infixLte(x: Int, y: Int): Bool =
+  chezCallCC "(<= ${x} ${y})"
 
-extern pure def infixGt(x: Int, y: Int): Boolean =
-  "(> ${x} ${y})"
+extern pure def infixGt(x: Int, y: Int): Bool =
+  chezCallCC "(> ${x} ${y})"
 
-extern pure def infixGte(x: Int, y: Int): Boolean =
-  "(>= ${x} ${y})"
+extern pure def infixGte(x: Int, y: Int): Bool =
+  chezCallCC "(>= ${x} ${y})"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
-  "(< ${x} ${y})"
+extern pure def infixLt(x: Double, y: Double): Bool =
+  chezCallCC "(< ${x} ${y})"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
-  "(<= ${x} ${y})"
+extern pure def infixLte(x: Double, y: Double): Bool =
+  chezCallCC "(<= ${x} ${y})"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
-  "(> ${x} ${y})"
+extern pure def infixGt(x: Double, y: Double): Bool =
+  chezCallCC "(> ${x} ${y})"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
-  "(>= ${x} ${y})"
+extern pure def infixGte(x: Double, y: Double): Bool =
+  chezCallCC "(>= ${x} ${y})"
 
-// Boolean ops
+// Bool ops
 // ===========
 // for now those are considered eager
-extern pure def not(b: Boolean): Boolean =
-  "(not ${b})"
+extern pure def not(b: Bool): Bool =
+  chezCallCC "(not ${b})"
 
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-  "(or ${x} ${y})"
+def infixOr { first: => Bool } { second: => Bool }: Bool = 
+  if (first()) true else second()
 
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-  "(and ${x} ${y})"
+def infixAnd { first: => Bool } { second: => Bool }: Bool = 
+  if (first()) second() else false
 
 // Should only be used internally since values in Effekt should not be undefined
-extern pure def isUndefined[A](value: A): Boolean =
-  "(eq? ${value} #f)"
+extern pure def isUndefined[A](value: A): Bool =
+  chezCallCC "(eq? ${value} #f)"
 
 // Pairs
 // =====
@@ -163,7 +163,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "(raise ${msg})"
+  chezCallCC "(raise ${msg})"
 
 interface Exception[E] {
   def raise(exception: E, msg: String): Nothing
@@ -218,4 +218,4 @@ def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action()
 // ============
 // should only be used with pure blocks
 extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit =
-  "(display (measure ${box block} ${warmup} ${iterations}))"
+  chezCallCC "(display (measure ${box block} ${warmup} ${iterations}))"

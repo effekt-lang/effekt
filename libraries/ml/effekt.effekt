@@ -2,7 +2,7 @@
 
 module effekt
 
-extern include "effekt.sml"
+extern include ml "effekt.sml"
 
 def locally[R] { f: => R }: R = f()
 
@@ -11,62 +11,62 @@ def locally[R] { f: => R }: R = f()
 def println(value: Int): Unit = println(value.show)
 def println(value: Unit): Unit = println(value.show)
 def println(value: Double): Unit = println(value.show)
-def println(value: Boolean): Unit = println(value.show)
+def println(value: Bool): Unit = println(value.show)
 
 def println(value: String): Unit = print(value ++ "\n")
-extern io def print(value: String): Unit = "print ${value}"
+extern io def print(value: String): Unit = ml "print ${value}"
 
 extern io def random(): Double =
-  "mlRandomReal ()"
+  ml "mlRandomReal ()"
 
 // TODO: js is absolute, but that is too big for 32-bit ints
 extern io def timestamp(): Int =
-  "IntInf.toInt ((Time.toMilliseconds (Time.now ())) - mlStartTime)"
+  ml "IntInf.toInt ((Time.toMilliseconds (Time.now ())) - mlStartTime)"
 
 // String ops
 // ==========
 extern pure def show(value: Int): String =
-  "show'int ${value}"
+  ml "show'int ${value}"
 extern pure def show(value: Unit): String =
-  "show'unit ${value}"
+  ml "show'unit ${value}"
 extern pure def show(value: Double): String =
-  "show'real ${value}"
+  ml "show'real ${value}"
 extern pure def show(value: String): String =
-  "show'string ${value}"
-extern pure def show(value: Boolean): String =
-  "show'bool ${value}"
+  ml "show'string ${value}"
+extern pure def show(value: Bool): String =
+  ml "show'bool ${value}"
 
 extern pure def infixConcat(s1: String, s2: String): String =
-  "${s1} ^ ${s2}"
+  ml "${s1} ^ ${s2}"
 
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "(${x}: int) + ${y}"
+  ml "(${x}: int) + ${y}"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "(${x}: int) * ${y}"
+  ml "(${x}: int) * ${y}"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(${x}: int) div ${y}"
+  ml "(${x}: int) div ${y}"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(${x}: int) - ${y}"
+  ml "(${x}: int) - ${y}"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(${x}: int) mod ${y}"
+  ml "(${x}: int) mod ${y}"
 
 extern pure def infixAdd(x: Double, y: Double): Double =
-  "(${x}: real) + ${y}"
+  ml "(${x}: real) + ${y}"
 
 extern pure def infixMul(x: Double, y: Double): Double =
-  "(${x}: real) * ${y}"
+  ml "(${x}: real) * ${y}"
 
 extern pure def infixSub(x: Double, y: Double): Double =
-  "(${x}: real) - ${y}"
+  ml "(${x}: real) - ${y}"
 
 extern pure def infixDiv(x: Double, y: Double): Double =
-  "(${x}: real) / ${y}"
+  ml "(${x}: real) / ${y}"
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -78,105 +78,105 @@ def max(n: Int, m: Int): Int =
 // ====
 
 extern pure def cos(x: Double): Double =
-  "Math.cos ${x}"
+  ml "Math.cos ${x}"
 
 extern pure def sin(x: Double): Double =
-  "Math.sin ${x}"
+  ml "Math.sin ${x}"
 
 extern pure def atan(x: Double): Double =
-  "Math.atan ${x}"
+  ml "Math.atan ${x}"
 
 extern pure def tan(x: Double): Double =
-  "Math.tan ${x}"
+  ml "Math.tan ${x}"
 
 extern pure def sqrt(x: Double): Double =
-  "Math.sqrt ${x}"
+  ml "Math.sqrt ${x}"
 
 extern pure def square(x: Double): Double =
-  "(${x}: real) * ${x}"
+  ml "(${x}: real) * ${x}"
 
 extern pure def log(x: Double): Double =
-  "Math.ln ${x}"
+  ml "Math.ln ${x}"
 
 extern pure def log1p(x: Double): Double =
-  "Math.ln (${x} + 1.0)"
+  ml "Math.ln (${x} + 1.0)"
 
 extern pure def exp(x: Double): Double =
-  "Math.exp ${x}"
+  ml "Math.exp ${x}"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
-  "Math.pi"
+  ml "Math.pi"
 
 val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
-  "Real.round ${d}"
+  ml "Real.round ${d}"
 
 extern pure def toDouble(d: Int): Double =
-  "Real.fromInt ${d}"
+  ml "Real.fromInt ${d}"
 
 extern pure def floor(d: Double): Int =
-  "Real.floor ${d}"
+  ml "Real.floor ${d}"
 
 extern pure def ceil(d: Double): Int =
-  "Real.ceil ${d}"
+  ml "Real.ceil ${d}"
 
 
 // Comparison ops
 // ==============
-extern pure def infixEq[R](x: R, y: R): Boolean =
-  "${x} = ${y}"
+extern pure def infixEq[R](x: R, y: R): Bool =
+  ml "${x} = ${y}"
 
-extern pure def infixNeq[R](x: R, y: R): Boolean =
-  "not (${x} = ${y})"
+extern pure def infixNeq[R](x: R, y: R): Bool =
+  ml "not (${x} = ${y})"
 
-extern pure def infixLt(x: Int, y: Int): Boolean =
-  "(${x}: int) < ${y}"
+extern pure def infixLt(x: Int, y: Int): Bool =
+  ml "(${x}: int) < ${y}"
 
-extern pure def infixLte(x: Int, y: Int): Boolean =
-  "(${x}: int) <= ${y}"
+extern pure def infixLte(x: Int, y: Int): Bool =
+  ml "(${x}: int) <= ${y}"
 
-extern pure def infixGt(x: Int, y: Int): Boolean =
-  "(${x}: int) > ${y}"
+extern pure def infixGt(x: Int, y: Int): Bool =
+  ml "(${x}: int) > ${y}"
 
-extern pure def infixGte(x: Int, y: Int): Boolean =
-  "(${x}: int) >= ${y}"
+extern pure def infixGte(x: Int, y: Int): Bool =
+  ml "(${x}: int) >= ${y}"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
-  "(${x}: real) < ${y}"
+extern pure def infixLt(x: Double, y: Double): Bool =
+  ml "(${x}: real) < ${y}"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
-  "(${x}: real) <= ${y}"
+extern pure def infixLte(x: Double, y: Double): Bool =
+  ml "(${x}: real) <= ${y}"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
-  "(${x}: real) > ${y}"
+extern pure def infixGt(x: Double, y: Double): Bool =
+  ml "(${x}: real) > ${y}"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
-  "(${x}: real) >= ${y}"
+extern pure def infixGte(x: Double, y: Double): Bool =
+  ml "(${x}: real) >= ${y}"
 
-extern pure def infixLt(x: String, y: String): Boolean =
-  "(${x}: string) < ${y}"
+extern pure def infixLt(x: String, y: String): Bool =
+  ml "(${x}: string) < ${y}"
 
-extern pure def infixLte(x: String, y: String): Boolean =
-  "(${x}: string) <= ${y}"
+extern pure def infixLte(x: String, y: String): Bool =
+  ml "(${x}: string) <= ${y}"
 
-extern pure def infixGt(x: String, y: String): Boolean =
-  "(${x}: string) > ${y}"
+extern pure def infixGt(x: String, y: String): Bool =
+  ml "(${x}: string) > ${y}"
 
-extern pure def infixGte(x: String, y: String): Boolean =
-  "(${x}: string) >= ${y}"
+extern pure def infixGte(x: String, y: String): Bool =
+  ml "(${x}: string) >= ${y}"
 
-// Boolean ops
+// Bool ops
 // ===========
-extern pure def not(b: Boolean): Boolean =
-  "not ${b}"
+extern pure def not(b: Bool): Bool =
+  ml "not ${b}"
 
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-  "${x} orelse ${y}"
+def infixOr { first: => Bool } { second: => Bool }: Bool = 
+  if (first()) true else second()
 
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-  "${x} andalso ${y}"
+def infixAnd { first: => Bool } { second: => Bool }: Bool = 
+  if (first()) second() else false
 
 // Pairs
 // =====
@@ -190,7 +190,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ==========
 // a fatal runtime error that cannot be caught
 extern io def panic[R](msg: String): R =
-  "raise Fail ${msg}"
+  ml "raise Fail ${msg}"
 
 interface Exception[E] {
   def raise(exception: E, msg: String): Nothing
@@ -255,7 +255,7 @@ def timed { block: => Unit }: Int = {
 }
 
 def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
-  def run(n: Int, report: Boolean): Unit = {
+  def run(n: Int, report: Bool): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };
       if (report) { println(time) } else { () };
