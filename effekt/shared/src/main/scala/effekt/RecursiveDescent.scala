@@ -802,13 +802,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   private def binaryOp(lhs: Term, op: TokenKind, rhs: Term): Term =
     nonterminal:
-      // TODO after rebasing!
-      // thunkedBinaryOp(lhs, op, rhs) = op { lhs } { rhs }
-      //    if op == `||` || op == `&&` then
-      //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
-      //    else
-      //      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
-      Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+       if isThunkedOp(op) then
+         Call(IdTarget(IdRef(Nil, opName(op))), Nil, Nil, List(BlockLiteral(Nil, Nil, Nil, Return(lhs)), BlockLiteral(Nil, Nil, Nil, Return(rhs))))
+       else
+         Call(IdTarget(IdRef(Nil, opName(op))), Nil, List(lhs, rhs), Nil)
+
+  private def isThunkedOp(op: TokenKind): Boolean = op match {
+    case `||` | `&&` => true
+    case _           => false
+  }
 
   private def opName(op: TokenKind): String = op match {
     case `||` => "infixOr"
