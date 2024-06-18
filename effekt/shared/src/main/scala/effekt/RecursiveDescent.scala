@@ -277,7 +277,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
      nonterminal:
        // skip spaces at the start
        spaces()
-       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevels())
+       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs())
        if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
 
@@ -318,6 +318,25 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
         case _ => fail("Expected a top-level definition")
       }
+
+  def toplevelDefs(): List[Def] =
+    peek.kind match {
+      case `namespace` =>
+        consume(`namespace`)
+        val id = idDef()
+        peek.kind match {
+          case `{` =>
+            val defs = braces(toplevelDefs())
+            val df = toplevelDefs()
+            NamespaceDef(id, defs) :: df
+          case _   =>
+            val defs = toplevelDefs()
+            List(NamespaceDef(id, defs))
+        }
+      case _ =>
+        if (isToplevel) toplevel() :: toplevelDefs()
+        else Nil
+    }
 
   def toplevels(): List[Def] =
     nonterminal:
