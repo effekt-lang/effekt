@@ -1104,7 +1104,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def paramsOpt(): (List[Id], List[ValueParam], List[BlockParam]) =
     nonterminal:
-      maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParams() match {
+      maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParamsOpt() match {
         case (tps ~ vps ~ bps) =>
           // fail("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
           (tps, vps, bps)
@@ -1141,6 +1141,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def blockParams(): List[BlockParam] =
     nonterminal:
       someWhile(`{` ~> blockParam() <~ `}`, `{`)
+
+  def maybeBlockParamsOpt(): List[BlockParam] =
+    nonterminal:
+      manyWhile(`{` ~> blockParamOpt() <~ `}`, `{`)
+
+  def blockParamsOpt(): List[BlockParam] =
+    nonterminal:
+      someWhile(`{` ~> blockParamOpt() <~ `}`, `{`)
 
   def blockParam(): BlockParam =
     nonterminal:
