@@ -402,6 +402,7 @@ class Lexer(source: Source) {
         }
         case Some('\n') if delim == `"` =>
           return err("Linebreaks are not allowed in single-line strings.")
+        // TODO have proper escape sequence handling
         case Some('\\') => {
           consume()
           consume()
