@@ -54,17 +54,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     }
 
 
-  def fail(message: String): Nothing = throw ParseError2(message, position)
-
-  def expect[T](message: String)(p: => T): T =
-    try { p } catch { case e: ParseError2 => throw ParseError2(s"Expected $message but failed: ${e.message}", position) }
+  // Interfacing with the token stream
+  // ---------------------------------
 
   // always points to the latest non-space position
   var position: Int = 0
 
   def peek: Token = tokens(position)
 
-  // Negative lookahead
+  /**
+   * Negative lookahead
+   */
   def lookbehind(offset: Int): Token =
     tokens(position - offset)
 
@@ -129,47 +129,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       fail(s"Expected ${explain(kind)} but got ${explain(t.kind)}")
     }
 
-  /**
-   * Guards `thn` by token `t` and consumes the token itself, if present.
-   */
-  inline def when[T](t: TokenKind)(thn: => T)(els: => T): T =
-    if peek(t) then { consume(t); thn } else els
 
-  inline def backtrack[T](p: => T): Option[T] =
-    val before = position
-    try { Some(p) } catch {
-      case ParseError2(_, _) => position = before; None
-    }
-
-  /**
-   * Tiny combinator DSL to sequence parsers
-   */
-  case class ~[+T, +U](_1: T, _2: U) {
-    override def toString = s"(${_1}~${_2})"
-  }
-
-  extension [A](self: A) {
-    @targetName("seq")
-    inline def ~[B](other: B): (A ~ B) = new ~(self, other)
-
-    @targetName("seqLeftToken")
-    inline def <~(t: TokenKind): A = { consume(t); self }
-
-    @targetName("seqLeftUnit")
-    inline def <~(t: Unit): A = { self }
-
-    inline def |(other: A): A = { backtrack(self).getOrElse(other) }
-  }
-
-  extension (self: TokenKind) {
-    @targetName("seqRightToken")
-    inline def ~>[R](other: => R): R = { consume(self); other }
-  }
-
-  extension (self: Unit) {
-    @targetName("seqRightUnit")
-    inline def ~>[R](other: => R): R = { other }
-  }
+  // The actual parser itself
+  // ------------------------
+  // We use the following naming conventions for nonterminals:
+  //
+  //  - maybe[...]s: zero or more times
+  //  - [...]s: one or more times
+  //  - [...]opt: optional type annotation
 
   // tokens that delimit a statement
   def returnPosition: Boolean = peek(`}`) || peek(`case`) || peek(`}>`) || peek(EOF)
@@ -369,7 +336,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       manyWhile(definition(), isDefinition)
 
-  def functionBody: Stmt = expect("the body of a function definition")(stmt())
+  def functionBody: Stmt = stmt() // TODO error context: "the body of a function definition"
 
   def valDef(): Def =
     nonterminal:
@@ -1120,13 +1087,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       braces { (backtrack { idDef() <~ `:` }, blockType()) }
 
-  /*
-  naming convention?:
-    maybe[...]s: zero or more times
-    [...]s: one or more times
-    [...]opt: optional type annotation
-  */
-
   def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
     nonterminal:
       if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
@@ -1217,11 +1177,56 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       else Effects(interfaceType())
 
 
+  // Generic utility functions
+  // -------------------------
+  // ... for writing parsers.
 
   /**
-   * Helpers
+   * Aborts parsing with the given message
    */
+  def fail(message: String): Nothing = throw ParseError2(message, position)
 
+  /**
+   * Guards `thn` by token `t` and consumes the token itself, if present.
+   */
+  inline def when[T](t: TokenKind)(inline thn: => T)(inline els: => T): T =
+    if peek(t) then { consume(t); thn } else els
+
+  inline def backtrack[T](inline p: => T): Option[T] =
+    val before = position
+    try { Some(p) } catch {
+      case ParseError2(_, _) => position = before; None
+    }
+
+  /**
+   * Tiny combinator DSL to sequence parsers
+   */
+  case class ~[+T, +U](_1: T, _2: U) {
+    override def toString = s"(${_1}~${_2})"
+  }
+
+  extension [A](self: A) {
+    @targetName("seq")
+    inline def ~[B](other: B): (A ~ B) = new ~(self, other)
+
+    @targetName("seqLeftToken")
+    inline def <~(t: TokenKind): A = { consume(t); self }
+
+    @targetName("seqLeftUnit")
+    inline def <~(t: Unit): A = { self }
+
+    inline def |(other: A): A = { backtrack(self).getOrElse(other) }
+  }
+
+  extension (self: TokenKind) {
+    @targetName("seqRightToken")
+    inline def ~>[R](other: => R): R = { consume(self); other }
+  }
+
+  extension (self: Unit) {
+    @targetName("seqRightUnit")
+    inline def ~>[R](other: => R): R = { other }
+  }
 
   /**
    * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]]
