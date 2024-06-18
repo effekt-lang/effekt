@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 effect Get() : Int
 effect Set(i: Int): Unit
@@ -20,6 +21,6 @@ def run(n: Int) = {
   } with Set { (i: Int) => s = i; resume(()) }
 }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(15)
+  { n => run(n) }
+  { println(run(5)) }
