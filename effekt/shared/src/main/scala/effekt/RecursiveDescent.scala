@@ -950,7 +950,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def isLiteral: Boolean = peek.kind match {
-    case _: (Integer | Float | Str) => true
+    case _: (Integer | Float | Str | Chr) => true
     case `true` => true
     case `false` => true
     case _ => isUnitLiteral
@@ -961,6 +961,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case Integer(v)         => skip(); IntLit(v)
         case Float(v)           => skip(); DoubleLit(v)
         case Str(s, multiline)  => skip(); StringLit(s)
+        case Chr(c)             => skip(); CharLit(c)
         case `true`             => skip(); BooleanLit(true)
         case `false`            => skip(); BooleanLit(false)
         case t if isUnitLiteral => skip(); skip(); UnitLit()

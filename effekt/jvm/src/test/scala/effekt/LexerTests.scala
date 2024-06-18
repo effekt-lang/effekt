@@ -81,6 +81,15 @@ class LexerTests extends munit.FunSuite {
       Str("\\\"hello\\\"", false),
       EOF
     )
+    assertTokensEq(""" "\n" """, Str("\\n", false), EOF)
+  }
+
+  test("characters") {
+    assertTokensEq("' '", Chr(' '), EOF)
+    assertTokensEq("'\\'", Chr('\\'), EOF)
+    assertTokensEq("'\n'", Chr('\n'), EOF)
+    assertTokensEq("\\u{0000}", Chr(0), EOF)
+    assertTokensEq("\\u{FFFF}", Chr(65535), EOF)
   }
 
   test("multi line strings") {
@@ -221,7 +230,7 @@ class LexerTests extends munit.FunSuite {
 
   test("big file") {
     val start = System.nanoTime()
-    val file = scala.io.Source.fromFile("libraries/js/immutable/list.effekt").mkString
+    val file = scala.io.Source.fromFile("libraries/common/list.effekt").mkString
     assertSuccess(file)
     println((System.nanoTime() - start) * 1e-9)
   }

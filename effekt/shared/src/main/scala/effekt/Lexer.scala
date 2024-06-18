@@ -1,5 +1,7 @@
 package effekt.lexer
 
+import java.lang.Integer
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable
@@ -25,7 +27,7 @@ enum TokenKind {
   case Integer(n: Long)
   case Float(d: Double)
   case Str(s: String, multiline: Boolean)
-  case Char(c: Char)
+  case Chr(c: Int)
   // identifiers
   case Ident(id: String)
   // misc
@@ -121,7 +123,7 @@ object TokenKind {
     case Float(d)          => s"float ${d}"
     case Str(s, true)      => s"multi-line string"
     case Str(s, false)     => s"string \"${s}\""
-    case Char(c)           => s"character '${c}'"
+    case Chr(c)            => s"character '${c}'"
     case Comment(contents) => "comment"
     case Newline           => "newline"
     case Space             => "space"
@@ -418,6 +420,29 @@ class Lexer(source: Source) {
     TokenKind.Str(s, delim.isMultiline)
   }
 
+  def matchChar(): TokenKind = {
+    consumeWhile(_ != '\'')
+    expect('\'')
+    val cs = slice(start + 1, current - 1).toList
+    cs match {
+      case List(c) => TokenKind.Chr(c)
+      // TODO check if escaped character is valid?
+      case '\\' :: c :: Nil => TokenKind.Chr(s"\\$c".codePointAt(0))
+      case _ => err("Invalid character literal.")
+    }
+  }
+
+  def matchUnicodeLiteral(): TokenKind = {
+    consumeWhile(_ != '}')
+    expect('}')
+    val n = slice(start + 3, current - 1)
+    try {
+      TokenKind.Chr(Integer.parseInt(n, 16))
+    } catch {
+      case e: Throwable => err("Invalid unicode literal.")
+    }
+  }
+
   /** Matches a mult-line comment delimited by /* and */. */
   def matchMultilineComment(): TokenKind = {
     var closed = false
@@ -530,6 +555,8 @@ class Lexer(source: Source) {
       }
       case '$' => TokenKind.`${`
       // --- literals ---
+      case '\'' => matchChar()
+      case '\\' if nextMatches("u{") => matchUnicodeLiteral()
       case '\"' if nextMatches("\"\"") => matchString(`"""`)
       case '\"' => matchString(`"`)
       case c if c.isDigit => matchNumber()
@@ -542,7 +569,7 @@ class Lexer(source: Source) {
         // check if the slice matches any know keyword, otherwise it is necessarily an identifier
         keywordMap.getOrElse(s, TokenKind.Ident(s))
       }
-      case c => err("Invalid keyword/identifier.")
+      case c => err(s"Invalid keyword/identifier: $c.")
     }
   }
 }
