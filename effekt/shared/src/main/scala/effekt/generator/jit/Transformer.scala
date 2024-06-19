@@ -179,7 +179,8 @@ object Transformer {
         case (id, b) => (id, transformClause(b))
       }
       val tDefault = default.map{ d => jit.Clause(Nil, transform(d)) }.getOrElse{
-        jit.Clause(Nil, jit.Primitive("non-exhaustive match", Nil, Nil, jit.Literal.Unit))
+        val ret = Var("%bottom", Bottom)
+        jit.Clause(Nil, jit.Primitive("non-exhaustive match", Nil, List(ret), ret))
       }
       val tpe: ValueType.Data = core.Type.inferType(scrutinee).asInstanceOf[ValueType.Data]
       jit.Match(transform(scrutinee), tpe.name, tClauses, tDefault)
