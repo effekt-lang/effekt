@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import list
 
 def range(i: Int, n: Int): List[Int] =
@@ -16,6 +18,5 @@ def sum(xs: List[Int]): Int =
 def run(n: Int) =
   sum(range(0, n))
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

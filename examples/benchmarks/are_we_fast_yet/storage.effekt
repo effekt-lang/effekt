@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import array
 
 type Tree {
@@ -45,6 +47,5 @@ def run(n: Int) = {
   count
 }
 
-def main() = {
-  println(run(1))
-}
+def main() = benchmark(1){run}
+

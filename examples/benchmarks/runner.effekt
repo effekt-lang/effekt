@@ -1,9 +1,9 @@
 import args
 import bench
 
-def benchmark(iterations: Int) { bench: Int => Int } { test: => Unit }: Unit = commandLineArgs() match {
+def benchmark(testSize: Int) { run: Int => Int } = commandLineArgs() match {
   // test mode
-  case Nil() => test()
+  case Nil() => println(run(testSize))
 
   // bench mode
   case Cons(problemSize, _) =>
@@ -11,22 +11,19 @@ def benchmark(iterations: Int) { bench: Int => Int } { test: => Unit }: Unit = c
 
     val n = problemSize.toInt
 
-    iterations.repeat {
-      val before = relativeTimestamp()
-      ignore(bench(n))
-      val after = relativeTimestamp()
-      val nanos = after - before
-      println(nanos)
-    }
+    val before = relativeTimestamp()
+    relevant(run(n))
+    val after = relativeTimestamp()
+    val nanos = after - before
+    println(nanos)
 }
 
 /**
  * The inliner might remove unused computation (if pure), which is not desired
  * for benchmarking. Since externs are opaque to the optimizer, just wrap the
- * result of the computation to benchmark in `ignore`.
+ * result of the computation to benchmark in `relevant`.
  */
-extern io def ignore[T](value: T): Unit =
-  js "$effekt.unit"
-  llvm "ret %Pos zeroinitializer"
+extern io def relevant(value: Int): Unit =
+  default { () }
 
 def main() = ()

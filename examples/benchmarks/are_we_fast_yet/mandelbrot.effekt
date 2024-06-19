@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import string
 
 def mandelbrot(size: Int): Int = {
@@ -56,6 +58,5 @@ def run(n: Int) = {
   mandelbrot(n)
 }
 
-def main() = {
-  println(run(1))
-}
+def main() = benchmark(1){run}
+

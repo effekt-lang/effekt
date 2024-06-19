@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import option
 
 def attempt(i: Int): Option[Int] =
@@ -16,6 +18,5 @@ def run(n: Int) =
     case None() => -1
   }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

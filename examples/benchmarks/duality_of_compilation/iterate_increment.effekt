@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 def iterate(i: Int, a: Int) { f: Int => Int }: Int =
   if (i == 0) {
@@ -9,6 +10,5 @@ def iterate(i: Int, a: Int) { f: Int => Int }: Int =
 def run(n: Int) =
   iterate(n, 0) { x => x + 1 }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

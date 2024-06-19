@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import ref
 import array
 
@@ -78,6 +80,5 @@ def run(n: Int) = {
   }
 }
 
-def main() = {
-  println(run(50))
-}
+def main() = benchmark(50){run}
+

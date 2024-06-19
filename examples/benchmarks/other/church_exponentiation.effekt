@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 type Succ[Z] = Z => Z at {}
 
@@ -19,6 +20,5 @@ def churchToInt(num: Church[Int]): Int =
 
 def run(n: Int) = churchToInt(intToChurch(n)(u27()))
 
-def main() = {
-  println(run(4))
-}
+def main() = benchmark(4){run}
+

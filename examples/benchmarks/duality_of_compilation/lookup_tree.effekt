@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 type Tree {
   Leaf(n: Int)
@@ -21,6 +22,5 @@ def lookup(t: Tree): Int =
 def run(n: Int) =
   lookup(create(0, n))
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 def abs(i: Int): Int = if (i < 0) { 0 - i } else { i }
 
@@ -28,6 +29,5 @@ def run(n: Int) = {
   step(1000, 0)
 }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

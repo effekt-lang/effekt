@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 // TODO: map uses `var` and therefore fails in ML with "Effect polymorphic recursion is not allowed."
 def vfix(lst: List[List[=> (Int => Int at {}) at {}] => (Int => Int at {}) at {}]): List[=> (Int => Int at {}) at {}] = {
@@ -46,6 +47,5 @@ def run(n: Int) = {
   mod3(n) + mod3(n + 1) + mod3(n + 2)
 }
 
-def main() = {
-  println(run(999))
-}
+def main() = benchmark(999){run}
+

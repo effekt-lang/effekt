@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 interface Yield {
   def yield(num: Int): Unit
@@ -59,6 +60,5 @@ def run(n: Int): Int = region r {
   consumer(0)
 }
 
-def main() = {
-  println(run(10))
-}
+def main() = benchmark(10){run}
+

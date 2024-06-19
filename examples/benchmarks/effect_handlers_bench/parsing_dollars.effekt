@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 type Chr = Int
 
@@ -68,6 +69,5 @@ def feed(n: Int) { action: () => Unit / Read } = {
 def run(n: Int) =
   sum { catch { feed(n) { parse(0) } } }
 
-def main() = {
-  println(run(10))
-}
+def main() = benchmark(10){run}
+

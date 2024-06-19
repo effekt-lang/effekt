@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 effect Emit(e: Int): Unit
 
@@ -20,6 +21,5 @@ def run(n: Int) = {
   }
 }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

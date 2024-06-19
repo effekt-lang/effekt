@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 record Triple(a: Int, b: Int, c: Int)
 
@@ -43,6 +44,5 @@ def run(n: Int) =
     def fail() = 0
   }
 
-def main() = {
-  println(run(10))
-}
+def main() = benchmark(10){run}
+

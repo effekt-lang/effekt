@@ -1,3 +1,4 @@
+import examples/benchmarks/runner
 
 def factorial(a: Int, i: Int): Int =
   if (i == 0) {
@@ -9,6 +10,5 @@ def factorial(a: Int, i: Int): Int =
 def run(n: Int): Int =
   factorial(1, n)
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

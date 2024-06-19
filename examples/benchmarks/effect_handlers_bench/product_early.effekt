@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import list
 
 interface Abort {
@@ -36,6 +38,5 @@ def run(n: Int) = {
   loop(n,0)
 }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

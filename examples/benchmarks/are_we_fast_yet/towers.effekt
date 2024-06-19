@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import array
 import list
 
@@ -63,6 +65,5 @@ def run(n: Int) = {
   movesDone
 }
 
-def main() = {
-  println(run(13))
-}
+def main() = benchmark(13){run}
+

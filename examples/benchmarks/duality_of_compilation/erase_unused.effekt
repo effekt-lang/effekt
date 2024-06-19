@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import list
 
 def replicate(v: Int, n: Int, a: List[Int]): List[Int] =
@@ -17,6 +19,5 @@ def useless(i: Int, n: Int, _: List[Int]): Int =
 def run(n: Int) =
   useless(0, n, Nil())
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

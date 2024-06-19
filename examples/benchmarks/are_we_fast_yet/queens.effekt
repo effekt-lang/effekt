@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import array
 
 interface Break[T] {
@@ -42,10 +44,9 @@ def run(n: Int) = {
         def break(value) = value
     }
 
-  placeQueen(0)
+  if (placeQueen(0)) { 1 } else { 0 }
 
 }
 
-def main() = {
-  println(run(8))
-}
+def main() = benchmark(8){run}
+

@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import list
 
 def abs(n: Int): Int = if (n < 0) 0 - n else n
@@ -62,6 +64,5 @@ def run(n: Int) = {
   loop(10)
 }
 
-def main() = {
-  println(run(5))
-}
+def main() = benchmark(5){run}
+

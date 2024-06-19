@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import array
 
 record Body(
@@ -170,6 +172,5 @@ def run(n: Int) = {
   toInt(bodies.energy * 1000000000.0)
 }
 
-def main() = {
-  println(run(1))
-}
+def main() = benchmark(1){run}
+

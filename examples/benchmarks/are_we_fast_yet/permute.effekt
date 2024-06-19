@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import array
 
 def swap(arr: Array[Int], i: Int, j: Int) = {
@@ -29,6 +31,5 @@ def run(n: Int) = {
   count
 }
 
-def main() = {
-  println(run(6))
-}
+def main() = benchmark(6){run}
+

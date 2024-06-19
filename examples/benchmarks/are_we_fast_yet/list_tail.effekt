@@ -1,3 +1,5 @@
+import examples/benchmarks/runner
+
 import list
 
 def length(xs: List[Int]): Int =
@@ -36,6 +38,5 @@ def run(n: Int) = {
   tail(makeList(n), makeList(10), makeList(6)).length;
 }
 
-def main() = {
-  println(run(15))
-}
+def main() = benchmark(15){run}
+
