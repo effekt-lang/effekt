@@ -652,7 +652,7 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
     %fp = load ptr, ptr %fpp
 
     ; call
-    %result = call tailcc %Pos %fp(%Obj %obj, i64 0, i64 %arg, %Sp %sp)
+    %result = call fastcc %Pos %fp(%Obj %obj, i64 0, i64 %arg, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
@@ -681,7 +681,7 @@ define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
     %fp = load ptr, ptr %fpp
 
     ; call
-    %result = call tailcc %Pos %fp(%Obj %obj, i64 0, %Pos %arg, %Sp %sp)
+    %result = call fastcc %Pos %fp(%Obj %obj, i64 0, %Pos %arg, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
@@ -709,7 +709,7 @@ define void @run(%Neg %f) {
     %fp = load ptr, ptr %fpp
 
     ; call
-    %result = call tailcc %Pos %fp(%Obj %obj, i64 0, %Sp %sp)
+    %result = call fastcc %Pos %fp(%Obj %obj, i64 0, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
