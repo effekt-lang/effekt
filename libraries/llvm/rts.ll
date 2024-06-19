@@ -709,8 +709,7 @@ define void @run(%Neg %f) {
     %fp = load ptr, ptr %fpp
 
     ; call
-    %buf = call %Neg @malloc(i64 1048576)
-    %result = call tailcc %Pos %fp(%Obj %obj, i64 0, %Neg %buf, %Sp %sp)
+    %result = call tailcc %Pos %fp(%Obj %obj, i64 0, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
