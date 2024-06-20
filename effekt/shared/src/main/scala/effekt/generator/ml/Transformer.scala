@@ -17,7 +17,15 @@ import scala.collection.mutable
 
 object Transformer {
 
-  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+  val escapeSeqs: Map[Char, String] = Map(
+    '\'' -> raw"'",
+    '\"' -> raw"\"",
+    '\\' -> raw"\\",
+    '\n' -> raw"\n",
+    '\t' -> raw"\t",
+    '\r' -> raw"\r")
+
+
 
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
@@ -622,11 +630,15 @@ object Transformer {
     case exps => Some(ml.Expr.Tuple(exps))
   }
 
-  def escape(scalaString: String): String =
-    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
-      escapeSeqs.get(c) match {
-        case Some(s) => acc ++= s
-        case None => acc += c
-      }
+  def escape(scalaString: String): String = {
+    scalaString.foldLeft(new StringBuilder) {
+      case (acc, c) if escapeSeqs.isDefinedAt(c) =>
+        acc ++= escapeSeqs(c)
+      case (acc, c) if (c.isControl || c < ' ' || c > '~') =>
+        acc ++= f"\\u${c.toInt}%04x"
+      case (acc, c) =>
+        acc += c
     }.toString()
+  }
+
 }
