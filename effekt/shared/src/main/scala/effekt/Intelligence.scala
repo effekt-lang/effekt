@@ -101,15 +101,16 @@ trait Intelligence {
 
 
   case class HoleInfo(hole: Hole, tpe: String, terms: Array[TermBinding], types: Array[TypeBinding])
-  case class TermBinding(name: String, tpe: String)
+  case class TermBinding(name: String, tpe: String) // TODO add qualifier
   case class TypeBinding(name: String, definition: String)
 
   def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
     (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
-    tpe = hole.expectedType.map { t => pp"${t}" }.getOrElse { "Unknown type" }
+    tpe = scope.toString
+    //tpe = hole.expectedType.map { t => pp"${t}" }.getOrElse { "Unknown type" }
   } yield {
     val (te, ty) = allBindings(scope)
-    HoleInfo(hole, tpe, te.toArray, ty.toArray)
+    HoleInfo(hole, tpe, te.toArray.distinct, ty.toArray.distinct)
   }
 
   def allBindings(scope: Scope)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
