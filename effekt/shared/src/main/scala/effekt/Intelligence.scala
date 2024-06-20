@@ -106,7 +106,10 @@ trait Intelligence {
 
   def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
     (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
-    tpe = scope.toString
+    tpe = s"""imports: ${scope.imports.toBindings}
+              |
+              |bindings: ${scope.bindings.toBindings}
+              |""".stripMargin
     //tpe = hole.expectedType.map { t => pp"${t}" }.getOrElse { "Unknown type" }
   } yield {
     val (te, ty) = allBindings(scope)
