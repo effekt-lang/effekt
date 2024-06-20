@@ -142,8 +142,13 @@ trait Intelligence {
         case sym: BlockSymbol => TermBinding(name, C.blockTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
       }
     }
+    val (nestedTerms, nestedTypes) = bindings.namespaces.map {
+      // TODO prefix names with name::...
+      case (name, namespace) => allBindings(namespace)
+    }.unzip
+
     // TODO look into outer scopes
-    (terms, types)
+    (terms ++ nestedTerms.flatten, types ++ nestedTypes.flatten)
 
   // For now we only show captures of function definitions and calls to box
   def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =
