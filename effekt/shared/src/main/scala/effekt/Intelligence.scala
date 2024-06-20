@@ -104,8 +104,8 @@ trait Intelligence {
     importedTerms: Array[TermBinding], importedTypes: Array[TypeBinding],
     terms: Array[TermBinding], types: Array[TypeBinding])
 
-  case class TermBinding(name: String, tpe: String) // TODO add qualifier
-  case class TypeBinding(name: String, definition: String)
+  case class TermBinding(qualifier: Array[String], name: String, tpe: String) // TODO add qualifier
+  case class TypeBinding(qualifier: Array[String], name: String, definition: String)
 
   case class BindingInfo(
     importedTerms: Iterable[TermBinding],
@@ -145,22 +145,20 @@ trait Intelligence {
         BindingInfo(te1, ty1, te2, ty2) ++ allBindings(outer)
     }
 
-  def allBindings(bindings: Namespace)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+  def allBindings(bindings: Namespace, path: List[String] = Nil)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
     val types = bindings.types.flatMap {
       case (name, sym) =>
         // TODO this is extremely hacky, printing is not defined for all types at the moment
-        try { Some(TypeBinding(name, DeclPrinter(sym))) } catch { case e => None }
+        try { Some(TypeBinding(path.toArray, name, DeclPrinter(sym))) } catch { case e => None }
     }
     val terms = bindings.terms.flatMap { case (name, syms) =>
-      // TODO can crash
       syms.collect {
-        case sym: ValueSymbol => TermBinding(name, C.valueTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
-        case sym: BlockSymbol => TermBinding(name, C.blockTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
+        case sym: ValueSymbol => TermBinding(path.toArray, name, C.valueTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
+        case sym: BlockSymbol => TermBinding(path.toArray, name, C.blockTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
       }
     }
     val (nestedTerms, nestedTypes) = bindings.namespaces.map {
-      // TODO prefix names with name::...
-      case (name, namespace) => allBindings(namespace)
+      case (name, namespace) => allBindings(namespace, path :+ name)
     }.unzip
 
     (terms ++ nestedTerms.flatten, types ++ nestedTypes.flatten)
