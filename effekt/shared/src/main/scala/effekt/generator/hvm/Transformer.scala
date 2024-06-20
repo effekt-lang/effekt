@@ -103,9 +103,9 @@ def transform(term: cps.Term)(using env: Environment): Term = term match {
     println(term)
     Mat(List(transform(scrutinee)), (clauses map ((id, blockLit) => transform(id, blockLit, scrutinee)(using env))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
-  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(param.name.name), transform(body)(using env)), transform(rest)) 
+  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(idToString(param)), transform(body)(using env)), transform(rest)) 
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
-  case cps.Term.Reset(ev, body) => chainApp(chainLam(List("ev", "k"), transform(body)(using env)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
+  case cps.Term.Reset(ev, body) => chainApp(chainLam(List(ev.name.name, "k"), transform(body)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
   case cps.Term.Shift(ev, cont, body) => App(Auto, App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body)(using env)))), Var("k"))//((ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body)(using env)) k)
 }
 
@@ -128,7 +128,7 @@ def transform(expr: cps.Expr)(using env: Environment): Term = expr match {
   case cps.Expr.PureApp(b, args) => chainApp(transform(b), (args map transform))
   case cps.Expr.Box(b) => transform(b)
   case cps.Expr.Run(t) => transform(t)
-  case cps.Expr.BlockLit(params, body) => chainLam(params map (x => x.toString()), transform(body)(using env))
+  case cps.Expr.BlockLit(params, body) => chainLam(params map idToString, transform(body)(using env))
   case cps.Expr.Make(data, tag, vargs) => chainApp(idToVar(data), vargs map transform)
   case cps.Expr.Select(target, field) => ???
   case cps.Member(interface, field, tpe) => App(Auto, Var(tpe.name.toString + "." + field.toString), transform(interface))
@@ -208,4 +208,12 @@ def idToVar(id: Id): Var = {
   Var(updatedName)
 }
 
-def idToName(id: Id): Name = Name(id.name.name)
+def idToName(id: Id): Name = {
+  val updatedName = id.name.name.replace('$', '.')
+  Name(updatedName)
+}
+
+def idToString(id: Id): String = {
+  val updatedName = id.name.name.replace('$', '.')
+  updatedName
+}
