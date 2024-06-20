@@ -437,19 +437,17 @@ class Lexer(source: Source) {
   }
 
   def matchChar(): TokenKind = {
+    if (peekMatches(_ == '\'')) err("Empty character literal.")
     consumeWhile(_ != '\'')
     expect('\'')
-    val cs = slice(start + 1, current - 1).toList
-    cs match {
-      case List(c) => TokenKind.Chr(c)
-      // TODO check if escaped character is valid?
-      case '\\' :: c :: Nil => TokenKind.Chr(s"\\$c".codePointAt(0))
-      case _ => err("Invalid character literal.")
-    }
+    val cs = slice(start + 1, current - 1)
+    TokenKind.Chr(cs.codePointAt(0))
   }
 
+  lazy val hexadecimal = ('a' to 'f') ++ ('A' to 'F') ++ ('0' to '9')
+
   def matchUnicodeLiteral(): TokenKind = {
-    consumeWhile(!_.isWhitespace)
+    consumeWhile(hexadecimal.contains(_))
     val n = slice(start + 2, current)
     try {
       TokenKind.Chr(Integer.parseInt(n, 16))

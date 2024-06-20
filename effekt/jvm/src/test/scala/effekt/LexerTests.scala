@@ -89,12 +89,15 @@ class LexerTests extends munit.FunSuite {
 
   test("characters") {
     assertTokensEq("' '", Chr(' '), EOF)
+    assertTokensEq("'😅'", Chr(0x1F605), EOF)
     assertTokensEq("'\\'", Chr('\\'), EOF)
     assertTokensEq("'\n'", Chr('\n'), EOF)
     assertTokensEq("'\t'", Chr('\t'), EOF)
     assertTokensEq("\\u0000", Chr(0), EOF)
     assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
-    assertTokensEq("\\u10FFFF", Chr(0x10FFFF), EOF)
+    assertTokensEq("\\u10FFFF{ val", Chr(0x10FFFF), `{`, `val`, EOF)
+    assertTokensEq("val s =\\u0000+ 1", `val`, Ident("s"), `=`, Chr(0), `+`, Integer(1), EOF)
+    assertFailure("''")
   }
 
   test("multi line strings") {
@@ -234,9 +237,9 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("big file") {
-    val start = System.nanoTime()
+    // val start = System.nanoTime()
     val file = scala.io.Source.fromFile("libraries/common/list.effekt").mkString
     assertSuccess(file)
-    println((System.nanoTime() - start) * 1e-9)
+    // println((System.nanoTime() - start) * 1e-9)
   }
 }
