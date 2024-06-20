@@ -243,7 +243,9 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   case class CaptureInfo(location: Location, captureText: String)
 
-  case class HoleInfoLSP(name: String, range: LSPRange, tpe: String, terms: Array[TermBinding], types: Array[TypeBinding])
+  case class HoleInfoLSP(name: String, range: LSPRange, tpe: String,
+    importedTerms: Array[TermBinding], importedTypes: Array[TypeBinding],
+    terms: Array[TermBinding], types: Array[TypeBinding])
 
   override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] = params.getCommand match {
     case "inferredCaptures" =>
@@ -258,8 +260,8 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         context.compiler.runFrontend(src)(using context).map { _ =>
           val holes = getHoles(src)(using context)
           holes.map {
-            case HoleInfo(hole, tpe, terms, types) =>
-              HoleInfoLSP(hole.name.name, rangeOfNode(hole.decl), tpe, terms, types)
+            case HoleInfo(hole, tpe, importedTerms, importedTypes, terms, types) =>
+              HoleInfoLSP(hole.name.name, rangeOfNode(hole.decl), tpe, importedTerms, importedTypes, terms, types)
           }.toArray
         }
       } catch {

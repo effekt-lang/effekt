@@ -100,37 +100,49 @@ trait Intelligence {
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
 
-  case class HoleInfo(hole: Hole, tpe: String, terms: Array[TermBinding], types: Array[TypeBinding])
+  case class HoleInfo(hole: Hole, tpe: String,
+    importedTerms: Array[TermBinding], importedTypes: Array[TypeBinding],
+    terms: Array[TermBinding], types: Array[TypeBinding])
+
   case class TermBinding(name: String, tpe: String) // TODO add qualifier
   case class TypeBinding(name: String, definition: String)
 
-  def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
-    (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
-    tpe = s"""imports: ${scope.imports.toBindings}
-              |
-              |bindings: ${scope.bindings.toBindings}
-              |""".stripMargin
-    //tpe = hole.expectedType.map { t => pp"${t}" }.getOrElse { "Unknown type" }
-  } yield {
-    val (te, ty) = allBindings(scope)
-    HoleInfo(hole, tpe, te.toArray.distinct, ty.toArray.distinct)
+  case class BindingInfo(
+    importedTerms: Iterable[TermBinding],
+    importedTypes: Iterable[TypeBinding],
+    terms: Iterable[TermBinding],
+    types: Iterable[TypeBinding]) {
+
+    def ++(other: BindingInfo): BindingInfo =
+      BindingInfo(
+        importedTerms ++ other.importedTerms,
+        importedTypes ++ other.importedTypes,
+        terms ++ other.terms,
+        types ++ other.types)
   }
 
-  def allBindings(scope: Scope)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+  def getHoles(src: Source)(using C: Context): List[HoleInfo] = for {
+    (hole, scope) <- C.annotationOption(Annotations.HolesForFile, src).getOrElse(Nil)
+    tpe = hole.expectedType.map { t => pp"${t}" }.getOrElse { "Unknown type" }
+  } yield {
+    val BindingInfo(importedTerms, importedTypes, terms, types) = allBindings(scope)
+    HoleInfo(hole, tpe, importedTerms.toArray.distinct, importedTypes.toArray.distinct, terms.toArray.distinct, types.toArray.distinct)
+  }
+
+  def allBindings(scope: Scope)(using C: Context): BindingInfo =
     scope match {
       case Scope.Global(imports, bindings) =>
         val (te1, ty1) = allBindings(imports)
         val (te2, ty2) = allBindings(bindings)
-        (te2, ty1 ++ ty2)
+        BindingInfo(te1, ty1, te2, ty2)
       case Scope.Named(name, bindings, outer) =>
-        val (te1, ty1) = allBindings(bindings)
-        val (te2, ty2) = allBindings(outer)
-        (te1 ++ te2, ty1 ++ ty2)
+        val (te, ty) = allBindings(bindings)
+        BindingInfo(Seq.empty, Seq.empty, te, ty) ++ allBindings(outer)
       case Scope.Local(imports, bindings, outer) =>
+        val outerBindings = allBindings(outer)
         val (te1, ty1) = allBindings(imports)
         val (te2, ty2) = allBindings(bindings)
-        val (te3, ty3) = allBindings(outer)
-        (te2 ++ te3, ty1 ++ ty2 ++ ty3)
+        BindingInfo(te1, ty1, te2, ty2) ++ allBindings(outer)
     }
 
   def allBindings(bindings: Namespace)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
@@ -151,7 +163,6 @@ trait Intelligence {
       case (name, namespace) => allBindings(namespace)
     }.unzip
 
-    // TODO look into outer scopes
     (terms ++ nestedTerms.flatten, types ++ nestedTypes.flatten)
 
   // For now we only show captures of function definitions and calls to box
