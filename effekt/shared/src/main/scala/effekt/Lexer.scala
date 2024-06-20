@@ -402,10 +402,13 @@ class Lexer(source: Source) {
         }
         case Some('\n') if delim == `"` =>
           return err("Linebreaks are not allowed in single-line strings.")
-        // TODO have proper escape sequence handling
+        // handle escape sequences
         case Some('\\') => {
-          consume()
-          consume()
+          expect('\\')
+          peek() match {
+            case Some('\"') | Some('\\') | Some('n') | Some('t') => consume()
+            case _ => err("Invalid escape sequence.")
+          }
         }
         case Some('$') if peekN(2).contains('{') => {
           val s = slice(st, current)
@@ -418,7 +421,10 @@ class Lexer(source: Source) {
       }
     }
     val s = slice(st, current - offset)
-    TokenKind.Str(s, delim.isMultiline)
+    // Unescape the following sequences: control: `\b`, `\t`, `\n`, `\f`, `\r`; escape:  `\\`, `\"`, `\'`
+    // For now, we only support a subset
+    val unescaped = StringContext.processEscapes(s)
+    TokenKind.Str(unescaped, delim.isMultiline)
   }
 
   def matchChar(): TokenKind = {

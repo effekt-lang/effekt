@@ -73,21 +73,24 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("single line strings") {
-    val prog = """ "hello, world" "" "\"hello\""  """
+    val prog = """ "hello, world" "" """
     assertTokensEq(
       prog,
       Str("hello, world", false),
       Str("", false),
-      Str("\\\"hello\\\"", false),
       EOF
     )
-    assertTokensEq(""" "\n" """, Str("\\n", false), EOF)
+    assertTokensEq("\"\\\"hello\\\"\"", Str("\"hello\"", false), EOF)
+    assertTokensEq("\" \\n\"", Str(" \n", false), EOF)
+    assertTokensEq("\" \\t \"", Str(" \t ", false), EOF)
+    assertFailure("\"\\k\"")
   }
 
   test("characters") {
     assertTokensEq("' '", Chr(' '), EOF)
     assertTokensEq("'\\'", Chr('\\'), EOF)
     assertTokensEq("'\n'", Chr('\n'), EOF)
+    assertTokensEq("'\t'", Chr('\t'), EOF)
     assertTokensEq("\\u{0000}", Chr(0), EOF)
     assertTokensEq("\\u{FFFF}", Chr(65535), EOF)
   }
