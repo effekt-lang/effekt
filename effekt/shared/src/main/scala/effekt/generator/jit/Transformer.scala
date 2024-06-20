@@ -90,20 +90,21 @@ object Transformer {
     case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       val tBody = (prompt, resume) match {
         case (Some(prompt), Some(resume)) =>
-          val k = jit.Var(TmpValue(), jit.Ptr) // TODO transform type more precisely
-          val (resumeFn, resumeResultTpe) = resume.tpe match {
+          val (k, resumeFn, resumeResultTpe) = resume.tpe match {
 
             case core.BlockType.Function(_, _, List(vparam), List(), result) =>
               // resume(value)
               val resumeArg = jit.Var(TmpValue(), transform(vparam))
-              (jit.Abs(List(resumeArg),
+              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe))) // TODO transform type more precisely
+              (k, jit.Abs(List(resumeArg),
                  jit.Resume(k, List(resumeArg))),
                transform(vparam))
 
             case core.BlockType.Function(_, _, List(), List(bparam: core.BlockType.Function), result) =>
               // resume{ block }
               val resumeArg = jit.Var(TmpBlock(), transform(bparam))
-              (jit.Abs(List(resumeArg),
+              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe))) // TODO transform type more precisely
+              (k, jit.Abs(List(resumeArg),
                  jit.Resumed(k, jit.App(resumeArg, bparams map transform))),
                transform(bparam.result))
 
