@@ -224,6 +224,18 @@ object Transformer {
           Invoke(Variable(transform(id), transform(tpe)), opTag, values)
         }
 
+      case lifted.App(lifted.Member(lifted.Unbox(lifted.ValueVar(id, lifted.ValueType.Boxed(tpe))), op, annotatedTpe), targs, args) =>
+        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        val opTag = {
+          tpe match
+            case lifted.BlockType.Interface(ifceId, _) =>
+              DeclarationContext.getPropertyTag(op)
+            case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
+        }
+        transform(args).run { values =>
+          Invoke(Variable(transform(id), transform(tpe)), opTag, values)
+        }
+
       case lifted.If(cond, thenStmt, elseStmt) =>
         transform(cond).run { value =>
           Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
@@ -390,9 +402,14 @@ object Transformer {
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
 
+    case lifted.New(impl) =>
+      val variable = Variable(freshName("g"), Negative())
+      Binding { k =>
+        New(variable, transform(impl), k(variable))
+      }
+
     case lifted.Member(b, field, annotatedTpe) => ???
     case lifted.Unbox(e) => ???
-    case lifted.New(impl) => ???
   }
 
   def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match {
@@ -487,14 +504,15 @@ object Transformer {
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
-    handler.operations.sortBy {
+  def transform(impl: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
+    impl.operations.sortBy {
       case lifted.Operation(operationName, _) =>
-        DeclarationContext.getInterface(handler.interface.name).properties.indexWhere(_.id == operationName)
+        DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
     }.map(transform)
 
   def transform(op: lifted.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause = op match {
     case lifted.Operation(name, lifted.BlockLit(tparams, params, body)) =>
+      // TODO note block parameters
       Clause(params.map(transform), transform(body))
   }
 

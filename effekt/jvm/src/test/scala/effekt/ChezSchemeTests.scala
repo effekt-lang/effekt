@@ -61,6 +61,8 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "io", // async io is only implemented for monadic JS
 
     examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
+
+    examplesDir / "pos" / "issue429.effekt",
   )
 }
 

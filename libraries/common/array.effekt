@@ -4,17 +4,16 @@ import effekt
 import exception
 import list
 
-// Primitive operations:
-
 /**
  * A mutable 0-indexed fixed-sized array.
  */
 extern type Array[T]
 
 /**
- * Violated Postcondition: Fields contain values
+ * Allocates a new array of size `size`, keeping its values _undefined_.
+ * Prefer using `array` constructor instead to ensure that values are defined.
  */
-extern global def unsafeFresh[T](size: Int): Array[T] =
+extern global def allocate[T](size: Int): Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
@@ -22,6 +21,35 @@ extern global def unsafeFresh[T](size: Int): Array[T] =
     ret %Pos %z
   """
 
+/**
+ * Creates a new Array of size `size` filled with the value `init`
+ */
+extern global def array[T](size: Int, init: T): Array[T] =
+  ml "Array.array (${size}, ${init})"
+  default {
+    val arr = allocate[T](size);
+    each(0, size) { i =>
+      unsafeSet(arr, i, init)
+    };
+    arr
+  }
+
+/**
+ * Converts a List `list` to an Array
+ */
+def fromList[T](list: List[T]): Array[T] = {
+  val listSize = list.size();
+  val arr = allocate(listSize);
+
+  foreachIndex(list) { (i, head) =>
+    arr.unsafeSet(i, head)
+  }
+  return arr;
+}
+
+/**
+ * Gets the length of the array in constant time.
+ */
 extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
@@ -32,7 +60,10 @@ extern pure def size[T](arr: Array[T]): Int =
   """
 
 /**
- * Unchecked Precondition: Index in bounds
+ * Gets the element of the `arr` at given `index` in constant time.
+ * Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
+ *
+ * Prefer using `get` instead.
  */
 extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
@@ -50,8 +81,11 @@ function array$set(arr, index, value) {
 }
 """
 
-/**
- * Unchecked Precondition: Index in bounds
+ /**
+ * Sets the element of the `arr` at given `index` to `value` in constant time.
+ * Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
+ *
+ * Prefer using `set` instead.
  */
 extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   js "array$set(${arr}, ${index}, ${value})"
@@ -68,7 +102,7 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
 def copy[T](arr: Array[T]): Array[T] = {
   with on[OutOfBounds].default { <> }; // should not happen
   val len = arr.size;
-  val newArray = unsafeFresh[T](len);
+  val newArray = allocate[T](len);
   copy[T](arr, 0, newArray, 0, len);
   newArray
 }
@@ -94,22 +128,17 @@ def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int):
 // Derived operations:
 
 /**
- * Creates a new Array of size `size` filled with the value `init`
+ * Gets the element of the `arr` at given `index` in constant time,
+ * throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
  */
-extern global def fresh[T](size: Int, init: T): Array[T] =
- ml "Array.array (${size}, ${init})"
- default {
-    val arr = unsafeFresh[T](size);
-    each(0, size) { i =>
-      unsafeSet(arr, i, init)
-    };
-    arr
-  }
-
 def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
   if (index >= 0 && index < arr.size) arr.unsafeGet(index)
   else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
 
+/**
+ * Sets the element of the `arr` at given `index` to `value` in constant time,
+ * throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
+ */
 def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
   if (index >= 0 && index < arr.size) unsafeSet(arr, index, value)
   else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
@@ -119,7 +148,7 @@ def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
  * and returns a value that will be on that position in the resulting array
  */
 def build[T](size: Int) { index: Int => T }: Array[T] = {
-  val arr = unsafeFresh[T](size);
+  val arr = allocate[T](size);
   each(0, size) { i =>
     unsafeSet(arr, i, index(i))
   };
@@ -128,24 +157,11 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
 
 // Utility functions:
 
-/**
- * Converts a List `list` to an Array
- */
-def fromList[T](list: List[T]): Array[T] = {
-  val listSize = list.size();
-  val arr = unsafeFresh(listSize);
-
-  foreachIndex(list) { (i, head) =>
-    unsafeSet(arr, i, head)
-  }
-  return arr;
-}
-
 def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
   var l = Nil[T]()
   while (i >= 0) {
-    l = Cons(unsafeGet(arr, i), l)
+    l = Cons(arr.unsafeGet(i), l)
     i = i - 1
   }
   l
