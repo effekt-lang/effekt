@@ -16,11 +16,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   val prelude = "#!/usr/local/bin/hvm --script\n\n(import (hvm))\n\n"
 
   def toDoc(expr: Term): Doc = expr match {
-      case Lam(tag, nam, bod)         => toDoc(tag)<+>string("λ")<>toDoc(nam)<+>toDoc(bod)
+      case Lam(tag, nam, bod)         => toDoc(tag)<+>string("λ")<>toDoc(nam)<>line<>nest(toDoc(bod))
       //case Chn(tag, nam, bod)         => toDoc(tag)<+>string("λ$")<>toDoc(nam)<+>toDoc(bod)
       case Var(nam)                   => string(nam)
       case Lnk(nam)                   => string("$") <> string(nam)
-      case Let(pat, value, nxt)       => line<>string("let")<+> toDoc(pat) <+> string("=") <+> toDoc(value)<>string(";")<+>toDoc(nxt)
+      case Let(pat, value, nxt)       => string("let")<+> toDoc(pat) <+> string("=") <+> toDoc(value)<>string(";")<>line<>nest(toDoc(nxt))
       case Bnd(fun, ask, value, nxt) => string("do")<+>string(fun)<+>braces(bndToDoc(Bnd(fun, ask, value, nxt)))
       case Use(None, value, nxt) => ???
       case Use(Some(name), value, nxt) => string("use")<+>string(name)<+>string("=")<+>toDoc(value)<+>string(";")<+>toDoc(nxt)
@@ -36,7 +36,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case Lst(els)                   => brackets(folddoc((els map toDoc), (x, y) => x <> String(",") <+> y))
       case Opx(op, fst, snd)          => parens(toDoc(op) <+> toDoc(fst) <+> toDoc(snd))
       case Mat(args, rules)           => line<>string("match") <+> hsep((args map toDoc), string(","))<>line<> braces(vsep((rules map ((x)=>hsep(x.pats map toDoc)<>string(":")<+>toDoc(x.body))), string("; ")))
-      case Swt(args, rules)           => line<>string("switch") <+> hsep((args map toDoc), string(","))<>line<> braces(vsep((rules map ((x)=>hsep(x.pats map toDoc)<>string(":")<+>toDoc(x.body))), string("; ")))
+      case Swt(args, rules)           => string("switch") <+> hsep((args map toDoc), string(","))<>line<> braces(vsep((rules map ((x)=>hsep(x.pats map toDoc)<>string(":")<>line<>nest(toDoc(x.body)))), string("; ")))
       //case NewMAtch(arg, rules) => string("match")
       case Era                        => string("*")
       case Err                        => string("<Invalid>")
