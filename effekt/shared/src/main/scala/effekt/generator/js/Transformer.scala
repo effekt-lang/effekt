@@ -20,6 +20,8 @@ trait Transformer {
 
   val jsFeatureFlags: List[String] = List("js")
 
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+
   def run(body: js.Expr): js.Stmt
 
   def shouldExport(id: Id)(using D: DeclarationContext): Boolean = true
@@ -123,6 +125,14 @@ trait Transformer {
 
   def freshName(s: String): JSName =
     JSName(s + Symbol.fresh.next())
+
+  def escape(scalaString: String): String =
+    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
+      escapeSeqs.get(c) match {
+        case Some(s) => acc ++= s
+        case None => acc += c
+      }
+    }.toString()
 
 
   // Separate Compilation (Website)

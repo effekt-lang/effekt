@@ -43,6 +43,8 @@ object TransformerCallCC extends Transformer {
 
 trait Transformer {
 
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
@@ -216,7 +218,7 @@ trait Transformer {
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("#f")
 
-    case Literal(s: String, _)  => ChezString(chez.adaptEscapes(s))
+    case Literal(s: String, _)  => ChezString(adaptEscapes(escape(s)))
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
@@ -254,4 +256,12 @@ trait Transformer {
 
     List(getter, setter)
   }
+
+  def escape(scalaString: String): String =
+    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
+      escapeSeqs.get(c) match {
+        case Some(s) => acc ++= s
+        case None => acc += c
+      }
+    }.toString()
 }
