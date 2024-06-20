@@ -98,7 +98,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("f")
     parseExpr("f(a)")
     parseExpr("f(a, 42)")
-    parseExpr("\\u{0000}")
+    parseExpr("\\u0000")
 
     parseExpr("l.foreach { _ => 42 }")
 
@@ -622,6 +622,9 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExternDef("extern interface State[A]")
     parseExternDef("extern resource withFile: [A](String) { () => A } => A")
     parseExternDef("extern include \"path/to/file\"")
+    parseExternDef("extern js \"\"\"console.log(42)\"\"\"")
+    parseExternDef("extern pure def read(s: String): String = default { s }")
+    parseExternDef("extern def read(s: String): String = \"${s}\"")
     parseProgram(
       "extern def println(value: String): Unit =" +
       "js \"$effekt.println(${value})\"" +

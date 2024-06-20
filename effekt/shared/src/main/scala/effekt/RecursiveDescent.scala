@@ -14,7 +14,7 @@ import scala.util.boundary
 import scala.util.boundary.break
 
 
-case class Fail(message: String, position: Int) extends Throwable(message, null, false, false)
+case class Fail(message: String, position: Int) extends Throwable(null, null, false, false)
 
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
 
@@ -467,11 +467,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `interface` => externInterface()
         case `resource`  => externResource()
         case `include`   => externInclude()
+        // extern """..."""
         case s: Str      => externString()
-        // could be either a capture set or a feature flag
-        case id: Ident   =>
+        case Ident(_) | `pure` =>
+          // extern IDENT def ...
           if (peek(2, `def`)) externFun()
+          // extern IDENT """..."""
           else externString()
+        // extern {...} def ...
         case _ => externFun()
       }
 
@@ -505,29 +508,32 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val ff = maybeFeatureFlag()
       next().kind match {
         case Str(contents, _) => ExternInclude(ff, "", Some(contents))
-        case _ => fail("Expected string literal")
+        case _ => fail("Expected string literal.")
       }
 
   def externFun(): Def =
     nonterminal:
       ((`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
         case capt ~ id ~ (tps, vps, bps) ~ ret =>
-          val bodies =
-            manyWhile(
-              externBody(),
-              peek.kind match {
-                case Str(_, _) | Ident(_) | `{` => true
-                case _                    => false
-            })
+          val bodies = manyWhile(externBody(), isExternBodyStart)
           ExternDef(capt, id, tps, vps, bps, ret, bodies)
       }
 
   def externBody(): ExternBody =
     nonterminal:
-      peek(1).kind match {
-        case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
-        case _   => ExternBody.StringExternBody(maybeFeatureFlag(), template())
+      peek.kind match {
+        case _: Ident => peek(1).kind match {
+          case `{` => ExternBody.EffektExternBody(featureFlag(), `{` ~> stmts() <~ `}`)
+          case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
+        }
+        case _ => ExternBody.StringExternBody(maybeFeatureFlag(), template())
       }
+
+  private def isExternBodyStart: Boolean =
+    peek.kind match {
+      case Str(_, _) | Ident(_) | `{` => true
+      case _                          => false
+    }
 
   def template(): Template[Term] =
     nonterminal:
@@ -1261,9 +1267,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     components.toList
 
   inline def someWhile[T](p: => T, lookahead: TokenKind): List[T] =
+    someWhile(p, peek(lookahead))
+
+  inline def someWhile[T](p: => T, predicate: => Boolean): List[T] =
     val components: ListBuffer[T] = ListBuffer.empty
     components += p
-    while (peek(lookahead)) {
+    while (predicate) {
       components += p
     }
     components.toList
