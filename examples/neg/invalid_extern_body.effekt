@@ -1,3 +1,0 @@
-extern def jsPrintThree(): Unit = 1
-
-def main() = jsPrintThree()

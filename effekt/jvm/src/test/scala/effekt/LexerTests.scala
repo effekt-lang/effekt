@@ -84,6 +84,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("\" \\n\"", Str(" \n", false), EOF)
     assertTokensEq("\" \\t \"", Str(" \t ", false), EOF)
     assertFailure("\"\\k\"")
+    assertTokensEq("\"\\u001b\"", Str("\u001b", false), EOF)
   }
 
   test("characters") {
@@ -91,8 +92,9 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("'\\'", Chr('\\'), EOF)
     assertTokensEq("'\n'", Chr('\n'), EOF)
     assertTokensEq("'\t'", Chr('\t'), EOF)
-    assertTokensEq("\\u{0000}", Chr(0), EOF)
-    assertTokensEq("\\u{FFFF}", Chr(65535), EOF)
+    assertTokensEq("\\u0000", Chr(0), EOF)
+    assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
+    assertTokensEq("\\u10FFFF", Chr(0x10FFFF), EOF)
   }
 
   test("multi line strings") {

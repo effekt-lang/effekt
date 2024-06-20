@@ -407,6 +407,10 @@ class Lexer(source: Source) {
           expect('\\')
           peek() match {
             case Some('\"') | Some('\\') | Some('n') | Some('t') => consume()
+            case Some('u') => {
+              consume()
+              consumeWhile(c => !c.isWhitespace && c != '"')
+            }
             case _ => err("Invalid escape sequence.")
           }
         }
@@ -423,7 +427,12 @@ class Lexer(source: Source) {
     val s = slice(st, current - offset)
     // Unescape the following sequences: control: `\b`, `\t`, `\n`, `\f`, `\r`; escape:  `\\`, `\"`, `\'`
     // For now, we only support a subset
-    val unescaped = StringContext.processEscapes(s)
+    val unescaped = 
+      try {
+        StringContext.processEscapes(s)
+      } catch {
+        case e: StringContext.InvalidEscapeException => err("Contains invalid escape sequence.")
+      }
     TokenKind.Str(unescaped, delim.isMultiline)
   }
 
@@ -440,9 +449,8 @@ class Lexer(source: Source) {
   }
 
   def matchUnicodeLiteral(): TokenKind = {
-    consumeWhile(_ != '}')
-    expect('}')
-    val n = slice(start + 3, current - 1)
+    consumeWhile(!_.isWhitespace)
+    val n = slice(start + 2, current)
     try {
       TokenKind.Chr(Integer.parseInt(n, 16))
     } catch {
@@ -563,7 +571,7 @@ class Lexer(source: Source) {
       case '$' => TokenKind.`${`
       // --- literals ---
       case '\'' => matchChar()
-      case '\\' if nextMatches("u{") => matchUnicodeLiteral()
+      case '\\' if nextMatches("u") => matchUnicodeLiteral()
       case '\"' if nextMatches("\"\"") => matchString(`"""`)
       case '\"' => matchString(`"`)
       case c if c.isDigit => matchNumber()
