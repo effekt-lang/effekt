@@ -568,12 +568,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => fail("Expected string literal.")
       }
 
-  // TODO uncomment after rebase:
-  //  def featureFlag(): FeatureFlag =
-  //    ident() match {
-  //      case "default" => FeatureFlag.Default
-  //      case flag => FeatureFlag.NamedFeatureFlag(flag)
-  //    }
 
   def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
