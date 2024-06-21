@@ -85,6 +85,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("\" \\t \"", Str(" \t ", false), EOF)
     assertFailure("\"\\k\"")
     assertTokensEq("\"\\u001b\"", Str("\u001b", false), EOF)
+    assertTokensEq(" \"\"\"= #\"\\n\";\"\"\" ", Str("= #\"\n\";", true), EOF)
   }
 
   test("characters") {
