@@ -130,13 +130,24 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     }
 
 
-  // The actual parser itself
-  // ------------------------
-  // We use the following naming conventions for nonterminals:
-  //
-  //  - maybe[...]s: zero or more times
-  //  - [...]s: one or more times
-  //  - [...]opt: optional type annotation
+  /* The actual parser itself
+  * ------------------------
+  * We use the following naming conventions for nonterminals:
+  *
+  *  - maybe[...]s: zero or more times
+  *  - [...]s: one or more times
+  *  - [...]opt: optional type annotation
+  *
+  * Furthermore, we try to adhere to the following conventions:
+  * - Use `backtrack` with caution and as a last resort. Try to disambiguate the grammar by using `peek` and also try to
+  *   only use `backtrack` on "shallow" non-terminals, that is, not on a non-terminal containing an expression,
+  *   a statement or a type.
+  * - For the same reason, there is no function `manyWhile[T](p: => T): List[T]` but only 
+  *   `manyWhile[T](p: => T, predicate: => Boolean): List[T]` as this one does not use backtracking.
+  * - Use `fail` for reporting errors.
+  * - Functions consuming tokens have an empty parameter list `()`, functions that do not, have no parameter list (e.g. peek)
+  * - All non-terminals are to use the `nonterminal` function for keeping track of positions.
+  */
 
   // tokens that delimit a statement
   def returnPosition: Boolean = peek(`}`) || peek(`case`) || peek(`}>`) || peek(EOF)
@@ -1157,11 +1168,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def blockParamOpt(): BlockParam =
     nonterminal:
-      BlockParam(idDef(), backtrack(blockTypeAnnotation()))
-
-  // TODO this needs to be implemented, once the PR is rebased onto master
-  //  def blockParamOpt: BlockParam =
-  //    BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
+      BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
 
 
   def maybeValueTypes(): List[ValueType] =
