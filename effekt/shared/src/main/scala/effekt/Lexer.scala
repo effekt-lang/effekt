@@ -413,7 +413,7 @@ class Lexer(source: Source) {
               consume()
               consumeWhile(c => !c.isWhitespace && c != '"')
             }
-            case _ => err("Invalid escape sequence.")
+            case _ => err("Invalid escape sequence.", current - 1, current)
           }
         }
         case Some('$') if peekN(2).contains('{') => {
@@ -438,8 +438,7 @@ class Lexer(source: Source) {
         try {
           StringContext.processEscapes(s)
         } catch {
-          // TODO: Report the position of the invalid escape to the user, the position is in `e.index`.
-          case e: StringContext.InvalidEscapeException => err("Contains invalid escape sequence.")
+          case e: StringContext.InvalidEscapeException => err("Contains invalid escape sequence.", e.index, e.index)
         }
       }
 
