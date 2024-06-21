@@ -147,11 +147,6 @@ object Lexer {
 
   val keywordMap: immutable.HashMap[String, TokenKind] =
     immutable.HashMap.from(TokenKind.keywords.map { case t => t.toString -> t })
-
-  enum Mode {
-    case Normal
-    case Interpolated
-  }
 }
 
 /**
@@ -165,24 +160,23 @@ class Lexer(source: Source) {
   var start: Int = 0
   /** The absolute index of the lexer's reading 'head' in the source string. Example
    * "hello world"
-   *     ^
-   *  chars.next() => current = 3
+   *   ^
+   *  current = 1
+   *  chars.next() = 'e'
    */
   var current: Int = 0
   /** The sequence of tokens the source strings contains. Returned as the result by [[Lexer.run()]] */
   val tokens: mutable.ListBuffer[Token] = mutable.ListBuffer.empty
   // For future improvement, this is probably more performant than using substring on the source
-  val currLexeme: mutable.StringBuilder = mutable.StringBuilder()
-  /** A peekable iterator of the source string. This is used instead of directly indexing the source string. */
+  // val currLexeme: mutable.StringBuilder = mutable.StringBuilder()
+  /** A peekable iterator of the source string. This is used instead of directly indexing the source string.
+  * This may only be advanced by using the `consume` function, otherwise positions cannot be keept track of.
+  */
   val chars: BufferedIterator[Char] = source.content.iterator.buffered
 
   val str: String = source.content
 
   lazy val whitespace: Regex = """([ \t\r\n])""".r // single whitespace characters
-  //lazy val nameFirst: Regex = """[a-zA-Z_]""".r
-  //lazy val nameRest: Regex = """[a-zA-Z0-9_!?$]""".r
-  //lazy val nameBoundary: Regex = """(?!%s)""".format(nameRest).r
-  //lazy val name: Regex = "%s(%s)*%s".format(nameFirst, nameRest, nameBoundary).r
   val whitespaces = Set(' ', '\t', '\r', '\n')
   val nameFirst = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ List('_').iterator).toSet
   val nameRest = ('a'.to('z').iterator ++ 'A'.to('Z').iterator ++ '0'.to('9').iterator ++ List('_', '!', '?', '$').iterator).toSet
@@ -236,6 +230,7 @@ class Lexer(source: Source) {
   def makeToken(kind: TokenKind): Token =
     Token(start, current - 1, kind)
 
+  /** Used for reporting erros while lexing. These are only caught by the `lex` function. */
   def err(msg: String, start: Int = start, end: Int = current): Nothing =
     throw LexerError(msg, start, end)
 
@@ -283,7 +278,6 @@ class Lexer(source: Source) {
         val relativeStart = source.offsetToPosition(start)
         val relativeEnd = source.offsetToPosition(end)
         val range = Range(relativeStart, relativeEnd)
-        // TODO create separate error kind for lexer error
         ctx.abort(effekt.util.messages.ParseError(msg, Some(range)))
       }
     }
@@ -297,6 +291,8 @@ class Lexer(source: Source) {
     var eof = false
     while (!eof && err.isEmpty) {
       val kind =
+        // If the last token was `}` and we are currently inside unquotes, remember to directly continue
+        // lexing a string
         if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.pop() == `${{`) {
           // TODO: catch error
           val delim = delimiters.pop().asInstanceOf[StrDelim]
@@ -345,6 +341,11 @@ class Lexer(source: Source) {
     }
   }
 
+  /** This is for remembering delimiters of strings and unquotes for string interpolation (`${`, `}`).
+  * If we encounter a `"` or `"""`, we push it onto the stack and pop from the stack if we see such
+  * delimiters again while lexing a string.
+  * Likewise, if we are at a `${`, push it onto the stack and pop from the stack upon seeing a `}`.
+  */
   val delimiters = mutable.Stack[Delimiter]()
   sealed trait Delimiter
   sealed trait InterpolateDelim extends Delimiter
@@ -373,8 +374,9 @@ class Lexer(source: Source) {
   case object `"""` extends StrDelim
 
   /** Matches a string literal -- both single- and multi-line strings.
-   *  Strings may contain arbitrary escaped characters, these are not validated.
-   *  Strings may also contain quotes, i.e., "f = ${x + 1}" that include arbitrary expressions.
+   * Strings may contain space characters (e.g. \n, \t, \r), which are stored unescaped for single-line strings and
+   * escaped for multi-line strings.
+   * Strings may also contain unquotes, i.e., "f = ${x + 1}" that include arbitrary expressions.
    */
   def matchString(delim: StrDelim, continued: Boolean = false): TokenKind = {
     if (nextMatches(delim.toString)) return TokenKind.Str("", delim.isMultiline)
@@ -406,7 +408,7 @@ class Lexer(source: Source) {
         case Some('\\') => {
           expect('\\')
           peek() match {
-            case Some('\"') | Some('\\') | Some('n') | Some('t') => consume()
+            case Some('\"') | Some('\\') | Some('n') | Some('t') | Some('r') => consume()
             case Some('u') => {
               consume()
               consumeWhile(c => !c.isWhitespace && c != '"')
@@ -444,16 +446,19 @@ class Lexer(source: Source) {
     TokenKind.Str(stringContent, delim.isMultiline)
   }
 
+  /** Matches a character: '.+' */
   def matchChar(): TokenKind = {
     if (peekMatches(_ == '\'')) err("Empty character literal.")
     consumeWhile(_ != '\'')
     expect('\'')
+    // exclude opening and closing '
     val cs = slice(start + 1, current - 1)
     TokenKind.Chr(cs.codePointAt(0))
   }
 
   lazy val hexadecimal = ('a' to 'f') ++ ('A' to 'F') ++ ('0' to '9')
 
+  /** \u<HEXADECIMAL>+ */
   def matchUnicodeLiteral(): TokenKind = {
     consumeWhile(hexadecimal.contains(_))
     val n = slice(start + 2, current)
@@ -481,15 +486,15 @@ class Lexer(source: Source) {
     TokenKind.Comment(comment)
   }
 
-  /** Matches a single-line comment. */
+  /** Matches a single-line comment delimited by // and a newline. */
   def matchComment(): TokenKind = {
-    var newline = false
-    while (!newline) {
+    var reachedNewline = false
+    while (!reachedNewline) {
       // peek to ensure the newline is not part of the comment
       peek() match {
         // comment is terminated when encountering a new line
-        case Some('\n') => newline = true
-        case None => newline = true
+        case Some('\n') => reachedNewline = true
+        case None => reachedNewline = true
         case _ => consume()
       }
     }
