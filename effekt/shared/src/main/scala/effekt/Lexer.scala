@@ -372,9 +372,9 @@ class Lexer(source: Source) {
   case object `"` extends StrDelim
   case object `"""` extends StrDelim
 
-  /** Matches a string literal -- both single- and multi-line strings. Strings may contain arbitrary escaped
-   * characters, these are not validated. Strings may also contain quotes, i.e., "f = ${x + 1}" that include arbitrary
-   * expressions.
+  /** Matches a string literal -- both single- and multi-line strings.
+   *  Strings may contain arbitrary escaped characters, these are not validated.
+   *  Strings may also contain quotes, i.e., "f = ${x + 1}" that include arbitrary expressions.
    */
   def matchString(delim: StrDelim, continued: Boolean = false): TokenKind = {
     if (nextMatches(delim.toString)) return TokenKind.Str("", delim.isMultiline)
@@ -425,15 +425,23 @@ class Lexer(source: Source) {
       }
     }
     val s = slice(st, current - offset)
-    // Unescape the following sequences: control: `\b`, `\t`, `\n`, `\f`, `\r`; escape:  `\\`, `\"`, `\'`
-    // For now, we only support a subset
-    val unescaped = 
-      try {
-        StringContext.processEscapes(s)
-      } catch {
-        case e: StringContext.InvalidEscapeException => err("Contains invalid escape sequence.")
+
+    val stringContent =
+      if (delim.isMultiline) {
+        // Do not unescape multiline strings at all for multiline strings (see comments in PR #495)
+        s
+      } else {
+        // Unescape the following sequences: control: `\b`, `\t`, `\n`, `\f`, `\r`; escape:  `\\`, `\"`, `\'`
+        // For now, we only support a subset determined by `StringContext.processEscapes`
+        try {
+          StringContext.processEscapes(s)
+        } catch {
+          // TODO: Report the position of the invalid escape to the user, the position is in `e.index`.
+          case e: StringContext.InvalidEscapeException => err("Contains invalid escape sequence.")
+        }
       }
-    TokenKind.Str(unescaped, delim.isMultiline)
+
+    TokenKind.Str(stringContent, delim.isMultiline)
   }
 
   def matchChar(): TokenKind = {
