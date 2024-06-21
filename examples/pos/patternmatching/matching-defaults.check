@@ -1,4 +1,4 @@
 default
 [warning] examples/pos/patternmatching/matching-defaults.effekt:5:3: Unreachable case.
   case None() => "world"
-  ^
+  ^^^^^^^^^^^^^^^^^^^^^^

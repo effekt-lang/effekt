@@ -2,12 +2,11 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.*
-import effekt.util.{SourceTask, VirtualSource}
+import effekt.util.{ VirtualSource }
 import effekt.util.messages.ParseError
-import kiama.parsing.{Failure, Input, NoSuccess, ParseResult, Parsers, Success}
-import kiama.util.{Position, Positions, Range, Source, StringSource}
+import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
+import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
-import scala.util.matching.Regex
 import scala.language.implicitConversions
 
 /**
@@ -19,20 +18,21 @@ object Parser extends Phase[Source, Parsed] {
 
   val phaseName = "parser"
 
-  /**
-   * Note: The parser needs to be created freshly since otherwise the memo tables will maintain wrong results for
-   * new input sources. Even though the contents differ, two sources are considered equal since only the paths are
-   * compared.
-   */
-  def parser(implicit C: Context) = new EffektParsers(C.positions)
-
-  def run(source: Source)(implicit C: Context) = source match {
+  def run(source: Source)(implicit C: Context): Option[PhaseResult.Parsed] = source match {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
       //println(s"parsing ${source.name}")
-      Context.timed(phaseName, source.name) { parser.parse(source) }
-  } map { tree => Parsed(source, tree) }
+      Context.timed(phaseName, source.name) {
+        val lexer = effekt.lexer.Lexer(source)
+        val tokens = lexer.lex()
+        val parser = RecursiveDescent(C.positions, tokens, source)
+        parser.parse(Input(source, 0))
+      }
+  } map { tree =>
+    Parsed(source, tree)
+  }
 }
+
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
@@ -353,7 +353,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val valDef: P[Def] =
-     `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
+    `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
 
   lazy val varDef: P[Def] =
     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`in` ~/> idRef).? ~ (`=` ~/> stmt) ^^ {
@@ -923,7 +923,6 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val integerLiteral  = regex("([-+])?(0|[1-9][0-9]*)".r, s"Integer literal")
   lazy val doubleLiteral   = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r, "Double literal")
   lazy val stringLiteral   = regex("""\"(\\.|\\[\r?\n]|[^\r\n\"])*+\"""".r, "String literal")
-  // TODO add escape sequences
   lazy val charLiteral   = regex("""'.'""".r, "Character literal") ^^ { s => s.codePointAt(1) }
   lazy val unicodeChar   = regex("""\\u\{[0-9A-Fa-f]{1,6}\}""".r, "Unicode character literal") ^^ {
     case contents =>  Integer.parseInt(contents.stripPrefix("\\u{").stripSuffix("}"), 16)

@@ -1,3 +1,3 @@
 [error] examples/neg/object_operation_annotation.effekt:5:5: Unexpected type annotation on operation bar.
     def bar(): Int = 42
-    ^
+    ^^^^^^^^^^^^^^^^^^^

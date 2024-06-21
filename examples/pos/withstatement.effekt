@@ -11,8 +11,8 @@ def bar { f: (Int, String) => Unit / {}}: Unit =
 
 def user(): Unit = {
     with printer;
-    with x: Int = foreach([1,2,3]);
-    with (a, b) = bar;
+    with val x: Int = foreach([1,2,3]);
+    with val (a, b) = bar;
     println(show(x) ++ b);
     val z = {
         val x = 2;

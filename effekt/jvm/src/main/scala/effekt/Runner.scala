@@ -251,6 +251,7 @@ object LLVMRunner extends Runner[String] {
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
   override def build(path: String)(using C: Context): String =
+
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"

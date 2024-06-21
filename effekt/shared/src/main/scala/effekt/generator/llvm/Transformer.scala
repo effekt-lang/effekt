@@ -13,6 +13,8 @@ object Transformer {
 
   val llvmFeatureFlags: List[String] = List("llvm")
 
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, statement) =>
       given MC: ModuleContext = ModuleContext();
@@ -768,4 +770,12 @@ object Transformer {
 
   def setStackPointer(stackPointer: Operand)(using C: BlockContext) =
     C.stackPointer = stackPointer;
+
+  def escape(scalaString: String): String =
+    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
+      escapeSeqs.get(c) match {
+        case Some(s) => acc ++= s
+        case None => acc += c
+      }
+    }.toString()
 }

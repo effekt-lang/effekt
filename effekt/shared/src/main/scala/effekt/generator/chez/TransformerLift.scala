@@ -21,6 +21,8 @@ import scala.language.implicitConversions
  */
 object TransformerLift {
 
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+
   def runMain(main: ChezName): chez.Expr =
     val monomorphized = false
     if (monomorphized) chez.Call(chez.Call(main), List(CPS.id))
@@ -294,7 +296,7 @@ object TransformerLift {
 
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _) => chez.RawValue("#f")
-    case Literal(s: String, _) => ChezString(chez.adaptEscapes(s))
+    case Literal(s: String, _) => ChezString(chez.adaptEscapes(escape(s)))
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
     case ValueVar(id, _)  => chez.Variable(nameRef(id))
@@ -421,4 +423,11 @@ object TransformerLift {
     List(getter, setter)
   }
 
+  def escape(scalaString: String): String =
+    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
+      escapeSeqs.get(c) match {
+        case Some(s) => acc ++= s
+        case None => acc += c
+      }
+    }.toString()
 }
