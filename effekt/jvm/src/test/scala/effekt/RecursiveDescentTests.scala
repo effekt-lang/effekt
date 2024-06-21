@@ -605,12 +605,12 @@ class RecursiveDescentTests extends munit.FunSuite {
         |def foo() = 42
         |""".stripMargin)
 
-    println(parseProgram(
+    parseProgram(
       """module trailing_comment
         |
         |def main() = ()
         |
-        |// foo""".stripMargin))
+        |// foo""".stripMargin)
   }
 
   test("Extern definition") {
