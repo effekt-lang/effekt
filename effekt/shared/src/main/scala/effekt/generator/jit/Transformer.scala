@@ -95,7 +95,7 @@ object Transformer {
             case core.BlockType.Function(_, _, List(vparam), List(), result) =>
               // resume(value)
               val resumeArg = jit.Var(TmpValue(), transform(vparam))
-              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe))) // TODO transform type more precisely
+              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe)))
               (k, jit.Abs(List(resumeArg),
                  jit.Resume(k, List(resumeArg))),
                transform(vparam))
@@ -103,7 +103,7 @@ object Transformer {
             case core.BlockType.Function(_, _, List(), List(bparam: core.BlockType.Function), result) =>
               // resume{ block }
               val resumeArg = jit.Var(TmpBlock(), transform(bparam))
-              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe))) // TODO transform type more precisely
+              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe)))
               (k, jit.Abs(List(resumeArg),
                  jit.Resumed(k, jit.App(resumeArg, bparams map transform))),
                transform(bparam.result))
@@ -153,7 +153,7 @@ object Transformer {
       C.abort(s"Unsupported ${core.PrettyPrinter.format(annotatedType)} literal" +
         s" (or unsupported scala representation as ${value.getClass}).")
     case core.Pure.PureApp(b, targs, vargs) => jit.App(transform(b), vargs map transform)
-    case core.Pure.Make(data, tag, vargs) => jit.Construct(data.name, tag, vargs map transform)
+    case core.Pure.Make(data, tag, vargs) => jit.The(transform(data), jit.Construct(data.name, tag, vargs map transform))
     case core.Pure.Select(target, field, annotatedType: ValueType.Data) =>
       val dField = DC.getField(field)
       val dConstructor = dField.constructor
