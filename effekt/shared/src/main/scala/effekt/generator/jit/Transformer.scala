@@ -52,6 +52,7 @@ object Transformer {
         transform(result),
         Purity.Effectful) // FIXME
     case core.BlockType.Interface(symbols.builtins.RegionSymbol, _) => jit.Region
+    case core.BlockType.Interface(symbols.builtins.TState.interface, List(to)) => jit.Ref(transform(to))
     case core.BlockType.Interface(name, _) if symbols.builtins.rootTypes.values.exists(_ == name) =>
       C.error(s"Unsupported builtin type ${core.PrettyPrinter.format(t)}.")
       jit.Top
@@ -66,6 +67,11 @@ object Transformer {
     case core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => jit.Var(id, transform(annotatedTpe))
     case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       jit.Abs(((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams), transform(body))
+    case core.Block.Member(ref, symbols.builtins.TState.put, core.BlockType.Function(_,_,List(vtpe),_,_)) =>
+      val v = jit.Var(TmpValue(), transform(vtpe))
+      jit.Abs(List(v), jit.Store(transform(ref), v))
+    case core.Block.Member(ref, symbols.builtins.TState.get, annotatedTpe) =>
+      jit.Abs(Nil, jit.Load(transform(ref)))
     case core.Block.Member(block, field, annotatedTpe) =>
       // `block` does not have side-effects, so we can defer it until the member call
       val core.BlockType.Interface(ifceTag, targs) = core.Type.inferType(block) : @unchecked
