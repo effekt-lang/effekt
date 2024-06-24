@@ -572,7 +572,6 @@ class Lexer(source: Source) {
       case '*' => `*`
       case '+' if nextMatches('+') => `++`
       case '+' => `+`
-      case '-' if peek().exists(_.isDigit) => matchNumber()
       case '-' => `-`
       case '$' if nextMatches('{') => {
         delimiters.push(`${{`)
