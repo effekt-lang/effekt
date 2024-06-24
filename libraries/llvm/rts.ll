@@ -596,7 +596,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 
 ; RTS initialization
 
-define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
+define fastcc void @topLevel(%Pos %val, %Sp noalias %sp) {
     %base = load %Base, ptr @base
     call void @free(%Base %base)
 
@@ -609,7 +609,6 @@ define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
     call void @free(%Base %base.1)
     call void @free(%Base %base.2)
 
-    call void @free(%Env %env)
     ret void
 }
 
@@ -652,13 +651,8 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
     %fpp = getelementptr ptr, ptr %arrayp, i64 0
     %fp = load ptr, ptr %fpp
 
-    ; Store the argument (0th index is evidence)
-    %env = call %Env @malloc(i64 1048576)
-    %ev2 = getelementptr {%Int, %Int}, %Env %env, i64 0, i32 1
-    store i64 %arg, ptr %ev2
-
     ; call
-    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
+    %result = call fastcc %Pos %fp(%Obj %obj, i64 0, i64 %arg, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
@@ -686,13 +680,8 @@ define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
     %fpp = getelementptr ptr, ptr %arrayp, i64 0
     %fp = load ptr, ptr %fpp
 
-    ; Store the argument (0th index is evidence)
-    %env = call %Env @malloc(i64 1048576)
-    %arg_pos = getelementptr {%Int, %Pos}, %Env %env, i64 0, i32 1
-    store %Pos %arg, ptr %arg_pos
-
     ; call
-    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
+    %result = call fastcc %Pos %fp(%Obj %obj, i64 0, %Pos %arg, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
@@ -720,8 +709,7 @@ define void @run(%Neg %f) {
     %fp = load ptr, ptr %fpp
 
     ; call
-    %env = call %Env @malloc(i64 1048576)
-    %result = call fastcc %Pos %fp(%Obj %obj, %Env %env, %Sp %sp)
+    %result = call fastcc %Pos %fp(%Obj %obj, i64 0, %Sp %sp)
 
     ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
     store %Sp %base, ptr @base
