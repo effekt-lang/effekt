@@ -769,8 +769,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def eqExpr(): Term = infix(relExpr, `===`, `!==`)
   def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
   def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
-  def mulExpr(): Term = infix(callExpr, `*`, `/`)
+  def mulExpr(): Term = infix(prefixExpr, `*`, `/`)
+  def prefixExpr(): Term = prefix(callExpr, `+`, `-`)
 
+  def prefix(nonTerminal: () => Term, ops: TokenKind*): Term = {
+    if (ops.contains(peek.kind)) {
+      val op = next().kind
+      val right = prefix(nonTerminal, ops: _*)
+      unaryOp(op, right).withRangeOf(op, right)
+    } else {
+      nonTerminal()
+    }
+  }
+  
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
     nonterminal:
       var left = nonTerminal()
@@ -783,6 +794,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // === AST Helpers ===
 
+  private def unaryOp(op: TokenKind, arg: Term): Term =
+    nonterminal:
+      Call(IdTarget(IdRef(Nil, prefixOpName(op))), Nil, List(arg), Nil)
+
   private def binaryOp(lhs: Term, op: TokenKind, rhs: Term): Term =
     nonterminal:
        if isThunkedOp(op) then
@@ -793,6 +808,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   private def isThunkedOp(op: TokenKind): Boolean = op match {
     case `||` | `&&` => true
     case _           => false
+  }
+
+  private def prefixOpName(op: TokenKind): String = op match {
+    case `-` => "prefixSub"
+    case `+` => "prefixAdd"
+    case _ => sys.error(s"Internal compiler error: not a valid prefix operator $op")
   }
 
   private def opName(op: TokenKind): String = op match {
