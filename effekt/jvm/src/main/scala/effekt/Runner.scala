@@ -179,7 +179,6 @@ object JSWebRunner extends Runner[String] {
     val jsFilePath = (out / path).unixPath
     val jsFileName = jsFilePath.split("/").last
     val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
-    val shFilePath = jsFilePath.stripSuffix(s".$extension")
     val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
     val htmlContent =
       s"""<!DOCTYPE html>
@@ -193,10 +192,7 @@ object JSWebRunner extends Runner[String] {
          |</html>
          |""".stripMargin
     IO.createFile(htmlFilePath, htmlContent, false)
-    IO.createFile(shFilePath,
-      s"#!/bin/sh\nxdg-open ${htmlFilePath} || open ${htmlFilePath} || echo \"Cannot open browser\"",
-      true)
-    shFilePath
+    C.abort(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
 }
 
 trait ChezRunner extends Runner[String] {
