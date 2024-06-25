@@ -141,19 +141,11 @@ object JSRunner extends Runner[String] {
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val mjsFilePath = (out / path).canonicalPath.escape
-    // create "executable" using shebang besides the .js file
-    //
     // NOTE: This is a hack since this file cannot use ES imports & exports
     //       because it doesn't have the .mjs ending. Sigh.
-    val jsScript = s"""
-      |const { pathToFileURL } = require('url');
-      |
-      |(async () => {
-      |  const modulePath = pathToFileURL('${mjsFilePath}');
-      |  const { main } = await import(modulePath);
-      |  main();
-      |})();
-    """.stripMargin
+    val jsScript = s"import('${mjsFilePath}').then(({main}) => { main(); })"
+
+    // create "executable" using shebang besides the .js file
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
