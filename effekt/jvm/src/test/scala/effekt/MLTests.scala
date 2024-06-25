@@ -70,6 +70,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "matchblock.effekt",
     examplesDir / "pos" / "polymorphic" / "exceptions.effekt",
     examplesDir / "pos" / "exists.effekt", // now show instance for existentials
+    examplesDir / "casestudies" / "inference.effekt.md",
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
