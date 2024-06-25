@@ -6,7 +6,7 @@ import io
 
 namespace js {
   extern js """
-    const net = require('node:net');
+    import net from 'node:net';
 
     function listen(server, port, host, listener) {
       server.listen(port, host);

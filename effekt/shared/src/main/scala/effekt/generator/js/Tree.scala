@@ -28,59 +28,43 @@ case class Export(name: JSName, expr: Expr)
 case class Module(name: JSName, imports: List[Import], exports: List[Export], stmts: List[Stmt]) {
 
   /**
-   * Generates the Javascript module skeleton for whole program compilation
+   * Generates the Javascript module skeleton for ES modules
    */
-  def commonjs: List[Stmt] = {
+  def esModule: List[Stmt] = {
     val effekt = js.Const(JSName("$effekt"), js.Object())
 
     val importStmts = imports.map {
-      // const MOD = require(PATH)
       case Import.All(name, file) =>
-        js.Const(name, js.Call(Variable(JSName("require")), List(JsString(s"./${file}"))))
-
-      // const {NAMES, ...} = require(PATH)
+      // import * as MOD from PATH
+        js.RawStmt(s"import * as ${name.name} from './${file}.mjs';")
       case Import.Selective(names, file) =>
-        js.Destruct(names, js.Call(Variable(JSName("require")), List(JsString(s"./${ file }"))))
+      // import {NAMES, ...} from PATH
+        js.RawStmt(s"import { ${names.map(_.name).mkString(", ")} } from './${file}.mjs';")
     }
 
-    val exportStatement = js.Assign(RawExpr("module.exports"),
-      js.Object(exports.map { e => e.name -> e.expr })
-    )
+    val exportStatements = exports.map { e =>
+      RawExport(e.name, e.expr)
+    }
 
-    List(effekt) ++ importStmts ++ stmts ++ List(exportStatement)
+    List(effekt) ++ importStmts ++ stmts ++ exportStatements
   }
 
   /**
    * Generates the Javascript module skeleton for virtual modules that are compiled separately
-   *
-   * {{{
-   *   const MYMODULE = {}
-   *   // ... contents of the module
-   *   module.exports = Object.assign(MYMODULE, {
-   *     // EXPORTS...
-   *   })
-   * }}}
    */
-  def virtual : List[Stmt] = {
+  def virtual: List[Stmt] = {
     val importStmts = imports.map {
-      // const MOD = load(PATH)
       case Import.All(name, file) =>
-        js.Const(name, js.Call(Variable(JSName("load")), List(JsString(file))))
-
-      // const {NAMES, ...} = load(PATH)
+        js.RawStmt(s"const ${name.name} = await import('./${file}.mjs');")
       case Import.Selective(names, file) =>
-        js.Destruct(names, js.Call(Variable(JSName("load")), List(JsString(file))))
+        js.RawStmt(s"const { ${names.map(_.name).mkString(", ")} } = await import('./${file}.mjs');")
     }
 
-    val declaration = js.Const(name, js.Object())
+    val exportStatements = exports.map { e =>
+      RawExport(e.name, e.expr)
+    }
 
-    // module.exports = Object.assign(MODULE, { EXPORTS })
-    val exportStatement = js.ExprStmt(js.Call(RawExpr("module.exports = Object.assign"), List(
-      js.Variable(name),
-      js.Object(exports.map { e => e.name -> e.expr })
-    )))
-
-    importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
+    importStmts ++ stmts ++ exportStatements
   }
 }
 
@@ -185,6 +169,9 @@ enum Stmt {
 
   // e.g. <EXPR>;
   case ExprStmt(expr: Expr)
+
+  // e.g. export const <NAME> = <EXPR>;
+  case RawExport(name: JSName, expr: Expr)
 }
 export Stmt.*
 

@@ -4,7 +4,7 @@ import io
 import io/time // just for testing
 
 extern js """
-  const readline = require('node:readline');
+  import readline from 'node:readline';
 """
 
 interface Console {

@@ -6,7 +6,7 @@ import io
 import io/error
 
 extern js """
-  const fs = require("fs");
+  import fs from 'node:fs';
 """
 
 extern type FileDescriptor
