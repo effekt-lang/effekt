@@ -143,7 +143,8 @@ object JSRunner extends Runner[String] {
     val mjsFilePath = (out / path).canonicalPath.escape
     // NOTE: This is a hack since this file cannot use ES imports & exports
     //       because it doesn't have the .mjs ending. Sigh.
-    val jsScript = s"import('${mjsFilePath}').then(({main}) => { main(); })"
+    //       Also, we add the 'file://' prefix to satisfy Windows.
+    val jsScript = s"import('file://${mjsFilePath}').then(({main}) => { main(); })"
 
     // create "executable" using shebang besides the .js file
     os match {
