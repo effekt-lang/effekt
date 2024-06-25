@@ -71,8 +71,12 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
+    val process = if (C.config.valgrind())
+      Process("valgrind", "--leak-check=full" +: "--log-file=valgrind.log" +: "--error-exitcode=1" +: execFile +: Context.config.runArgs())
+    else
+      Process(execFile, Context.config.runArgs())
 
-    val exitCode = Process(execFile, Context.config.runArgs()).run(new ProcessLogger {
+    val exitCode = process.run(new ProcessLogger {
 
       override def out(s: => String): Unit = {
         C.config.output().emitln(s)
@@ -86,6 +90,7 @@ trait Runner[Executable] {
 
     if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
+      if (C.config.valgrind()) C.error(s"Valgrind log: " ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
   }
 
@@ -270,8 +275,8 @@ object LLVMRunner extends Runner[String] {
     val executableFile = basePath
     var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
 
-    if (C.config.debug())
-      gccArgs ++= Seq("-fsanitize=address,leak,undefined", "-fstack-protector-all", "-Og", "-g")
+    if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,leak,undefined", "-fstack-protector-all", "-Og", "-g")
+    if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
 
     exec(gccArgs: _*)
 
