@@ -4,9 +4,9 @@
 /** We represent references like positive types.
  *  The tag is 0 and the obj points to memory with the following layout:
  *
- *   +--[ Header ]--+------------+
- *   | Rc  | Eraser | Field      |
- *   +--------------+------------+
+ *   +--[ Header ]--------------+------------+
+ *   | ReferenceCount  | Eraser | Field      |
+ *   +--------------------------+------------+
  */
 
 void c_ref_erase_field(void *envPtr) {
