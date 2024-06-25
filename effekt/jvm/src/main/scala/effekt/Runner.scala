@@ -268,7 +268,11 @@ object LLVMRunner extends Runner[String] {
 
     val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    val gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+
+    if (C.config.debug())
+      gccArgs ++= Seq("-fsanitize=address,leak,undefined", "-fstack-protector-all", "-Og", "-g")
+
     exec(gccArgs: _*)
 
     executableFile
