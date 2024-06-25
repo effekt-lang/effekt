@@ -162,9 +162,9 @@ object JSWebRunner extends Runner[String] {
 
   val extension = "js"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "js"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     Left("Running js-web code directly is not supported (yet). Use `--compile` to generate a js file / `--build` to generate a html file.") // TODO
