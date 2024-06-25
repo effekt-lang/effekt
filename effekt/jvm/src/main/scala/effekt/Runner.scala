@@ -71,8 +71,9 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
+    val valgrindArgs = Seq("--leak-check=full", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
     val process = if (C.config.valgrind())
-      Process("valgrind", "--leak-check=full" +: "--log-file=valgrind.log" +: "--error-exitcode=1" +: execFile +: Context.config.runArgs())
+      Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
     else
       Process(execFile, Context.config.runArgs())
 
@@ -90,7 +91,7 @@ trait Runner[Executable] {
 
     if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
-      if (C.config.valgrind()) C.error(s"Valgrind log: " ++ scala.io.Source.fromFile("valgrind.log").mkString)
+      if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
   }
 
