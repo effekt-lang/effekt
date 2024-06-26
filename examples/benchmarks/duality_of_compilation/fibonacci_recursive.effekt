@@ -1,0 +1,15 @@
+import examples/benchmarks/runner
+
+def fibonacci(i: Int): Int =
+  if (i == 0) {
+    0
+  } else if (i == 1) {
+    1
+  } else {
+    fibonacci(i - 1) + fibonacci(i - 2)
+  }
+
+def run(n: Int) = fibonacci(n)
+
+def main() = benchmark(5){run}
+

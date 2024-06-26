@@ -1,0 +1,23 @@
+import examples/benchmarks/runner
+
+import list
+
+def replicate(v: Int, n: Int, a: List[Int]): List[Int] =
+  if (n == 0) {
+    a
+  } else {
+    replicate(v, n - 1, Cons(v, a))
+  }
+
+def useless(i: Int, n: Int, _: List[Int]): Int =
+  if (i < n) {
+    useless(i + 1, n, replicate(0, i, Nil()))
+  } else {
+    i
+  }
+
+def run(n: Int) =
+  useless(0, n, Nil())
+
+def main() = benchmark(5){run}
+

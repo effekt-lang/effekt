@@ -1,0 +1,25 @@
+import examples/benchmarks/runner
+
+effect Emit(e: Int): Unit
+
+def range(l: Int, u: Int): Unit / Emit =
+  if (l > u) {
+    ()
+  } else {
+    do Emit(l);
+    range(l + 1, u)
+  }
+
+def run(n: Int) = {
+  var s = 0;
+  try {
+    range(0, n);
+    s
+  } with Emit { (e: Int) =>
+    s = s + e;
+    resume(())
+  }
+}
+
+def main() = benchmark(5){run}
+
