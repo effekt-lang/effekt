@@ -79,10 +79,10 @@ jobs:
     - name: Set up NodeJS
       uses: actions/setup-node@v1
       with:
-        node-version: '12.x'
+        node-version: '14.x'
 
-    - name: Run tests
-      run: sbt clean test
+    - name: Run effekt tests
+      run: sbt clean effektJVM/test
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
@@ -92,3 +92,6 @@ jobs:
 
     - name: Run effekt binary
       run: effekt.sh --help
+
+    - name: Run lspTest tests
+      run: sbt lspTest/test
