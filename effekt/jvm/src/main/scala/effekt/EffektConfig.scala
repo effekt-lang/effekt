@@ -154,6 +154,16 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = debugging
   )
 
+  lazy val valgrind = toggle(
+    "valgrind",
+    descrYes = "Execute files using valgrind",
+    descrNo = "Don't execute files using valgrind",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
   /**
    * Tries to find the path to the standard library. Proceeds in the following
    * order:

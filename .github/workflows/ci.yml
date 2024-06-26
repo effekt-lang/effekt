@@ -73,6 +73,10 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: sudo apt-get install llvm-15
 
+    - name: Install Valgrind
+      if: matrix.os != 'windows-latest'
+      run: sudo apt-get install valgrind
+
     - name: Install libuv
       run: sudo apt-get install libuv1-dev
 
