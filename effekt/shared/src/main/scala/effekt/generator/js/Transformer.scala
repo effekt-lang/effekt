@@ -104,7 +104,7 @@ trait Transformer {
 
   def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 
-  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
+  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".mjs"
 
   val `fresh` = JSName("fresh")
   val `ref`   = JSName("ref")
