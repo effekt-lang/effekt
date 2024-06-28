@@ -52,7 +52,6 @@ class StdlibMLTests extends StdlibTests {
 }
 class StdlibLLVMTests extends StdlibTests {
   def backendName: String = "llvm"
-  override def valgrind: Boolean = true
 
   override def ignored: List[File] = List(
     // For every function tested using `immutable/result`:

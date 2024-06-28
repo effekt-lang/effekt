@@ -86,7 +86,7 @@ jobs:
         node-version: '12.x'
 
     - name: Run tests
-      run: sbt clean test
+      run: EFFEKT_VALGRIND=1 sbt clean test
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
