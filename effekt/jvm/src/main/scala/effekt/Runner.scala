@@ -171,7 +171,7 @@ object JSWebRunner extends Runner[String] {
 
   /**
    * Creates an openable `.html` file besides the given `.js` file ([[path]])
-   * and then returns the absolute path of a shell script opening it.
+   * and then errors out, printing it's path.
    */
   def build(path: String)(using C: Context): String =
     import java.nio.file.Path
