@@ -9,13 +9,13 @@ import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 
-class JavaScript extends Compiler[String] {
+class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".js"
 
-  override def supportedFeatureFlags: List[String] = TransformerMonadicWhole.jsFeatureFlags
+  override def supportedFeatureFlags: List[String] = additionalFeatureFlags ++ TransformerMonadicWhole.jsFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -62,3 +62,5 @@ class JavaScript extends Compiler[String] {
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)
 }
+class JavaScriptWeb extends JavaScript(List("jsWeb")) {}
+class JavaScriptNode extends JavaScript(List("jsNode")) {}
