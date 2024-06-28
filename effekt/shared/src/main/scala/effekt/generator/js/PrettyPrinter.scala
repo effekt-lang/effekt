@@ -67,6 +67,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
       case (tag, stmts) => "case" <+> toDoc(tag) <> ":" <+> nested(stmts map toDoc)
     } ++ default.toList.map { stmts => "default:" <+> nested(stmts map toDoc) })
+    case RawExport(name, expr)         => "export const" <+> toDoc(name) <+> "=" <+> parens(toDoc(expr))
   }
 
   def jsMethod(c: js.Function): Doc = c match {

@@ -13,7 +13,7 @@ class JavaScript extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
-  def extension = ".js"
+  def extension = ".mjs"
 
   override def supportedFeatureFlags: List[String] = TransformerMonadicWhole.jsFeatureFlags
 
@@ -48,7 +48,7 @@ class JavaScript extends Compiler[String] {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      val doc = pretty(TransformerMonadicWhole.compile(input, mainSymbol).commonjs)
+      val doc = pretty(TransformerMonadicWhole.compile(input, mainSymbol).esModule)
       (Map(mainFile -> doc.layout), mainFile)
   }
 

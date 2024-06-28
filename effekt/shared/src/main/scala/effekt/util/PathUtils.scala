@@ -40,7 +40,7 @@ trait PathUtils {
    * filename of the module (like `data_option.js`).
    */
   def moduleFileName(modulePath: String) =
-    modulePath.replace('/', '_') + ".js"
+    modulePath.replace('/', '_') + ".mjs"
 
   def lastModified(src: Source): Long = src match {
     case FileSource(name, encoding) => file(name).lastModified
