@@ -167,7 +167,7 @@ object JSWebRunner extends Runner[String] {
   override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
-    Left("Running js-web code directly is not supported (yet). Use `--compile` to generate a js file / `--build` to generate a html file.") // TODO
+    Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
 
   /**
    * Creates an openable `.html` file besides the given `.js` file ([[path]])
