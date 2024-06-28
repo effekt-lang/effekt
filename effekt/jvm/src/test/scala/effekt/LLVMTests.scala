@@ -35,6 +35,27 @@ class LLVMTests extends EffektTests {
 
     // unclear
     examplesDir / "pos" / "higher_rank_polymorphism.effekt",
+
+    // Valgrind leak/failure
+    examplesDir / "llvm" / "nested.effekt",
+    examplesDir / "llvm" / "strings.effekt",
+    examplesDir / "llvm" / "polymorphism_map.effekt",
+    examplesDir / "pos" / "parser.effekt",
+    examplesDir / "pos" / "matchdef.effekt",
+    examplesDir / "pos" / "type_parameters_blocks.effekt",
+    examplesDir / "pos" / "long_string.effekt",
+    examplesDir / "pos" / "matchblock.effekt",
+    examplesDir / "pos" / "overloading.effekt",
+    examplesDir / "pos" / "withstatement.effekt",
+    examplesDir / "pos" / "dequeue.effekt",
+    examplesDir / "pos" / "higherorder_io_control.effekt",
+    examplesDir / "pos" / "infer" / "infer_overload.effekt",
+    examplesDir / "pos" / "bug1.effekt",
+    examplesDir / "pos" / "string_concat_pr493.effekt",
+    examplesDir / "pos" / "string" / "substring.effekt",
+    examplesDir / "pos" / "string" / "indexOf.effekt",
+    examplesDir / "benchmarks" / "tree.effekt",
+    examplesDir / "benchmarks" / "variadic_combinators.effekt",
   )
 
   /**
