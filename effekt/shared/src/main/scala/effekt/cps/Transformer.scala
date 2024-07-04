@@ -71,7 +71,7 @@ def transform(expr: lifted.Expr): Expr = expr match {
     case true => Expr.Lit(1)
     case false => Expr.Lit(0)
   }
-  case lifted.Literal(value: BoxedUnit, _) => Expr.Var(Id(""))
+  case lifted.Literal(value: BoxedUnit, _) => Expr.UnitLit()
   case lifted.Literal(value, _) => println(value.getClass()); ???//Expr.Lit(value.toInt); ???
   case lifted.ValueVar(id, annotatedType) => Expr.Var(id)
   case lifted.PureApp(b, targs, args) => Expr.PureApp(transform(b), (args map transform))
@@ -124,7 +124,7 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Region(body) => ???
   case lifted.Stmt.Alloc(id, init, region, ev, body) => ???
   
-  case lifted.Stmt.Var(init, body) => println(body); ???
+  case lifted.Stmt.Var(init, body) => println(body); ??? //add to cps
   case lifted.Stmt.Get(id, ev, annotatedTpe) => ???
   case lifted.Stmt.Put(id, ev, value) => ???
 

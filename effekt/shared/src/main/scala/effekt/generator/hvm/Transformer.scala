@@ -9,8 +9,7 @@ import effekt.util.intercalate
 import scala.annotation.targetName
 
 
-//using enviroment lift (Context)
-case class Environment(adts: Adts) {
+case class Environment(adts: Adts, defMap: MutableMap[Name, Definition]) {
   def findKeyInAdts(targetName: Name): Option[Name] = {
   // Iterate through the Adts map
   adts.find { case (key, adt) =>
@@ -19,7 +18,7 @@ case class Environment(adts: Adts) {
   }.map(_._1) // Return the key if found, otherwise return None
   }
   def getName(constructor: lifted.Id): String = findKeyInAdts(idToName(constructor)) match {
-    case Some(Name(string)) => string + "/" + constructor.name.name
+    case Some(Name(string)) => string + "/" + idToString(constructor)
     case _ => ""
 
   }
@@ -31,21 +30,34 @@ case class Environment(adts: Adts) {
       case Some(fields) => fields map (x => scrutinee + "." + x)
       case None => List()
   }
+
+  def addDefinition(definition: Definition): Unit = definition match {
+    case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))
+  }
 }
 
 def transform(mod: cps.ModuleDecl): Book = {
   val decls = transform(mod.decls, MutableMap()) //Adt
-  val defMap: MutableMap[Name, Definition] = MutableMap() // Definitions
+  
+  given env: Environment = Environment(decls, MutableMap())
+
+  //println(env.defMap)
+
   mod.decls.foreach({
-    case cps.Declaration.InterfaceDecl(id, operations) => defMap ++= transform(id, operations); 
-    case cps.Declaration.Data(id, ctors) => defMap ++= transform(id, ctors)
+    case cps.Declaration.InterfaceDecl(id, operations) => env.defMap ++= transform(id, operations); 
+    case cps.Declaration.Data(id, ctors) => env.defMap ++= transform(id, ctors)
   })
-  val externs = mod.externs.map(x => transform(x)(using Environment(decls)))
-  val defns = mod.definitions.map(x => transform(x)(using Environment(decls)))
   
-  defns.foreach({case Definition(name, rules, builtin) => defMap += (Name(name) -> Definition(name, rules, builtin))})
+  val externs = mod.externs.map(x => transform(x))
+  val defns = mod.definitions.map(x => transform(x))
   
-  Book(defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
+  //println(env.defMap)
+
+  defns map env.addDefinition
+  
+  //println(env.defMap)
+
+  Book(env.defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
 
 //destructor
@@ -70,7 +82,7 @@ def transform(decls: List[cps.Declaration], map: MutableMap[Name, Adt]): Mutable
     transform(rest, map += (Name(id.toString) -> Adt(MutableMap(Name(id.toString) -> (operations map (x=>x.id.toString()))), false)))
 }
 
-def transform(decl: cps.Extern)(using env: Environment): Verbatim = decl match {
+def transform(decl: cps.Extern): Verbatim = decl match {
   case cps.Extern.Def(id, params, body) =>
     Verbatim.Def(id.name.name, params map idToPattern, transform(body))
   case cps.Extern.Include(contents) => Verbatim.Include(contents)
@@ -98,36 +110,39 @@ def transform(term: cps.Term)(using env: Environment): Term = term match {
     //println(term)
     Swt(List(transform(cond)), List(Rule(List(NumPattern(NumCtr.Num(0))), transform(els)), Rule(List(VarPattern(Some("_"))), transform(thn))))
   case cps.Term.Match(scrutinee, clauses, None) =>
-    Mat(List(transform(scrutinee)), clauses map ((id, blockLit) => transform(id, blockLit, scrutinee)(using env)))
+    Mat(List(transform(scrutinee)), clauses map ((id, blockLit) => transform(id, blockLit, scrutinee)))
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>
-    println(term)
-    Mat(List(transform(scrutinee)), (clauses map ((id, blockLit) => transform(id, blockLit, scrutinee)(using env))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
+    //println(term)
+    Mat(List(transform(scrutinee)), (clauses map ((id, blockLit) => transform(id, blockLit, scrutinee))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
+  case cps.Term.Let(name, cps.Expr.BlockLit(params, body), rest) => println(term); toTopLevel(name, params:+ Id("k"), body)(using env); transform(rest)//params :+ k ???
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
-  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(idToString(param)), transform(body)(using env)), transform(rest)) 
+  //case cps.Term.LetCont(name, param, body, rest) => toTopLevel(name, List(param), body)(using env); transform(rest)
+  case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(idToString(param)), transform(body)(using env)), transform(rest))
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
   case cps.Term.Reset(ev, body) => chainApp(chainLam(List(ev.name.name, "k"), transform(body)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
-  case cps.Term.Shift(ev, cont, body) => App(Auto, App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body)(using env)))), Var("k"))//((ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body)(using env)) k)
+  case cps.Term.Shift(ev, cont, body) => App(Auto, App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body)))), Var("k"))//((ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body)(using env)) k)
 }
 
 def transform(id: cps.Id, blockLit: cps.BlockLit, scrutinee: cps.Expr)(using env: Environment): Rule = blockLit match {
   case cps.Expr.BlockLit(params, body) => 
-    Rule(List(VarPattern(Some(env.getName(id)))), chainLet(params map idToPattern, env.getFields(id, exprToString(scrutinee)) map (x => Var(x)), transform(body)(using env))) //let params = scrutinee.fields, transform(body)(using env)
+    Rule(List(VarPattern(Some(env.getName(id)))), chainLet(params map idToPattern, env.getFields(id, exprToString(scrutinee)) map (x => Var(x)), transform(body))) //let params = scrutinee.fields, transform(body)(using env)
 }
 
 def transform(definitions: List[cps.Definition], body: cps.Term)(using env: Environment): Term = definitions match {
   case Nil => transform(body)(using env)
   case _ => definitions.head match {
-    case cps.Definition.Let(id, bindings) => Let(idToPattern(id), transform(bindings), transform(definitions.tail, body))
+    case cps.Definition.Let(id, bindings) => Let(idToPattern(id), transform(bindings)(using env), transform(definitions.tail, body))
     case cps.Definition.Function(name, params, cont, body) => ???
   }
 }
 
 def transform(expr: cps.Expr)(using env: Environment): Term = expr match {
   case cps.Expr.Lit(n) => Num(n)
+  case cps.Expr.UnitLit() => Era
   case cps.Expr.Var(name) => idToVar(name)
   case cps.Expr.PureApp(b, args) => chainApp(transform(b), (args map transform))
   case cps.Expr.Box(b) => transform(b)
-  case cps.Expr.Run(t) => transform(t)
+  case cps.Expr.Run(t) => Let(VarPattern(Some("k")), Var("here"), transform(t))
   case cps.Expr.BlockLit(params, body) => chainLam(params map idToString, transform(body)(using env))
   case cps.Expr.Make(data, tag, vargs) => chainApp(idToVar(data), vargs map transform)
   case cps.Expr.Select(target, field) => ???
@@ -162,6 +177,9 @@ def transformProperties(tparams: List[cps.Id], properties: List[cps.Id]): List[R
   case (tparams, List()) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(" ")) :: transformProperties(tparams, List())
   case (tparams, properties) => Rule(List(VarPattern(Some(tparams.head.name.name))), Var(properties.head.name.name)) :: transformProperties(tparams.tail, properties.tail)
 }
+
+def toTopLevel(name: cps.Id, params: List[cps.Id], body: cps.Term)(using env: Environment): Unit = 
+  env.addDefinition(Definition(idToString(name), List(Rule(params map idToPattern, transform(body))), false))
 
 //helper functions:
 def chainApp(name: Term, args: List[Term]): Term = { //add parameter body
@@ -199,21 +217,21 @@ def exprToString(expr: cps.Expr): String = expr match {
 }
 
 def idToPattern(id: Id): Pattern = {
-  val updatedName = id.name.name.replace('$', '.')
+  val updatedName = id.name.name.replace('$', '.').replace('_', '*')
   VarPattern(Some(updatedName))
 }
 
 def idToVar(id: Id): Var = {
-  val updatedName = id.name.name.replace('$', '.')
+  val updatedName = id.name.name.replace('$', '.').replace('_', '*')
   Var(updatedName)
 }
 
 def idToName(id: Id): Name = {
-  val updatedName = id.name.name.replace('$', '.')
+  val updatedName = id.name.name.replace('$', '.').replace('_', '*')
   Name(updatedName)
 }
 
 def idToString(id: Id): String = {
-  val updatedName = id.name.name.replace('$', '.')
+  val updatedName = id.name.name.replace('$', '.').replace('_', '*')
   updatedName
 }

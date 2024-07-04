@@ -52,6 +52,7 @@ enum Definition {
 enum Expr{
   case Var(name: Id)
   case Lit(n: Int)
+  case UnitLit()
   case PureApp(b: Expr, args: List[Expr])
 
   case Make(data: Id, tag: Id, vargs: List[Expr])
