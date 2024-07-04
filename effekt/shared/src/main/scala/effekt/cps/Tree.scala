@@ -80,6 +80,12 @@ enum Term {
   case Match(scrutinee: Expr, clauses: List[(Id, BlockLit)], default: Option[Term])
   case Reset(evidence: Id, body: Term)
   case Shift(evidence: Id, cont: Id, body: Term)
+
+  // creates a fresh state handler to model local (backtrackable) state.
+  // e.g. state(init) { (ev){x: Ref} => ... }
+  case StateVar(init: Expr, body: Expr.BlockLit)
+  case Get(id: Id, ev: Evidence)
+  case Put(id: Id, ev: Evidence, value: Expr)
 } 
 export Term.*
 

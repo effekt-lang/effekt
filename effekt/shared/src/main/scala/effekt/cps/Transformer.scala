@@ -124,9 +124,9 @@ def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Region(body) => ???
   case lifted.Stmt.Alloc(id, init, region, ev, body) => ???
   
-  case lifted.Stmt.Var(init, body) => println(body); ??? //add to cps
-  case lifted.Stmt.Get(id, ev, annotatedTpe) => ???
-  case lifted.Stmt.Put(id, ev, value) => ???
+  case lifted.Stmt.Var(init, body) => StateVar(transform(init), transform(body))
+  case lifted.Stmt.Get(id, lifted.Evidence(lifts), annotatedTpe) => Get(id, Evidence(lifts map transform))
+  case lifted.Stmt.Put(id, lifted.Evidence(lifts), value) => Put(id, Evidence(lifts map transform), transform(value))
 
   case lifted.Stmt.Try(lifted.BlockLit(_, params, body), handlers) => params match {
     case ev :: caps => Reset(transform(ev), transform(caps, handlers, body)) 

@@ -121,6 +121,7 @@ def transform(term: cps.Term)(using env: Environment): Term = term match {
   case cps.Term.Fun(name, params, cont, body) => println(term); ???
   case cps.Term.Reset(ev, body) => chainApp(chainLam(List(ev.name.name, "k"), transform(body)), (List(Var("lift"), Var("pure"), Var("k")))) //(@ev @k transfomr(body)) lift pure k
   case cps.Term.Shift(ev, cont, body) => App(Auto, App(Auto, idToVar(ev), chainLam(List("kTemp", "k"), Let(idToPattern(cont), chainLam(List("eTemp", "xTemp"), App(Auto, Var("eTemp"), App(Auto, Var("kTemp"), Var("xTemp")))), transform(body)))), Var("k"))//((ev (@kTemp @k let cont = @eTemp @xtemp (eTemp (kTemp xTemp)); transform(body)(using env)) k)
+  case _ => ???
 }
 
 def transform(id: cps.Id, blockLit: cps.BlockLit, scrutinee: cps.Expr)(using env: Environment): Rule = blockLit match {
