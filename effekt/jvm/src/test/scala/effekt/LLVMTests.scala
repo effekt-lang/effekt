@@ -56,8 +56,14 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "string_concat_pr493.effekt",
     examplesDir / "pos" / "string" / "substring.effekt",
     examplesDir / "pos" / "string" / "indexOf.effekt",
-    examplesDir / "benchmarks" / "tree.effekt",
-    examplesDir / "benchmarks" / "variadic_combinators.effekt",
+    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt",
   )
 
   /**
