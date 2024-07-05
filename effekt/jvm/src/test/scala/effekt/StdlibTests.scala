@@ -53,6 +53,8 @@ class StdlibMLTests extends StdlibTests {
 class StdlibLLVMTests extends StdlibTests {
   def backendName: String = "llvm"
 
+  override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
+
   override def ignored: List[File] = List(
     // For every function tested using `immutable/result`:
     // [error] Unsupported coercion from Exception47234[E48288] to Exception47234[OutOfBounds47515]

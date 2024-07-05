@@ -10,6 +10,8 @@ class LLVMTests extends EffektTests {
 
   def backendName = "llvm"
 
+  override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
+
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
     examplesDir / "pos",

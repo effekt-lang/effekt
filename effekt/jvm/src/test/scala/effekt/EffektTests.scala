@@ -18,7 +18,7 @@ trait EffektTests extends munit.FunSuite {
   def backendName: String
 
   // Whether to execute using valgrind
-  def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
+  def valgrind = false
 
   def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
 
