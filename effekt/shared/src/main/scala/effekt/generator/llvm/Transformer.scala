@@ -100,9 +100,9 @@ object Transformer {
       case machine.Construct(variable, tag, values, rest) =>
         emit(Comment("statement construct"))
         val `object` = produceObject(values, freeVariables(rest))
-        val tmpName = freshName("tmp")
-        emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
-        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), `object`, 1))
+        val temporaryName = freshName("temporary")
+        emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
+        emit(InsertValue(variable.name, LocalReference(positiveType, temporaryName), `object`, 1))
 
         eraseValues(List(variable), freeVariables(rest))
         transform(rest)
@@ -170,9 +170,9 @@ object Transformer {
         emit(GlobalConstant(arrayName, ConstantArray(methodType, clauseNames)))
 
         val `object` = produceObject(closureEnvironment, freeVariables(rest));
-        val tmpName = freshName("tmp");
-        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
-        emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), `object`, 1));
+        val temporaryName = freshName("temporary");
+        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
+        emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), `object`, 1));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -198,15 +198,15 @@ object Transformer {
         emit(Comment("statement allocate"))
         val idx = regionIndex(ref.tpe)
 
-        val tmp = freshName("tmp")
-        val tmpRef = LocalReference(StructureType(List(PointerType(), referenceType)), tmp)
-        emit(Call(tmp, tmpRef.tpe, alloc, List(ConstantInt(idx), transform(evidence))));
+        val temporary = freshName("temporary")
+        val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), temporary)
+        emit(Call(temporary, temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(evidence))));
 
         val ptr = freshName("pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
-        emit(ExtractValue(ptr, tmpRef, 0))
+        emit(ExtractValue(ptr, temporaryRef, 0))
 
-        emit(ExtractValue(name, tmpRef, 1))
+        emit(ExtractValue(name, temporaryRef, 1))
 
 
         emit(Store(ptrRef, transform(init)))
@@ -364,11 +364,11 @@ object Transformer {
         emit(Comment("statement popStacks"))
         // TODO Handle n (n+1 = number of stacks to pop)
         val newStackPointerName = freshName("stackPointer");
-        val tmpName = freshName("tmp");
-        val tmpReference = LocalReference(StructureType(List(stackType, stackPointerType)), tmpName);
-        emit(Call(tmpName, StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
-        emit(ExtractValue(variable.name, tmpReference, 0));
-        emit(ExtractValue(newStackPointerName, tmpReference, 1));
+        val temporaryName = freshName("temporary");
+        val temporaryReference = LocalReference(StructureType(List(stackType, stackPointerType)), temporaryName);
+        emit(Call(temporaryName, StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
+        emit(ExtractValue(variable.name, temporaryReference, 0));
+        emit(ExtractValue(newStackPointerName, temporaryReference, 1));
         setStackPointer(LocalReference(stackPointerType, newStackPointerName));
 
         eraseValues(List(variable), freeVariables(rest));
