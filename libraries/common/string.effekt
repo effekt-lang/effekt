@@ -250,6 +250,13 @@ extern pure def toInt(ch: Char): Int =
   ml "${ch}"
   llvm "ret %Int ${ch}"
 
+extern pure def toChar(codepoint: Int): Char =
+  js "${codepoint}"
+  chez "${codepoint}"
+  ml "${codepoint}"
+  llvm "ret %Int ${codepoint}"
+
+
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
