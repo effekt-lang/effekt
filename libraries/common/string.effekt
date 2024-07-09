@@ -139,6 +139,46 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
   }
 }
 
+// TODO optimize (right now this will be horribly slow (compared to the native JS version)
+def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
+
+  if( base > 36 || base < 1 ) {
+    wrongFormat("Invalid base: " ++ base.show)
+  }
+
+  val zero = '0'.toInt
+  val l_a = 'a'.toInt
+  val u_a = 'A'.toInt
+
+  def parseDigit(c: Char): Option[Int] = {
+    if( c >= '0' and c <= '9' and c.toInt - zero < base ) {
+      Some(c.toInt - zero)
+    } else if( c >= 'a' and c <= 'z' and c.toInt - l_a < base - 10 ) {
+      Some(c.toInt - l_a + 10)
+    } else if( c >= 'A' and c <= 'Z' and c.toInt - u_a < base - 10) {
+      Some(c.toInt - u_a + 10)
+    } else {
+      None()
+    }
+  }
+
+  def go(index: Int, acc: Int): Int = {
+    result[Char, OutOfBounds] { str.charAt(index) } match {
+      case Success(c) and parseDigit(c) is Some(d) =>
+        go(index + 1, base * acc + d)
+      case Success(c) => wrongFormat("Not a valid number: '" ++ str ++ "'")
+      // wrong index means we are done parsing
+      case Error(_, _) => acc
+    }
+  }
+
+  with default[OutOfBounds, Int] { wrongFormat("Empty string is not a valid number") };
+
+  str.charAt(0) match {
+    case '-' => 0 - go(1, 0)
+    case _   => go(0, 0)
+  }
+}
 
 // Native versions of toInt (unused right now)
 //   ML: also accepts sml style `~2` for unary minus along with `+2` and `-2`
