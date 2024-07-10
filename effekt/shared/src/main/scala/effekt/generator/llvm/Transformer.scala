@@ -604,7 +604,7 @@ object Transformer {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
-        val field = LocalReference(PointerType(), freshName(name + "p"));
+        val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
         emit(Store(field, transform(machine.Variable(name, tpe))))
     }
@@ -614,7 +614,7 @@ object Transformer {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
-        val field = LocalReference(PointerType(), freshName(name + "p"));
+        val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
         emit(Load(name, transform(tpe), field))
     }

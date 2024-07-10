@@ -84,8 +84,8 @@ class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite
     // e.g. f : (Int) => Unit @ {io,exc}   ===>   { (n) => f(n, exc) }
     //   the type of f after transformation is `(Int, Exc) => Unit @ {io}`
     case f @ core.BlockVar(id, core.BlockType.Function(tps, cps, vps, bps, res), capt) if needsCallsiteAdaptation(id) =>
-      val vparams: List[core.ValueParam] = vps map { tpe => core.ValueParam(Id("x"), tpe) }
-      val bparams: List[core.BlockParam] = (cps zip bps) map { case (capt, tpe) => core.BlockParam(Id("f"), tpe, Set(capt)) }
+      val vparams: List[core.ValueParam] = vps map { tpe => core.ValueParam(Id("valueParam"), tpe) }
+      val bparams: List[core.BlockParam] = (cps zip bps) map { case (capt, tpe) => core.BlockParam(Id("blockParam"), tpe, Set(capt)) }
 
       val targs = tps map { tpe => core.ValueType.Var(tpe) }
       val vargs = vparams.map { p => core.ValueVar(p.id, p.tpe) } ++ infos(id).valueArgs
