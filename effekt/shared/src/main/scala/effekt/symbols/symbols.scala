@@ -212,8 +212,8 @@ case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol { val
  * Introduced by Transformer
  */
 case class Wildcard() extends ValueSymbol { val name = Name.local("_") }
-case class TmpValue() extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
-case class TmpBlock() extends BlockSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
+case class TmpValue(hint: String = "temporary") extends ValueSymbol { val name = Name.local(hint + "_" + Symbol.fresh.next()) }
+case class TmpBlock(hint: String = "temporary") extends BlockSymbol { val name = Name.local(hint + "_" + Symbol.fresh.next()) }
 
 /**
  * Type Symbols

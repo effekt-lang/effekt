@@ -297,7 +297,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // if this block argument expects to be called using PureApp or DirectApp, make sure it is
           // by wrapping it in a BlockLit
           val targs = tparams.map(core.ValueType.Var.apply)
-          val vparams: List[Param.ValueParam] = vparamtps.map { t => Param.ValueParam(TmpValue(), transform(t))}
+          val vparams: List[Param.ValueParam] = vparamtps.map { t => Param.ValueParam(TmpValue("valueParam"), transform(t))}
           val vargs = vparams.map { case Param.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
 
           // [[ f ]] = { (x) => f(x) }
@@ -321,11 +321,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
           def etaExpandDirect(f: ExternFunction): BlockLit = {
             assert(effects.isEmpty)
-            val bparams: List[Param.BlockParam] = bparamtps.map { t => val id = TmpBlock(); Param.BlockParam(id, transform(t), Set(id)) }
+            val bparams: List[Param.BlockParam] = bparamtps.map { t => val id = TmpBlock("etaParam"); Param.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
               case Param.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
             }
-            val result = TmpValue()
+            val result = TmpValue("etaBinding")
             val resultBinding = DirectApp(BlockVar(f), targs, vargs, bargs)
             BlockLit(tparams, bparams.map(_.id), vparams, bparams,
               core.Let(result, resultBinding.tpe, resultBinding,
@@ -411,7 +411,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
     case source.While(guards, body, default) =>
-      val loopName = TmpBlock()
+      val loopName = TmpBlock("whileLoop")
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
 
       // TODO double check: probably we are forgetting the capture of the guards!
@@ -419,7 +419,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
       val transformedBody = transform(body)
-      val thenBranch = Stmt.Val(TmpValue(), transformedBody.tpe, transformedBody, loopCall)
+      val thenBranch = Stmt.Val(TmpValue("whileThen"), transformedBody.tpe, transformedBody, loopCall)
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
       val loopBody = guards match {
@@ -611,7 +611,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // create joinpoint
     val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
-    val joinpoint = Context.bind(TmpBlock(), BlockLit(Nil, Nil, params, Nil, body))
+    val joinpoint = Context.bind(TmpBlock("joinpoint"), BlockLit(Nil, Nil, params, Nil, body))
 
     def transformPattern(p: source.MatchPattern): Pattern = p match {
       case source.AnyPattern(id) =>
@@ -809,7 +809,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(s: Stmt): ValueVar = {
 
     // create a fresh symbol and assign the type
-    val x = TmpValue()
+    val x = TmpValue("statementBind")
 
     val binding = Binding.Val(x, s.tpe, s)
     bindings += binding
@@ -821,7 +821,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     case x: ValueVar => x
     case e =>
       // create a fresh symbol and assign the type
-      val x = TmpValue()
+      val x = TmpValue("expressionBind")
 
       val binding = Binding.Let(x, e.tpe, e)
       bindings += binding

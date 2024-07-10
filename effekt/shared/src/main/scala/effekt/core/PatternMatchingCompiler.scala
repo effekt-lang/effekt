@@ -180,7 +180,7 @@ object PatternMatchingCompiler {
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
       def fieldVarsFor(constructor: Id, fieldTypes: List[ValueType]): List[ValueVar] =
-        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue(), tpe) })
+        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue("fieldValue"), tpe) })
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>

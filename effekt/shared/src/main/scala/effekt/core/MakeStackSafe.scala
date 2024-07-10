@@ -57,5 +57,5 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   // [[ s ]] = val tmp = return (); s
-  def thunk(s: Stmt): Stmt = Stmt.Val(TmpValue(), core.Type.TUnit, Stmt.Return(Literal((), core.Type.TUnit)), s)
+  def thunk(s: Stmt): Stmt = Stmt.Val(TmpValue("thunk"), core.Type.TUnit, Stmt.Return(Literal((), core.Type.TUnit)), s)
 }

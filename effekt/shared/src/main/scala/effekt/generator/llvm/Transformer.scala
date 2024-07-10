@@ -100,7 +100,7 @@ object Transformer {
       case machine.Construct(variable, tag, values, rest) =>
         emit(Comment("statement construct"))
         val `object` = produceObject(values, freeVariables(rest))
-        val temporaryName = freshName("temporary")
+        val temporaryName = "temporary_" + variable.name
         emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
         emit(InsertValue(variable.name, LocalReference(positiveType, temporaryName), `object`, 1))
 
@@ -170,7 +170,7 @@ object Transformer {
         emit(GlobalConstant(arrayName, ConstantArray(methodType, clauseNames)))
 
         val `object` = produceObject(closureEnvironment, freeVariables(rest));
-        val temporaryName = freshName("temporary");
+        val temporaryName = "temporary_" + arrayName;
         emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), `object`, 1));
 
@@ -198,7 +198,7 @@ object Transformer {
         emit(Comment("statement allocate"))
         val idx = regionIndex(ref.tpe)
 
-        val temporary = freshName("temporary")
+        val temporary = freshName("temporaryEvidence")
         val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), temporary)
         emit(Call(temporary, temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(evidence))));
 
@@ -364,7 +364,7 @@ object Transformer {
         emit(Comment("statement popStacks"))
         // TODO Handle n (n+1 = number of stacks to pop)
         val newStackPointerName = freshName("stackPointer");
-        val temporaryName = freshName("temporary");
+        val temporaryName = "temporary_" + newStackPointerName;
         val temporaryReference = LocalReference(StructureType(List(stackType, stackPointerType)), temporaryName);
         emit(Call(temporaryName, StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
         emit(ExtractValue(variable.name, temporaryReference, 0));
