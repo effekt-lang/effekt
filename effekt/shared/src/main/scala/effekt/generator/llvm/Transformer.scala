@@ -100,7 +100,7 @@ object Transformer {
       case machine.Construct(variable, tag, values, rest) =>
         emit(Comment("statement construct"))
         val `object` = produceObject(values, freeVariables(rest))
-        val temporaryName = "temporary_" + variable.name
+        val temporaryName = freshName(variable.name + "_temporary")
         emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
         emit(InsertValue(variable.name, LocalReference(positiveType, temporaryName), `object`, 1))
 
@@ -155,7 +155,7 @@ object Transformer {
         val closureEnvironment = freeVariables(clauses).toList;
 
         val clauseNames = clauses.map { clause =>
-          val clauseName = freshName(variable.name);
+          val clauseName = freshName(variable.name + "_clause")
           defineFunction(clauseName, List(Parameter(objectType, "object"), Parameter(environmentType, "environment"), Parameter(stackPointerType, "stackPointer"))) {
             emit(Comment("statement new"))
             consumeObject(LocalReference(objectType, "object"), closureEnvironment, freeVariables(clause));
@@ -166,11 +166,11 @@ object Transformer {
           ConstantGlobal(methodType, clauseName)
         }
 
-        val arrayName = freshName(variable.name)
+        val arrayName = freshName(variable.name + "_array")
         emit(GlobalConstant(arrayName, ConstantArray(methodType, clauseNames)))
 
         val `object` = produceObject(closureEnvironment, freeVariables(rest));
-        val temporaryName = "temporary_" + arrayName;
+        val temporaryName = freshName(arrayName + "_temporary");
         emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), `object`, 1));
 
@@ -364,7 +364,7 @@ object Transformer {
         emit(Comment("statement popStacks"))
         // TODO Handle n (n+1 = number of stacks to pop)
         val newStackPointerName = freshName("stackPointer");
-        val temporaryName = "temporary_" + newStackPointerName;
+        val temporaryName = freshName(newStackPointerName + "_temporary");
         val temporaryReference = LocalReference(StructureType(List(stackType, stackPointerType)), temporaryName);
         emit(Call(temporaryName, StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
         emit(ExtractValue(variable.name, temporaryReference, 0));
