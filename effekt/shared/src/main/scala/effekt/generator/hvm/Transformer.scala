@@ -41,8 +41,6 @@ def transform(mod: cps.ModuleDecl): Book = {
   
   given env: Environment = Environment(decls, MutableMap())
 
-  //println(env.defMap)
-
   mod.decls.foreach({
     case cps.Declaration.InterfaceDecl(id, operations) => env.defMap ++= transform(id, operations); 
     case cps.Declaration.Data(id, ctors) => env.defMap ++= transform(id, ctors)
@@ -50,12 +48,8 @@ def transform(mod: cps.ModuleDecl): Book = {
   
   val externs = mod.externs.map(x => transform(x))
   val defns = mod.definitions.map(x => transform(x))
-  
-  //println(env.defMap)
 
   defns map env.addDefinition
-  
-  //println(env.defMap)
 
   Book(env.defMap, externs, decls, MutableMap(), Some(Name(mod.path)))
 }
@@ -93,7 +87,6 @@ def transform(template: Template[cps.Expr]): String =
   intercalate(template.strings, template.args map exprToString).mkString // keine map
 
 def transform(definition: cps.Definition)(using env: Environment): Definition = 
-  //println(definition)
   definition match {
   //params + body => rule(patterns, body)
   case cps.Definition.Function(name, params, cont, body) => 
@@ -114,7 +107,7 @@ def transform(term: cps.Term)(using env: Environment): Term = term match {
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>
     //println(term)
     Mat(List(transform(scrutinee)), (clauses map ((id, blockLit) => transform(id, blockLit, scrutinee))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
-  case cps.Term.Let(name, cps.Expr.BlockLit(params, body), rest) => println(term); toTopLevel(name, params:+ Id("k"), body)(using env); transform(rest)//params :+ k ???
+  case cps.Term.Let(name, cps.Expr.BlockLit(params, body), rest) => println(term); toTopLevel(name, params, body)(using env); transform(rest)
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
   //case cps.Term.LetCont(name, param, body, rest) => toTopLevel(name, List(param), body)(using env); transform(rest)
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(idToString(param)), transform(body)(using env)), transform(rest))
