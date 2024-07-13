@@ -16,7 +16,8 @@ extern pure def show[R](value: R): String =
 //extern pure def infixConcat(s1: String, s2: String): String =
 //  "${s1} + ${s2}"
 
-
+extern io def println(r: String): Unit =
+  hvm "(IO/bind (IO/print r) *)"
 
 //Math ops
 

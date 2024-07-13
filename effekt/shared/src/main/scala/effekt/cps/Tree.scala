@@ -53,6 +53,7 @@ enum Expr{
   case Var(name: Id)
   case Lit(n: Int)
   case UnitLit()
+  case StringLit(s: String)
   case PureApp(b: Expr, args: List[Expr])
 
   case Make(data: Id, tag: Id, vargs: List[Expr])

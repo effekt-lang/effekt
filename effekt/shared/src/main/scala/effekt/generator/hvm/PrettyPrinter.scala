@@ -32,7 +32,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case Fan(Tup, tag, els) => toDoc(tag)<>parens(hsep(els map toDoc, string(", ")))
       case Fan(Dup, tag, els) => toDoc(tag)<>braces(hsep(els map toDoc))
       case Num(value)                 => string(value.toString)
-      case Str(value)                 => string(value)
+      case Str(value)                 => string(""""""")<>string(value)<>string(""""""")
       case Lst(els)                   => brackets(folddoc((els map toDoc), (x, y) => x <> String(",") <+> y))
       case Opx(op, fst, snd)          => parens(toDoc(op) <+> toDoc(fst) <+> toDoc(snd))
       case Mat(args, rules)           => line<>string("match") <+> hsep((args map toDoc), string(","))<>line<> braces(vsep((rules map ((x)=>hsep(x.pats map toDoc)<>string(":")<+>toDoc(x.body))), string("; ")))

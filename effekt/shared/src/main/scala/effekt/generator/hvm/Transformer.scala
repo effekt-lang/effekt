@@ -133,6 +133,7 @@ def transform(definitions: List[cps.Definition], body: cps.Term)(using env: Envi
 def transform(expr: cps.Expr)(using env: Environment): Term = expr match {
   case cps.Expr.Lit(n) => Num(n)
   case cps.Expr.UnitLit() => Era
+  case cps.Expr.StringLit(s) => Str(s)
   case cps.Expr.Var(name) => idToVar(name)
   case cps.Expr.PureApp(b, args) => chainApp(transform(b), (args map transform))
   case cps.Expr.Box(b) => transform(b)
