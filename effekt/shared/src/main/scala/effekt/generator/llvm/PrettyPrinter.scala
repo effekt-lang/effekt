@@ -99,7 +99,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case Comment(msg) =>
       val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
-      s"; $sanitized"
+      s"\n; $sanitized"
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {
