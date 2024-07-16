@@ -584,17 +584,20 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 
 
 // Bitwise operations
-// ===============
+// ==================
 extern pure def bitwiseShl(x: Int, y: Int): Int =
   js "(${x} << ${y})"
+  chez "(ash ${x} ${y})"
   llvm "%z = shl %Int %x, %y ret %Int %z"
 
 extern pure def bitwiseAnd(x: Int, y: Int): Int =
   js "(${x} & ${y})"
+  chez "(logand ${x} ${y})"
   llvm "%z = and %Int %x, %y ret %Int %z"
 
 extern pure def bitwiseXor(x: Int, y: Int): Int =
   js "(${x} ^ ${y})"
+  chez "(logxor ${x} ${y})"
   llvm "%z = xor %Int %x, %y ret %Int %z"
 
 
@@ -684,7 +687,7 @@ namespace internal {
     extern pure def boxInt(n: Int): BoxedInt =
       llvm """
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxInt(b: BoxedInt): Int =
@@ -698,7 +701,7 @@ namespace internal {
       llvm """
         %extended = sext i8 %n to i64
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxByte(b: BoxedByte): Byte =
@@ -712,7 +715,7 @@ namespace internal {
     extern pure def boxChar(c: Char): BoxedChar =
       llvm """
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %c, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxChar(b: BoxedChar): Char =
@@ -730,7 +733,7 @@ namespace internal {
       llvm """
         %n = bitcast double %d to i64
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxDouble(b: BoxedDouble): Double =

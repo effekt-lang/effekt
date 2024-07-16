@@ -176,7 +176,7 @@ trait TransformerMonadic extends Transformer {
 
   def toJS(expr: core.Expr)(using D: DeclarationContext, C: Context): js.Expr = expr match {
     case Literal((), _) => $effekt.field("unit")
-    case Literal(s: String, _) => JsString(s)
+    case Literal(s: String, _) => JsString(escape(s))
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
 

@@ -139,6 +139,46 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
   }
 }
 
+// TODO optimize (right now this will be horribly slow (compared to the native JS version)
+def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
+
+  if( base > 36 || base < 1 ) {
+    wrongFormat("Invalid base: " ++ base.show)
+  }
+
+  val zero = '0'.toInt
+  val l_a = 'a'.toInt
+  val u_a = 'A'.toInt
+
+  def parseDigit(c: Char): Option[Int] = {
+    if( c >= '0' and c <= '9' and c.toInt - zero < base ) {
+      Some(c.toInt - zero)
+    } else if( c >= 'a' and c <= 'z' and c.toInt - l_a < base - 10 ) {
+      Some(c.toInt - l_a + 10)
+    } else if( c >= 'A' and c <= 'Z' and c.toInt - u_a < base - 10) {
+      Some(c.toInt - u_a + 10)
+    } else {
+      None()
+    }
+  }
+
+  def go(index: Int, acc: Int): Int = {
+    result[Char, OutOfBounds] { str.charAt(index) } match {
+      case Success(c) and parseDigit(c) is Some(d) =>
+        go(index + 1, base * acc + d)
+      case Success(c) => wrongFormat("Not a valid number: '" ++ str ++ "'")
+      // wrong index means we are done parsing
+      case Error(_, _) => acc
+    }
+  }
+
+  with default[OutOfBounds, Int] { wrongFormat("Empty string is not a valid number") };
+
+  str.charAt(0) match {
+    case '-' => 0 - go(1, 0)
+    case _   => go(0, 0)
+  }
+}
 
 // Native versions of toInt (unused right now)
 //   ML: also accepts sml style `~2` for unary minus along with `+2` and `-2`
@@ -250,6 +290,13 @@ extern pure def toInt(ch: Char): Int =
   ml "${ch}"
   llvm "ret %Int ${ch}"
 
+extern pure def toChar(codepoint: Int): Char =
+  js "${codepoint}"
+  chez "${codepoint}"
+  ml "${codepoint}"
+  llvm "ret %Int ${codepoint}"
+
+
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
@@ -305,16 +352,16 @@ extern type StringIterator
  * Also see: https://en.wikipedia.org/wiki/UTF-8
  */
 def utf8ByteCount(codepoint: Char): Int = codepoint match {
-  case c and c >= \u{0000}  and c <= \u{007F}   => 1
-  case c and c >= \u{0080}  and c <= \u{07FF}   => 2
-  case c and c >= \u{0800}  and c <= \u{FFFF}   => 3
-  case c and c >= \u{10000} and c <= \u{10FFFF} => 4
+  case c and c >= \u0000  and c <= \u007F   => 1
+  case c and c >= \u0080  and c <= \u07FF   => 2
+  case c and c >= \u0800  and c <= \uFFFF   => 3
+  case c and c >= \u10000 and c <= \u10FFFF => 4
   case c => panic("Not a valid code point")
 }
 
 def utf16UnitCount(codepoint: Char): Int = codepoint match {
-  case c and c >= \u{0000}  and c <= \u{FFFF}   => 1
-  case c and c >= \u{10000} and c <= \u{10FFFF} => 4
+  case c and c >= \u0000  and c <= \uFFFF   => 1
+  case c and c >= \u10000 and c <= \u10FFFF => 4
   case c => panic("Not a valid code point")
 }
 

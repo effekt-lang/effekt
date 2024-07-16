@@ -1,0 +1,25 @@
+import examples/benchmarks/runner
+
+effect Get() : Int
+effect Set(i: Int): Unit
+
+def countdown(): Int / {Get, Set} = {
+  val i = do Get();
+  if (i == 0) {
+    i
+  } else {
+    do Set(i - 1);
+    countdown()
+  }
+}
+
+def run(n: Int) = {
+  var s = n;
+  try {
+    countdown()
+  } with Get { () => resume(s)
+  } with Set { (i: Int) => s = i; resume(()) }
+}
+
+def main() = benchmark(5){run}
+

@@ -18,7 +18,7 @@ def main() = {
   charOrOutOfBounds { str.charAt(10) }    // 100
 
   println(utf8ByteCount('a'))      // 1
-  println(utf8ByteCount(\u{0a00})) // 3
+  println(utf8ByteCount(\u0a00)) // 3
 
 
   charOrOutOfBounds { str.charAt(11) }

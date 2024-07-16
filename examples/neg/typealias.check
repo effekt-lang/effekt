@@ -10,4 +10,4 @@ Possible overload: effekt::infixAdd of type (Double, Double) => Double
   Expected Double but got Int.
 
 def add(x: Foo, y: Foo): Bar = x + y
-                               ^
+                               ^^^^^

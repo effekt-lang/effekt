@@ -23,7 +23,7 @@ def main() = {
   println("f😅o😅o".indexOf("😅", 0))    // Some(1)
 
   println("f😅o😅o".split("😅"))
-  println(toString(\u{1FAD6}))
+  println(toString(\u1FAD6))
   println(toString('🫖'))
   println(toString('貫'))
 
