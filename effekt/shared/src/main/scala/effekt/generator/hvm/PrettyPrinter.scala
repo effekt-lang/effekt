@@ -76,7 +76,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(optional: Option[String]): Doc = optional match {
-    case Some(string)  => toDoc(Str(string))
+    case Some(s)  => string(s)
     case None          => string("")
   }
 
