@@ -20,7 +20,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       //case Chn(tag, nam, bod)         => toDoc(tag)<+>string("λ$")<>toDoc(nam)<+>toDoc(bod)
       case Var(nam)                   => string(nam)
       case Lnk(nam)                   => string("$") <> string(nam)
-      case Let(pat, value, nxt)       => string("let")<+> toDoc(pat) <+> string("=") <+> toDoc(value)<>string(";")<>line<>nest(toDoc(nxt))
+      case Let(pat, value, nxt)       => string("let") <+> toDoc(pat) <+> string("=") <+> toDoc(value)<>string(";")<>line<>nest(toDoc(nxt))
+      case Def(definition, nxt) => string("def") <+> toDoc(definition) <>line<> nest(toDoc(nxt))
       case Bnd(fun, ask, value, nxt) => string("do")<+>string(fun)<+>braces(bndToDoc(Bnd(fun, ask, value, nxt)))
       case Use(None, value, nxt) => ???
       case Use(Some(name), value, nxt) => string("use")<+>string(name)<+>string("=")<+>toDoc(value)<+>string(";")<+>toDoc(nxt)

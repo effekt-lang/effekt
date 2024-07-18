@@ -92,6 +92,7 @@ enum Term {
    //case Chn(tag: Tag, nam: Option[String], bod: Term)
    case Lnk(nam: String)
    case Let(pat: Pattern, value: Term, nxt: Term)
+   case Def(definition: Definition, nxt: Term)
    case Bnd(fun: String, ask: Pattern, value: Term, nxt: Term)
    case Use(name: Option[String], value: Term, nxt: Term)
    case App(tag: Tag, fun: Term, arg: Term)

@@ -107,7 +107,8 @@ def transform(term: cps.Term)(using env: Environment): Term = term match {
   case cps.Term.Match(scrutinee, clauses, Some(default)) =>
     //println(term)
     Mat(List(transform(scrutinee)), (clauses map ((id, blockLit) => transform(id, blockLit, scrutinee))) :+ Rule(List(VarPattern(Some("_"))), transform(default)))
-  case cps.Term.Let(name, cps.Expr.BlockLit(params, body), rest) => println(term); toTopLevel(name, params, body)(using env); transform(rest)
+  //case cps.Term.Let(name, cps.Expr.BlockLit(params, body), rest) => toTopLevel(name, params, body)(using env); transform(rest)
+  case cps.Term.Let(name, cps.Expr.BlockLit(params, body), rest) => Def(Definition(name.toString, List(Rule(params map idToPattern, transform(body))), false), transform(rest))
   case cps.Term.Let(name, expr, rest) => Let(idToPattern(name), transform(expr), transform(rest))
   //case cps.Term.LetCont(name, param, body, rest) => toTopLevel(name, List(param), body)(using env); transform(rest)
   case cps.Term.LetCont(name, param, body, rest) => Let(idToPattern(name), Lam(Auto, Some(idToString(param)), transform(body)(using env)), transform(rest))
