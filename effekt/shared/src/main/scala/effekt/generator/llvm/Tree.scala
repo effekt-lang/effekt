@@ -7,12 +7,18 @@ package llvm
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Definition
  */
 enum Definition {
-  case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock], cc: String = "tailcc")
+  case Function(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
   case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
   case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
 }
 export Definition.*
+
+enum CallingConvention {
+  case Ccc()
+  case Tailcc()
+}
+export CallingConvention.*
 
 case class BasicBlock(name: String, instructions: List[Instruction], terminator: Terminator)
 
@@ -20,8 +26,7 @@ case class BasicBlock(name: String, instructions: List[Instruction], terminator:
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST-Instruction.html#t:Instruction
  */
 enum Instruction {
-  case Call(result: String, resultType: Type, function: Operand, arguments: List[Operand])
-  case TailCall(function: Operand, arguments: List[Operand], cc: String = "tailcc")
+  case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand])
   case Load(result: String, tpe: Type, address: Operand)
   case Store(address: Operand, value: Operand)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])

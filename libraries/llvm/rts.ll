@@ -1,7 +1,5 @@
 ; Run-Time System
 
-attributes #0 = { "ccc" }
-
 %Evidence = type i64
 
 ; Basic types
@@ -207,7 +205,7 @@ define void @eraseObject(%Object %object) alwaysinline {
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     %eraser = load %Eraser, ptr %objectEraser
     %environment = call %Environment @objectEnvironment(%Object %object)
-    call fastcc void %eraser(%Environment %environment)
+    call void %eraser(%Environment %environment)
     call void @free(%Object %object)
     br label %done
 
@@ -491,7 +489,7 @@ loop:
     %newMemory = call %Memory @copyMemory(%Memory %memory)
 
     %newStackPointer = extractvalue %Memory %newMemory, 0
-    call fastcc void @shareFrames(%StackPointer %newStackPointer)
+    call void @shareFrames(%StackPointer %newStackPointer)
 
     %newRegion = call %Region @copyRegion(%Region %region)
 
@@ -534,7 +532,7 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     free:
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
-    call fastcc void @eraseFrames(%StackPointer %stackPointer)
+    call void @eraseFrames(%StackPointer %stackPointer)
 
     %regionPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %region = load %Region, ptr %regionPointer
@@ -545,19 +543,19 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     ret void
 }
 
-define fastcc void @shareFrames(%StackPointer %stackPointer) alwaysinline {
+define void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
     %stackSharer = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 1
     %sharer = load %Sharer, ptr %stackSharer
-    tail call fastcc void %sharer(%StackPointer %newStackPointer)
+    tail call void %sharer(%StackPointer %newStackPointer)
     ret void
 }
 
-define fastcc void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
+define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
     %stackEraser = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 2
     %eraser = load %Eraser, ptr %stackEraser
-    tail call fastcc void %eraser(%StackPointer %newStackPointer)
+    tail call void %eraser(%StackPointer %newStackPointer)
     ret void
 }
 
@@ -596,7 +594,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 
 ; RTS initialization
 
-define fastcc void @topLevel(%Pos %val, %StackPointer noalias %stackPointer) {
+define tailcc void @topLevel(%Pos %val, %StackPointer noalias %stackPointer) {
     %base = load %Base, ptr @base
     call void @free(%Base %base)
 
@@ -612,12 +610,12 @@ define fastcc void @topLevel(%Pos %val, %StackPointer noalias %stackPointer) {
     ret void
 }
 
-define fastcc void @topLevelSharer(%Environment %environment) {
+define void @topLevelSharer(%Environment %environment) {
     ; TODO this should never be called
     ret void
 }
 
-define fastcc void @topLevelEraser(%Environment %environment) {
+define void @topLevelEraser(%Environment %environment) {
     ; TODO this should never be called
     ret void
 }
@@ -635,7 +633,7 @@ define %StackPointer @withEmptyStack() {
     ret %StackPointer %stackPointer_2
 }
 
-define fastcc void @run_i64(%Neg %f, i64 %arg) {
+define void @run_i64(%Neg %f, i64 %arg) {
     ; backup globals
     %base = load %Base, ptr @base
     %region = load %Region, ptr @region
@@ -664,7 +662,7 @@ define fastcc void @run_i64(%Neg %f, i64 %arg) {
 }
 
 
-define fastcc void @run_Pos(%Neg %f, %Pos %arg) {
+define void @run_Pos(%Neg %f, %Pos %arg) {
     ; backup globals
     %base = load %Base, ptr @base
     %region = load %Region, ptr @region
