@@ -16,45 +16,23 @@ import scala.util.boundary.break
 
 case class Fail(message: String, position: Int) extends Throwable(null, null, false, false)
 
-// Used for Pratt-style parsing
-enum Operator {
-  case Add, Sub, Mul, Div, And, Or, Eq, Neq, Lt, Gt, Lte, Gte
-}
-
-object Operator {
-  def fromToken(token: TokenKind): Option[Operator] = match token {
-    case `+` => Some(Operator.Add)
-    case `-` => Some(Operator.Sub)
-    case `*` => Some(Operator.Mul)
-    case `/` => Some(Operator.Div)
-    case `&&` => Some(Operator.And)
-    case `||` => Some(Operator.Or)
-    case `===` => Some(Operator.Eq)
-    case `!==` => Some(Operator.Neq)
-    case `<` => Some(Operator.Lt)
-    case `>` => Some(Operator.Gt)
-    case `<=` => Some(Operator.Lte)
-    case `>=` => Some(Operator.Gte)
-    case _ => None
-  }
-}
-
 // Used for operator precedence
 enum Precedence {
   case LeftBindsTighter, RightBindsTighter, Ambiguous
 }
 
 object Precedence {
-  // Compares two operators and returns a precedence.
+  // Compares two token operators and returns a precedence.
+  // TODO(jiribenes): should only be used with operators!
   // TODO(jiribenes): laws
   // TODO(jiribenes): maybe render as a precedence table instead? (or at least document it as such)
-  def compareOperators(left: Operator, right: Operator): Precedence = (left, right) match {
-    case (Operator.Mul | Operator.Div, Operator.Add | Operator.Sub) => Precedence.LeftBindsTighter
-    case (Operator.Add | Operator.Sub, Operator.Mul | Operator.Div) => Precedence.RightBindsTighter
-    case (Operator.And, Operator.Or) => Precedence.LeftBindsTighter
-    case (Operator.Or, Operator.And) => Precedence.RightBindsTighter
-    case (Operator.Eq | Operator.Neq, Operator.Lt | Operator.Gt | Operator.Lte | Operator.Gte) => Precedence.LeftBindsTighter
-    case (Operator.Lt | Operator.Gt | Operator.Lte | Operator.Gte, Operator.Eq | Operator.Neq) => Precedence.RightBindsTighter
+  def compareOperators(left: TokenKind, right: TokenKind): Precedence = (left, right) match {
+    case (`*` | `/`, `+` | `-`) => Precedence.LeftBindsTighter
+    case (`+` | `-`, `*` | `/`) => Precedence.RightBindsTighter
+    case (`&&`, `||`) => Precedence.LeftBindsTighter
+    case (`||`, `&&`) => Precedence.RightBindsTighter
+    case (`===` | `!==`, `<=` | `>=` | `<` | `>`) => Precedence.LeftBindsTighter
+    case (`<=` | `>=` | `<` | `>`, `===` | `!==`) => Precedence.RightBindsTighter
     case _ if left == right => Precedence.LeftBindsTighter
     case _ => Precedence.Ambiguous
   }
@@ -670,15 +648,20 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       e
     case _ => fail(s"Expected expression")
   }
+
+  def isOperator(token: TokenKind): Boolean = token match {
+    case `+` | `-` | `*` | `/` | `&&` | `||` | `===` | `!==` | `<` | `>` | `<=` | `>=` => true
+    case _ => false
+  }
                 
-  def exprOuter(prevOp: Option[Operator]): Term = {
+  def exprOuter(prevOp: Option[TokenKind]): Term = {
     var left = exprInner()
     while (true) {
       val startPos = position
-      Operator.fromToken(peek.kind) match {
-        case Some(op) =>
+      peek.kind match {
+        case op if isOperator(op) =>
           val precedence = prevOp match {
-            case Some(prev) => Precedence.compare(prev, op)
+            case Some(prev) => Precedence.compareOperators(prev, op)
             case None => Precedence.RightBindsTighter
           }
           precedence match {
@@ -686,12 +669,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
               return left
             case Precedence.RightBindsTighter =>
               consume(op)
-              val right = exprOuter(Some(currentOp))
+              val right = exprOuter(Some(op))
               left = binaryOp(left, op, right).withRangeOf(left, right)
             case Precedence.Ambiguous =>
               fail("Ambiguous precedence")
           }
-        case None =>
+        case _ =>
           return left
       }
     }
