@@ -611,7 +611,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // create joinpoint
     val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
-    val joinpoint = Context.bind(TmpBlock("joinpoint"), BlockLit(Nil, Nil, params, Nil, body))
+    val joinpoint = Context.bind(TmpBlock("k"), BlockLit(Nil, Nil, params, Nil, body))
 
     def transformPattern(p: source.MatchPattern): Pattern = p match {
       case source.AnyPattern(id) =>
@@ -809,7 +809,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(s: Stmt): ValueVar = {
 
     // create a fresh symbol and assign the type
-    val x = TmpValue("statementBind")
+    val x = TmpValue("r")
 
     val binding = Binding.Val(x, s.tpe, s)
     bindings += binding
@@ -821,7 +821,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     case x: ValueVar => x
     case e =>
       // create a fresh symbol and assign the type
-      val x = TmpValue("expressionBind")
+      val x = TmpValue("r")
 
       val binding = Binding.Let(x, e.tpe, e)
       bindings += binding
