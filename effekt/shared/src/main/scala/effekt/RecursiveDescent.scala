@@ -16,6 +16,50 @@ import scala.util.boundary.break
 
 case class Fail(message: String, position: Int) extends Throwable(null, null, false, false)
 
+// Used for Pratt-style parsing
+enum Operator {
+  case Add, Sub, Mul, Div, And, Or, Eq, Neq, Lt, Gt, Lte, Gte
+}
+
+object Operator {
+  def fromToken(token: TokenKind): Option[Operator] = match token {
+    case `+` => Some(Operator.Add)
+    case `-` => Some(Operator.Sub)
+    case `*` => Some(Operator.Mul)
+    case `/` => Some(Operator.Div)
+    case `&&` => Some(Operator.And)
+    case `||` => Some(Operator.Or)
+    case `===` => Some(Operator.Eq)
+    case `!==` => Some(Operator.Neq)
+    case `<` => Some(Operator.Lt)
+    case `>` => Some(Operator.Gt)
+    case `<=` => Some(Operator.Lte)
+    case `>=` => Some(Operator.Gte)
+    case _ => None
+  }
+}
+
+// Used for operator precedence
+enum Precedence {
+  case LeftBindsTighter, RightBindsTighter, Ambiguous
+}
+
+object Precedence {
+  // Compares two operators and returns a precedence.
+  // TODO(jiribenes): laws
+  // TODO(jiribenes): maybe render as a precedence table instead? (or at least document it as such)
+  def compareOperators(left: Operator, right: Operator): Precedence = (left, right) match {
+    case (Operator.Mul | Operator.Div, Operator.Add | Operator.Sub) => Precedence.LeftBindsTighter
+    case (Operator.Add | Operator.Sub, Operator.Mul | Operator.Div) => Precedence.RightBindsTighter
+    case (Operator.And, Operator.Or) => Precedence.LeftBindsTighter
+    case (Operator.Or, Operator.And) => Precedence.RightBindsTighter
+    case (Operator.Eq | Operator.Neq, Operator.Lt | Operator.Gt | Operator.Lte | Operator.Gte) => Precedence.LeftBindsTighter
+    case (Operator.Lt | Operator.Gt | Operator.Lte | Operator.Gte, Operator.Eq | Operator.Neq) => Precedence.RightBindsTighter
+    case _ if left == right => Precedence.LeftBindsTighter
+    case _ => Precedence.Ambiguous
+  }
+}
+
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
 
   import scala.collection.mutable.ListBuffer
@@ -604,9 +648,57 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     if peek(`:`) then  `:` ~> blockType()
     else fail("Expected a type annotation")
 
-  def expr(): Term = peek.kind match {
-    case _ => matchExpr()
+  def exprInner(): Term = peek.kind match {
+    case `if`     => ifExpr()
+    case `while`  => whileExpr()
+    case `try`    => tryExpr()
+    case `region` => regionExpr()
+    case `box`    => boxExpr()
+    case `unbox`  => unboxExpr()
+    case `fun`    => funExpr()
+    case `new`    => newExpr()
+    case `do`     => doExpr()
+    case _ if isLiteral      => literal()
+    case _ if isVariable     => variable()
+    case _ if isHole         => hole()
+    case _ if isTupleOrGroup => tupleOrGroup()
+    case _ if isListLiteral  => listLiteral()
+    case `(` => 
+      consume(`(`)
+      val e = expr()
+      consume(`)`)
+      e
+    case _ => fail(s"Expected expression")
   }
+                
+  def exprOuter(prevOp: Option[Operator]): Term = {
+    var left = exprInner()
+    while (true) {
+      val startPos = position
+      Operator.fromToken(peek.kind) match {
+        case Some(op) =>
+          val precedence = prevOp match {
+            case Some(prev) => Precedence.compare(prev, op)
+            case None => Precedence.RightBindsTighter
+          }
+          precedence match {
+            case Precedence.LeftBindsTighter =>
+              return left
+            case Precedence.RightBindsTighter =>
+              consume(op)
+              val right = exprOuter(Some(currentOp))
+              left = binaryOp(left, op, right).withRangeOf(left, right)
+            case Precedence.Ambiguous =>
+              fail("Ambiguous precedence")
+          }
+        case None =>
+          return left
+      }
+    }
+    left
+  }
+                
+  def expr(): Term = exprOuter(None)
 
   def ifExpr(): Term =
     nonterminal:
