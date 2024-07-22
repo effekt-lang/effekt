@@ -45,30 +45,50 @@ unsafeDiv(42, 0)
 Notice how the return type of `unsafeDiv` changed in comparison with `div`. Since the `Exception` effect has been 
 handled, there are no other effects (the empty set `{}`) the calling context needs to handle. One may easily mistake 
 the absence of effects in the signature as proof for the purity of the function, however, this is not the case in 
-Effekt as `unsafeDiv` obviously invokes an effect: it is merely contextually pure.
+Effekt as `unsafeDiv` obviously invokes the `Exception` effect.
 
-Now that we have seen this basic example, you may ask yourself why you would even use effects if they simply emulate 
-exceptions? While this is partly true, that is, effects can be used for exceptions, there are also many other, more 
-elaborate use-cases. Effects are in fact strictly more powerful since they can capture the state of a computation as a 
-continuation and optionally resume this computation at a later point in time.
+Besides exceptions, we can also emulate other usefull mechanism with effects. For example generator functions using the 
+`Yield` effect.
 
 ```
-interface Flip {
-  def flip(): Boolean
+interface Yield[A] {
+  def yield(x: A): Unit
 }
 ```
 
-```
-def imp(): List[Boolean] / Flip = { 
-  val a = flip()
-  val b = flip()
-  [not(a) || b]
-}
-def truthTableImp(): List[Boolean] =
-  try { 
-    imp()
-  } with Flip {
-    def flip() = resume(true).append(resume(false))
+When envoking the `yield` operation, we pass a value to be yield to the lexically nearest handler discharging the 
+`Yield` effect. Recall our `fib` functions from earlier. We may also write it as a generator that runs infinitely while 
+yielding each fibonacci number in the process.
+
+````
+def fib(): Unit / { Yield[Int] } = {
+  def inner(a: Int, b: Int): Unit / { Yield[Int] } = {
+    do yield(a)
+    inner(b, a + b)
   }
+  inner(0, 1)
+}
+
+// generate all fibonacci numbers up until the given limit.
+def genFibs(limit: Int): List[Int] / {} = {
+  var iters = 0
+  var fibs = []
+  try {
+    fib()
+  } with Yield[Int] {
+    def yield(x) = 
+      if (iters < limit) {
+        iters = iters + 1
+        fibs = Cons(x, fibs)
+        resume(()) // <- we resume the computation where yield was envoked
+      } else {
+        ()
+      }
+  }
+  fibs
+}
 ```
 
+```effekt:repl
+genFibs(15)
+```
