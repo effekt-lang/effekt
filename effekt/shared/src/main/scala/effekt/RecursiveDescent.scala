@@ -834,17 +834,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def assignExpr(): Term =
     nonterminal:
-      orExpr() match {
+      expr() match {
         case x @ Term.Var(id) => when(`=`) { Assign(id, expr()) } { x }
         case other => other
       }
-
-  def orExpr(): Term = infix(andExpr, `||`)
-  def andExpr(): Term = infix(eqExpr, `&&`)
-  def eqExpr(): Term = infix(relExpr, `===`, `!==`)
-  def relExpr(): Term = infix(addExpr, `<=`, `>=`, `<`, `>`)
-  def addExpr(): Term = infix(mulExpr, `++`, `+`, `-`)
-  def mulExpr(): Term = infix(callExpr, `*`, `/`)
 
   inline def infix(nonTerminal: () => Term, ops: TokenKind*): Term =
     nonterminal:
