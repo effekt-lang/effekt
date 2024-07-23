@@ -122,6 +122,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "capture" / "borrows.effekt",
     examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
+    examplesDir / "pos" / "capture" / "state_eff.effekt",
     examplesDir / "pos" / "lambdas" / "annotated.effekt",
     examplesDir / "pos" / "lambdas" / "scheduler.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
