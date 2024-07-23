@@ -1,15 +1,14 @@
 module examples/pos/simpleparser
 
-import text/string
+import string
 import text/regex
-import immutable/list
-import immutable/option
-
 
 effect Fail[A](msg: String) : A
 
-def stringToInt(str: String): Int / { Fail } =
-  str.toInt.getOrElse { do Fail("cannot convert input to integer") }
+def stringToInt(str: String): Int / { Fail } = {
+  with default[WrongFormat, Int] { do Fail("cannot convert input to integer") };
+  str.toInt
+}
 
 def perhapsAdd(): Int / { Fail } = stringToInt("1") + stringToInt("2")
 
@@ -41,7 +40,7 @@ def feed[R](input: List[String]) { prog: () => R / Next } : R / Fail = {
 }
 
 
-effect Flip(): Boolean
+effect Flip(): Bool
 
 def many[R] { prog: () => R }: List[R] / Flip = {
   var result: List[R] = Nil();
@@ -78,6 +77,6 @@ def parse[R](input: List[String]) { prog: () => R / Parser }: Result[R] / {} =
 
 
 def main() = {
-  println(parse(["12", "34", "56"]) { manyNumbers() })
+  inspect(parse(["12", "34", "56"]) { manyNumbers() })
   // Success(Cons(12, Cons(34, Cons(56, Nil()))))
 }

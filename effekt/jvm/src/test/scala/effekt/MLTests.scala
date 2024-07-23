@@ -12,7 +12,6 @@ class MLTests extends EffektTests {
 
   override lazy val positives: List[File] = List(
     examplesDir / "ml",
-    examplesDir / "benchmarks",
     examplesDir / "pos",
     examplesDir / "features"
   )
@@ -54,10 +53,10 @@ class MLTests extends EffektTests {
     //    examplesDir / "pos" / "lambdas" / "localstate.effekt",
     //    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
 
+
     // region-based memory management is not yet supported (monomorphization would only work for type monomorphic regions)
     examplesDir / "pos" / "recursiveobject.effekt",
-
-    examplesDir / "benchmarks" / "generator.effekt",
+    examplesDir / "benchmarks" / "other" / "generator.effekt",
 
     // missing "show" instance
     examplesDir / "pos" / "nim.effekt",
@@ -68,11 +67,20 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "dequeue.effekt",
     examplesDir / "pos" / "matchblock.effekt",
     examplesDir / "pos" / "polymorphic" / "exceptions.effekt",
+    examplesDir / "pos" / "exists.effekt", // now show instance for existentials
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
     examplesDir / "pos" / "triples.effekt",
     examplesDir / "pos" / "bidirectional",
+    examplesDir / "pos" / "type_omission_op.effekt",
+
+    // effect-polymorphic recursion
+    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "mandelbrot.effekt",
 
     // mutual recursion
     examplesDir / "pos" / "mutualrecursion.effekt",
@@ -85,7 +93,6 @@ class MLTests extends EffektTests {
     examplesDir / "casestudies" / "lexer.effekt.md",
     examplesDir / "casestudies" / "parser.effekt.md",
     examplesDir / "casestudies" / "prettyprinter.effekt.md",
-    examplesDir / "benchmarks" / "pretty.effekt",
     examplesDir / "pos" / "simpleparser.effekt",
 
     // cont
@@ -114,9 +121,14 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "liftinference.effekt",
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
+
     // unkown issue - 'Mutual definitions are currently not supported by this backend'
     examplesDir / "pos" / "patternmatching" / "matching-while.effekt",
 
     examplesDir / "pos" / "probabilistic.effekt",
+
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
   )
 }

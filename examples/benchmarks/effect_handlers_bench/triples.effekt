@@ -1,0 +1,48 @@
+import examples/benchmarks/runner
+
+record Triple(a: Int, b: Int, c: Int)
+
+interface Flip {
+  def flip(): Bool
+}
+
+interface Fail {
+  def fail(): Nothing
+}
+
+def choice(n: Int): Int / {Flip, Fail} = {
+  if (n < 1) {
+    do fail() match {}
+  } else if (do flip()) {
+    n
+  } else {
+    choice(n - 1)
+  }
+}
+
+def triple(n: Int, s: Int): Triple / {Flip, Fail} = {
+  val i = choice(n)
+  val j = choice(i - 1)
+  val k = choice(j - 1)
+  if (i + j + k == s) {
+    Triple(i, j, k)
+  } else {
+    do fail() match {}
+  }
+}
+
+def hash(triple: Triple): Int = triple match {
+  case Triple(a, b, c) => mod(((53 * a) + 2809 * b + 148877 * c), 1000000007)
+}
+
+def run(n: Int) =
+  try {
+    hash(triple(n, n))
+  } with Flip {
+    def flip() = mod(resume(true) + resume(false), 1000000007)
+  } with Fail {
+    def fail() = 0
+  }
+
+def main() = benchmark(10){run}
+

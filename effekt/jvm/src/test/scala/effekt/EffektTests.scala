@@ -17,6 +17,9 @@ trait EffektTests extends munit.FunSuite {
   // The name of the backend as it is passed to the --backend flag.
   def backendName: String
 
+  // Whether to execute using valgrind
+  def valgrind = false
+
   def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
 
   // The sources of all testfiles are stored here:
@@ -35,14 +38,37 @@ trait EffektTests extends munit.FunSuite {
       assertNoDiff(run(input), expected)
     }
 
-  def run(input: File): String =
-    val compiler = new effekt.Driver {}
+  // one shared driver for all tests in this test runner
+  object driver extends effekt.Driver
+
+  lazy val state: driver.context.State = warmup(file("empty.effekt"))
+
+  def warmup(input: File): driver.context.State =
+    val compiler = driver
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
+      "--compile",
+      "--no-exit-on-error",
       "--backend", backendName,
       "--out", output.getPath
     ))
     configs.verify()
+    compiler.compileFile(input.getPath, configs)
+    compiler.context.backup
+
+  def run(input: File): String =
+    val compiler = driver
+    var options = Seq(
+      "--Koutput", "string",
+      "--backend", backendName,
+      "--out", output.getPath,
+    )
+    if (valgrind) options = options :+ "--valgrind"
+    val configs = compiler.createConfig(options)
+    configs.verify()
+
+    // reuse state after compiling a trivial file
+    driver.context.restore(state)
     compiler.compileFile(input.getPath, configs)
     configs.stringEmitter.result()
 
@@ -51,7 +77,7 @@ trait EffektTests extends munit.FunSuite {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--compile",
-      "--noexit-on-error",
+      "--no-exit-on-error",
       "--backend", backendName,
       "--out", output.getPath
     ))

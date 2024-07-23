@@ -1,25 +1,26 @@
 module immutable/cslist
 
-import immutable/list
+import list
+import array
 
 // a chez scheme cons list
 extern type CSList[A]
 extern pure def cons[A](el: A, rest: CSList[A]): CSList[A] =
-  "(cons ${el} ${rest})"
+  chez "(cons ${el} ${rest})"
 
 extern pure def nil[A](): CSList[A] =
-  "(list)"
+  chez "(list)"
 
-extern pure def isEmpty[A](l: CSList[A]): Boolean =
-  "(null? ${l})"
+extern pure def isEmpty[A](l: CSList[A]): Bool =
+  chez "(null? ${l})"
 
 // unsafe!
 extern pure def head[A](l: CSList[A]): A =
-  "(car ${l})"
+  chez "(car ${l})"
 
 // unsafe!
 extern pure def tail[A](l: CSList[A]): CSList[A] =
-  "(cdr ${l})"
+  chez "(cdr ${l})"
 
 
 def toChez[A](l: List[A]): CSList[A] = l match {
@@ -29,3 +30,8 @@ def toChez[A](l: List[A]): CSList[A] = l match {
 
 def fromChez[A](l: CSList[A]): List[A] =
   if (l.isEmpty) Nil() else Cons(l.head, l.tail.fromChez)
+
+// Old From Chez
+// -------------
+extern pure def toArray[A](l: CSList[A]): Array[A] =
+  chez "(list->vector ${l})"

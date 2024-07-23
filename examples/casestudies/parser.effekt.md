@@ -15,15 +15,14 @@ Again, we require some imports -- in particular, we reuse the lexer implementati
 module examples/casestudies/parser
 
 import examples/casestudies/lexer
-import immutable/option
-import text/string
+import string
 ```
 
 Parsers can be expressed by using the lexer effect and process the token stream. To model different alternatives in the grammar, we use the following effect for non-determinism:
 
 ```
 interface Nondet {
-  def alt(): Boolean
+  def alt(): Bool
   def fail[A](msg: String): A
 }
 
@@ -36,10 +35,10 @@ We start by the simplest one, which applies a predicate to the next element in t
 input stream and fails, if it does not match.
 
 ```
-def accept { p: Token => Boolean } : Token / Parser = {
+def accept { p: Token => Bool } : Token / Parser = {
   val got = do next();
   if (p(got)) got
-  else do fail("Unexpected token " ++ show(got))
+  else do fail("Unexpected token " ++ got.show)
 }
 ```
 
@@ -91,11 +90,9 @@ type Tree {
 Let us start by defining the parser for numeric literals.
 ```
 def parseNum(): Tree / Parser = {
-  val numText = number()
-  val num = toInt(numText).getOrElse {
-    do fail("Expected number, but cannot convert input to integer: " ++ numText)
-  }
-  Lit(num)
+  val numText = number();
+  with default[WrongFormat, Tree] { do fail("Expected number, but cannot convert input to integer: " ++ numText) };
+  Lit(numText.toInt)
 }
 ```
 We simply call the parser for `number()` and try to convert the
@@ -226,19 +223,19 @@ Having implemented a handler for the `Parser` effect, we can run our example "gr
 
 ```
 def main() = {
-  println(parse("42") { parseCalls() })
-  println(parse("foo(1)") { parseCalls() })
-  println(parse("foo(1, 2)") { parseCalls() })
-  println(parse("foo(1, 2, 3, 4)") { parseCalls() })
-  println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-  println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+  inspect(parse("42") { parseCalls() })
+  inspect(parse("foo(1)") { parseCalls() })
+  inspect(parse("foo(1, 2)") { parseCalls() })
+  inspect(parse("foo(1, 2, 3, 4)") { parseCalls() })
+  inspect(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
+  inspect(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-  println(parse("}42") { parseExpr() })
-  println(parse("42") { parseExpr() })
-  println(parse("let x = 4 in 42") { parseExpr() })
-  println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-  println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-  println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-  println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+  inspect(parse("}42") { parseExpr() })
+  inspect(parse("42") { parseExpr() })
+  inspect(parse("let x = 4 in 42") { parseExpr() })
+  inspect(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+  inspect(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+  inspect(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+  inspect(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 }
 ```

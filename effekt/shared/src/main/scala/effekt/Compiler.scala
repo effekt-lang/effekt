@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ModuleDecl }
+import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ResolveExternDefs, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
 import effekt.util.messages.FatalPhaseError
@@ -107,6 +107,8 @@ trait Compiler[Executable] {
 
   def extension: String
 
+  def supportedFeatureFlags: List[String]
+
   /**
    * Used by LSP server (Intelligence) to map positions to source trees
    */
@@ -127,10 +129,10 @@ trait Compiler[Executable] {
 
   /**
    * Used by the server to typecheck, report type errors and show
-   * captures at boxes and definitions 
+   * captures at boxes and definitions
    */
   def runMiddleend(source: Source)(using Context): Option[Module] =
-    (Frontend andThen Middleend)(source).map { res => 
+    (Frontend andThen Middleend)(source).map { res =>
       validate(res.source, res.mod)
       res.mod
     }
@@ -230,6 +232,11 @@ trait Compiler[Executable] {
    */
   val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
     /**
+     * Resolves `extern`s for the current backend
+     * [[Typechecked]] --> [[Typechecked]]
+     */
+    ResolveExternDefs andThen
+    /**
      * Uses annotated effects to translate to explicit capability passing
      * [[Typechecked]] --> [[Typechecked]]
      */
@@ -311,5 +318,5 @@ trait Compiler[Executable] {
    * Path relative to the output folder
    */
   def path(m: symbols.Module)(using C: Context): String =
-    (m.path.replace('/', '_').replace('-', '_')) + extension
+    (m.path.split('/').last.replace('-', '_')) + extension
 }

@@ -1,6 +1,6 @@
 module parser
 
-effect Flip(): Boolean
+effect Flip(): Bool
 effect Next(): String
 effect Fail[A](msg: String): A
 effect Error[A](msg: String): A

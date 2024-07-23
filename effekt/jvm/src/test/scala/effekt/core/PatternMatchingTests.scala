@@ -71,7 +71,7 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Any(x.id))),
-          Condition.Val(p.id, trivalPredicate),
+          Condition.Val(p.id, TBoolean, trivalPredicate),
           Condition.Predicate(p)),
         b1, List(x)),
       Clause(
@@ -80,7 +80,7 @@ class PatternMatchingTests extends CoreTests {
         b2, List())))
 
     val expected =
-      Val(p.id, trivalPredicate,
+      Val(p.id, TBoolean, trivalPredicate,
       If(p,
         jump(b1, sc),
         jump(b2)))
@@ -125,7 +125,7 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(Pattern.Any(v.id) -> TInt)))),
-          Condition.Val(p.id, trivalPredicate),
+          Condition.Val(p.id, TBoolean, trivalPredicate),
           Condition.Predicate(p)),
         b1, List(v)),
       Clause(
@@ -139,7 +139,7 @@ class PatternMatchingTests extends CoreTests {
     // }
     val expected = Match(opt,
       List((SomeC, BlockLit(Nil, Nil, List(ValueParam(tmp.id, tmp.tpe)), Nil,
-        Val(p.id, trivalPredicate, If(p,
+        Val(p.id, TBoolean, trivalPredicate, If(p,
           App(b1, Nil, List(tmp), Nil),
           App(b2, Nil, Nil, Nil)))))),
       Some(App(b2, Nil, Nil, Nil)))

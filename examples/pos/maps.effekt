@@ -7,6 +7,6 @@ def main() = {
     m.update("hello", 5);
     m.update("world", 6);
     m.update("world", 7);
-    println(get(m, "hello"));
-    println(get(m, "world"))
+    println(m.get("hello"));
+    println(m.get("world"))
 }

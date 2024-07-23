@@ -5,7 +5,11 @@ interface Foo {
   def bar(): String
 }
 
-extern control def fancy { f: Unit => Int }: Int = "foo"
+// add for other lift-based backends, if they get added!
+extern control def fancy { f: Unit => Int }: Int =
+  chezLift "foo"
+  llvm "foo"
+  default { <> }
 
 def toplevel(x: Int, y: Int) = x + y
 
@@ -22,18 +26,18 @@ def myState { f: () => Int } = {
   x + x + f()
 }
 
-def outer(n: Int): Boolean = {
+def outer(n: Int): Bool = {
 
-  def inner(n: Int): Boolean =
+  def inner(n: Int): Bool =
     if (n <= 0) true else outer(n - 1)
 
   if (n <= 0) false else region r { inner(n - 1) }
 }
 
-def even(n: Int): Boolean =
+def even(n: Int): Bool =
   if (n <= 0) true else odd(n - 1)
 
-def odd(n: Int): Boolean =
+def odd(n: Int): Bool =
   if (n <= 0) false else even(n - 1)
 
 def usingEffects1() = try {

@@ -1,0 +1,746 @@
+module effekt
+
+namespace js {
+  // Runtime
+  extern include js "../js/effekt_runtime.js"
+
+  // Builtins
+  extern include js "../js/effekt_builtins.js"
+}
+
+namespace chez {
+
+  // All Chez Scheme backends
+  // ------------------------
+  extern include chez "../chez/common/effekt_primitives.ss"
+
+  // call/cc based implementation
+  // ----------------------------
+  extern include chezCallCC "../chez/callcc/seq0.ss"
+  extern include chezCallCC "../chez/callcc/tail0.ss"
+  extern include chezCallCC "../chez/callcc/effekt.ss"
+
+  // CPS implementation
+  // ------------------
+  extern include chezLift "../chez/lift/effekt.ss"
+
+  // Monadic implementation
+  // ----------------------
+  extern include chezMonadic "../chez/monadic/seq0.ss"
+  extern include chezMonadic "../chez/monadic/effekt.ss"
+}
+
+namespace ml {
+  extern include ml "../ml/effekt.sml"
+}
+
+namespace llvm {
+  extern include llvm "../llvm/rts.ll"
+  extern include llvm "../llvm/forward-declare-c.ll"
+}
+
+// Showing and debugging
+// =====================
+
+extern def println(value: String): Unit =
+  js "$effekt.println(${value})"
+  chez "(println_impl ${value})"
+  llvm """
+    call void @c_io_println_String(%Pos %value)
+    ret %Pos zeroinitializer ; Unit
+  """
+  ml { print(value); print("\n") }
+
+extern io def print(value: String): Unit =
+  ml "print ${value}"
+
+def println(value: Int): Unit = println(value.show)
+def println(value: Unit): Unit = println(value.show)
+def println(value: Double): Unit = println(value.show)
+def println(value: Bool): Unit = println(value.show)
+def println(value: Byte): Unit = println(value.show)
+
+extern pure def show(value: Int): String =
+  js "'' + ${value}"
+  chez "(show-number ${value})"
+  ml "show'int ${value}"
+  llvm """
+    %z = call %Pos @c_buffer_show_Int(%Int %value)
+    ret %Pos %z
+  """
+
+def show(value: Unit): String = "()"
+
+extern pure def show(value: Double): String =
+  js "'' + ${value}"
+  chez "(show-number ${value})"
+  ml "show'real ${value}"
+  llvm """
+    %z = call %Pos @c_buffer_show_Double(%Double %value)
+    ret %Pos %z
+  """
+
+def show(value: String): String =
+  value
+
+def show(value: Bool): String =
+  if (value) "true" else "false"
+
+extern pure def show(value: Char): String =
+  js "String.fromCodePoint(${value})"
+  chez "(string (integer->char ${value}))"
+  ml "str (chr ${value})"
+  llvm """
+    %z = call %Pos @c_buffer_show_Char(%Int %value)
+    ret %Pos %z
+  """
+
+extern pure def show(value: Byte): String =
+  llvm """
+    %z = call %Pos @c_buffer_show_Byte(i8 %value)
+    ret %Pos %z
+  """
+
+extern pure def genericShow[R](value: R): String =
+  js "$effekt.show(${value})"
+  chez "(show_impl ${value})"
+
+extern io def inspect[R](value: R): Unit =
+  js { println(genericShow(value)) }
+  chez { println(genericShow(value)) }
+
+
+// Strings
+// =======
+extern pure def infixConcat(s1: String, s2: String): String =
+  js "((${s1}) + (${s2}))"
+  chez "(string-append ${s1} ${s2})"
+  ml "${s1} ^ ${s2}"
+  llvm """
+    %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
+    ret %Pos %spz
+  """
+
+extern pure def length(str: String): Int =
+  js "${str}.length"
+  chez "(string-length ${str})"
+  ml "String.size ${str}"
+  llvm """
+    %x = call %Int @c_buffer_length(%Pos %str)
+    ret %Int %x
+  """
+
+extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
+  js "${str}.substring(${from}, ${to})"
+  chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
+  ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
+  llvm """
+    %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
+    ret %Pos %x
+  """
+
+
+// Side effecting ops
+// ==================
+
+extern io def random(): Double =
+  js "Math.random()"
+  chez "(random 1.0)"
+  ml "mlRandomReal ()"
+
+// References and state
+// ====================
+// the following type is defined in builtins.scala
+// interface Ref[T] { def get(): T; def put(t: T): Unit }
+// extern io def freshIn[T](t: T) {r: Region}: Ref[T] at {r} = js "r.fresh(${t})"
+// extern io def freshGlobal[T](t: T): Ref[T] at {global} = js "$effekt.fresh(${t})"
+
+
+// Equality
+// ========
+/**
+ * Result of comparison between two objects according to some order:
+ *
+ * - `Less()` means that the first object is *before* the first in the order,
+ * - `Equal()` means that the two objects are the same in the order,
+ * - and `Greater()` means that the second object is *before* the first in the order.
+ */
+type Ordering {
+  Less();
+  Equal();
+  Greater()
+}
+
+extern pure def genericCompareImpl[R](x: R, y: R): Int =
+  js "$effekt.compare(${x}, ${y})"
+
+ // Compares two values of the same type, returning an `Ordering`.
+def genericCompare[R](x: R, y: R): Ordering = {
+  genericCompareImpl(x, y) match {
+    case -1 => Less()
+    case 0 => Equal()
+    case 1 => Greater()
+    case _ => <{ "Impossible: JS comparison returned invalid value!" }>
+  }
+}
+
+def show(o: Ordering): String = o match {
+  case Less() => "Less()"
+  case Equal() => "Equal()"
+  case Greater() => "Greater()"
+}
+
+def println(o: Ordering): Unit = println(o.show)
+
+
+// Comparison ops
+// ==============
+
+/**
+ * Structural equality: Not available in the LLVM backend
+ */
+extern pure def equals[R](x: R, y: R): Bool =
+  js "$effekt.equals(${x}, ${y})"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+
+def differsFrom[R](x: R, y: R): Bool =
+  not(equals(x, y))
+
+// TODO fix this in the pattern matching compiler
+extern pure def infixEq(x: Unit, y: Unit): Bool =
+  js "true"
+  chez "#t"
+  ml "true"
+
+extern pure def infixEq(x: Int, y: Int): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %z = icmp eq %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Int, y: Int): Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  ml "${x} <> ${y}"
+  llvm """
+    %z = icmp ne %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: Char, y: Char): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %z = icmp eq %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Char, y: Char): Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  ml "${x} <> ${y}"
+  llvm """
+    %z = icmp ne %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: String, y: String): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
+    ret %Pos %res
+  """
+
+def infixNeq(x: String, y: String): Bool = not(x == y)
+
+extern pure def infixEq(x: Bool, y: Bool): Bool =
+  js "${x} === ${y}"
+  chez "(equal? ${x} ${y})"
+  ml "${x} = ${y}"
+  llvm """
+    %slim_x = extractvalue %Pos %x, 0
+    %slim_y = extractvalue %Pos %y, 0
+    %slim_z = icmp eq i64 %slim_x, %slim_y
+    %fat_z = zext i1 %slim_z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixNeq(x: Bool, y: Bool): Bool =
+  js "${x} !== ${y}"
+  chez "(not (equal? ${x} ${y}))"
+  ml "${x} <> ${y}"
+  llvm """
+    %slim_x = extractvalue %Pos %x, 0
+    %slim_y = extractvalue %Pos %y, 0
+    %slim_z = icmp ne i64 %slim_x, %slim_y
+    %fat_z = zext i1 %slim_z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+
+// Math ops
+// ========
+extern pure def infixAdd(x: Int, y: Int): Int =
+  js "(${x} + ${y})"
+  chez "(+ ${x} ${y})"
+  ml "(${x}: int) + ${y}"
+  llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  js "(${x} * ${y})"
+  chez "(* ${x} ${y})"
+  ml "(${x}: int) * ${y}"
+  llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
+
+extern pure def infixDiv(x: Int, y: Int): Int =
+  js "Math.floor(${x} / ${y})"
+  chez "(floor (/ ${x} ${y}))"
+  ml "(${x}: int) div ${y}"
+  llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  js "(${x} - ${y})"
+  chez "(- ${x} ${y})"
+  ml "(${x}: int) - ${y}"
+  llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
+
+extern pure def mod(x: Int, y: Int): Int =
+  js "(${x} % ${y})"
+  chez "(modulo ${x} ${y})"
+  ml "(${x}: int) mod ${y}"
+  llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
+
+extern pure def infixAdd(x: Double, y: Double): Double =
+  js "(${x} + ${y})"
+  chez "(+ ${x} ${y})"
+  ml "(${x}: real) + ${y}"
+  llvm "%z = fadd %Double ${x}, ${y} ret %Double %z"
+
+extern pure def infixMul(x: Double, y: Double): Double =
+  js "(${x} * ${y})"
+  chez "(* ${x} ${y})"
+  ml "(${x}: real) * ${y}"
+  llvm "%z = fmul %Double ${x}, ${y} ret %Double %z"
+
+extern pure def infixSub(x: Double, y: Double): Double =
+  js "(${x} - ${y})"
+  chez "(- ${x} ${y})"
+  ml "(${x}: real) - ${y}"
+  llvm "%z = fsub %Double ${x}, ${y} ret %Double %z"
+
+extern pure def infixDiv(x: Double, y: Double): Double =
+  js "(${x} / ${y})"
+  chez "(/ ${x} ${y})"
+  ml "(${x}: real) / ${y}"
+  llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
+
+extern pure def cos(x: Double): Double =
+  js "Math.cos(${x})"
+  chez "(cos ${x})"
+  ml "Math.cos ${x}"
+
+extern pure def sin(x: Double): Double =
+  js "Math.sin(${x})"
+  chez "(sin ${x})"
+  ml "Math.sin ${x}"
+
+extern pure def atan(x: Double): Double =
+  js "Math.atan(${x})"
+  chez "(atan ${x})"
+  ml "Math.atan ${x}"
+
+extern pure def tan(x: Double): Double =
+  js "Math.tan(${x})"
+  chez "(tan ${x})"
+  ml "Math.tan ${x}"
+
+extern pure def sqrt(x: Double): Double =
+  js "Math.sqrt(${x})"
+  chez "(sqrt ${x})"
+  ml "Math.sqrt ${x}"
+  llvm "%z = call %Double @llvm.sqrt.f64(double %x) ret %Double %z"
+
+extern llvm """
+declare double @llvm.sqrt.f64(double %x)
+"""
+
+def square(x: Double): Double = x * x
+
+def neg(n: Double): Double =
+  0.0 - n
+
+def max(n: Double, m: Double): Double =
+  if (n > m) n else m
+
+def abs(n: Double): Double =
+  max(n, neg(n))
+
+extern pure def log(x: Double): Double =
+  js "Math.log(${x})"
+  chez "(log ${x})"
+  ml "Math.ln ${x}"
+
+extern pure def log1p(x: Double): Double =
+  js "Math.log1p(${x})"
+  chez "(log (+ ${x} 1))"
+  ml "Math.ln (${x} + 1.0)"
+
+extern pure def exp(x: Double): Double =
+  js "Math.exp(${x})"
+  chez "(exp ${x})"
+  ml "Math.exp ${x}"
+
+// since we do not have "extern val", yet
+extern pure def _pi(): Double =
+  js "Math.PI"
+  chez "(* 4 (atan 1))"
+  ml "Math.pi"
+
+val PI: Double = _pi()
+
+extern pure def toInt(d: Double): Int =
+  js "Math.trunc(${d})"
+  chez "(flonum->fixnum ${d})"
+  ml "Real.trunc ${d}"
+  llvm "%z = fptosi double %d to %Int ret %Int %z"
+
+extern pure def toDouble(d: Int): Double =
+  js "${d}"
+  chez "${d}"
+  ml "Real.fromInt ${d}"
+  llvm "%z = sitofp i64 %d to double ret double %z"
+
+extern pure def round(d: Double): Int =
+  js "Math.round(${d})"
+  chez "(round ${d})"
+  ml "Real.round ${d}"
+
+extern pure def floor(d: Double): Int =
+  js "Math.floor(${d})"
+  chez "(floor ${d})"
+  ml "Real.floor ${d}"
+
+extern pure def ceil(d: Double): Int =
+  js "Math.ceil(${d})"
+  chez "(ceiling ${d})"
+  ml "Real.ceil ${d}"
+
+def min(n: Int, m: Int): Int =
+  if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+  if (n > m) n else m
+
+def neg(n: Int): Int =
+    0 - n
+
+def abs(n: Int): Int =
+    max(n, neg(n))
+
+
+extern pure def infixLt(x: Int, y: Int): Bool =
+  js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
+  ml "(${x}: int) < ${y}"
+  llvm """
+    %z = icmp slt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixLte(x: Int, y: Int): Bool =
+  js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
+  ml "(${x}: int) <= ${y}"
+  llvm """
+    %z = icmp sle %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixGt(x: Int, y: Int): Bool =
+  js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
+  ml "(${x}: int) > ${y}"
+  llvm """
+    %z = icmp sgt %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixGte(x: Int, y: Int): Bool =
+  js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+  ml "(${x}: int) >= ${y}"
+  llvm """
+    %z = icmp sge %Int %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixEq(x: Double, y: Double): Bool =
+  js "${x} === ${y}"
+  chez "(= ${x} ${y})"
+  ml "(${x}: real) = ${y}"
+
+extern pure def infixNeq(x: Double, y: Double): Bool =
+  js "${x} !== ${y}"
+  chez "(not (= ${x} ${y}))"
+  ml "(${x}: real) <> ${y}"
+
+extern pure def infixLt(x: Double, y: Double): Bool =
+  js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
+  ml "(${x}: real) < ${y}"
+  llvm """
+    %z = fcmp olt %Double %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixLte(x: Double, y: Double): Bool =
+  js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
+  ml "(${x}: real) <= ${y}"
+
+extern pure def infixGt(x: Double, y: Double): Bool =
+  js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
+  ml "(${x}: real) > ${y}"
+  llvm """
+    %z = fcmp ogt %Double %x, %y
+    %fat_z = zext i1 %z to i64
+    %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
+    ret %Pos %adt_boolean
+  """
+
+extern pure def infixGte(x: Double, y: Double): Bool =
+  js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+  ml "(${x}: real) >= ${y}"
+
+// TODO do we really need those? if yes, move to string.effekt
+extern pure def infixLt(x: String, y: String): Bool =
+  js "(${x} < ${y})"
+  chez "(< ${x} ${y})"
+  ml "(${x}: string) < ${y}"
+
+extern pure def infixLte(x: String, y: String): Bool =
+  js "(${x} <= ${y})"
+  chez "(<= ${x} ${y})"
+  ml "(${x}: string) <= ${y}"
+
+extern pure def infixGt(x: String, y: String): Bool =
+  js "(${x} > ${y})"
+  chez "(> ${x} ${y})"
+  ml "(${x}: string) > ${y}"
+
+extern pure def infixGte(x: String, y: String): Bool =
+  js "(${x} >= ${y})"
+  chez "(>= ${x} ${y})"
+  ml "(${x}: string) >= ${y}"
+
+
+// Boolean operations
+// ==================
+extern pure def not(b: Bool): Bool =
+  js "!${b}"
+  chez "(not ${b})"
+  ml "not ${b}"
+  llvm """
+    %p = extractvalue %Pos %b, 0
+    %q = xor i64 1, %p
+    %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0
+    ret %Pos %adt_q
+  """
+
+def infixOr { first: => Bool } { second: => Bool }: Bool =
+  if (first()) true else second()
+
+def infixAnd { first: => Bool } { second: => Bool }: Bool =
+  if (first()) second() else false
+
+
+// Bitwise operations
+// ==================
+extern pure def bitwiseShl(x: Int, y: Int): Int =
+  js "(${x} << ${y})"
+  chez "(ash ${x} ${y})"
+  llvm "%z = shl %Int %x, %y ret %Int %z"
+
+extern pure def bitwiseAnd(x: Int, y: Int): Int =
+  js "(${x} & ${y})"
+  chez "(logand ${x} ${y})"
+  llvm "%z = and %Int %x, %y ret %Int %z"
+
+extern pure def bitwiseXor(x: Int, y: Int): Int =
+  js "(${x} ^ ${y})"
+  chez "(logxor ${x} ${y})"
+  llvm "%z = xor %Int %x, %y ret %Int %z"
+
+
+// Byte operations
+// ===============
+extern pure def toByte(n: Int): Byte =
+  js "${n}"
+  llvm "%z = trunc %Int %n to %Byte ret %Byte %z"
+
+extern pure def toInt(n: Byte): Int =
+  js "${n}"
+  llvm "%z = zext %Byte %n to %Int ret %Int %z"
+
+
+// Undefined and Null
+// ==================
+// Should only be used for interop with FFI, since values in Effekt
+// should not be undefined.
+//
+//   js:   undefined || null
+//   chez: #f
+//   ml:  NONE (of option 'a)
+//   llvm: null?
+
+/**
+ * The value used by the FFI to represent undefined values
+ */
+extern pure def undefined[A](): A =
+  js "undefined"
+  chez "#f"
+  ml "NONE"
+
+/**
+ * Is an FFI value undefined?
+ */
+extern pure def isUndefined[A](value: A): Bool =
+  js "(${value} === undefined || ${value} === null)"
+  chez "(eq? ${value} #f)"
+  ml "Option.isSome ${value}"
+
+
+// Tuples
+// ======
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+
+
+// Control Flow
+// ============
+interface Control {
+  def break(): Unit
+  def continue(): Unit
+}
+
+def loop { f: () => Unit / Control }: Unit = try {
+  def go(): Unit = { f(); go() }
+  go()
+} with Control {
+  def break() = ()
+  def continue() = loop { f }
+}
+
+/**
+ * Calls provided action repeatedly. `start` is inclusive, `end` is not.
+ */
+def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
+  var i = start;
+  loop {
+    if (i < end) { val el = i; i = i + 1; action(el) }
+    else { do break() }
+  }
+}
+
+def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
+
+namespace internal {
+  namespace boxing {
+    // For boxing polymorphic values
+    extern type BoxedUnit
+    extern pure def boxUnit(u: Unit): Unit =
+    extern pure def unboxUnit(u: Unit): Unit =
+
+    extern type BoxedInt
+    extern pure def boxInt(n: Int): BoxedInt =
+      llvm """
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxInt(b: BoxedInt): Int =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        ret %Int %unboxed
+      """
+
+    extern type BoxedByte
+    extern pure def boxByte(n: Byte): BoxedByte =
+      llvm """
+        %extended = sext i8 %n to i64
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxByte(b: BoxedByte): Byte =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        %truncated = trunc i64 %unboxed to i8
+        ret i8 %truncated
+      """
+
+    extern type BoxedChar
+    extern pure def boxChar(c: Char): BoxedChar =
+      llvm """
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %c, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxChar(b: BoxedChar): Char =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        ret %Int %unboxed
+      """
+
+    extern type BoxedBool
+    extern pure def boxBool(b: Bool): BoxedBool =
+    extern pure def unboxBool(b: BoxedBool): Bool =
+
+    extern type BoxedDouble
+    extern pure def boxDouble(d: Double): BoxedDouble =
+      llvm """
+        %n = bitcast double %d to i64
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+        ret %Pos %boxed2
+      """
+    extern pure def unboxDouble(b: BoxedDouble): Double =
+      llvm """
+        %unboxed = extractvalue %Pos %b, 0
+        %d = bitcast i64 %unboxed to double
+        ret %Double %d
+      """
+  }
+}

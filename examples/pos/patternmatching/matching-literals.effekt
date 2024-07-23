@@ -1,5 +1,3 @@
-import immutable/option
-
 def ex1(opt: Option[Int]) = opt match {
   case Some(voo) and voo is 0 => "hello"
   case _ => "world"
@@ -13,7 +11,7 @@ def ex2(n: Int) = n match {
   5
 }
 
-def ex3(cond: Boolean) = cond match {
+def ex3(cond: Bool) = cond match {
   case true => 2
   case false => 3
 }

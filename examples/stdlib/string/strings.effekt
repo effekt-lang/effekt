@@ -1,0 +1,70 @@
+import exception
+
+def main() = {
+  val str = "hello world"
+  val c = 'a'
+
+  def charOrOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].default { println("<OutOfBounds>") }
+    println(p().show)
+  }
+
+  def intOrWrongFormat { p: => Int / Exception[WrongFormat] }: Unit = {
+    with on[WrongFormat].default { println("<WrongFormat>") }
+    println(p().show)
+  }
+
+  charOrOutOfBounds { str.charAt(0) }     // 104
+  charOrOutOfBounds { str.charAt(10) }    // 100
+
+  println(utf8ByteCount('a'))      // 1
+  println(utf8ByteCount(\u0a00)) // 3
+
+
+  charOrOutOfBounds { str.charAt(11) }
+
+  println(str.isSubstringAt("hello", 0)) // true
+  println(str.isSubstringAt("", 0))      // true
+  println(str.isSubstringAt("ello", 0))  // false
+  println(str.isSubstringAt("ello", 1))  // true
+  println(str.isSubstringAt("rld", 8))   // true
+  println(str.isSubstringAt("rld!", 8))  // false
+  println(str.indexOf("llo"))            // Some(2)
+  println(str.indexOf("l"))              // Some(2)
+  println(str.indexOf("l", 4))           // Some(9)
+  println(str.indexOf("l", 9))           // Some(9)
+  println(str.indexOf("l", 10))          // None()
+
+  println("foo, bar, baz, bam".split(", "))
+  println("foo, bar, baz, bam".split(", ").join(", "))
+
+  println("foo, bar, baz, bam, ".split(", "))
+  println("foo, bar, baz, bam, , ".split(", "))
+  println(", ".split(", "))
+  println("".split(", "))
+  println("foo".split(", "))
+  println("f:o:o".split(":"))
+  println("foo".split(""))
+
+  def splitJoinIdentity(str: String, sep: String) = {
+    println(str.split(sep).join(sep) == str)
+  }
+
+  splitJoinIdentity("", "")
+  splitJoinIdentity("foo", "")
+  splitJoinIdentity("foo, bar, baz, bam", ", ")
+
+  intOrWrongFormat { "42".toInt }
+  intOrWrongFormat { "-42".toInt }
+  intOrWrongFormat { "0".toInt }
+  intOrWrongFormat { "".toInt }
+  intOrWrongFormat { "9999".toInt }
+
+  println("---")
+
+  println("foobarbaz".endsWith("baz"))
+
+  println("foobarbaz".lastIndexOf("a"))
+  println("foobarba".lastIndexOf("a"))
+
+}

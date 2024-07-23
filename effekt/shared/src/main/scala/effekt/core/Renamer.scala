@@ -49,18 +49,18 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
         case (d : core.Definition.Def) :: rest =>
           // can be recursive
           withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
-        case core.Definition.Let(id, binding) :: rest =>
+        case core.Definition.Let(id, tpe, binding) :: rest =>
           // resolve binding in outer scope
           val resolvedBinding = rewrite(binding)
-          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), resolvedBinding)) }
+          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), rewrite(tpe), resolvedBinding)) }
         case Nil => core.Scope(defs, rewrite(body))
       }
 
       go(definitions, Nil)
 
-    case core.Val(id, binding, body) =>
+    case core.Val(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Val(rewrite(id), tpe, resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)
@@ -77,6 +77,19 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id)) {
         Block.BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite,
+          rewrite(body))
+      }
+  }
+
+  override def rewrite(o: Operation): Operation = o match {
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      withBindings(tparams ++ cparams ++ vparams.map(_.id) ++ bparams.map(_.id) ++ resume.map(_.id).toList) {
+        Operation(name,
+          tparams map rewrite,
+          cparams map rewrite,
+          vparams map rewrite,
+          bparams map rewrite,
+          resume map rewrite,
           rewrite(body))
       }
   }

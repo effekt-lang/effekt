@@ -7,11 +7,9 @@
 //
 module examples/pos/raytracer
 
-import immutable/option
-import immutable/list
-import mutable/array
-import io/args
-import text/string
+import array
+import args
+import string
 
 // replacing all vector operations by `inline pure def` buys us 20%
 record Vector(x: Double, y: Double, z: Double)
@@ -76,7 +74,7 @@ val WHITE = Vector(255.0, 255.0, 255.0)
 def toVector(c: Color): ColorV = Vector(c.red.toDouble, c.green.toDouble, c.blue.toDouble)
 
 // TODO here we should check for the range of 0-255
-def toColor(c: ColorV): Color = Color(c.x.toInt, c.y.toInt, c.z.toInt)
+def toColor(c: ColorV): Color = Color(c.x.round, c.y.round, c.z.round)
 
 type Light = Point
 
@@ -136,7 +134,7 @@ def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] 
   } else { None() }
 }
 
-def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
+def isLightVisible(pos: Point, scene: Scene, light: Point): Bool =
     intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
 
 def lambert(scene: Scene, normal: Vector, pointAtTime: Point): Double = {

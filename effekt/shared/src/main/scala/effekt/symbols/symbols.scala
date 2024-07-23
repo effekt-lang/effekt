@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef, RegDef }
+import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -62,8 +62,28 @@ case class Module(
     case e: Interface => e
   }
 
+  def isPrelude: Boolean = name.name == "effekt"
+
   def findPrelude: Module = {
-    dependencies.find(_.name.name == "effekt").get
+    // Either this module is already Prelude
+    if (isPrelude) {
+      return this
+    }
+
+    // ... or we try to find Prelude in our dependencies
+    dependencies.find(_.isPrelude).getOrElse {
+      sys error "Cannot find Prelude, this should not happen"
+    }
+  }
+
+  def findDependency(path: QualifiedName): Option[Module] = {
+    // Either this module is already Prelude
+    if (name == path) {
+      return Some(this)
+    }
+
+    // ... or we try to find Prelude in our dependencies
+    dependencies.find(dep => dep.name == path)
   }
 
   /**
@@ -101,7 +121,7 @@ sealed trait TrackedParam extends Param, BlockSymbol {
   }
 }
 object TrackedParam {
-  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
+  case class BlockParam(name: Name, tpe: Option[BlockType]) extends TrackedParam
   case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
   case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
 
@@ -123,7 +143,8 @@ trait Callable extends BlockSymbol {
     val tps = tparams
     val vps = vparams.map { p => p.tpe.get }
     val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
-    FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
+    val bps_ = bps.collect { case Some(bp) => bp }
+    FunctionType(tps, bcapt ++ capabilityParams, vps, bps_, ret, effects)
 
   def annotatedType: Option[FunctionType] =
     for {
@@ -254,15 +275,15 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   lazy val vparams: List[ValueParam] = fields.map { f => f.param }
   val bparams: List[BlockParam] = Nil
 
-  val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
-  def annotatedResult: Option[ValueType] = Some(returnType)
+  val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
+  def annotatedResult: Option[ValueType] = Some(appliedDatatype)
   def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
   val tparams: List[TypeParam] = constructor.tparams
-  val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
+  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype)))
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
@@ -392,7 +413,7 @@ case class ExternFunction(
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,
-  body: Template[source.Term]
+  bodies: List[source.ExternBody]
 ) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)

@@ -18,6 +18,10 @@ import scala.collection.mutable
  */
 trait Transformer {
 
+  val jsFeatureFlags: List[String] = List("js")
+
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+
   def run(body: js.Expr): js.Stmt
 
   def shouldExport(id: Id)(using D: DeclarationContext): Boolean = true
@@ -51,7 +55,7 @@ trait Transformer {
 
     val other = freshName("other")
     def otherGet(field: JSName): js.Expr = js.Member(js.Variable(other), field)
-    def compare(field: JSName): js.Expr = js"${get(field)} !== ${otherGet(field)}"
+    def compare(field: JSName): js.Expr = js"!${$effekt.call("equals", get(field), otherGet(field))}"
     val noop    = js.Block(Nil)
     val abort   = js.Return(js"false")
     val succeed = js.Return(js"true")
@@ -95,7 +99,8 @@ trait Transformer {
     "window", "document", "alert", "console", "this"
   )
 
-  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
+  def jsEscape(name: String): String =
+    if (reserved contains name) "$" + name else name.replace("?", "").replace("!", "")
 
   def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 
@@ -120,6 +125,14 @@ trait Transformer {
 
   def freshName(s: String): JSName =
     JSName(s + Symbol.fresh.next())
+
+  def escape(scalaString: String): String =
+    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
+      escapeSeqs.get(c) match {
+        case Some(s) => acc ++= s
+        case None => acc += c
+      }
+    }.toString()
 
 
   // Separate Compilation (Website)

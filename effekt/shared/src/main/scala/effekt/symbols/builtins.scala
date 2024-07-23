@@ -22,7 +22,7 @@ object builtins {
   val UnitSymbol = ExternType(name("Unit"), Nil)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val BooleanSymbol = ExternType(name("Boolean"), Nil)
+  val BooleanSymbol = ExternType(name("Bool"), Nil)
   val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
 
   val IntSymbol = ExternType(name("Int"), Nil)
@@ -33,6 +33,12 @@ object builtins {
 
   val StringSymbol = ExternType(name("String"), Nil)
   val TString = ValueTypeApp(StringSymbol, Nil)
+
+  val CharSymbol = ExternType(name("Char"), Nil)
+  val TChar = ValueTypeApp(CharSymbol, Nil)
+
+  val ByteSymbol = ExternType(name("Byte"), Nil)
+  val TByte = ValueTypeApp(ByteSymbol, Nil)
 
   val TopSymbol = ExternType(name("Any"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
@@ -68,10 +74,12 @@ object builtins {
 
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Unit" -> UnitSymbol,
-    "Boolean" -> BooleanSymbol,
+    "Bool" -> BooleanSymbol,
     "Int" -> IntSymbol,
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,
+    "Char" -> CharSymbol,
+    "Byte" -> ByteSymbol,
     "Any" -> TopSymbol,
     "Nothing" -> BottomSymbol,
     "IO" -> IOSymbol,
@@ -82,9 +90,7 @@ object builtins {
   lazy val globalRegion = ExternResource(name("global"), TRegion)
 
   val rootTerms: Map[String, TermSymbol] = Map(
-    "global" -> globalRegion,
-    "get" -> TState.get,
-    "put" -> TState.put
+    "global" -> globalRegion
   )
 
   val rootCaptures: Map[String, Capture] = Map(
@@ -92,6 +98,9 @@ object builtins {
     "control" -> ControlCapability.capture,
     "global" -> globalRegion.capture
   )
+
+  // captures which are allowed on the toplevel
+  val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, globalRegion.capture)
 
   lazy val rootBindings: Bindings =
     Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures,

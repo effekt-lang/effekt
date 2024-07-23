@@ -1,6 +1,4 @@
-import immutable/dequeue
-import immutable/option
-
+import dequeue
 
 interface Process {
   def yield(): Unit

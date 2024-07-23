@@ -21,7 +21,7 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) =>
-      val safe = stacksafe.rewrite(core)
+      val safe = Context.timed(phaseName, source.name) { stacksafe.rewrite(core) }
       Some(CoreTransformed(source, tree, mod, safe))
   }
 
@@ -39,8 +39,8 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
     def clear() = scopes = Nil
 
     override def stmt: PartialFunction[Stmt, Stmt] = {
-      case Stmt.Val(id, binding, body) =>
-        Stmt.Val(id, rewrite(binding), {
+      case Stmt.Val(id, tpe, binding, body) =>
+        Stmt.Val(id, tpe, rewrite(binding), {
           // stop transformation under val binders, they already perform trampolining
           clear();
           rewrite(body)
@@ -57,5 +57,5 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   // [[ s ]] = val tmp = return (); s
-  def thunk(s: Stmt): Stmt = Stmt.Val(TmpValue(), Stmt.Return(Literal((), core.Type.TUnit)), s)
+  def thunk(s: Stmt): Stmt = Stmt.Val(TmpValue(), core.Type.TUnit, Stmt.Return(Literal((), core.Type.TUnit)), s)
 }

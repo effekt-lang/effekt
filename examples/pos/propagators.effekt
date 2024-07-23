@@ -1,10 +1,8 @@
 module drafts/propagators
 
-import immutable/option
-import immutable/list
-import immutable/dequeue
+import dequeue
 import unsafe/cont
-import mutable/heap
+import ref
 
 // An Experiment with Propagator Networks
 // ===
@@ -13,7 +11,7 @@ import mutable/heap
 // we are using unsafe/Cont since operations cannot take blocks
 // Safety is established manually and restricted to the local scope of
 // the handler `propagators`.
-type Cell[T] = HeapRef[(Option[T], List[Cont[T, Unit]])]
+type Cell[T] = Ref[(Option[T], List[Cont[T, Unit]])]
 
 // A net of propagators
 interface Net {
@@ -33,7 +31,7 @@ interface Net {
 
 def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net } =
   do subscribe(cell).foreach { a =>
-    println("received a " ++ a.show);
+    println("received a " ++ a.genericShow);
     f(a); do abort() } // this abort seems to abort also other subscribers?
 
 // establishes a connection between cellA and cellB
@@ -74,7 +72,7 @@ def example() = {
   println("z = y + x")
   z.sumOf(y, x)
 
-  println(do subscribe(z))
+  inspect(do subscribe(z))
 }
 
 // cells must not leave the propagator!
@@ -100,30 +98,30 @@ def propagators { net: => Unit / Net }: Unit = {
 
   try { net(); run() } with Net {
     def unknown[R]() =
-      resume(fresh((None(), Nil())))
+      resume(ref((None(), Nil())))
     def make[R](value) =
-      resume(fresh((Some(value), Nil())))
+      resume(ref((Some(value), Nil())))
     def learn[A](cell, value) = get(cell) match {
       case (None(), k) =>
         // update network with new information
-        put(cell, (Some(value), Nil()));
+        set(cell, (Some(value), Nil()));
         enqueue(value, k)
         resume(())
         run()
 
       // we already knew it!
-      case (Some(v), k) => if (v == value) {
+      case (Some(v), k) => if (v.equals(value)) {
         resume(())
         run()
       } else {
         // contradiction
-        println("contradiction: " ++ value.show ++ " and " ++ v.show);
+        println("contradiction: " ++ value.genericShow ++ " and " ++ v.genericShow);
         ()
       }
     }
     def subscribe[A](cell) = get(cell) match {
       case (None(), k) =>
-        put(cell, (None(), Cons(cont { a => resume(Some(a)); }, k)))
+        set(cell, (None(), Cons(cont { a => resume(Some(a)); }, k)))
         resume(None())
         run()
       case (Some(a), k) =>

@@ -1,0 +1,21 @@
+module nested
+
+type BExp {
+  Lit(b: Bool)
+  Or(l: BExp, r: BExp)
+  And(l: BExp, r: BExp)
+}
+
+def test(b: BExp) = b match {
+  case Lit(true) => 0
+  // case Lit(false) => 1
+  case Or(_, And(Lit(false), _)) => 2
+  // case Or(_, And(Lit(true), _)) => 3
+  case Or(_, And(And(_, _), _)) => 4
+  case Or(_, And(Or(_, _), _)) => 5
+  case Or(_, Lit(_)) => 6
+  case Or(_, Or(_, _)) => 7
+  case And(_, _) => 8
+}
+
+def main() = ()

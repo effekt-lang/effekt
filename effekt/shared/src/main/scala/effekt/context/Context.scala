@@ -6,6 +6,7 @@ import effekt.typer.TyperOps
 import effekt.core.TransformerOps
 import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, EffektMessages }
+import effekt.util.Timers
 import effekt.symbols.Module
 
 import kiama.util.Positions
@@ -40,7 +41,8 @@ abstract class Context(val positions: Positions)
     extends NamerOps
     with TyperOps
     with ModuleDB
-    with TransformerOps {
+    with TransformerOps
+    with Timers {
 
   // bring the context itself in scope
   implicit val context: Context = this
@@ -54,6 +56,9 @@ abstract class Context(val positions: Positions)
   var _config: EffektConfig = _
   def config = _config
 
+  // cache used by tasks to save their results (in addition to information in the AnnotationsDB)
+  var cache: util.Task.Cache = util.Task.emptyCache
+
   // We assume the backend never changes
   lazy val backend = config.backend()
   lazy val compiler = backend.compiler
@@ -64,6 +69,9 @@ abstract class Context(val positions: Positions)
    */
   def setup(cfg: EffektConfig): Unit = {
     messaging.clear()
+    // No timings are captured in server mode to keep the memory footprint small. Since the server is run continuously,
+    // the memory claimed by the timing information would increase continuously.
+    clearTimers(cfg.timed())
     _config = cfg
   }
 
@@ -98,6 +106,24 @@ abstract class Context(val positions: Positions)
     val msgs = messaging.buffer
     messaging.buffer = bufferBefore
     (msgs, res)
+  }
+
+  /**
+   * The compiler state
+   */
+  case class State(annotations: DB, cache: util.Task.Cache)
+
+  /**
+   * Export the compiler state
+   */
+  def backup: State = State(this.db, this.cache)
+
+  /**
+   * Restores the compiler state from a backup
+   */
+  def restore(s: State) = {
+    db = s.annotations
+    cache = s.cache
   }
 }
 

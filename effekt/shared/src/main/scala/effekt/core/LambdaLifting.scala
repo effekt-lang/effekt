@@ -108,7 +108,8 @@ object LambdaLifting extends Phase[CoreTransformed, CoreTransformed] {
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
       case CoreTransformed(source, tree, mod, core) =>
-        Some(CoreTransformed(source, tree, mod, lift(core)))
+        val lifted = Context.timed(phaseName, source.name) { lift(core) }
+        Some(CoreTransformed(source, tree, mod, lifted))
     }
 
   def lift(m: core.ModuleDecl)(using Context): core.ModuleDecl =
@@ -192,7 +193,7 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
       }
       stillFree ++ binding(boundSoFar) { query(body) }
 
-    case d @ Stmt.Val(id, rhs, body) =>
+    case d @ Stmt.Val(id, tpe, rhs, body) =>
       val bound = Variables.value(id, rhs.tpe)
       query(rhs) ++ binding(bound) {
         // we annotate the free variables of the continuation

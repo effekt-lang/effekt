@@ -1,29 +1,19 @@
 module examples/pos/arrays
 
-import immutable/option
-import mutable/array
-
-def show(o: Option[String]) = o match {
-    case None() => "None()"
-    case Some(v) => "Some(" ++ show(v) ++ ")"
-}
-
 def main() = {
-    val arr = emptyArray[String]();
-    put(arr, 0, "hello");
-    put(arr, 2, "world");
-    println(show(get(arr, 0)));
-    println(show(get(arr, 2)));
-    println(show(get(arr, 4)));
-    put(arr, 4, "foo");
-    println(show(get(arr, 4)))
+    val arr = array::allocate[String](5);
 
-    val arrWithVals: Array[String] = fill(4, "Hello World");
+    arr.unsafeSet(0, "hello");
+    arr.unsafeSet(2, "world");
+    println(arr.unsafeGet(0));
+    println(arr.unsafeGet(2));
+
+    val arrWithVals: Array[String] = array(4, "Hello World");
     println(arrWithVals)
 
-    val arrByF: Array[Int] = build(5){ i => i };
+    val arrByF: Array[Int] = array::build(5){ i => i };
     println(arrByF);
 
-    var arrByList: Array[Int] = fromList([1, 5, 17]);
+    var arrByList: Array[Int] = array::fromList([1, 5, 17]);
     println(arrByList)
 }

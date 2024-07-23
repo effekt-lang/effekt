@@ -1,13 +1,14 @@
 package effekt
 
-import effekt.source._
-import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
-import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
+import effekt.lexer.Token
+import effekt.source.*
+import effekt.context.{Context, IOModuleDB}
+import effekt.symbols.{BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic}
+import effekt.util.{AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting}
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
-import kiama.util.{ Console, REPL, Source, StringSource, Range }
-import kiama.parsing.{ NoSuccess, ParseResult, Success }
+import kiama.util.{Console, REPL, Range, Source, StringSource}
+import kiama.parsing.{NoSuccess, ParseResult, Success, Input}
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
@@ -53,8 +54,10 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
    * and everything else that can occur on the top-level.
    */
   override def parse(source: Source): ParseResult[Tree] = {
-    val parsers = new EffektParsers(positions)
-    parsers.parseAll(parsers.repl, source)
+    val lexer = effekt.lexer.Lexer(source)
+    val tokens = lexer.lex()
+    val parser = RecursiveDescent(context.positions, tokens, source)
+    parser.parseRepl(Input(source, 0))
   }
 
   /**
@@ -316,7 +319,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     }
 
     def makeEval(expr: Term): ModuleDecl =
-      make(Call(IdTarget(IdRef(List("effekt"), "println")), Nil, List(expr), Nil))
+      make(Call(IdTarget(IdRef(List(), "println")), Nil, List(expr), Nil))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

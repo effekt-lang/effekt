@@ -1,45 +1,52 @@
 package effekt
 
 import java.io.File
-
 import effekt.util.paths.file
 import kiama.util.REPLConfig
+import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
 
-import org.rogach.scallop.ScallopOption
-import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter, stringListConverter }
+class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--")) {
 
-class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
+  // Common
+  // ------
+  private val common = group("Common Options")
 
   val compile: ScallopOption[Boolean] = toggle(
     "compile",
     descrYes = "Compile the Effekt program to the backend specific representation",
-    default = Some(false)
+    default = Some(false),
+    prefix = "no-",
+    group = common
   )
 
   val build: ScallopOption[Boolean] = toggle(
     "build",
     descrYes = "Compile the Effekt program and build a backend specific executable",
-    default = Some(false)
+    default = Some(false),
+    group = common
   )
 
   val outputPath: ScallopOption[File] = opt[File](
     "out",
     descr = "Path to write generated files to (defaults to ./out)",
     default = Some(new File("./out")),
-    required = false
+    required = false,
+    group = common
   )
 
   val includePath: ScallopOption[List[File]] = opt[List[File]](
     "includes",
     descr = "Path to consider for includes (can be set multiple times)",
     default = Some(List(new File("."))),
-    noshort = true
+    noshort = true,
+    group = common
   )
 
   val stdlibPath: ScallopOption[File] = opt[File](
     "lib",
     descr = "Path to the standard library to be used",
-    required = false
+    required = false,
+    group = common
   )
 
   val backend: ScallopOption[Backend[_]] = choice(
@@ -47,28 +54,114 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
-    noshort = true
+    noshort = true,
+    group = common
   ).map(Backend.backend)
+
+  def runArgs(): Seq[String] = args.dropWhile(_ != "--").drop(1)
+
+  // Advanced
+  // --------
+  private val advanced = group("Advanced Options")
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
     descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 15)",
     default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "15")),
-    noshort = true
+    noshort = true,
+    group = advanced
+  )
+
+  val gccIncludes: ScallopOption[File] = opt[File](
+    "gcc-includes",
+    descr = "Additional include path for gcc (necessary for libuv on the llvm backend)",
+    noshort = true,
+    group = advanced
+  )
+
+  val gccLibraries: ScallopOption[File] = opt[File](
+    "gcc-libraries",
+    descr = "Additional library path for gcc (necessary for libuv on the llvm backend)",
+    noshort = true,
+    group = advanced
   )
 
   val preludePath: ScallopOption[List[String]] = opt[List[String]](
     "prelude",
-    descr = "Modules to be automatically imported in every file.",
+    descr = "Modules to be automatically imported in every file",
     default = None,
-    noshort = true
+    noshort = true,
+    group = advanced
   )
 
   val exitOnError: ScallopOption[Boolean] = toggle(
     "exit-on-error",
     descrYes = "Exit with non-zero exit code on error",
     default = Some(!repl() && !server()),
-    noshort = true
+    noshort = true,
+    prefix = "no-",
+    group = advanced
+  )
+
+  val optimize: ScallopOption[Boolean] = toggle(
+    "optimize",
+    descrYes = "Run optimizations (in particular the inliner) when compiling programs",
+    default = Some(true),
+    short = 'O',
+    prefix = "no-",
+    group = advanced
+  )
+
+  val maxInlineSize: ScallopOption[Long] = opt(
+    "max-inline-size",
+    descr = "Maximum size (number of core tree-nodes) of a function considered by the inliner",
+    default = Some(50L),
+    noshort = true,
+    group = advanced
+  )
+  advanced.append(server)
+
+
+  // Debugging
+  // ---------
+  private val debugging = group("Compiler Development")
+
+  val showIR: ScallopOption[Option[Stage]] = choice(
+    choices = List("none", "core", "lifted", "machine", "target"),
+    name = "ir-show",
+    descr = "The intermediate presentation that should be printed.",
+    default = Some("none"),
+    noshort = true,
+    group = debugging
+  ).map(s => Stage.values.find(_.toString.toLowerCase == s))
+
+  debugging.append(showIR)
+
+  val writeIRs: ScallopOption[Boolean] = toggle(
+    "ir-write-all",
+    descrYes = "Write all IRs to files in the output directory",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
+  val time: ScallopOption[String] = choice(
+    choices = Seq("text", "json"),
+    name = "time",
+    descr = "Measure the time spent in each compilation phase",
+    required = false,
+    group = debugging
+  )
+
+  lazy val valgrind = toggle(
+    "valgrind",
+    descrYes = "Execute files using valgrind",
+    descrNo = "Don't execute files using valgrind",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
   )
 
   /**
@@ -129,6 +222,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def interpret(): Boolean = !server() && !compile() && !build()
 
   def repl(): Boolean = filenames().isEmpty && !server() && !compile()
+
+  def timed(): Boolean = time.isSupplied && !server()
 
   validateFilesIsDirectory(includePath)
 

@@ -3,30 +3,36 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.symbols.{ Module, Symbol }
-
+import effekt.symbols.{Module, Symbol}
+import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 class ChezSchemeMonadic extends ChezScheme {
-  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl)(using ErrorReporter): chez.Block =
     chez.TransformerMonadic.compilationUnit(mainSymbol, mod, decl)
+
+  override def supportedFeatureFlags: List[String] = List("chezMonadic", "chez")
 }
 
 
 class ChezSchemeCallCC extends ChezScheme {
-  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl)(using ErrorReporter): chez.Block =
     chez.TransformerCallCC.compilationUnit(mainSymbol, mod, decl)
+
+  override def supportedFeatureFlags: List[String] =  List("chezCallCC", "chez")
 }
 
 
 trait ChezScheme extends Compiler[String] {
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl)(using ErrorReporter): chez.Block
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
   def extension = ".ss"
+
+  override def supportedFeatureFlags: List[String] = List("chez")
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }

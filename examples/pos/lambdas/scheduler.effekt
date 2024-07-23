@@ -1,11 +1,10 @@
 module examples/pos/lambdas/scheduler
 
-import immutable/dequeue
-import immutable/option
+import dequeue
 
 interface Proc {
   def yield(): Unit
-  def fork(): Boolean
+  def fork(): Bool
   def exit(): Unit
 }
 

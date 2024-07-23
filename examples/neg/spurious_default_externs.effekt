@@ -1,0 +1,11 @@
+extern include "spurious_default_externs.effekt" // WARN without feature flag
+extern include default "spurious_default_externs.effekt" // WARN without feature flag
+
+extern """ weird """ // WARN without feature flag
+extern default """ more weird """ // WARN without feature flag
+
+extern def foo(): Unit = default " wont work " // WARN without feature flag
+
+extern def bar(): Unit = " wont work either " // WARN without feature flag
+
+def main() = { () }

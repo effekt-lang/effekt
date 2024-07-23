@@ -25,9 +25,9 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   val phaseName = "explicit-capabilities"
 
   def run(input: Typechecked)(using C: Context) =
-    val x = rewrite(input.tree)
+    val rewritten = C.timed(phaseName, input.source.name) { rewrite(input.tree) }
 
-    Some(input.copy(tree = x))
+    Some(input.copy(tree = rewritten))
 
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
@@ -137,6 +137,6 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
     val id = IdDef(s.name.name)
     C.assignSymbol(id, s)
-    val tree: source.BlockParam = source.BlockParam(id, source.BlockTypeTree(s.tpe))
+    val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree.apply })
     tree
 }

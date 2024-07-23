@@ -31,3 +31,8 @@ def main() = region this {
   println(gen())
   println(gen())
 }
+
+def println(g: Result): Unit = g match {
+  case Done()  => println("Done()")
+  case Next(n) => println("Next(" ++ show(n) ++ ")")
+}

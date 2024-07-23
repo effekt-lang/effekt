@@ -1,6 +1,6 @@
 module triples
 
-effect Flip(): Boolean
+effect Flip(): Bool
 effect Fail(): Nothing
 
 type Triple {

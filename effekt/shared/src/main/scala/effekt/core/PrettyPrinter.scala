@@ -1,10 +1,11 @@
 package effekt
 package core
 
+import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, Wildcard, builtins }
+import effekt.symbols.{Name, Wildcard, builtins}
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
@@ -59,9 +60,17 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> toDoc(body)
-    case Extern.Include(contents) => emptyDoc // right now, do not print includes.
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, bodies) =>
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
+        case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
+        case ExternBody.Unsupported(err) => s"unsupported(${err.toString})"
+      })
+    case Extern.Include(ff, contents) => emptyDoc // right now, do not print includes.
+  }
+
+  def toDoc(ff: FeatureFlag): Doc = ff match {
+    case FeatureFlag.NamedFeatureFlag(name) => name
+    case FeatureFlag.Default => "default"
   }
 
   def toDoc(t: Template[Pure]): Doc =
@@ -151,7 +160,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
@@ -162,12 +171,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Val(Wildcard(), binding, body) =>
+    case Val(Wildcard(), _, binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, binding, body) =>
-      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+    case Val(id, tpe, binding, body) =>
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, vargs, bargs) =>

@@ -8,6 +8,7 @@ import effekt.source.{ Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree
 import effekt.source.Tree.{ Query, Visit }
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 /**
@@ -148,17 +149,36 @@ object ExhaustivityChecker {
 
     // Error Reporting
     // ---------------
-    def reportNonExhaustive()(using C: ErrorReporter): Unit = missingCases.foreach {
-      case Missing.Tag(ctor, at) =>
-        C.error(pp"Non exhaustive pattern matching, missing case for ${ ctor }")
-      case Missing.Guard(term) =>
-        C.at(term) {
-          C.error(pp"Non exhaustive pattern matching, guard could be false which is not covered")
-        }
-      case Missing.Literal(value, tpe, at) =>
-        C.error(pp"Non exhaustive pattern matching, missing case for ${value}")
-      case Missing.Default(tpe, at) =>
-        C.error(pp"Non exhaustive pattern matching, scrutinees of type ${tpe} require a default case")
+    def reportNonExhaustive()(using C: ErrorReporter): Unit = {
+      @tailrec
+      def traceToCase(at: Trace, acc: String): String = at match {
+        case Trace.Root(_) => acc
+        case Trace.Child(childCtor, field, outer) =>
+          val newAcc = s"${childCtor.name}(${childCtor.fields.map { f => if f == field then acc else "_" }.mkString(", ")})"
+          traceToCase(outer, newAcc)
+      }
+
+      missingCases.foreach {
+        case Missing.Tag(ctor, at) =>
+          val missingSubcase = ctor.fields match
+            case Nil => s"${ctor.name}()"
+            case _ => s"${ctor.name}(${ctor.fields.map { _f => "_" }.mkString(", ")})"
+          val missingCase = traceToCase(at, missingSubcase)
+
+          C.error(pp"Non-exhaustive pattern matching, missing case ${missingCase}")
+        case Missing.Guard(term) =>
+          C.at(term) {
+            C.error(pp"Non-exhaustive pattern matching, guard could be false which is not covered")
+          }
+        case Missing.Literal(value, tpe, at) =>
+          val missingCase = traceToCase(at, pp"${value}")
+
+          C.error(pp"Non-exhaustive pattern matching, missing case $missingCase")
+        case Missing.Default(tpe, at) =>
+          val missingCase = traceToCase(at, "_")
+
+          C.error(pp"Non-exhaustive pattern matching, scrutinees of type ${tpe} require a default case ${missingCase}")
+      }
     }
 
     def reportRedundant()(using C: ErrorReporter): Unit = redundant.foreach { p =>
@@ -258,7 +278,7 @@ object ExhaustivityChecker {
     tpe match {
       case ValueType.ValueTypeApp(DataType(_, _, ctors), _) => checkDatatype(ctors)
       case ValueType.ValueTypeApp(Record(_, _, ctor), _)    => checkDatatype(List(ctor))
-      case tpe @ (builtins.TInt | builtins.TDouble | builtins.TString | builtins.TBoolean | builtins.TUnit | builtins.TBottom) =>
+      case tpe @ (builtins.TInt | builtins.TDouble | builtins.TString | builtins.TBoolean | builtins.TUnit | builtins.TBottom | builtins.TChar | builtins.TByte) =>
         checkLiteral(tpe)
 
         // missing.add(trace);
@@ -292,7 +312,7 @@ object ExhaustivityChecker {
       // matched against.
       patterns.head match {
         case (sc, Pattern.Tag(constructor, ps)) =>
-          checkScrutinee(sc, constructor.returnType, head :: alternatives)
+          checkScrutinee(sc, constructor.appliedDatatype, head :: alternatives)
         case (sc, Pattern.Literal(lit, tpe)) =>
           checkScrutinee(sc, tpe, head :: alternatives)
         case (sc, Pattern.Any()) =>

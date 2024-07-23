@@ -1,6 +1,6 @@
 module triples
 
-effect Flip(): Boolean
+effect Flip(): Bool
 effect Fail[A](): A
 
 type Triple {
@@ -46,4 +46,4 @@ def handledTriple(n : Int, s : Int) =
     with Fail[A] { () => Nil[Triple]() }
   } with Flip { () => concat(resume(true), resume(false)) }
 
-def main() = println(handledTriple(10, 15))
+def main() = inspect(handledTriple(10, 15))

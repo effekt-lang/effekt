@@ -1,9 +1,5 @@
 module examples/pos/list/modifyat
 
-import immutable/option
-import immutable/list
-import immutable/result
-
 // used to circumvent missing universal `show` & `println` on some backends
 def printResultOfList(l: Result[List[Int], OutOfBounds]): Unit = l match {
   case Error(err, msg) => println("Error(" ++ msg ++ ")")

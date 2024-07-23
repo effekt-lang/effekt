@@ -11,6 +11,7 @@ import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
+import effekt.source.FeatureFlag.supportedByFeatureFlags
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -34,20 +35,29 @@ object Namer extends Phase[Parsed, NameResolved] {
   def run(input: Parsed)(using Context): Option[NameResolved] = {
     val Parsed(source, tree) = input
     val mod = Module(tree, source)
-    Context.using(module = mod, focus = tree) { resolve(tree) }
+    Context.using(module = mod, focus = tree) { resolve(mod) }
     Some(NameResolved(source, tree, mod))
   }
 
-  def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
+  def resolve(mod: Module)(using Context): ModuleDecl = {
+    val Module(decl, src) = mod
     val scope = scopes.toplevel(Context.module.namespace, builtins.rootBindings)
 
     Context.initNamerstate(scope)
 
     def importDependency(filePath: String) =
       val included = Context.moduleOf(filePath)
-      // include "effekt.effekt" as effekt
+
+      // Fully qualified:
+      //   include "foo/bar/baz.effekt" as foo::bar::baz
       scope.importAs(included.exports, included.namespace)
-      // import effekt::*
+
+      // Bind the module itself:
+      //   include "foo/bar/baz.effekt" as baz
+      scope.importAs(included.exports, List(included.name.name))
+
+      // Open it:
+      //   import baz::*
       scope.importAll(included.exports)
       included
 
@@ -65,7 +75,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.at(im) { importDependency(path) }
     }
 
-    resolveGeneric(decl)
+    Context.timed(phaseName, src.name) { resolveGeneric(decl) }
 
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct
@@ -179,7 +189,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -191,7 +201,8 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        ExternFunction(name, tps, vps, bps, tpe, eff, capt, body)
+
+        ExternFunction(name, tps, vps, bps, tpe, eff, capt, bodies)
       })
     }
 
@@ -202,14 +213,18 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
       Context.bindBlock(sym)
 
-    case d @ source.ExternInclude(path, Some(contents), _) =>
+    case d @ source.ExternInclude(ff, path, Some(contents), _) =>
       ()
 
-    case d @ source.ExternInclude(path, None, _) =>
-      d.contents = Some(Context.contentsOf(path).getOrElse {
-        Context.abort(s"Missing include: ${path}")
-      })
-      ()
+    case d @ source.ExternInclude(ff, path, None, _) =>
+      // only load include if it is required by the backend.
+      if (ff matches Context.compiler.supportedFeatureFlags) {
+        d.contents = Some(Context.contentsOf(path).getOrElse {
+          Context.abort(s"Missing include: ${path}")
+        })
+      } else {
+        d.contents = None
+      }
   }
 
   /**
@@ -235,7 +250,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), resolve(tpe))
+      val p = BlockParam(Name.local(id), tpe.map { resolve })
       Context.define(id, p)
       Context.bind(p.capture)
 
@@ -252,6 +267,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       val sym = VarBinder(Context.nameFor(id), tpe, d)
       Context.define(id, sym)
+      Context.bind(sym.capture)
 
     // allocation into a region
     case d @ source.RegDef(id, annot, region, binding) =>
@@ -286,13 +302,17 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) =>
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-        body.args.foreach(resolveGeneric)
+        bodies.foreach {
+          case source.ExternBody.StringExternBody(ff, body) => body.args.foreach(resolveGeneric)
+          case source.ExternBody.EffektExternBody(ff, body) => resolveGeneric(body)
+          case u: source.ExternBody.Unsupported => u
+        }
       }
 
     case source.InterfaceDef(id, tparams, operations, isEffect) =>
@@ -303,7 +323,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val name = Context.nameFor(id)
 
           Context scoped {
-            // the parameters of the effect are in scope
+            // the parameters of the interface are in scope
             interface.tparams.foreach { p => Context.bind(p) }
 
             val tps = tparams map resolve
@@ -339,9 +359,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DataDef(id, tparams, ctors) =>
       val data = d.symbol
       data.constructors = ctors map {
-        case source.Constructor(id, ps) =>
-          val name = Context.nameFor(id)
-          val constructor = Constructor(name, data.tparams, null, data)
+        case source.Constructor(id, tparams, ps) =>
+          val constructor = Context scoped {
+            val name = Context.nameFor(id)
+            val tps = tparams map resolve
+            Constructor(name, data.tparams ++ tps, null, data)
+          }
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
           constructor
@@ -360,7 +383,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
     case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(path, _, _) => ()
+    case source.ExternInclude(ff, path, _, _) => ()
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
@@ -389,7 +412,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case tree @ source.Region(name, body) =>
-      val reg = BlockParam(Name.local(name.name), builtins.TRegion)
+      val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion))
       Context.define(name, reg)
       Context scoped {
         Context.bindBlock(reg)
@@ -509,13 +532,13 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   // TODO move away
   def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
-    val paramSyms = Context scoped {
+    val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
       params map resolve
     }
 
-    (paramSyms zip params) map {
+    (vps zip params) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
@@ -556,7 +579,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym: BlockParam = BlockParam(Name.local(p.id), resolve(p.tpe))
+    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { resolve })
     Context.assignSymbol(p.id, sym)
     sym
   }

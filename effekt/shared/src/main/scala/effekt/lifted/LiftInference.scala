@@ -19,7 +19,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def run(input: CoreTransformed)(using Context): Option[CoreLifted] =
     given Environment = Environment(Map.empty)
-    val transformed = transform(input.core)
+    val transformed = Context.timed(phaseName, input.source.name) { transform(input.core) }
     Some(CoreLifted(input.source, input.tree, input.mod, transformed))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
@@ -108,9 +108,15 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
       }
       Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
-        Template(body.strings, body.args.map(transform)))
-    case core.Extern.Include(contents) =>
-      Extern.Include(contents)
+        body match {
+          case core.ExternBody.StringExternBody(ff, bbody) =>
+            ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
+          case core.ExternBody.Unsupported(err) =>
+            import effekt.source.FeatureFlag.Default
+            ExternBody.Unsupported(err)
+        })
+    case core.Extern.Include(ff, contents) =>
+      Extern.Include(ff, contents)
   }
 
   def transform(p: core.Param.ValueParam): lifted.Param.ValueParam = p match {
@@ -123,7 +129,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
     case core.Definition.Def(id, block) =>
       Definition.Def(id, transform(block))
-    case core.Definition.Let(id, binding) =>
+    case core.Definition.Let(id, _, binding) =>
       Definition.Let(id, transform(binding))
   }
 
@@ -195,7 +201,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       Scope(definitions.map(d => transform(d)(using env, ErrorReporter)), body)
 
-    case core.Val(id, binding, body) =>
+    case core.Val(id, tpe, binding, body) =>
       Val(id, transform(binding), transform(body))
 
     case core.Var(id, init, capture, body) =>
@@ -321,7 +327,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       val extendedEnv = env.bind(id, env.evidenceFor(block).lifts)
       pretransform(rest)(using extendedEnv, E)
     // even if defs cannot be mutually recursive across lets, we still have to pretransform them.
-    case core.Definition.Let(id, _) :: rest =>
+    case core.Definition.Let(id, _, _) :: rest =>
       pretransform(rest)
     case Nil => env
   }

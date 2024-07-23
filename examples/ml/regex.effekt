@@ -1,5 +1,7 @@
 import text/regex
 
+import internal/mloption
+
 def tryMatch(r: Regex, str: String) = r.exec(str) match {
   case None() => println("No match")
   case Some(Match(m)) => println(m)

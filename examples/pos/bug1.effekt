@@ -1,7 +1,7 @@
 module bug1
 
 // should succeed, but raises "n should be a value"
-effect Flip(): Boolean
+effect Flip(): Bool
 effect MyPrint(n: Int): Unit
 
 def flipTrue { prog: => Unit / Flip }: Unit =

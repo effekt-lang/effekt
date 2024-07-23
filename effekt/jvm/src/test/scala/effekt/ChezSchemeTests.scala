@@ -18,6 +18,7 @@ abstract class ChezSchemeTests extends EffektTests {
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
   override def ignored: List[File] = List(
+
     examplesDir / "llvm",
 
     examplesDir / "ml",
@@ -29,6 +30,7 @@ abstract class ChezSchemeTests extends EffektTests {
     // bidirectional effects are not yet supported in our Chez backend
     examplesDir / "pos" / "bidirectional",
     examplesDir / "pos" / "object",
+    examplesDir / "pos" / "type_omission_op.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
@@ -58,6 +60,10 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "multiline_extern_definition.effekt", // the test is specific to JS
 
     examplesDir / "pos" / "io", // async io is only implemented for monadic JS
+
+    examplesDir / "pos" / "genericcompare.effekt", // genericCompare is only implemented for JS
+
+    examplesDir / "pos" / "issue429.effekt",
   )
 }
 
@@ -73,9 +79,8 @@ class ChezSchemeLiftTests extends ChezSchemeTests {
   def backendName = "chez-lift"
 
   override def ignored: List[File] = super.ignored ++ List(
-
     // regions are not yet supported
-    examplesDir / "benchmarks" / "generator.effekt",
+    examplesDir / "benchmarks" / "other" / "generator.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "selfregion.effekt",
     // boxing is not (yet) supported for lift-based backends

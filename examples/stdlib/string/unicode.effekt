@@ -1,0 +1,59 @@
+import exception
+
+def main() = {
+  val str = "hello world"
+  val c = 'a'
+
+  def charOrOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].default { println("<OutOfBounds>") }
+    println(p().show)
+  }
+
+  def intOrWrongFormat { p: => Int / Exception[WrongFormat] }: Unit = {
+    with on[WrongFormat].default { println("<WrongFormat>") }
+    println(p().show)
+  }
+
+  // Unicode:
+  // --------
+  // only supported in JS and LLVM
+
+  charOrOutOfBounds { "😅".charAt(0) }   // 128517
+  println(utf8ByteCount('😅'))           // 4
+  println("f😅o😅o".indexOf("😅", 0))    // Some(1)
+
+  println("f😅o😅o".split("😅"))
+  println(toString(\u1FAD6))
+  println(toString('🫖'))
+  println(toString('貫'))
+
+  platform() match {
+    case "chez" =>
+      val expectedLength = 3 + 2
+      // chez scheme is the only backend that indexes strings "properly"
+      charOrOutOfBounds { "f😅o😅o".charAt(expectedLength - 1) }
+      println("f😅o😅o".length == expectedLength)
+
+    // UTF-16 (2 bytes per character)
+    case "js" =>
+      val expectedLength = 3 + (2 * 2)
+      charOrOutOfBounds { "f😅o😅o".charAt(expectedLength - 1) }
+      println("f😅o😅o".length == expectedLength)
+
+    // UTF-8 (4 bytes for the emoji)
+    case "llvm" =>
+      val expectedLength = 3 + (2 * 4)
+      charOrOutOfBounds { "f😅o😅o".charAt(expectedLength - 1) }
+      println("f😅o😅o".length == expectedLength)
+
+    // ML does not support unicode
+    case _ => ()
+  }
+}
+
+extern pure def platform(): String =
+  chez { "chez" }
+  llvm { "llvm" }
+  js { "js" }
+  ml { "ml" }
+  default { "other" }

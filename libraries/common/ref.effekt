@@ -1,0 +1,63 @@
+module ref
+
+import effekt
+
+extern js """
+function set$impl(ref, value) {
+  ref.value = value;
+  return $effekt.unit;
+}
+"""
+
+/**
+ * Global, mutable references
+ */
+extern type Ref[T]
+
+/**
+ * Allocates a new reference of size `size`, keeping its value _undefined_.
+ * Prefer using `ref` constructor instead to ensure that the value is defined.
+ */
+extern global def allocate[T](): Ref[T] =
+  js "{ value: undefined }"
+  chez "(box #f)"
+  llvm """
+    %z = call %Pos @c_ref_fresh(%Pos zeroinitializer)
+    ret %Pos %z
+  """
+
+/**
+ * Creates a new reference with the initial value `init`.
+ */
+extern global def ref[T](init: T): Ref[T] =
+  js "{ value: ${init} }"
+  chez "(box ${init})"
+  ml "ref ${init}"
+  llvm """
+    %z = call %Pos @c_ref_fresh(%Pos %init)
+    ret %Pos %z
+  """
+
+/**
+ * Gets the referenced element of the `ref` in constant time.
+ */
+extern global def get[T](ref: Ref[T]): T =
+  js "${ref}.value"
+  chez "(unbox ${ref})"
+  ml "!${ref}"
+  llvm """
+    %z = call %Pos @c_ref_get(%Pos %ref)
+    ret %Pos %z
+  """
+
+/**
+ * Sets the referenced element of the `ref` to `value` in constant time.
+ */
+extern global def set[T](ref: Ref[T], value: T): Unit =
+  js "set$impl(${ref}, ${value})"
+  chez "(set-box! ${ref} ${value})"
+  ml "${ref} := ${value}"
+  llvm """
+    %z = call %Pos @c_ref_set(%Pos %ref, %Pos %value)
+    ret %Pos %z
+  """

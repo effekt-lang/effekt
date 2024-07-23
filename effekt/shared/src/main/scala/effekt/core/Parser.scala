@@ -2,9 +2,9 @@ package effekt
 package core
 
 import effekt.core.Param.ValueParam
-import effekt.source.NoSource
+import effekt.source.{FeatureFlag, NoSource}
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
-import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
+import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Success }
 import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
 import scala.util.matching.Regex
@@ -23,7 +23,6 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
-
       case res: NoSuccess =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
@@ -68,11 +67,20 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Externs
   // -------
   lazy val externDecl: P[Extern] =
-    ( `extern` ~> externBody ^^ Extern.Include.apply
-    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> externBody) ^^ {
+    ( `extern` ~> featureFlag ~ externBody ^^ Extern.Include.apply
+    | `extern` ~> (captures <~ `def`) ~ signature ~ (`=` ~> (featureFlag ~ externBody)) ^^ {
       case captures ~ (id, tparams, cparams, vparams, bparams, result) ~ body =>
-        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, Template(List(body), Nil))
+        Extern.Def(id, tparams, cparams, vparams, bparams, result, captures, body match {
+          case ff ~ (body: String) =>
+            ExternBody.StringExternBody(ff, Template(List(body), Nil))
+        })
     })
+
+  lazy val featureFlag: P[FeatureFlag] =
+    ("else" ^^ { _ => FeatureFlag.Default }
+    | ident ^^ FeatureFlag.NamedFeatureFlag.apply
+    )
+
 
   lazy val externBody = stringLiteral | multilineString
 
@@ -96,7 +104,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Definitions
   // -----------
   lazy val definition: P[Definition] =
-  ( `let` ~> id ~ (`=` ~/> expr) ^^ Definition.Let.apply
+  ( `let` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ^^ {
+    case (name ~ tpe ~ binding) => Definition.Let(name, tpe.getOrElse(binding.tpe), binding)
+  }
   | `def` ~> id ~ (`=` ~/> block) ^^ Definition.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
@@ -111,7 +121,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   lazy val stmt: P[Stmt] =
     ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
     | `return` ~> pure ^^ Stmt.Return.apply
-    | `val` ~> id ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ Stmt.Val.apply
+    | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ {
+      case id ~ tpe ~ binding ~ body => Stmt.Val(id, tpe.getOrElse(binding.tpe), binding, body)
+    }
     | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
@@ -285,6 +297,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( `(` ~> manySep(valueType, `,`) <~ `)`
     | success(Nil)
     )
+
+  lazy val maybeTypeAnnotation: P[Option[ValueType]] =
+    (`:` ~> valueType).?
 
   // { f : S }
   // abbreviation { S } .= { _: S }

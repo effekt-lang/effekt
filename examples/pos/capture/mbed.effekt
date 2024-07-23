@@ -9,10 +9,10 @@ extern resource deep: Builtin
 
 // Some Builtins pretending to use the resources
 // ---------------------------------------------
-extern {in}    def useIn(): Unit = "0"
-extern {out}   def useOut(): Unit = "0"
-extern {block} def performBlocking(): Unit = "0"
-extern {deep}  def blockDeepSleep(): Unit = "0"
+extern {in}    def useIn(): Unit = default { () }
+extern {out}   def useOut(): Unit = default { () }
+extern {block} def performBlocking(): Unit = default { () }
+extern {deep}  def blockDeepSleep(): Unit = default { () }
 
 // Interrupt routines can only use in, out, and io
 type ISR = () => Unit at {in, out, io}
@@ -20,8 +20,8 @@ type ISR = () => Unit at {in, out, io}
 def dontSleep { f: => Unit }: Unit = { blockDeepSleep(); f() }
 
 interface Output {
-  def set(n: Boolean): Unit
-  def get(): Boolean
+  def set(n: Bool): Unit
+  def get(): Bool
 }
 
 record Time(nanoseconds: Int)
@@ -68,7 +68,7 @@ def loop[T] { f: => Unit / Loop[T] }: T = {
 
 
 def DigitalOut(name: String) = new Output {
-  def set(n: Boolean) = useOut()
+  def set(n: Bool) = useOut()
   def get() = { useOut(); true }
 }
 

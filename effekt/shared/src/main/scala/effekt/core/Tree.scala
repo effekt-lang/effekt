@@ -1,8 +1,10 @@
 package effekt
 package core
 
+import effekt.source.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
+import effekt.util.messages.ErrorReporter
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -64,7 +66,25 @@ import effekt.util.messages.INTERNAL_ERROR
  *
  * -------------------------------------------
  */
-sealed trait Tree
+sealed trait Tree extends Product {
+  /**
+   * The number of nodes of this tree (potentially used by inlining heuristics)
+   */
+  lazy val size: Int = {
+    var nodeCount = 1
+
+    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
+    def one(obj: Any): Unit = obj match {
+      case t: Tree => nodeCount += t.size
+      case s: effekt.symbols.Symbol => ()
+      case p: Product => all(p.productIterator)
+      case t: Iterable[t] => all(t)
+      case leaf           => ()
+    }
+    this.productIterator.foreach(one)
+    nodeCount
+  }
+}
 
 /**
  * In core, all symbols are supposed to be "just" names.
@@ -107,16 +127,22 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: Template[Pure])
-  case Include(contents: String)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Include(featureFlag: FeatureFlag, contents: String)
 }
-
+sealed trait ExternBody extends Tree
+object ExternBody {
+  case class StringExternBody(featureFlag: FeatureFlag, contents: Template[Pure]) extends ExternBody
+  case class Unsupported(err: util.messages.EffektError) extends ExternBody {
+    def report(using E: ErrorReporter): Unit = E.report(err)
+  }
+}
 
 enum Definition extends Tree {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Let(id: Id, binding: Expr) // PURE on the toplevel?
+  case Let(id: Id, tpe: ValueType, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -135,9 +161,8 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
 def Def(id: Id, block: Block, rest: Stmt) =
   addToScope(Definition.Def(id, block), rest)
 
-def Let(id: Id, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id,  binding), rest)
-
+def Let(id: Id, tpe: ValueType, binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(id, tpe, binding), rest)
 
 /**
  * Expressions (with potential IO effects)
@@ -262,7 +287,7 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: Pure)
-  case Val(id: Id, binding: Stmt, body: Stmt)
+  case Val(id: Id, annotatedTpe: ValueType, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
@@ -296,7 +321,7 @@ export Stmt.*
  */
 object normal {
 
-  def valDef(id: Id, binding: Stmt, body: Stmt): Stmt =
+  def valDef(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt =
     (binding, body) match {
 
       // [[ val x = STMT; return x ]] == STMT
@@ -312,16 +337,16 @@ object normal {
       //   all recursive functions that could blow the stack are trivially wrapped
       //   again, after optimizing.
       case (Stmt.Return(expr), body) =>
-        scope(List(Definition.Let(id, expr)), body)
+        scope(List(Definition.Let(id, tpe, expr)), body)
 
       // here we are flattening scopes; be aware that this extends
       // life-times of bindings!
       //
       // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
       case (Stmt.Scope(definitions, binding), body) =>
-        scope(definitions, valDef(id, binding, body))
+        scope(definitions, valDef(id, tpe, binding, body))
 
-      case _ => Stmt.Val(id, binding, body)
+      case _ => Stmt.Val(id, tpe, binding, body)
     }
 
   // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
@@ -375,8 +400,12 @@ object normal {
         clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
           .map(body => app(body, Nil, vargs, Nil))
           .orElse { default }.getOrElse { sys error "Pattern not exhaustive. This should not happen" }
-      case other =>
-        Match(scrutinee, clauses, default)
+      case other => (clauses, default) match {
+        // Unit-like types: there is only one case and it is just a tag.
+        //   sc match { case Unit() => body }   ==>   body
+        case ((id, lit) :: Nil, None) if lit.vparams.isEmpty => lit.body
+        case _ => Match(scrutinee, clauses, default)
+      }
     }
 
 
@@ -481,6 +510,7 @@ object Tree {
     def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
     def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
     def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
+    def externBody(using Ctx): PartialFunction[ExternBody, Res] = PartialFunction.empty
 
     /**
      * Hook that can be overridden to perform an action at every node in the tree
@@ -502,6 +532,7 @@ object Tree {
       if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
         case (id, lit) => query(lit)
     }
+    def query(b: ExternBody)(using Ctx): Res = structuralQuery(b, externBody)
   }
 
   class Rewrite extends Structural {
@@ -525,6 +556,7 @@ object Tree {
     def rewrite(p: Param): Param = rewriteStructurally(p, param)
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(b: ExternBody): ExternBody= rewrite(b)
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
     def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
@@ -592,7 +624,7 @@ object Variables {
 
   def free(d: Definition): Variables = d match {
     case Definition.Def(id, block) => free(block)
-    case Definition.Let(id, binding) => free(binding)
+    case Definition.Let(id, _, binding) => free(binding)
   }
 
   def all[T](t: IterableOnce[T], f: T => Variables): Variables =
@@ -616,7 +648,7 @@ object Variables {
       stillFree ++ (free(body) -- boundSoFar)
 
     case Stmt.Return(expr) => free(expr)
-    case Stmt.Val(id, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
+    case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
@@ -638,7 +670,7 @@ object Variables {
 
   def bound(d: Definition): Variables = d match {
     case Definition.Def(id, block) => Variables.block(id, block.tpe, block.capt)
-    case Definition.Let(id, binding) => Variables.value(id, binding.tpe)
+    case Definition.Let(id, tpe, binding) => Variables.value(id, tpe)
   }
 }
 
@@ -683,7 +715,7 @@ object substitutions {
   def substitute(definition: Definition)(using Substitution): Definition =
     definition match {
       case Definition.Def(id, block) => Definition.Def(id, substitute(block))
-      case Definition.Let(id, binding) => Definition.Let(id, substitute(binding))
+      case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, substitute(binding))
     }
 
   def substitute(expression: Expr)(using Substitution): Expr =
@@ -707,8 +739,8 @@ object substitutions {
       case Return(expr) =>
         Return(substitute(expr))
 
-      case Val(id, binding, body) =>
-        Val(id, substitute(binding),
+      case Val(id, tpe, binding, body) =>
+        Val(id, substitute(tpe), substitute(binding),
           substitute(body)(using subst shadowValues List(id)))
 
       case App(callee, targs, vargs, bargs) =>

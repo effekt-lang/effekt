@@ -193,7 +193,7 @@ def elaborate(e: Extern)(using T: TransformationContext): Extern = e match {
       case (id, tpe) => Param.BlockParam(id, T.elaborate(tpe))
     }
     Extern.Def(id, tparams, vps ++ bps, ret, body)
-  case i @ Extern.Include(contents) => i
+  case i @ Extern.Include(ff, contents) => i
 }
 
 def elaborate(d: Declaration)(using T: TransformationContext): Declaration = d match {

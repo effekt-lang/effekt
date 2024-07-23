@@ -4,42 +4,42 @@ extern type Node
 
 // can be null
 extern pure def getElementById(id: String): Node =
-  "document.getElementById(${id})"
+  js "document.getElementById(${id})"
 
 extern pure def createElement(tag: String): Node =
-  "document.createElement(${tag})"
+  js "document.createElement(${tag})"
 
 extern pure def createTextNode(text: String): Node =
-  "document.createTextNode(${text})"
+  js "document.createTextNode(${text})"
 
 extern pure def setAttribute(node: Node, key: String, value: String): Node =
-  "${node}.setAttribute(${key}, ${value})"
+  js "${node}.setAttribute(${key}, ${value})"
 
 // the string return type is wrong here...
 extern pure def getAttribute(node: Node, key: String): String =
-  "${node}.getAttribute(${key})"
+  js "${node}.getAttribute(${key})"
 
 extern pure def appendChild(node: Node, child: Node): Node =
-  "${node}.appendChild(${child})"
+  js "${node}.appendChild(${child})"
 
 extern pure def innerHTML(node: Node, contents: String): Node =
-  "(function() { ${node}.innerHTML = ${contents}; return ${node} })()"
+  js "(function() { ${node}.innerHTML = ${contents}; return ${node} })()"
 
 extern type IdleDeadline
 
 extern pure def requestIdleCallback(callback: (IdleDeadline) => Unit at {io}): Unit =
-  "window.requestIdleCallback(deadline => ${callback}(deadline).run())"
+  js "window.requestIdleCallback(deadline => ${callback}(deadline).run())"
 
-extern pure def didDimeout(deadline: IdleDeadline): Boolean =
-  "${deadline}.didTimeout"
+extern pure def didDimeout(deadline: IdleDeadline): Bool =
+  js "${deadline}.didTimeout"
 
 extern pure def timeRemaining(deadline: IdleDeadline): Double =
-  "${deadline}.timeRemaining()"
+  js "${deadline}.timeRemaining()"
 
 extern pure def onClick(node: Node, handler: () => Unit at {io}): Node =
-  "(function() { ${node}.onclick = () => ${handler}().run(); return ${node} })()"
+  js "(function() { ${node}.onclick = () => ${handler}().run(); return ${node} })()"
 
 extern def sleep(n: Int): Unit =
-  "$effekt.callcc(k => window.setTimeout(() => k(null), ${n}))"
+  js "$effekt.callcc(k => window.setTimeout(() => k(null), ${n}))"
 
 def clear(node: Node) = node.innerHTML("")
