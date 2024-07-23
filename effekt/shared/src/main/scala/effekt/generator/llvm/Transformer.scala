@@ -88,7 +88,7 @@ object Transformer {
         shareValues(label.environment, Set())
 
         val arguments = label.environment.map(transform)
-        emit(Call("", Tailcc(), VoidType(), transform(label), arguments :+ getStackPointer()))
+        emit(tailCall(transform(label), arguments :+ getStackPointer()))
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
@@ -191,7 +191,7 @@ object Transformer {
         emit(ExtractValue(objName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
         emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
-        emit(Call("", Tailcc(), VoidType(), LocalReference(methodType, functionName), LocalReference(objectType, objName) +: arguments :+ getStackPointer()));
+        emit(tailCall(LocalReference(methodType, functionName), LocalReference(objectType, objName) +: arguments :+ getStackPointer()))
         RetVoid()
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
@@ -269,7 +269,7 @@ object Transformer {
           emit(Comment("statement pushFrame / sharer"))
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
-          emit(Call("", Ccc(), VoidType(), shareFrames, List(getStackPointer())));
+          emit(Call("_", Ccc(), VoidType(), shareFrames, List(getStackPointer())));
           RetVoid()
         }
 
@@ -279,7 +279,7 @@ object Transformer {
           emit(Comment("statement pushFrame / eraser"))
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
-          emit(Call("", Ccc(), VoidType(), eraseFrames, List(getStackPointer())));
+          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(getStackPointer())));
           RetVoid()
         }
 
@@ -294,7 +294,7 @@ object Transformer {
         shareValues(values, Set())
 
         val returnAddress = popReturnAddress();
-        emit(Call("", Tailcc(), VoidType(), LocalReference(returnAddressType, returnAddress), values.map(transform) :+ getStackPointer()));
+        emit(tailCall(LocalReference(returnAddressType, returnAddress), values.map(transform) :+ getStackPointer()))
         RetVoid()
 
       case machine.NewStack(variable, frame, rest) =>
@@ -492,6 +492,9 @@ object Transformer {
 
     emit(function)
   }
+
+  def tailCall(name: Operand, arguments: List[Operand]): Instruction =
+    Call("_", Tailcc(), VoidType(), name, arguments)
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
