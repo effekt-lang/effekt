@@ -32,7 +32,8 @@ object Transformer {
     // collect all information
     val declarations = mod.externs.map(transform)
     val definitions = mod.definitions
-    val mainEntry = Jump(Label(mainName, List()))
+    val evidence = Variable(freshName("ev"), builtins.Evidence)
+    val mainEntry = LiteralEvidence(evidence, builtins.Here, Jump(Label(mainName, List(evidence))))
 
     findToplevelBlocksParams(definitions)
 

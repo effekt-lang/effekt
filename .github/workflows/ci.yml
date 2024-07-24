@@ -73,6 +73,10 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: sudo apt-get install llvm-15
 
+    - name: Install Valgrind
+      if: matrix.os != 'windows-latest'
+      run: sudo apt-get install valgrind
+
     - name: Install libuv
       run: sudo apt-get install libuv1-dev
 
@@ -82,7 +86,7 @@ jobs:
         node-version: '12.x'
 
     - name: Run tests
-      run: sbt clean test
+      run: EFFEKT_VALGRIND=1 sbt clean test
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS

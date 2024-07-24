@@ -360,10 +360,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       val data = d.symbol
       data.constructors = ctors map {
         case source.Constructor(id, tparams, ps) =>
-          val name = Context.nameFor(id)
-          val tps = tparams map resolve
-
-          val constructor = Constructor(name, data.tparams ++ tps, null, data)
+          val constructor = Context scoped {
+            val name = Context.nameFor(id)
+            val tps = tparams map resolve
+            Constructor(name, data.tparams ++ tps, null, data)
+          }
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
           constructor
