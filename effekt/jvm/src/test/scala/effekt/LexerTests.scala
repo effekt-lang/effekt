@@ -11,23 +11,40 @@ import munit.Location
 class LexerTests extends munit.FunSuite {
 
   def assertTokensEq(prog: String, expected: TokenKind*)(using Location): Unit = {
-    val tokens = Lexer(StringSource(prog, "")).run()
+    val (tokens, _) = Lexer(StringSource(prog, "")).run()
     tokens.zipAll(expected, null, null).foreach((t1, t2) => assertEquals(t1.kind, t2))
   }
 
   def assertSuccess(prog: String)(using Location): Unit =
-    try {
-      Lexer(StringSource(prog, "")).run()
-    } catch {
-        case LexerError(msg, _, _) => fail(msg)
+    val (tokens, errors) = Lexer(StringSource(prog, "")).run()
+    if (errors.nonEmpty) {
+      fail(s"expected success, but found hard errors: $errors")
     }
 
-  def assertFailure(prog: String)(using Location): Unit =
-    try {
-      Lexer(StringSource(prog, "")).run()
-      fail(s"expected an lexer error but found none")
-    } catch {
-      case LexerError(_, _, _) => ()
+    val softErrors = tokens.collect {
+      case Token(_, _, TokenKind.Error(lexerError)) => lexerError
+    }
+    if (softErrors.nonEmpty) {
+      fail(s"expected success, but found soft errors: $softErrors")
+    }
+
+  def assertHardError(prog: String)(using Location): Unit =
+    val (tokens, errors) = Lexer(StringSource(prog, "")).run()
+    if (errors.isEmpty) {
+      fail(s"expected a hard error, but found none")
+    }
+
+  def assertSoftError(prog: String)(using Location): Unit =
+    val (tokens, errors) = Lexer(StringSource(prog, "")).run()
+    if (errors.nonEmpty) {
+      fail(s"expected a soft error, but found hard errors: $errors")
+    }
+
+    val softErrors = tokens.collect {
+      case Token(_, _, TokenKind.Error(lexerError)) => lexerError
+    }
+    if (softErrors.isEmpty) {
+      fail(s"expected a soft error, but found none")
     }
 
   test("function definition") {
@@ -56,9 +73,9 @@ class LexerTests extends munit.FunSuite {
   }
 
   test("big numbers") {
-    assertFailure("9223372036854775808")
+    assertHardError("9223372036854775808")
     assertTokensEq("9223372036854775807", Integer(9223372036854775807L), EOF)
-    assertFailure("-9223372036854775809")
+    assertHardError("-9223372036854775809")
     assertTokensEq("-9223372036854775808", Integer(-9223372036854775808L), EOF)
     // the max double value is 1.7976931348623157E308, without "e notation/scientific notation" support in the lexer,
     // we refrain from writing it down in full length here
@@ -83,7 +100,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("\"\\\"hello\\\"\"", Str("\"hello\"", false), EOF)
     assertTokensEq("\" \\n\"", Str(" \n", false), EOF)
     assertTokensEq("\" \\t \"", Str(" \t ", false), EOF)
-    assertFailure("\"\\k\"")
+    assertHardError("\"\\k\"")
     assertTokensEq("\"\\u001b\"", Str("\u001b", false), EOF)
   }
 
@@ -97,7 +114,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
     assertTokensEq("\\u10FFFF{ val", Chr(0x10FFFF), `{`, `val`, EOF)
     assertTokensEq("val s =\\u0000+ 1", `val`, Ident("s"), `=`, Chr(0), `+`, Integer(1), EOF)
-    assertFailure("''")
+    assertSoftError("''")
   }
 
   test("multi line strings") {
@@ -112,8 +129,8 @@ class LexerTests extends munit.FunSuite {
       EOF
     )
     assertTokensEq("\" \"\"\"", Str(" ", false), Str("", false), EOF)
-    assertFailure("\"\"\"")
-    assertFailure("\"\"\" \"")
+    assertHardError("\"\"\"")
+    assertHardError("\"\"\" \"")
   }
 
   test("quoted single-line string") {

@@ -14,7 +14,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescent = {
     val source = StringSource(input, "")
     val lexer = effekt.lexer.Lexer(source)
-    val tokens = lexer.run()
+    val (tokens, errors) = lexer.run()
     // TODO catch LexerError exception?
     new RecursiveDescent(positions, tokens, source)
   }

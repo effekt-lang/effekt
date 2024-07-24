@@ -279,7 +279,7 @@ class Lexer(source: Source) {
   }
 
   def lex()(using ctx: Context): Vector[Token] =
-    val result = run()
+    val (result, _) = run()
 
     errors.foreach {
       case LexerError(msg, start, end) => {
@@ -296,10 +296,9 @@ class Lexer(source: Source) {
    * If an error is encountered, all successfully scanned tokens this far will returned,
    * including the error.
    */
-  def run(): Vector[Token] = {
-    var err: Option[LexerError] = None
+  def run(): (Vector[Token], Vector[LexerError]) = {
     var eof = false
-    while (!eof && err.isEmpty) {
+    while (!eof) {
       val kind =
         // If the last token was `}` and we are currently inside unquotes, remember to directly continue
         // lexing a string
@@ -319,7 +318,8 @@ class Lexer(source: Source) {
       }
       start = current
     }
-    tokens.toVector
+
+    (tokens.toVector, errors.toVector)
   }
 
   // --- Literal and comment matchers ---
