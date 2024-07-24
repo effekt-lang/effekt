@@ -81,7 +81,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         }
 
         // we are in one of three exclusive modes: LSPServer, Compile, Run
-        if (config.server()) { compiler.runMiddleend(src) }
+        if (config.server()) { compiler.runFrontend(src) }
         else if (config.interpret()) { compile() foreach runner.eval }
         else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
@@ -90,6 +90,13 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     case FatalPhaseError(msg) => context.report(msg)
     case e @ CompilerPanic(msg) =>
       context.report(msg)
+      e.getStackTrace.foreach { line =>
+        context.info("  at " + line)
+      }
+    // when in server-mode, do not crash but report the error to avoid
+    // restarting the server.
+    case e if config.server() =>
+      context.info("Effekt Compiler Crash: " + e.getMessage)
       e.getStackTrace.foreach { line =>
         context.info("  at " + line)
       }
@@ -129,7 +136,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
       C.compiler.prettyIR(source, stage).map { case (Document(s, _)) =>
         val extension = if (stage == Stage.Target) C.runner.extension else "ir"
         val name = source.name.split("/").last + "-" + stage.toString.toLowerCase + "." + extension
-        IO.createFile((out / name).unixPath, s)  
+        IO.createFile((out / name).unixPath, s)
       }
   }
 
