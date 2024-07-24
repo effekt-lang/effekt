@@ -13,8 +13,8 @@ extern pure def show[R](value: R): String =
   hvm "(HVM.log ${value} ${value})"
 
 */
-//extern pure def infixConcat(s1: String, s2: String): String =
-//  "${s1} + ${s2}"
+extern pure def infixConcat(s1: String, s2: String): String =
+  hvm "(List/concat ${s1} ${s2})"
 
 extern io def println(r: String): Unit =
   hvm "(IO/bind (IO/print r) *)"
