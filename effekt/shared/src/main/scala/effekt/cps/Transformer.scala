@@ -83,7 +83,7 @@ def transform(expr: lifted.Expr): Expr = expr match {
 
 def transform(b: lifted.Block): Expr = b match { // block => Term
   case lifted.Block.BlockVar(id, annotatedType) => Var(id)
-  case lifted.Block.BlockLit(tparams, params, body) => println(b); BlockLit((params map transform) :+ Id("k"), transform(body))
+  case lifted.Block.BlockLit(tparams, params, body) => BlockLit((params map transform) :+ Id("k"), transform(body))
   case lifted.Block.Member(b, field, annotatedType) => 
   b match {
     case lifted.Block.BlockVar(id, annotatedType) => annotatedType match {
@@ -109,7 +109,7 @@ def transform(blockLit: lifted.BlockLit): BlockLit = blockLit match {
 
 def transform(stmt: lifted.Stmt): Term = stmt match {
   case lifted.Stmt.Return(e)  =>  AppCont(Id("k"), transform(e))
-  case lifted.Stmt.Val(id, binding, body)  => println(stmt); LetCont(Id("k"), id, transform(body), transform(binding))
+  case lifted.Stmt.Val(id, binding, body)  => LetCont(Id("k"), id, transform(body), transform(binding))
   
   case lifted.Stmt.Scope(definitions, body) => transform(definitions, transform(body))
   case lifted.Stmt.App(b, targs, args) => App(transform(b), args map transform, Id("k"))
