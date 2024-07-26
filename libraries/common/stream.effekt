@@ -13,12 +13,13 @@ def for[A, R] { stream: () => R / Emit[A] } { action: A => Unit }: R =
     def emit(value) = resume(action(value))
   }
 
-// TODO what if the number is negative? undefined behavior?
-def repeat[A](number: Int) { action: () => A }: Unit / Emit[A] =
-  if (number > 0) {
+def forever[A] { action: () => A }: Nothing / Emit[A] = {
+  def go(): Nothing = {
     do emit(action())
-    repeat(number - 1) {action}
+    go()
   }
+  go()
+}
 
 
 def each[A](list: List[A]): Unit / Emit[A] =
@@ -66,7 +67,7 @@ interface Done {
   def done(): Nothing
 }
 
-def noneOnDone[R] { program: () => R / Done }: Option[R] =
+def boundary[R] { program: () => R / Done }: Option[R] =
   try {
     Some(program())
   } with Done {
@@ -106,15 +107,8 @@ def index[A, R] { stream: () => R / Emit[A] }: R / Emit[Indexed[A]] = {
   }
 }
 
-def ever[A] { action: () => A }: Nothing / Emit[A] = {
-  def go(): Nothing = {
-    do emit(action())
-    go()
-  }
-  go()
-}
 
-def limit[A, R](number: Int) { stream: () => R / Emit[A] }: R / { Emit[A], Done } = {
+def take[A, R](number: Int) { stream: () => R / Emit[A] }: R / { Emit[A], Done } = {
   var i = 0;
   try {
     stream()
@@ -132,7 +126,15 @@ def limit[A, R](number: Int) { stream: () => R / Emit[A] }: R / { Emit[A], Done 
 }
 
 
-def addition[R] { stream : () => R / Emit[Int] }: (R, Int) = {
+// If `number` is zero or negative it does nothing (like `stream::take`)
+def repeat[A](number: Int) { action: () => A }: Unit / Emit[A] =
+  if (number > 0) {
+    do emit(action())
+    repeat(number - 1) {action}
+  }
+
+
+def sum[R] { stream : () => R / Emit[Int] }: (R, Int) = {
   var s = 0;
   try {
     (stream(), s)
@@ -144,6 +146,9 @@ def addition[R] { stream : () => R / Emit[Int] }: (R, Int) = {
   }
 }
 
+def sum { stream : () => Unit / Emit[Int] }: Int =
+  sum[Unit]{stream}.second
+
 def gatherList[A, R] { stream: () => R / Emit[A] }: (R, List[A]) =
   try {
     (stream(), Nil())
@@ -154,15 +159,18 @@ def gatherList[A, R] { stream: () => R / Emit[A] }: (R, List[A]) =
     }
   }
 
+def gatherList[A] { stream: () => Unit / Emit[A] }: List[A] =
+  gatherList[A, Unit]{stream}.second
+
 def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
   var i = 0
   var a = allocate(1)
   try {
-    (stream(), unsafeShrink(a, i))
+    (stream(), a.resize(i))
   } with Emit[A] {
     def emit(v) = {
       val c = i;
-      if (c >= a.size) { a = unsafeBackoff(a) }
+      if (c >= a.size) { a = a.resize(2 * a.size) }
       a.unsafeSet(c, v)
       i = c + 1
       resume(())
@@ -170,7 +178,10 @@ def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
   }
 }
 
-def gatherArrayLimit[A, R](number: Int) { stream: () => R / Emit[A] }: (R, Array[A]) = {
+def gatherArray[A] { stream: () => Unit / Emit[A] }: Array[A] =
+  gatherArray[A, Unit]{stream}.second
+
+def gatherArraySize[A, R](number: Int) { stream: () => R / Emit[A] }: (R, Array[A]) = {
   var i = 0;
   val a = allocate(number);
   try {
@@ -187,6 +198,9 @@ def gatherArrayLimit[A, R](number: Int) { stream: () => R / Emit[A] }: (R, Array
   }
 }
 
+def gatherArraySize[A](number: Int) { stream: () => Unit / Emit[A] }: Array[A] =
+  gatherArraySize[A, Unit](number){stream}.second
+
 // def gatherBytes[A, R] { stream: () => R / Emit[Byte] }: (Bytes, R) = <>
 
 // def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
@@ -201,24 +215,13 @@ interface Read[A] {
   def read(): A / Done
 }
 
-def whileNotDone[A] { thunk: () => A / Done } { action: A => Unit }: Unit = {
-  try {
-    def go(): Unit = {
-      action(thunk())
-      go()
-    }
-    go()
-  } with Done {
-      def done() = ()
-  }
-}
-
 def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }: R / Done = {
-  var next = box { () => <> }
+  var next = box { () => val x: A = do done(); return x }
   next = box { () =>
     try {
       stream()
-      do done()
+      val x: A = do done()
+      return x
     } with Emit[A] {
       def emit(v) = {
         next = box { () => resume(()) }
@@ -229,6 +232,8 @@ def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }:
   try {
     reader()
   } with Read[A] {
-    def read() = resume(next())
+    def read() = {
+      resume { next() }
+    }
   }
 }
