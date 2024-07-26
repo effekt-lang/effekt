@@ -1,4 +1,0 @@
-import args
-def main() = {
-  println(commandLineArgs())
-}
