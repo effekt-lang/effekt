@@ -1,0 +1,16 @@
+interface Break[A] {
+  def break(r: A): Nothing
+}
+
+def foo() = try {
+  def go(x: Int): Int = {
+    if (x == 5) { do break(x) } else { go(x + 1) }
+  }
+  go(0)
+} with Break[Int] {
+   def break(r: Int) = r
+}
+
+def main() = {
+  println(foo())
+}
