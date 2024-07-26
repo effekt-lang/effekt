@@ -655,10 +655,15 @@ interface Control {
   def continue(): Unit
 }
 
-def loop { f: () => Unit / Control }: Unit = try {
+def loop { f: () => Unit }: Unit = {
   def go(): Unit = { f(); go() }
   go()
-} with Control {
+}
+
+def loop { f: {Control} => Unit }: Unit = try {
+  def go(): Unit = { f {label}; go() }
+  go()
+} with label: Control {
   def break() = ()
   def continue() = loop { f }
 }
@@ -666,15 +671,27 @@ def loop { f: () => Unit / Control }: Unit = try {
 /**
  * Calls provided action repeatedly. `start` is inclusive, `end` is not.
  */
-def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
+def each(start: Int, end: Int) { action: (Int) => Unit } = {
+  def loop(i: Int): Unit =
+    if (i < end) { action(i); loop(i + 1) }
+
+  loop(start)
+}
+
+/**
+ * Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
+ */
+def each(start: Int, end: Int) { action: (Int) {Control} => Unit } = {
   var i = start;
-  loop {
-    if (i < end) { val el = i; i = i + 1; action(el) }
-    else { do break() }
+  loop { {l} =>
+    if (i < end) { val el = i; i = i + 1; action(el){l} }
+    else { l.break() }
   }
 }
 
-def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
+def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
+
+def repeat(n: Int) { action: () {Control} => Unit } = each(0, n) { (n) {l} => action() {l} }
 
 namespace internal {
   namespace boxing {
