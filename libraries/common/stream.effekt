@@ -1,0 +1,234 @@
+module stream
+
+import bytes
+
+interface Emit[A] {
+  def emit(value: A): Unit
+}
+
+def for[A, R] { stream: () => R / Emit[A] } { action: A => Unit }: R =
+  try {
+    stream()
+  } with Emit[A] {
+    def emit(value) = resume(action(value))
+  }
+
+// TODO what if the number is negative? undefined behavior?
+def repeat[A](number: Int) { action: () => A }: Unit / Emit[A] =
+  if (number > 0) {
+    do emit(action())
+    repeat(number - 1) {action}
+  }
+
+
+def each[A](list: List[A]): Unit / Emit[A] =
+  list match {
+    case Nil() => ()
+    case Cons(head, tail) =>
+      do emit(head)
+      each(tail)
+  }
+
+def each[A](array: Array[A]): Unit / Emit[A] = {
+  val n = array.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(array.unsafeGet(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+def each(bytes: Bytes): Unit / Emit[Byte] = {
+  val n = bytes.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(bytes.read(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+// not option
+// not dequeue
+// not queue
+// not result
+// not seq
+
+// def decodeUtf8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = <>
+// def encodeUtf8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] = <>
+// def each(string: String): Unit / Emit[Char] = decodeUtf8 { string.asBytes.each }
+
+
+interface Done {
+  def done(): Nothing
+}
+
+def noneOnDone[R] { program: () => R / Done }: Option[R] =
+  try {
+    Some(program())
+  } with Done {
+    def done() = None()
+  }
+
+
+record Indexed[A](index: Int, value: A)
+
+// In Effekt lower bounds are inclusive and upper bounds are exclusive
+
+def range(lower: Int, upper: Int): Unit / Emit[Int] =
+  if (lower < upper) {
+    do emit(lower)
+    range(lower + 1, upper)
+  }
+
+def rangeTo(upper: Int): Unit / Emit[Int] =
+  range(0, upper)
+
+def rangeFrom(lower: Int): Unit / Emit[Int] = {
+  do emit(lower)
+  rangeFrom(lower + 1)
+}
+
+
+def index[A, R] { stream: () => R / Emit[A] }: R / Emit[Indexed[A]] = {
+  var i = 0;
+  try {
+    stream()
+  } with Emit[A] {
+    def emit(v) = {
+      val c = i;
+      i = c + 1;
+      resume(do emit(Indexed(c, v)))
+    }
+  }
+}
+
+def ever[A] { action: () => A }: Nothing / Emit[A] = {
+  def go(): Nothing = {
+    do emit(action())
+    go()
+  }
+  go()
+}
+
+def limit[A, R](number: Int) { stream: () => R / Emit[A] }: R / { Emit[A], Done } = {
+  var i = 0;
+  try {
+    stream()
+  } with Emit[A] {
+    def emit(v) = {
+      val c = i;
+      if (c < number) {
+        i = c + 1;
+        resume(do emit(v))
+      } else {
+        do done()
+      }
+    }
+  }
+}
+
+
+def addition[R] { stream : () => R / Emit[Int] }: (R, Int) = {
+  var s = 0;
+  try {
+    (stream(), s)
+  } with Emit[Int] {
+    def emit(v) = {
+      s = s + v;
+      resume(())
+    }
+  }
+}
+
+def gatherList[A, R] { stream: () => R / Emit[A] }: (R, List[A]) =
+  try {
+    (stream(), Nil())
+  } with Emit[A] {
+    def emit(v) = {
+      val (r, vs) = resume(());
+      (r, Cons(v, vs))
+    }
+  }
+
+def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
+  var i = 0
+  var a = allocate(1)
+  try {
+    (stream(), unsafeShrink(a, i))
+  } with Emit[A] {
+    def emit(v) = {
+      val c = i;
+      if (c >= a.size) { a = unsafeBackoff(a) }
+      a.unsafeSet(c, v)
+      i = c + 1
+      resume(())
+    }
+  }
+}
+
+def gatherArrayLimit[A, R](number: Int) { stream: () => R / Emit[A] }: (R, Array[A]) = {
+  var i = 0;
+  val a = allocate(number);
+  try {
+    (stream(), a)
+  } with Emit[A] {
+    def emit(v) = {
+      val c = i;
+      if (c < number) {
+        a.unsafeSet(i, v)
+        i = c + 1
+        resume(())
+      }
+    }
+  }
+}
+
+// def gatherBytes[A, R] { stream: () => R / Emit[Byte] }: (Bytes, R) = <>
+
+// def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
+
+// TODO input from file
+// TODO input from stdin
+// TODO output to file
+// TODO output to stdout
+
+
+interface Read[A] {
+  def read(): A / Done
+}
+
+def whileNotDone[A] { thunk: () => A / Done } { action: A => Unit }: Unit = {
+  try {
+    def go(): Unit = {
+      action(thunk())
+      go()
+    }
+    go()
+  } with Done {
+      def done() = ()
+  }
+}
+
+def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }: R / Done = {
+  var next = box { () => <> }
+  next = box { () =>
+    try {
+      stream()
+      do done()
+    } with Emit[A] {
+      def emit(v) = {
+        next = box { () => resume(()) }
+        return v
+      }
+    }
+  }
+  try {
+    reader()
+  } with Read[A] {
+    def read() = resume(next())
+  }
+}

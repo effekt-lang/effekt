@@ -77,30 +77,33 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
     ret %Pos %z
   """
 
-/// Creates a copy of `arr`
-def copy[T](arr: Array[T]): Array[T] = {
-  with on[OutOfBounds].default { <> }; // should not happen
-  val len = arr.size;
-  val newArray = allocate[T](len);
-  copy[T](arr, 0, newArray, 0, len);
-  newArray
-}
-
-/// Copies `length`-many elements from `from` to `to`
-/// starting at `start` (in `from`) and `offset` (in `to`)
-def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
-  val startValid  = start >= 0 && start + length <= from.size
-  val offsetValid = offset >= 0 && offset + length <= to.size
-
-  def go(i: Int, j: Int, length: Int): Unit =
-    if (length > 0) {
-      to.unsafeSet(j, from.unsafeGet(i))
-      go(i + 1, j + 1, length - 1)
+// Parameter `n` must be smaller than `source.size`
+def unsafeShrink[T](source: Array[T], n: Int): Array[T] = {
+  val target = allocate(n)
+  def go(i: Int): Array[T] =
+    if (i < n) {
+      target.unsafeSet(i, source.unsafeGet(i))
+      go(i + 1)
+    } else {
+      target
     }
-
-  if (startValid && offsetValid) go(start, offset, length)
-  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
+  go(0)
 }
+
+// Elements after `source.size` are uninitialized
+def unsafeBackoff[T](source: Array[T]): Array[T] = {
+  val n = source.size
+  val target = allocate(2 * n)
+  def go(i: Int): Array[T] =
+    if (i < n) {
+      target.unsafeSet(i, source.unsafeGet(i))
+      go(i + 1)
+    } else {
+      target
+    }
+  go(0)
+}
+
 
 // Derived operations:
 
@@ -125,6 +128,36 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
   };
   arr
 }
+
+/**
+ * Creates a copy of `arr`
+ */
+def copy[T](arr: Array[T]): Array[T] = {
+  with on[OutOfBounds].default { <> }; // should not happen
+  val len = arr.size;
+  val newArray = allocate[T](len);
+  copy[T](arr, 0, newArray, 0, len);
+  newArray
+}
+
+/**
+ * Copies `length`-many elements from `from` to `to`
+ * starting at `start` (in `from`) and `offset` (in `to`)
+ */
+def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
+  val startValid  = start >= 0 && start + length <= from.size
+  val offsetValid = offset >= 0 && offset + length <= to.size
+
+  def go(i: Int, j: Int, length: Int): Unit =
+    if (length >= 0) {
+      to.unsafeSet(j, from.unsafeGet(i))
+      go(i + 1, j + 1, length - 1)
+    }
+
+  if (startValid && offsetValid) go(start, offset, length)
+  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
+}
+
 
 // Utility functions:
 
