@@ -181,7 +181,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `val` =>
       val params = (`val` ~> peek.kind match {
         case `(` => valueParamsOpt()
-        case _ => List(valueParam()) // TODO copy position
+        case _ => List(valueParamOpt()) // TODO copy position
       })
       desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts())
 
