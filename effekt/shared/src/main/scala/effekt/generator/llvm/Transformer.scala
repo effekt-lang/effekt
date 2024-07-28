@@ -88,7 +88,7 @@ object Transformer {
         shareValues(label.environment, Set())
 
         val arguments = label.environment.map(transform)
-        emit(tailCall(transform(label), arguments :+ getStackPointer()))
+        emit(tailCall(transform(label), arguments :+ LocalReference(stackType, "stack")))
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
@@ -118,10 +118,9 @@ object Transformer {
 
         val freeInClauses = clauses.flatMap(freeVariables)
 
-        val stackPointer = getStackPointer();
+        // TODO
         def labelClause(clause: machine.Clause): String = {
           implicit val BC = BlockContext()
-          BC.stackPointer = stackPointer
 
           consumeObject(LocalReference(objectType, objName), clause.parameters, freeVariables(clause.body));
           eraseValues(freeInClauses, freeVariables(clause));
@@ -191,7 +190,7 @@ object Transformer {
         emit(ExtractValue(objName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
         emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
-        emit(tailCall(LocalReference(methodType, functionName), LocalReference(objectType, objName) +: arguments :+ getStackPointer()))
+        emit(tailCall(LocalReference(methodType, functionName), LocalReference(objectType, objName) +: arguments :+ LocalReference(stackType, "stack")))
         RetVoid()
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
@@ -254,7 +253,7 @@ object Transformer {
 
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineFunction(Tailcc(), returnAddressName, parameters :+ Parameter(stackPointerType, "stackPointer")) {
+        defineFunction(Tailcc(), returnAddressName, parameters :+ Parameter(stackType, "stack")) {
           emit(Comment("statement pushFrame / return address"))
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
@@ -265,21 +264,21 @@ object Transformer {
 
         // TODO cache based on environment
         val sharerName = freshName("sharer");
-        defineFunction(Ccc(), sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
+        defineFunction(Ccc(), sharerName, List(Parameter(stackType, "stack"))) {
           emit(Comment("statement pushFrame / sharer"))
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
-          emit(Call("_", Ccc(), VoidType(), shareFrames, List(getStackPointer())));
+          emit(Call("_", Ccc(), VoidType(), shareFrames, List(LocalReference(stackType, "stack"))));
           RetVoid()
         }
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
-        defineFunction(Ccc(), eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
+        defineFunction(Ccc(), eraserName, List(Parameter(stackType, "stack"))) {
           emit(Comment("statement pushFrame / eraser"))
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
-          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(getStackPointer())));
+          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(LocalReference(stackType, "stack"))));
           RetVoid()
         }
 
@@ -294,7 +293,7 @@ object Transformer {
         shareValues(values, Set())
 
         val returnAddress = popReturnAddress();
-        emit(tailCall(LocalReference(returnAddressType, returnAddress), values.map(transform) :+ getStackPointer()))
+        emit(tailCall(LocalReference(returnAddressType, returnAddress), values.map(transform) :+ LocalReference(stackType, "stack")))
         RetVoid()
 
       case machine.NewStack(variable, frame, rest) =>
@@ -305,22 +304,21 @@ object Transformer {
 
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineFunction(Tailcc(), returnAddressName, parameters :+ Parameter(stackPointerType, "stackPointer")) {
+        defineFunction(Tailcc(), returnAddressName, parameters :+ Parameter(stackType, "stack")) {
           emit(Comment("statement newStack / return address"))
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body));
 
           val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(Call(newStackPointer.name, Ccc(), stackPointerType, underflowStack, List(getStackPointer())));
-          setStackPointer(newStackPointer);
+          emit(Call(newStackPointer.name, Ccc(), stackPointerType, underflowStack, List(LocalReference(stackType, "stack"))));
 
           transform(frame.body);
         }
 
         // TODO cache based on environment (this is different from other sharers)
         val sharerName = freshName("sharer");
-        defineFunction(Ccc(), sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
+        defineFunction(Ccc(), sharerName, List(Parameter(stackType, "stack"))) {
           emit(Comment("statement newStack / sharer"))
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
@@ -329,11 +327,11 @@ object Transformer {
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
-        defineFunction(Ccc(), eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
+        defineFunction(Ccc(), eraserName, List(Parameter(stackType, "stack"))) {
           emit(Comment("statement newStack / eraser"))
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
-          emit(Call("_", Ccc(), VoidType(), free, List(getStackPointer())));
+          emit(Call("_", Ccc(), VoidType(), free, List(LocalReference(stackType, "stack"))));
           RetVoid()
         }
 
@@ -354,21 +352,13 @@ object Transformer {
         shareValues(List(value), freeVariables(rest));
         val newStackName = freshName("stack");
         emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
-        val newStackPointerName = freshName("stackPointer");
-        emit(Call(newStackPointerName, Ccc(), stackPointerType, pushStack, List(LocalReference(stackType, newStackName), getStackPointer())));
-        setStackPointer(LocalReference(stackPointerType, newStackPointerName));
+        emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), LocalReference(stackType, "stack"))));
         transform(rest)
 
       case machine.PopStacks(variable, n, rest) =>
         emit(Comment("statement popStacks"))
         // TODO Handle n (n+1 = number of stacks to pop)
-        val newStackPointerName = freshName("stackPointer");
-        val tmpName = freshName("tmp");
-        val tmpReference = LocalReference(StructureType(List(stackType, stackPointerType)), tmpName);
-        emit(Call(tmpName, Ccc(), StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
-        emit(ExtractValue(variable.name, tmpReference, 0));
-        emit(ExtractValue(newStackPointerName, tmpReference, 1));
-        setStackPointer(LocalReference(stackPointerType, newStackPointerName));
+        emit(Call("_", Ccc(), VoidType(), popStacks, List(LocalReference(stackType, "stack"), transform(n))));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -562,24 +552,21 @@ object Transformer {
   }
 
   def pushEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    setStackPointer(pushEnvironmentOnto(getStackPointer(), environment))
+    pushEnvironmentOnto(LocalReference(stackType, "stack"), environment)
   }
 
-  def pushEnvironmentOnto(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+  def pushEnvironmentOnto(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
-      oldStackPointer
+      ()
     } else {
       storeEnvironmentAt(oldStackPointer, environment);
 
-      val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-      emit(GetElementPtr(newStackPointer.name, environmentType(environment), oldStackPointer, List(1)));
-
-      newStackPointer
+      emit(GetElementPtr(???, environmentType(environment), oldStackPointer, List(1)));
     }
   }
 
   def popEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    setStackPointer(popEnvironmentFrom(getStackPointer(), environment))
+    popEnvironmentFrom(LocalReference(stackType, "stack"), environment)
   }
 
   def popEnvironmentFrom(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
@@ -677,10 +664,10 @@ object Transformer {
   }
 
   def pushReturnAddress(returnAddressName: String, scannerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    setStackPointer(pushReturnAddressOnto(getStackPointer(), returnAddressName, scannerName, eraserName));
+    pushReturnAddressOnto(LocalReference(stackType, "stack"), returnAddressName, scannerName, eraserName);
   }
 
-  def pushReturnAddressOnto(oldStackPointer: Operand, returnAddressName: String, sharerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+  def pushReturnAddressOnto(oldStackPointer: Operand, returnAddressName: String, sharerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
 
     val pointerType = PointerType();
 
@@ -695,19 +682,22 @@ object Transformer {
     emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName)));
     emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName)));
 
-    val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-    emit(GetElementPtr(newStackPointer.name, frameHeaderType, oldStackPointer, List(1)));
+    // TODO
+    // val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+    // emit(GetElementPtr(newStackPointer.name, frameHeaderType, oldStackPointer, List(1)));
 
-    newStackPointer
+    // newStackPointer
   }
 
   def popReturnAddress()(using ModuleContext, FunctionContext, BlockContext): String = {
+    // TODO
     val returnAddress = freshName("returnAddress");
-    setStackPointer(popReturnAddressFrom(getStackPointer(), returnAddress));
+    popReturnAddressFrom(LocalReference(stackType, "stack"), returnAddress);
     returnAddress
   }
 
   def popReturnAddressFrom(oldStackPointer: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+    // TODO
 
     val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
     emit(GetElementPtr(newStackPointer.name, frameHeaderType, oldStackPointer, List(-1)));
@@ -787,18 +777,11 @@ object Transformer {
     C.substitution.toMap.getOrElse(value, value)
 
   class BlockContext() {
-    var stackPointer: Operand = LocalReference(stackPointerType, "stackPointer");
     var instructions: List[Instruction] = List();
   }
 
   def emit(instruction: Instruction)(using C: BlockContext) =
     C.instructions = C.instructions :+ instruction
-
-  def getStackPointer()(using C: BlockContext) =
-    C.stackPointer
-
-  def setStackPointer(stackPointer: Operand)(using C: BlockContext) =
-    C.stackPointer = stackPointer;
 
   def escape(scalaString: String): String =
     scalaString.foldLeft(StringBuilder()) { (acc, c) =>

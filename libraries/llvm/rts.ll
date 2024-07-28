@@ -93,43 +93,6 @@
 %Unit = type %Pos
 %String = type %Pos
 
-; Global locations
-
-@base = private global %Base null
-@limit = private global %Limit null
-@region = private global %Region zeroinitializer
-@rest = private global %Stack undef
-
-
-define %StackValue @getStack(%StackPointer %stackPointer) alwaysinline {
-    %base = load %Base, ptr @base
-    %limit = load %Limit, ptr @limit
-    %region = load %Region, ptr @region
-    %rest = load %Stack, ptr @rest
-
-    %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
-    %stack.1 = insertvalue %StackValue %stack.0, %StackPointer %stackPointer, 1, 0
-    %stack.2 = insertvalue %StackValue %stack.1, %Base %base, 1, 1
-    %stack.3 = insertvalue %StackValue %stack.2, %Limit %limit, 1, 2
-    %stack.4 = insertvalue %StackValue %stack.3, %Region %region, 2
-    %stack.5 = insertvalue %StackValue %stack.4, %Stack %rest, 3
-
-    ret %StackValue %stack.5
-}
-
-define void @setStack(%StackValue %stack) alwaysinline {
-    %base = extractvalue %StackValue %stack, 1, 1
-    %limit = extractvalue %StackValue %stack, 1, 2
-    %region = extractvalue %StackValue %stack, 2
-    %rest = extractvalue %StackValue %stack, 3
-
-    store %Base %base, ptr @base
-    store %Limit %limit, ptr @limit
-    store %Region %region, ptr @region
-    store %Stack %rest, ptr @rest
-    ret void
-}
-
 ; Foreign imports
 
 declare ptr @malloc(i64)
@@ -342,27 +305,24 @@ define %Stack @newStack() alwaysinline {
     ret %Stack %stack
 }
 
-define %StackPointer @pushStack(%Stack %stack, %StackPointer %oldStackPointer) alwaysinline {
-    %newStack = load %StackValue, %Stack %stack
+define %StackPointer @pushStack(%Stack %stack, %Stack %oldStack) alwaysinline {
+    %newStackValue = load %StackValue, %Stack %stack
+    %oldStackValue = load %StackValue, %Stack %oldStack
 
-    %oldStack = call %StackValue @getStack(%StackPointer %oldStackPointer)
+    call void @setStack(%StackValue %newStackValue)
 
-    call void @setStack(%StackValue %newStack)
-
-    store %StackValue %oldStack, %Stack %stack
-
-    %newStackPointer = extractvalue %StackValue %newStack, 1, 0
-    ret %StackPointer %newStackPointer
+    store %StackValue %oldStackValue, %Stack %stack
+    ret void
 }
 
 ; pop n+1 stacks
-define {%Stack, %StackPointer} @popStacks(%StackPointer %oldStackPointer, i64 %n) alwaysinline {
+define void @popStacks(%Stack %stack, i64 %n) alwaysinline {
 entry:
-    %oldStack = call %StackValue @getStack(%StackPointer %oldStackPointer)
+    %oldStackValue = load %StackValue, %Stack %stack
     br label %loop
 
 loop:
-    %stackValue = phi %StackValue [%oldStack, %entry], [%newStack, %loop]
+    %stackValue = phi %StackValue [%oldStackValue, %entry], [%newStack, %loop]
     %index = phi i64 [%n, %entry], [%nextIndex, %loop]
 
     %newStackPointer = extractvalue %StackValue %stackValue, 3
@@ -376,16 +336,10 @@ loop:
 done:
     call void @setStack(%StackValue %newStack)
 
-    store %StackValue %oldStack, %Stack %newStackPointer
-
-    %newStackPointer_2 = extractvalue %StackValue %newStack, 1, 0
-    %ret.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %newStackPointer, 0
-    %ret.1 = insertvalue {%Stack, %StackPointer} %ret.0, %StackPointer %newStackPointer_2, 1
-
-    ret {%Stack, %StackPointer} %ret.1
+    store %StackValue %oldStackValue, %Stack %newStackPointer
 }
 
-define %StackPointer @underflowStack(%StackPointer %stackPointer) alwaysinline {
+define %StackPointer @underflowStack(%Stack %stack) alwaysinline {
     %stack = load %Stack, ptr @rest
     %newStack = load %StackValue, %Stack %stack
 
@@ -394,11 +348,9 @@ define %StackPointer @underflowStack(%StackPointer %stackPointer) alwaysinline {
 
     call void @setStack(%StackValue %newStack)
 
-    call void @free(%StackPointer %stackPointer)
     call void @free(%Stack %stack)
 
-    %newStackPointer = extractvalue %StackValue %newStack, 1, 0
-    ret %StackPointer %newStackPointer
+    ret void
 }
 
 define %Memory @copyMemory(%Memory %memory) alwaysinline {
@@ -595,17 +547,18 @@ define void @eraseRegion(%Region %region) alwaysinline {
 ; RTS initialization
 
 define tailcc void @topLevel(%Pos %val, %StackPointer noalias %stackPointer) {
-    %base = load %Base, ptr @base
-    call void @free(%Base %base)
+    ; TODO
+    ; %base = load %Base, ptr @base
+    ; call void @free(%Base %base)
 
-    %region = load %Region, ptr @region
-    %base.0 = extractvalue %Region %region, 0, 1
-    %base.1 = extractvalue %Region %region, 1, 1
-    %base.2 = extractvalue %Region %region, 2, 1
+    ; %region = load %Region, ptr @region
+    ; %base.0 = extractvalue %Region %region, 0, 1
+    ; %base.1 = extractvalue %Region %region, 1, 1
+    ; %base.2 = extractvalue %Region %region, 2, 1
 
-    call void @free(%Base %base.0)
-    call void @free(%Base %base.1)
-    call void @free(%Base %base.2)
+    ; call void @free(%Base %base.0)
+    ; call void @free(%Base %base.1)
+    ; call void @free(%Base %base.2)
 
     ret void
 }
