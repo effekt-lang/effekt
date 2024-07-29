@@ -277,6 +277,29 @@ define ptr @getPointer(%Reference %reference, i64 %index, i64 %evidence) alwaysi
     ret ptr %pointer
 }
 
+; Stack management
+
+define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
+    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
+
+    %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %n
+    store %StackPointer %stackPointer_2, ptr %stackStackPointer
+
+    ret %StackPointer %stackPointer
+}
+
+define %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
+    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
+
+    %o = sub i64 0, %n
+    %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %o
+    store %StackPointer %stackPointer_2, ptr %stackStackPointer
+
+    ret %StackPointer %stackPointer_2
+}
+
 ; Meta-stack management
 
 define %Memory @newMemory() {
