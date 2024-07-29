@@ -142,7 +142,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   * - Use `backtrack` with caution and as a last resort. Try to disambiguate the grammar by using `peek` and also try to
   *   only use `backtrack` on "shallow" non-terminals, that is, not on a non-terminal containing an expression,
   *   a statement or a type.
-  * - For the same reason, there is no function `manyWhile[T](p: => T): List[T]` but only 
+  * - For the same reason, there is no function `manyWhile[T](p: => T): List[T]` but only
   *   `manyWhile[T](p: => T, predicate: => Boolean): List[T]` as this one does not use backtracking.
   * - Use `fail` for reporting errors.
   * - Functions consuming tokens have an empty parameter list `()`, functions that do not, have no parameter list (e.g. peek)
