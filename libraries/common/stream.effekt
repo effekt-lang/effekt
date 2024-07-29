@@ -13,6 +13,9 @@ def for[A, R] { stream: () => R / Emit[A] } { action: A => Unit }: R =
     def emit(value) = resume(action(value))
   }
 
+def for[A] { stream: () => Unit / Emit[A] } { action: A => Unit }: Unit =
+  for[A, Unit]{stream}{action}
+
 def forever[A] { action: () => A }: Nothing / Emit[A] = {
   def go(): Nothing = {
     do emit(action())
@@ -181,20 +184,27 @@ def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
 def gatherArray[A] { stream: () => Unit / Emit[A] }: Array[A] =
   gatherArray[A, Unit]{stream}.second
 
-def gatherArraySize[A, R](number: Int) { stream: () => R / Emit[A] }: (R, Array[A]) = {
+def gatherArraySize[A, R](number: Int) { stream: () => R / Emit[A] }: (Option[R], Array[A]) = {
   var i = 0;
   val a = allocate(number);
-  try {
-    (stream(), a)
+  val r = try {
+    Some(stream())
   } with Emit[A] {
     def emit(v) = {
       val c = i;
       if (c < number) {
-        a.unsafeSet(i, v)
+        a.unsafeSet(c, v)
         i = c + 1
         resume(())
+      } else {
+        None()
       }
     }
+  }
+  if (i < a.size) {
+    (r, a.resize(i))
+  } else {
+    (r, a)
   }
 }
 
