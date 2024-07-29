@@ -49,6 +49,9 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, binding), rest) =>
       val tpe = Context.inferredTypeOf(rest)
 
+      query(rest)
+      query(binding)
+
       val free = freeCapture(tpe)
       val capt = tree.symbol.capture
 

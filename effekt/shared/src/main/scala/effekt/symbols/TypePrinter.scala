@@ -40,6 +40,8 @@ object TypePrinter extends ParenPrettyPrinter {
     case c: Constructor     => c.name.name
     case c: Field           => c.name.name
     case c: Operation       => c.name.name
+    case p: TrackedParam    => p.name.name
+    case p: ValueParam      => p.name.name
   }
 
   def toDoc(m: Type): Doc = m match {
