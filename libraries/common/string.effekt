@@ -233,15 +233,6 @@ def lastIndexOf(str: String, sub: String, from: Int): Option[Int] = {
 // extern pure def unsafeIndexOf(str: String, sub: String): Int =
 //   js "${str}.indexOf(${sub})"
 
-interface Stream {
-  def emit(string: Char): Unit
-}
-
-def string[T] { prog: => T / Stream }: (T, String) = <>
-
-// TODO implement after concurrent IO (we need to stub `process.stdout` in JS for browsers).
-def printing[T] { prog: => T / Stream }: T = <>
-
 
 // ANSI escape codes
 namespace ANSI {
