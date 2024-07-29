@@ -195,10 +195,15 @@ entry:
     switch i64 %evidence, label %loop [i64 0, label %here]
 
 here:
-    ret ptr @region
+    ; TODO IMPORTANT FIX
+    ; ret ptr @region
+    ret ptr null
 
 loop:
-    %stackPointer = phi ptr [@rest, %entry], [%nextPointer, %loop]
+    ; TODO IMPORTANT FIX
+    ; %stackPointer = phi ptr [@rest, %entry], [%nextPointer, %loop]
+    %stackPointer = phi ptr [null, %entry], [%nextPointer, %loop]
+
     %index = phi i64 [%evidence, %entry], [%nextIndex, %loop]
     %stack = load %Stack, ptr %stackPointer
     %regionPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
@@ -212,8 +217,6 @@ done:
     ret ptr %regionPointer
 
 }
-
-
 
 define { ptr, %Reference } @alloc(i64 %index, i64 %evidence) alwaysinline {
     %regionPointer = call ptr @getRegionPointer(i64 %evidence)
@@ -276,7 +279,7 @@ define ptr @getPointer(%Reference %reference, i64 %index, i64 %evidence) alwaysi
 
 ; Meta-stack management
 
-define %Memory @newMemory() alwaysinline {
+define %Memory @newMemory() {
     %stackPointer = call %StackPointer @malloc(i64 268435456)
     %limit = getelementptr i8, ptr %stackPointer, i64 268435456
 
@@ -287,7 +290,7 @@ define %Memory @newMemory() alwaysinline {
     ret %Memory %memory.2
 }
 
-define %Stack @newStack() alwaysinline {
+define %Stack @newStack() {
 
     ; TODO find actual size of stack
     %stack = call ptr @malloc(i64 112)
@@ -298,59 +301,95 @@ define %Stack @newStack() alwaysinline {
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
-    %stack.3 = insertvalue %StackValue %stack.2, %Stack %stack, 3
+    %stack.3 = insertvalue %StackValue %stack.2, %Stack zeroinitializer, 3
 
     store %StackValue %stack.3, %Stack %stack
 
     ret %Stack %stack
 }
 
-define %StackPointer @pushStack(%Stack %stack, %Stack %oldStack) alwaysinline {
-    %newStackValue = load %StackValue, %Stack %stack
-    %oldStackValue = load %StackValue, %Stack %oldStack
-
-    call void @setStack(%StackValue %newStackValue)
-
-    store %StackValue %oldStackValue, %Stack %stack
-    ret void
-}
-
-; pop n+1 stacks
-define void @popStacks(%Stack %stack, i64 %n) alwaysinline {
-entry:
-    %oldStackValue = load %StackValue, %Stack %stack
-    br label %loop
-
-loop:
-    %stackValue = phi %StackValue [%oldStackValue, %entry], [%newStack, %loop]
-    %index = phi i64 [%n, %entry], [%nextIndex, %loop]
-
-    %newStackPointer = extractvalue %StackValue %stackValue, 3
-    %newStack = load %StackValue, %Stack %newStackPointer
-
-    %nextIndex = sub i64 %index, 1
-
-    %cmp = icmp eq i64 %index, 0
-    br i1 %cmp, label %done, label %loop
+define void @pushStack(%Stack %stack, %Stack %oldStack) {
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %rest = load %Stack, ptr %stackRest
+    %isNull = icmp eq %Stack %rest, null
+    br i1 %isNull, label %done, label %next
 
 done:
-    call void @setStack(%StackValue %newStack)
+    store %Stack %oldStack, ptr %stackRest
+    ret void
 
-    store %StackValue %oldStackValue, %Stack %newStackPointer
+next:
+    tail call void @pushStack(%Stack %rest, %Stack %oldStack)
+    ret void
 }
 
-define %StackPointer @underflowStack(%Stack %stack) alwaysinline {
-    %stack = load %Stack, ptr @rest
-    %newStack = load %StackValue, %Stack %stack
+define %Stack @popStacks(%Stack %stack, i64 %n) {
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %rest = load %Stack, ptr %stackRest
+    %isZero = icmp eq i64 %n, 0
+    br i1 %isZero, label %done, label %next
+done:
+    store %Stack null, ptr %stackRest
+    ret %Stack %rest
+next:
+    %o = sub i64 %n, 1
+    %result = tail call %Stack @popStacks(%Stack %rest, i64 %o)
+    ret %Stack %result
+}
 
-    %region = load %Region, ptr @region
-    call void @eraseRegion(%Region %region)
+define void @eraseMemory(%Memory %memory) {
+    %stackPointer = extractvalue %Memory %memory, 0
+    call void @free(%StackPointer %stackPointer)
+    ret void
+}
 
-    call void @setStack(%StackValue %newStack)
+define void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
+    %done = icmp uge ptr %elementPointer, %end
+    br i1 %done, label %return, label %erase
 
-    call void @free(%Stack %stack)
+erase:
+    %element = load %Pos, ptr %elementPointer
+    call void %f(%Pos %element)
+
+    %nextElementPointer = getelementptr %Pos, ptr %elementPointer, i64 1
+    tail call void @forEachObject(ptr %nextElementPointer, ptr %end, ptr %f)
+    ret void
+
+return:
+    ret void
+}
+
+define void @eraseRegion(%Region %region) alwaysinline {
+    %valuesBase = extractvalue %Region %region, 0, 1
+    call void @free(%Base %valuesBase)
+
+    %objectsBase = extractvalue %Region %region, 1, 1
+    %objectsStackPointer = extractvalue %Region %region, 1, 0
+    call void @forEachObject(%Base %objectsBase, %StackPointer %objectsStackPointer, %Eraser @erasePositive)
+    call void @free(%Base %objectsBase)
+
+    %stringsBase = extractvalue %Region %region, 2, 1
+    %stringsStackPointer = extractvalue %Region %region, 2, 0
+    call void @forEachObject(%Base %stringsBase, %StackPointer %stringsStackPointer, %Eraser @erasePositive)
+    call void @free(%Base %stringsBase)
 
     ret void
+}
+
+define %Stack @underflowStack(%Stack %stack) {
+    %stackMemory = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+
+    %memory = load %Memory, ptr %stackMemory
+    %region = load %Region, ptr %stackRegion
+    %rest = load %Stack, ptr %stackRest
+
+    call void @eraseMemory(%Memory %memory)
+    call void @eraseRegion(%Region %region)
+    call void @free(%Stack %stack)
+
+    ret %Stack %rest
 }
 
 define %Memory @copyMemory(%Memory %memory) alwaysinline {
@@ -449,18 +488,17 @@ loop:
     store %Memory %newMemory, ptr %newStackMemory
     store %Region %newRegion, ptr %newStackRegion
 
-    %last = icmp eq %Stack %rest, %stack
-    br i1 %last, label %closeCycle, label %next
+    %isLast = icmp eq %Stack %rest, null
+    br i1 %isLast, label %stop, label %next
 
 next:
     %nextNew = call ptr @malloc(i64 112)
     store %Stack %nextNew, ptr %newStackRest
     br label %loop
 
-closeCycle:
-    store %Stack %newHead, ptr %newStackRest
+stop:
+    store %Stack null, ptr %newStackRest
     ret %Stack %newHead
-
 }
 
 define void @shareStack(%Stack %stack) alwaysinline {
@@ -491,6 +529,8 @@ define void @eraseStack(%Stack %stack) alwaysinline {
 
     call void @eraseRegion(%Region %region)
 
+    ; TODO erase rest
+
     call void @free(%Stack %stack)
     ret void
 }
@@ -511,55 +551,11 @@ define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     ret void
 }
 
-define void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
-    %done = icmp uge ptr %elementPointer, %end
-    br i1 %done, label %return, label %erase
-
-erase:
-    %element = load %Pos, ptr %elementPointer
-    call void %f(%Pos %element)
-
-    %nextElementPointer = getelementptr %Pos, ptr %elementPointer, i64 1
-    tail call void @forEachObject(ptr %nextElementPointer, ptr %end, ptr %f)
-    ret void
-
-return:
-    ret void
-}
-
-define void @eraseRegion(%Region %region) alwaysinline {
-    %valuesBase = extractvalue %Region %region, 0, 1
-    call void @free(%Base %valuesBase)
-
-    %objectsBase = extractvalue %Region %region, 1, 1
-    %objectsStackPointer = extractvalue %Region %region, 1, 0
-    call void @forEachObject(%Base %objectsBase, %StackPointer %objectsStackPointer, %Eraser @erasePositive)
-    call void @free(%Base %objectsBase)
-
-    %stringsBase = extractvalue %Region %region, 2, 1
-    %stringsStackPointer = extractvalue %Region %region, 2, 0
-    call void @forEachObject(%Base %stringsBase, %StackPointer %stringsStackPointer, %Eraser @erasePositive)
-    call void @free(%Base %stringsBase)
-
-    ret void
-}
-
 ; RTS initialization
 
-define tailcc void @topLevel(%Pos %val, %StackPointer noalias %stackPointer) {
-    ; TODO
-    ; %base = load %Base, ptr @base
-    ; call void @free(%Base %base)
-
-    ; %region = load %Region, ptr @region
-    ; %base.0 = extractvalue %Region %region, 0, 1
-    ; %base.1 = extractvalue %Region %region, 1, 1
-    ; %base.2 = extractvalue %Region %region, 2, 1
-
-    ; call void @free(%Base %base.0)
-    ; call void @free(%Base %base.1)
-    ; call void @free(%Base %base.2)
-
+define tailcc void @topLevel(%Pos %val, %Stack %stack) {
+    %rest = call %Stack @underflowStack(%Stack %stack)
+    ; assert %rest == null
     ret void
 }
 
@@ -573,28 +569,29 @@ define void @topLevelEraser(%Environment %environment) {
     ret void
 }
 
-define %StackPointer @withEmptyStack() {
-    %stackPointer = call %StackPointer @malloc(i64 268435456)
-    store %StackPointer %stackPointer, ptr @base
-    %returnAddressPointer_1 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %sharerPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
-    %eraserPointer_3 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
-    store %ReturnAddress @topLevel, ptr %returnAddressPointer_1
-    store %Sharer @topLevelSharer, ptr %sharerPointer_2
-    store %Eraser @topLevelEraser, ptr %eraserPointer_3
+define %Stack @withEmptyStack() {
+    %stack = call %Stack @newStack()
+
+    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
+
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
+    %sharerPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
+    %eraserPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
+
+    store %ReturnAddress @topLevel, ptr %returnAddressPointer
+    store %Sharer @topLevelSharer, ptr %sharerPointer
+    store %Eraser @topLevelEraser, ptr %eraserPointer
+
     %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
-    ret %StackPointer %stackPointer_2
+    store %StackPointer %stackPointer_2, ptr %stackStackPointer
+
+    ret %Stack %stack
 }
 
 define void @run_i64(%Neg %f, i64 %arg) {
-    ; backup globals
-    %base = load %Base, ptr @base
-    %region = load %Region, ptr @region
-    %limit = load %Limit, ptr @limit
-    %rest = load %Stack, ptr @rest
-
     ; fresh stack
-    %stackPointer = call %StackPointer @withEmptyStack()
+    %stack = call %Stack @withEmptyStack()
 
     ; prepare call
     %arrayPointer = extractvalue %Neg %f, 0
@@ -603,27 +600,14 @@ define void @run_i64(%Neg %f, i64 %arg) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    %result = call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %arg, %StackPointer %stackPointer)
-
-    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
-    store %StackPointer %base, ptr @base
-    store %Region %region, ptr @region
-    store %Limit %limit, ptr @limit
-    store %Stack %rest, ptr @rest
-
+    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %arg, %Stack %stack)
     ret void
 }
 
 
 define void @run_Pos(%Neg %f, %Pos %arg) {
-    ; backup globals
-    %base = load %Base, ptr @base
-    %region = load %Region, ptr @region
-    %limit = load %Limit, ptr @limit
-    %rest = load %Stack, ptr @rest
-
     ; fresh stack
-    %stackPointer = call %StackPointer @withEmptyStack()
+    %stack = call %Stack @withEmptyStack()
 
     ; prepare call
     %arrayPointer = extractvalue %Neg %f, 0
@@ -632,26 +616,13 @@ define void @run_Pos(%Neg %f, %Pos %arg) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    %result = call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %arg, %StackPointer %stackPointer)
-
-    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
-    store %StackPointer %base, ptr @base
-    store %Region %region, ptr @region
-    store %Limit %limit, ptr @limit
-    store %Stack %rest, ptr @rest
-
+    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %arg, %Stack %stack)
     ret void
 }
 
 define void @run(%Neg %f) {
-    ; backup globals
-    %base = load %Base, ptr @base
-    %region = load %Region, ptr @region
-    %limit = load %Limit, ptr @limit
-    %rest = load %Stack, ptr @rest
-
     ; fresh stack
-    %stackPointer = call %StackPointer @withEmptyStack()
+    %stack = call %Stack @withEmptyStack()
 
     ; prepare call
     %arrayPointer = extractvalue %Neg %f, 0
@@ -660,13 +631,6 @@ define void @run(%Neg %f) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    %result = call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %StackPointer %stackPointer)
-
-    ; restore stack (TODO this shouldn't be necessary, the moment we pass stacks...; then this is a tail-call again)
-    store %StackPointer %base, ptr @base
-    store %Region %region, ptr @region
-    store %Limit %limit, ptr @limit
-    store %Stack %rest, ptr @rest
-
+    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Stack %stack)
     ret void
 }
