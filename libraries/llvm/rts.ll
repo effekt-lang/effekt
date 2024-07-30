@@ -190,36 +190,24 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define ptr @getRegionPointer(i64 %evidence) alwaysinline {
+define ptr @getRegionPointer(%Evidence %evidence, %Stack %stack) {
 entry:
-    switch i64 %evidence, label %loop [i64 0, label %here]
+    switch %Evidence %evidence, label %else [i64 0, label %here]
 
 here:
-    ; TODO IMPORTANT FIX
-    ; ret ptr @region
-    ret ptr null
+    %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    ret ptr %stackRegion
 
-loop:
-    ; TODO IMPORTANT FIX
-    ; %stackPointer = phi ptr [@rest, %entry], [%nextPointer, %loop]
-    %stackPointer = phi ptr [null, %entry], [%nextPointer, %loop]
-
-    %index = phi i64 [%evidence, %entry], [%nextIndex, %loop]
-    %stack = load %Stack, ptr %stackPointer
-    %regionPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %nextPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
-    %nextIndex = sub i64 %index, 1
-    %cmp = icmp eq i64 %nextIndex, 0
-
-    br i1 %cmp, label %done, label %loop
-
-done:
-    ret ptr %regionPointer
-
+else:
+    %nextEvidence = sub %Evidence %evidence, 1
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %rest = load %Stack, ptr %stackRest
+    %region = tail call ptr @getRegionPointer(%Evidence %nextEvidence, %Stack %rest)
+    ret ptr %region
 }
 
-define { ptr, %Reference } @alloc(i64 %index, i64 %evidence) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(i64 %evidence)
+define { ptr, %Reference } @alloc(i64 %index, %Evidence %evidence, %Stack %stack) alwaysinline {
+    %regionPointer = call ptr @getRegionPointer(%Evidence %evidence, %Stack %stack)
     %stackPointerPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 0
     %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
     %limitPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 2
@@ -269,8 +257,8 @@ realloc:
 
 }
 
-define ptr @getPointer(%Reference %reference, i64 %index, i64 %evidence) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(i64 %evidence)
+define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %Stack %stack) alwaysinline {
+    %regionPointer = call ptr @getRegionPointer(%Evidence %evidence, %Stack %stack)
     %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
     %base = load %Base, ptr %basePointer
     %pointer = getelementptr i8, ptr %base, %Reference %reference
@@ -449,11 +437,11 @@ define %Region @copyRegion(%Region %region) alwaysinline {
 
     %objectsBase = extractvalue %Region %region, 1, 1
     %objectsStackPointer = extractvalue %Region %region, 1, 0
-    call void @forEachObject(%Base %objectsBase, %StackPointer %objectsStackPointer, %Eraser @sharePositive)
+    call void @forEachObject(%Base %objectsBase, %StackPointer %objectsStackPointer, %Sharer @sharePositive)
 
     %stringsBase = extractvalue %Region %region, 2, 1
     %stringsStackPointer = extractvalue %Region %region, 2, 0
-    call void @forEachObject(%Base %stringsBase, %StackPointer %stringsStackPointer, %Eraser @sharePositive)
+    call void @forEachObject(%Base %stringsBase, %StackPointer %stringsStackPointer, %Sharer @sharePositive)
 
     %newMemory.0 = call %Memory @copyMemory(%Memory %memory.0)
     %newMemory.1 = call %Memory @copyMemory(%Memory %memory.1)
@@ -544,17 +532,18 @@ define void @eraseStack(%Stack %stack) alwaysinline {
 
     free:
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+
     %stackPointer = load %StackPointer, ptr %stackStackPointer
-    call void @eraseFrames(%StackPointer %stackPointer)
-
-    %regionPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %region = load %Region, ptr %regionPointer
-
-    call void @eraseRegion(%Region %region)
-
-    ; TODO erase rest
+    %region = load %Region, ptr %stackRegion
+    %rest = load %Stack, ptr %stackRest
 
     call void @free(%Stack %stack)
+    call void @eraseFrames(%StackPointer %stackPointer)
+    call void @eraseRegion(%Region %region)
+    call void @eraseStack(%Stack %rest)
+
     ret void
 }
 
