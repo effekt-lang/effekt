@@ -1,0 +1,25 @@
+interface Cell { 
+  def get(): Int
+  def set(n: Int): Unit 
+}
+
+def add {c1: Cell} {c2: Cell} {dst: Cell} = 
+  dst.set(c1.get + c2.get)
+
+def fresh[T](init: Int) { prog: {Cell} => T }: T = {
+  var contents: Int = init;
+  try { prog {c} } with c: Cell { 
+    def get() = resume(contents)
+    def set(n) = { contents = n; resume(()) }
+  }
+}
+
+def main() = {
+  with def target = fresh(0)
+  with def c1 = fresh(0)
+  with def c2 = fresh(0)
+  c1.set(1);
+  c2.set(2);
+  add {c1} {c2} {target};
+  println(target.get)
+}

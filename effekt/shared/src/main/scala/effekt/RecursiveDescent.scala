@@ -181,23 +181,30 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `val` =>
       val params = (`val` ~> peek.kind match {
         case `(` => valueParamsOpt()
-        case _ => List(valueParam()) // TODO copy position
+        case _ => List(valueParamOpt()) // TODO copy position
       })
-      desugarWith(params, `=` ~> expr(), semi() ~> stmts())
+      desugarWith(params, Nil, `=` ~> expr(), semi() ~> stmts())
 
-    case _ => desugarWith(Nil, expr(), semi() ~> stmts())
+    case `def` =>
+      val params = (`def` ~> peek.kind match {
+        case `{` => blockParamsOpt()
+        case _ => List(blockParamOpt()) // TODO copy position
+      })
+      desugarWith(Nil, params, `=` ~> expr(), semi() ~> stmts())
+
+    case _ => desugarWith(Nil, Nil, expr(), semi() ~> stmts())
   }
 
-  def desugarWith(params: List[ValueParam], call: Term, body: Stmt): Stmt = call match {
+  def desugarWith(vparams: List[ValueParam], bparams: List[BlockParam], call: Term, body: Stmt): Stmt = call match {
      case m@MethodCall(receiver, id, tps, vargs, bargs) =>
-       Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, params, Nil, body))))
+       Return(MethodCall(receiver, id, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body))))
      case c@Call(callee, tps, vargs, bargs) =>
-       Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, params, Nil, body))))
+       Return(Call(callee, tps, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body))))
      case Var(id) =>
        val tgt = IdTarget(id)
-       Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, params, Nil, body)) :: Nil))
+       Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
      case term =>
-       Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, params, Nil, body)) :: Nil))
+       Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
   }
 
   def maybeSemi(): Unit = if isSemi then semi()
