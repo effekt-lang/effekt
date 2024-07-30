@@ -24,7 +24,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(expr: Expr): Doc = expr match {
     case Call(callee, args)           => toDocParens(callee) <> parens(args map toDoc)
     case New(callee, args)            => "new" <+> toDocParens(callee) <> parens(args map toDoc)
-    case RawExpr(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDoc)))
+    case RawExpr(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDocAsAtom)))
     case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els)
     case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
@@ -40,6 +40,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case e: IfExpr => parens(toDoc(e))
     case e: Lambda => parens(toDoc(e))
     case e => toDoc(e)
+  }
+
+  // to be used in really low precedence positions
+  def toDocAsAtom(e: Expr): Doc = e match {
+    case e: Variable => toDoc(e)
+    case e: Object => toDoc(e)
+    case e: ArrayLiteral => toDoc(e)
+    case e => parens(toDoc(e))
   }
 
   def toDoc(stmt: Stmt): Doc = stmt match {
