@@ -198,7 +198,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       if (coerce.isIdentity) {
         List(Definition.Let(id, transform(tpe), transform(binding)))
       } else {
-        val orig = TmpValue("toBeCoerced")
+        val orig = TmpValue("coe")
         val origTpe = binding.tpe
         List(
           Definition.Let(orig, origTpe, transform(binding)),
@@ -248,7 +248,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       if (coerce.isIdentity) {
         Stmt.Val(id, transform(tpe), transform(binding), transform(body))
       } else {
-        val orig = TmpValue("toBeCoerced")
+        val orig = TmpValue("coe")
         Stmt.Val(orig, binding.tpe, transform(binding),
           Let(id, transform(binding.tpe), coerce(Pure.ValueVar(orig, binding.tpe)),
             transform(body)))
@@ -508,9 +508,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         override def to = totpe
 
         override def apply(block: B): B = {
-          val vparams: List[Param.ValueParam] = vcoercers.map { c => Param.ValueParam(TmpValue("toBeCoerced"), transform(c.from)) }
-          val bparams: List[Param.BlockParam] = bcoercers.map { c => val id = TmpBlock("toBeCoerced"); Param.BlockParam(id, transform(c.from), Set(id)) }
-          val result = TmpValue("toBeCoerced")
+          val vparams: List[Param.ValueParam] = vcoercers.map { c => Param.ValueParam(TmpValue("coe"), transform(c.from)) }
+          val bparams: List[Param.BlockParam] = bcoercers.map { c => val id = TmpBlock("coe"); Param.BlockParam(id, transform(c.from), Set(id)) }
+          val result = TmpValue("coe")
           val inner = TmpBlock()
           val vargs = (vcoercers zip vparams).map { case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }
           val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
@@ -525,7 +525,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         }
 
         override def callDirect(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Expr = {
-          val result = TmpValue("toBeCoerced")
+          val result = TmpValue("coe")
           Run(Let(result, rcoercer.from, DirectApp(block, targs map transformArg,
             (vcoercers zip vargs).map {case (c,v) => c(v)},
             (bcoercers zip bargs).map {case (c,b) => c(b)}),
@@ -533,7 +533,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         }
 
         override def call(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt = {
-          val result = TmpValue("toBeCoerced")
+          val result = TmpValue("coe")
           Stmt.Val(result, rcoercer.from, Stmt.App(block, targs map transformArg,
             (vcoercers zip vargs).map { case (c, v) => c(v) },
             (bcoercers zip bargs).map { case (c, b) => c(b) }),
