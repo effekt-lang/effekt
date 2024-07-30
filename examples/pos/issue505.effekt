@@ -1,0 +1,7 @@
+def main() = {
+  println("abc" == "def");
+  println(("abc" == "def").not);
+  println(not ("abc" == "def"));
+  val huh = "abc" == "def";
+  println(huh.not);
+}
