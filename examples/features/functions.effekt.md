@@ -29,15 +29,13 @@ val b = identity[Int](42)
 
 When calling the function, you may explicitly pass a type argument for each type parameter or let type inference do its job.
 
-It is important to note that functions are not first-class citiziens in Effekt, that is, they are not treated like 
+It is important to note that functions are not first-class citizens in Effekt, that is, they are not treated like 
 values. This means, among others, that you may not simply return them, save them in collections or use them as function 
-arguments. The following is thereby not permitted.
+arguments. The following thereby is not permitted.
 
 ```
-// def map(xs: List[Int], f: Int => Int): List[Int] = <>
 // val f = fib
 // val fns = [fib, fib]
 ```
 
-Thus, sadly, you cannot define your favorite higher-order functions in Effekt. Or can you? When we talk about boxing, 
-we will see a way to alleviate these potential pain points.
+When we talk about boxing, we will see a way to alleviate these potential pain points.

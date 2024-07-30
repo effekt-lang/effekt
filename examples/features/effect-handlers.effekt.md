@@ -3,8 +3,8 @@
 Up until this point, all things shown are pretty standard and also known from many other languages. Effects and 
 handlers, however, are not quite as well known but nonetheless are at the core of the Effekt language.
 
-One particular handler and effect, though, is very wide spread and often integrated into the other languages themselve 
--- the exception effect. First, we declare the `Exception` effect:
+One particular handler and effect, though, is very wide spread and often integrated into the other languages themselve:
+the exception effect. First, we declare the `Exception` effect:
 
 ```
 interface Exception {
@@ -16,14 +16,14 @@ Each effect is equiped with at least one operation, like `throw`. Operations off
 
 ```
 def div(a: Double, b: Double) = 
-  if (b == 0.0) do throw("division by zero")
-  else a / b
+  if (b == 0.0) { do throw("division by zero") }
+  else { a / b }
 ```
 
 In the definition of `div`, we throw an exception when dividing by zero. The return type has purposefully been left 
 out. In other languages such as Java, the return type would simply be `Double`. However, in Effekt the return type is 
-actually `Double / { Exception }`. The right-hand side of the slash consists of a set of
-effects the calling context needs to handle. Thus, they are requirements passed onto the calling context.
+actually `Double / { Exception }`. The right-hand side of the slash consists of a set of effects the calling context
+needs to handle. Thus, they are requirements passed onto the calling context.
 
 Whereas operations introduce effects, handlers offer a way of discharging them.
 
@@ -47,7 +47,7 @@ handled, there are no other effects (the empty set `{}`) the calling context nee
 the absence of effects in the signature as proof for the purity of the function, however, this is not the case in 
 Effekt as `unsafeDiv` obviously invokes the `Exception` effect.
 
-Besides exceptions, we can also emulate other usefull mechanism with effects. For example generator functions using the 
+Besides exceptions, we can also emulate other useful mechanism with effects. For example generator functions using the 
 `Yield` effect.
 
 ```
@@ -60,7 +60,8 @@ When envoking the `yield` operation, we pass a value to be yield to the lexicall
 `Yield` effect. Recall our `fib` functions from earlier. We may also write it as a generator that runs infinitely while 
 yielding each fibonacci number in the process.
 
-````
+```
+// Fibonacci sequence as a generator function
 def fib(): Unit / { Yield[Int] } = {
   def inner(a: Int, b: Int): Unit / { Yield[Int] } = {
     do yield(a)
