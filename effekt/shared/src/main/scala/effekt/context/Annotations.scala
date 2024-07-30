@@ -166,6 +166,14 @@ object Annotations {
   )
 
   /**
+   * Used by LSP to list all scopes
+   */
+  val ScopesForFile = Annotation[kiama.util.Source, List[symbols.scopes.Scope]](
+    "ScopesForFile",
+    "all scopes for file"
+  )
+
+  /**
    * The module a given symbol is defined in
    *
    * @deprecated

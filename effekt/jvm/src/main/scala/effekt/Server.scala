@@ -13,6 +13,7 @@ import kiama.output.PrettyPrinterTypes.Document
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, SymbolTag, ExecuteCommandParams }
 
 import scala.jdk.CollectionConverters._
+import effekt.context.Annotations
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -135,6 +136,12 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
     context.compiler.runFrontend(source)(using context).map { module =>
+      for {
+        scope <- context.annotationOption(Annotations.ScopesForFile, source).getOrElse(Nil)
+      } yield {
+        val BindingInfo(importedTerms, importedTypes, terms, types) = allBindings(scope)(using context)
+      }
+
       val fileStart = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
       val root = DocumentSymbol(module.namespace.head, SymbolKind.Namespace, fileStart, fileStart)
 
@@ -163,8 +170,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     case (s: Callable, tpe: BlockType.FunctionType) => DeclPrinter.format(tpe)
     case (_, tpe) => TypePrinter.show(tpe)
   }
-
-
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
