@@ -26,7 +26,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case New(callee, args)            => "new" <+> toDocParens(callee) <> parens(args map toDoc)
     case RawExpr(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDoc)))
     case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
-    case IfExpr(cond, thn, els)       => parens(parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els))
+    case IfExpr(cond, thn, els)       => parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els)
     case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
     case Lambda(params, Block(stmts)) => parens(params map toDoc) <+> "=>" <+> jsBlock(stmts.map(toDoc))
     case Lambda(params, body)         => parens(params map toDoc) <+> "=>" <> jsBlock(toDoc(body))
