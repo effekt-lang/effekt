@@ -100,6 +100,10 @@ enum Expr {
   //   raw JS splices, always start with a prefix string, then interleaved with arguments
   case RawExpr(raw: List[String], args: List[Expr])
 
+  // e.g. 42
+  //   raw JS literal, already converted to a string. Similar to RawExpr but will not be parenthesized
+  case RawLiteral(raw: String)
+
   // e.g. (<EXPR> ? <EXPR> : <EXPR>)
   case IfExpr(cond: Expr, thn: Expr, els: Expr)
 
@@ -196,7 +200,7 @@ def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(
 
 def Lambda(params: List[JSName], body: Expr): Expr = Lambda(params, Return(body))
 
-def JsString(scalaString: String): Expr = RawExpr(s"\"${scalaString}\"")
+def JsString(scalaString: String): Expr = RawLiteral(s"\"${scalaString}\"")
 
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
@@ -206,7 +210,7 @@ def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
   case head :: next => js.Block(stmts)
 }
 
-val Undefined = RawExpr("undefined")
+val Undefined = RawLiteral("undefined")
 
 object monadic {
 
