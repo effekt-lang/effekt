@@ -125,7 +125,7 @@ trait Runner[Executable] {
   }
 }
 
-object JSRunner extends Runner[String] {
+object JSNodeRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "js"
@@ -162,6 +162,43 @@ object JSRunner extends Runner[String] {
         IO.createFile(jsMainFilePath, jsScript)
         createScript(exePath, "node", jsMainFilePath)
     }
+}
+object JSWebRunner extends Runner[String] {
+  import scala.sys.process.Process
+
+  val extension = "js"
+
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+
+  def checkSetup(): Either[String, Unit] =
+    Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
+
+  /**
+   * Creates an openable `.html` file besides the given `.js` file ([[path]])
+   * and then errors out, printing it's path.
+   */
+  def build(path: String)(using C: Context): String =
+    import java.nio.file.Path
+    val out = C.config.outputPath().getAbsolutePath
+    val jsFilePath = (out / path).unixPath
+    val jsFileName = jsFilePath.split("/").last
+    val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
+    val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
+    val htmlContent =
+      s"""<!DOCTYPE html>
+         |<html>
+         |  <body>
+         |    <script type="text/javascript" src="${jsFileName}"></script>
+         |    <script type="text/javascript">
+         |      window.onload=${mainName};
+         |    </script>
+         |  </body>
+         |</html>
+         |""".stripMargin
+    IO.createFile(htmlFilePath, htmlContent, false)
+    C.abort(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
 }
 
 trait ChezRunner extends Runner[String] {
