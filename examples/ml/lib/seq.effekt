@@ -78,18 +78,18 @@ def main() = {
   }
 
   println("\nTesting iteration")
-  seq15.each { el =>
-    if (el == 7 || el == 9) do continue() else if (el == 13) do break()
+  seq15.each { (el) {label} =>
+    if (el == 7 || el == 9) label.continue() else if (el == 13) label.break()
     println(el)
   }
 
   println("\nTesting reverse iteration")
-  seq15.eachReverse { el =>
-    if (el == 7 || el == 9) do continue() else if (el == 3) do break()
+  seq15.eachReverse { (el) {label} =>
+    if (el == 7 || el == 9) label.continue() else if (el == 3) label.break()
     println(el)
   }
-  seq15.reverse.each { el =>
-    if (el == 7 || el == 9) do continue() else if (el == 3) do break()
+  seq15.reverse.each { (el) {label} =>
+    if (el == 7 || el == 9) label.continue() else if (el == 3) label.break()
     println(el)
   }
 
@@ -106,8 +106,8 @@ def main() = {
   println("-------")
 
   println("\nTesting mapping")
-  val mapped = seq15.map { n =>
-    if (n == 7 || n == 9) do continue() else if (n == 11) do break()
+  val mapped = seq15.map { (n) {label} =>
+    if (n == 7 || n == 9) label.continue() else if (n == 11) label.break()
     n > 5
   }
   mapped.printAll
