@@ -542,8 +542,15 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     call void @free(%Stack %stack)
     call void @eraseFrames(%StackPointer %stackPointer)
     call void @eraseRegion(%Region %region)
-    call void @eraseStack(%Stack %rest)
 
+    %isNull = icmp eq %Stack %stack, null
+    br i1 %isNull, label %done, label %next
+
+next:
+    call void @eraseStack(%Stack %rest)
+    ret void
+
+done:
     ret void
 }
 
