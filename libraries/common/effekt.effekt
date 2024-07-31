@@ -113,7 +113,7 @@ extern io def inspect[R](value: R): Unit =
 // Strings
 // =======
 extern pure def infixConcat(s1: String, s2: String): String =
-  js "((${s1}) + (${s2}))"
+  js "${s1} + ${s2}"
   chez "(string-append ${s1} ${s2})"
   ml "${s1} ^ ${s2}"
   llvm """
