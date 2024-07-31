@@ -21,10 +21,7 @@ object Transformer {
       given FC: FunctionContext = FunctionContext();
       given BC: BlockContext = BlockContext();
 
-      // TODO proper initialization of runtime
-      emit(Call("stackPointer", Ccc(), stackPointerType, malloc, List(ConstantInt(256 * 1024 * 1024))));
-      emit(Store(ConstantGlobal(PointerType(), "base"), LocalReference(stackPointerType, "stackPointer")));
-      pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
+      emit(Call("stack", Ccc(), stackType, withEmptyStack, List()));
 
       val terminator = transform(statement);
 
@@ -751,6 +748,7 @@ object Transformer {
   def popStacks = ConstantGlobal(PointerType(), "popStacks");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
+  def withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");
 
 
   /**
