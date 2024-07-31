@@ -250,7 +250,7 @@ object Transformer {
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineLabel(returnAddressName, parameters) {
           emit(Comment("statement pushFrame / return address"))
-          popEnvironment(frameEnvironment);
+          popEnvironmentFrom(getStack(), frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body))
 
@@ -261,9 +261,13 @@ object Transformer {
         val sharerName = freshName("sharer");
         defineFunction(sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
           emit(Comment("statement pushFrame / sharer"))
-          popEnvironment(frameEnvironment);
+
+          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+          loadEnvironmentAt(nextStackPointer, frameEnvironment);
+
           shareValues(frameEnvironment, Set.from(frameEnvironment));
-          emit(Call("_", Ccc(), VoidType(), shareFrames, List(LocalReference(stackPointerType, "stackPointer"))));
+          emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
           RetVoid()
         }
 
@@ -271,15 +275,19 @@ object Transformer {
         val eraserName = freshName("eraser");
         defineFunction(eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
           emit(Comment("statement pushFrame / eraser"))
-          popEnvironment(frameEnvironment);
+
+          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+          loadEnvironmentAt(nextStackPointer, frameEnvironment);
+
           eraseValues(frameEnvironment, Set());
-          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(LocalReference(stackPointerType, "stackPointer"))));
+          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(nextStackPointer)));
           RetVoid()
         }
 
         shareValues(frameEnvironment, freeVariables(rest));
-        pushEnvironment(frameEnvironment);
-        pushReturnAddress(returnAddressName, sharerName, eraserName);
+        pushEnvironmentOnto(getStack(), frameEnvironment);
+        pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
 
         transform(rest)
 
@@ -287,8 +295,9 @@ object Transformer {
         emit(Comment("statement return"))
         shareValues(values, Set())
 
-        val returnAddress = popReturnAddress();
-        emit(callLabel(LocalReference(returnAddressType, returnAddress), values.map(transform)))
+        val returnAddress = LocalReference(returnAddressType, freshName("returnAddress"));
+        popReturnAddressFrom(getStack(), returnAddress.name);
+        emit(callLabel(returnAddress, values.map(transform)))
         RetVoid()
 
       case machine.NewStack(variable, frame, rest) =>
@@ -301,12 +310,13 @@ object Transformer {
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineLabel(returnAddressName, parameters) {
           emit(Comment("statement newStack / return address"))
-          popEnvironment(frameEnvironment);
+          popEnvironmentFrom(getStack(), frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body));
 
-          val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(Call(newStackPointer.name, Ccc(), stackPointerType, underflowStack, List(LocalReference(stackType, "stack"))));
+          val nextStack = LocalReference(stackType, freshName("stack"));
+          emit(Call(nextStack.name, Ccc(), nextStack.tpe, underflowStack, List(getStack())));
+          setStack(nextStack);
 
           transform(frame.body);
         }
@@ -315,7 +325,11 @@ object Transformer {
         val sharerName = freshName("sharer");
         defineFunction(sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
           emit(Comment("statement newStack / sharer"))
-          popEnvironment(frameEnvironment);
+
+          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+          loadEnvironmentAt(nextStackPointer, frameEnvironment);
+
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           RetVoid()
         }
@@ -324,20 +338,23 @@ object Transformer {
         val eraserName = freshName("eraser");
         defineFunction(eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
           emit(Comment("statement newStack / eraser"))
-          popEnvironment(frameEnvironment);
+
+
+          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+          loadEnvironmentAt(nextStackPointer, frameEnvironment);
+
           eraseValues(frameEnvironment, Set());
-          emit(Call("_", Ccc(), VoidType(), free, List(LocalReference(stackType, "stack"))));
+          // TODO consider doing the following in the RTS
+          emit(Call("_", Ccc(), VoidType(), free, List(nextStackPointer)));
           RetVoid()
         }
 
         shareValues(frameEnvironment, freeVariables(rest));
-        val stackPointerPointer = LocalReference(PointerType(), freshName("stackPointPointer"));
-        val oldStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-        emit(GetElementPtr(stackPointerPointer.name, NamedType("StackValue"), LocalReference(PointerType(), variable.name), List(0, 1, 0)));
-        emit(Load(oldStackPointer.name, NamedType("StackPointer"), stackPointerPointer));
-        val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
-        val newStackPointer = pushReturnAddressOnto(???, returnAddressName, sharerName, eraserName);
-        emit(Store(stackPointerPointer, ???));
+
+        // TODO bind this operand once further up
+        pushEnvironmentOnto(LocalReference(stackType, variable.name), frameEnvironment);
+        pushReturnAddressOnto(LocalReference(stackType, variable.name), returnAddressName, sharerName, eraserName);
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -347,16 +364,23 @@ object Transformer {
         shareValues(List(value), freeVariables(rest));
         val newStackName = freshName("stack");
         emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
-        emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), LocalReference(stackType, "stack"))));
+        emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), getStack())));
+        setStack(LocalReference(stackType, newStackName));
         transform(rest)
 
       case machine.PopStacks(variable, n, rest) =>
         emit(Comment("statement popStacks"))
         // TODO Handle n (n+1 = number of stacks to pop)
-        emit(Call("_", Ccc(), VoidType(), popStacks, List(LocalReference(stackType, "stack"), transform(n))));
+        val newStackName = freshName("stack");
+        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(n))));
+
+        // TODO find solution for renaming
+        emit(BitCast(variable.name, getStack(), stackType));
+        setStack(LocalReference(stackType, newStackName));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
+
 
       case machine.ComposeEvidence(machine.Variable(name, _), ev1, ev2, rest) =>
         emit(Comment("statement composeEvidence"))
@@ -561,35 +585,25 @@ object Transformer {
     }
   }
 
-  def pushEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    pushEnvironmentOnto(LocalReference(stackType, "stack"), environment)
-  }
-
-  def pushEnvironmentOnto(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def pushEnvironmentOnto(stack: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
       ()
     } else {
-      storeEnvironmentAt(oldStackPointer, environment);
-
-      emit(GetElementPtr(???, environmentType(environment), oldStackPointer, List(1)));
+      val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+      val size = ConstantInt(environmentSize(environment));
+      emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackAllocate, List(stack, size)));
+      storeEnvironmentAt(stackPointer, environment);
     }
   }
 
-  def popEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    popEnvironmentFrom(LocalReference(stackType, "stack"), environment)
-  }
-
-  def popEnvironmentFrom(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+  def popEnvironmentFrom(stack: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
-      oldStackPointer
+      ()
     } else {
-
-      val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-      emit(GetElementPtr(newStackPointer.name, environmentType(environment), oldStackPointer, List(-1)));
-
-      loadEnvironmentAt(newStackPointer, environment);
-
-      newStackPointer
+      val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+      val size = ConstantInt(environmentSize(environment));
+      emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
+      loadEnvironmentAt(stackPointer, environment)
     }
   }
 
@@ -673,51 +687,36 @@ object Transformer {
     }
   }
 
-  def pushReturnAddress(returnAddressName: String, scannerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    pushReturnAddressOnto(LocalReference(stackType, "stack"), returnAddressName, scannerName, eraserName);
-  }
+  def pushReturnAddressOnto(stack: Operand, returnAddressName: String, sharerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
 
-  def pushReturnAddressOnto(oldStackPointer: Operand, returnAddressName: String, sharerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-
-    val pointerType = PointerType();
+    val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+    // TODO properly find size
+    val size = ConstantInt(24);
+    emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackAllocate, List(stack, size)));
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddressPointer"));
-    emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, oldStackPointer, List(0, 0)));
+    emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
     val sharerPointer = LocalReference(PointerType(), freshName("sharerPointer"));
-    emit(GetElementPtr(sharerPointer.name, frameHeaderType, oldStackPointer, List(0, 1)));
+    emit(GetElementPtr(sharerPointer.name, frameHeaderType, stackPointer, List(0, 1)));
     val eraserPointer = LocalReference(PointerType(), freshName("eraserPointer"));
-    emit(GetElementPtr(eraserPointer.name, frameHeaderType, oldStackPointer, List(0, 2)));
+    emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
 
     emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName)));
     emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName)));
     emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName)));
-
-    // TODO
-    // val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-    // emit(GetElementPtr(newStackPointer.name, frameHeaderType, oldStackPointer, List(1)));
-
-    // newStackPointer
   }
 
-  def popReturnAddress()(using ModuleContext, FunctionContext, BlockContext): String = {
-    // TODO
-    val returnAddress = freshName("returnAddress");
-    popReturnAddressFrom(LocalReference(stackType, "stack"), returnAddress);
-    returnAddress
-  }
+  def popReturnAddressFrom(stack: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
 
-  def popReturnAddressFrom(oldStackPointer: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
-    // TODO
-
-    val newStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-    emit(GetElementPtr(newStackPointer.name, frameHeaderType, oldStackPointer, List(-1)));
+    val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+    // TODO properly find size
+    val size = ConstantInt(24);
+    emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddressPointer"));
-    emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, newStackPointer, List(0, 0)));
+    emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
 
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer));
-
-    newStackPointer
   }
 
   def malloc = ConstantGlobal(PointerType(), "malloc");
@@ -749,6 +748,8 @@ object Transformer {
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
   def withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");
+  def stackAllocate = ConstantGlobal(PointerType(), "stackAllocate");
+  def stackDeallocate = ConstantGlobal(PointerType(), "stackDeallocate");
 
 
   /**
