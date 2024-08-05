@@ -207,6 +207,24 @@ def any[A](list: List[A]) { predicate: A => Bool }: Bool = {
   }
 }
 
+// Fold a list using `f`, starting from the left given a starting value.
+//
+// O(N)
+def foldLeft[A, B](l: List[A], init: B) { f: (B, A) => B }: B = {
+  var acc = init;
+  l.foreach { x => acc = f(acc, x) };
+  acc
+}
+
+// Fold a list using `f`, starting from the right given a starting value.
+//
+// O(N)
+def foldRight[A, B](l: List[A], init: B) { f: (A, B) => B }: B = {
+  var acc = init;
+  l.reverse.foreach { x => acc = f(x, acc) };
+  acc
+}
+
 // Sum the elements of the list.
 //
 // O(N)
