@@ -12,7 +12,7 @@ type FileSystem {
 Each definition starts with the `type` keyword and is followed by the name of the datatype. Enclosed by curly braces
 and separated by newlines, variants consisting of a name and optional fields can be defined.
 
-Creating instances of this type functions just as you might expect:
+Creating instances of this datatype functions just as you might expect:
 
 ```effekt:repl
 val file = File("README.md", "Effekt")
@@ -26,22 +26,27 @@ file.name // fails
 
 Instead, pattern matching has to be used.
 
-```effekt:hidden
-def foldLeft[A, B](xs: List[A], init: B) { f: (B, A) => B }: B =
-  xs match {
-    case Nil => init
-    case Cons(y, ys) => ys.foldLeft(f(init, y)) { f }
-  }
-```
-
 ```
 def containsFile(fs: FileSystem, name: String): Bool =
   fs match {
     case File(name1, _) and name1 == name => true
-    case File(_, _) => false
     case Directory(_, children) => 
       children
         .map { child => containsFile(child, name) }
         .foldLeft(false) { (lhs, rhs) => lhs || rhs } 
-  }
+  } else { false }
+```
+
+A pattern match with `match` consists of one or more clauses delimited by `case`. There is an exhaustivity check such 
+that you need to handle all cases of the scrutinee. Pattern guards, starting with `and`, can be used to refine matches
+with further conditions that evaluate to a `Bool`. Optionally, like with `if` expressions, a `match` expression can be 
+followed by an `else` branch.
+
+```effekt:repl
+containsFile(Directory("/", file), "README.md")
+```
+Furthermore, you can use partial matches in positions where a `Bool` is expected, like here:
+
+```effekt:repl
+if (file is File(_, _)) println("it's a file!")
 ```

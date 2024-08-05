@@ -9,8 +9,7 @@ def fib(n: Int): Int =
 ```
 
 Since `fib` is a recursive function, you need to explicitly annotate it. Value parameters like `n` always need to be 
-annotated with their type. Recursive functions like `fib` are stack-safe in Effekt, meaning that a stack-overflow 
-cannot occur and are often preferred over while-loops.
+annotated with their type.
 
 Calling functions works as you might expect:
 
@@ -18,8 +17,14 @@ Calling functions works as you might expect:
 fib(5)
 ```
 
-For defining polymorphic (generic) function, like the identity, you need to introduce a type parameter as known from 
-other languages.
+Perhaps unusual, you can also call `fib` using Effekt's implementation of [Uniform Function Call Syntax
+](https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax#cite_note-4):
+
+```effekt:repl
+5.fib
+```
+
+For defining polymorphic (generic) function, like the identity, you need to introduce a type parameter enclosed in square brackets:
 
 ```
 def identity[A](x: A): A = x
@@ -29,13 +34,18 @@ val b = identity[Int](42)
 
 When calling the function, you may explicitly pass a type argument for each type parameter or let type inference do its job.
 
-It is important to note that functions are not first-class citizens in Effekt, that is, they are not treated like 
-values. This means, among others, that you may not simply return them, save them in collections or use them as function 
-arguments. The following thereby is not permitted.
+There are also nested function definitions. Thus, we also could have defined `fib` like this:
 
 ```
-// val f = fib
-// val fns = [fib, fib]
+def fib(n: Int): Int = {
+  def inner(last: Int, current: Int, count: Int): Int = {
+    if (count == 1) current
+    else inner(current, last + current)
+  }
+  inner(0, 1, n)
+}
 ```
 
-When we talk about boxing, we will see a way to alleviate these potential pain points.
+```effekt:repl
+fib(5)
+```
