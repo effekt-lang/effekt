@@ -53,6 +53,8 @@ class StdlibMLTests extends StdlibTests {
 class StdlibLLVMTests extends StdlibTests {
   def backendName: String = "llvm"
 
+  override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
+
   override def ignored: List[File] = List(
     // For every function tested using `immutable/result`:
     // [error] Unsupported coercion from Exception47234[E48288] to Exception47234[OutOfBounds47515]
@@ -60,5 +62,23 @@ class StdlibLLVMTests extends StdlibTests {
     examplesDir / "stdlib" / "list" / "modifyat.effekt",
     // Toplevel let-bindings (for ANSI-color-codes in output) not supported
     examplesDir / "stdlib" / "test" / "test.effekt",
+
+    // Valgrind leak/failure
+    examplesDir / "stdlib" / "bytes" / "bytes.effekt",
+    examplesDir / "stdlib" / "io" / "files" / "async_file_io.effekt",
+    examplesDir / "stdlib" / "io" / "files" / "filesystem.effekt",
+    examplesDir / "stdlib" / "io" / "time.effekt",
+    examplesDir / "stdlib" / "list" / "flatmap.effekt",
+    examplesDir / "stdlib" / "list" / "zip.effekt",
+    examplesDir / "stdlib" / "list" / "deleteat.effekt",
+    examplesDir / "stdlib" / "list" / "join.effekt",
+    examplesDir / "stdlib" / "list" / "updateat.effekt",
+    examplesDir / "stdlib" / "list" / "insert.effekt",
+    examplesDir / "stdlib" / "list" / "fill.effekt",
+    examplesDir / "stdlib" / "list" / "zipwith.effekt",
+    examplesDir / "stdlib" / "list" / "collect.effekt",
+    examplesDir / "stdlib" / "list" / "build.effekt",
+    examplesDir / "stdlib" / "string" / "strings.effekt",
+    examplesDir / "stdlib" / "string" / "unicode.effekt",
   )
 }

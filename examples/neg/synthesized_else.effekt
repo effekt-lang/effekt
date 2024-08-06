@@ -1,0 +1,3 @@
+def foo(): Option[Int] = if (true) Some(42) // ERROR Cannot merge different constructors
+
+def main() = ()
