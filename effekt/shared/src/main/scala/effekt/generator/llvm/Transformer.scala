@@ -17,7 +17,7 @@ object Transformer {
 
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
     case machine.Program(declarations, statement) =>
-      emit(Comment("program"))
+      emit(Comment(s"program, ${declarations.length} declarations"))
 
       given MC: ModuleContext = ModuleContext();
       given FC: FunctionContext = FunctionContext();
@@ -76,7 +76,7 @@ object Transformer {
       case machine.Def(machine.Label(name, environment), body, rest) =>
         val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineFunction(Tailcc(), name, parameters :+ Parameter(stackPointerType, "stackPointer")) {
-          emit(Comment("statement definition"))
+          emit(Comment(s"statement definition $name, environment length ${environment.length}"))
           eraseValues(environment, freeVariables(body))
           transform(body)
         }
@@ -84,7 +84,7 @@ object Transformer {
         transform(rest)
 
       case machine.Jump(label) =>
-        emit(Comment("statement jump"))
+        emit(Comment(s"statement jump ${label.name}"))
         shareValues(label.environment, Set())
 
         val arguments = label.environment.map(transform)
@@ -93,28 +93,29 @@ object Transformer {
 
       case machine.Substitute(bindings, rest) =>
         emit(Comment("statement substitution"))
+        bindings.foreach { (from, to) => emit(Comment(s"substitution [${from.name} !-> ${to.name}]")) }
         withBindings(bindings) { () =>
           transform(rest)
         }
 
       case machine.Construct(variable, tag, values, rest) =>
-        emit(Comment("statement construct"))
-        val obj = produceObject(values, freeVariables(rest))
-        val tmpName = freshName("tmp")
-        emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
-        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), obj, 1))
+        emit(Comment(s"statement construct ${variable.name}, tag ${tag}, ${values.length} values"))
+        val `object` = produceObject(values, freeVariables(rest))
+        val temporaryName = freshName(variable.name + "_temporary")
+        emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
+        emit(InsertValue(variable.name, LocalReference(positiveType, temporaryName), `object`, 1))
 
         eraseValues(List(variable), freeVariables(rest))
         transform(rest)
 
       case machine.Switch(value, clauses, default) =>
-        emit(Comment("statement switch"))
+        emit(Comment(s"statement switch ${value.name}, ${clauses.length} clauses"))
         shareValues(List(value), clauses.flatMap(freeVariables).toSet)
 
         val tagName = freshName("tag")
-        val objName = freshName("obj")
+        val objectName = freshName("object")
         emit(ExtractValue(tagName, transform(value), 0))
-        emit(ExtractValue(objName, transform(value), 1))
+        emit(ExtractValue(objectName, transform(value), 1))
 
         val freeInClauses = clauses.flatMap(freeVariables)
 
@@ -123,7 +124,7 @@ object Transformer {
           implicit val BC = BlockContext()
           BC.stackPointer = stackPointer
 
-          consumeObject(LocalReference(objectType, objName), clause.parameters, freeVariables(clause.body));
+          consumeObject(LocalReference(objectType, objectName), clause.parameters, freeVariables(clause.body));
           eraseValues(freeInClauses, freeVariables(clause));
 
           val terminator = transform(clause.body);
@@ -151,62 +152,62 @@ object Transformer {
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
       case machine.New(variable, clauses, rest) =>
-        emit(Comment("statement new"))
+        emit(Comment(s"statement new ${variable.name}, ${clauses.length} clauses"))
         val closureEnvironment = freeVariables(clauses).toList;
 
         val clauseNames = clauses.map { clause =>
-          val clauseName = freshName(variable.name);
+          val clauseName = freshName(variable.name + "_clause");
           val parameters = clause.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-          defineFunction(Tailcc(), clauseName, Parameter(objectType, "obj") +: parameters :+ Parameter(stackPointerType, "stackPointer")) {
-            emit(Comment("statement new"))
-            consumeObject(LocalReference(objectType, "obj"), closureEnvironment, freeVariables(clause));
+          defineFunction(Tailcc(), clauseName, Parameter(objectType, "object") +: parameters :+ Parameter(stackPointerType, "stackPointer")) {
+            emit(Comment(s"statement new ${clauseName}, ${clause.parameters.length} parameters"))
+            consumeObject(LocalReference(objectType, "object"), closureEnvironment, freeVariables(clause));
             eraseValues(clause.parameters, freeVariables(clause.body));
             transform(clause.body);
           }
           ConstantGlobal(methodType, clauseName)
         }
 
-        val arrayName = freshName(variable.name)
+        val arrayName = freshName(variable.name + "_array")
         emit(GlobalConstant(arrayName, ConstantArray(methodType, clauseNames)))
 
-        val obj = produceObject(closureEnvironment, freeVariables(rest));
-        val tmpName = freshName("tmp");
-        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
-        emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
+        val `object` = produceObject(closureEnvironment, freeVariables(rest));
+        val temporaryName = freshName(arrayName + "_temporary");
+        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), arrayName), 0));
+        emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), `object`, 1));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.Invoke(value, tag, values) =>
-        emit(Comment("statement invoke"))
+        emit(Comment(s"statement invoke ${value.name}, tag ${tag}, ${values.length} values"))
         shareValues(value :: values, Set());
 
         val arrayName = freshName("arrayPointer");
-        val objName = freshName("obj");
+        val objectName = freshName("object");
         val pointerName = freshName("functionPointerPointer");
         val functionName = freshName("functionPointer");
         val arguments = values.map(transform)
 
         emit(ExtractValue(arrayName, transform(value), 0));
-        emit(ExtractValue(objName, transform(value), 1));
+        emit(ExtractValue(objectName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
         emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
-        emit(tailCall(LocalReference(methodType, functionName), LocalReference(objectType, objName) +: arguments :+ getStackPointer()))
+        emit(tailCall(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments :+ getStackPointer()))
         RetVoid()
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
-        emit(Comment("statement allocate"))
+        emit(Comment(s"statement allocate $name, type ${tpe}, init ${init.name}, evidence ${evidence.name}"))
         val idx = regionIndex(ref.tpe)
 
-        val tmp = freshName("tmp")
-        val tmpRef = LocalReference(StructureType(List(PointerType(), referenceType)), tmp)
-        emit(Call(tmp, Ccc(), tmpRef.tpe, alloc, List(ConstantInt(idx), transform(evidence))));
+        val temporary = freshName("tmpEvidence")
+        val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), temporary)
+        emit(Call(temporary, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(evidence))));
 
         val ptr = freshName("pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
-        emit(ExtractValue(ptr, tmpRef, 0))
+        emit(ExtractValue(ptr, temporaryRef, 0))
 
-        emit(ExtractValue(name, tmpRef, 1))
+        emit(ExtractValue(name, temporaryRef, 1))
 
 
         emit(Store(ptrRef, transform(init)))
@@ -218,7 +219,7 @@ object Transformer {
         ???
 
       case machine.Load(name, ref, ev, rest) =>
-        emit(Comment("statement load"))
+        emit(Comment(s"statement load ${name.name}, reference ${ref.name}, evidence ${ev.name}"))
         val idx = regionIndex(ref.tpe)
 
         val ptr = freshName("pointer");
@@ -234,7 +235,7 @@ object Transformer {
         transform(rest)
 
       case machine.Store(ref, value, ev, rest) =>
-        emit(Comment("statement store"))
+        emit(Comment(s"statement store ${ref.name}, value ${value.name}, evidence ${ev.name}"))
         val idx = regionIndex(ref.tpe)
 
         val ptr = freshName("pointer");
@@ -255,7 +256,7 @@ object Transformer {
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineFunction(Tailcc(), returnAddressName, parameters :+ Parameter(stackPointerType, "stackPointer")) {
-          emit(Comment("statement pushFrame / return address"))
+          emit(Comment(s"statement pushFrame / return address, ${frameEnvironment.length} free variables"))
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body))
@@ -266,7 +267,7 @@ object Transformer {
         // TODO cache based on environment
         val sharerName = freshName("sharer");
         defineFunction(Ccc(), sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment("statement pushFrame / sharer"))
+          emit(Comment(s"statement pushFrame / sharer, ${frameEnvironment.length} free variables"))
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           emit(Call("_", Ccc(), VoidType(), shareFrames, List(getStackPointer())));
@@ -276,7 +277,7 @@ object Transformer {
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
         defineFunction(Ccc(), eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment("statement pushFrame / eraser"))
+          emit(Comment(s"statement pushFrame / eraser, ${frameEnvironment.length} free variables"))
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
           emit(Call("_", Ccc(), VoidType(), eraseFrames, List(getStackPointer())));
@@ -290,7 +291,7 @@ object Transformer {
         transform(rest)
 
       case machine.Return(values) =>
-        emit(Comment("statement return"))
+        emit(Comment(s"statement return, ${values.length} values"))
         shareValues(values, Set())
 
         val returnAddress = popReturnAddress();
@@ -298,7 +299,7 @@ object Transformer {
         RetVoid()
 
       case machine.NewStack(variable, frame, rest) =>
-        emit(Comment("statement newStack"))
+        emit(Comment(s"statement newStack ${variable.name}"))
         emit(Call(variable.name, Ccc(), transform(variable.tpe), newStack, List()));
 
         val frameEnvironment = freeVariables(frame).toList;
@@ -306,7 +307,7 @@ object Transformer {
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineFunction(Tailcc(), returnAddressName, parameters :+ Parameter(stackPointerType, "stackPointer")) {
-          emit(Comment("statement newStack / return address"))
+          emit(Comment(s"statement newStack / return address, ${frameEnvironment.length} free variables"))
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body));
@@ -321,7 +322,7 @@ object Transformer {
         // TODO cache based on environment (this is different from other sharers)
         val sharerName = freshName("sharer");
         defineFunction(Ccc(), sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment("statement newStack / sharer"))
+          emit(Comment(s"statement newStack / sharer, ${frameEnvironment.length} free variables"))
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           RetVoid()
@@ -330,7 +331,7 @@ object Transformer {
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
         defineFunction(Ccc(), eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment("statement newStack / eraser"))
+          emit(Comment(s"statement newStack / eraser, ${frameEnvironment.length} free variables"))
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
           emit(Call("_", Ccc(), VoidType(), free, List(getStackPointer())));
@@ -350,7 +351,7 @@ object Transformer {
         transform(rest)
 
       case machine.PushStack(value, rest) =>
-        emit(Comment("statement pushStack"))
+        emit(Comment(s"statement pushStack ${value.name}"))
         shareValues(List(value), freeVariables(rest));
         val newStackName = freshName("stack");
         emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
@@ -360,36 +361,36 @@ object Transformer {
         transform(rest)
 
       case machine.PopStacks(variable, n, rest) =>
-        emit(Comment("statement popStacks"))
+        emit(Comment(s"statement popStacks ${variable.name}, n=${n.name}"))
         // TODO Handle n (n+1 = number of stacks to pop)
         val newStackPointerName = freshName("stackPointer");
-        val tmpName = freshName("tmp");
-        val tmpReference = LocalReference(StructureType(List(stackType, stackPointerType)), tmpName);
-        emit(Call(tmpName, Ccc(), StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
-        emit(ExtractValue(variable.name, tmpReference, 0));
-        emit(ExtractValue(newStackPointerName, tmpReference, 1));
+        val temporaryName = freshName(newStackPointerName + "_tmp");
+        val temporaryReference = LocalReference(StructureType(List(stackType, stackPointerType)), temporaryName);
+        emit(Call(temporaryName, Ccc(), StructureType(List(stackType, stackPointerType)), popStacks, List(getStackPointer(), transform(n))));
+        emit(ExtractValue(variable.name, temporaryReference, 0));
+        emit(ExtractValue(newStackPointerName, temporaryReference, 1));
         setStackPointer(LocalReference(stackPointerType, newStackPointerName));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.ComposeEvidence(machine.Variable(name, _), ev1, ev2, rest) =>
-        emit(Comment("statement composeEvidence"))
+        emit(Comment(s"statement composeEvidence $name, evidence 1 ${ev1.name}, evidence 2 ${ev2.name}"))
         emit(Add(name, transform(ev1), transform(ev2)))
         transform(rest)
 
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
-        emit(Comment("statement literalInt"))
+        emit(Comment(s"statement literalInt $name, n=$n"))
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
       case machine.LiteralDouble(machine.Variable(name, _), x, rest) =>
-        emit(Comment("statement literalDouble"))
+        emit(Comment(s"statement literalDouble $name, x=$x"))
         emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));
         transform(rest)
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
-        emit(Comment("statement literalUTF8String"))
+        emit(Comment(s"statement literalUTF8String $bind, ${utf8.length} bytes"))
         emit(GlobalConstant(s"$bind.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
         val res = positiveType
@@ -401,12 +402,12 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralEvidence(machine.Variable(name, _), n, rest) =>
-        emit(Comment("statement literalEvidence"))
+        emit(Comment(s"statement literalEvidence $name, n=$n"))
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
-        emit(Comment("statement foreignCall"))
+        emit(Comment(s"statement foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         val functionType = PointerType();
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(functionType, foreign), values.map(transform)));
@@ -536,28 +537,28 @@ object Transformer {
     if (environment.isEmpty) {
       ConstantNull(objectType)
     } else {
-      val obj = LocalReference(objectType, freshName("obj"));
-      val env = LocalReference(environmentType, freshName("environment"));
+      val objectReference = LocalReference(objectType, freshName("object"));
+      val environmentReference = LocalReference(environmentType, freshName("environment"));
       val size = ConstantInt(environmentSize(environment));
       val eraser = getEraser(environment)
 
-      emit(Call(obj.name, Ccc(), objectType, newObject, List(eraser, size)));
-      emit(Call(env.name, Ccc(), environmentType, objectEnvironment, List(obj)));
+      emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
+      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
       shareValues(environment, freeInBody);
-      storeEnvironment(env, environment);
-      obj
+      storeEnvironment(environmentReference, environment);
+      objectReference
     }
   }
 
-  def consumeObject(obj: Operand, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def consumeObject(`object`: Operand, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
       ()
     } else {
-      val env = LocalReference(environmentType, freshName("environment"));
-      emit(Call(env.name, Ccc(), environmentType, objectEnvironment, List(obj)));
-      loadEnvironment(env, environment);
+      val environmentReference = LocalReference(environmentType, freshName("environment"));
+      emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(`object`)));
+      loadEnvironment(environmentReference, environment);
       shareValues(environment, freeInBody);
-      emit(Call("_", Ccc(), VoidType(), eraseObject, List(obj)));
+      emit(Call("_", Ccc(), VoidType(), eraseObject, List(`object`)));
     }
   }
 
@@ -605,7 +606,7 @@ object Transformer {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
-        val field = LocalReference(PointerType(), freshName(name + "p"));
+        val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
         emit(Store(field, transform(machine.Variable(name, tpe))))
     }
@@ -615,7 +616,7 @@ object Transformer {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
-        val field = LocalReference(PointerType(), freshName(name + "p"));
+        val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
         emit(Load(name, transform(tpe), field))
     }

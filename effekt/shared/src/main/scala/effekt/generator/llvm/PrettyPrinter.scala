@@ -102,9 +102,11 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
-    case Comment(msg) =>
+    case Comment(msg) if C.config.debug() =>
       val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
-      s"; $sanitized"
+      s"\n; $sanitized"
+
+    case Comment(msg) => ""
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {

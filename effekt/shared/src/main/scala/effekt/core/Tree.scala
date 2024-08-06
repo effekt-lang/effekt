@@ -427,7 +427,7 @@ object normal {
       case x: Block.BlockVar => bvars = bvars :+ x
       // introduce a binding
       case block =>
-        val id = symbols.TmpBlock()
+        val id = symbols.TmpBlock("blockBinding")
         bindings = bindings :+ Definition.Def(id, block)
         bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
         ids += id
