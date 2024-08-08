@@ -293,7 +293,7 @@ class Lexer(source: Source) {
       val kind =
         // If the last token was `}` and we are currently inside unquotes, remember to directly continue
         // lexing a string
-        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.pop() == `${{`) {
+        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.nonEmpty && delimiters.pop() == `${{`) {
           // TODO: catch error
           val delim = delimiters.pop().asInstanceOf[StrDelim]
           matchString(delim, true)
