@@ -23,17 +23,12 @@ class LLVMTests extends EffektTests {
 
     // unsure
     examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
-    examplesDir / "ml" / "probabilistic.effekt", // crashes with "PANIC: Reached a hole in the program"
 
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
     // *** MALLOC PANIC
     examplesDir / "pos" / "get_put.effekt",
-
-    // showing of strings with escaped " is wrong / different from other backends
-    examplesDir / "pos" / "escaped_linebreaks.effekt",
-    examplesDir / "pos" / "multiline_string.effekt",
 
     // unclear
     examplesDir / "pos" / "higher_rank_polymorphism.effekt",
@@ -99,9 +94,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "capture" / "mbed.effekt",
     examplesDir / "pos" / "lib_test.effekt",
 
-    // foreign functions with block arguments
-    examplesDir / "pos" / "liftinference.effekt",
-
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
     examplesDir / "pos" / "unsafe_cont.effekt",
@@ -119,15 +111,9 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "object"/ "higher_order_compose_op.effekt",
 
     // first class functions closing over capabilities
-    examplesDir / "pos" / "capture" / "borrows.effekt",
-    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
-    examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "state_eff.effekt",
-    examplesDir / "pos" / "lambdas" / "annotated.effekt",
-    examplesDir / "pos" / "lambdas" / "scheduler.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
     examplesDir / "pos" / "file.effekt",
-    examplesDir / "benchmarks" / "generator.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",
