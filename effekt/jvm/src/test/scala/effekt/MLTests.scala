@@ -23,7 +23,6 @@ class MLTests extends EffektTests {
 
     // `gametree` uses `resume` in a different region (under `var i` in `range`)
     examplesDir / "ml" / "nim.effekt",
-    examplesDir / "ml" / "non_scoped_resume.effekt", // minified version
 
     // monomorphization of global state is not yet implemented (minified version of original raytracer)
     examplesDir / "ml" / "global.effekt",
@@ -34,7 +33,6 @@ class MLTests extends EffektTests {
 
     examplesDir / "pos" / "object",
     // Tests with box
-    examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
     examplesDir / "pos" / "file.effekt",
     //    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
@@ -45,17 +43,16 @@ class MLTests extends EffektTests {
     //    examplesDir / "pos" / "infer" / "infer_effect_polymorphic.effekt",
     examplesDir / "pos" / "issue108.effekt",
 
-    examplesDir / "pos" / "lambdas",
     //    examplesDir / "pos" / "lambdas" / "annotated.effekt",
     //    examplesDir / "pos" / "lambdas" / "effects.effekt",
-    //    examplesDir / "pos" / "lambdas" / "generators.effekt",
+    examplesDir / "pos" / "lambdas" / "generators.effekt",
     //    examplesDir / "pos" / "lambdas" / "higherorder.effekt",
     //    examplesDir / "pos" / "lambdas" / "localstate.effekt",
-    //    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+    examplesDir / "pos" / "lambdas" / "scheduler.effekt",
 
 
     // region-based memory management is not yet supported (monomorphization would only work for type monomorphic regions)
-    examplesDir / "pos" / "recursiveobject.effekt",
     examplesDir / "benchmarks" / "other" / "generator.effekt",
 
     // missing "show" instance
@@ -63,14 +60,9 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "builtins.effekt",
     examplesDir / "pos" / "either.effekt",
     examplesDir / "pos" / "namespaces.effekt",
-    examplesDir / "pos" / "overloading.effekt",
-    examplesDir / "pos" / "dequeue.effekt",
-    examplesDir / "pos" / "matchblock.effekt",
-    examplesDir / "pos" / "polymorphic" / "exceptions.effekt",
     examplesDir / "pos" / "exists.effekt", // now show instance for existentials
 
     // polymorphic effect operation not supported
-    examplesDir / "pos" / "existentials.effekt",
     examplesDir / "pos" / "triples.effekt",
     examplesDir / "pos" / "bidirectional",
     examplesDir / "pos" / "type_omission_op.effekt",
@@ -81,9 +73,6 @@ class MLTests extends EffektTests {
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "mandelbrot.effekt",
-
-    // mutual recursion
-    examplesDir / "pos" / "mutualrecursion.effekt",
 
     // heap
     examplesDir / "casestudies" / "ad.effekt..md",
@@ -105,9 +94,6 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "array" / "list_conversion.effekt",
     examplesDir / "pos" / "array" / "sum.effekt",
 
-    // async
-    examplesDir / "pos" / "io" / "async_file_io.effekt",
-
     // mutable map
     examplesDir / "pos" / "maps.effekt",
 
@@ -117,15 +103,10 @@ class MLTests extends EffektTests {
     examplesDir / "casestudies" / "naturalisticdsls.effekt.md",
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
-    examplesDir / "pos" / "emptymatch.effekt",
     examplesDir / "pos" / "liftinference.effekt",
-    examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
-
-    // unkown issue - 'Mutual definitions are currently not supported by this backend'
-    examplesDir / "pos" / "patternmatching" / "matching-while.effekt",
 
     examplesDir / "pos" / "probabilistic.effekt",
 

@@ -56,10 +56,6 @@ class StdlibLLVMTests extends StdlibTests {
   override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
 
   override def ignored: List[File] = List(
-    // For every function tested using `immutable/result`:
-    // [error] Unsupported coercion from Exception47234[E48288] to Exception47234[OutOfBounds47515]
-    examplesDir / "stdlib" / "list" / "get.effekt",
-    examplesDir / "stdlib" / "list" / "modifyat.effekt",
     // Toplevel let-bindings (for ANSI-color-codes in output) not supported
     examplesDir / "stdlib" / "test" / "test.effekt",
 
