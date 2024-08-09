@@ -1,13 +1,37 @@
-# This is a copy-and-past version of ci.yml but additionally creating a release
+# This is a copy-and-paste version of ci.yml but additionally creating a release
 name: Release Artifacts
 
 on:
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
   push:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
 jobs:
+  calculate-version:
+    name: Calculate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.VERSION }}
+    steps:
+
+      - name: Calculate new version
+        id: set-version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            MAJOR=0
+            YEAR=$(date +%y)
+            WEEK=$(date +%W)
+            WEEK_PADDED=$(printf "%02d" $WEEK)
+            echo "VERSION=${MAJOR}.${YEAR}.${WEEK_PADDED}" >> $GITHUB_OUTPUT
+          fi
+
   build-jar:
     name: Build Effekt compiler and run tests
+    needs: calculate-version
     runs-on: ubuntu-latest
     steps:
 
@@ -39,6 +63,10 @@ jobs:
     - name: Install Chez Scheme
       run: sudo apt-get install chezscheme
 
+    - name: Update version in build.sbt
+      run: |
+        sed -i 's/lazy val effektVersion = ".*"/lazy val effektVersion = "${{ needs.calculate-version.outputs.version }}"/' build.sbt
+
     - name: Run tests and assemble jar file
       run: sbt clean deploy
 
@@ -61,7 +89,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build-jar]
+    needs: [calculate-version, build-jar]
     steps:
       - name: Checkout code
         uses: actions/checkout@master
@@ -84,11 +112,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_name: Prerelease ${{ github.ref }}
-          tag_name: ${{ github.ref }}
-          body: Automatic release for ${{ github.ref }}
+          release_name: Release ${{ needs.calculate-version.outputs.version }}
+          tag_name: v${{ needs.calculate-version.outputs.version }}
+          body: Release ${{ needs.calculate-version.outputs.version }}
           draft: false
-          prerelease: true
+          prerelease: false
 
       - name: Upload jar file
         id: upload_jar
@@ -109,5 +137,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./distribution/effekt.tgz
-          asset_name: effekt.tgz
+          asset_name: effekt-${{ needs.calculate-version.outputs.version }}.tgz
           asset_content_type: application/gzip
