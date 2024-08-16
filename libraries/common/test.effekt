@@ -1,5 +1,55 @@
+<<<<<<< HEAD
 import string
 import process
+||||||| parent of e3e9b93b (Make the Effekt testing suite a little prettier)
+import string
+=======
+import bench
+
+interface Formatted {
+  def supportsEscape(escape: String): Bool
+}
+
+namespace Formatted {
+  def formatting[R] { prog : => R / Formatted }: R =
+    try {
+      prog()
+    } with Formatted {
+      def supportsEscape(escape: String) = resume(true)
+    }
+
+  def noFormatting[R] { prog : => R / Formatted }: R =
+    try {
+      prog()
+    } with Formatted {
+      def supportsEscape(escape: String) = resume(false)
+    }
+
+  def tryEmit(escape: String): String / Formatted =
+    if (do supportsEscape(escape)) { escape } else { "" }
+}
+
+namespace Duration {
+  def diff(from: Int, to: Int) = to - from
+  def now(): Int = bench::relativeTimestamp()
+
+  def format(nanos: Int): String = {
+    val micros = nanos / 1000000
+    val sub = (nanos.mod(1000000).toDouble / 10000.0).round
+
+    if (sub == 100) {
+      (micros + 1).show ++ ".0ms"
+    } else {
+      micros.show ++ "." ++ sub.show ++ "ms"
+    }
+  }
+}
+
+def red(s: String) = Formatted::tryEmit(ANSI::RED) ++ s ++ Formatted::tryEmit(ANSI::RESET)
+def green(s: String) = Formatted::tryEmit(ANSI::GREEN) ++ s ++ Formatted::tryEmit(ANSI::RESET)
+def dim(s: String) = Formatted::tryEmit(ANSI::FAINT) ++ s ++ Formatted::tryEmit(ANSI::RESET)
+def bold(s: String) = Formatted::tryEmit(ANSI::BOLD) ++ s ++ Formatted::tryEmit(ANSI::RESET)
+>>>>>>> e3e9b93b (Make the Effekt testing suite a little prettier)
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit
@@ -29,65 +79,87 @@ def assert(obtained: Char, expected: Char, msg: String): Unit / Assertion =
 def assert(obtained: String, expected: String, msg: String): Unit / Assertion =
   assertEqual(obtained, expected, msg) { (x, y) => x == y }
 
-def assert(obtained: Int, expected: Int): Unit / Assertion =
+def assert(obtained: Int, expected: Int): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: Bool, expected: Bool): Unit / Assertion =
+def assert(obtained: Bool, expected: Bool): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: Char, expected: Char): Unit / Assertion =
+def assert(obtained: Char, expected: Char): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
-def assert(obtained: String, expected: String): Unit / Assertion =
+def assert(obtained: String, expected: String): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x == y } { x => show(x) }
 
 def assertEqual[A](obtained: A, expected: A, msg: String): Unit / Assertion =
   assertEqual(obtained, expected, msg) { (x, y) => x.equals(y) }
 
-def assertEqual[A](obtained: A, expected: A): Unit / Assertion =
+def assertEqual[A](obtained: A, expected: A): Unit / { Assertion, Formatted } =
   assertEqual(obtained, expected) { (x, y) => x.equals(y) } { x => x.genericShow }
 
 def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bool }: Unit / Assertion =
   do assert(equals(obtained, expected), msg)
 
-def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: A => String }: Unit / Assertion =
-  do assert(equals(obtained, expected), "Obtained: " ++ show(obtained) ++ "\n but expected:" ++ show(expected))
-
+def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: A => String }: Unit / { Assertion, Formatted } =
+  do assert(equals(obtained, expected), Formatted::tryEmit(ANSI::RESET) ++ "Expected: ".dim ++ show(expected).green ++ "\n  Obtained: ".dim ++ show(obtained).red)
+  //                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  //             Here's an accidental capture! Can we prevent this somehow nicely?
 
 interface Test {
-  def success(name: String): Unit
-  def failure(name: String, msg: String): Unit
+  def success(name: String, duration: Int): Unit
+  def failure(name: String, msg: String, duration: Int): Unit
 }
 
-def test(name: String) { body: => Unit / Assertion } =
-  try { body(); do success(name) } with Assertion {
-    def assert(condition, msg) = if (condition) resume(()) else do failure(name, msg)
+def test(name: String) { body: => Unit / Assertion } = {
+  val startTime = Duration::now()
+  try {
+    body()
+    val duration = Duration::diff(startTime, Duration::now())
+    do success(name, duration)
+  } with Assertion {
+    def assert(condition, msg) =
+      if (condition) resume(())
+      else {
+        val duration = Duration::diff(startTime, Duration::now())
+        do failure(name, msg, duration)
+      }
   }
+}
 
-def suite(name: String) { body: => Unit / Test }: Bool = {
-  println("Running suite: " ++ name);
+def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} = {
+  with Formatted::formatting;
+
+  println(name.bold)
   var failed = 0
   var passed = 0
 
-  try { body() } with Test {
-    def success(name) = {
-      passed = passed + 1
-      println(ANSI::GREEN ++ "+ " ++ name ++ "" ++ ANSI::RESET);
-      resume(())
-    }
-    def failure(name, msg) = {
-      failed = failed + 1
-      println(ANSI::RED ++ "- (FAIL) " ++ name ++ "\n    " ++ msg ++ ANSI::RESET);
-      resume(())
+  val totalDuration = timed {
+    try { body() } with Test {
+      def success(name, duration) = {
+        passed = passed + 1
+        println("✓".green ++ " " ++ name ++ " " ++ ("[" ++ Duration::format(duration) ++ "]").dim)
+        resume(())
+      }
+      def failure(name, msg, duration) = {
+        failed = failed + 1
+        println("✕".red ++ " " ++ name ++ " " ++ ("[" ++ Duration::format(duration) ++ "]").dim)
+        println("  " ++ msg.red)
+        resume(())
+      }
     }
   }
-  if (failed > 0) {
-    println(ANSI::RED ++ "Some tests failed (" ++ passed.show ++ " passed, " ++ failed.show ++ " failed)" ++ ANSI::RESET)
-    false
-  } else {
-    println(ANSI::GREEN ++ "All tests passed (" ++ passed.show ++ " passed)" ++ ANSI::RESET)
-    true
-  }
+
+  def color(s: String, n: Int) { colorIfNonZero: String => String / Formatted } =
+    if (n == 0) { dim(s) }
+    else { colorIfNonZero(s) }
+
+  println("")
+  println(" " ++ (passed.show ++ " pass").color(passed) { green })
+  println(" " ++ (failed.show ++ " fail").color(failed) { red })
+  println(" " ++ (passed + failed).show ++ " tests total" ++ " " ++ ("[" ++ Duration::format(totalDuration) ++ "]").dim)
+  println("")
+
+  return failed == 0
 }
 
 /// Use as `def main() = mainSuite("...") { ... }`
@@ -96,3 +168,4 @@ def mainSuite(name: String) { body: => Unit / Test }: Unit = {
   val exitCode = if (result) 0 else 1
   exit(exitCode)
 }
+

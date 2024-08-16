@@ -245,25 +245,38 @@ def printing[T] { prog: => T / Stream }: T = <>
 
 // ANSI escape codes
 namespace ANSI {
-  val BLACK = "\u001b[30m"
-  val RED = "\u001b[31m"
-  val GREEN = "\u001b[32m"
-  val YELLOW = "\u001b[33m"
-  val BLUE = "\u001b[34m"
-  val MAGENTA = "\u001b[35m"
-  val CYAN = "\u001b[36m"
-  val WHITE = "\u001b[37m"
+  val CSI = "\u001b["
 
-  val BG_BLACK = "\u001b[40m"
-  val BG_RED = "\u001b[41m"
-  val BG_GREEN = "\u001b[42m"
-  val BG_YELLOW = "\u001b[43m"
-  val BG_BLUE = "\u001b[44m"
-  val BG_MAGENTA = "\u001b[45m"
-  val BG_CYAN = "\u001b[46m"
-  val BG_WHITE = "\u001b[47m"
+  def escape(s: String) = CSI ++ s ++ "m"
 
-  val RESET = "\u001b[0m"
+  val BLACK = escape("30")
+  val RED = escape("31")
+  val GREEN = escape("32")
+  val YELLOW = escape("33")
+  val BLUE = escape("34")
+  val MAGENTA = escape("35")
+  val CYAN = escape("36")
+  val WHITE = escape("37")
+
+  val BG_BLACK = escape("40")
+  val BG_RED = escape("41")
+  val BG_GREEN = escape("42")
+  val BG_YELLOW = escape("43")
+  val BG_BLUE = escape("44")
+  val BG_MAGENTA = escape("45")
+  val BG_CYAN = escape("46")
+  val BG_WHITE = escape("47")
+
+  val RESET = escape("0")
+
+  val BOLD = escape("1")
+  val FAINT = escape("2")
+  val ITALIC = escape("3")
+  val UNDERLINE = escape("4")
+  val BLINK = escape("5")
+  val REVERSE = escape("7")
+  val CROSSOUT = escape("9")
+  val OVERLINE = escape("53")
 }
 
 
