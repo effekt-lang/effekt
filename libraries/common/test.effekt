@@ -30,19 +30,7 @@ namespace Formatted {
 }
 
 namespace Duration {
-  def diff(from: Int, to: Int) = to - from
-  def now(): Int = bench::relativeTimestamp()
-
-  def format(nanos: Int): String = {
-    val micros = nanos / 1000000
-    val sub = (nanos.mod(1000000).toDouble / 10000.0).round
-
-    if (sub == 100) {
-      (micros + 1).show ++ ".0ms"
-    } else {
-      micros.show ++ "." ++ sub.show ++ "ms"
-    }
-  }
+  def diff(fromNanos: Int, toNanos: Int) = toNanos - fromNanos
 }
 
 def red(s: String) = Formatted::tryEmit(ANSI::RED) ++ s ++ Formatted::tryEmit(ANSI::RESET)
@@ -111,16 +99,16 @@ interface Test {
 }
 
 def test(name: String) { body: => Unit / Assertion } = {
-  val startTime = Duration::now()
+  val startTime = bench::relativeTimestamp()
   try {
     body()
-    val duration = Duration::diff(startTime, Duration::now())
+    val duration = Duration::diff(startTime, bench::relativeTimestamp())
     do success(name, duration)
   } with Assertion {
     def assert(condition, msg) =
       if (condition) resume(())
       else {
-        val duration = Duration::diff(startTime, Duration::now())
+        val duration = Duration::diff(startTime, bench::relativeTimestamp())
         do failure(name, msg, duration)
       }
   }
@@ -134,7 +122,7 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
 
   def ms(duration: Int): String / Formatted =
     if (printTimes) {
-      ("[" ++ Duration::format(duration) ++ "]").dim
+      ("[" ++ bench::formatMs(duration) ++ "]").dim
     } else {
       ""
     }

@@ -58,3 +58,18 @@ def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
   run(warmup, false)
   run(iterations, true)
 }
+
+/**
+ * Takes a duration in nanoseconds and formats it in milliseconds with precision of two decimal digits.
+ */
+def formatMs(nanos: Int): String = {
+  val micros = nanos / 1000000
+  val sub = (nanos.mod(1000000).toDouble / 10000.0).round
+
+  if (sub == 100) {
+    // overflow because of rounding
+    (micros + 1).show ++ ".0ms"
+  } else {
+    micros.show ++ "." ++ sub.show ++ "ms"
+  }
+}
