@@ -90,7 +90,7 @@ def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bo
 
 def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: A => String }: Unit / { Assertion, Formatted } =
   do assert(equals(obtained, expected), Formatted::tryEmit(ANSI::RESET) ++ "Expected: ".dim ++ show(expected).green ++ "\n  Obtained: ".dim ++ show(obtained).red)
-  //                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
 interface Test {
@@ -122,7 +122,7 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
 
   def ms(duration: Int): String / Formatted =
     if (printTimes) {
-      ("[" ++ bench::formatMs(duration) ++ "]").dim
+      " " ++ ("[" ++ bench::formatMs(duration) ++ "]").dim
     } else {
       ""
     }
@@ -135,26 +135,26 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
     try { body() } with Test {
       def success(name, duration) = {
         passed = passed + 1
-        println("✓".green ++ " " ++ name ++ " " ++ duration.ms)
+        println("✓".green ++ " " ++ name ++ duration.ms)
         resume(())
       }
       def failure(name, msg, duration) = {
         failed = failed + 1
-        println("✕".red ++ " " ++ name ++ " " ++ duration.ms)
+        println("✕".red ++ " " ++ name ++ duration.ms)
         println("  " ++ msg.red)
         resume(())
       }
     }
   }
 
-  def color(s: String, n: Int) { colorIfNonZero: String => String / Formatted } =
+  def dimWhenZeroElse(s: String, n: Int) { colorIfNonZero: String => String / Formatted } =
     if (n == 0) { dim(s) }
     else { colorIfNonZero(s) }
 
   println("")
-  println(" " ++ (passed.show ++ " pass").color(passed) { green })
-  println(" " ++ (failed.show ++ " fail").color(failed) { red })
-  println(" " ++ (passed + failed).show ++ " tests total" ++ " " ++ totalDuration.ms)
+  println(" " ++ (passed.show ++ " pass").dimWhenZeroElse(passed) { green })
+  println(" " ++ (failed.show ++ " fail").dimWhenZeroElse(failed) { red })
+  println(" " ++ (passed + failed).show ++ " tests total" ++ totalDuration.ms)
 
   return failed == 0
 }
