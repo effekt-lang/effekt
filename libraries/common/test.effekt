@@ -126,8 +126,18 @@ def test(name: String) { body: => Unit / Assertion } = {
   }
 }
 
-def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} = {
+/// Run a test suite with a given `name`.
+/// If `printTimes` is `true` (or missing), prints out time in milliseconds.
+/// Formats automatically using ANSI escapes.
+def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } }: Bool / {} = {
   with Formatted::formatting;
+
+  def ms(duration: Int): String / Formatted =
+    if (printTimes) {
+      ("[" ++ Duration::format(duration) ++ "]").dim
+    } else {
+      ""
+    }
 
   println(name.bold)
   var failed = 0
@@ -137,12 +147,12 @@ def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} = {
     try { body() } with Test {
       def success(name, duration) = {
         passed = passed + 1
-        println("✓".green ++ " " ++ name ++ " " ++ ("[" ++ Duration::format(duration) ++ "]").dim)
+        println("✓".green ++ " " ++ name ++ " " ++ duration.ms)
         resume(())
       }
       def failure(name, msg, duration) = {
         failed = failed + 1
-        println("✕".red ++ " " ++ name ++ " " ++ ("[" ++ Duration::format(duration) ++ "]").dim)
+        println("✕".red ++ " " ++ name ++ " " ++ duration.ms)
         println("  " ++ msg.red)
         resume(())
       }
@@ -156,8 +166,7 @@ def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} = {
   println("")
   println(" " ++ (passed.show ++ " pass").color(passed) { green })
   println(" " ++ (failed.show ++ " fail").color(failed) { red })
-  println(" " ++ (passed + failed).show ++ " tests total" ++ " " ++ ("[" ++ Duration::format(totalDuration) ++ "]").dim)
-  println("")
+  println(" " ++ (passed + failed).show ++ " tests total" ++ " " ++ totalDuration.ms)
 
   return failed == 0
 }
@@ -169,3 +178,5 @@ def mainSuite(name: String) { body: => Unit / Test }: Unit = {
   exit(exitCode)
 }
 
+def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} =
+  suite(name, true) { body }

@@ -2,7 +2,8 @@ import test
 
 def main() = {
 
-  suite("Arithmetic") {
+  // Don't print out times in CI.
+  suite("Arithmetic", false) {
 
     test("addition") {
       val x = 1;

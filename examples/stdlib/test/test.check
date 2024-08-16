@@ -1,5 +1,8 @@
-Running suite: Test test suite
-+ Test test assertTrue
-+ Test test assertFalse
-+ Test test assert
-All tests passed (3 passed)
+Test test suite
+✓ Test test assertTrue
+✓ Test test assertFalse
+✓ Test test assert
+
+ 3 pass
+ 0 fail
+ 3 tests total
