@@ -1,0 +1,11 @@
+import array
+
+def main() = {
+  with on[OutOfBounds].panic
+
+  val a = array(10, 0)
+  val b = array(10, 1)
+
+  copy(a, 0, b, 0, 5)
+  println(b)
+}
