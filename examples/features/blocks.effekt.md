@@ -6,23 +6,29 @@ interface Yield[A] {
 }
 ```
 
-As we have established in a previous section, functions in Effekt are second-class. While you cannot pass them as first-class values to other functions as argument, you can pass them as second-class blocks.
+Functions are second-class in Effekt. While you cannot pass them as first-class values to other functions as argument, you can pass them as second-class blocks.
 
 ```
-def map[A, B](xs: List[A]) { f: A => B }: List[B] =
+def myMap[A, B](xs: List[A]) { f: A => B }: List[B] =
   xs match {
     case Nil() => Nil()
-    case Cons(x, xs) => Cons(f(x), map(xs) { f })
+    case Cons(x, xs) => Cons(f(x), myMap(xs) { f })
   }
 ```
 
-The parameter `f` is enclosed by curcly braces and is syntactically separated from the value paramters. What happens if we pass `map` an effectful block argument? What is the return type of this call?
+The block parameter `f` is enclosed by curly braces and is syntactically separated from the value paramters. Of course, there may also be multiple block parameters
+each enclosed by curly braces.
 
-```
-map([1, 2, 3]) { x =>
-  do yield(x)
-  x * 2
-}
+```effekt:repl
+[1, 2, 3].myMap { x => x * 2 }
 ```
 
+In the previous example, the block passed to `myMap` did not use any effect operations and the signature of `f` in `myMap` did not mention any as well. What happens if
+the argument passed for `f` is effectful?
 
+```
+def example(): List[Int] / Yield[Int] = [1, 2, 3].map { x => do yield[Int](x); x * 2 }
+```
+
+Since effects are considered as requirements for the calling context and the signature of `f` does not mention any, the implementation of `myMap` cannot handle any effects
+occuring in `f`. The effects used in the passed block need to be handled exactly where the block is defined, that is, at the call-site of `myMap`.
