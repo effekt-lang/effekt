@@ -1,6 +1,7 @@
 # Loops
 
-In Effekt, there is only a `while` loop expression built-in (that is completely standard).
+Effekt includes a (completely standard) built-in `while` loop expression as its sole native looping construct.
+
 
 ```
 def fib(n: Int): Int = {
@@ -44,3 +45,18 @@ def worker() = loop {
 ```
 
 The operations `break` and `continue` have their usual semantics, except that they are handled by `loop` as operations of the algebraic effect `Control`.
+
+Additionally, the standard library also includes the fucntions `each` and `repeat`.
+
+```effekt:repl
+each(1, 11) { n => if (n.mod(2) == 0) println(n) else do continue() }
+```
+
+`each` expects two value arguments: an inclusive starting index and an exclusive end index. At each iteration, the current index is passed to the block argument of `each`.
+You may also use the operations `break` and `continue` of the effect `Control` within this block argument.
+
+```effekt:repl
+repeat(2) { println("Effekt!") }
+```
+
+`repeat` just expects one value argument that controls, how often the passed block argument is to be executed. You may also use the operations of the `Control` effect here.
