@@ -31,16 +31,15 @@ def containsFile(fs: FileSystem, name: String): Bool =
   fs match {
     case File(name1, _) and name1 == name => true
     case Directory(_, children) => 
-      children
-        .map { child => containsFile(child, name) }
-        .foldLeft(false) { (lhs, rhs) => lhs || rhs } 
+      children.any { c => containsFile(c, name) }
   } else { false }
 ```
 
 A pattern match with `match` consists of one or more clauses delimited by `case`. There is an exhaustivity check such 
 that you need to handle all cases of the scrutinee. Pattern guards, starting with `and`, can be used to refine matches
 with further conditions that evaluate to a `Bool`. Optionally, like with `if` expressions, a `match` expression can be 
-followed by an `else` branch.
+followed by an `else` branch. Instead of an `else` branch in a `match` expression, you may also use a wildcard pattern
+(`case _ => ...`).
 
 ```effekt:repl
 containsFile(Directory("/", file), "README.md")
@@ -48,5 +47,5 @@ containsFile(Directory("/", file), "README.md")
 Furthermore, you can use partial matches in positions where a `Bool` is expected, like here:
 
 ```effekt:repl
-if (file is File(_, _)) println("it's a file!")
+if (file is File(name, content)) println("The file " ++ name ++ " has a content length of " ++ show(content.length))
 ```
