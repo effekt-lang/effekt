@@ -96,7 +96,6 @@
 ; Foreign imports
 
 declare ptr @malloc(i64)
-declare ptr @calloc(i64, i64)
 declare void @free(ptr)
 declare ptr @realloc(ptr, i64)
 declare void @memcpy(ptr, ptr, i64)
@@ -292,7 +291,7 @@ define %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
 ; Meta-stack management
 
 define %Memory @newMemory() {
-    %stackPointer = call %StackPointer @calloc(i64 268435456, i64 1)
+    %stackPointer = call %StackPointer @malloc(i64 268435456)
     %limit = getelementptr i8, ptr %stackPointer, i64 268435456
 
     %memory.0 = insertvalue %Memory undef, %StackPointer %stackPointer, 0
@@ -500,8 +499,8 @@ loop:
     store %Memory %newMemory, ptr %newStackMemory
     store %Region %newRegion, ptr %newStackRegion
 
-    %isLast = icmp eq %Stack %rest, null
-    br i1 %isLast, label %stop, label %next
+    %isNull = icmp eq %Stack %rest, null
+    br i1 %isNull, label %stop, label %next
 
 next:
     %nextNew = call ptr @malloc(i64 112)
@@ -574,8 +573,7 @@ define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
 ; RTS initialization
 
 define tailcc void @topLevel(%Pos %val, %Stack %stack) {
-    ; TODO: not needed, double free?
-    ;%rest = call %Stack @underflowStack(%Stack %stack)
+    %rest = call %Stack @underflowStack(%Stack %stack)
     ; assert %rest == null
     ret void
 }

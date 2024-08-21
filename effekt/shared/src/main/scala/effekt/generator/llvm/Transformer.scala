@@ -354,9 +354,9 @@ object Transformer {
 
         shareValues(frameEnvironment, freeVariables(rest));
 
-        // TODO bind this operand once further up
-        pushEnvironmentOnto(LocalReference(stackType, variable.name), frameEnvironment);
-        pushReturnAddressOnto(LocalReference(stackType, variable.name), returnAddressName, sharerName, eraserName);
+        val stack = LocalReference(stackType, variable.name);
+        pushEnvironmentOnto(stack, frameEnvironment);
+        pushReturnAddressOnto(stack, returnAddressName, sharerName, eraserName);
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
