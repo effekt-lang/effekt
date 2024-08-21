@@ -114,38 +114,53 @@ def get[A](list: List[A], index: Int): A / Exception[OutOfBounds] = {
 // Traverse a list, applying the given action on every element.
 //
 // O(N)
-def foreach[A](l: List[A]) { f: A => Unit / Control } : Unit = {
-  var remainder = l
-  loop {
-    if (not(remainder.isEmpty)) {
-      remainder match {
-        case Nil() => ()
-        case Cons(a, as) =>
-          remainder = as
-          f(a)
-      }
-    } else { do break() }
-  }
+def foreach[A](l: List[A]) { f: (A) => Unit } : Unit = l match {
+  case Nil() => ()
+  case Cons(head, tail) => f(head); tail.foreach {f}
 }
 
-
+// Traverse a list, applying the given action on every element.
+//
+// O(N)
+def foreach[A](l: List[A]) { f: (A) {Control} => Unit } : Unit = {
+  var remainder = l
+  loop { {label} =>
+    remainder match {
+      case Nil() => label.break()
+      case Cons(head, tail) =>
+        remainder = tail
+        f(head) {label}
+    }
+  }
+}
 
 // Traverse a list, applying the given action on every element and its (zero-based) index.
 //
 // O(N)
-def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit / Control }: Unit = {
+def foreachIndex[A](list: List[A]){ f: (Int, A) => Unit }: Unit = {
+  def loop(index: Int, remainder: List[A]): Unit = remainder match {
+    case Nil() => ()
+    case Cons(head, tail) =>
+      f(index, head);
+      loop(index + 1, tail)
+  }
+  loop(0, list)
+}
+
+// Traverse a list, applying the given action on every element and its (zero-based) index.
+//
+// O(N)
+def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
   var remainder = list
   var i = -1
-  loop {
-    if (not(remainder.isEmpty)) {
+  loop { {label} =>
       remainder match {
-        case Nil() => ()
-        case Cons(a, as) =>
-          remainder = as
+        case Nil() => label.break()
+        case Cons(head, tail) =>
+          remainder = tail
           i = i + 1
-          f(i, a)
+          f(i, head) {label}
       }
-    } else { do break() }
   }
 }
 
