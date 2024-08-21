@@ -86,6 +86,15 @@ trait ModuleDB { self: Context =>
       C.abort(pp"Main cannot have user defined effects, but includes effects: ${controlEffects}")
     }
 
+    tpe.result match {
+      case symbols.builtins.TInt =>
+        C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+      case symbols.builtins.TUnit =>
+        ()
+      case other =>
+        C.abort(pp"Main must return Unit.")
+    }
+
     main
   }
 }
