@@ -1,0 +1,10 @@
+type Box { Wrap[X](x: X) }
+
+def main() = {
+  val res = Wrap[Int](5) match {
+    case Wrap(y) => // ERROR escape
+      val res = y;
+      res
+  };
+  ()
+}

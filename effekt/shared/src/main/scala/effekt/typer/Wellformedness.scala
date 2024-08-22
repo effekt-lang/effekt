@@ -4,14 +4,14 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{ Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
+import effekt.source.{ CallTarget, Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
 import effekt.source.Tree.{ Query, Visit }
+import effekt.util.messages.ErrorReporter
 
-import scala.collection.mutable
+case class WFContext(typesInScope: Set[TypeVar], capturesInScope: Set[Capture])
 
-class WFContext(var effectsInScope: List[Interface]) {
-  def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
-}
+def binding(types: Set[TypeVar] = Set.empty, captures: Set[Capture] = Set.empty)(prog: WFContext ?=> Unit)(using WF: WFContext, C: Context): Unit =
+  prog(using WFContext(WF.typesInScope ++ types, WF.capturesInScope ++ captures))
 
 /**
  * Performs additional wellformed-ness checks that are easier to do on already
@@ -20,6 +20,9 @@ class WFContext(var effectsInScope: List[Interface]) {
  * Checks:
  * - exhaustivity
  * - escape of capabilities through types
+ * - scope extrusion of type parameters (of existentials and higher-rank types)
+ *
+ * Note: Resources (like io and global) are not treated as being free (alternatively, we could also prepopulate the WFContext)
  */
 object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] {
 
@@ -40,7 +43,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       effs ++ mod.effects
     }
 
-    given WFContext = WFContext(toplevelEffects.distinct)
+    given WFContext = WFContext(Set.empty, Set.empty)
 
     query(tree)
   }
@@ -57,6 +60,33 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       }
   }
 
+  enum Wellformed {
+    case Yes
+    case No(captures: Set[Capture], types: Set[TypeVar])
+  }
+
+  def wellformed(o: Type)(using ctx: WFContext): Wellformed =
+    val captures = freeCapture(o) -- ctx.capturesInScope
+    val types = freeTypes(o) -- ctx.typesInScope
+    if captures.isEmpty && types.isEmpty then Wellformed.Yes
+    else Wellformed.No(captures, types)
+
+  def wellformed(o: Type, tree: Tree)(msgCapture: Set[Capture] => String)(msgType: Set[TypeVar] => String)(using ctx: WFContext, E: ErrorReporter): Unit = wellformed(o) match {
+    case Wellformed.No(captures, types) =>
+      if captures.nonEmpty then E.at(tree) { E.abort(msgCapture(captures)) }
+      if types.nonEmpty then E.at(tree) { E.abort(msgType(types)) }
+    case _ => ()
+  }
+
+  def reportCaptures(wf: Wellformed)(msg: Set[Capture] => String)(using E: ErrorReporter): Unit =
+    wf match {
+      case Wellformed.No(captures, types) if captures.nonEmpty => E.error(msg(captures))
+      case _ => ()
+    }
+
+  def showTypes(types: Set[TypeVar]): String = types.map(TypePrinter.show).mkString(", ")
+  def showCaptures(captures: Set[Capture]): String = pp"${CaptureSet(captures)}"
+
   override def expr(using Context, WFContext) = {
 
     /**
@@ -68,29 +98,25 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       val tpe = Context.inferredTypeOf(prog)
 
       val free = freeCapture(tpe)
-      val escape = free intersect bound
 
-      if (escape.nonEmpty) {
-        Context.at(prog) {
-          Context.error(pp"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}")
-        }
+      // first check prog and handlers (to report the "tightest" error)
+      binding(captures = bound) { query(prog) }
+
+      handlers foreach { query }
+
+      // Now check the return type ...
+      wellformed(tpe, prog) {
+        captures => pp"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${showCaptures(captures)}"
+      } {
+        types => pp"Type variable(s) ${showTypes(types)} escape their scope through the return type of the handled statement."
       }
 
-      // also check prog and handlers
-      scoped { query(prog) }
-
-      val typesInEffects = freeTypeVars(usedEffects)
-
-      handlers foreach { h =>
-        scoped { query(h) }
-
-        h.clauses.foreach { cl =>
-          val existentials = cl.tparams.map(_.symbol.asTypeParam)
-          existentials.foreach { t =>
-            if (typesInEffects.contains(t)) {
-              Context.error(pp"Type variable ${t} escapes its scope as part of the effect types: ${usedEffects}")
-            }
-          }
+      // ... and the handled effects
+      usedEffects.effects.foreach { tpe =>
+        wellformed(tpe, prog) {
+          captures => pp"Capture(s) ${showCaptures(captures)} escape their scope as part of the effect ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope as part of the effect ${tpe}"
         }
       }
 
@@ -98,15 +124,13 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       val reg = tree.symbol
       val tpe = Context.inferredTypeOf(body)
 
-      val free = freeCapture(tpe)
+      binding(captures = Set(reg.capture)) { query(body) }
 
-      if (free contains reg.capture) {
-        Context.at(body) {
-          Context.error(pp"The return type ${tpe} of the statement is not allowed to refer to region ${reg}")
-        }
+      wellformed(tpe, body) {
+        captures => pp"The return type ${tpe} of the region body is not allowed to refer to region: ${showCaptures(captures)}"
+      } {
+        types => pp"Type variable(s) ${showTypes(types)} escape their scope through the return type of the region body."
       }
-
-      scoped { query(body) }
 
     case tree @ source.Match(scrutinee, clauses, default) => Context.at(tree) {
       // TODO copy annotations from default to synthesized defaultClause (in particular positions)
@@ -114,38 +138,76 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       ExhaustivityChecker.checkExhaustive(scrutinee, clauses ++ defaultClause)
 
       query(scrutinee)
-      clauses foreach { cl => scoped { query(cl) }}
+      clauses foreach { query }
       default foreach query
     }
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
-      scoped { query(body) }
+      val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
+      val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
+      binding(types = boundTypes, captures = boundCapts) { query(body) }
+
+    case tree @ source.Call(target, targs, vargs, bargs) =>
+      target match {
+        case CallTarget.IdTarget(id) => ()
+        case ExprTarget(e) => query(e)
+      }
+      val inferredTypeArgs = Context.typeArguments(tree)
+      inferredTypeArgs.foreach { tpe =>
+        wellformed(tpe, tree) {
+          captures => pp"Captures ${showCaptures(captures)} escape through inferred type argument ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type argument ${tpe}"
+        }
+      }
+      vargs.foreach(query)
+      bargs.foreach(query)
+
+    case tree @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
+      query(receiver)
+
+      val inferredTypeArgs = Context.typeArguments(tree)
+      inferredTypeArgs.foreach { tpe =>
+        wellformed(tpe, tree) {
+          captures => pp"Captures ${showCaptures(captures)} escape through inferred type argument ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type argument ${tpe}"
+        }
+      }
+      vargs.foreach(query)
+      bargs.foreach(query)
   }
+
+  // TODO bring existentials in scope
+  override def query(c: source.MatchClause)(using Context, WFContext): Unit = c match {
+    case source.MatchClause(pattern, guards, body) =>
+      guards.foreach(query)
+      query(body)
+  }
+
 
   override def defn(using C: Context, WF: WFContext) = {
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
-      scoped { query(body) }
+      val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
+      val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
+      binding(types = boundTypes, captures = boundCapts) { query(body) }
 
-    /**
-     * Interface definitions bring an effect in scope that can be handled
-     */
-    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      WF.addEffect(d.symbol)
-  }
-
-  override def scoped(action: => Unit)(using C: Context, ctx: WFContext): Unit = {
-    val before = ctx.effectsInScope
-    action
-    ctx.effectsInScope = before
+    case tree @ source.ExternDef(capture, id, tps, vps, bps, ret, bodies) =>
+      val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
+      val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
+      binding(types = boundTypes, captures = boundCapts) { bodies.foreach(query) }
   }
 
   // Can only compute free capture on concrete sets
   def freeCapture(o: Any): Set[Capture] = o match {
-    case t: symbols.Capture   => Set(t)
+    // we do not treat resources as free
+    case t: symbols.CaptureParam => Set(t)
+    case t: symbols.LexicalRegion => Set(t)
+
     case FunctionType(tparams, cparams, vparams, bparams, ret, eff) =>
       // TODO what with capabilities introduced for eff--those are bound in ret?
       freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) ++ freeCapture(eff) -- cparams.toSet
-    case CaptureSet(cs) => cs
+    case CaptureSet(cs) => freeCapture(cs)
     case x: CaptUnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
     case x: UnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
     case _: Symbol | _: String => Set.empty // don't follow symbols
@@ -157,16 +219,16 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       Set.empty
   }
 
-  def freeTypeVars(o: Any): Set[TypeVar] = o match {
+  def freeTypes(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
     case FunctionType(tps, cps, vps, bps, ret, effs) =>
-      freeTypeVars(vps) ++ freeTypeVars(bps) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tps.toSet
-    case e: Effects            => freeTypeVars(e.toList)
+      freeTypes(vps) ++ freeTypes(bps) ++ freeTypes(ret) ++ freeTypes(effs) -- tps.toSet
+    case e: Effects            => freeTypes(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
     case t: Iterable[t] =>
-      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypes(t) }
     case p: Product =>
-      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypes(t) }
     case _ =>
       Set.empty
   }
