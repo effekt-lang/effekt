@@ -10,5 +10,6 @@ def main() = {
   } with Fail { () =>
     1
   }
+  ()
 }
 

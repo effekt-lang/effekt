@@ -11,5 +11,6 @@ def main() = {
   def loop(): EMPTY = { println("!"); loop() }
   def foo(): EMPTY = { exit(0); loop() };
   val x: Int = foo() match {}
-  x + 1
+  x + 1;
+  ()
 }
