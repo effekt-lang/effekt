@@ -386,17 +386,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
           // The parameters C, D, ... are existentials
-          val existentials: List[ValueType] = if (tparams.size == declaredType.tparams.size - targs.size) {
-            tparams.map { tparam => ValueTypeRef(tparam.symbol.asTypeParam) }
+          val existentialParams: List[TypeVar] = if (tparams.size == declaredType.tparams.size - targs.size) {
+            tparams.map { tparam => tparam.symbol.asTypeParam }
           } else {
             // using the invariant that the universals are prepended to type parameters of the operation
             declaredType.tparams.drop(targs.size).map { tp =>
               // recreate "fresh" type variables
               val name = tp.name
-              val newTp = TypeVar.TypeParam(name)
-              ValueTypeRef(newTp)
+              TypeVar.TypeParam(name)
             }
           }
+          val existentials = existentialParams.map(ValueTypeRef.apply)
+
+          Context.annotate(Annotations.TypeParameters, d, existentialParams)
 
           val canonicalEffects = declaredType.effects.canonical
 
@@ -565,6 +567,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val freshUniversals   = universals.map { t => Context.freshTypeVar(t, pattern) }
       // create fresh **bound** variables
       val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name) }
+
+      Context.annotate(Annotations.TypeParameters, p, freshExistentials)
 
       val targs = (freshUniversals ++ freshExistentials).map { t => ValueTypeRef(t) }
 

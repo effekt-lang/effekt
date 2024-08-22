@@ -1,8 +1,8 @@
 type Box { Wrap[X](x: X) }
 
 def main() = {
-  val res = Wrap[Int](5) match {
-    case Wrap(y) => // ERROR escape
+  val res = Wrap[Int](5) match { // ERROR escape
+    case Wrap(y) =>
       val res = y;
       res
   };

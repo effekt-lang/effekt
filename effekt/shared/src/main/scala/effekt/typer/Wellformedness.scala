@@ -49,14 +49,24 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
   }
 
   override def stmt(using Context, WFContext) = {
-    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, binding), rest) =>
-      val tpe = Context.inferredTypeOf(rest)
-
-      val free = freeCapture(tpe)
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs), rest) =>
       val capt = tree.symbol.capture
+      binding(captures = Set(capt)) {
 
-      if free contains capt then Context.at(stmt) {
-        Context.error(pp"Local variable ${id} escapes through the returned value of type ${tpe}.")
+        query(rhs)
+        query(rest)
+
+        val tpe = Context.inferredTypeOf(rest)
+
+        wellformed(tpe, stmt) {
+          case captures if captures.contains(capt) =>
+            pp"Local variable ${id} escapes through the returned value of type ${tpe}."
+          case captures =>
+            pp"Capture(s) ${showCaptures(captures)} escape their scope as part of the return type ${tpe}"
+        } {
+          types =>
+            pp"Type variable(s) ${showTypes(types)} escape their scope as part of the return type ${tpe}"
+        }
       }
   }
 
@@ -140,12 +150,29 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       query(scrutinee)
       clauses foreach { query }
       default foreach query
+
+      val tpe = Context.inferredTypeOf(tree)
+      wellformed(tpe, tree) {
+        captures => pp"Captures ${showCaptures(captures)} escape through inferred type ${tpe}"
+      } {
+        types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type ${tpe}"
+      }
     }
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
-      val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
-      binding(types = boundTypes, captures = boundCapts) { query(body) }
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
+      val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
+      binding(types = boundTypes, captures = capabilities ++ blocks) {
+        query(body)
+
+        val tpe = Context.inferredTypeOf(body)
+        wellformed(tpe, body) {
+          captures => pp"Captures ${showCaptures(captures)} escape through return type ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope through return type ${tpe}"
+        }
+      }
 
     case tree @ source.Call(target, targs, vargs, bargs) =>
       target match {
@@ -176,21 +203,125 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       }
       vargs.foreach(query)
       bargs.foreach(query)
+
+    case tree @ source.Do(effect, id, targs, vargs, bargs) =>
+      val inferredTypeArgs = Context.typeArguments(tree)
+      inferredTypeArgs.foreach { tpe =>
+        wellformed(tpe, tree) {
+          captures => pp"Captures ${showCaptures(captures)} escape through inferred type argument ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type argument ${tpe}"
+        }
+      }
+      vargs.foreach(query)
+      bargs.foreach(query)
+
+    case tree @ source.If(guards, thn, els) =>
+      var bound: Set[TypeVar] = Set.empty
+
+      guards.foreach { g =>
+        binding(types = bound) { bound = bound ++ queryGuardsExistentials(g) }
+      }
+
+      binding(types = bound) {
+        query(thn)
+        query(els)
+      }
+
+      val tpe = Context.inferredTypeOf(tree)
+      wellformed(tpe, thn) {
+        captures => pp"Captures ${showCaptures(captures)} escape through inferred type ${tpe}"
+      } {
+        types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type ${tpe}"
+      }
+
+    case tree @ source.While(guards, block, default) =>
+      var bound: Set[TypeVar] = Set.empty
+
+      guards.foreach { g =>
+        binding(types = bound) { bound = bound ++ queryGuardsExistentials(g) }
+      }
+
+      binding(types = bound) {
+        query(block)
+        default.foreach(query)
+      }
+
+      val tpe = Context.inferredTypeOf(tree)
+      wellformed(tpe, tree) {
+        captures => pp"Captures ${showCaptures(captures)} escape through inferred type ${tpe}"
+      } {
+        types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type ${tpe}"
+      }
   }
 
-  // TODO bring existentials in scope
   override def query(c: source.MatchClause)(using Context, WFContext): Unit = c match {
     case source.MatchClause(pattern, guards, body) =>
-      guards.foreach(query)
-      query(body)
+
+      var bound: Set[TypeVar] = existentials(pattern)
+
+      guards.foreach { g =>
+        binding(types = bound) { bound = bound ++ queryGuardsExistentials(g) }
+      }
+
+      binding(types = bound) {
+        query(body)
+      }
   }
 
+  override def query(op: source.OpClause)(using Context, WFContext): Unit = op match {
+    case tree @ source.OpClause(id, tps, vps, bps, ret, body, resume) =>
+      val boundTypes = Context.annotation(Annotations.TypeParameters, op).toSet
+      // bound capabilities are ONLY available on New(Implementation(OpClause ... )))
+      // but not TryHandle(Implementation(OpClause) since their they are bound by the resumption
+      val capabilities = Context.annotationOption(Annotations.BoundCapabilities, tree) match {
+        case Some(caps) => caps.map(_.capture).toSet
+        case None => Set.empty
+      }
+      val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
+      binding(types = boundTypes, captures = capabilities ++ blocks) {
+        query(body)
+
+        val tpe = Context.inferredTypeOf(body)
+        wellformed(tpe, body) {
+          captures => pp"Captures ${showCaptures(captures)} escape through return type ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope through return type ${tpe}"
+        }
+      }
+  }
+
+  def queryGuardsExistentials(p: MatchGuard)(using Context, WFContext): Set[TypeVar] = p match {
+    case MatchGuard.BooleanGuard(condition) =>
+      query(condition);
+      Set.empty
+    case MatchGuard.PatternGuard(scrutinee, pattern) =>
+      query(scrutinee);
+      existentials(pattern)
+  }
+
+  def existentials(p: MatchPattern)(using Context): Set[TypeVar] = p match {
+    case p @ MatchPattern.TagPattern(id, patterns) =>
+      Context.annotation(Annotations.TypeParameters, p).toSet ++ patterns.flatMap(existentials)
+    case _ => Set.empty
+  }
 
   override def defn(using C: Context, WF: WFContext) = {
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
-      val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
-      binding(types = boundTypes, captures = boundCapts) { query(body) }
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
+      val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
+      binding(types = boundTypes, captures = capabilities ++ blocks) {
+
+        query(body)
+
+        val tpe = Context.inferredTypeOf(body)
+        wellformed(tpe, body) {
+          captures => pp"Captures ${showCaptures(captures)} escape through return type ${tpe}"
+        } {
+          types => pp"Type variable(s) ${showTypes(types)} escape their scope through return type ${tpe}"
+        }
+      }
 
     case tree @ source.ExternDef(capture, id, tps, vps, bps, ret, bodies) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]

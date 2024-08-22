@@ -134,6 +134,14 @@ object Annotations {
   )
 
   /**
+   * Existential type parameters inferred by the typer when type-checking pattern matches.
+   */
+  val TypeParameters = Annotation[source.TagPattern | source.OpClause, List[symbols.TypeVar]](
+    "TypeParameters",
+    "the existentials of the constructor pattern or operation clause"
+  )
+
+  /**
    * Value type of symbols like value binders or value parameters
    */
   val ValueType = Annotation[symbols.ValueSymbol, symbols.ValueType](
