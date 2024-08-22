@@ -20,5 +20,6 @@ def main() = {
       assert('A','A')
       assert('A','A', "char A is A")
     }
-  }
+  };
+  ()
 }

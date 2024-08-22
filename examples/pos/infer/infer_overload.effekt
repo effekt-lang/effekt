@@ -6,4 +6,7 @@ def id[A](a: A): A = a
 
 def something[B](): B = <>
 
-def main() = foo(id(id(4))) ++ ""
+def main() = {
+  foo(id(id(4))) ++ "";
+  ()
+}
