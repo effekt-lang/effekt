@@ -14,5 +14,6 @@ def main() =
     def closure(): Int = (unbox repeat)(3);
     val g = fun(n: Int) { closure(); n + 1 }
      def unboxed() = (unbox g)(1);
-    unboxed()
+    unboxed();
+    ()
   } with Yield { println("yielded"); resume(()) }

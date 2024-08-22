@@ -2,6 +2,7 @@ package effekt
 package context
 
 import effekt.symbols._
+import effekt.context.assertions.*
 import kiama.util.Source
 
 /**
@@ -72,20 +73,31 @@ trait ModuleDB { self: Context =>
       C.abort(pp"Multiple main functions defined: ${names}")
     }
 
-    val main = mains.head
+    val main = mains.head.asUserFunction
 
-    val mainValueParams = C.functionTypeOf(main).vparams
-    val mainBlockParams = C.functionTypeOf(main).bparams
-    if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
-      C.abort("Main does not take arguments")
+    Context.at(main.decl) {
+      val mainValueParams = C.functionTypeOf(main).vparams
+      val mainBlockParams = C.functionTypeOf(main).bparams
+      if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
+        C.abort("Main does not take arguments")
+      }
+
+      val tpe = C.functionTypeOf(main)
+      val controlEffects = tpe.effects
+      if (controlEffects.nonEmpty) {
+        C.abort(pp"Main cannot have user defined effects, but includes effects: ${controlEffects}")
+      }
+
+      tpe.result match {
+        case symbols.builtins.TInt =>
+          C.abort(pp"Main must return Unit, please use `exit(n)` to return an error code.")
+        case symbols.builtins.TUnit =>
+          ()
+        case other =>
+          C.abort(pp"Main must return Unit, but returns ${other}.")
+      }
+
+      main
     }
-
-    val tpe = C.functionTypeOf(main)
-    val controlEffects = tpe.effects
-    if (controlEffects.nonEmpty) {
-      C.abort(pp"Main cannot have user defined effects, but includes effects: ${controlEffects}")
-    }
-
-    main
   }
 }

@@ -8,7 +8,7 @@ def foo {t: Test} = {
 }
 
 def main() = try {
-  foo {test}
+  println(foo {test})
 } with test: Test {
   def test() = {
     println("hello")
