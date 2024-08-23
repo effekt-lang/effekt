@@ -67,6 +67,16 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
           types =>
             pp"Type variable(s) ${showTypes(types)} escape their scope as part of the return type ${tpe}"
         }
+
+        val varTpe = Context.inferredTypeOf(rhs)
+
+        wellformed(varTpe, stmt) {
+          case captures =>
+            pp"Capture(s) ${showCaptures(captures)} escape their scope as part of the inferred type ${varTpe} of mutable variable ${id}"
+        } {
+          types =>
+            pp"Type variable(s) ${showTypes(types)} escape their scope as part of the inferred type ${varTpe} of mutable variable ${id}"
+        }
       }
   }
 
