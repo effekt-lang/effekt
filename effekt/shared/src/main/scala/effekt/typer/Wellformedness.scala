@@ -48,38 +48,6 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     query(tree)
   }
 
-  override def stmt(using Context, WFContext) = {
-    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs), rest) =>
-      val capt = tree.symbol.capture
-      binding(captures = Set(capt)) {
-
-        query(rhs)
-        query(rest)
-
-        val tpe = Context.inferredTypeOf(rest)
-
-        wellformed(tpe, stmt) {
-          case captures if captures.contains(capt) =>
-            pp"Local variable ${id} escapes through the returned value of type ${tpe}."
-          case captures =>
-            pp"Capture(s) ${showCaptures(captures)} escape their scope as part of the return type ${tpe}"
-        } {
-          types =>
-            pp"Type variable(s) ${showTypes(types)} escape their scope as part of the return type ${tpe}"
-        }
-
-        val varTpe = Context.inferredTypeOf(rhs)
-
-        wellformed(varTpe, stmt) {
-          case captures =>
-            pp"Capture(s) ${showCaptures(captures)} escape their scope as part of the inferred type ${varTpe} of mutable variable ${id}"
-        } {
-          types =>
-            pp"Type variable(s) ${showTypes(types)} escape their scope as part of the inferred type ${varTpe} of mutable variable ${id}"
-        }
-      }
-  }
-
   enum Wellformed {
     case Yes
     case No(captures: Set[Capture], types: Set[TypeVar])
@@ -91,12 +59,27 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     if captures.isEmpty && types.isEmpty then Wellformed.Yes
     else Wellformed.No(captures, types)
 
-  def wellformed(o: Type, tree: Tree)(msgCapture: Set[Capture] => String)(msgType: Set[TypeVar] => String)(using ctx: WFContext, E: ErrorReporter): Unit = wellformed(o) match {
+  inline def wellformed(o: Type, tree: Tree)(msgCapture: Set[Capture] => String)(msgType: Set[TypeVar] => String)(using ctx: WFContext, E: ErrorReporter): Unit = wellformed(o) match {
     case Wellformed.No(captures, types) =>
       if captures.nonEmpty then E.at(tree) { E.abort(msgCapture(captures)) }
       if types.nonEmpty then E.at(tree) { E.abort(msgType(types)) }
     case _ => ()
   }
+
+  inline def wellformed(tpe: Type, tree: Tree,
+      inline locationDetail: => String,
+      specificTypes: PartialFunction[Set[TypeVar], String] = PartialFunction.empty,
+      specificCaptures: PartialFunction[Set[Capture], String] = PartialFunction.empty
+  )(using ctx: WFContext, E: ErrorReporter): Unit =
+    wellformed(tpe, tree) {
+      case captures if specificCaptures.isDefinedAt(captures) => specificCaptures(captures)
+      case captures if captures.size == 1 => pp"Capture ${captures.head} escapes through type ${tpe}${locationDetail}."
+      case captures                       => pp"Captures ${showCaptures(captures)} escape through type ${tpe}${locationDetail}."
+    } {
+      case tpes if specificTypes.isDefinedAt(tpes) => specificTypes(tpes)
+      case tpes if tpes.size == 1         => pp"Type ${tpes.head} escapes through type ${tpe}${locationDetail}."
+      case tpes                           => pp"Types ${showTypes(tpes)} escape through type ${tpe}${locationDetail}."
+    }
 
   def reportCaptures(wf: Wellformed)(msg: Set[Capture] => String)(using E: ErrorReporter): Unit =
     wf match {
@@ -106,6 +89,38 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
   def showTypes(types: Set[TypeVar]): String = types.map(TypePrinter.show).mkString(", ")
   def showCaptures(captures: Set[Capture]): String = pp"${CaptureSet(captures)}"
+  def showPosition(n: Int): String = n match {
+    case 1 => "first"
+    case 2 => "second"
+    case 3 => "third"
+    case 4 => "forth"
+    case 5 => "fifth"
+    case 6 => "sixth"
+    case n if n % 10 == 3 => n.toString + "rd"
+    case n => n.toString + "th"
+  }
+
+  override def stmt(using Context, WFContext) = {
+    case stmt @ source.DefStmt(tree @ source.VarDef(id, annot, rhs), rest) =>
+      val capt = tree.symbol.capture
+      binding(captures = Set(capt)) {
+
+        query(rhs)
+        query(rest)
+
+        val tpe = Context.inferredTypeOf(rest)
+
+        wellformed(tpe, stmt, " inferred as return type",
+          specificCaptures = {
+            case captures if captures.size == 1 && captures.contains(capt) =>
+              pp"Local variable ${id} escapes through the returned value of type ${tpe}."
+          })
+
+        val varTpe = Context.inferredTypeOf(rhs)
+
+        wellformed(varTpe, stmt, pp" inferred for mutable variable ${id}")
+      }
+  }
 
   override def expr(using Context, WFContext) = {
 
@@ -125,19 +140,15 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       handlers foreach { query }
 
       // Now check the return type ...
-      wellformed(tpe, prog) {
-        captures => pp"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${showCaptures(captures)}"
-      } {
-        types => pp"Type variable(s) ${showTypes(types)} escape their scope through the return type of the handled statement."
-      }
+      wellformed(tpe, prog, " inferred as return type of the handled statement",
+        specificCaptures = {
+          case captures if (captures intersect bound).nonEmpty =>
+            pp"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${showCaptures(captures)}."
+        })
 
       // ... and the handled effects
       usedEffects.effects.foreach { tpe =>
-        wellformed(tpe, prog) {
-          captures => pp"Capture(s) ${showCaptures(captures)} escape their scope as part of the effect ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope as part of the effect ${tpe}"
-        }
+        wellformed(tpe, prog, locationDetail = " as part of the inferred effect")
       }
 
     case tree @ source.Region(id, body) =>
@@ -146,11 +157,11 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
       binding(captures = Set(reg.capture)) { query(body) }
 
-      wellformed(tpe, body) {
-        captures => pp"The return type ${tpe} of the region body is not allowed to refer to region: ${showCaptures(captures)}"
-      } {
-        types => pp"Type variable(s) ${showTypes(types)} escape their scope through the return type of the region body."
-      }
+      wellformed(tpe, body, " inferred as return type of the region body",
+        specificCaptures = {
+          case captures if captures contains reg.capture =>
+            pp"The return type ${tpe} of the region body is not allowed to refer to region ${reg.capture}."
+        })
 
     case tree @ source.Match(scrutinee, clauses, default) => Context.at(tree) {
       // TODO copy annotations from default to synthesized defaultClause (in particular positions)
@@ -162,11 +173,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       default foreach query
 
       val tpe = Context.inferredTypeOf(tree)
-      wellformed(tpe, tree) {
-        captures => pp"Captures ${showCaptures(captures)} escape through inferred type ${tpe}"
-      } {
-        types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type ${tpe}"
-      }
+      wellformed(tpe, tree, " inferred as return type of the match")
     }
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
@@ -177,11 +184,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         query(body)
 
         val tpe = Context.inferredTypeOf(body)
-        wellformed(tpe, body) {
-          captures => pp"Captures ${showCaptures(captures)} escape through return type ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope through return type ${tpe}"
-        }
+        wellformed(tpe, tree, " inferred as return type")
       }
 
     case tree @ source.Call(target, targs, vargs, bargs) =>
@@ -190,12 +193,8 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         case ExprTarget(e) => query(e)
       }
       val inferredTypeArgs = Context.typeArguments(tree)
-      inferredTypeArgs.foreach { tpe =>
-        wellformed(tpe, tree) {
-          captures => pp"Captures ${showCaptures(captures)} escape through inferred type argument ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type argument ${tpe}"
-        }
+      inferredTypeArgs.zipWithIndex.foreach { case (tpe, index) =>
+        wellformed(tpe, tree, pp" inferred as ${showPosition(index + 1)} type argument")
       }
       vargs.foreach(query)
       bargs.foreach(query)
@@ -204,24 +203,16 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       query(receiver)
 
       val inferredTypeArgs = Context.typeArguments(tree)
-      inferredTypeArgs.foreach { tpe =>
-        wellformed(tpe, tree) {
-          captures => pp"Captures ${showCaptures(captures)} escape through inferred type argument ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type argument ${tpe}"
-        }
+      inferredTypeArgs.zipWithIndex.foreach { case (tpe, index) =>
+        wellformed(tpe, tree, pp" inferred as ${showPosition(index + 1)} type argument")
       }
       vargs.foreach(query)
       bargs.foreach(query)
 
     case tree @ source.Do(effect, id, targs, vargs, bargs) =>
       val inferredTypeArgs = Context.typeArguments(tree)
-      inferredTypeArgs.foreach { tpe =>
-        wellformed(tpe, tree) {
-          captures => pp"Captures ${showCaptures(captures)} escape through inferred type argument ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type argument ${tpe}"
-        }
+      inferredTypeArgs.zipWithIndex.foreach { case (tpe, index) =>
+        wellformed(tpe, tree, pp" inferred as ${showPosition(index + 1)} type argument")
       }
       vargs.foreach(query)
       bargs.foreach(query)
@@ -239,11 +230,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       }
 
       val tpe = Context.inferredTypeOf(tree)
-      wellformed(tpe, thn) {
-        captures => pp"Captures ${showCaptures(captures)} escape through inferred type ${tpe}"
-      } {
-        types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type ${tpe}"
-      }
+      wellformed(tpe, tree, " inferred for the result of the if statement")
 
     case tree @ source.While(guards, block, default) =>
       var bound: Set[TypeVar] = Set.empty
@@ -258,11 +245,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       }
 
       val tpe = Context.inferredTypeOf(tree)
-      wellformed(tpe, tree) {
-        captures => pp"Captures ${showCaptures(captures)} escape through inferred type ${tpe}"
-      } {
-        types => pp"Type variable(s) ${showTypes(types)} escape their scope through inferred type ${tpe}"
-      }
+      wellformed(tpe, tree, " inferred for the result of the while statement")
   }
 
   override def query(c: source.MatchClause)(using Context, WFContext): Unit = c match {
@@ -293,11 +276,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         query(body)
 
         val tpe = Context.inferredTypeOf(body)
-        wellformed(tpe, body) {
-          captures => pp"Captures ${showCaptures(captures)} escape through return type ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope through return type ${tpe}"
-        }
+        wellformed(tpe, body, pp" inferred as return type of operation ${id}")
       }
   }
 
@@ -326,11 +305,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         query(body)
 
         val tpe = Context.inferredTypeOf(body)
-        wellformed(tpe, body) {
-          captures => pp"Captures ${showCaptures(captures)} escape through return type ${tpe}"
-        } {
-          types => pp"Type variable(s) ${showTypes(types)} escape their scope through return type ${tpe}"
-        }
+        wellformed(tpe, body, pp" inferred as return type of ${id}")
       }
 
     case tree @ source.ExternDef(capture, id, tps, vps, bps, ret, bodies) =>

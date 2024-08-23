@@ -1,3 +1,3 @@
-[error] examples/neg/lambdas/capability_closure.effekt:14:17: Captures {Get$capability} escape through return type () => Int at {Get$capability}
+[error] examples/neg/lambdas/capability_closure.effekt:14:17: Capture Get$capability escapes through type () => Int at {Get$capability} inferred as return type of operation get.
     def get() = resume(42)
                 ^^^^^^^^^^
