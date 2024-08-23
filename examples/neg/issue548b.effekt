@@ -1,0 +1,6 @@
+def hof[A] { prog: [B](B) => A }: A = prog[String]("hello")
+
+def main() = {
+  val res = hof { [C](x: C) => x }; // ERROR escape
+  println(res.genericShow)
+}

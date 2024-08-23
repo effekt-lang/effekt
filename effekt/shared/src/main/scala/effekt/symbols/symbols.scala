@@ -322,9 +322,6 @@ sealed trait CaptVar extends TypeSymbol
 /**
  * "Tracked" capture parameters. Like [[TypeParam]] used to abstract
  * over capture. Also see [[BlockParam.capture]].
- *
- * Can be either
- * - [[LexicalRegion]] to model self regions of functions
  */
 enum Capture extends CaptVar {
 
