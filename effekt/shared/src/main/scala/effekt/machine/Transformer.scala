@@ -48,7 +48,7 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, tps, params, ret, body) =>
+    case lifted.Extern.Def(name, tps, params, ret, control, body) =>
       val transformedParams = params.flatMap {
         case lifted.ValueParam(id, tpe) => Some(Variable(id.name.name, transform(tpe)))
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
@@ -56,19 +56,20 @@ object Transformer {
         case lifted.EvidenceParam(id) => None // Variable(id.name.name, builtins.Evidence)
       }
       noteDefinition(name, params map transform, Nil)
-      val tBody = body match {
-        case lifted.ExternBody.StringExternBody(ff, Template(strings, args)) =>
-          ExternBody.StringExternBody(ff, Template(strings, args map {
-            case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
-            case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
-          }))
-        case lifted.ExternBody.Unsupported(err) =>
-          ExternBody.Unsupported(err)
-      }
-      Extern(transform(name), transformedParams, transform(ret), tBody)
+      Extern(transform(name), transformedParams, transform(ret), control, transform(body))
 
     case lifted.Extern.Include(ff, contents) =>
       Include(ff, contents)
+  }
+
+  def transform(body: lifted.ExternBody)(using ErrorReporter): machine.ExternBody = body match {
+    case lifted.ExternBody.StringExternBody(ff, Template(strings, args)) =>
+      ExternBody.StringExternBody(ff, Template(strings, args map {
+        case lifted.ValueVar(id, tpe) => Variable(id.name.name, transform(tpe))
+        case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
+      }))
+    case lifted.ExternBody.Unsupported(err) =>
+      ExternBody.Unsupported(err)
   }
 
   def transform(stmt: lifted.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =

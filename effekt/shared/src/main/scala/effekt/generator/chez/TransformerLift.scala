@@ -201,7 +201,7 @@ object TransformerLift {
   }
 
   def toChez(decl: lifted.Extern)(using ErrorReporter): chez.Def = decl match {
-    case Extern.Def(id, tparams, params, ret, body) =>
+    case Extern.Def(id, tparams, params, ret, _, body) =>
       chez.Constant(nameDef(id),
         chez.Lambda( params.flatMap {
           case p: Param.EvidenceParam => None

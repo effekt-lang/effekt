@@ -42,26 +42,28 @@ object Transformer {
 
   def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, body ) =>
-        body match {
-          case machine.ExternBody.StringExternBody(_, contents) =>
-            VerbatimFunction(transform(returnType), functionName, parameters.map {
-              case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-            }, "; declaration extern\n    " ++ transform(contents))
-          case u: machine.ExternBody.Unsupported =>
-            u.report
-            VerbatimFunction(transform(returnType), functionName, parameters.map {
-                case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-              },
-              """call void @hole()
-                |unreachable
-                |""".stripMargin)
+      case machine.Extern(functionName, parameters, returnType, control, body) =>
+        val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        if (control) {
+          VerbatimFunction(VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body))
+        } else {
+          VerbatimFunction(transform(returnType), functionName, transformedParameters, transform(body))
         }
       case machine.Include(ff, content) =>
         Verbatim("; declaration include" ++ content)
     }
 
-  def transform(t: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(t.strings, t.args.map {
+  def transform(body: machine.ExternBody)(using ErrorReporter): String = body match {
+    case machine.ExternBody.StringExternBody(_, contents) =>
+      "; declaration extern\n    " ++ transform(contents)
+    case u: machine.ExternBody.Unsupported =>
+      u.report
+      """call void @hole()
+        |unreachable
+        |""".stripMargin
+    }
+
+  def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(template.strings, template.args.map {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
   }).mkString
 
