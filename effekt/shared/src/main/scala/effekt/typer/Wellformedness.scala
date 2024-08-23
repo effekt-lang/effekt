@@ -1,24 +1,27 @@
 package effekt
 package typer
 
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{ Annotations, Context }
 import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.{ CallTarget, Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
-import effekt.source.Tree.{ Query, Visit }
+import effekt.source.Tree.Visit
 import effekt.util.messages.ErrorReporter
 
+/**
+ * Lexical context used to check wellformedness of inferred types
+ */
 case class WFContext(typesInScope: Set[TypeVar], capturesInScope: Set[Capture])
 
 def binding(types: Set[TypeVar] = Set.empty, captures: Set[Capture] = Set.empty)(prog: WFContext ?=> Unit)(using WF: WFContext, C: Context): Unit =
   prog(using WFContext(WF.typesInScope ++ types, WF.capturesInScope ++ captures))
 
 /**
- * Performs additional wellformed-ness checks that are easier to do on already
+ * Performs additional wellformedness checks that are easier to do on already
  * inferred and annotated trees.
  *
  * Checks:
- * - exhaustivity
+ * - exhaustivity of pattern matching
  * - escape of capabilities through types
  * - scope extrusion of type parameters (of existentials and higher-rank types)
  *
@@ -35,19 +38,13 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     if (Context.messaging.hasErrors) { None }
     else { Some(input) }
 
-  def check(mod: Module, tree: source.ModuleDecl)(using Context): Unit = {
-
-    // Effects that are lexically in scope at the top level
-    // We use dependencies instead of imports, since types might mention effects of transitive imports.
-    val toplevelEffects = mod.dependencies.foldLeft(mod.effects) { case (effs, mod) =>
-      effs ++ mod.effects
-    }
-
+  def check(mod: Module, tree: source.ModuleDecl)(using Context): Unit =
     given WFContext = WFContext(Set.empty, Set.empty)
-
     query(tree)
-  }
 
+  /**
+   * Constructive evidence indicating the result of checking wellformedness
+   */
   enum Wellformed {
     case Yes
     case No(captures: Set[Capture], types: Set[TypeVar])
@@ -59,17 +56,18 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     if captures.isEmpty && types.isEmpty then Wellformed.Yes
     else Wellformed.No(captures, types)
 
-  inline def wellformed(o: Type, tree: Tree)(msgCapture: Set[Capture] => String)(msgType: Set[TypeVar] => String)(using ctx: WFContext, E: ErrorReporter): Unit = wellformed(o) match {
-    case Wellformed.No(captures, types) =>
-      if captures.nonEmpty then E.at(tree) { E.abort(msgCapture(captures)) }
-      if types.nonEmpty then E.at(tree) { E.abort(msgType(types)) }
-    case _ => ()
-  }
+  inline def wellformed(o: Type, tree: Tree)(msgCapture: Set[Capture] => String)(msgType: Set[TypeVar] => String)(using ctx: WFContext, E: ErrorReporter): Unit =
+    wellformed(o) match {
+      case Wellformed.No(captures, types) =>
+        if captures.nonEmpty then E.at(tree) { E.abort(msgCapture(captures)) }
+        if types.nonEmpty then E.at(tree) { E.abort(msgType(types)) }
+      case _ => ()
+    }
 
   inline def wellformed(tpe: Type, tree: Tree,
-      inline locationDetail: => String,
-      specificTypes: PartialFunction[Set[TypeVar], String] = PartialFunction.empty,
-      specificCaptures: PartialFunction[Set[Capture], String] = PartialFunction.empty
+    inline locationDetail: => String,
+    specificTypes: PartialFunction[Set[TypeVar], String] = PartialFunction.empty,
+    specificCaptures: PartialFunction[Set[Capture], String] = PartialFunction.empty
   )(using ctx: WFContext, E: ErrorReporter): Unit =
     wellformed(tpe, tree) {
       case captures if specificCaptures.isDefinedAt(captures) => specificCaptures(captures)
