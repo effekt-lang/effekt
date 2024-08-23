@@ -8,7 +8,7 @@ package llvm
  */
 enum Definition {
   case Function(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
-  case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
+  case VerbatimFunction(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
   case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
 }

@@ -30,7 +30,7 @@ typedef struct Pos String;
 // Defined in rts.ll
 
 extern void run(struct Neg);
-extern void run_i64(struct Neg, int64_t);
+extern void run_Int(struct Neg, Int);
 extern void run_Pos(struct Neg, struct Pos);
 
 // Reference counting primitives defined in LLVM

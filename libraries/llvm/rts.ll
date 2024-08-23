@@ -608,34 +608,19 @@ define %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
-define void @run_i64(%Neg %f, i64 %arg) {
-    ; fresh stack
-    %stack = call %Stack @withEmptyStack()
-
-    ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
-    %object = extractvalue %Neg %f, 1
-    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer
-
-    ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %arg, %Stack %stack)
+define void @resume_Int(%Stack %stack, %Int %argument) {
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
+    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer
+    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
     ret void
 }
 
-
-define void @run_Pos(%Neg %f, %Pos %arg) {
-    ; fresh stack
-    %stack = call %Stack @withEmptyStack()
-
-    ; prepare call
-    %arrayPointer = extractvalue %Neg %f, 0
-    %object = extractvalue %Neg %f, 1
-    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer
-
-    ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %arg, %Stack %stack)
+define void @resume_Pos(%Stack %stack, %Pos %argument) {
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
+    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer
+    tail call tailcc void %returnAddress(%Pos %argument, %Stack %stack)
     ret void
 }
 
@@ -653,3 +638,34 @@ define void @run(%Neg %f) {
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Stack %stack)
     ret void
 }
+
+define void @run_Int(%Neg %f, i64 %argument) {
+    ; fresh stack
+    %stack = call %Stack @withEmptyStack()
+
+    ; prepare call
+    %arrayPointer = extractvalue %Neg %f, 0
+    %object = extractvalue %Neg %f, 1
+    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+    %functionPointer = load ptr, ptr %functionPointerPointer
+
+    ; call
+    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %argument, %Stack %stack)
+    ret void
+}
+
+define void @run_Pos(%Neg %f, %Pos %argument) {
+    ; fresh stack
+    %stack = call %Stack @withEmptyStack()
+
+    ; prepare call
+    %arrayPointer = extractvalue %Neg %f, 0
+    %object = extractvalue %Neg %f, 1
+    %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
+    %functionPointer = load ptr, ptr %functionPointerPointer
+
+    ; call
+    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
+    ret void
+}
+

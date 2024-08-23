@@ -403,7 +403,7 @@ void c_file_open_handler(uv_fs_t* req) {
         run_Pos(success, filedescriptor_to_pos(fd));
     } else {
         eraseNegative(success);
-        run_i64(failure, uv_error_to_errno(fd));
+        run_Int(failure, uv_error_to_errno(fd));
     }
 }
 
@@ -461,10 +461,10 @@ void c_file_read_handler(uv_fs_t* req) {
 
     if (result >= 0) {
         eraseNegative(failure);
-        run_i64(success, result);
+        run_Int(success, result);
     } else {
         eraseNegative(success);
-        run_i64(failure, uv_error_to_errno(result));
+        run_Int(failure, uv_error_to_errno(result));
     }
 }
 
@@ -517,10 +517,10 @@ void c_file_write_handler(uv_fs_t* req) {
 
     if (result >= 0) {
         eraseNegative(failure);
-        run_i64(success, result);
+        run_Int(success, result);
     } else {
         eraseNegative(success);
-        run_i64(failure, uv_error_to_errno(result));
+        run_Int(failure, uv_error_to_errno(result));
     }
 }
 

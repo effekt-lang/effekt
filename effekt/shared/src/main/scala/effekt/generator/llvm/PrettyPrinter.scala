@@ -18,10 +18,9 @@ define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${comm
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
-    case VerbatimFunction(returnType, name, parameters, body) =>
-      // TODO what about calling convention?
+    case VerbatimFunction(callingConvention, returnType, name, parameters, body) =>
       s"""
-define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
     $body
 }
 """
