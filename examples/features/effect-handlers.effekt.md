@@ -1,5 +1,7 @@
 # Effects and handlers
 
+TODO mention effect safety
+
 For getting started with effects and handlers, we define the popular exception effect, consisting just of one effect operation `throw`:
 
 ```
@@ -73,7 +75,7 @@ def genFibs(limit: Int): List[Int] / {} = {
       if (iters < limit) {
         iters = iters + 1
         fibs = Cons(x, fibs)
-        resume(()) // <- we resume the computation where yield was envoked
+        resume(()) // <- we resume the computation where yield was invoked
       } else {
         ()
       }

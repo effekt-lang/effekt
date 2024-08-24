@@ -1,6 +1,6 @@
 # Functions
 
-For defining a function, you may use similar syntax for know from other languages such as Scala:
+For defining a function, you may use similar syntax know from other languages such as Scala:
 
 ```
 def fib(n: Int): Int =
@@ -21,7 +21,7 @@ Perhaps unusual, you can also call `fib` using Effekt's implementation of [Unifo
 ](https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax#cite_note-4):
 
 ```effekt:repl
-5.fib
+5.fib()
 ```
 
 For defining polymorphic (generic) function, like the identity, you need to introduce a type parameter enclosed in square brackets:

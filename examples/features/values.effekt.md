@@ -23,3 +23,5 @@ Though, everything can be transformed into a string representation via the `insp
 ```effekt:repl
 inspect(unicode)
 ```
+
+Table values and computation
