@@ -287,16 +287,26 @@ class Lexer(source: Source) {
    * including the error.
    */
   def run(): Vector[Token] = {
-    var err: Option[LexerError] = None
     var eof = false
-    while (!eof && err.isEmpty) {
+    while (!eof) {
       val kind =
         // If the last token was `}` and we are currently inside unquotes, remember to directly continue
         // lexing a string
-        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && delimiters.pop() == `${{`) {
-          // TODO: catch error
-          val delim = delimiters.pop().asInstanceOf[StrDelim]
-          matchString(delim, true)
+        if (tokens.lastOption.map { _.kind }.contains(TokenKind.`}`) && !delimiters.isEmpty) {
+          delimiters.pop() match {
+            case `${{` =>
+              // there has to be a string delimiter on the stack since `${ }` may only appear in strings
+              // and cannot be directly nested within other `${}`
+              val errMsg = "string interpolation ${ ... } may only appear inside strings"
+              if (delimiters.isEmpty) err(errMsg)
+              delimiters.pop() match {
+                case `${{` | `{{` =>  err(errMsg)
+                case strDelim: StrDelim => matchString(strDelim, true)
+              }
+            // Last `}` is not be considered as part of string interpolation. Let the parser fail if braces don't match
+            // and just continue lexing
+            case `{{` | `"` | `"""` => nextToken()
+          }
         } else nextToken()
       kind match {
         case TokenKind.EOF =>
