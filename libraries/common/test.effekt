@@ -1,4 +1,5 @@
 import string
+import process
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit
@@ -87,4 +88,11 @@ def suite(name: String) { body: => Unit / Test }: Bool = {
     println(ANSI::GREEN ++ "All tests passed (" ++ passed.show ++ " passed)" ++ ANSI::RESET)
     true
   }
+}
+
+/// Use as `def main() = mainSuite("...") { ... }`
+def mainSuite(name: String) { body: => Unit / Test }: Unit = {
+  val result = suite(name) { body() }
+  val exitCode = if (result) 0 else 1
+  exit(exitCode)
 }

@@ -1,0 +1,10 @@
+module process
+
+extern io def exit(errorCode: Int): Nothing =
+  js   "(function() { process.exit(${errorCode}) })()"
+  llvm """
+    call void @exit(i64 %errorCode)
+    ret %Pos zeroinitializer
+  """
+  chez "(exit ${errorCode})"
+  ml "(Posix.Process.exit (Word8.fromInt ${errorCode}))"
