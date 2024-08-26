@@ -27,6 +27,11 @@ extern llvm """
   declare i32 @clock_gettime(i32, ptr)
 """
 
+// This will not be needed from NodeJS 16 and newer.
+extern jsNode """
+  const { performance } = require('perf_hooks');
+"""
+
 /**
  * High-precision timestamp in nanoseconds that should be for measurements.
  *
