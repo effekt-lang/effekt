@@ -132,11 +132,6 @@ jobs:
           node-version: '12.x'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Publish to NPM as effekt-lang
-        run: npm publish effekt.tgz --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Publish to NPM as @effekt-lang/effekt
         run: npm publish effekt.tgz --access public --scope @effekt-lang
         env:
