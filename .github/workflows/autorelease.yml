@@ -1,0 +1,51 @@
+name: Create Version and Tag
+# If you change this name, don't forget to change the name in 'deploy.yml'!
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday at 3am UTC
+  workflow_dispatch: # For manual triggering
+    inputs:
+      patch_version:
+        description: 'Patch version number (default is 0)'
+        required: false
+        default: '0'
+
+jobs:
+  calculate-version-and-tag:
+    name: Calculate Version and Create Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Calculate new version
+        id: set-version
+        run: |
+          MAJOR=0
+          YEAR=$(date +%y)
+          WEEK=$(date +%W)
+          WEEK_PADDED=$(printf "%02d" $WEEK)
+          PATCH="${{ github.event.inputs.patch_version }}"
+          if [[ -z "$PATCH" ]]; then
+            PATCH="0"
+          fi
+          VERSION="${MAJOR}.${YEAR}.${WEEK_PADDED}.${PATCH}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update version in build.sbt
+        run: |
+          sed -i 's/lazy val effektVersion = ".*"/lazy val effektVersion = "${{ steps.set-version.outputs.VERSION }}"/' build.sbt
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add build.sbt
+          git commit -m "Update version to ${{ steps.set-version.outputs.VERSION }}"
+          git push
+
+      - name: Create and push tag
+        run: |
+          git tag v${{ steps.set-version.outputs.VERSION }}
+          git push origin v${{ steps.set-version.outputs.VERSION }}
