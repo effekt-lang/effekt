@@ -57,7 +57,7 @@ attributes #1 = { nounwind norecurse nosync willreturn }
 !12 = !{!"Double", !0, i64 0}
 !13 = !{!"Int", !0, i64 0}
 !14 = !{!"String", !0, i64 0}
-
+!24 = !{!"Reference", !0, i64 0}
 
 ; A Frame has the following layout
 ;

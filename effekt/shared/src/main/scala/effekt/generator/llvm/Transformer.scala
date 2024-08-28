@@ -811,7 +811,7 @@ object Transformer {
     case machine.Type.Byte() => TBAA.Byte()
     case machine.Type.Double() => TBAA.Double()
     case machine.Type.String() => TBAA.String()
-    case machine.Type.Reference(tpe) => ???
+    case machine.Type.Reference(tpe) => TBAA.Reference()
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =

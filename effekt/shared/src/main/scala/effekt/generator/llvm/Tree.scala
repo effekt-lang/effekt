@@ -82,6 +82,7 @@ enum TBAA {
   case ReferenceCount()
   case Memory()
   case Region()
+  case Reference()
   case FrameAccess(id: scala.Int, offset: scala.Int)
 
   def size: scala.Int = this match {
@@ -94,6 +95,7 @@ enum TBAA {
     case TBAA.Stack() => 8
     case TBAA.StackPointer() => 8
     case TBAA.ReferenceCount() => 8
+    case TBAA.Reference() => 8
     case _ => ???
   }
 }
