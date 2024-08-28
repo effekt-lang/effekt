@@ -190,7 +190,7 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define ptr @getRegionPointer(%Evidence %evidence, %Stack %stack) {
+define ptr @getRegionPointer(%Evidence %evidence, %Stack noalias nonnull %stack) {
 entry:
     switch %Evidence %evidence, label %else [i64 0, label %here]
 
@@ -267,7 +267,7 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %
 
 ; Stack management
 
-define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
+define %StackPointer @stackAllocate(%Stack noalias nonnull %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
 
@@ -277,7 +277,7 @@ define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     ret %StackPointer %stackPointer
 }
 
-define %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
+define %StackPointer @stackDeallocate(%Stack noalias nonnull %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
 
@@ -334,7 +334,7 @@ next:
     ret void
 }
 
-define %Stack @popStacks(%Stack %stack, i64 %n) {
+define %Stack @popStacks(%Stack noalias nonnull %stack, i64 %n) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %rest = load %Stack, ptr %stackRest
     %isZero = icmp eq i64 %n, 0
@@ -387,7 +387,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
     ret void
 }
 
-define %Stack @underflowStack(%Stack %stack) {
+define %Stack @underflowStack(%Stack noalias nonnull %stack) {
     %stackMemory = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
@@ -572,7 +572,7 @@ define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define tailcc void @topLevel(%Pos %val, %Stack %stack) {
+define tailcc void @topLevel(%Pos %val, %Stack noalias nonnull %stack) {
     %rest = call %Stack @underflowStack(%Stack %stack)
     ; assert %rest == null
     ret void

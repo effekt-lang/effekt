@@ -13,15 +13,17 @@ object PrettyPrinter {
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
     case Function(callingConvention, returnType, name, parameters, basicBlocks) =>
+      val privateOrNot = if name.contains("effektMain") then "" else "private "
       s"""
-define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${privateOrNot} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) norecurse {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
     case VerbatimFunction(returnType, name, parameters, body) =>
       // TODO what about calling convention?
+      // TODO annotated as readonly, though this might not always be true...
       s"""
-define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define private ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) readonly {
     $body
 }
 """
@@ -56,15 +58,15 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
     case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})"
     case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments) =>
-      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})"
     case Call(_, Ccc(), _, nonglobal, _) =>
       C.abort(s"cannot call non-global operand: $nonglobal")
     case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})"
     case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments) =>
-      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
+      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(showArgument))})"
     case Call(_, Tailcc(), tpe, _, _) =>
       C.abort(s"tail call to non-void function returning: $tpe")
 
@@ -130,6 +132,18 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ConstantInteger8(b)                => s"i8 $b"
   }
 
+  def showArgument(operand: Operand): LLVMString = operand match {
+    case LocalReference(tpe @ Type.PointerType(), name) => s"${show(tpe)} nonnull ${localName(name)}"
+    case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
+    case ConstantGlobal(tpe, name)          => s"${show(tpe)} ${globalName(name)}"
+    case ConstantInt(n)                     => s"i64 $n"
+    case ConstantDouble(n)                  => s"double $n"
+    case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
+    case ConstantNull(tpe)                  => s"${show(tpe)} null"
+    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}] [${commaSeparated(members.map(show))}]"
+    case ConstantInteger8(b)                => s"i8 $b"
+  }
+
   def show(tpe: Type): LLVMString = tpe match {
     case VoidType() => "void"
     case IntegerType1() => "i1"
@@ -144,6 +158,11 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   }
 
   def show(parameter: Parameter): LLVMString = parameter match {
+    case Parameter(tpe, "stack") => s"${show(tpe)} noalias nonnull ${localName("stack")}"
+    case Parameter(tpe, "environment") => s"${show(tpe)} noalias nonnull ${localName("environment")}"
+    case Parameter(tpe, "obj") => s"${show(tpe)} noalias nonnull ${localName("obj")}"
+    case Parameter(tpe, "stackPointer") => s"${show(tpe)} noalias nonnull ${localName("stackPointer")}"
+    case Parameter(tpe @ Type.PointerType(), name) => s"${show(tpe)} nonnull ${localName(name)}"
     case Parameter(tpe, name) => s"${show(tpe)} ${localName(name)}"
   }
 
