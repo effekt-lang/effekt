@@ -186,7 +186,7 @@ object Transformer {
         emit(ExtractValue(arrayName, transform(value), 0));
         emit(ExtractValue(objectName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
-        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
+        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), None))
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
@@ -205,7 +205,7 @@ object Transformer {
         emit(ExtractValue(name, temporaryRef, 1))
 
 
-        emit(Store(ptrRef, transform(init)))
+        emit(Store(ptrRef, transform(init), None))
 
         shareValues(List(init), freeVariables(rest))
         transform(rest);
@@ -222,10 +222,10 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, None))
         shareValue(oldVal)
 
-        emit(Load(name.name, transform(name.tpe), ptrRef))
+        emit(Load(name.name, transform(name.tpe), ptrRef, None))
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
@@ -238,10 +238,10 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, None))
         eraseValue(oldVal)
 
-        emit(Store(ptrRef, transform(value)))
+        emit(Store(ptrRef, transform(value), None))
         shareValues(List(value), freeVariables(rest))
         transform(rest)
 
@@ -616,21 +616,23 @@ object Transformer {
 
   def storeEnvironmentAt(pointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val `type` = environmentType(environment)
+    val descriptor = frameDescriptorFor(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Store(field, transform(machine.Variable(name, tpe))))
+        emit(Store(field, transform(machine.Variable(name, tpe)), Some(TBAA.FrameAccess(descriptor.id, i))))
     }
   }
 
   def loadEnvironmentAt(pointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val `type` = environmentType(environment)
+    val descriptor = frameDescriptorFor(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Load(name, transform(tpe), field))
+        emit(Load(name, transform(tpe), field, Some(TBAA.FrameAccess(descriptor.id, i))))
     }
   }
 
@@ -703,9 +705,9 @@ object Transformer {
     val eraserPointer = LocalReference(PointerType(), freshName("eraserPointer"));
     emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
 
-    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName)));
-    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName)));
-    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName)));
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName), None));
+    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName), None));
+    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName), None));
   }
 
   def popReturnAddressFrom(stack: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -718,7 +720,7 @@ object Transformer {
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddressPointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
 
-    emit(Load(returnAddressName, returnAddressType, returnAddressPointer));
+    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, None));
   }
 
   def malloc = ConstantGlobal(PointerType(), "malloc");
@@ -758,9 +760,58 @@ object Transformer {
    * Extra info in context
    */
   class ModuleContext() {
-    var counter = 0;
-    var definitions: List[Definition] = List();
-    val erasers = mutable.HashMap[List[machine.Type], Operand]();
+    var counter = 0
+    var definitions: List[Definition] = List()
+    val erasers = mutable.HashMap[List[machine.Type], Operand]()
+
+    var descriptorCounter = 100
+    val descriptors = mutable.HashMap[List[machine.Type], FrameDescriptor]()
+  }
+
+  def frameDescriptorFor(environment: machine.Environment)(using C: ModuleContext): FrameDescriptor = {
+    val types = environment.map(_.tpe)
+    C.descriptors.getOrElseUpdate(types, {
+      val id = C.descriptorCounter
+      // reserves one index for the descriptor and #(Type) many indices for the access descriptors
+      C.descriptorCounter = id + 1 + types.size
+
+
+      var offset = 0
+      val typesWithOffset = types.zipWithIndex.map {
+        case (tpe, index) =>
+          val tbaa = transformTBAA(tpe)
+          val oldOffset = offset
+          offset = oldOffset + tbaa.size
+          (tbaa, oldOffset)
+      }
+
+      // !100 = !{!"frame_100", !13, i64 0, !13, i64 8}
+      // case TypeDescriptor(name: String, typeName: String, structure: List[(TBAA, Int)])
+      emit(TypeDescriptor(id, s"frame_${id}", typesWithOffset))
+
+      typesWithOffset.zipWithIndex.foreach {
+        case ((tpe, offset), index) =>
+          //  ; int, into stack at offset 1
+          // !25 = !{!99, !13, i64 8}
+          // case AccessTag(name: String, base: Int, access: TBAA, offset: Int)
+          emit(AccessTag(id + index + 1, id, tpe, offset))
+      }
+
+      FrameDescriptor(id, types.map(transformTBAA))
+    })
+  }
+
+  case class FrameDescriptor(id: Int, fields: List[llvm.TBAA])
+
+  def transformTBAA(tpe: machine.Type): llvm.TBAA = tpe match {
+    case machine.Type.Positive() => TBAA.Pos()
+    case machine.Type.Negative() => TBAA.Neg()
+    case machine.Type.Stack() => TBAA.Stack()
+    case machine.Type.Int() => TBAA.Int()
+    case machine.Type.Byte() => TBAA.Byte()
+    case machine.Type.Double() => TBAA.Double()
+    case machine.Type.String() => TBAA.String()
+    case machine.Type.Reference(tpe) => ???
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =

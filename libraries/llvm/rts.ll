@@ -1,5 +1,8 @@
 ; Run-Time System
 
+; TBAA Top type
+!0 = !{!"TBAA Top"}
+
 %Evidence = type i64
 
 ; Basic types
@@ -8,15 +11,20 @@
 
 ; Reference counts
 %ReferenceCount = type i64
+!3 = !{!"ReferenceCount", !0, i64 0}
 
 ; Code to share (bump rc) an environment
 %Sharer = type ptr
+!5 = !{!"Sharer", !0, i64 0}
 
 ; Code to drop an environment
 %Eraser = type ptr
+!4 = !{!"Eraser", !0, i64 0}
 
 ; Every heap object starts with a header
+; size = 16
 %Header = type {%ReferenceCount, %Eraser}
+!17 = !{!"Header", !3, i64 0, !4, i64 8}
 
 ; A heap object is a pointer to a header followed by payload.
 ;
@@ -24,6 +32,9 @@
 ;   | ReferenceCount  | Eraser | Payload ... |
 ;   +-----------------+--------+-------------+
 %Object = type ptr
+!7 = !{!"Object", !0, i64 0}
+
+; object contents: !{!"ObjectContents", !17, i64 0, !0, i64 16}
 
 ; Attribute set for user defined functions
 attributes #0 = { nounwind norecurse nosync }
@@ -31,27 +42,21 @@ attributes #0 = { nounwind norecurse nosync }
 ; Attribute set for extern functions
 attributes #1 = { nounwind norecurse nosync willreturn }
 
-; TBAA Top type
-!0 = !{!"TBAA Top"}
+
 
 ; Runtime types
-!1 = !{!"Stack", !0, i64 0}
-!2 = !{!"StackPointer", !0, i64 0}
-!3 = !{!"ReferenceCount", !0, i64 0}
-!4 = !{!"Eraser", !0, i64 0}
-!5 = !{!"Sharer", !0, i64 0}
+
+
+
 !6 = !{!"FunctionPointer", !0, i64 0}
-!7 = !{!"Object", !0, i64 0}
+
+
 
 ; Base types
-!10 = !{!"Char", !0, i64 0}
-!11 = !{!"Float", !0, i64 0}
+!10 = !{!"Byte", !0, i64 0}
 !12 = !{!"Double", !0, i64 0}
 !13 = !{!"Int", !0, i64 0}
 !14 = !{!"String", !0, i64 0}
-
-!15 = !{!"Pos", !0, i64 0}
-!16 = !{!"Neg", !0, i64 0}
 
 
 ; A Frame has the following layout
@@ -78,13 +83,20 @@ attributes #1 = { nounwind norecurse nosync willreturn }
 ;     :        ...         :
 ;     +--------------------+ <- Base
 %StackPointer = type ptr
+!2 = !{!"StackPointer", !0, i64 0}
+
 %Base = type %StackPointer
 %Limit = type %StackPointer
 %ReturnAddress = type ptr
+!18 = !{!"ReturnAddress", !0, i64 0}
+
 %FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
+!19 = !{!"FrameHeader", !18, i64 0, !5, i64 8, !4, i64 16}
 
 ; Pointers for a heap allocated stack
+; size = 24
 %Memory = type { %StackPointer, %Base, %Limit }
+!8 = !{!"Memory", !2, i64 0, !2, i64 8, !2, i64 16}
 
 ; The garbage collector differentiates three groups of types:
 ; - Values (Integer, Double)
@@ -92,21 +104,44 @@ attributes #1 = { nounwind norecurse nosync willreturn }
 ; - Strings
 ; For each group we have an arena where mutable state is allocated.
 ;
+; size = 3 * 24 = 72
 %Region = type [ 3 x %Memory ]
+!9 = !{!"Region", !8, i64 0, !8, i64 24, !8, i64 48}
 
 ; The "meta" stack (a stack of stacks) -- a pointer to a %StackValue
 %Stack = type ptr
+!1 = !{!"Stack", !0, i64 0}
+
 
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
 %StackValue = type { %ReferenceCount, %Memory, %Region, %Stack }
+!20 = !{!"StackValue", !3, i64 0, !8, i64 8, !9, i64 32, !1, i64 104}
+
+
+; access type
+; Stackvalue->Stackpointer
+!23 = !{!20, !2, i64 8}
+
+; %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+; %stackPointer = load %StackPointer, ptr %stackStackPointer
+
+; %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %n
+; store %StackPointer %stackPointer_2, ptr %stackStackPointer
+
+; ret %StackPointer %stackPointer
+
+!21 = !{!"Tag", !0, i64 0}
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Object}
+!15 = !{!"Pos", !0, i64 0 }  ; !21, i64 0, !7, i64 8}
+; !pos_access = !{!pos_type, !pos_type, i64 0}
 
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Object}
+!16 = !{!"Neg", !0, i64 0 } ;, !0, i64 0, !7, i64 8} ;, !3, i64 0, !7, i64 8}
 
 ; Offset within the arena
 %Reference = type i64
