@@ -15,7 +15,7 @@ object PrettyPrinter {
     case Function(callingConvention, returnType, name, parameters, basicBlocks) =>
       val privateOrNot = if name.contains("effektMain") then "" else "private "
       s"""
-define ${privateOrNot} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) norecurse {
+define ${privateOrNot} ${show(callingConvention)} ${showReturnType(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) #0 {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
@@ -23,7 +23,7 @@ define ${privateOrNot} ${show(callingConvention)} ${show(returnType)} ${globalNa
       // TODO what about calling convention?
       // TODO annotated as readonly, though this might not always be true...
       s"""
-define private ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) readonly {
+define private ${showReturnType(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) #1 {
     $body
 }
 """
@@ -41,6 +41,11 @@ define private ${show(returnType)} ${globalName(name)}(${commaSeparated(paramete
       s"@$name = private constant ${show(initializer)}"
   }
 
+  def showReturnType(returnType: Type): LLVMString = returnType match {
+      case PointerType() => s"noalias nonnull ${show(returnType)}"
+      case _ => show(returnType)
+    }
+
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
     case Ccc() => "ccc"
     case Tailcc() => "tailcc"
@@ -53,6 +58,24 @@ ${name}:
 ${indentedLines(instructions.map(show).mkString("\n"))}
     ${show(terminator)}
 """
+  }
+
+  def tbaa(tpe: String): String = tpe match {
+    case "Stack" => ", !tbaa !1"
+    case "StackPointer" => ", !tbaa !2"
+    case "ReferenceCount" => ", !tbaa !3"
+    case "Eraser" => ", !tbaa !4"
+    case "Sharer" => ", !tbaa !5"
+
+    case "Char" => ", !tbaa !10"
+    case "Float" => ", !tbaa !11"
+    case "Double" => ", !tbaa !12"
+    case "Int" => ", !tbaa !13"
+    case "String" => ", !tbaa !14"
+    case "Pos" => ", !tbaa !15"
+    case "Neg" => ", !tbaa !16"
+
+    case _ => ""
   }
 
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
@@ -69,12 +92,18 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(showArgument))})"
     case Call(_, Tailcc(), tpe, _, _) =>
       C.abort(s"tail call to non-void function returning: $tpe")
+    case Load(result, NamedType(tpe), LocalReference(PointerType(), name)) =>
+      s"${localName(result)} = load ${localName(tpe)}, ${show(LocalReference(PointerType(), name))}${tbaa(tpe)}"
 
     case Load(result, tpe, LocalReference(PointerType(), name)) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}"
+
     case Load(_, _, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
 
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
+    case Store(address @ Operand.LocalReference(NamedType(tpe), name), value) =>
+      s"store ${show(value)}, ${show(address)}${tbaa(tpe)}"
+
     case Store(address, value) =>
       s"store ${show(value)}, ${show(address)}"
 
