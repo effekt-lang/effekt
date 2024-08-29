@@ -186,7 +186,7 @@ object Transformer {
         emit(ExtractValue(arrayName, transform(value), 0));
         emit(ExtractValue(objectName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
-        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), None))
+        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), None, true))
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
@@ -205,7 +205,7 @@ object Transformer {
         emit(ExtractValue(name, temporaryRef, 1))
 
 
-        emit(Store(ptrRef, transform(init), Some(TBAA.AccessRef(transformTBAA(tpe)))))
+        emit(Store(ptrRef, transform(init), Some(TBAA.AccessRef(transformTBAA(tpe))), false))
 
         shareValues(List(init), freeVariables(rest))
         transform(rest);
@@ -222,11 +222,11 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(oldVal.tpe)))))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(oldVal.tpe))), false))
         shareValue(oldVal)
 
         // do we really need the second load here?
-        emit(Load(name.name, transform(name.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(name.tpe)))))
+        emit(Load(name.name, transform(name.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(name.tpe))), false))
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
@@ -239,10 +239,10 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(oldVal.tpe)))))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(oldVal.tpe))), false))
         eraseValue(oldVal)
 
-        emit(Store(ptrRef, transform(value), Some(TBAA.AccessRef(transformTBAA(oldVal.tpe)))))
+        emit(Store(ptrRef, transform(value), Some(TBAA.AccessRef(transformTBAA(oldVal.tpe))), false))
         shareValues(List(value), freeVariables(rest))
         transform(rest)
 
@@ -622,7 +622,7 @@ object Transformer {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Store(field, transform(machine.Variable(name, tpe)), Some(TBAA.FrameAccess(descriptor.id, i))))
+        emit(Store(field, transform(machine.Variable(name, tpe)), Some(TBAA.FrameAccess(descriptor.id, i)), true))
     }
   }
 
@@ -633,7 +633,7 @@ object Transformer {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Load(name, transform(tpe), field, Some(TBAA.FrameAccess(descriptor.id, i))))
+        emit(Load(name, transform(tpe), field, Some(TBAA.FrameAccess(descriptor.id, i)), true))
     }
   }
 
@@ -706,9 +706,10 @@ object Transformer {
     val eraserPointer = LocalReference(PointerType(), freshName("eraserPointer"));
     emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
 
-    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName), Some(TBAA.ReturnAddressInFrameHeader())));
-    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName), Some(TBAA.SharerInFrameHeader())));
-    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName), Some(TBAA.EraserInFrameHeader())));
+    // TODO is the invariant flag here correct?
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName), Some(TBAA.ReturnAddressInFrameHeader()), true));
+    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName), Some(TBAA.SharerInFrameHeader()), true));
+    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName), Some(TBAA.EraserInFrameHeader()), true));
   }
 
   def popReturnAddressFrom(stack: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -721,7 +722,7 @@ object Transformer {
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddressPointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
 
-    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, Some(TBAA.ReturnAddressInFrameHeader())));
+    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, Some(TBAA.ReturnAddressInFrameHeader()), true));
   }
 
   def malloc = ConstantGlobal(PointerType(), "malloc");

@@ -216,7 +216,7 @@ define %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     store %ReferenceCount 0, ptr %objectReferenceCount
-    store %Eraser %eraser, ptr %objectEraser
+    store %Eraser %eraser, ptr %objectEraser, !invariant.group !0
     ret %Object %object
 }
 
@@ -269,7 +269,7 @@ define void @eraseObject(%Object %object) alwaysinline {
 
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
-    %eraser = load %Eraser, ptr %objectEraser, !tbaa !40
+    %eraser = load %Eraser, ptr %objectEraser, !tbaa !40, !invariant.group !0
     %environment = call %Environment @objectEnvironment(%Object %object)
     call void %eraser(%Environment %environment)
     call void @free(%Object %object)
@@ -462,7 +462,7 @@ define void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
     br i1 %done, label %return, label %erase
 
 erase:
-    %element = load %Pos, ptr %elementPointer
+    %element = load %Pos, ptr %elementPointer, !invariant.group !0
     call void %f(%Pos %element)
 
     %nextElementPointer = getelementptr %Pos, ptr %elementPointer, i64 1
@@ -660,7 +660,7 @@ done:
 define void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
     %stackSharer = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 1
-    %sharer = load %Sharer, ptr %stackSharer, !tbaa !5
+    %sharer = load %Sharer, ptr %stackSharer, !tbaa !5, !invariant.group !0
     tail call void %sharer(%StackPointer %newStackPointer)
     ret void
 }
@@ -668,7 +668,7 @@ define void @shareFrames(%StackPointer %stackPointer) alwaysinline {
 define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
     %stackEraser = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 2
-    %eraser = load %Eraser, ptr %stackEraser, !tbaa !4
+    %eraser = load %Eraser, ptr %stackEraser, !tbaa !4, !invariant.group !0
     tail call void %eraser(%StackPointer %newStackPointer)
     ret void
 }
@@ -702,8 +702,8 @@ define noalias nonnull %Stack @withEmptyStack() {
     %eraserPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
 
     store %ReturnAddress @topLevel, ptr %returnAddressPointer, !tbaa !25
-    store %Sharer @topLevelSharer, ptr %sharerPointer, !tbaa !26
-    store %Eraser @topLevelEraser, ptr %eraserPointer, !tbaa !27
+    store %Sharer @topLevelSharer, ptr %sharerPointer, !tbaa !26, !invariant.group !0
+    store %Eraser @topLevelEraser, ptr %eraserPointer, !tbaa !27, !invariant.group !0
 
     %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
     store %StackPointer %stackPointer_2, ptr %stackStackPointer

@@ -34,8 +34,8 @@ case class BasicBlock(name: String, instructions: List[Instruction], terminator:
  */
 enum Instruction {
   case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand])
-  case Load(result: String, tpe: Type, address: Operand, tbaa: Option[TBAA])
-  case Store(address: Operand, value: Operand, tbaa: Option[TBAA])
+  case Load(result: String, tpe: Type, address: Operand, tbaa: Option[TBAA], invariant: Boolean)
+  case Store(address: Operand, value: Operand, tbaa: Option[TBAA], invariant: Boolean)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])
   case BitCast(result: String, operand: Operand, typ: Type)
   case Add(result: String, operand0: Operand, operand1: Operand)
