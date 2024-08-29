@@ -177,8 +177,8 @@ object Transformer {
         emit(Comment(s"statement invoke ${value.name}, tag ${tag}, ${values.length} values"))
         shareValues(value :: values, Set());
 
-        val arrayName = freshName("arrayPointer");
-        val objectName = freshName("object");
+        val arrayName = freshName("arrayPointer"); // vtable
+        val objectName = freshName("object");      // closure
         val pointerName = freshName("functionPointerPointer");
         val functionName = freshName("functionPointer");
         val arguments = values.map(transform)
@@ -205,7 +205,7 @@ object Transformer {
         emit(ExtractValue(name, temporaryRef, 1))
 
 
-        emit(Store(ptrRef, transform(init), None))
+        emit(Store(ptrRef, transform(init), Some(TBAA.AccessRef(transformTBAA(tpe)))))
 
         shareValues(List(init), freeVariables(rest))
         transform(rest);
@@ -222,10 +222,11 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, None))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(oldVal.tpe)))))
         shareValue(oldVal)
 
-        emit(Load(name.name, transform(name.tpe), ptrRef, None))
+        // do we really need the second load here?
+        emit(Load(name.name, transform(name.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(name.tpe)))))
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
@@ -238,10 +239,10 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, None))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, Some(TBAA.AccessRef(transformTBAA(oldVal.tpe)))))
         eraseValue(oldVal)
 
-        emit(Store(ptrRef, transform(value), None))
+        emit(Store(ptrRef, transform(value), Some(TBAA.AccessRef(transformTBAA(oldVal.tpe)))))
         shareValues(List(value), freeVariables(rest))
         transform(rest)
 

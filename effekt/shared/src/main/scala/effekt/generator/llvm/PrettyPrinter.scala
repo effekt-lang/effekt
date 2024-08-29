@@ -156,6 +156,13 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case TBAA.ReturnAddressInFrameHeader() => "!25"
     case TBAA.SharerInFrameHeader() => "!26"
     case TBAA.EraserInFrameHeader() => "!27"
+
+    case TBAA.AccessRef(llvm.TBAA.Int()) => "!29"
+    case TBAA.AccessRef(llvm.TBAA.Double()) => "!31"
+    case TBAA.AccessRef(llvm.TBAA.String()) => "!33"
+    case TBAA.AccessRef(llvm.TBAA.Pos()) => "!35"
+    case TBAA.AccessRef(llvm.TBAA.Neg()) => "!37"
+    case TBAA.AccessRef(_) => ???
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {

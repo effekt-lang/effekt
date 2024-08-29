@@ -88,6 +88,8 @@ enum TBAA {
   case SharerInFrameHeader()
   case EraserInFrameHeader()
 
+  case AccessRef(contents: TBAA)
+
   def size: scala.Int = this match {
     case TBAA.Byte() => 1
     case TBAA.Int() => 8
