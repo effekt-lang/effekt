@@ -152,6 +152,10 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case TBAA.Neg() => "!16"
 
     case TBAA.Reference() => "!24"
+
+    case TBAA.ReturnAddressInFrameHeader() => "!25"
+    case TBAA.SharerInFrameHeader() => "!26"
+    case TBAA.EraserInFrameHeader() => "!27"
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {

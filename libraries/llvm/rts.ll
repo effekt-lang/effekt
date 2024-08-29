@@ -21,6 +21,7 @@
 %Eraser = type ptr
 !4 = !{!"Eraser", !0, i64 0}
 
+
 ; Every heap object starts with a header
 ; size = 16
 %Header = type {%ReferenceCount, %Eraser}
@@ -92,6 +93,12 @@ attributes #1 = { nounwind norecurse nosync willreturn }
 
 %FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
 !19 = !{!"FrameHeader", !18, i64 0, !5, i64 8, !4, i64 16}
+; return address in frame header
+!25 = !{ !19, !18, i64 0 }
+; sharer in frame header
+!26 = !{ !19, !5, i64 8 }
+; eraser in frame header
+!27 = !{ !19, !4, i64 16 }
 
 ; Pointers for a heap allocated stack
 ; size = 24
@@ -175,8 +182,8 @@ define %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
     %object = call ptr @malloc(i64 %size)
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
-    store %ReferenceCount 0, ptr %objectReferenceCount, !tbaa !3
-    store %Eraser %eraser, ptr %objectEraser, !tbaa !4
+    store %ReferenceCount 0, ptr %objectReferenceCount
+    store %Eraser %eraser, ptr %objectEraser
     ret %Object %object
 }
 
@@ -192,9 +199,9 @@ define void @shareObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !tbaa !3
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
-    store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount, !tbaa !3
+    store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount
     br label %done
 
     done:
@@ -219,17 +226,17 @@ define void @eraseObject(%Object %object) alwaysinline {
 
     next:
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !tbaa !3
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
     %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
-    store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount, !tbaa !3
+    store %ReferenceCount %referenceCount.1, ptr %objectReferenceCount
     ret void
 
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
-    %eraser = load %Eraser, ptr %objectEraser, !tbaa !4
+    %eraser = load %Eraser, ptr %objectEraser
     %environment = call %Environment @objectEnvironment(%Object %object)
     call void %eraser(%Environment %environment)
     call void @free(%Object %object)
@@ -264,7 +271,7 @@ here:
 else:
     %nextEvidence = sub %Evidence %evidence, 1
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
-    %rest = load %Stack, ptr %stackRest, !tbaa !1
+    %rest = load %Stack, ptr %stackRest
     %region = tail call ptr @getRegionPointer(%Evidence %nextEvidence, %Stack %rest)
     ret ptr %region
 }
@@ -275,7 +282,7 @@ define { ptr, %Reference } @alloc(i64 %index, %Evidence %evidence, %Stack %stack
     %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
     %limitPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 2
 
-    %stackPointer = load %StackPointer, ptr %stackPointerPointer, !tbaa !2
+    %stackPointer = load %StackPointer, ptr %stackPointerPointer
     %base = load %Base, ptr %basePointer
     %limit = load %Limit, ptr %limitPointer
 
@@ -288,7 +295,7 @@ define { ptr, %Reference } @alloc(i64 %index, %Evidence %evidence, %Stack %stack
     br i1 %cmp, label %continue, label %realloc
 
 continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointerPointer, !tbaa !2
+    store %StackPointer %nextStackPointer, ptr %stackPointerPointer
     %intBase = ptrtoint %Base %base to i64
     %intStackPointer = ptrtoint %StackPointer %stackPointer to i64
     %offset = sub i64 %intStackPointer, %intBase
@@ -312,7 +319,7 @@ realloc:
 
     store %Base %newBase, ptr %basePointer
     store %Limit %newlimit, ptr %limitPointer
-    store %StackPointer %newNextStackPointer, ptr %stackPointerPointer, !tbaa !2
+    store %StackPointer %newNextStackPointer, ptr %stackPointerPointer
 
     %ret..0 = insertvalue { ptr, %Reference } undef, %StackPointer %newStackPointer, 0
     %ret..1 = insertvalue { ptr, %Reference } %ret..0, %Reference %arenaSize, 1
@@ -332,21 +339,21 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %
 
 define nonnull noalias %StackPointer @stackAllocate(%Stack noalias nonnull %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackStackPointer, !tbaa !2
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
 
     %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %n
-    store %StackPointer %stackPointer_2, ptr %stackStackPointer, !tbaa !2
+    store %StackPointer %stackPointer_2, ptr %stackStackPointer
 
     ret %StackPointer %stackPointer
 }
 
 define nonnull noalias %StackPointer @stackDeallocate(%Stack noalias nonnull %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackStackPointer, !tbaa !2
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
 
     %o = sub i64 0, %n
     %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %o
-    store %StackPointer %stackPointer_2, ptr %stackStackPointer, !tbaa !2
+    store %StackPointer %stackPointer_2, ptr %stackStackPointer
 
     ret %StackPointer %stackPointer_2
 }
@@ -384,12 +391,12 @@ define nonnull noalias %Stack @newStack() {
 
 define void @pushStack(%Stack nonnull noalias %stack, %Stack nonnull noalias %oldStack) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
-    %rest = load %Stack, ptr %stackRest, !tbaa !1
+    %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
     br i1 %isNull, label %done, label %next
 
 done:
-    store %Stack %oldStack, ptr %stackRest, !tbaa !1
+    store %Stack %oldStack, ptr %stackRest
     ret void
 
 next:
@@ -399,11 +406,11 @@ next:
 
 define nonnull noalias %Stack @popStacks(%Stack noalias nonnull %stack, i64 %n) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
-    %rest = load %Stack, ptr %stackRest, !tbaa !1
+    %rest = load %Stack, ptr %stackRest
     %isZero = icmp eq i64 %n, 0
     br i1 %isZero, label %done, label %next
 done:
-    store %Stack null, ptr %stackRest, !tbaa !1
+    store %Stack null, ptr %stackRest
     ret %Stack %rest
 next:
     %o = sub i64 %n, 1
@@ -422,7 +429,7 @@ define void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
     br i1 %done, label %return, label %erase
 
 erase:
-    %element = load %Pos, ptr %elementPointer, !tbaa !15
+    %element = load %Pos, ptr %elementPointer
     call void %f(%Pos %element)
 
     %nextElementPointer = getelementptr %Pos, ptr %elementPointer, i64 1
@@ -457,7 +464,7 @@ define nonnull noalias %Stack @underflowStack(%Stack noalias nonnull %stack) {
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
-    %rest = load %Stack, ptr %stackRest, !tbaa !1
+    %rest = load %Stack, ptr %stackRest
 
     call void @eraseMemory(%Memory %memory)
     call void @eraseRegion(%Region %region)
@@ -521,7 +528,7 @@ define %Stack @uniqueStack(%Stack %stack) alwaysinline {
 
 entry:
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %stackReferenceCount, !tbaa !3
+    %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
 
 done:
@@ -529,7 +536,7 @@ done:
 
 copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
-    store %ReferenceCount %newOldReferenceCount, ptr %stackReferenceCount, !tbaa !3
+    store %ReferenceCount %newOldReferenceCount, ptr %stackReferenceCount
 
     %newHead = call ptr @malloc(i64 112)
     br label %loop
@@ -544,7 +551,7 @@ loop:
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
-    %rest = load %Stack, ptr %stackRest, !tbaa !1
+    %rest = load %Stack, ptr %stackRest
 
     %newStackReferenceCount = getelementptr %StackValue, %Stack %newStack, i64 0, i32 0
     %newStackMemory = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
@@ -558,7 +565,7 @@ loop:
 
     %newRegion = call %Region @copyRegion(%Region %region)
 
-    store %ReferenceCount 0, ptr %newStackReferenceCount, !tbaa !3
+    store %ReferenceCount 0, ptr %newStackReferenceCount
     store %Memory %newMemory, ptr %newStackMemory
     store %Region %newRegion, ptr %newStackRegion
 
@@ -567,30 +574,30 @@ loop:
 
 next:
     %nextNew = call ptr @malloc(i64 112)
-    store %Stack %nextNew, ptr %newStackRest, !tbaa !1
+    store %Stack %nextNew, ptr %newStackRest
     br label %loop
 
 stop:
-    store %Stack null, ptr %newStackRest, !tbaa !1
+    store %Stack null, ptr %newStackRest
     ret %Stack %newHead
 }
 
 define void @shareStack(%Stack %stack) alwaysinline {
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %stackReferenceCount, !tbaa !3
+    %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
-    store %ReferenceCount %referenceCount.1, ptr %stackReferenceCount, !tbaa !3
+    store %ReferenceCount %referenceCount.1, ptr %stackReferenceCount
     ret void
 }
 
 define void @eraseStack(%Stack %stack) alwaysinline {
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
-    %referenceCount = load %ReferenceCount, ptr %stackReferenceCount, !tbaa !3
+    %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
     decr:
     %referenceCount.1 = sub %ReferenceCount %referenceCount, 1
-    store %ReferenceCount %referenceCount.1, ptr %stackReferenceCount, !tbaa !3
+    store %ReferenceCount %referenceCount.1, ptr %stackReferenceCount
     ret void
 
     free:
@@ -598,9 +605,9 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
 
-    %stackPointer = load %StackPointer, ptr %stackStackPointer, !tbaa !2
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
     %region = load %Region, ptr %stackRegion
-    %rest = load %Stack, ptr %stackRest, !tbaa !1
+    %rest = load %Stack, ptr %stackRest
 
     call void @free(%Stack %stack)
     call void @eraseFrames(%StackPointer %stackPointer)
@@ -655,7 +662,7 @@ define noalias nonnull %Stack @withEmptyStack() {
     %stack = call %Stack @newStack()
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackStackPointer, !tbaa !2
+    %stackPointer = load %StackPointer, ptr %stackStackPointer
 
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %sharerPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
@@ -666,7 +673,7 @@ define noalias nonnull %Stack @withEmptyStack() {
     store %Eraser @topLevelEraser, ptr %eraserPointer, !tbaa !4
 
     %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
-    store %StackPointer %stackPointer_2, ptr %stackStackPointer, !tbaa !2
+    store %StackPointer %stackPointer_2, ptr %stackStackPointer
 
     ret %Stack %stack
 }

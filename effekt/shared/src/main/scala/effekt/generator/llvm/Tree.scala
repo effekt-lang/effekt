@@ -83,7 +83,10 @@ enum TBAA {
   case Memory()
   case Region()
   case Reference()
-  case FrameAccess(id: scala.Int, offset: scala.Int)
+  case FrameAccess(id: scala.Int, index: scala.Int)
+  case ReturnAddressInFrameHeader()
+  case SharerInFrameHeader()
+  case EraserInFrameHeader()
 
   def size: scala.Int = this match {
     case TBAA.Byte() => 1

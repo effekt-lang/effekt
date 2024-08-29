@@ -705,9 +705,9 @@ object Transformer {
     val eraserPointer = LocalReference(PointerType(), freshName("eraserPointer"));
     emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
 
-    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName), None));
-    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName), None));
-    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName), None));
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName), Some(TBAA.ReturnAddressInFrameHeader())));
+    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName), Some(TBAA.SharerInFrameHeader())));
+    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName), Some(TBAA.EraserInFrameHeader())));
   }
 
   def popReturnAddressFrom(stack: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -720,7 +720,7 @@ object Transformer {
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddressPointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
 
-    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, None));
+    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, Some(TBAA.ReturnAddressInFrameHeader())));
   }
 
   def malloc = ConstantGlobal(PointerType(), "malloc");
