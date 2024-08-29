@@ -32,7 +32,11 @@ object Transformer {
       val entryBlock = BasicBlock("entry", instructions, terminator)
       // TODO strictly speaking, the entry function should use the C calling convention
       val entryFunction = Function(Tailcc(), VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions :+ entryFunction
+
+      val calleesDefinitions = MC.callees.values.toList.map { case Callees(id, impls) =>
+        llvm.Definition.Callees(id, impls.toList)
+      }
+      declarations.map(transform) ++ definitions ++ calleesDefinitions :+ entryFunction
   }
 
   // context getters
@@ -146,13 +150,16 @@ object Transformer {
 
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
-      case machine.New(variable, clauses, rest) =>
+      case machine.New(variable, interface, clauses, rest) =>
         emit(Comment(s"statement new ${variable.name}, ${clauses.length} clauses"))
         val closureEnvironment = freeVariables(clauses).toList;
 
-        val clauseNames = clauses.map { clause =>
+        val clauseNames = clauses.zipWithIndex.map { case (clause, index) =>
           val clauseName = freshName(variable.name + "_clause");
           val parameters = clause.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+
+          addCallee(interface, index, clauseName)
+
           defineLabel(clauseName, Parameter(objectType, "obj") +: parameters) {
             emit(Comment(s"statement new ${clauseName}, ${clause.parameters.length} parameters"))
             consumeObject(LocalReference(objectType, "obj"), closureEnvironment, freeVariables(clause));
@@ -173,7 +180,7 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
-      case machine.Invoke(value, tag, values) =>
+      case machine.Invoke(value, interface, tag, values) =>
         emit(Comment(s"statement invoke ${value.name}, tag ${tag}, ${values.length} values"))
         shareValues(value :: values, Set());
 
@@ -187,7 +194,9 @@ object Transformer {
         emit(ExtractValue(objectName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), arrayName), List(tag)))
         emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), None, true))
-        emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
+
+        // call i64 %binop(i64 %x, i64 %y), !callees !0
+        emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments, Some(findCallees(interface, tag).id)))
         RetVoid()
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
@@ -520,8 +529,8 @@ object Transformer {
     emit(function)
   }
 
-  def callLabel(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(), VoidType(), name, arguments :+ getStack())
+  def callLabel(name: Operand, arguments: List[Operand], callees: Option[Int] = None)(using BlockContext): Instruction =
+    Call("_", Tailcc(), VoidType(), name, arguments :+ getStack(), callees)
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
@@ -768,7 +777,23 @@ object Transformer {
 
     var descriptorCounter = 100
     val descriptors = mutable.HashMap[List[machine.Type], FrameDescriptor]()
+
+    var callees = mutable.HashMap[(String, Int), Callees]()
   }
+
+  // !0 = !{ptr @add, ptr @sub}
+  case class Callees(id: Int, implementations: Set[String])
+
+  def addCallee(interfaceName: String, tag: Int, clauseName: String)(using C: ModuleContext): Unit =
+    val Callees(id, impls) = findCallees(interfaceName, tag)
+    C.callees.update((interfaceName, tag), Callees(id, impls + clauseName))
+
+  def findCallees(interfaceName: String, tag: Int)(using C: ModuleContext): Callees =
+    C.callees.getOrElseUpdate((interfaceName, tag), {
+      val id = C.descriptorCounter
+      C.descriptorCounter = id + 1
+      Callees(id, Set.empty)
+    })
 
   def frameDescriptorFor(environment: machine.Environment)(using C: ModuleContext): FrameDescriptor = {
     val types = environment.map(_.tpe)

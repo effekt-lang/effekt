@@ -18,6 +18,9 @@ enum Definition {
   //  ; int, into stack at offset 1
   //  !25 = !{!99, !13, i64 8}
   case AccessTag(id: Int, base: Int, access: TBAA, offset: Int)
+
+  // !0 = !{ptr @add, ptr @sub}
+  case Callees(id: Int, callees: List[String])
 }
 export Definition.*
 
@@ -33,7 +36,7 @@ case class BasicBlock(name: String, instructions: List[Instruction], terminator:
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST-Instruction.html#t:Instruction
  */
 enum Instruction {
-  case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand])
+  case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand], callees: Option[Int] = None)
   case Load(result: String, tpe: Type, address: Operand, tbaa: Option[TBAA], invariant: Boolean)
   case Store(address: Operand, value: Operand, tbaa: Option[TBAA], invariant: Boolean)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])

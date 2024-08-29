@@ -127,7 +127,7 @@ object Transformer {
                 // TODO we assume that there are no block params in methods
                 Clause(params.map(transform), transform(body))
             })
-            New(Variable(transform(id), transform(impl.interface)), implTransformed, rest)
+            New(Variable(transform(id), transform(impl.interface)), impl.interface.name.toString, implTransformed, rest)
 
           case (d @ lifted.Definition.Def(_, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
@@ -156,7 +156,7 @@ object Transformer {
           // Unknown Jump
           case BlockInfo.Parameter(t : lifted.BlockType.Function) =>
             transform(args).run { values =>
-              Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values)
+              Invoke(Variable(transform(id), transform(tpe)), "Fun", builtins.Apply, values)
             }
 
           case BlockInfo.Parameter(t : lifted.BlockType.Interface) =>
@@ -184,7 +184,7 @@ object Transformer {
       case lifted.App(lifted.Unbox(e), targs, args) =>
         transform(e).run { x =>
           transform(args).run { values =>
-            Invoke(x, builtins.Apply, values)
+            Invoke(x, "Fun", builtins.Apply, values)
           }
         }
 
@@ -214,27 +214,26 @@ object Transformer {
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), targs, args) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-        val opTag = {
-          tpe match
-            case lifted.BlockType.Interface(ifceId, _) =>
-              DeclarationContext.getPropertyTag(op)
-            case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
+        if (targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        val receiverName = tpe match {
+          case lifted.BlockType.Interface(ifceId, _) => ifceId.toString
+          case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
         }
+        val opTag = DeclarationContext.getPropertyTag(op)
+
         transform(args).run { values =>
-          Invoke(Variable(transform(id), transform(tpe)), opTag, values)
+          Invoke(Variable(transform(id), transform(tpe)), receiverName, opTag, values)
         }
 
       case lifted.App(lifted.Member(lifted.Unbox(lifted.ValueVar(id, lifted.ValueType.Boxed(tpe))), op, annotatedTpe), targs, args) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-        val opTag = {
-          tpe match
-            case lifted.BlockType.Interface(ifceId, _) =>
-              DeclarationContext.getPropertyTag(op)
-            case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
+        if (targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        val receiverName = tpe match {
+          case lifted.BlockType.Interface(ifceId, _) => ifceId.toString
+          case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
         }
+        val opTag = DeclarationContext.getPropertyTag(op)
         transform(args).run { values =>
-          Invoke(Variable(transform(id), transform(tpe)), opTag, values)
+          Invoke(Variable(transform(id), transform(tpe)), receiverName, opTag, values)
         }
 
       case lifted.If(cond, thenStmt, elseStmt) =>
@@ -267,7 +266,7 @@ object Transformer {
             PushStack(delimiter,
               (ids zip handlers).foldRight(transform(body)){
                 case ((id, handler), body) =>
-                  New(transform(id), transform(handler), body)
+                  New(transform(id), handler.interface.name.toString, transform(handler), body)
               })))
 
       // TODO what about the evidence passed to resume?
@@ -386,7 +385,7 @@ object Transformer {
       val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
       val environment = getBlocksParams(id)
       Binding { k =>
-        New(variable, List(Clause(parameters,
+        New(variable, "Fun", List(Clause(parameters,
           // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
           Jump(Label(transform(id), environment))
         )), k(variable))
@@ -400,13 +399,13 @@ object Transformer {
       val parameters = params.map(transform);
       val variable = Variable(freshName("blockLit"), Negative())
       Binding { k =>
-        New(variable, List(Clause(parameters, transform(body))), k(variable))
+        New(variable, "Fun", List(Clause(parameters, transform(body))), k(variable))
       }
 
     case lifted.New(impl) =>
       val variable = Variable(freshName("new"), Negative())
       Binding { k =>
-        New(variable, transform(impl), k(variable))
+        New(variable, "Fun", transform(impl), k(variable))
       }
 
     case lifted.Member(b, field, annotatedTpe) => ???

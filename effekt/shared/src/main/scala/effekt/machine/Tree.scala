@@ -138,12 +138,12 @@ enum Statement {
   /**
    * e.g. let x = new { (x1, ...) => s1; ... }; s
    */
-  case New(name: Variable, operations: List[Clause], rest: Statement)
+  case New(name: Variable, interface: String, operations: List[Clause], rest: Statement)
 
   /**
    * e.g. v.m(v1, ...)
    */
-  case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
+  case Invoke(receiver: Variable, interface: String, tag: Tag, arguments: Environment)
 
   /**
   *  e.g. let x = allocate(42, ev); s

@@ -51,6 +51,10 @@ define private ${showReturnType(returnType)} ${globalName(name)}(${commaSeparate
     // !25 = !{!99, !13, i64 8}
     case AccessTag(id: Int, base: Int, access: TBAA, offset: Int) =>
       s"""!${id} = !{ !${base}, ${show(access)}, i64 ${offset} }"""
+
+    // !0 = !{ptr @add, ptr @sub}
+    case Callees(id, callees) =>
+      s"""!${id} = !{ ${ callees.map(c => s"ptr @${c}").mkString(", ")} }"""
   }
 
   def showReturnType(returnType: Type): LLVMString = returnType match {
@@ -74,17 +78,21 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
-    case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})"
-    case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments) =>
-      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})"
-    case Call(_, Ccc(), _, nonglobal, _) =>
+    case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(_, Ccc(), _, nonglobal, _, callees) =>
       C.abort(s"cannot call non-global operand: $nonglobal")
-    case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})"
-    case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments) =>
-      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(showArgument))})"
-    case Call(_, Tailcc(), tpe, _, _) =>
+    case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(_, Tailcc(), tpe, _, _, callees) =>
       C.abort(s"tail call to non-void function returning: $tpe")
 
     case Load(result, tpe, LocalReference(PointerType(), name), Some(tbaa), invariant) =>
