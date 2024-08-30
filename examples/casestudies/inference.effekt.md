@@ -12,7 +12,7 @@ This case study shows how we can perform inference over probabilistic models wit
 We require some imports 
 
 ```
-import immutable/list
+import list
 extern pure def pow(x: Double, y: Double): Double = 
   js "Math.pow(${x}, ${y})"
 ```
@@ -81,8 +81,8 @@ def gamma(z0: Double): Double = {
     -176.61502916214059,
     12.507343278686905,
     -0.13857109526572012,
-    9.9843695780195716 * pow(10.0, 0.0-6.0),
-    1.5056327351493116 * pow(10.0, 0.0-7.0)] 
+    9.9843695780195716 * pow(10.0, 0.0 - 6.0),
+    1.5056327351493116 * pow(10.0, 0.0 - 7.0)] 
 
   // takes the i-th element of a list
   def takeith(i: Double, p0: List[Double]): Double = {
@@ -176,7 +176,7 @@ def handleWeight[R]{program: () => R / Weight}: (R, Double)  = {
 def handleEmit[A,R]{program: () => R / Emit[A]} = {
   try {program()}
   with Emit[A] {
-    def emit(element) = {println(element); resume(())}}
+    def emit(element) = {inspect(element); resume(())}}
 }
 ``` 
 
@@ -188,7 +188,7 @@ def handleLimitEmit[A,R](n: Int){program: () => R / Emit[A]} = {
   try {program(); ()}
   with Emit[A] {
     def emit(element) = {
-      println(element)
+      inspect(element)
       steps = steps - 1
       if (0 < steps) {resume(())}
     }
@@ -525,11 +525,14 @@ def main() = {
   }}
 
   //Robot movements
+  /*
   linearCongruentialGenerator(1){sliceSampling[State](5){
     val init = State(0.0, 3.0, 2.0, 0.0)
     step(init, 5.0)
   }}
+  */
 
+  /*
   linearCongruentialGenerator(1){sliceSampling[List[State]](1){
     var nextState = State(0.0, 3.0, 2.0, 0.0)
     var nextdis = 5.0
@@ -545,6 +548,7 @@ def main() = {
     }
     return path
   }}
+  */
 
   //Epidemic Spreading
   linearCongruentialGenerator(1){metropolisHastings[Population](5){
