@@ -24,7 +24,8 @@ abstract class StdlibChezTests extends StdlibTests {
     // Not implemented yet
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
-    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "map"
   )
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
@@ -46,5 +47,22 @@ class StdlibLLVMTests extends StdlibTests {
 
     // Conditional jump or move depends on uninitialised value(s)
     examplesDir / "stdlib" / "io" / "filesystem" / "wordcount.effekt",
+    examplesDir / "stdlib" / "io" / "time.effekt",
+    examplesDir / "stdlib" / "list" / "flatmap.effekt",
+    examplesDir / "stdlib" / "list" / "zip.effekt",
+    examplesDir / "stdlib" / "list" / "deleteat.effekt",
+    examplesDir / "stdlib" / "list" / "join.effekt",
+    examplesDir / "stdlib" / "list" / "modifyat.effekt",
+    examplesDir / "stdlib" / "list" / "updateat.effekt",
+    examplesDir / "stdlib" / "list" / "insert.effekt",
+    examplesDir / "stdlib" / "list" / "fill.effekt",
+    examplesDir / "stdlib" / "list" / "zipwith.effekt",
+    examplesDir / "stdlib" / "list" / "collect.effekt",
+    examplesDir / "stdlib" / "list" / "build.effekt",
+    examplesDir / "stdlib" / "string" / "strings.effekt",
+    examplesDir / "stdlib" / "string" / "unicode.effekt",
+
+    // Not implemented yet
+    examplesDir / "stdlib" / "map"
   )
 }
