@@ -45,9 +45,12 @@ class StdlibMLTests extends StdlibTests {
     // unicode is not supported in the ML backend
     examplesDir / "stdlib" / "string" / "unicode.effekt",
 
+    // missing support for multibyte character escape in a string
+    examplesDir / "stdlib" / "test",
+
     // Not implemented yet
     examplesDir / "stdlib" / "bytes",
-    examplesDir / "stdlib" / "io"
+    examplesDir / "stdlib" / "io",
   )
 }
 class StdlibLLVMTests extends StdlibTests {
@@ -77,5 +80,8 @@ class StdlibLLVMTests extends StdlibTests {
     examplesDir / "stdlib" / "list" / "build.effekt",
     examplesDir / "stdlib" / "string" / "strings.effekt",
     examplesDir / "stdlib" / "string" / "unicode.effekt",
+
+    // missing support for top-level constants for ANSI escapes
+    examplesDir / "stdlib" / "test",
   )
 }
