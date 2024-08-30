@@ -9,8 +9,10 @@ def main() = {
     val m2 = m.put(-1, "Hullo")
     println(m2.toList.prettyPairs)
 
-    val m3 = m.put(-10, "EY")
+    val m3 = m2.put(-10, "EY")
     println(m3.toList.prettyPairs)
+
+    // ...
 
     val m4 = m.delete(1).put(42, "Whole new world!").put(100, "Big").put(1000, "Bigger").put(10000, "Biggest!")
     println(m4.toList.prettyPairs)
@@ -18,7 +20,7 @@ def main() = {
     val m5 = map::fromList(Cons((1, "Foo"), Cons((-1, "Huh?!"), m4.toList.reverse)))
     println(m5.toList.prettyPairs)
 
-    val m6: Map[Int, String] = m3.toList.fromList
+    val m6: Map[Int, String] = m5.toList.fromList
     println(m6.toList.prettyPairs)
 
     val nuMap = map::fromList(l.reverse)
