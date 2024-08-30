@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 import string
 import process
-||||||| parent of e3e9b93b (Make the Effekt testing suite a little prettier)
-import string
-=======
 import bench
 
 interface Formatted {
@@ -11,33 +7,33 @@ interface Formatted {
 }
 
 namespace Formatted {
+  /// Run given block of code, allowing all formatting
   def formatting[R] { prog : => R / Formatted }: R =
-    try {
-      prog()
-    } with Formatted {
+    try { prog() } with Formatted {
       def supportsEscape(escape: String) = resume(true)
     }
 
+  /// Run given block of code, ignoring all formatting
   def noFormatting[R] { prog : => R / Formatted }: R =
-    try {
-      prog()
-    } with Formatted {
+    try { prog() } with Formatted {
       def supportsEscape(escape: String) = resume(false)
     }
 
   def tryEmit(escape: String): String / Formatted =
-    if (do supportsEscape(escape)) { escape } else { "" }
+    if (do supportsEscape(escape)) escape else ""
+
+  def withEscape(text: String, colorEscape: String): String / Formatted =
+    tryEmit(colorEscape) ++ s ++ tryEmit(ANSI::RESET)
 }
 
 namespace Duration {
   def diff(fromNanos: Int, toNanos: Int) = toNanos - fromNanos
 }
 
-def red(s: String) = Formatted::tryEmit(ANSI::RED) ++ s ++ Formatted::tryEmit(ANSI::RESET)
-def green(s: String) = Formatted::tryEmit(ANSI::GREEN) ++ s ++ Formatted::tryEmit(ANSI::RESET)
-def dim(s: String) = Formatted::tryEmit(ANSI::FAINT) ++ s ++ Formatted::tryEmit(ANSI::RESET)
-def bold(s: String) = Formatted::tryEmit(ANSI::BOLD) ++ s ++ Formatted::tryEmit(ANSI::RESET)
->>>>>>> e3e9b93b (Make the Effekt testing suite a little prettier)
+def red(s: String) = s.withEscape(ANSI::RED)
+def green(s: String) = s.withEscape(ANSI::GREEN)
+def dim(s: String) = s.withEscape(ANSI::FAINT)
+def bold(s: String) = s.withEscape(ANSI::BOLD)
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit
@@ -93,11 +89,14 @@ def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: 
   // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
+
 interface Test {
   def success(name: String, duration: Int): Unit
   def failure(name: String, msg: String, duration: Int): Unit
 }
 
+/// Runs the `body` as a test under the given `name`
+/// See `suite` for examples.
 def test(name: String) { body: => Unit / Assertion } = {
   val startTime = bench::relativeTimestamp()
   try {
@@ -117,6 +116,15 @@ def test(name: String) { body: => Unit / Assertion } = {
 /// Run a test suite with a given `name`.
 /// If `printTimes` is `true` (or missing), prints out time in milliseconds.
 /// Formats automatically using ANSI escapes.
+///
+/// Example:
+/// ```effekt
+/// suite("My Tests") {
+///   test("1 + 1 == 2") {
+///     assertEqual(1 + 1, 2)
+///   }
+/// }
+/// ```
 def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } }: Bool / {} = {
   with Formatted::formatting;
 
@@ -127,17 +135,27 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
       ""
     }
 
-  println(name.bold)
+  def dimWhenZeroElse(s: String, n: Int) { colorIfNonZero: String => String / Formatted } =
+    if (n == 0) { dim(s) }
+    else { colorIfNonZero(s) }
+
   var failed = 0
   var passed = 0
 
+  // 1) Print the name of the test
+  println(name.bold)
+
+  // 2) Run the tests, timing them
   val totalDuration = timed {
     try { body() } with Test {
+      // 2a) Handle a passing test on success
       def success(name, duration) = {
         passed = passed + 1
         println("✓".green ++ " " ++ name ++ duration.ms)
         resume(())
       }
+
+      // 2b) Handle a failing test on failure, additionally printing its message
       def failure(name, msg, duration) = {
         failed = failed + 1
         println("✕".red ++ " " ++ name ++ duration.ms)
@@ -147,15 +165,13 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
     }
   }
 
-  def dimWhenZeroElse(s: String, n: Int) { colorIfNonZero: String => String / Formatted } =
-    if (n == 0) { dim(s) }
-    else { colorIfNonZero(s) }
-
+  // 3) Format the test results
   println("")
   println(" " ++ (passed.show ++ " pass").dimWhenZeroElse(passed) { green })
   println(" " ++ (failed.show ++ " fail").dimWhenZeroElse(failed) { red })
   println(" " ++ (passed + failed).show ++ " tests total" ++ totalDuration.ms)
 
+  // 4) Return true if all tests succeeded, otherwise false
   return failed == 0
 }
 
