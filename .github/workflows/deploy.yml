@@ -14,12 +14,14 @@ jobs:
   build-jar:
     name: Build the Effekt compiler and run tests
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     outputs:
       version: ${{ steps.get_version.outputs.VERSION }}
 
     steps:
     - uses: actions/checkout@v4
       with:
+        fetch-tags: 'true'
         submodules: 'true'
 
     - name: Set up JDK 11
@@ -49,7 +51,18 @@ jobs:
 
     - name: Get the version
       id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      run: |
+        if [ "${{ github.event_name }}" = "push" ]; then
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+          # For workflow_run event, we need to fetch the tag created in the previous workflow
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "VERSION=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
+        else
+          echo "Unsupported event type: ${{ github.event_name }}"
+          exit 1
+        fi
 
     - name: Run tests and assemble jar file
       run: sbt clean deploy
