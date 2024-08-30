@@ -302,9 +302,9 @@ object Transformer {
         emit(callLabel(returnAddress, values.map(transform)))
         RetVoid()
 
-      case machine.NewStack(variable, frame, rest) =>
+      case machine.NewStack(variable, prompt, frame, rest) =>
         emit(Comment(s"newStack ${variable.name}"))
-        emit(Call(variable.name, Ccc(), transform(variable.tpe), newStack, List()));
+        emit(Call(variable.name, Ccc(), transform(variable.tpe), newStack, List(transform(prompt))));
 
         val frameEnvironment = freeVariables(frame).toList;
 
@@ -383,6 +383,20 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
+      case machine.PopStacksPrompt(variable, prompt, rest) =>
+        emit(Comment(s"popStacksPrompt ${variable.name}, prompt=${prompt.name}"))
+        val newStackName = freshName("stack");
+        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(prompt))));
+
+        emit(BitCast(variable.name, getStack(), stackType));
+        setStack(LocalReference(stackType, newStackName));
+
+        eraseValues(List(variable), freeVariables(rest));
+        transform(rest)
+
+      case machine.FreshPrompt(machine.Variable(name, _), rest) =>
+        emit(Call(name, Ccc(), promptType, freshPrompt, List(getStack())));
+        transform(rest)
 
       case machine.ComposeEvidence(machine.Variable(name, _), ev1, ev2, rest) =>
         emit(Comment(s"composeEvidence $name, evidence 1 ${ev1.name}, evidence 2 ${ev2.name}"))
@@ -451,6 +465,7 @@ object Transformer {
   def objectType = NamedType("Object");
   def stackPointerType = NamedType("StackPointer");
   def stackType = NamedType("Stack");
+  def promptType = NamedType("Prompt");
   def referenceType = NamedType("Reference");
 
   def transform(tpe: machine.Type): Type = tpe match {
@@ -747,6 +762,7 @@ object Transformer {
   def newStack = ConstantGlobal(PointerType(), "newStack");
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
   def popStacks = ConstantGlobal(PointerType(), "popStacks");
+  def freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
   def withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");

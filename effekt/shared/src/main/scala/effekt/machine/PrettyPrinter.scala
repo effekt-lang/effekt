@@ -80,14 +80,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(arguments) =>
       "return" <+> hsep(arguments map toDoc, ",")
 
-    case NewStack(name, frame, rest) =>
-      "let" <+> name <+> "=" <+> "stack" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
+    case NewStack(name, prompt, frame, rest) =>
+      "let" <+> name <+> "=" <+> "stack" <> parens(toDoc(prompt)) <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
     case PushStack(stack, rest) =>
       "push stack" <+> stack <> ";" <> line <> toDoc(rest)
 
     case PopStacks(name, n, rest) =>
       "let" <+> name <+> "=" <+> "shift0" <+> n <> ";" <> line <> toDoc(rest)
+
+    case PopStacksPrompt(name, prompt, rest) =>
+      "let" <+> name <+> "=" <+> "shift0p" <+> prompt <> ";" <> line <> toDoc(rest)
+
+    case FreshPrompt(name, rest) =>
+      "let" <+> name <+> "=" <+> "freshPrompt" <> ";" <> line <> toDoc(rest)
 
     case ComposeEvidence(name, ev1, ev2, rest) =>
       "let" <+> name <+> "=" <+> ev1 <+> "+" <+> ev2 <> ";" <> line <> toDoc(rest)

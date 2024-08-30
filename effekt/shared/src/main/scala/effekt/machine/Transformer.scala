@@ -261,14 +261,16 @@ object Transformer {
         val variable = Variable(freshName("try"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val prompt = Variable(freshName("prompt"), builtins.Prompt)
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
-            PushStack(delimiter,
-              (ids zip handlers).foldRight(transform(body)){
-                case ((id, handler), body) =>
-                  New(transform(id), transform(handler), body)
-              })))
+          FreshPrompt(prompt,
+            NewStack(delimiter, prompt, returnClause,
+              PushStack(delimiter,
+                (ids zip handlers).foldRight(transform(body)){
+                  case ((id, handler), body) =>
+                    New(transform(id), transform(handler), body)
+                }))))
 
       // TODO what about the evidence passed to resume?
       case lifted.Shift(ev, lifted.Block.BlockLit(tparams, List(kparam), body)) =>
@@ -282,10 +284,12 @@ object Transformer {
         val variable = Variable(freshName("region"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val prompt = Variable(freshName("prompt"), builtins.Prompt)
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
-            PushStack(delimiter, transform(body))))
+          FreshPrompt(prompt,
+            NewStack(delimiter, prompt, returnClause,
+              PushStack(delimiter, transform(body)))))
 
       case lifted.Alloc(id, init, region, ev, body) =>
         transform(init).run { value =>

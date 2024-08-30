@@ -171,9 +171,9 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * e.g. let k = stack { (x, ...) => s }; s
+   * e.g. let k = stack(p) { (x, ...) => s }; s
    */
-  case NewStack(name: Variable, frame: Clause, rest: Statement)
+  case NewStack(name: Variable, prompt: Variable, frame: Clause, rest: Statement)
 
   /**
    * e.g. push k; s
@@ -187,6 +187,11 @@ enum Statement {
   case PopStacks(name: Variable, n: Variable, rest: Statement)
 
   /**
+   * Pops stacks until it finds one labeled with `prompt`
+   */
+  case PopStacksPrompt(name: Variable, prompt: Variable, rest: Statement)
+
+  /**
    * let x = #infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
@@ -196,6 +201,12 @@ enum Statement {
    * let x = ev1 + ev2; s
    */
   case ComposeEvidence(name: Variable, ev1: Variable, ev2: Variable, rest: Statement)
+
+  /**
+   * Creates a fresh prompt
+   * let p = freshPrompt; s
+   */
+  case FreshPrompt(name: Variable, rest: Statement)
 
   /**
    * let x = 42; s
@@ -230,9 +241,12 @@ enum Type {
 export Type.{ Positive, Negative }
 
 type Evidence = Int
+type Prompt = Int
+
 object builtins {
 
   val Evidence = Type.Int()
+  val Prompt = Type.Int()
   val Here: Evidence = 0
   val There: Evidence = 1
 

@@ -315,7 +315,7 @@ define %Memory @newMemory() {
     ret %Memory %memory.2
 }
 
-define %Stack @newStack() {
+define %Stack @newStack(%Prompt %prompt) {
 
     ; TODO find actual size of stack
     %stack = call ptr @malloc(i64 120)
@@ -326,7 +326,7 @@ define %Stack @newStack() {
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
-    %stack.3 = insertvalue %StackValue %stack.2, %Prompt 0, 3 ; TODO add prompt here!
+    %stack.3 = insertvalue %StackValue %stack.2, %Prompt %prompt, 3 ; TODO add prompt here!
     %stack.4 = insertvalue %StackValue %stack.3, %Stack zeroinitializer, 4
 
     store %StackValue %stack.4, %Stack %stack
@@ -635,7 +635,7 @@ define void @topLevelEraser(%Environment %environment) {
 }
 
 define %Stack @withEmptyStack() {
-    %stack = call %Stack @newStack()
+    %stack = call %Stack @newStack(%Prompt 0) ; TODO get the last prompt from somewhere
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
