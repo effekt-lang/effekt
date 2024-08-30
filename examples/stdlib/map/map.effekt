@@ -6,16 +6,21 @@ def main() = {
     val m = map::fromList(l)
     println(m.toList.prettyPairs)
 
-    val m2 = m.delete(1).put(42, "Whole new world!").put(100, "Big").put(1000, "Bigger").put(10000, "Biggest!")
+    val m2 = m.put(-1, "Hullo")
     println(m2.toList.prettyPairs)
 
-    // TODO: BUG!
-    // val m3 = map::fromList(Cons((1, "Foo"), Cons((-1, "Huh?!"), m2.toList.reverse)))
-    // println(m3.toList.prettyPairs)
-
-    val m3 = map::fromList(Cons((1, "Foo"), m2.toList.reverse))
+    val m3 = m.put(-10, "EY")
     println(m3.toList.prettyPairs)
 
-    val m4: Map[Int, String] = m3.toList.fromList
+    val m4 = m.delete(1).put(42, "Whole new world!").put(100, "Big").put(1000, "Bigger").put(10000, "Biggest!")
     println(m4.toList.prettyPairs)
+
+    val m5 = map::fromList(Cons((1, "Foo"), Cons((-1, "Huh?!"), m4.toList.reverse)))
+    println(m5.toList.prettyPairs)
+
+    val m6: Map[Int, String] = m3.toList.fromList
+    println(m6.toList.prettyPairs)
+
+    val nuMap = map::fromList(l.reverse)
+    println(nuMap.toList.prettyPairs)
 }
