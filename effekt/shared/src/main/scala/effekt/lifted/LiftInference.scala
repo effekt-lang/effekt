@@ -176,6 +176,13 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Region(_) => ErrorReporter.panic("Should not happen. Regions always take block literals as body.")
 
+    case core.App(core.BlockVar(b: symbols.ExternFunction, tpe, _), targs, vargs, bargs) =>
+      if (bargs.nonEmpty) {
+        ErrorReporter.panic("Extern control definitions must not take block arguments")
+      } else {
+        App(BlockVar(b, transform(tpe)), targs.map(transform), vargs map transform)
+      }
+
     case core.App(b: core.Block, targs, vargs, bargs) =>
 
       // evidence for the function itself
