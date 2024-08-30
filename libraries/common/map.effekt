@@ -556,7 +556,7 @@ def balance[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): Map[K, V] = {
   }
   def rotateR[A, B](k: A, v: B, l: Map[A, B], r: Map[A, B]): Map[A, B] = {
     l match {
-      case Bin(_, _, _, ll, lr) and (ll.size() < ratio * lr.size()) => singleR(k, v, l, r)
+      case Bin(_, _, _, ll, lr) and (lr.size() < ratio * ll.size()) => singleR(k, v, l, r)
       case _ => doubleR(k, v, l, r)
     }
   }
