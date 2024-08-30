@@ -37,14 +37,27 @@ object WebTests extends TestSuite {
         mod.module
       }
 
-    def evaluate[A](includes: List[String], content: String) =
-      run[A](includes, s"\n\ndef main() = { ${content} }\n")
+    /**
+     * Since main needs to return `Unit`, we define the effekt function `withResult` which side-channels the result
+     * using the global object `module.export`.
+     */
+    def evaluate[A](includes: List[String], content: String): A =
+      run(includes,
+        s"""|extern io def withResult[A](value: A): Unit = js"(function() { module.exports.result = $${value} })()"
+            |def main() = { withResult(${content}) }
+            |""".stripMargin)
+      js.Dynamic.global.globalThis.module.`exports`.result.asInstanceOf[A]
 
-    def run[A](includes: List[String], content: String) = {
+    def run(includes: List[String], content: String) = {
       server.writeFile("interactive.effekt", includes.map(i => s"import $i").mkString("\n") + s"\n\n${content}")
       val mainFile = server.compileFile("interactive.effekt")
 
-      load(mainFile.replace("out/", "")).main().run().asInstanceOf[A]
+      load(mainFile.replace("out/", "")).main().run()
+    }
+
+    test("Can read files from the stdlib") {
+      val contents = server.readFile("common/effekt.effekt")
+      assert(contents.length > 100)
     }
 
     test("Evaluate simple expressions in REPL") {
@@ -57,7 +70,7 @@ object WebTests extends TestSuite {
     }
 
     test("Evaluate expressions using stdlib in REPL") {
-      val result = evaluate[Int](List("immutable/list"), "Cons(1, Cons(2, Nil())).size")
+      val result = evaluate[Int](List("list"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
     }
 
@@ -71,7 +84,7 @@ object WebTests extends TestSuite {
     }
 
     test("Load file with multiline extern strings") {
-      val result = evaluate[Int](List("immutable/list", "mutable/heap"), "Cons(1, Cons(2, Nil())).size")
+      val result = evaluate[Int](List("list", "ref"), "Cons(1, Cons(2, Nil())).size")
       assert(result == 2)
     }
 
@@ -85,15 +98,13 @@ object WebTests extends TestSuite {
     }
 
     test("Extern resources on website") {
-      val result = run[String](Nil,
+      run(Nil,
         """interface Greet { }
           |
           |extern resource my_resource : Greet
           |
-          |def main() = "hello"
+          |def main() = ()
           |""".stripMargin)
-
-      assert(result == "hello")
     }
   }
 }

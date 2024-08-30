@@ -12,9 +12,9 @@ object PrettyPrinter {
     definitions.map(show).mkString("\n\n")
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
-    case Function(returnType, name, parameters, basicBlocks) =>
+    case Function(callingConvention, returnType, name, parameters, basicBlocks) =>
       s"""
-define fastcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
@@ -39,6 +39,11 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
       s"@$name = private constant ${show(initializer)}"
   }
 
+  def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
+    case Ccc() => "ccc"
+    case Tailcc() => "tailcc"
+  }
+
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
     case BasicBlock(name, instructions, terminator) =>
       s"""
@@ -50,18 +55,18 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
-    case Call(_, VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"call void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(result, tpe, ConstantGlobal(_, name), arguments) =>
-      s"${localName(result)} = call ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, _, nonglobal, _) => C.abort(s"cannot call non-global operand: $nonglobal")
-
-    case TailCall(LocalReference(_, name), arguments) =>
-      s"tail call fastcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
-    case TailCall(ConstantGlobal(_, name), arguments) =>
-      s"tail call fastcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case TailCall(nonglobal, _) => C.abort(s"can only tail call references, not: $nonglobal")
-    // TODO [jfrech, 2022-07-26] Why does tail call even have a return type if we do not use it?
+    case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments) =>
+      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments) =>
+      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(_, Ccc(), _, nonglobal, _) =>
+      C.abort(s"cannot call non-global operand: $nonglobal")
+    case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments) =>
+      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments) =>
+      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(_, Tailcc(), tpe, _, _) =>
+      C.abort(s"tail call to non-void function returning: $tpe")
 
     case Load(result, tpe, LocalReference(PointerType(), name)) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}"
@@ -97,9 +102,11 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
-    case Comment(msg) =>
+    case Comment(msg) if C.config.debug() =>
       val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
-      s"; $sanitized"
+      s"\n; $sanitized"
+
+    case Comment(msg) => ""
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {
@@ -128,6 +135,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case IntegerType1() => "i1"
     case IntegerType8() => "i8"
     case IntegerType64() => "i64"
+    case DoubleType() => "double"
     case PointerType() => "ptr"
     case ArrayType(size, of) => s"[$size x ${show(of)}]"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(show))}}"

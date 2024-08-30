@@ -11,6 +11,7 @@ import kiama.output.PrettyPrinterTypes.Document
 import util.messages.{ INTERNAL_ERROR, NOT_SUPPORTED }
 
 import scala.language.implicitConversions
+import scala.util.matching.Regex
 
 object TransformerMonadic extends Transformer {
 
@@ -41,6 +42,8 @@ object TransformerCallCC extends Transformer {
 }
 
 trait Transformer {
+
+  val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
 
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
@@ -74,7 +77,9 @@ trait Transformer {
     case Return(e) => pure(toChez(e))
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    // empty matches are translated to a hole in chez scheme
+    case Match(scrutinee, Nil, None) => chez.Builtin("hole")
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -155,7 +160,7 @@ trait Transformer {
     case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -165,7 +170,7 @@ trait Transformer {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 
@@ -212,7 +217,8 @@ trait Transformer {
 
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("#f")
-    case Literal(s: String, _)  => ChezString(s)
+
+    case Literal(s: String, _)  => ChezString(adaptEscapes(escape(s)))
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
@@ -250,4 +256,12 @@ trait Transformer {
 
     List(getter, setter)
   }
+
+  def escape(scalaString: String): String =
+    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
+      escapeSeqs.get(c) match {
+        case Some(s) => acc ++= s
+        case None => acc += c
+      }
+    }.toString()
 }

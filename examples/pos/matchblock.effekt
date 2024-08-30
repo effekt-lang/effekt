@@ -1,7 +1,5 @@
 module matchblock
 
-import immutable/list
-
 type P {
   Person(name: String, age: Int)
 }

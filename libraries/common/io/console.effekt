@@ -1,0 +1,66 @@
+module io/console
+
+import io
+import io/time // just for testing
+
+extern js """
+  const readline = require('node:readline');
+"""
+
+interface Console {
+  def readLine(): String
+  def writeLine(content: String): Unit
+}
+
+namespace js {
+  extern type JSConsole
+  extern {io} def newConsole(): JSConsole =
+    js """readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      })"""
+  extern {io} def close(console: JSConsole): Unit =
+    js "${console}.close()"
+
+  extern {io} def readline(console: JSConsole, k: String => Unit at {io, global}): Unit =
+    js "${console}.question('', input => (${k})(input).run())"
+}
+
+/**
+ * Handler for the console effect, using the Console available in js
+ */
+def console[R] { prog: => R / Console }: R / AsyncIO = {
+  val c = js::newConsole()
+  try { val res = prog(); js::close(c); res } with Console {
+    def readLine() = {
+      resume(do performIO[String](box { write =>
+        js::readline(c, write)
+      }))
+    }
+    def writeLine(content) = resume(println(content))
+  }
+}
+
+// TODO we could also use stdin and out to implement the Console effect:
+namespace alternative {
+  extern {io} def writeStdoutCallback(message: String, k: () => Unit at {io, global}): Unit =
+    js "process.stdout.write(${message}, 'utf-8', () => (${k})().run())"
+
+  def write(message: String): Unit / IO =
+    do performIO[Unit](box { write => writeStdoutCallback(message, box { write(()) })})
+}
+
+namespace examples {
+
+  def greeter() = {
+    do writeLine("What's your name?")
+    val name = do readLine();
+    do writeLine("Hi " ++ name ++ ", nice to meet you!")
+  }
+
+  def main() = eventloop(box {
+    with console;
+    greeter()
+  })
+
+}

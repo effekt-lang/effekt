@@ -1,0 +1,225 @@
+module array
+
+import effekt
+import exception
+import list
+
+/**
+ * A mutable 0-indexed fixed-sized array.
+ */
+extern type Array[T]
+
+/**
+ * Allocates a new array of size `size`, keeping its values _undefined_.
+ * Prefer using `array` constructor instead to ensure that values are defined.
+ */
+extern global def allocate[T](size: Int): Array[T] =
+  js "(new Array(${size}))"
+  chez "(make-vector ${size})" // creates an array filled with 0s on CS
+  llvm """
+    %z = call %Pos @c_array_new(%Int %size)
+    ret %Pos %z
+  """
+
+/**
+ * Creates a new Array of size `size` filled with the value `init`
+ */
+extern global def array[T](size: Int, init: T): Array[T] =
+  ml "Array.array (${size}, ${init})"
+  default {
+    val arr = allocate[T](size);
+    each(0, size) { i =>
+      unsafeSet(arr, i, init)
+    };
+    arr
+  }
+
+/**
+ * Converts a List `list` to an Array
+ */
+def fromList[T](list: List[T]): Array[T] = {
+  val listSize = list.size();
+  val arr = allocate(listSize);
+
+  foreachIndex(list) { (i, head) =>
+    arr.unsafeSet(i, head)
+  }
+  return arr;
+}
+
+/**
+ * Gets the length of the array in constant time.
+ */
+extern pure def size[T](arr: Array[T]): Int =
+  js "${arr}.length"
+  chez "(vector-length ${arr})"
+  ml "Array.length ${arr}"
+  llvm """
+    %z = call %Int @c_array_size(%Pos %arr)
+    ret %Int %z
+  """
+
+/**
+ * Gets the element of the `arr` at given `index` in constant time.
+ * Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
+ *
+ * Prefer using `get` instead.
+ */
+extern global def unsafeGet[T](arr: Array[T], index: Int): T =
+  js "${arr}[${index}]"
+  chez "(vector-ref ${arr} ${index})"
+  ml "Array.sub (${arr}, ${index})"
+  llvm """
+    %z = call %Pos @c_array_get(%Pos %arr, %Int %index)
+    ret %Pos %z
+  """
+
+extern js """
+function array$set(arr, index, value) {
+  arr[index] = value;
+  return $effekt.unit
+}
+"""
+
+ /**
+ * Sets the element of the `arr` at given `index` to `value` in constant time.
+ * Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
+ *
+ * Prefer using `set` instead.
+ */
+extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
+  js "array$set(${arr}, ${index}, ${value})"
+  chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
+  ml "Array.update (${arr}, ${index}, ${value})"
+  llvm """
+    %z = call %Pos @c_array_set(%Pos %arr, %Int %index, %Pos %value)
+    ret %Pos %z
+  """
+
+/**
+ * Creates a copy of `arr`
+ */
+def copy[T](arr: Array[T]): Array[T] = {
+  with on[OutOfBounds].default { <> }; // should not happen
+  val len = arr.size;
+  val newArray = allocate[T](len);
+  copy[T](arr, 0, newArray, 0, len);
+  newArray
+}
+
+/**
+ * Copies `length`-many elements from `from` to `to`
+ * starting at `start` (in `from`) and `offset` (in `to`)
+ */
+def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
+  val startValid  = start >= 0 && start + length <= from.size
+  val offsetValid = offset >= 0 && offset + length <= to.size
+
+  def go(i: Int, j: Int, length: Int): Unit =
+    if (length > 0) {
+      to.unsafeSet(j, from.unsafeGet(i))
+      go(i + 1, j + 1, length - 1)
+    }
+
+  if (startValid && offsetValid) go(start, offset, length)
+  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
+}
+
+// Derived operations:
+
+/**
+ * Gets the element of the `arr` at given `index` in constant time,
+ * throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
+ */
+def get[T](arr: Array[T], index: Int): T / Exception[OutOfBounds] =
+  if (index >= 0 && index < arr.size) arr.unsafeGet(index)
+  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
+
+/**
+ * Sets the element of the `arr` at given `index` to `value` in constant time,
+ * throwing an `Exception[OutOfBounds]` unless `0 ≤ index < arr.size`.
+ */
+def set[T](arr: Array[T], index: Int, value: T): Unit / Exception[OutOfBounds] =
+  if (index >= 0 && index < arr.size) unsafeSet(arr, index, value)
+  else do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
+
+/**
+ * Builds a new Array of size `size` from a computation `index` which gets an index
+ * and returns a value that will be on that position in the resulting array
+ */
+def build[T](size: Int) { index: Int => T }: Array[T] = {
+  val arr = allocate[T](size);
+  each(0, size) { i =>
+    unsafeSet(arr, i, index(i))
+  };
+  arr
+}
+
+// Utility functions:
+
+def toList[T](arr: Array[T]): List[T] = {
+  var i = arr.size - 1;
+  var l = Nil[T]()
+  while (i >= 0) {
+    l = Cons(arr.unsafeGet(i), l)
+    i = i - 1
+  }
+  l
+}
+
+def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
+  each(0, arr.size) { i =>
+    val x: T = arr.unsafeGet(i)
+    action(x)
+  }
+
+def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    val x: T = arr.unsafeGet(i)
+    action(x) {label}
+  }
+
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
+  each(0, arr.size) { i =>
+    val x: T = arr.unsafeGet(i)
+    action(i, x)
+  }
+
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    val x: T = arr.unsafeGet(i)
+    action(i, x) {label}
+  }
+
+def sum(list: Array[Int]): Int = {
+  var acc = 0
+  list.foreach { x =>
+    acc = acc + x
+  }
+  acc
+}
+
+// Show Instances
+// --------------
+
+def show[A](arr: Array[A]) { showA: A => String }: String = {
+  var output = "Array("
+  val lastIndex = arr.size - 1
+
+  arr.foreachIndex { (index, a) =>
+    if (index == lastIndex) output = output ++ showA(a)
+    else output = output ++ showA(a) ++ ", "
+  }
+  output = output ++ ")"
+
+  output
+}
+def show(l: Array[Int]): String = show(l) { e => show(e) }
+def show(l: Array[Double]): String = show(l) { e => show(e) }
+def show(l: Array[Bool]): String = show(l) { e => show(e) }
+def show(l: Array[String]): String = show(l) { e => e }
+
+def println(l: Array[Int]): Unit = println(show(l))
+def println(l: Array[Double]): Unit = println(show(l))
+def println(l: Array[Bool]): Unit = println(show(l))
+def println(l: Array[String]): Unit = println(show(l))

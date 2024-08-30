@@ -62,7 +62,7 @@ case class Module(
     case e: Interface => e
   }
 
-  private def isPrelude: Boolean = name.name == "effekt"
+  def isPrelude: Boolean = name.name == "effekt"
 
   def findPrelude: Module = {
     // Either this module is already Prelude
@@ -74,6 +74,16 @@ case class Module(
     dependencies.find(_.isPrelude).getOrElse {
       sys error "Cannot find Prelude, this should not happen"
     }
+  }
+
+  def findDependency(path: QualifiedName): Option[Module] = {
+    // Either this module is already Prelude
+    if (name == path) {
+      return Some(this)
+    }
+
+    // ... or we try to find Prelude in our dependencies
+    dependencies.find(dep => dep.name == path)
   }
 
   /**
@@ -202,8 +212,8 @@ case class CallTarget(symbols: List[Set[BlockSymbol]]) extends BlockSymbol { val
  * Introduced by Transformer
  */
 case class Wildcard() extends ValueSymbol { val name = Name.local("_") }
-case class TmpValue() extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
-case class TmpBlock() extends BlockSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
+case class TmpValue(hint: String = "tmp") extends ValueSymbol { val name = Name.local("v_" + hint + "_" + Symbol.fresh.next()) }
+case class TmpBlock(hint: String = "tmp") extends BlockSymbol { val name = Name.local("b_" + hint + "_" + Symbol.fresh.next()) }
 
 /**
  * Type Symbols
@@ -312,9 +322,6 @@ sealed trait CaptVar extends TypeSymbol
 /**
  * "Tracked" capture parameters. Like [[TypeParam]] used to abstract
  * over capture. Also see [[BlockParam.capture]].
- *
- * Can be either
- * - [[LexicalRegion]] to model self regions of functions
  */
 enum Capture extends CaptVar {
 

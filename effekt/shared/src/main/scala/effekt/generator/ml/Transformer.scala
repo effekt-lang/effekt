@@ -17,6 +17,16 @@ import scala.collection.mutable
 
 object Transformer {
 
+  val escapeSeqs: Map[Char, String] = Map(
+    '\'' -> raw"'",
+    '\"' -> raw"\"",
+    '\\' -> raw"\\",
+    '\n' -> raw"\n",
+    '\t' -> raw"\t",
+    '\r' -> raw"\r")
+
+
+
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
   def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(using C: Context): ml.Toplevel = {
@@ -130,6 +140,12 @@ object Transformer {
     case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
       defineRecord(name(id), name(id.constructor), ctor.fields.map { f => name(f.id) })
 
+    // SML does not support empty datatype declarations -- instead recursive definitions are used.
+    //   https://github.com/SMLFamily/Successor-ML/issues/32
+    case Declaration.Data(id, tparams, List()) =>
+      val constructor = freshName(id.name.name)
+      defineRecord(name(id), constructor, List(name(id)))
+
     case Declaration.Data(id, tparams, ctors) =>
       def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
         case Constructor(id, fields) =>
@@ -233,6 +249,9 @@ object Transformer {
       toMLExpr(binding).flatMap { value =>
         toMLExpr(body).mapComputation { b => ml.mkLet(List(ml.ValBind(name(id), value)), b) }
       }
+
+    // empty matches are translated to holes
+    case lifted.Match(scrutinee, Nil, None) => CPS.inline { k => ml.RawExpr("raise Absurd") }
 
     case lifted.Match(scrutinee, clauses, default) =>
       def clauseToML(c: (Id, BlockLit)): (ml.Pattern, CPS) = {
@@ -430,7 +449,7 @@ object Transformer {
         case v: Float => numberString(v)
         case v: Double => numberString(v)
         case _: Unit => Consts.unitVal
-        case v: String => MLString(v)
+        case v: String => MLString(escape(v))
         case v: Boolean => if (v) Consts.trueVal else Consts.falseVal
         case _ => ml.RawValue(l.value.toString)
       }
@@ -610,4 +629,16 @@ object Transformer {
     case one :: Nil => Some(one)
     case exps => Some(ml.Expr.Tuple(exps))
   }
+
+  def escape(scalaString: String): String = {
+    scalaString.foldLeft(new StringBuilder) {
+      case (acc, c) if escapeSeqs.isDefinedAt(c) =>
+        acc ++= escapeSeqs(c)
+      case (acc, c) if (c.isControl || c < ' ' || c > '~') =>
+        acc ++= f"\\u${c.toInt}%04x"
+      case (acc, c) =>
+        acc += c
+    }.toString()
+  }
+
 }

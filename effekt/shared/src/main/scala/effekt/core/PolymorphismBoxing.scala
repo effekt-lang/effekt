@@ -6,7 +6,9 @@ import effekt.context.Context
 import effekt.symbols
 import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.{ CoreTransformed, Phase }
-import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TState, TUnit }
+import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TChar, TByte, TState, TUnit }
+import effekt.symbols.ErrorMessageInterpolator
+import scala.util.boundary
 
 import scala.annotation.targetName
 
@@ -25,11 +27,38 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   /**
    * Describes how to box/unbox values
-   * @param tpe The type of the values to be boxed
-   * @param constructor The constructor to box the values with
-   * @param field The field to access for unboxing
    */
-  case class Boxer(tpe: ValueType.Data, constructor: Id, field: Id)
+  trait Boxer {
+    /** The type of the boxed values */
+    def tpe: ValueType
+    /** Generates a pure expression boxing the parameter */
+    def box(p: Pure): Pure
+    /** Generates a pure expression unboxing the parameter */
+    def unbox(p: Pure): Pure
+  }
+  /**
+   * Describes how to box/unbox values using extern functions
+   * @param tpe The type of the boxed values
+   * @param boxFn The extern function to call to box
+   * @param unboxFn The extern function to call to unbox
+   */
+  case class ExternFnBoxer(val tpe: ValueType, boxFn: Block.BlockVar, unboxFn: Block.BlockVar) extends Boxer {
+    def box(p: Pure) = Pure.PureApp(boxFn, Nil, List(p))
+    def unbox(p: Pure) = Pure.PureApp(unboxFn, Nil, List(p))
+  }
+
+  /**
+   * Describes how to box/unbox values using records
+   *
+   * @param boxTpe       The type BoxedT
+   * @param constructor  The constructor to use for boxing
+   * @param field        The field to access for unboxing
+   */
+  case class RecordBoxer(boxTpe: ValueType.Data, constructor: Constructor, field: Field) extends Boxer {
+    def tpe = boxTpe
+    def box(p: Pure) = Pure.Make(boxTpe, constructor.id, List(p))
+    def unbox(p: Pure) = Pure.Select(p, field.id, field.tpe)
+  }
 
   /**
    * Partial function to describe which values to box and how.
@@ -40,32 +69,35 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    */
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt     => PContext.boxer("Int")
-    case core.Type.TBoolean => PContext.boxer("Bool")
+    case core.Type.TChar    => PContext.boxer("Char")
+    case core.Type.TByte    => PContext.boxer("Byte")
     case core.Type.TDouble  => PContext.boxer("Double")
-    case core.Type.TUnit    => PContext.boxer("Unit")
-    // Do strings need to be boxed? Really?
-    case core.Type.TString  => PContext.boxer("String")
   }
 
-  class PContext(val declarations: List[Declaration])(using val Context: Context){
-    def findDeclarations(id: Id): List[Declaration] = {
-      declarations.filter(_.id == id)
-    }
-    def getDataLikeDeclaration(id: Id): Declaration.Data = {
-      val decls: List[Declaration.Data] = declarations.flatMap{
-        case d : Declaration.Data if d.id == id =>
-          Some(d)
-        case _ => None
-      }
-      if (decls.length != 1) {
-        Context.abort(s"No unique declaration for ${id}. Options: \n" +
-          (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n"))
-      } else {
-        decls.head
-      }
+  class PContext(declarations: List[Declaration], externs: List[Extern])(using val Context: Context) extends DeclarationContext(declarations, externs){
+    /**
+     * Find a pure extern def with one value parameter named [[name]] in the prelude (or some namespace in the prelude).
+     */
+    def findPureExternFn(name: String): Option[Block.BlockVar] = {
+       this.externs.collectFirst {
+        case d@effekt.core.Extern.Def(id, List(), List(), List(vparam), List(), ret, capts, body)
+          if id.name.name == name && capts.isEmpty => d
+      }.map { definition =>
+         val id = definition.id
+         val tpe = core.BlockType.Function(Nil, Nil, definition.vparams.map(_.tpe), Nil, definition.ret)
+         Block.BlockVar(id, tpe, Set.empty)
+       }
     }
 
-    lazy val prelude = Context.module.findPrelude
+    /**
+     * Find a record declaration named [[name]] with one field in the prelude (or some namespace in the prelude).
+     */
+    def findRecord(name: String): Option[Declaration.Data] = {
+      this.declarations.collectFirst {
+        case d@effekt.core.Declaration.Data(tpe, List(), List(Constructor(cns, List(fld))))
+          if tpe.name.name == name => d
+      }
+    }
 
     /**
      * Finds the corresponding boxer for a primitive type.
@@ -73,17 +105,37 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
      * @param name The name of the [[ValueType]]
      * @return a [[Boxer]] that describes how to box values of that type
      */
-    def boxer(name: String): Boxer = prelude.types.get("Boxed" + name) match {
-      case Some(value) => value match {
-        case tpeCns @ symbols.TypeConstructor.Record(_, List(), cns @ symbols.Constructor(_, List(), List(field), _)) =>
-          Boxer(ValueType.Data(tpeCns, List()), cns, field)
-        case tpeCns @ symbols.TypeConstructor.DataType(_, List(), List(cns @ symbols.Constructor(_, List(), List(field), _))) =>
-          Boxer(ValueType.Data(tpeCns, List()), cns, field)
-        case _ =>
-          Context.abort(s"No appropriate Boxed${name} type, but ${name} used as type parameter.")
+    def boxer(name: String): Boxer = {
+      /** Try to find `boxT` and `unboxT` externs */
+      def findExternFnBoxer() = boundary {
+        val box = findPureExternFn("box" ++ name).getOrElse { boundary.break(None) }
+        val unbox = findPureExternFn("unbox" ++ name).getOrElse { boundary.break(None) }
+        val boxRet = box.annotatedTpe match {
+          case BlockType.Function(_, _, _, _, result) => result
+          case _ => Context.abort(pp"${box} is not of function type.")
+        }
+        unbox.annotatedTpe match {
+          case BlockType.Function(_, _, List(unboxArg), List(), _) =>
+            if (unboxArg != boxRet) {
+              Context.abort(pp"Argument type of ${unbox} and return type of ${box} do not match up.")
+            }
+          case _ => Context.abort(pp"${unbox} is not of function type.")
+        }
+        Some(ExternFnBoxer(boxRet, box, unbox))
       }
-      case None =>
-        Context.abort(s"Primitive ${name} is used as type parameter but Boxed${name} is not defined.")
+      /** Try to find a `BoxedT` type */
+      def findRecordBoxer() = boundary {
+        findRecord("Boxed" ++ name) match {
+          case Some(Declaration.Data(tpe, List(), List(cns@Constructor(id, List(field))))) =>
+            Some(RecordBoxer(ValueType.Data(tpe, Nil), cns, field))
+          case _ => None
+        }
+      }
+      findExternFnBoxer() orElse findRecordBoxer() getOrElse {
+        Context.abort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
+          s"corresponding pure externs box${name} and unbox${name} were defined in the prelude, " +
+          s"and also no record type Boxed${name}.")
+      }
     }
   }
   def PContext(using ctx: PContext): PContext = ctx
@@ -91,7 +143,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
     case CoreTransformed(source, tree, mod, core) => {
-      implicit val pctx: PContext = new PContext(core.declarations)
+      implicit val pctx: PContext = new PContext(core.declarations, core.externs)
       Context.module = mod
       val transformed = Context.timed(phaseName, source.name) { transform(core) }
       Some(CoreTransformed(source, tree, mod, transformed))
@@ -100,7 +152,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(decl: ModuleDecl)(using PContext): ModuleDecl = decl match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions map transform, exports)
+      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions flatMap transform, exports)
   }
 
   def transform(declaration: Declaration)(using PContext): Declaration = declaration match {
@@ -139,9 +191,19 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, transform(tpe), capt)
   }
 
-  def transform(definition: Definition)(using PContext): Definition = definition match {
-    case Definition.Def(id, block) => Definition.Def(id, transform(block))
-    case Definition.Let(id, binding) => Definition.Let(id, transform(binding))
+  def transform(definition: Definition)(using PContext): List[Definition] = definition match {
+    case Definition.Def(id, block) => List(Definition.Def(id, transform(block)))
+    case Definition.Let(id, tpe, binding) =>
+      val coerce = coercer(binding.tpe, transform(tpe))
+      if (coerce.isIdentity) {
+        List(Definition.Let(id, transform(tpe), transform(binding)))
+      } else {
+        val orig = TmpValue("coe")
+        val origTpe = binding.tpe
+        List(
+          Definition.Let(orig, origTpe, transform(binding)),
+          Definition.Let(id, transform(tpe), coerce(ValueVar(orig, origTpe))))
+      }
   }
 
   def transform(block: Block.BlockLit)(using PContext): Block.BlockLit = block match {
@@ -179,12 +241,31 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(stmt: Stmt)(using PContext): Stmt = stmt match {
     case Stmt.Scope(definitions, body) =>
-      Stmt.Scope(definitions map transform, transform(body))
+      Stmt.Scope(definitions flatMap transform, transform(body))
     case Stmt.Return(expr) => Stmt.Return(transform(expr))
-    case Stmt.Val(id, binding, body) => Stmt.Val(id, transform(binding), transform(body))
+    case Stmt.Val(id, tpe, binding, body) =>
+      val coerce = coercer(binding.tpe, transform(tpe))
+      if (coerce.isIdentity) {
+        Stmt.Val(id, transform(tpe), transform(binding), transform(body))
+      } else {
+        val orig = TmpValue("coe")
+        Stmt.Val(orig, binding.tpe, transform(binding),
+          Let(id, transform(binding.tpe), coerce(Pure.ValueVar(orig, binding.tpe)),
+            transform(body)))
+      }
     case Stmt.App(callee, targs, vargs, bargs) =>
       val calleeT = transform(callee)
-      instantiate(calleeT, targs).call(calleeT, vargs map transform, bargs map transform)
+      val tpe: BlockType.Function = calleeT.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
+      }
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val tBargs = bargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val fcoercer = coercer[Block](tpe, itpe, targs)
+      fcoercer.call(calleeT, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, transform(tpe))
     case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, transform(value))
     case Stmt.If(cond, thn, els) =>
@@ -192,7 +273,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Match(scrutinee, clauses, default) =>
       scrutinee.tpe match {
         case ValueType.Data(symbol, targs) =>
-          val Declaration.Data(tpeId, tparams, constructors) = PContext.getDataLikeDeclaration(symbol)
+          val Declaration.Data(tpeId, tparams, constructors) = PContext.getData(symbol)
           Stmt.Match(transform(scrutinee), clauses.map {
             case (id, clause: Block.BlockLit) =>
               val constructor = constructors.find(_.id == id).get
@@ -201,7 +282,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
               )
               (id, coercer(clause.tpe, Type.instantiate(casetpe, targs map transformArg, List()))(transform(clause)))
           }, default map transform)
-        case t => Context.abort(s"Match on value of type ${PrettyPrinter.format(t)}")
+        case t => Context.abort(pp"Match on value of type ${t}")
       }
     case Stmt.Alloc(id, init, region, body) =>
       Stmt.Alloc(id, transform(init), region, transform(body))
@@ -215,7 +296,18 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using PContext): Expr = expr match {
     case DirectApp(b, targs, vargs, bargs) =>
-      instantiate(b, targs).callDirect(b, vargs map transform, bargs map transform)
+      val callee = transform(b)
+      val tpe: BlockType.Function = callee.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
+      }
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val tBargs = bargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val fcoercer = coercer[Block](tpe, itpe, targs)
+      fcoercer.callDirect(callee, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
     case Run(s) => Run(transform(s))
     case pure: Pure => transform(pure)
   }
@@ -223,11 +315,21 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(pure: Pure)(using PContext): Pure = pure match {
     case Pure.ValueVar(id, annotatedType) => Pure.ValueVar(id, transform(annotatedType))
     case Pure.Literal(value, annotatedType) => Pure.Literal(value, transform(annotatedType))
-    case Pure.PureApp(b, targs, vargs) => instantiate(b, targs).callPure(b, vargs map transform)
+    case Pure.PureApp(b, targs, vargs) =>
+      val callee = transform(b)
+      val tpe: BlockType.Function = callee.tpe match {
+        case tpe: BlockType.Function => tpe
+        case _ => sys error "Callee does not have function type"
+      }
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val fcoercer = coercer[Block](tpe, itpe, targs)
+      fcoercer.callPure(b, (vcoercers zip tVargs).map(_(_)))
     case Pure.Make(data, tag, vargs) =>
-      val dataDecl = PContext.getDataLikeDeclaration(data.name)
+      val dataDecl = PContext.getData(data.name)
       val ctorDecl = dataDecl.constructors.find(_.id == tag).getOrElse {
-        Context.panic(s"No constructor found for tag ${tag} in data type: ${data}")
+        Context.panic(pp"No constructor found for tag ${tag} in data type: ${data}")
       }
 
       val argTypes   = vargs.map(_.tpe)
@@ -243,7 +345,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case ValueType.Data(symbol, targs) => (symbol, targs)
         case t => Context.abort(s"Select on value of type ${PrettyPrinter.format(t)} is not supported.")
       }
-      PContext.getDataLikeDeclaration(symbol) match {
+      PContext.getData(symbol) match {
         case Declaration.Data(id, tparams, List(Constructor(cns, fields))) =>
           val f = fields.find(_.id == field).getOrElse{
             Context.abort(s"${id} has no field ${field}.")
@@ -310,7 +412,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.Make(boxer.tpe, boxer.constructor, List(t))
+      boxer.box(t)
     }
   }
   case class UnboxCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
@@ -319,7 +421,22 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.Select(t, boxer.field, to)
+      boxer.unbox(t)
+    }
+  }
+  case class BottomCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
+    override def from = core.Type.TBottom
+    override def to = valueType
+
+    override def apply(t: Pure): Pure = {
+      to match {
+        case core.Type.TInt => Pure.Literal(1337L, core.Type.TInt)
+        case core.Type.TDouble  => Pure.Literal(13.37, core.Type.TDouble)
+        // Do strings need to be boxed? Really?
+        case core.Type.TString  => Pure.Literal("<?nothing>", core.Type.TString)
+        case t if box.isDefinedAt(t) => sys error s"No default value defined for ${t}"
+        case _ => sys error s"Trying to unbox Nothing to ${t}"
+      }
     }
   }
 
@@ -330,6 +447,23 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
     case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
     case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
+    case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+    case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => BottomCoercer(unboxed)
+    case (core.ValueType.Boxed(bt1,cs1), core.ValueType.Boxed(bt2, cs2)) =>
+      // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
+      val bcoercer = coercer[Block](bt1, bt2)
+      if (bcoercer.isIdentity) then { IdentityCoercer(from, to) } else {
+        val _fr = from
+        val _to = to
+        new Coercer[ValueType, Pure] {
+          val from: ValueType = _fr
+          val to: ValueType = _to
+          override def isIdentity: Boolean = false
+          override def apply(t: Pure): Pure = {
+            Pure.Box(bcoercer(Block.Unbox(t)), cs2)
+          }
+        }
+      }
     case _ =>
       //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
       new IdentityCoercer(from, to)
@@ -374,15 +508,15 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         override def to = totpe
 
         override def apply(block: B): B = {
-          val vparams: List[Param.ValueParam] = vcoercers.map { c => Param.ValueParam(TmpValue(), transform(c.from)) }
-          val bparams: List[Param.BlockParam] = bcoercers.map { c => val id = TmpBlock(); Param.BlockParam(id, transform(c.from), Set(id)) }
-          val result = TmpValue()
+          val vparams: List[Param.ValueParam] = vcoercers.map { c => Param.ValueParam(TmpValue("coe"), transform(c.from)) }
+          val bparams: List[Param.BlockParam] = bcoercers.map { c => val id = TmpBlock("coe"); Param.BlockParam(id, transform(c.from), Set(id)) }
+          val result = TmpValue("coe")
           val inner = TmpBlock()
           val vargs = (vcoercers zip vparams).map { case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }
           val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
           Block.BlockLit(ftparams, bparams.map(_.id), vparams, bparams,
             Def(inner, block,
-              Stmt.Val(result, Stmt.App(Block.BlockVar(inner, block.tpe, block.capt), targs map transformArg, vargs, bargs),
+              Stmt.Val(result, rcoercer.from, Stmt.App(Block.BlockVar(inner, block.tpe, block.capt), targs map transformArg, vargs, bargs),
                 Stmt.Return(rcoercer(Pure.ValueVar(result, rcoercer.from))))))
         }
 
@@ -391,25 +525,25 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         }
 
         override def callDirect(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Expr = {
-          val result = TmpValue()
-          Run(Let(result, DirectApp(block, targs map transformArg,
+          val result = TmpValue("coe")
+          Run(Let(result, rcoercer.from, DirectApp(block, targs map transformArg,
             (vcoercers zip vargs).map {case (c,v) => c(v)},
             (bcoercers zip bargs).map {case (c,b) => c(b)}),
             Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
         }
 
         override def call(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt = {
-          val result = TmpValue()
-          Stmt.Val(result, Stmt.App(block, targs map transformArg,
-            (vcoercers zip vargs).map {case (c,v) => c(v)},
-            (bcoercers zip bargs).map {case (c,b) => c(b)}),
+          val result = TmpValue("coe")
+          Stmt.Val(result, rcoercer.from, Stmt.App(block, targs map transformArg,
+            (vcoercers zip vargs).map { case (c, v) => c(v) },
+            (bcoercers zip bargs).map { case (c, b) => c(b) }),
             Return(rcoercer(Pure.ValueVar(result, rcoercer.from))))
         }
 
       }
     case (BlockType.Interface(n1,targs), BlockType.Interface(n2,_)) =>
       FunctionIdentityCoercer(fromtpe, totpe, targs)
-    case _ => Context.abort(s"Unsupported coercion from ${PrettyPrinter.format(fromtpe)} to ${PrettyPrinter.format(totpe)}")
+    case _ => Context.abort(pp"Unsupported coercion from ${fromtpe} to ${totpe}")
   }
 
 }

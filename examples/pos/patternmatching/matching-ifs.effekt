@@ -1,5 +1,3 @@
-import immutable/option
-
 type TrafficLight {
   Red()
   Yellow()

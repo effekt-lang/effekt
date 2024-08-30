@@ -1,0 +1,8 @@
+def main() = {
+    println(1.2 + 2.0 * 3.0 / 4.0 + 1.4);
+    println(toInt(1.5));
+    println(round(1.5));
+    println(toDouble(2)+ 0.1);
+    println(floor(1.7));
+    println(ceil(2.1));
+}

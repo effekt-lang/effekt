@@ -51,9 +51,9 @@ trait TypeUnifier {
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
 
       if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
-
-      if (args1.size != args2.size)
+      else if (args1.size != args2.size) {
         abort(pp"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
+      }
 
       // TODO here we assume that the type constructor is covariant
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }

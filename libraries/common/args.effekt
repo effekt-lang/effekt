@@ -1,0 +1,95 @@
+module args
+
+extern io def commandLineArgs(): List[String] =
+  js { js::commandLineArgs() }
+  chez { chez::commandLineArgs() }
+  ml { ml::commandLineArgs() }
+  llvm { llvm::commandLineArgs() }
+
+namespace js {
+  extern type Args // = Array[String]
+
+  extern io def nativeArgs(): Args = js "process.argv.slice(1)"
+
+  extern io def argCount(args: Args): Int = js "${args}.length"
+
+  extern io def argument(args: Args, i: Int): String = js "${args}[${i}]"
+
+  def commandLineArgs(): List[String] = {
+    def toList(args: Args, start: Int, acc: List[String]): List[String] =
+      if (start < 1) { acc }
+      else args.toList(start - 1, Cons(args.argument(start), acc))
+
+    val args = nativeArgs()
+    args.toList(args.argCount - 1, Nil())
+  }
+}
+
+namespace chez {
+  extern type Args // = CSList[String]
+
+  extern io def nativeArgs(): Args =
+    chez "(cdr (command-line))"
+
+  extern pure def isEmpty(l: Args): Bool =
+    chez "(null? ${l})"
+
+  extern pure def head(l: Args): String =
+    chez "(car ${l})"
+
+  extern pure def tail(l: Args): Args =
+    chez "(cdr ${l})"
+
+  def toList(l: Args): List[String] =
+    if (l.isEmpty) Nil() else Cons(l.head, l.tail.toList)
+
+  def commandLineArgs(): List[String] = nativeArgs().toList
+}
+
+namespace ml {
+
+  // MLList[String]
+  // we inline these from mllist to not have a dependency
+  extern type Args
+
+  extern io def nativeArgs(): Args =
+    ml "CommandLine.arguments ()"
+
+  extern pure def isEmpty(args: Args): Bool =
+    ml "null ${args}"
+
+  extern io def first(a: Args): String =
+    ml "hd ${a}"
+
+  extern io def rest(a: Args): Args =
+    ml "tl ${a}"
+
+
+  def commandLineArgs(): List[String] = {
+    def toList(args: Args): List[String] =
+      if (args.isEmpty) Nil() else Cons(args.first, args.rest.toList)
+    nativeArgs().toList
+  }
+}
+
+namespace llvm {
+  extern io def argCount(): Int =
+    llvm """
+      %c = call %Int @c_get_argc()
+      ret %Int %c
+    """
+
+  extern io def argument(i: Int): String =
+    llvm """
+      %s = call %Pos @c_get_arg(%Int %i)
+      ret %Pos %s
+    """
+
+  def commandLineArgs(): List[String] = {
+    def toList(start: Int, acc: List[String]): List[String] =
+      if (start < 1) { acc }
+      else toList(start - 1, Cons(argument(start), acc))
+
+    toList(argCount() - 1, Nil())
+  }
+}

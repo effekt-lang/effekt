@@ -1,0 +1,13 @@
+// just doesn't print anything since 42 is not boxed and then treated as a tag!
+
+interface AsyncIO {
+  def performIO[T](computation: (T => Unit at {io}) => Unit at {io}): T
+}
+
+def main() = try {
+  def g(k: (Int) => Unit at {io}): Unit = k(42)
+  val n = do performIO(box g)
+  println(n)
+} with AsyncIO {
+  def performIO[T](computation) = computation(box { t => resume(t) })
+}

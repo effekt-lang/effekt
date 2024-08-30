@@ -4,7 +4,6 @@ package core
 import effekt.context.Context
 import effekt.core.substitutions.Substitution
 import effekt.symbols.TmpValue
-import effekt.util.messages.ErrorReporter
 
 import scala.collection.mutable
 
@@ -65,8 +64,8 @@ object PatternMatchingCompiler {
     // a boolean predicate that needs to be branched on at runtime
     case Predicate(pred: Pure)
     // a predicate trivially met by running and binding the statement
-    case Val(x: Id, binding: Stmt)
-    case Let(x: Id, binding: Expr)
+    case Val(x: Id, tpe: core.ValueType, binding: Stmt)
+    case Let(x: Id, tpe: core.ValueType, binding: Expr)
   }
 
   enum Pattern {
@@ -84,8 +83,8 @@ object PatternMatchingCompiler {
    * - a sequence of clauses that represent alternatives (disjunction)
    * - each sequence contains a list of conditions that all have to match (conjunction).
    */
-  def compile(clauses: List[Clause])(using ErrorReporter): core.Stmt = {
-    // matching on void will result in this case
+  def compile(clauses: List[Clause]): core.Stmt = {
+    // This shouldn't be reachable anymore since we specialize matching on void before calling compile
     if (clauses.isEmpty) return core.Hole()
 
     // (0) normalize clauses
@@ -97,11 +96,11 @@ object PatternMatchingCompiler {
       case Clause(Nil, target, args) =>
         return core.App(target, Nil, args, Nil)
       // - We need to perform a computation
-      case Clause(Condition.Val(x, binding) :: rest, target, args) =>
-        return core.Val(x, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      case Clause(Condition.Val(x, tpe, binding) :: rest, target, args) =>
+        return core.Val(x, tpe, binding, compile(Clause(rest, target, args) :: remainingClauses))
       // - We need to perform a computation
-      case Clause(Condition.Let(x, binding) :: rest, target, args) =>
-        return core.Let(x, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      case Clause(Condition.Let(x, tpe, binding) :: rest, target, args) =>
+        return core.Let(x, tpe, binding, compile(Clause(rest, target, args) :: remainingClauses))
       // - We need to check a predicate
       case Clause(Condition.Predicate(pred) :: rest, target, args) =>
         return core.If(pred,
@@ -125,7 +124,7 @@ object PatternMatchingCompiler {
     }
 
     // (3a) Match on a literal
-    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure) = {
+    def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
         case Clause(Split(Pattern.Literal(lit, _), _, _), _, _) => lit
@@ -148,6 +147,10 @@ object PatternMatchingCompiler {
           addDefault(c)
           variants.foreach { v => addClause(v, c) }
       }
+
+      // special case matching on ()
+      val unit: Literal = Literal((), core.Type.TUnit)
+      if (lit == unit) return compile(clausesFor.getOrElse(unit, Nil))
 
       // (4) assemble syntax tree for the pattern match
       variants.foldRight(compile(defaults)) {
@@ -177,7 +180,7 @@ object PatternMatchingCompiler {
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
       def fieldVarsFor(constructor: Id, fieldTypes: List[ValueType]): List[ValueVar] =
-        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue(), tpe) })
+        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue("y"), tpe) })
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
@@ -266,15 +269,17 @@ object PatternMatchingCompiler {
         }
         normalize(patterns ++ filtered, rest, substitution ++ additionalSubst)
 
-      case Condition.Val(x, binding) :: rest =>
+      case Condition.Val(x, tpe, binding) :: rest =>
         val substitutedBinding = core.substitutions.substitute(binding)(using subst)
+        val substitutedType = core.substitutions.substitute(tpe)(using subst)
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
-        (prefix(patterns, Condition.Val(x, substitutedBinding) :: resCond), resSubst)
+        val substituted = Condition.Val(x, substitutedType, substitutedBinding)
+        (prefix(patterns, substituted :: resCond), resSubst)
 
-      case Condition.Let(x, binding) :: rest =>
+      case Condition.Let(x, tpe, binding) :: rest =>
         val substitutedBinding = core.substitutions.substitute(binding)(using subst)
         val (resCond, resSubst) = normalize(Map.empty, rest, substitution)
-        (prefix(patterns, Condition.Let(x, substitutedBinding) :: resCond), resSubst)
+        (prefix(patterns, Condition.Let(x, tpe, substitutedBinding) :: resCond), resSubst)
 
       case Condition.Predicate(p) :: rest =>
         val substitutedPredicate = core.substitutions.substitute(p)(using subst)
@@ -298,8 +303,8 @@ object PatternMatchingCompiler {
   def show(c: Condition): String = c match {
     case Condition.Patterns(patterns) => patterns.map { case (v, p) => s"${util.show(v)} is ${show(p)}" }.mkString(", ")
     case Condition.Predicate(pred) => util.show(pred) + "?"
-    case Condition.Val(x, binding) => s"val ${util.show(x)} = ${util.show(binding)}"
-    case Condition.Let(x, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
+    case Condition.Val(x, tpe,  binding) => s"val ${util.show(x)} = ${util.show(binding)}"
+    case Condition.Let(x, tpe, binding) => s"let ${util.show(x)} = ${util.show(binding)}"
   }
 
   def show(p: Pattern): String = p match {

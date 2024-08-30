@@ -22,6 +22,7 @@ object TypePrinter extends ParenPrettyPrinter {
     case name: QualifiedName => name.qualifiedName
   }
   def show(t: Type): String = pretty(toDoc(t), 80).layout
+  def show(t: TypeVar): String = pretty(toDoc(t), 80).layout
   def show(t: Capture): String = pretty(toDoc(t), 80).layout
   def show(t: Captures): String = pretty(toDoc(t), 80).layout
   def show(t: Effects): String = pretty(toDoc(t), 80).layout
@@ -32,10 +33,15 @@ object TypePrinter extends ParenPrettyPrinter {
     case id: source.IdDef   => TypePrinter.show(id)
     case n: Name            => TypePrinter.show(n)
     case t: symbols.Type    => TypePrinter.show(t)
+    case t: symbols.TypeVar => TypePrinter.show(t)
     case t: Capture         => TypePrinter.show(t)
     case t: Captures        => TypePrinter.show(t)
     case t: Effects         => TypePrinter.show(t)
     case t: ConcreteEffects => TypePrinter.show(t.toEffects)
+    case c: TypeConstructor => c.name.name
+    case c: Constructor     => c.name.name
+    case c: Field           => c.name.name
+    case c: Operation       => c.name.name
   }
 
   def toDoc(m: Type): Doc = m match {
@@ -109,6 +115,6 @@ object TypePrinter extends ParenPrettyPrinter {
 }
 
 implicit class ErrorMessageInterpolator(private val sc: StringContext) extends AnyVal {
-  def pp(args: Any*): String = sc.s(args.map(TypePrinter.show.orElse(_.toString)): _*)
+  def pp(args: Any*): String = sc.s(args.map(effekt.util.show): _*)
 }
 

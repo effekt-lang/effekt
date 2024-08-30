@@ -1,0 +1,13 @@
+type EMPTY {}
+
+effect Foo(): Int
+
+def main() = {
+  try {
+    def loop(): EMPTY = { println("!"); loop() }
+    def foo(): EMPTY = { println(do Foo()); loop() };
+    val x: Int = foo() match {}
+    x + 1
+  } with Foo { () => 42 }
+  ()
+}

@@ -8,7 +8,10 @@ trait EffektConfig {
 
   def output(): Emitter = new OutputEmitter
 
-  def includes(): List[File] = Nil
+  def includes(): List[String] = List(
+    "common",
+    "js",
+    ".")
 
   def backend(): Backend = Backend()
 
@@ -16,11 +19,22 @@ trait EffektConfig {
 
   def requiresLift(): Boolean = false
 
-  def prelude() = List("effekt")
+  def prelude(): List[String] = List(
+    "effekt",
+    "option",
+    "list",
+    "result",
+    "exception",
+    "array",
+    "string",
+    "ref"
+  )
 
   def optimize() = true
 
   def maxInlineSize() = 50L
 
   def timed() = false
+
+  def debug() = false
 }

@@ -126,8 +126,8 @@ object TransformerDirect extends Transformer {
    */
   def toJS(expr: core.Expr)(using TransformerContext): js.Expr = expr match {
     case Literal((), _) => $effekt.field("unit")
-    case Literal(s: String, _) => JsString(s)
-    case literal: Literal => js.RawExpr(literal.value.toString)
+    case Literal(s: String, _) => JsString(escape(s))
+    case literal: Literal => js.RawLiteral(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
     case PureApp(b, targs, vargs) => js.Call(toJS(b), vargs map toJS)
@@ -194,7 +194,7 @@ object TransformerDirect extends Transformer {
     //   let x = undefined;
     //   [[bind]](x = []);
     //   [[body]](k)
-    case d @ Val(id, binding, body) =>
+    case d @ Val(id, tpe, binding, body) =>
       // Here we fix the order of arguments
       val free = C.locals(d).toList
       val freeValues = free.collect { case core.Variable.Value(id, tpe) => id }
@@ -368,16 +368,16 @@ object TransformerDirect extends Transformer {
     case Definition.Def(id, block) =>
       List(js.Const(nameDef(id), toJS(block)))
 
-    case Definition.Let(Wildcard(), core.Run(s)) =>
+    case Definition.Let(Wildcard(), _, core.Run(s)) =>
       toJS(s)(Continuation.Ignore)
 
-    case Definition.Let(id, core.Run(s)) =>
+    case Definition.Let(id, _, core.Run(s)) =>
       js.Let(nameDef(id), js.Undefined) :: toJS(s)(Continuation.Assign(id))
 
-    case Definition.Let(Wildcard(), binding) =>
+    case Definition.Let(Wildcard(), _, binding) =>
       List(js.ExprStmt(toJS(binding)))
 
-    case Definition.Let(id, binding) =>
+    case Definition.Let(id, _, binding) =>
       List(js.Const(nameDef(id), toJS(binding)))
   }
 

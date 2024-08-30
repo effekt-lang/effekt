@@ -7,7 +7,7 @@ import scala.util.matching._
 
 object AnsiHighlight {
 
-  object parser extends EffektParsers(new Positions)
+  object parser extends EffektLexers(new Positions)
 
   case class Token(r: Regex, highlight: String => String = identity) {
     def apply(in: String): Option[(String, String)] =
@@ -35,7 +35,7 @@ object AnsiHighlight {
   )
 
   val string = Token(
-    """["][^"]*["]""".r,
+    """["].*["]""".r,
     Console.GREEN + _ + Console.RESET
   )
 

@@ -17,6 +17,9 @@ trait EffektTests extends munit.FunSuite {
   // The name of the backend as it is passed to the --backend flag.
   def backendName: String
 
+  // Whether to execute using valgrind
+  def valgrind = false
+
   def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
 
   // The sources of all testfiles are stored here:
@@ -45,7 +48,7 @@ trait EffektTests extends munit.FunSuite {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--compile",
-      "--noexit-on-error",
+      "--no-exit-on-error",
       "--backend", backendName,
       "--out", output.getPath
     ))
@@ -55,11 +58,13 @@ trait EffektTests extends munit.FunSuite {
 
   def run(input: File): String =
     val compiler = driver
-    val configs = compiler.createConfig(Seq(
+    var options = Seq(
       "--Koutput", "string",
       "--backend", backendName,
-      "--out", output.getPath
-    ))
+      "--out", output.getPath,
+    )
+    if (valgrind) options = options :+ "--valgrind"
+    val configs = compiler.createConfig(options)
     configs.verify()
 
     // reuse state after compiling a trivial file
@@ -72,7 +77,7 @@ trait EffektTests extends munit.FunSuite {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--compile",
-      "--noexit-on-error",
+      "--no-exit-on-error",
       "--backend", backendName,
       "--out", output.getPath
     ))

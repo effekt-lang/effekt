@@ -14,11 +14,8 @@ Before we get started, we require a few imports to deal with strings and regular
 ```
 module examples/casestudies/lexer
 
-import text/string
+import string
 import text/regex
-import immutable/option
-import immutable/list
-import mutable/array
 ```
 
 ## Tokens and Positions
@@ -28,7 +25,26 @@ record Position(line: Int, col: Int, index: Int)
 
 type TokenKind { Number(); Ident(); Punct(); Space() }
 
+def show(t: TokenKind): String = t match {
+  case Number() => "number"
+  case Ident()  => "identifier"
+  case Punct()  => "punctuation"
+  case Space()  => "space"
+}
+
+def infixEq(t1: TokenKind, t2: TokenKind): Bool =
+  (t1, t2) match {
+    case (Number(), Number()) => true
+    case (Ident(), Ident()) => true
+    case (Punct(), Punct()) => true
+    case (Space(), Space()) => true
+    case _ => false
+  }
+
 record Token(kind: TokenKind, text: String, position: Position)
+
+def show(t: Token): String = t.kind.show
+
 ```
 Tokens simply are tagged with a token type (distinguishing numbers, identifiers, and punctuation),
 the original text of the token and its position.
@@ -94,7 +110,7 @@ we can compose the two handlers to run our example consumer:
 def runExample1() =
   report {
     exampleTokens.lexerFromList {
-      println(example1())
+      inspect(example1())
     }
   }
 ```
@@ -132,12 +148,13 @@ At the same time, we need to keep track of the line information.
   def position() = Position(line, col, index)
   def input() = in.substring(index)
   def consume(text: String): Unit = {
+    with ignore[MissingValue]
     val lines = text.split("\n")
-    val len = lines.unsafeGet(lines.size - 1).length
+    val offset = lines.last.length
     // compute new positions
     index = index + text.length
     line = line + lines.size - 1
-    if (lines.size == 1) { col = col + text.length } else { col = len }
+    if (lines.size == 1) { col = col + text.length } else { col = offset }
   }
   def eos(): Bool = index >= in.length
 ```
@@ -176,7 +193,7 @@ Running our above consumer with the string `"foo()"`
 def runExample2() =
   report {
     lexer("foo()") {
-      println(example1())
+      inspect(example1())
     }
   }
 ```
@@ -191,7 +208,8 @@ Interestingly, a whitespace skipping lexer can be implemented as a _effect trans
 ```
 def skipSpaces(): Unit / Lexer = do peek() match {
   case None() => ()
-  case Some(t) => if (t.kind == Space()) { do next(); skipSpaces() } else ()
+  case Some(Token(Space(), _, _)) => do next(); skipSpaces()
+  case _ => ()
 }
 
 def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
@@ -207,7 +225,7 @@ def runExample3() =
   report {
     lexer("foo (   \n  )") {
       skipWhitespace {
-        println(example1())
+        inspect(example1())
       }
     }
   }

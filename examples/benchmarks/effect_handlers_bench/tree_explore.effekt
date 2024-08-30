@@ -1,0 +1,68 @@
+import examples/benchmarks/runner
+
+import list
+
+def abs(n: Int): Int = if (n < 0) 0 - n else n
+def max(n: Int, m: Int): Int = if (n > m) n else m
+def maximum(l: List[Int]): Int =
+  l match {
+    case Nil() => -1 // -inf
+    case Cons(x, Nil()) => x
+    case Cons(x, xs) => max(x, maximum(xs))
+  }
+
+
+interface Choose {
+  def choose(): Bool
+}
+
+type Tree {
+  Leaf();
+  Node(left: Tree, value: Int, right: Tree)
+}
+
+def operator(x: Int, y: Int): Int =
+  mod(abs(x - (503 * y) + 37), 1009)
+
+def make(n: Int): Tree =
+  if (n == 0) {
+    Leaf()
+  } else {
+    val t = make(n - 1)
+    Node(t, n, t)
+  }
+
+def run(n: Int) = {
+
+  val tree = make(n);
+  var state = 0;
+
+  def explore(t: Tree): Int / Choose =
+    t match {
+      case Leaf() => state
+      case Node(l, v, r) =>
+        val next = { if (do choose()) { l } else { r } };
+        state = operator(state, v);
+        operator(v, explore(next))
+    }
+
+  def paths() =
+    try {
+      [explore(tree)]
+    } with Choose {
+      def choose() = append(resume(true), resume(false))
+    }
+
+  def loop(i: Int): Int =
+    if (i == 0) {
+      state
+    } else {
+      state = paths().maximum;
+      loop(i - 1)
+    }
+
+  loop(10)
+}
+
+def main() = benchmark(5){run}
+

@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
-import effekt.util.getOrElseAborting
+import effekt.util.{getOrElseAborting, escape, OS, os}
 import kiama.util.IO
 
 /**
@@ -40,6 +40,21 @@ trait Runner[Executable] {
   def prelude: List[String] = List("effekt")
 
   /**
+   * Creates a OS-specific script file that will execute the command when executed,
+   * forwarding command line arguments.
+   * @return the actual name of the generated script (might be `!= name`)
+   */
+  def createScript(name: String, command: String*): String = os match {
+    case OS.POSIX =>
+      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")} \"$$@\"", true)
+      name
+    case OS.Windows =>
+      val batName = name + ".bat"
+      IO.createFile(batName, "@echo off\r\n" + command.mkString(" ") + " %*")
+      batName
+  }
+
+  /**
    * Should check whether everything is installed for this backend
    * to run. Should return Right(()) if everything is ok and
    * Left(explanation) if something is missing.
@@ -56,8 +71,13 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
+    val valgrindArgs = Seq("--leak-check=full", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
+    val process = if (C.config.valgrind())
+      Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
+    else
+      Process(execFile, Context.config.runArgs())
 
-    val exitCode = Process(execFile).run(new ProcessLogger {
+    val exitCode = process.run(new ProcessLogger {
 
       override def out(s: => String): Unit = {
         C.config.output().emitln(s)
@@ -71,6 +91,7 @@ trait Runner[Executable] {
 
     if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
+      if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
   }
 
@@ -104,14 +125,16 @@ trait Runner[Executable] {
   }
 }
 
-object JSRunner extends Runner[String] {
+object JSNodeRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "js"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "js"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def includes(path: File): List[File] = List(path / ".." / "js")
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
@@ -123,20 +146,67 @@ object JSRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val jsFilePath = (out / path).unixPath
+    val jsFilePath = (out / path).canonicalPath.escape
     // create "executable" using shebang besides the .js file
-    val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
     val jsScript = s"require('${jsFilePath}').main()"
-    val shebang = "#!/usr/bin/env node"
-    IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
-    jsScriptFilePath
+    os match {
+      case OS.POSIX =>
+        val shebang = "#!/usr/bin/env node"
+        val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
+        IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
+        jsScriptFilePath
+
+      case OS.Windows =>
+        val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
+        val exePath = jsFilePath.stripSuffix(s".$extension")
+        IO.createFile(jsMainFilePath, jsScript)
+        createScript(exePath, "node", jsMainFilePath)
+    }
+}
+object JSWebRunner extends Runner[String] {
+  import scala.sys.process.Process
+
+  val extension = "js"
+
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+
+  def checkSetup(): Either[String, Unit] =
+    Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
+
+  /**
+   * Creates an openable `.html` file besides the given `.js` file ([[path]])
+   * and then errors out, printing it's path.
+   */
+  def build(path: String)(using C: Context): String =
+    import java.nio.file.Path
+    val out = C.config.outputPath().getAbsolutePath
+    val jsFilePath = (out / path).unixPath
+    val jsFileName = jsFilePath.split("/").last
+    val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
+    val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
+    val htmlContent =
+      s"""<!DOCTYPE html>
+         |<html>
+         |  <body>
+         |    <script type="text/javascript" src="${jsFileName}"></script>
+         |    <script type="text/javascript">
+         |      window.onload=${mainName};
+         |    </script>
+         |  </body>
+         |</html>
+         |""".stripMargin
+    IO.createFile(htmlFilePath, htmlContent, false)
+    C.abort(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
 }
 
 trait ChezRunner extends Runner[String] {
   val extension = "ss"
 
-  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
-  override def includes(path: File): List[File] = List(path / ".." / "common")
+   def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
@@ -148,22 +218,26 @@ trait ChezRunner extends Runner[String] {
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val schemeFilePath = (out / path).unixPath
-    val bashScriptPath = schemeFilePath.stripSuffix(s".$extension")
-    val bashScript = s"#!/bin/bash\nscheme --script $schemeFilePath"
-    IO.createFile(bashScriptPath, bashScript, true)
-    bashScriptPath
+    val schemeFilePath = (out / path).canonicalPath.escape
+    val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
+    createScript(exeScriptPath, "scheme", "--script", schemeFilePath)
 }
 
 object ChezMonadicRunner extends ChezRunner {
-  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "monadic"
+  override def includes(path: File): List[File] = List(
+    path / ".." / "chez" / "common",
+    path / ".." / "chez" / "monadic")
 }
 
 object ChezCallCCRunner extends ChezRunner {
-  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "callcc"
+  override def includes(path: File): List[File] = List(
+    path / ".." / "chez" / "common",
+    path / ".." / "chez" / "callcc")
 }
 object ChezLiftRunner extends ChezRunner {
-  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "lift"
+  override def includes(path: File): List[File] = List(
+    path / ".." / "chez" / "common",
+    path / ".." / "chez" / "lift")
 }
 
 object LLVMRunner extends Runner[String] {
@@ -171,7 +245,12 @@ object LLVMRunner extends Runner[String] {
 
   val extension = "ll"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "llvm"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def includes(path: File): List[File] = List(path / ".." / "llvm")
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string") // "array", "ref")
+
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
   lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
@@ -183,6 +262,31 @@ object LLVMRunner extends Runner[String] {
     optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
     Right(())
 
+  def libuvArgs(using C: Context): Seq[String] =
+    val OS = System.getProperty("os.name").toLowerCase
+    val libraries = C.config.gccLibraries.toOption.map(file).orElse {
+      OS match {
+        case os if os.contains("mac")  => Some(file("/opt/homebrew/lib"))
+        case os if os.contains("win") => None
+        case os if os.contains("linux") => Some(file("/usr/local/lib"))
+        case os => None
+      }
+    }
+    val includes = C.config.gccIncludes.toOption.map(file).orElse {
+      OS match {
+        case os if os.contains("mac")  => Some(file("/opt/homebrew/include"))
+        case os if os.contains("win") => None
+        case os if os.contains("linux") => Some(file("/usr/local/include"))
+        case os => None
+      }
+    }
+    (libraries, includes) match {
+      case (Some(lib), Some(include)) => Seq(s"-L${lib.unixPath}", "-luv", s"-I${include.unixPath}")
+      case _ =>
+        C.warning(s"Cannot find libuv on ${OS}; please use --gcc-libraries and --gcc-includes to configure the paths for the libuv dylib and header files, respectively.")
+        Seq()
+    }
+
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -190,6 +294,7 @@ object LLVMRunner extends Runner[String] {
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
   override def build(path: String)(using C: Context): String =
+
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
@@ -204,9 +309,15 @@ object LLVMRunner extends Runner[String] {
     exec(opt, llPath, "-S", "-O2", "-o", optPath)
     exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
 
-    val gccMainFile = (C.config.libPath / "main.c").unixPath
+    val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    exec(gcc, gccMainFile, "-o", executableFile, objPath)
+    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+
+    if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,leak,undefined", "-fstack-protector-all", "-Og", "-g")
+    if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
+
+    exec(gccArgs: _*)
+
     executableFile
 }
 
@@ -216,9 +327,11 @@ object MLRunner extends Runner[String] {
 
   val extension = "sml"
 
-  def standardLibraryPath(root: File): File = root / "libraries" / "ml"
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "immutable/option",  "internal/option", "immutable/list", "text/string")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+
+  override def includes(path: File): List[File] = List(path / ".." / "ml")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("mlton") then Right(())

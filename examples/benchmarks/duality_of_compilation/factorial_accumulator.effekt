@@ -1,0 +1,14 @@
+import examples/benchmarks/runner
+
+def factorial(a: Int, i: Int): Int =
+  if (i == 0) {
+    a
+  } else {
+    factorial((i * a).mod(1000000007), i - 1)
+  }
+
+def run(n: Int): Int =
+  factorial(1, n)
+
+def main() = benchmark(5){run}
+

@@ -47,9 +47,17 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     def importDependency(filePath: String) =
       val included = Context.moduleOf(filePath)
-      // include "effekt.effekt" as effekt
+
+      // Fully qualified:
+      //   include "foo/bar/baz.effekt" as foo::bar::baz
       scope.importAs(included.exports, included.namespace)
-      // import effekt::*
+
+      // Bind the module itself:
+      //   include "foo/bar/baz.effekt" as baz
+      scope.importAs(included.exports, List(included.name.name))
+
+      // Open it:
+      //   import baz::*
       scope.importAll(included.exports)
       included
 
@@ -209,10 +217,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       ()
 
     case d @ source.ExternInclude(ff, path, None, _) =>
-      d.contents = Some(Context.contentsOf(path).getOrElse {
-        Context.abort(s"Missing include: ${path}")
-      })
-      ()
+      // only load include if it is required by the backend.
+      if (ff matches Context.compiler.supportedFeatureFlags) {
+        d.contents = Some(Context.contentsOf(path).getOrElse {
+          Context.abort(s"Missing include: ${path}")
+        })
+      } else {
+        d.contents = None
+      }
   }
 
   /**
@@ -348,10 +360,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       val data = d.symbol
       data.constructors = ctors map {
         case source.Constructor(id, tparams, ps) =>
-          val name = Context.nameFor(id)
-          val tps = tparams map resolve
-
-          val constructor = Constructor(name, data.tparams ++ tps, null, data)
+          val constructor = Context scoped {
+            val name = Context.nameFor(id)
+            val tps = tparams map resolve
+            Constructor(name, data.tparams ++ tps, null, data)
+          }
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
           constructor

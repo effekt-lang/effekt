@@ -13,4 +13,5 @@ def main() = {
   } with Increment {
       def increment() = resume(())
   }
+  ()
 }
