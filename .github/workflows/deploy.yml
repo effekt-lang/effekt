@@ -99,14 +99,31 @@ jobs:
           name: effekt-npm-package
           path: distribution/
 
+        # Generates nice release notes according to https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+        # We can also configure these down the road: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes#configuring-automatically-generated-release-notes
+      - name: Generate Release Notes
+        id: generate_release_notes
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data } = await github.rest.repos.generateReleaseNotes({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: 'v${{ needs.build-jar.outputs.version }}',
+            });
+            core.setOutput('name', data.name);
+            core.setOutput('body', data.body);
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_name: Release ${{ needs.build-jar.outputs.version }}
+          release_name: ${{ steps.generate_release_notes.outputs.name }}
           tag_name: v${{ needs.build-jar.outputs.version }}
+          body: ${{ steps.generate_release_notes.outputs.body }}
           draft: false
           prerelease: false
 
