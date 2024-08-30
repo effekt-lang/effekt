@@ -114,8 +114,9 @@ def test(name: String) { body: => Unit / Assertion } = {
 }
 
 /// Run a test suite with a given `name`.
-/// If `printTimes` is `true` (or missing), prints out time in milliseconds.
-/// Formats automatically using ANSI escapes.
+/// - If `printTimes` is `true` (or missing), prints out time in milliseconds.
+/// - Formats automatically using ANSI escapes.
+/// - Returns `true` if all tests succeed, otherwise returns `false`. If you want to exit the program on failure, see `mainSuite`.
 ///
 /// Example:
 /// ```effekt
@@ -175,12 +176,18 @@ def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } 
   return failed == 0
 }
 
+/// See `suite` above.
+def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} =
+  suite(name, true) { body }
+
 /// Use as `def main() = mainSuite("...") { ... }`
-def mainSuite(name: String) { body: => Unit / Test }: Unit = {
-  val result = suite(name) { body() }
+/// Recommended for standalone test files ran by CI.
+///
+/// Exits after running all tests:
+/// - if all tests succeed, exits the program with success (exit code 0)
+/// - otherwise exits the program with failure (exit code 1)
+def mainSuite(name: String) { body: => Unit / { Test, Formatted } }: Unit = {
+  val result = suite(name, true) { body }
   val exitCode = if (result) 0 else 1
   exit(exitCode)
 }
-
-def suite(name: String) { body: => Unit / { Test, Formatted } }: Bool / {} =
-  suite(name, true) { body }
