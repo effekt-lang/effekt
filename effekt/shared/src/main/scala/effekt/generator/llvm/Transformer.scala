@@ -386,7 +386,7 @@ object Transformer {
       case machine.PopStacksPrompt(variable, prompt, rest) =>
         emit(Comment(s"popStacksPrompt ${variable.name}, prompt=${prompt.name}"))
         val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(prompt))));
+        emit(Call(newStackName, Ccc(), stackType, popStacksPrompt, List(getStack(), transform(prompt))));
 
         emit(BitCast(variable.name, getStack(), stackType));
         setStack(LocalReference(stackType, newStackName));
@@ -762,6 +762,7 @@ object Transformer {
   def newStack = ConstantGlobal(PointerType(), "newStack");
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
   def popStacks = ConstantGlobal(PointerType(), "popStacks");
+  def popStacksPrompt = ConstantGlobal(PointerType(), "popStacksPrompt");
   def freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");

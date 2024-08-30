@@ -269,7 +269,7 @@ object Transformer {
               PushStack(delimiter,
                 (ids zip handlers).foldRight(transform(body)){
                   case ((id, handler), body) =>
-                    New(transform(id), transform(handler), body)
+                    New(transform(id), transform(handler, Some(prompt)), body)
                 }))))
 
       // TODO what about the evidence passed to resume?
@@ -410,7 +410,7 @@ object Transformer {
     case lifted.New(impl) =>
       val variable = Variable(freshName("new"), Negative())
       Binding { k =>
-        New(variable, transform(impl), k(variable))
+        New(variable, transform(impl, None), k(variable))
       }
 
     case lifted.Member(b, field, annotatedTpe) => ???
@@ -509,17 +509,27 @@ object Transformer {
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(impl: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
+  def transform(impl: lifted.Implementation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
     impl.operations.sortBy {
       case lifted.Operation(operationName, _) =>
         DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
-    }.map(transform)
+    }.map(op => transform(op, prompt))
 
-  def transform(op: lifted.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause = op match {
-    case lifted.Operation(name, lifted.BlockLit(tparams, params, body)) =>
-      // TODO note block parameters
-      Clause(params.map(transform), transform(body))
-  }
+  def transform(op: lifted.Operation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
+    (prompt, op) match {
+      // Since at the moment shift is evidence and not prompt based, here we inline the implementation of shift
+      case (Some(prompt), lifted.Operation(name, lifted.BlockLit(tparams, params, lifted.Shift(ev, lifted.Block.BlockLit(tparams2, List(kparam), body))))) =>
+        noteResumption(kparam.id)
+        Clause(params.map(transform),
+          PopStacksPrompt(Variable(transform(kparam).name, Type.Stack()), prompt,
+            transform(body)))
+
+      // fall back to evidence based solution, this makes it easier to comment out the above line and check whether the evidence
+      // version still works.
+      case (_, lifted.Operation(name, lifted.BlockLit(tparams, params, body))) =>
+        // TODO note block parameters
+        Clause(params.map(transform), transform(body))
+    }
 
   def transform(param: lifted.Param)(using BlocksParamsContext, ErrorReporter): Variable =
     param match {

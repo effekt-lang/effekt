@@ -270,7 +270,7 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %
 
 ; Stack management
 
-define %Prompt @freshPrompt(%Stack %stack) {
+define %Prompt @freshPrompt(%Stack %stack) alwaysinline {
 entry:
     ; Proposal for syntax: if we compute the address of something in a struct, use the following naming convention:
     %stack.lastPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
@@ -326,7 +326,7 @@ define %Stack @newStack(%Prompt %prompt) {
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
-    %stack.3 = insertvalue %StackValue %stack.2, %Prompt %prompt, 3 ; TODO add prompt here!
+    %stack.3 = insertvalue %StackValue %stack.2, %Prompt %prompt, 3
     %stack.4 = insertvalue %StackValue %stack.3, %Stack zeroinitializer, 4
 
     store %StackValue %stack.4, %Stack %stack
