@@ -1,0 +1,718 @@
+module map
+
+// Ordered finite immutable map, backed by balanced binary trees of logarithmic depth.
+// Currently use `genericCompare` as a comparison primitive, which means the map is now working only in the JS backend.
+// 
+// Please don't use the internal constructors `Bin` & `Tip` directly,
+// they might change down the line and are not considered stable.
+type Map[K, V] {
+  Bin(size: Int, k: K, v: V, left: Map[K, V], right: Map[K, V]);
+  Tip()
+}
+
+// Create a new empty map.
+//
+// O(1)
+def empty[K, V](): Map[K, V] = {
+  Tip()
+}
+
+// Check if map `m` is empty.
+//
+// O(1)
+def isEmpty[K, V](m: Map[K, V]): Bool = {
+  m match {
+    case Tip() => true
+    case _     => false
+  }
+}
+
+// Check if map `m` is nonempty.
+//
+// O(1)
+def nonEmpty[K, V](m: Map[K, V]): Bool = {
+  m match {
+    case Tip() => false
+    case _     => true
+  }
+}
+
+// Create a new map containing only the mapping from `k` to `v`.
+//
+// O(1)
+def singleton[K, V](k: K, v: V): Map[K, V] = {
+  Bin(1, k, v, Tip(), Tip())
+}
+
+// Get the size of the map (the number of keys/values).
+//
+// O(1)
+def size[K, V](m: Map[K, V]): Int = {
+  m match {
+    case Tip() => 0
+    case Bin(size, _, _, _, _) => size
+  }
+}
+
+// Insert a new key `k` and value `v` into the map `m`.
+// If the key `k` is already present in `m`, its associated value is replaced with `v`.
+//
+// O(log N)
+def put[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = m match {
+  case Tip() => singleton(k, v)
+  case Bin(size, k2, v2, l, r) =>
+    genericCompare(k, k2) match {
+      case Less() => balance(k2, v2, put(l, k, v), r)
+      case Greater() => balance(k2, v2, l, put(r, k, v))
+      case Equal() => Bin(size, k, v, l, r)
+    }
+}
+
+// Insert a new key `k` and value `v` into the map `m`.
+// If the key `k` is already present in `m` with value `v2`, the function `combine` is called on `k`, `v`, `v2`.
+//
+// O(log N)
+def putWithKey[K, V](m: Map[K, V], k: K, v: V) { combine: (K, V, V) => V } : Map[K, V] = m match {
+  case Tip() => singleton(k, v)
+  case Bin(size, k2, v2, l, r) =>
+    genericCompare(k, k2) match {
+      case Less() => balance(k2, v2, l.putWithKey(k, v){combine}, r)
+      case Greater() => balance(k2, v2, l, r.putWithKey(k, v){combine})
+      case Equal() => Bin(size, k, combine(k, v, v2), l, r)
+    }
+}
+
+// Lookup the value at a key `k` in the map `m`.
+//
+// O(log N)
+def get[K, V](m: Map[K, V], k: K): Option[V] = {
+  m match {
+    case Tip() => None()
+    case Bin(size, k2, v, l, r) =>
+      genericCompare(k, k2) match {
+        case Less() => get(l, k)
+        case Greater() => get(r, k)
+        case Equal() => Some(v)
+      }
+  }  
+}
+
+// Lookup the value at a key `k` in the map `m`.
+// If there is no key, use the `default` block to retrieve a default value.
+//
+// O(log N)
+def getOrElse[K, V](m: Map[K, V], k: K) { default : => V }: V = {
+  get(m, k) match {
+    case None() => default()
+    case Some(v) => v
+  }  
+}
+
+// Check if map `m` contains a key `k`.
+//
+// O(log N)
+def contains[K, V](m: Map[K, V], k: K): Bool = {
+  get(m, k) match {
+    case None() => false
+    case Some(v) => true
+  }
+}
+
+// Get minimum in the map `m`.
+//
+// O(log N)
+def getMin[K, V](m: Map[K, V]): Option[(K, V)] = {
+  def go(k: K, v: V, m: Map[K, V]): (K, V) = {
+    m match {
+      case Tip() => (k, v)
+      case Bin(_, k2, v2, l, _) => go(k2, v2, l)
+    }
+  }
+
+  m match {
+    case Tip() => None()
+    case Bin(_, k, v, l, _) => Some(go(k, v, l))
+  }
+}
+
+// Get maximum in the map `m`.
+//
+// O(log N)
+def getMax[K, V](m: Map[K, V]): Option[(K, V)] = {
+  def go(k: K, v: V, m: Map[K, V]): (K, V) = {
+    m match {
+      case Tip() => (k, v)
+      case Bin(_, k2, v2, _, r) => go(k2, v2, r)
+    }
+  }
+
+  m match {
+    case Tip() => None()
+    case Bin(_, k, v, _, r) => Some(go(k, v, r))
+  }
+}
+
+// Map a function `f` over values in map `m`.
+//
+// O(N)
+def map[K, V1, V2](m: Map[K, V1]) { f : (K, V1) => V2 }: Map[K, V2] = {
+  m match {
+    case Tip() => Tip()
+    case Bin(size, k, v, l, r) =>
+      Bin(size, k, f(k, v), l.map {f}, r.map {f})
+  }
+}
+
+// Map a function `f` over values in map `m`.
+//
+// O(N)
+def map[K, V1, V2](m: Map[K, V1]) { f : V1 => V2 }: Map[K, V2] = {
+  m.map { (_k, v) => f(v) }
+}
+
+// Traverse all keys and their associated values in map `m` in order,
+// running the function `action` on a key and its associated value.
+//
+// Law: `m.foreach { action } === m.toList.foreach { action }`
+// 
+// O(N)
+//
+// TODO: Support {Control} for early exits.
+def foreach[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit = {
+  def go(m: Map[K, V]): Unit = {
+    m match {
+      case Tip() => ()
+      case Bin(_, k, v, l, r) =>
+        go(l)
+        action(k, v)
+        go(r)
+    }
+  }
+  go(m)
+}
+
+// Convert a map `m` into a list of (key, value) pairs.
+//
+// O(N)
+def toList[K, V](m: Map[K, V]): List[(K, V)] = {
+  var acc = Nil()
+  m.foreach { (k, v) =>
+    acc = Cons((k, v), acc)
+  }
+  acc.reverse
+}
+
+// Get a list of keys of the map `m`.
+//
+// O(N)
+def keys[K, V](m: Map[K, V]): List[K] = {
+  var acc = Nil()
+  m.foreach { (k, _v) =>
+    acc = Cons(k, acc)
+  }
+  acc.reverse  
+}
+
+// Get a list of values of the map `m`.
+//
+// O(N)
+def values[K, V](m: Map[K, V]): List[V] = {
+  var acc = Nil()
+  m.foreach { (_k, v) =>
+    acc = Cons(v, acc)
+  }
+  acc.reverse   
+}
+
+// Create a map from a list of (key, value) pairs.
+// If the list contains more than one value for the same key,
+// only the last value is used in the map.
+// 
+// O(N) if the list is sorted by key,
+// O(N log N) otherwise
+def fromList[K, V](pairs: List[(K, V)]): Map[K, V] = {
+  pairs match {
+    case Nil() => Tip()
+    case Cons((k, v), Nil()) => singleton(k, v)
+    case Cons((k, v), rest) => 
+      // TODO: this function should really, **really** get inlined!
+      def notOrdered(k: K, pairs: List[(K, V)]) = {
+        pairs match {
+          case Nil() => false
+          case Cons((k2, _), _) =>  // k >= k2
+            genericCompare(k, k2) match {
+              case Less() => false
+              case Greater() => true
+              case Equal() => true
+            }
+        }
+      }
+
+      // Naive insertion, used for the worst-case scenario when the list is not sorted by key
+      def insertMany(m: Map[K, V], pairs: List[(K, V)]) = {
+        var mapSoFar = m
+        pairs.foreach { case (k, v) => 
+          mapSoFar = mapSoFar.put(k, v)
+        }
+        mapSoFar
+      }
+
+      // Returns a triple `(map, xs, ys)`
+      // 
+      // Invariant: At least one of `xs`, `ys` is empty.
+      // Moreover, if `ys` is nonempty, its keys are **not** ordered!
+      // Otherwise, all of the seen keys have been ordered so far.
+      //
+      // TODO: Possibly use a better type to encode the invariant?
+      def create(level: Int, pairs: List[(K, V)]): (Map[K, V], List[(K, V)], List[(K, V)]) = {
+        pairs match {
+          case Nil() => (Tip(), [], [])
+          case Cons((k, v), rest) => 
+            if (level == 1) {
+              val singleton = Bin(1, k, v, Tip(), Tip())
+              if (notOrdered(k, rest)) {
+                (singleton, [], rest)
+              } else {
+                (singleton, rest, [])
+              }
+            } else {
+              val res = create(level.bitwiseShr(1), pairs)
+              res match {
+                case (_, Nil(), _) => res
+                case (l, Cons((k2, v2), Nil()), zs) => (l.putMax(k2, v2), [], zs)
+                case (l, Cons((k2, v2), rest2), _) =>
+                  val xs = Cons((k2, v2), rest2) // @-pattern
+
+                  if (notOrdered(k2, rest2)) { (l, [], xs) }
+                  else {
+                    val (r, zs, ws) = create(level.bitwiseShr(1), rest2);
+                    (link(k2, v2, l, r), zs, ws)
+                  }
+              }
+            }
+        }
+      }
+
+      def go(level: Int, m: Map[K, V], pairs: List[(K, V)]): Map[K, V] = {
+        pairs match {
+          case Nil() => m
+          case Cons((k, v), Nil()) => m.putMax(k, v)
+          case Cons((k, v), rest) =>
+            if (notOrdered(k, rest)) { insertMany(m, pairs) }
+            else {
+              val l = m; // m is the left subtree here
+              val cr = create(level, rest)
+              cr match {
+                case (r, xs, Nil()) => go(level.bitwiseShl(1), link(k, v, l, r), xs)
+                case (r, Nil(), ys) => insertMany(link(k, v, l, r), ys)
+                case _ => panic("create: go: cannot happen, invariant broken!")
+              }
+            }
+        }
+      }
+
+      if (notOrdered(k, rest)) { insertMany(singleton(k, v), rest) }
+      else { go(1, singleton(k, v), rest) }
+  }
+}
+
+// Remove a key `k` from a map `m`.
+// If `k` is not in `m`, `m` is returned.
+//
+// O(log N)
+def delete[K, V](m: Map[K, V], k: K): Map[K, V] = {
+  m match {
+    case Tip() => Tip()
+    case Bin(_, k2, v2, l, r) =>
+      genericCompare(k, k2) match {
+        case Less() => balance(k2, v2, l.delete(k), r)
+        case Greater() => balance(k2, v2, l, r.delete(k))
+        case Equal() => glue(l, r)
+      }
+  }
+}
+
+// Can be used to insert, delete, or update a value.
+// Law: `get(m.alter(k){f}, k) === f(get(m, k))`
+//
+// O(log N)
+def alter[K, V](m: Map[K, V], k: K) { f : Option[V] => Option[V] }: Map[K, V] = {
+  m match {
+    case Tip() =>
+      f(None()) match {
+        case None() => Tip()
+        case Some(v) => singleton(k, v)
+      }
+    case Bin(size, k2, v2, l, r) =>
+      genericCompare(k, k2) match {
+        case Less() => balance(k2, v2, l.alter(k){f}, r)
+        case Greater() => balance(k2, v2, l, r.alter(k){f})
+        case Equal() =>
+          f(Some(v2)) match {
+            case Some(v) => Bin(size, k2, v, l, r)
+            case None() => glue(l, r)
+          }
+      }
+  }
+}
+
+// Update or delete a value associated with key `k` in map `m`.
+//
+// O(log N)
+def update[K, V](m: Map[K, V], k: K) { f: (K, V) => Option[V] }: Map[K, V] = {
+  m match {
+    case Tip() => Tip()
+    case Bin(size, k2, v2, l, r) =>
+      genericCompare(k, k2) match {
+        case Less() => balance(k2, v2, l.update(k){f}, r)
+        case Greater() => balance(k2, v2, l, r.update(k){f})
+        case Equal() =>
+          f(k2, v2) match {
+            case Some(v) => Bin(size, k2, v, l, r)
+            case None() => glue(l, r)
+          }
+      }
+  }
+}
+
+// Update or delete a value associated with key `k` in map `m`.
+//
+// O(log N)
+def update[K, V](m: Map[K, V], k: K) { f : V => Option[V] }: Map[K, V] = {
+  m.update(k) { (_k, v) => f(v) }
+}
+
+// Get `n`-th (key, value) pair in the map `m`.
+//
+// O(log N)
+def getIndex[K, V](m: Map[K, V], n: Int): Option[(K, V)] = {
+  m match {
+    case Tip() => None()
+    case Bin(size, k, v, l, r) =>
+      val sizeL = l.size()
+      genericCompare(sizeL, n) match {
+        case Less() => r.getIndex(n - (sizeL + 1))
+        case Greater() => l.getIndex(n)
+        case Equal() => Some((k, v))
+      }
+  }
+}
+
+// Construct a new map which contains all elements of `m1`
+// except those where the key is found in `m2`.
+//
+// O(???)
+def difference[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
+  (m1, m2) match {
+    case (Tip(), m2) => Tip()
+    case (m1, Tip()) => m1
+    case (m1, Bin(_, k, _, l2, r2)) =>
+      val (l1, r1) = m1.split(k)
+      val leftDiff = l1.difference(l2)
+      val rightDiff = r1.difference(r2)
+      if ((leftDiff.size() + rightDiff.size()) == m1.size()) { m1 }
+      else { link2(leftDiff, rightDiff) }
+  }
+}
+
+// Construct a new map which contains the elements of both `m1` and `m2`.
+// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
+//
+// O(???)
+def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (K, V, V) => V }: Map[K, V] = {
+  // Internal function similar to `putWithKey`, but right-biased.
+  // Only used here, recursively.
+  def putWithKeyR(m: Map[K, V], k: K, v: V): Map[K, V] = {
+    m match {
+      case Tip() => singleton(k, v)
+      case Bin(size, k2, v2, l, r) =>
+        genericCompare(k, k2) match {
+          case Less() => balance(k2, v2, l.putWithKeyR(k, v), r)
+          case Greater() => balance(k2, v2, l, r.putWithKeyR(k, v))
+          case Equal() => Bin(size, k, combine(k2, v2, v), l, r)
+        }
+    }
+  }
+
+  (m1, m2) match {
+    case (_, Tip()) => m1
+    case (_, Bin(_, k, v, Tip(), Tip())) => m1.putWithKeyR(k, v)
+    case (Bin(_, k, v, Tip(), Tip()), _) => m2.putWithKey(k, v){combine}
+    case (Tip(), _) => m2
+    case (Bin(_, k1, v1, l1, r1), _) =>
+      val (l2, optMid, r2) = m2.splitLookup(k1)
+      val leftUnion = union(l1, l2){combine}
+      val rightUnion = union(r1, r2){combine}
+      optMid match {
+        case None() => link(k1, v1, leftUnion, rightUnion)
+        case Some(v2) => link(k1, combine(k1, v1, v2), leftUnion, rightUnion)
+      }
+  }
+}
+
+// Construct a new map which contains the elements of both `m1` and `m2`.
+// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
+//
+// O(???)
+def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (V, V) => V }: Map[K, V] = {
+  union(m1, m2) { (k, v1, v2) => combine(v1, v2) }
+}
+
+// Construct a new map which contains the elements of both `m1` and `m2`.
+// Left-biased: Uses values from `m1` if there are duplicate keys.
+//
+// O(???)
+def union[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
+  union(m1, m2) { (k, v1, v2) => v1 }
+}
+
+// -------------
+// Internal
+
+val ratio = 2
+val delta = 3
+
+def bin[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): Map[K, V] = {
+  Bin(l.size() + r.size() + 1, k, v, l, r)
+}
+
+def balance[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): Map[K, V] = {
+  /*
+     k1->v1
+     /    \
+    t1     m                    k2->v2
+           =                   /      \
+         k2->v2        ~>    k1->v1    t3
+         /   \               /    \
+        t2    t3            t1    t2
+  */
+  def singleL[A, B](k1: A, v1: B, t1: Map[A, B], m: Map[A, B]): Map[A, B] = {
+    m match {
+      case Bin(_, k2, v2, t2, t3) => bin(k2, v2, bin(k1, v1, t1, t2), t3)
+      case _ => panic("impossible: singleL: Tip")
+    }
+  }
+
+  /*
+        k1->v1
+        /     \
+       m      t3            k2->v2
+       =                   /      \
+     k2->v2        ~>    t1       k1->v1
+      /   \               /       /   \
+    t1    t2            t1      t2    t3
+  */
+  def singleR[A, B](k1: A, v1: B, m: Map[A, B], t3: Map[A, B]): Map[A, B] = {
+    m match {
+      case Bin(_, k2, v2, t1, t2) => bin(k2, v2, t1, bin(k1, v1, t2, t3))
+      case _ => panic("impossible: singleR: Tip")
+    }
+  }
+
+  /*
+        k1->v1                     k3->v3
+       /      \                   /      \
+     t1        m                k1->v1    k2->v2
+               =                /  \      /   \
+             k2->v2     ~>     t1  t2    t3   t4
+            /     \
+          k3->v3   t4
+          /  \
+        t2    t3
+  */
+  def doubleL[A, B](k1: A, v1: B, t1: Map[A, B], m: Map[A, B]): Map[A, B] = {
+    m match {
+      case Bin(_, k2, v2, Bin(_, k3, v3, t2, t3), t4) =>
+        bin(k3, v3, bin(k1, v1, t1, t2), bin(k2, v2, t3, t4))
+      case _ => panic("impossible: doubleL: Tip")
+    }
+  }
+
+   /*
+             k1->v1                  k3->v3
+            /      \                /      \
+            m      t4            k2->v2    k1->v1
+            =                    /  \      /   \
+          k2->v2         ~>     t1  t2    t3   t4
+         /     \
+       t1      k3->v3
+                /  \
+              t2    t3
+  */
+  def doubleR[A, B](k1: A, v1: B, m: Map[A, B], t4: Map[A, B]): Map[A, B] = {
+    m match {
+      case Bin(_, k2, v2, t1, Bin(_, k3, v3, t2, t3)) =>
+        bin(k3, v3, bin(k2, v2, t1, t2), bin(k1, v1, t3, t4))
+      case _ =>
+        panic("impossible: doubleR: Tip")
+    }
+  }
+
+  def rotateL[A, B](k: A, v: B, l: Map[A, B], r: Map[A, B]): Map[A, B] = {
+    r match {
+      case Bin(_, _, _, rl, rr) =>
+        if (rl.size() < ratio * rr.size()) { singleL(k, v, l, r) }
+        else { doubleL(k, v, l, r) }
+      case Tip() => doubleL(k, v, l, r)
+    }
+  }
+  def rotateR[A, B](k: A, v: B, l: Map[A, B], r: Map[A, B]): Map[A, B] = {
+    l match {
+      case Bin(_, _, _, ll, lr) =>
+        if (ll.size() < ratio * lr.size()) { singleR(k, v, l, r) }
+        else { doubleR(k, v, l, r) }
+      case Tip() => doubleR(k, v, l, r)
+    }
+  }
+
+  val sizeL = l.size()
+  val sizeR = r.size()
+  val sizeCombined = sizeL + sizeR + 1
+
+  if ((sizeL + sizeR) <= 1) { Bin(sizeCombined, k, v, l, r) }
+  else if (sizeR > (delta * sizeL)) { rotateL(k, v, l, r) }
+  else if (sizeL > (delta * sizeR)) { rotateR(k, v, l, r) }
+  else { Bin(sizeCombined, k, v, l, r)}
+}
+
+record MaxView[K, V](k: K, v: V, m: Map[K, V])
+record MinView[K, V](k: K, v: V, m: Map[K, V])
+
+def maxViewSure[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): MaxView[K, V] = {
+  (l, r) match {
+    case (l, Tip()) => MaxView(k, v, l)
+    case (l, Bin(_, kr, vr, rl, rr)) =>
+      val MaxView(km, vm, r2) = maxViewSure(kr, vr, rl, rr)
+      MaxView(km, vm, balance(k, v, l, r2))
+  }
+}
+
+def minViewSure[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): MinView[K, V] = {
+  (l, r) match {
+    case (Tip(), r) => MinView(k, v, r)
+    case (Bin(_, kl, vl, ll, lr), r) =>
+      val MinView(km, vm, l2) = minViewSure(kl, vl, ll, lr)
+      MinView(km, vm, balance(k, v, l2, r))
+  }
+}
+
+// Internal: Glues two balanced trees (with respect to each other) together.
+def glue[K, V](l: Map[K, V], r: Map[K, V]): Map[K, V] = {
+  (l, r) match {
+    case (Tip(), r) => r
+    case (l, Tip()) => l
+    case (Bin(sizeL, kl, vl, ll, lr), Bin(sizeR, kr, vr, rl, rr)) =>
+      if (sizeL > sizeR) { 
+        val MaxView(km, m, l2) = maxViewSure(kl, vl, ll, lr)
+        balance(km, m, l2, r)
+      } else {
+        val MinView(km, m, r2) = minViewSure(kr, vr, rl, rr)
+        balance(km, m, l, r2)
+      }
+  }
+}
+
+def splitLookup[K, V](m: Map[K, V], k: K): Tuple3[Map[K, V], Option[V], Map[K, V]] = {
+  m match {
+    case Tip() => (Tip(), None(), Tip())
+    case Bin(_, k2, v2, l, r) =>
+      genericCompare(k, k2) match {
+        case Less() => 
+          val (lessThan, mid, greaterThan) = l.splitLookup(k);
+          (lessThan, mid, link(k2, v2, greaterThan, r))
+        case Greater() =>           
+          val (lessThan, mid, greaterThan) = r.splitLookup(k);
+          (link(k2, v2, l, lessThan), mid, greaterThan)
+        case Equal() => (l, Some(v2), r)
+      }
+  }
+}
+
+def split[K, V](m: Map[K, V], k: K): (Map[K, V], Map[K, V]) = {
+  val (l, _, r) = m.splitLookup(k);
+  (l, r)
+}
+
+def link[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): Map[K, V] = {
+  (l, r) match {
+    case (Tip(), r) => r.putMin(k, v)
+    case (l, Tip()) => l.putMax(k, v)
+    case (Bin(sizeL, kl, vl, ll, lr), Bin(sizeR, kr, vr, rl, rr)) =>
+      if ((delta * sizeL) < sizeR) { balance(kr, vr, link(k, v, l, rl), rr) }
+      else if ((delta * sizeR) < sizeL) { balance(kl, vl, ll, link(k, v, lr, r)) }
+      else { bin(k, v, l, r) }
+  }
+}
+
+// Internal: merge two trees
+def link2[K, V](l: Map[K, V], r: Map[K, V]): Map[K, V] = {
+  (l, r) match {
+    case (Tip(), r) => r
+    case (l, Tip()) => l
+    case (Bin(sizeL, kl, vl, ll, lr), Bin(sizeR, kr, vr, rl, rr)) =>
+      if ((delta * sizeL) < sizeR) { balance(kr, vr, link2(l, lr), rr) }
+      else if ((delta * sizeR) < sizeL) { balance(kl, vl, ll, link2(lr, r)) }
+      else { glue(l, r) }
+  }
+}
+
+def putMin[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = {
+  m match {
+    case Tip() => singleton(k, v)
+    case Bin(_, k2, v2, l, r) =>
+      balance(k2, v2, l.putMin(k, v), r)
+  }
+}
+
+def putMax[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = {
+  m match {
+    case Tip() => singleton(k, v)
+    case Bin(_, k2, v2, l, r) =>
+      balance(k2, v2, l, r.putMax(k, v))
+  }
+}
+
+// Section: internal utilities for tests:
+
+// Check if a map `m` is balanced.
+def isBalanced[K, V](m: Map[K, V]): Bool = {
+  m match {
+    case Tip() => true
+    case Bin(_, _, _, l, r) =>
+      val bothSmall = l.size() + r.size() <= 1
+      val leftSmallEnough = l.size() <= delta * r.size()
+      val rightSmallEnough = r.size() <= delta * l.size()
+      (bothSmall || (leftSmallEnough && rightSmallEnough)) && isBalanced(l) && isBalanced(r)
+  }
+}
+
+// Section: genericShow for tree maps and list maps
+
+def genericShow[K, V](m: Map[K, V]): String = {
+  // Helper function to recursively build the string representation of the tree
+  def go(t: Map[K, V], prefix: String, isTail: Bool): String = {
+    t match {
+      case Tip() => ""
+      case Bin(_, k, v, l, r) =>
+        val pair = k.genericShow ++ " → " ++ v.genericShow 
+        val currentLine = prefix ++ (if (isTail) "└── " else "├── ") ++ pair ++ "\n"
+
+        val newPrefix = prefix ++ (if (isTail) "    " else "│   ")
+        val leftStr = go(l, newPrefix, false)
+        val rightStr = go(r, newPrefix, true)
+
+        currentLine ++ leftStr ++ rightStr
+    }
+  }
+
+  // Start the recursion with the initial map, an empty prefix, and true for the root being the tail
+  go(m, "", true)
+}
+
+def genericShow[K, V](list: List[(K, V)]): String = {
+  val res: String = 
+    list.map { case (k, v) => k.genericShow ++ " → " ++ v.genericShow }
+        .join(", ")
+
+  "[" ++ res ++ "]"
+}
