@@ -13,15 +13,17 @@ object PrettyPrinter {
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
     case Function(callingConvention, returnType, name, parameters, basicBlocks) =>
+      val privateOrNot = if name.contains("effektMain") then "" else "private "
       s"""
-define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${privateOrNot} ${show(callingConvention)} ${showReturnType(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) #0 {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
     case VerbatimFunction(returnType, name, parameters, body) =>
       // TODO what about calling convention?
+      // TODO annotated as readonly, though this might not always be true...
       s"""
-define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define private ${showReturnType(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) #1 {
     $body
 }
 """
@@ -37,7 +39,28 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
 
     case GlobalConstant(name, initializer) =>
       s"@$name = private constant ${show(initializer)}"
+
+    // !100 = !{!"frame_100", !13, i64 0, !13, i64 8}
+    case TypeDescriptor(id: Int, typeName: String, structure: List[(TBAA, Int)]) =>
+      val fields = structure match {
+        case Nil => List("!0, i64 0") // TODO does this make sense at all?!
+        case structure => structure.map { case (tbaa, offset) => s"${show(tbaa)}, i64 ${offset}" }
+      }
+      s"""!${id} = !{!"${typeName}", ${fields.mkString(", ")} }"""
+
+    // !25 = !{!99, !13, i64 8}
+    case AccessTag(id: Int, base: Int, access: TBAA, offset: Int) =>
+      s"""!${id} = !{ !${base}, ${show(access)}, i64 ${offset} }"""
+
+    // !0 = !{ptr @add, ptr @sub}
+    case Callees(id, callees) =>
+      s"""!${id} = !{ ${ callees.map(c => s"ptr @${c}").mkString(", ")} }"""
   }
+
+  def showReturnType(returnType: Type): LLVMString = returnType match {
+      case PointerType() => s"noalias nonnull ${show(returnType)}"
+      case _ => show(returnType)
+    }
 
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
     case Ccc() => "ccc"
@@ -55,26 +78,41 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
-    case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments) =>
-      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Ccc(), _, nonglobal, _) =>
+    case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(_, Ccc(), _, nonglobal, _, callees) =>
       C.abort(s"cannot call non-global operand: $nonglobal")
-    case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments) =>
-      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Tailcc(), tpe, _, _) =>
+    case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments, callees) =>
+      val calleeMetadata = callees.map { n => s", !callees !${n}"}.getOrElse("")
+      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(showArgument))})${calleeMetadata}"
+    case Call(_, Tailcc(), tpe, _, _, callees) =>
       C.abort(s"tail call to non-void function returning: $tpe")
 
-    case Load(result, tpe, LocalReference(PointerType(), name)) =>
-      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}"
-    case Load(_, _, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
+    case Load(result, tpe, LocalReference(PointerType(), name), Some(tbaa), invariant) =>
+      val showInvariant = if invariant then ", !invariant.group !0" else ""
+      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}, !tbaa ${show(tbaa)}${showInvariant}"
+
+    case Load(result, tpe, LocalReference(PointerType(), name), None, invariant) =>
+      val showInvariant = if invariant then ", !invariant.group !0" else ""
+      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}${showInvariant}"
+
+    case Load(_, _, operand, _, _) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
 
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
-    case Store(address, value) =>
-      s"store ${show(value)}, ${show(address)}"
+    case Store(address, value, Some(tbaa), invariant) =>
+      val showInvariant = if invariant then ", !invariant.group !0" else ""
+      s"store ${show(value)}, ${show(address)}, !tbaa ${show(tbaa)}${showInvariant}"
+
+    case Store(address, value, None, invariant) =>
+      val showInvariant = if invariant then ", !invariant.group !0" else ""
+      s"store ${show(value)}, ${show(address)}${showInvariant}"
 
     case GetElementPtr(result, tpe, ptr @ LocalReference(_, name), i :: is) =>
       s"${localName(result)} = getelementptr ${show(tpe)}, ${show(ptr)}, i64 $i" + is.map(", i32 " + _).mkString
@@ -109,6 +147,36 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Comment(msg) => ""
   }
 
+  def show(tbaa: TBAA): String = tbaa match {
+    case TBAA.Stack() => "!1"
+    case TBAA.StackPointer() => "!2"
+    case TBAA.ReferenceCount() => "!3"
+    case TBAA.Memory() => "!8"
+    case TBAA.Region() => "!8"
+    case TBAA.FrameAccess(n, idx) => s"!${n + 1 + idx}"
+
+    case TBAA.Byte() => "!10"
+    case TBAA.Double() => "!12"
+    case TBAA.Int() => "!13"
+
+    case TBAA.String() => "!14"
+    case TBAA.Pos() => "!15"
+    case TBAA.Neg() => "!16"
+
+    case TBAA.Reference() => "!24"
+
+    case TBAA.ReturnAddressInFrameHeader() => "!25"
+    case TBAA.SharerInFrameHeader() => "!26"
+    case TBAA.EraserInFrameHeader() => "!27"
+
+    case TBAA.AccessRef(llvm.TBAA.Int()) => "!29"
+    case TBAA.AccessRef(llvm.TBAA.Double()) => "!31"
+    case TBAA.AccessRef(llvm.TBAA.String()) => "!33"
+    case TBAA.AccessRef(llvm.TBAA.Pos()) => "!35"
+    case TBAA.AccessRef(llvm.TBAA.Neg()) => "!37"
+    case TBAA.AccessRef(_) => ???
+  }
+
   def show(terminator: Terminator): LLVMString = terminator match {
     case RetVoid() =>
       s"ret void"
@@ -120,6 +188,18 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   }
 
   def show(operand: Operand): LLVMString = operand match {
+    case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
+    case ConstantGlobal(tpe, name)          => s"${show(tpe)} ${globalName(name)}"
+    case ConstantInt(n)                     => s"i64 $n"
+    case ConstantDouble(n)                  => s"double $n"
+    case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
+    case ConstantNull(tpe)                  => s"${show(tpe)} null"
+    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}] [${commaSeparated(members.map(show))}]"
+    case ConstantInteger8(b)                => s"i8 $b"
+  }
+
+  def showArgument(operand: Operand): LLVMString = operand match {
+    case LocalReference(tpe @ Type.PointerType(), name) => s"${show(tpe)} nonnull ${localName(name)}"
     case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
     case ConstantGlobal(tpe, name)          => s"${show(tpe)} ${globalName(name)}"
     case ConstantInt(n)                     => s"i64 $n"
@@ -144,6 +224,11 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   }
 
   def show(parameter: Parameter): LLVMString = parameter match {
+    case Parameter(tpe, "stack") => s"${show(tpe)} noalias nonnull ${localName("stack")}"
+    case Parameter(tpe, "environment") => s"${show(tpe)} noalias nonnull ${localName("environment")}"
+    case Parameter(tpe, "obj") => s"${show(tpe)} noalias nonnull ${localName("obj")}"
+    case Parameter(tpe, "stackPointer") => s"${show(tpe)} noalias nonnull ${localName("stackPointer")}"
+    case Parameter(tpe @ Type.PointerType(), name) => s"${show(tpe)} nonnull ${localName(name)}"
     case Parameter(tpe, name) => s"${show(tpe)} ${localName(name)}"
   }
 

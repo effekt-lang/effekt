@@ -59,10 +59,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map(d => space <> "else" <+> toDoc(d)).getOrElse(emptyDoc)
       "switch" <+> scrutinee <+> line <> indent(vcat(cls)) <> d
 
-    case New(name, operations, rest) =>
+    case New(name, interface, operations, rest) =>
       "let" <+> name <+> "=" <+> "new" <+> block(operations map toDoc) <> ";" <> line <> toDoc(rest)
 
-    case Invoke(receiver, tag, arguments) =>
+    case Invoke(receiver, interface, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
     case Allocate(name, init, ev, rest) =>
