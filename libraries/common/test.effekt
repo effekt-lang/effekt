@@ -22,7 +22,7 @@ namespace Formatted {
   def tryEmit(escape: String): String / Formatted =
     if (do supportsEscape(escape)) escape else ""
 
-  def withEscape(text: String, colorEscape: String): String / Formatted =
+  def colored(text: String, colorEscape: String): String / Formatted =
     tryEmit(colorEscape) ++ text ++ tryEmit(ANSI::RESET)
 }
 
@@ -30,10 +30,10 @@ namespace Duration {
   def diff(fromNanos: Int, toNanos: Int) = toNanos - fromNanos
 }
 
-def red(text: String) = text.withEscape(ANSI::RED)
-def green(text: String) = text.withEscape(ANSI::GREEN)
-def dim(text: String) = text.withEscape(ANSI::FAINT)
-def bold(text: String) = text.withEscape(ANSI::BOLD)
+def red(text: String) = Formatted::colored(text, ANSI::RED)
+def green(text: String) = Formatted::colored(text, ANSI::GREEN)
+def dim(text: String) = Formatted::colored(text, ANSI::FAINT)
+def bold(text: String) = Formatted::colored(text, ANSI::BOLD)
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit
