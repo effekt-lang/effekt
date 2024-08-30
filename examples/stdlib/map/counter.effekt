@@ -1,0 +1,39 @@
+import map
+
+def counter(words: List[String]): Map[String, Int] = {
+  var m: Map[String, Int] = map::empty();
+
+  list::foreach(words) { word =>
+    m = m.putWithKey(word, 1) { (_, n1, n2) => n1 + n2 }
+  }
+
+  m
+}
+
+def main() = {
+  // John F. Kennedy's Inaugural Address, Jan 20, 1961; modified for Effekt
+  val words: List[String] = [
+    "and", "so", "my", "fellow", "Effekt", "programmers",
+    "ask", "not", "what", "your", "language", "can", "do", "for", "you",
+    "ask", "what", "you", "can", "do", "for", "your", "language",
+    "my", "fellow", "programmers", "of", "the", "world",
+    "ask", "not", "what", "Effekt", "will", "do", "for", "you",
+    "but", "what", "together", "we", "can", "do", "for", "the", "programs", "of", "man"
+  ]
+
+  val ctr: Map[String, Int] = counter(words)
+
+  def test(word: String) = {
+    val count = ctr.getOrElse(word) { 0 }
+    println(word ++ ": " ++ count.show)
+  }
+
+  test("ask")
+  test("can")
+  test("you")
+  test("see")
+  test("do")
+  test("Effekt")
+
+  println(ctr.toList.prettyPairs)
+}
