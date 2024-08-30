@@ -686,9 +686,9 @@ def isBalanced[K, V](m: Map[K, V]): Bool = {
   }
 }
 
-// Section: genericShow for tree maps and list maps
+// Section: prettyprinting for tree maps and list maps
 
-def genericShow[K, V](m: Map[K, V]): String = {
+def prettyMap[K, V](m: Map[K, V]): String = {
   // Helper function to recursively build the string representation of the tree
   def go(t: Map[K, V], prefix: String, isTail: Bool): String = {
     t match {
@@ -709,7 +709,7 @@ def genericShow[K, V](m: Map[K, V]): String = {
   go(m, "", true)
 }
 
-def genericShow[K, V](list: List[(K, V)]): String = {
+def prettyPairs[K, V](list: List[(K, V)]): String = {
   val res: String = 
     list.map { case (k, v) => k.genericShow ++ " → " ++ v.genericShow }
         .join(", ")

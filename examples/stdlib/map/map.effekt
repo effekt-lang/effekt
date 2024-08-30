@@ -1,0 +1,21 @@
+import map
+
+def main() = {
+    val l = [(0, "Hello"), (1, "World"), (2, "Woo!")]
+
+    val m = map::fromList(l)
+    println(m.toList.prettyPairs)
+
+    val m2 = m.delete(1).put(42, "Whole new world!").put(100, "Big").put(1000, "Bigger").put(10000, "Biggest!")
+    println(m2.toList.prettyPairs)
+
+    // TODO: BUG!
+    // val m3 = map::fromList(Cons((1, "Foo"), Cons((-1, "Huh?!"), m2.toList.reverse)))
+    // println(m3.toList.prettyPairs)
+
+    val m3 = map::fromList(Cons((1, "Foo"), m2.toList.reverse))
+    println(m3.toList.prettyPairs)
+
+    val m4: Map[Int, String] = m3.toList.fromList
+    println(m4.toList.prettyPairs)
+}

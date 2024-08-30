@@ -25,7 +25,8 @@ abstract class StdlibChezTests extends StdlibTests {
     examplesDir / "stdlib" / "bytearray",
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
-    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "map"
   )
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
@@ -65,5 +66,8 @@ class StdlibLLVMTests extends StdlibTests {
     examplesDir / "stdlib" / "list" / "build.effekt",
     examplesDir / "stdlib" / "string" / "strings.effekt",
     examplesDir / "stdlib" / "string" / "unicode.effekt",
+
+    // Not implemented yet
+    examplesDir / "stdlib" / "map"
   )
 }
