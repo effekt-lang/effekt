@@ -69,10 +69,13 @@
 ; The "meta" stack (a stack of stacks) -- a pointer to a %StackValue
 %Stack = type ptr
 
+; Unique tags to index into the stack.
+%Prompt = type i64
+
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %ReferenceCount, %Memory, %Region, %Stack }
+%StackValue = type { %ReferenceCount, %Memory, %Region, %Prompt, %Stack }
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Object}
@@ -200,7 +203,7 @@ here:
 
 else:
     %nextEvidence = sub %Evidence %evidence, 1
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %region = tail call ptr @getRegionPointer(%Evidence %nextEvidence, %Stack %rest)
     ret ptr %region
@@ -267,6 +270,17 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %
 
 ; Stack management
 
+define %Prompt @freshPrompt(%Stack %stack) {
+entry:
+    ; Proposal for syntax: if we compute the address of something in a struct, use the following naming convention:
+    %stack.lastPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
+    %lastPrompt = load %Prompt, ptr %stack.lastPrompt
+
+    %nextPrompt = add %Prompt %lastPrompt, 1
+    store %Prompt %nextPrompt, ptr %stack.lastPrompt
+    ret %Prompt %lastPrompt
+}
+
 define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
@@ -304,7 +318,7 @@ define %Memory @newMemory() {
 define %Stack @newStack() {
 
     ; TODO find actual size of stack
-    %stack = call ptr @malloc(i64 112)
+    %stack = call ptr @malloc(i64 120)
 
     ; TODO initialize to zero and grow later
     %stackMemory = call %Memory @newMemory()
@@ -312,15 +326,16 @@ define %Stack @newStack() {
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
-    %stack.3 = insertvalue %StackValue %stack.2, %Stack zeroinitializer, 3
+    %stack.3 = insertvalue %StackValue %stack.2, %Prompt 0, 3 ; TODO add prompt here!
+    %stack.4 = insertvalue %StackValue %stack.3, %Stack zeroinitializer, 4
 
-    store %StackValue %stack.3, %Stack %stack
+    store %StackValue %stack.4, %Stack %stack
 
     ret %Stack %stack
 }
 
 define void @pushStack(%Stack %stack, %Stack %oldStack) {
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
     br i1 %isNull, label %done, label %next
@@ -335,7 +350,7 @@ next:
 }
 
 define %Stack @popStacks(%Stack %stack, i64 %n) {
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isZero = icmp eq i64 %n, 0
     br i1 %isZero, label %done, label %next
@@ -390,7 +405,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 define %Stack @underflowStack(%Stack %stack) {
     %stackMemory = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
@@ -468,7 +483,7 @@ copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newOldReferenceCount, ptr %stackReferenceCount
 
-    %newHead = call ptr @malloc(i64 112)
+    %newHead = call ptr @malloc(i64 120)
     br label %loop
 
 loop:
@@ -477,16 +492,19 @@ loop:
 
     %stackMemory = getelementptr %StackValue, %Stack %old, i64 0, i32 1
     %stackRegion = getelementptr %StackValue, %Stack %old, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 3
+    %stackPrompt = getelementptr %StackValue, %Stack %old, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
+    %prompt = load %Prompt, ptr %stackPrompt
     %rest = load %Stack, ptr %stackRest
 
     %newStackReferenceCount = getelementptr %StackValue, %Stack %newStack, i64 0, i32 0
     %newStackMemory = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newStackRegion = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
-    %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %newStackPrompt = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 4
 
     %newMemory = call %Memory @copyMemory(%Memory %memory)
 
@@ -498,12 +516,13 @@ loop:
     store %ReferenceCount 0, ptr %newStackReferenceCount
     store %Memory %newMemory, ptr %newStackMemory
     store %Region %newRegion, ptr %newStackRegion
+    store %Prompt %prompt, ptr %newStackPrompt
 
     %isNull = icmp eq %Stack %rest, null
     br i1 %isNull, label %stop, label %next
 
 next:
-    %nextNew = call ptr @malloc(i64 112)
+    %nextNew = call ptr @malloc(i64 120)
     store %Stack %nextNew, ptr %newStackRest
     br label %loop
 
@@ -533,7 +552,7 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     free:
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %stackPointer = load %StackPointer, ptr %stackStackPointer
     %region = load %Region, ptr %stackRegion
