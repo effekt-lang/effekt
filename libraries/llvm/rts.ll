@@ -363,6 +363,33 @@ next:
     ret %Stack %result
 }
 
+define %Stack @popStacksPrompt(%Stack %stack, %Prompt %p) {
+entry:
+    %isNull = icmp eq %Stack %stack, null
+    br i1 %isNull, label %returnNull, label %checkPrompt
+
+checkPrompt:
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %currentPrompt = load %Prompt, ptr %prompt_pointer
+    %promptMatch = icmp eq %Prompt %currentPrompt, %p
+    br i1 %promptMatch, label %found, label %continue
+
+continue:
+    %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack = load %Stack, ptr %nextStack_pointer
+    %result = tail call %Stack @popStacksPrompt(%Stack %nextStack, %Prompt %p)
+    ret %Stack %result
+
+found:
+    %nextStack2_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack2 = load %Stack, ptr %nextStack2_pointer
+    store %Stack null, ptr %nextStack2_pointer
+    ret %Stack %nextStack2
+
+returnNull:
+    ret %Stack null
+}
+
 define void @eraseMemory(%Memory %memory) {
     %stackPointer = extractvalue %Memory %memory, 0
     call void @free(%StackPointer %stackPointer)
