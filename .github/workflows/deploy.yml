@@ -14,14 +14,16 @@ jobs:
   build-jar:
     name: Build the Effekt compiler and run tests
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >
+      ${{ github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     outputs:
       version: ${{ steps.get_version.outputs.VERSION }}
 
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-tags: 'true'
+        fetch-depth: 0
         submodules: 'true'
 
     - name: Set up JDK 11
