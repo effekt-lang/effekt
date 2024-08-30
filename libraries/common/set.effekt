@@ -1,0 +1,208 @@
+module set
+
+import map
+
+// Ordered finite set, backed by a `Map`.
+record Set[A](internal: Map[A, Unit])
+
+// Create a new empty set.
+//
+// O(1)
+def empty[A](): Set[A] = {
+  Set(empty())
+}
+
+// Check if set `s` is empty.
+//
+// O(1)
+def isEmpty[A](s: Set[A]): Bool = {
+  s.viaInternal { m =>
+    m.isEmpty()
+  }
+}
+
+// Check if set `s` is nonempty.
+//
+// O(1)
+def nonEmpty[A](s: Set[A]): Bool = {
+  s.viaInternal { m =>
+    m.nonEmpty()
+  }
+}
+
+// Create a new set containing only the given element `a`.
+//
+// O(1)
+def singleton[A](a: A): Set[A] = {
+  val s: Set[A] = empty()
+  s.insert(a)
+}
+
+// Insert a new element `a` into the set `s`.
+//
+// O(log N)
+def insert[A](s: Set[A], a: A): Set[A] = {
+  s.modifyInternal { m =>
+    put(m, a, ())
+  }
+}
+
+// Create a set from a given list.
+// 
+// O(N log N)
+// O(N) if the list is sorted
+def fromList[A](list: List[A]): Set[A] = {
+  val m: Map[A, Unit] = list.map { k => (k, ()) }.fromList
+  Set(m)
+}
+
+// Create a list from a given set.
+//
+// O(N)
+def toList[A](s: Set[A]): List[A] = {
+  var acc = Nil()
+  s.foreach { a =>
+    acc = Cons(a, acc)
+  }
+  acc.reverse
+}
+
+// Check if a predicate holds for all elements in a given set.
+//
+// O(N)
+def all[A](s: Set[A]) { predicate : A => Bool }: Bool = {
+  var result = true
+  s.foreach { a =>
+    if (not(predicate(a))) { result = false }
+  }
+  result
+}
+
+// Check if a predicate holds for at least one element in a given set.
+//
+// O(N)
+def any[A](s: Set[A]) { predicate: A => Bool }: Bool = {
+  var result = false
+  s.foreach { a =>
+    if (predicate(a)) { result = true }
+  }
+  result  
+}
+
+// Check if a set contains a given element.
+//
+// O(log N)
+def contains[A](s: Set[A], a: A): Bool = {
+  s.viaInternal { m =>
+    m.contains(a)
+  }
+}
+
+// Check if set `s1` is a subset of set `s2`.
+//
+// O(N log N)
+def subset[A](s1: Set[A], s2: Set[A]): Bool = {
+  s1.all { a =>
+    s2.contains(a)
+  }
+}
+
+// Check if set `s1` is a superset of set `s2`.
+//
+// O(N log N)
+def superset[A](s1: Set[A], s2: Set[A]): Bool = {
+  s2.subset(s1)
+}
+
+// Remove an element from a set.
+// If the element is not in the set, the original set is returned.
+//
+// O(log N)
+def delete[A](s: Set[A], a: A): Set[A] = {
+  s.modifyInternal { m =>
+    m.delete(a)
+  }
+}
+
+// Remove many elements from a set.
+//
+// O(M log N) where M is the size of the list.
+def deleteMany[A](s: Set[A], list: List[A]): Set[A] = {
+  var tmp = s
+  list.foreach { a =>
+    tmp = tmp.delete(a)
+  }
+  tmp
+}
+
+// Traverse all elements in order, running the function `action` on each element.
+//
+// Law: `s.foreach { action } === s.toList.foreach { action }`
+//
+// O(N)
+def foreach[A](s: Set[A]) { action : A => Unit }: Unit = {
+  s.viaInternal { m =>
+    m.foreach { (k, _v) =>
+      action(k)
+    }
+  }
+}
+
+// Get the size of a set.
+//
+// O(N)
+def size[A](s: Set[A]): Int = {
+  s.viaInternal { m =>
+    m.size()
+  }
+}
+
+// Convert a given set into a map.
+// Uses a function `value` to give a value for each of the keys (elements of the set).
+//
+// O(N)
+def toMap[K, V](keys: Set[K]) { value : K => V }: Map[K, V] = {
+  keys.viaInternal { m =>
+    m.map { (k, _v) => value(k) }
+  }
+}
+
+// Construct a new set which contains all elements of `s1`
+// except those where the element is in `s2`.
+//
+// O(???)
+def difference[A](s1: Set[A], s2: Set[A]): Set[A] = {
+  s1.modifyInternal { m1 =>
+    s2.viaInternal { m2 =>
+      m1.difference(m2)
+    }
+  }
+}
+
+// Construct a new set which contains both elements of `s1` and `s2`.
+//
+// O(???)
+def union[A](s1: Set[A], s2: Set[A]): Set[A] = {
+  s1.modifyInternal { m1 =>
+    s2.viaInternal { m2 =>
+      m1.union(m2)
+    }
+  }
+}
+
+// -------------
+// Internal
+
+// Internal: inline at all costs
+// Function `f` is only used linearly, the set `s` is dropped.
+def viaInternal[A, R](s: Set[A]) { f : Map[A, Unit] => R }: R = {
+  val Set(internal) = s
+  f(internal)
+}
+
+// Internal: inline at all costs
+// Uses `viaInternal` inside and wraps the result in a `Set`.
+// Ideally, this would be in-place (when possible) since we don't change the type?
+def modifyInternal[A](s: Set[A]) { f : Map[A, Unit] => Map[A, Unit] }: Set[A] = {
+  s.viaInternal { m => Set(f(m)) }
+}
