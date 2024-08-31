@@ -635,7 +635,11 @@ object Transformer {
       case (acc, c) if escapeSeqs.isDefinedAt(c) =>
         acc ++= escapeSeqs(c)
       case (acc, c) if (c.isControl || c < ' ' || c > '~') =>
-        acc ++= f"\\u${c.toInt}%04x"
+        val bytes = c.toString.getBytes("UTF-8")
+        bytes.foreach { byte =>
+          acc ++= f"\\${byte & 0xff}%03o"
+        }
+        acc
       case (acc, c) =>
         acc += c
     }.toString()
