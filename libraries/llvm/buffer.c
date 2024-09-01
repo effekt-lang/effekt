@@ -60,13 +60,14 @@ struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     return c_buffer(0, n, obj);
 }
 
-// TODO this allocates, copies, and frees immediately... improve this
 struct Pos c_buffer_construct_zeroed(const uint64_t n) {
-    uint8_t *zeroes = calloc(n, sizeof *zeroes);
+    uint8_t *zeroes = calloc(sizeof(struct Header) + n, sizeof *zeroes);
     ASSERT_NON_NULL(zeroes)
-    const struct Pos buffer = c_buffer_construct(n, zeroes);
-    free(zeroes);
-    return buffer;
+
+    struct Header *header = (void*) zeroes;
+    *header = (struct Header) { .rc = 0, .eraser = c_buffer_erase_noop, };
+
+    return c_buffer(0, n, zeroes);
 }
 
 struct Pos c_buffer_construct_uninitialized(const uint64_t n) {
