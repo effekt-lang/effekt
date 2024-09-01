@@ -17,6 +17,7 @@ export Definition.*
 enum CallingConvention {
   case Ccc()
   case Tailcc()
+  case TailccPerhaps()
 }
 export CallingConvention.*
 

@@ -29,10 +29,13 @@ object Transformer {
       val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
       val instructions = BC.instructions; BC.instructions = null;
 
+      val transitionJump = Call("_", TailccPerhaps(), VoidType(), ConstantGlobal(FunctionType(VoidType(), Nil), "effektMainTailcc"), List())
+      val transitionBlock = BasicBlock("transition", List(transitionJump), RetVoid())
+      val transitionFunction = Function(Ccc(), VoidType(), "effektMain", List(), List(transitionBlock))
+
       val entryBlock = BasicBlock("entry", instructions, terminator)
-      // TODO strictly speaking, the entry function should use the C calling convention
-      val entryFunction = Function(Tailcc(), VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions :+ entryFunction
+      val effektMain = Function(Tailcc(), VoidType(), "effektMainTailcc", List(), entryBlock :: basicBlocks)
+      declarations.map(transform) ++ definitions :+ transitionFunction :+ effektMain
   }
 
   // context getters
@@ -83,7 +86,9 @@ object Transformer {
         shareValues(label.environment, Set())
 
         val arguments = label.environment.map(transform)
+
         emit(callLabel(transform(label), arguments))
+
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
@@ -521,6 +526,9 @@ object Transformer {
 
   def callLabel(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
     Call("_", Tailcc(), VoidType(), name, arguments :+ getStack())
+
+  def callLabelTransition(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
+    Call("_", TailccPerhaps(), VoidType(), name, arguments :+ getStack())
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 

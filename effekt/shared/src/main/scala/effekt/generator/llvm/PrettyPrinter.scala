@@ -42,6 +42,7 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
     case Ccc() => "ccc"
     case Tailcc() => "tailcc"
+    case TailccPerhaps() => "tailcc"
   }
 
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
@@ -67,6 +68,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Tailcc(), tpe, _, _) =>
       C.abort(s"tail call to non-void function returning: $tpe")
+    case Call(result, TailccPerhaps(), resultType, function, arguments) =>
+      show(Call(result, Tailcc(), resultType, function, arguments)).stripPrefix("musttail ")
 
     case Load(result, tpe, LocalReference(PointerType(), name)) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}"
