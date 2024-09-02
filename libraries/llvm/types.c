@@ -26,8 +26,15 @@ static const struct Pos BooleanTrue = (struct Pos) { .tag = 1, .obj = NULL, };
 
 typedef struct Pos String;
 
+struct StackValue;
+
+typedef struct StackValue* Stack;
+
 
 // Defined in rts.ll
+
+extern void resume_Int(Stack, Int);
+extern void resume_Pos(Stack, struct Pos);
 
 extern void run(struct Neg);
 extern void run_Int(struct Neg, Int);

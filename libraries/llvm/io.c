@@ -442,6 +442,48 @@ void c_file_open(struct Pos path, struct Pos modeString, struct Neg* success, st
 }
 
 
+void c_open_file_handler(uv_fs_t* req) {
+    // Extract the file descriptor from the uv_fs_t structure
+    int64_t fd = req->result;
+    Stack stack = (Stack)req->data;
+
+    // Free request structure
+    uv_fs_req_cleanup(req);
+    free(req);
+
+    resume_Int(stack, fd);
+}
+
+void c_open_file(struct Pos path, struct Pos modeString, Stack stack) {
+    int permissions = 0666;  // rw-rw-rw- permissions
+
+    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+
+    // Convert the Effekt String to a 0-terminated string
+    char* path_str = c_buffer_as_null_terminated_string(path);
+    erasePositive((struct Pos) path);
+
+    // Convert the Effekt String representing the opening mode to libuv flags
+    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
+    erasePositive((struct Pos) modeString);
+
+    // Store the stack in the req's data field
+    req->data = stack;
+
+    // Get the default loop and call fs_open
+    uv_loop_t* loop = uv_default_loop();
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_open_file_handler);
+    int64_t result_i64 = (int64_t)result_i32;
+
+    // TODO report error result (UV_EINVAL)
+
+    // We can free the string, since libuv copies it into req
+    free(path_str);
+
+    return; // result_i64;
+}
+
+
 // Reading a File
 // --------------
 
