@@ -75,7 +75,7 @@ def modeName(modes: Mode): String = modes match {
 /**
  * Using the file system via node.js
  */
-def filesystem[R] { program: => R / Files }: R / { AsyncIO, Exception[IOError] } = // TODO move Exception to be bidirectional
+def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO move Exception to be bidirectional
   try { program() }
   with Files {
     def readFile(path) = resume(readFile(path))
@@ -89,9 +89,9 @@ def filesystem[R] { program: => R / Files }: R / { AsyncIO, Exception[IOError] }
 /**
  * Reads a file at given path as utf8 encoded string.
  */
-def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
-  val fd = openFile(path, ReadOnly());
-  with on[IOError].finalize { closeFile(fd) }
+def readFile(path: String): String / Exception[IOError] = {
+  val fd = direct::openFile(path, modeName(ReadOnly()));
+  with on[IOError].finalize { direct::closeFile(fd); () }
 
   val readSize = 1048576 // 1MB
   var size = readSize
@@ -99,7 +99,7 @@ def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
   var offset = 0;
 
   def go(): String = {
-    readFile(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
+    direct::readFile(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
       case 0 =>
         buffer.slice(0, offset).toUTF8
       case n and n < 0 => panic("Error!")
@@ -124,9 +124,9 @@ def readFile(path: String): String / { AsyncIO, Exception[IOError] } = {
 /**
  * Writes the (utf8 encoded) string `contents` into the specified file.
  */
-def writeFile(path: String, contents: String): Unit / { AsyncIO, Exception[IOError] } = {
-  val fd = openFile(path, Write());
-  with on[IOError].finalize { closeFile(fd) }
+def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
+  val fd = direct::openFile(path, modeName(Write()));
+  with on[IOError].finalize { direct::closeFile(fd); () }
 
   val writeSize = 1048576 // 1MB
 
@@ -138,7 +138,7 @@ def writeFile(path: String, contents: String): Unit / { AsyncIO, Exception[IOErr
   def remaining() = size - offset
 
   def go(): Unit =
-    writeFile(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
+    direct::writeFile(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
       case 0 => ()
       case n and n < 0 => panic("Error!")
       case n =>
@@ -310,7 +310,7 @@ namespace examples {
     do writeFile(to, contents)
   }
 
-  def main() = eventloop(box {
+  def main() = direct::eventloop(box {
     with on[IOError].panic;
     with filesystem;
 
