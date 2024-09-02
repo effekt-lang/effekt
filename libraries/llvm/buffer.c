@@ -32,7 +32,7 @@ struct Pos c_buffer(const uint32_t offset, const uint32_t length, void* obj) {
     };
 }
 
-void c_buffer_erase_noop(void *envPtr) {}
+void c_buffer_erase_noop(void *envPtr) { (void)envPtr; }
 
 uint64_t c_buffer_offset(const struct Pos buffer) {
     return (uint32_t)(buffer.tag >> 32); // Extract offset from the upper 32 bits
@@ -94,7 +94,7 @@ struct Pos c_buffer_clone(const struct Pos buffer) {
 
 void c_buffer_copy(const struct Pos from, struct Pos to, uint64_t startFrom, uint64_t startTo, uint64_t length) {
     // Check bounds
-    if (startFrom < 0 || startTo < 0 || (startFrom + length > c_buffer_length(from)) || (startTo + length > c_buffer_length(to))) {
+    if ((startFrom + length > c_buffer_length(from)) || (startTo + length > c_buffer_length(to))) {
         return;
     }
 
