@@ -9,11 +9,15 @@ declare void @uv_loop_close(ptr)
 ; Helpers defined in C
 declare void @c_timer_wait(i64, %Neg)
 declare i64 @c_file_open(%Pos, %Pos, %Neg, %Neg)
-declare void @c_open_file(%Pos, %Pos, %Stack)
 declare void @c_file_close(%Pos)
 declare void @c_file_read(i32, %Pos, i64, ptr, ptr)
 declare void @c_file_write(i32, %Pos, i64, ptr, ptr)
 declare %Pos @c_filedescriptor_show(%Pos)
+
+declare void @c_open_file(%Pos, %Pos, %Stack)
+declare void @c_read_file(%Int, %Pos, %Int, %Stack)
+declare void @c_write_file(%Int, %Pos, %Int, %Stack)
+declare void @c_close_file(%Int, %Stack)
 
 declare %Pos @c_promise_make()
 declare void @c_promise_resolve(%Pos, %Pos)

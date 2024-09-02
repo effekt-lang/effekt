@@ -266,18 +266,39 @@ namespace callback {
 
 namespace direct {
 
-  extern io def eventloop(program: () => Unit at {global,io,control}): Unit = llvm """
-      call void @run(%Neg %program)
-      %loop = call ptr @uv_default_loop()
-      call i32 @uv_run(ptr %loop, i32 0)
-      call void @uv_loop_close(ptr %loop)
-      ret %Pos zeroinitializer
+  extern io def eventloop(program: () => Unit at {global,io,control}): Unit =
+  llvm """
+    call void @run(%Neg %program)
+    %loop = call ptr @uv_default_loop()
+    call i32 @uv_run(ptr %loop, i32 0)
+    call void @uv_loop_close(ptr %loop)
+    ret %Pos zeroinitializer
   """
 
-  extern control def openFile(path: String, mode: String): Int = llvm """
-      call void @c_open_file(%Pos %path, %Pos %mode, %Stack %stack)
-      ret void
+  extern control def openFile(path: String, mode: String): Int =
+  llvm """
+    call void @c_open_file(%Pos %path, %Pos %mode, %Stack %stack)
+    ret void
   """
+
+  extern control def readFile(fd: Int, buffer: Bytes, offset: Int): Int =
+  llvm """
+    call void @c_read_file(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
+    ret void
+  """
+
+  extern control def writeFile(fd: Int, buffer: Bytes, offset: Int): Int =
+  llvm """
+    call void @c_write_file(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
+    ret void
+  """
+
+  extern control def closeFile(fd: Int): Int =
+  llvm """
+    call void @c_close_file(%Int %fd, %Stack %stack)
+    ret void
+  """
+
 }
 
 namespace examples {
