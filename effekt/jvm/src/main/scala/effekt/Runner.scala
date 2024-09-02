@@ -147,8 +147,10 @@ object JSNodeRunner extends Runner[String] {
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).canonicalPath.escape
+    val jsFileName = path.unixPath.split("/").last
     // create "executable" using shebang besides the .js file
-    val jsScript = s"require('${jsFilePath}').main()"
+    val jsScript = s"require('./${jsFileName}').main()"
+
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
@@ -183,7 +185,7 @@ object JSWebRunner extends Runner[String] {
     import java.nio.file.Path
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).unixPath
-    val jsFileName = jsFilePath.split("/").last
+    val jsFileName = path.unixPath.split("/").last
     val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
     val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
     val htmlContent =
