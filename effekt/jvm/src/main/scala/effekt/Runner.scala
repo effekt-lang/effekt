@@ -147,8 +147,9 @@ object JSNodeRunner extends Runner[String] {
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).canonicalPath.escape
+    val jsFileName = jsFilePath.split("/").last
     // create "executable" using shebang besides the .js file
-    val jsScript = s"require('${jsFilePath}').main()"
+    val jsScript = s"require('./${jsFileName}').main()"
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
