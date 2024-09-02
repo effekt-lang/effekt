@@ -19,43 +19,33 @@ class LLVMTests extends EffektTests {
   )
 
   lazy val bugs: List[File] = List(
-    examplesDir / "pos" / "issue108.effekt", // seg faults!
-
-    // unsure
-    examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
-
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
-    // unclear
-    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
+    // sanitizer/valgrind: segfault
+    examplesDir / "pos" / "parametrized.effekt",
 
-    // Valgrind leak/failure
-    examplesDir / "llvm" / "nested.effekt",
+    // sanitizer/valgrind: segfault
+    // related to polymorphism boxing
+    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
+    examplesDir / "pos" / "issue108.effekt",
+
+    // valgrind leak
     examplesDir / "llvm" / "strings.effekt",
     examplesDir / "llvm" / "polymorphism_map.effekt",
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "type_parameters_blocks.effekt",
     examplesDir / "pos" / "long_string.effekt",
-    examplesDir / "pos" / "matchblock.effekt",
-    examplesDir / "pos" / "overloading.effekt",
-    examplesDir / "pos" / "withstatement.effekt",
-    examplesDir / "pos" / "dequeue.effekt",
-    examplesDir / "pos" / "higherorder_io_control.effekt",
-    examplesDir / "pos" / "infer" / "infer_overload.effekt",
-    examplesDir / "pos" / "bug1.effekt",
     examplesDir / "pos" / "string_concat_pr493.effekt",
-    examplesDir / "pos" / "string" / "substring.effekt",
-    examplesDir / "pos" / "string" / "indexOf.effekt",
-    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
+    examplesDir / "pos" / "string" / "substring.effekt", // a lot
+    examplesDir / "pos" / "string" / "indexOf.effekt", // a lot
     examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
-    examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt",
   )
 
   /**
