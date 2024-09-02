@@ -27,9 +27,6 @@ class LLVMTests extends EffektTests {
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
-    // *** MALLOC PANIC
-    examplesDir / "pos" / "get_put.effekt",
-
     // unclear
     examplesDir / "pos" / "higher_rank_polymorphism.effekt",
 
