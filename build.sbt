@@ -11,6 +11,7 @@ lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
+lazy val bumpVersion = taskKey[Unit]("Bumps the minor version number, rewriting this file (used in CI).")
 
 lazy val effektVersion = "0.2.2"
 
@@ -160,6 +161,27 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       Process(s"${npm.value} version ${effektVersion} --no-git-tag-version --allow-same-version").!!
       Process(s"${mvn.value} versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
     },
+
+    bumpVersion := {
+      val versionPattern = """(\d+)\.(\d+)\.(\d+)""".r
+      val newVersion = effektVersion match {
+        case versionPattern(major, minor, patch) =>
+          s"$major.${minor.toInt + 1}.0"
+        case _ =>
+          sys.error(s"Invalid version format: $effektVersion")
+      }
+
+      // Update the build.sbt file
+      val buildSbt = (ThisBuild / baseDirectory).value / "build.sbt"
+      IO.writeLines(buildSbt, IO.readLines(buildSbt).map {
+         case line if line.startsWith("lazy val effektVersion =") =>
+          s"""lazy val effektVersion = "$newVersion""""
+        case other => other
+      })
+
+      println(newVersion)
+    },
+
     generateDocumentation := TreeDocs.replacer.value,
     Compile / sourceGenerators += versionGenerator.taskValue,
     Compile / sourceGenerators += TreeDocs.generator.taskValue,

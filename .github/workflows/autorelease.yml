@@ -5,11 +5,6 @@ on:
   schedule:
     - cron: '0 3 * * 1'  # Every Monday at 3am UTC
   workflow_dispatch: # For manual triggering
-    inputs:
-      patch_version:
-        description: 'Patch version number (default is 0)'
-        required: false
-        default: '0'
 
 jobs:
   calculate-version-and-tag:
@@ -18,24 +13,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Calculate new version
-        id: set-version
-        run: |
-          MAJOR=0
-          YEAR=$(date +%y)
-          WEEK=$(date +%W)
-          WEEK_PADDED=$(printf "%02d" $WEEK)
-          PATCH="${{ github.event.inputs.patch_version }}"
-          if [[ -z "$PATCH" ]]; then
-            PATCH="0"
-          fi
-          VERSION="${MAJOR}.${YEAR}.${WEEK_PADDED}.${PATCH}"
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Update version in build.sbt
-        run: |
-          sed -i 's/lazy val effektVersion = ".*"/lazy val effektVersion = "${{ steps.set-version.outputs.VERSION }}"/' build.sbt
 
       - name: Set up JDK 11
         uses: actions/setup-java@v3
@@ -48,6 +25,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '12.x'
+
+      - name: Bump version using sbt
+        id: set-version
+        run: |
+          new_version=$(sbt 'bumpVersion' -error | tail -n 1)
+          echo "New version := ${new_version}"
+          echo "VERSION=${new_version}" >> $GITHUB_ENV
 
       - name: Update NPM and MVN versions via sbt
         run: sbt updateVersions
