@@ -50,7 +50,7 @@ trait Runner[Executable] {
     case OS.POSIX =>
       val computeScriptDir =
         """# Determine the directory of the script
-          |SCRIPT_DIR=$(dirname "$0")
+          |SCRIPT_DIR=$(dirname "$(realpath "$0")")
           |""".stripMargin
       IO.createFile(name, s"#!/bin/sh\n${computeScriptDir}\n${command.mkString(" ")} \"$$@\"", true)
       name
