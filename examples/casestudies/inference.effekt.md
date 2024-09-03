@@ -63,7 +63,7 @@ def draw(dist: Distribution): Double / random = {
 
     case Beta(mean, sampleSize) =>
       val alpha = mean * sampleSize
-      return draw(Gaussian(0.5, 1.0/(4.0 * (2.0 * alpha + 1.0))))
+      return draw(Gaussian(0.5, 1.0 / (4.0 * (2.0 * alpha + 1.0))))
   }
 }
 def gamma(z0: Double): Double = {
@@ -96,7 +96,7 @@ def gamma(z0: Double): Double = {
     z = z - 1.0
     var x = takeith(1.0, p)
     var i = 2.0
-    while(i <= 9.0){
+    while (i <= 9.0) {
       x = x + (takeith(i, p) / (z + i - 1.0))
       i = i + 1.0
     }
@@ -109,17 +109,17 @@ def gamma(z0: Double): Double = {
 def density(value: Double, dist: Distribution): Double = {
   dist match {
     case Gaussian(mean, variance) =>
-      val density = 1.0/(sqrt(variance) * (sqrt(2.0 * PI))) * exp((0.0 - 1.0/2.0) * (square(value - mean) / variance))
+      val density = 1.0 / (sqrt(variance) * (sqrt(2.0 * PI))) * exp((0.0 - 1.0 / 2.0) * (square(value - mean) / variance))
       return density
 
     case Uniform(lower, upper) =>
-      if(lower < value && value < upper){ 1.0 / (upper - lower)}
-      else {0.0}
+      if (lower < value && value < upper) { 1.0 / (upper - lower) }
+      else { 0.0 }
 
     case Beta(mean, sampleSize) =>
       val alpha = mean * sampleSize
       val beta = (1.0 - mean) * sampleSize
-      val density = (gamma(alpha + beta)/(gamma(alpha) * gamma(beta))) * pow(value, (alpha - 1.0)) * pow((1.0 - value), (beta - 1.0))
+      val density = (gamma(alpha + beta) / (gamma(alpha) * gamma(beta))) * pow(value, (alpha - 1.0)) * pow((1.0 - value), (beta - 1.0))
       return density
   }
 }
@@ -128,17 +128,17 @@ def density(value: Double, dist: Distribution): Double = {
 We define default handlers for all effects in this library
 
 ```
-def handleSample[R]{ program: () => R / sample } = {
+def handleSample[R] { program: () => R / sample } = {
   try { program() }
   with sample { dist => resume(draw(dist)) }
 }
-def handleObserve[R]{ program: () => R / observe } = {
+def handleObserve[R] { program: () => R / observe } = {
   try { program() }
   with observe { (value, dist) => do weight(density(value, dist)); resume(()) }
 }
-def handleRandom[R]{program: () => R / random }: R = {
-  try {program()}
-  with random {() => resume(random())}
+def handleRandom[R] { program: () => R / random }: R = {
+  try { program() }
+  with random { () => resume(random()) }
 }
 // pseudo random number generator
 def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
@@ -207,7 +207,7 @@ The effect `Weight` is also the basis of the rejection handling algorithm
 def handleRejection[R] { program: () => R / weight }: R / random = {
   try { program() }
   with weight { (prob) =>
-    if(do random() < prob) { resume(()) }
+    if (do random() < prob) { resume(()) }
     else { handleRejection{ program } }
   }
 }
@@ -265,8 +265,8 @@ def handleTracing[R] { program: () => R / sample }: (R, Trace) / sample = {
 }
 def handleReusingTrace[R](trace0: Trace) { program: () => R / sample } = handleObserve {
   var trace = trace0
-  try {program()}
-  with sample {(dist) =>
+  try { program() }
+  with sample { (dist) =>
     trace match {
       case Nil() => panic("empty trace")
       case Cons(t, ts) =>
@@ -300,7 +300,7 @@ The algorithm is implemented with a helper function
 def metropolisStep[A](prob0: Probability, trace0: Trace) { program: Trace => (A, Probability) } = {
   val trace1 = propose(trace0)
   val (result1, prob1) = program(trace1)
-  if(prob1 < prob0) {
+  if (prob1 < prob0) {
     do weight(prob1 / prob0)
   }
   ((result1, trace1), prob1)
@@ -345,7 +345,7 @@ def proposeSingleSite(trace: Trace): Trace / sample = {
     p0 match {
       case Nil() => []
       case Cons(p, ps) =>
-        if(i == 0) {
+        if (i == 0) {
           val noise = do sample(Gaussian(0.0, 1.0))
           Cons(p + noise, ps)
         }
@@ -364,7 +364,7 @@ The single-site Metropolis-Hastings algorithm is implemented like the Metropolis
 def metropolisStepSingleSite[A](prob0: Probability, trace0: Trace) { program: Trace => (A, Probability) } = {
   val trace1 = proposeSingleSite(trace0)
   val (result1, prob1) = program(trace1)
-  if(prob1 < prob0){
+  if (prob1 < prob0){
     do weight(prob1 / prob0)
   }
   ((result1, trace1), prob1)
@@ -377,7 +377,7 @@ def metropolisHastingsSingleSiteAlgo[A] {program: () => A / { sample, weight } }
   }
   def loop(result: A, trace: Trace, prob: Probability): Unit / Emit[A] = {
     do emit(result)
-    val ((result1, trace1), prob1)= handleSample {
+    val ((result1, trace1), prob1) = handleSample {
       with handleRejection
       metropolisStepSingleSite(prob, trace) { trace => 
         with handleWeight
@@ -444,10 +444,10 @@ The current state of the robot, consisting of position and velocity.
 ```
 record State(x: Double, y: Double, vx: Double, vy: Double)
 
-def show(s: State): String = s match {
-  case State(x, y, vx, vy) =>
-    def rounded(d: Double) = round(d, 3).show
-    "State(" ++ x.rounded ++ ", " ++ y.rounded ++ ", " ++ vx.rounded ++ ", " ++ vy.rounded ++ ")"
+def show(s: State): String = {
+  val State(x, y, vx, vy) = s
+  def rounded(d: Double) = round(d, 3).show
+  "State(" ++ x.rounded ++ ", " ++ y.rounded ++ ", " ++ vx.rounded ++ ", " ++ vy.rounded ++ ")"
 }
 ```
 
@@ -529,7 +529,7 @@ def main() = {
   // random number generator used by all examples
   with linearCongruentialGenerator(1)
 
-  // "show instances for the different emitted values"
+  // show instances for the different emitted values
   with onEmit[Point] { s => println(s.show) };
   with onEmit[State] { s => println(s.show) };
   with onEmit[Path] { path =>
@@ -601,11 +601,11 @@ def main() = {
     var nextpr = 0.8
     var m = 5
     var path : List[Population] = [nextPop]
-    while(m > 0){
+    while (m > 0) {
       nextPop = step(nextPop, nextpr)
       val noise = do sample(Gaussian(0.0, 0.01))
       var nextpr1 = nextpr + noise
-      if(not(nextpr1 < 0.0 || nextpr1 > 1.0)){nextpr = nextpr1}
+      if (not(nextpr1 < 0.0 || nextpr1 > 1.0)) { nextpr = nextpr1 }
       path = append(path, [nextPop])
       m = m - 1
     }
