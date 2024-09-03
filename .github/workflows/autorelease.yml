@@ -29,9 +29,25 @@ jobs:
       - name: Bump version using sbt
         id: set-version
         run: |
-          new_version=$(sbt 'bumpVersion' -error | tail -n 1)
-          echo "New version := ${new_version}"
-          echo "VERSION=${new_version}" >> $GITHUB_ENV
+          # Capture the output of 'sbt bumpVersion'
+          full_output=$(sbt 'bumpVersion' -error)
+
+          # Extract the actual version number using grep
+          new_version=$(echo "$full_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)
+
+          # Trim any potential whitespace
+          new_version=$(echo "$new_version" | xargs)
+
+          # Check that the new_version is actually non-empty and looks like a version number
+          if [[ ! $new_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Version bump failed. Invalid version number: '${new_version}'"
+            echo "Full output was:"
+            echo "$full_output"
+            exit 1
+          fi
+
+          echo "VERSION=${new_version}" >> $GITHUB_OUTPUT
+          echo "Successfully set new version: ${new_version}"
 
       - name: Update NPM and MVN versions via sbt
         run: sbt updateVersions

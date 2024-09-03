@@ -9,14 +9,13 @@ on:
     workflows: ["Create Version and Tag"] # 'autorelease.yml'
     types:
       - completed
-
 jobs:
   build-jar:
     name: Build the Effekt compiler and run tests
     runs-on: ubuntu-latest
     if: >
-      ${{ github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     outputs:
       version: ${{ steps.get_version.outputs.VERSION }}
 
@@ -123,7 +122,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_name: ${{ steps.generate_release_notes.outputs.name }}
+          release_name: Release v${{ steps.generate_release_notes.outputs.name }}
           tag_name: v${{ needs.build-jar.outputs.version }}
           body: ${{ steps.generate_release_notes.outputs.body }}
           draft: false
