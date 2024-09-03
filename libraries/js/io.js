@@ -133,6 +133,32 @@ function writeFile(fd, buffer, offset, onSuccess, onFailure) {
 }
 
 
+function open(path, mode, callback) {
+  fs.open(path, mode, (err, fd) => {
+    if (err) { callback(err.errno) } else { callback(fd) }
+  })
+}
+
+function read(fd, buffer, offset, callback) {
+  let position = offset === -1 ? null : offset;
+  fs.read(fd, toBuffer(buffer), 0, buffer.length, position, (err, bytesRead) => {
+    if (err) { callback(err.errno) } else { callback(bytesRead) }
+  })
+}
+
+function write(fd, buffer, offset, callback) {
+  let position = offset === -1 ? null : offset;
+  fs.write(fd, toBuffer(buffer), 0, buffer.length, position, (err, bytesWritten) => {
+    if (err) { callback(err.errno) } else { callback(bytesWritten) }
+  })
+}
+
+function close(fd, callback) {
+  fs.close(fd, (err) => {
+    if (err) { callback(err.errno) } else { callback(0) }
+  })
+}
+
 
 /**
  * Nodejs file operations expect buffers, but we represent buffers as typed arrays.

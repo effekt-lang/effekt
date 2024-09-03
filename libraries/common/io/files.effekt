@@ -267,6 +267,7 @@ namespace callback {
 namespace direct {
 
   extern io def eventloop(program: () => Unit at {global,io,control}): Unit =
+  js "${program}().run()"
   llvm """
     call void @run(%Neg %program)
     %loop = call ptr @uv_default_loop()
@@ -276,24 +277,28 @@ namespace direct {
   """
 
   extern control def openFile(path: String, mode: String): Int =
+  js "$effekt.callcc(callback => open(${path}, ${mode}, callback))"
   llvm """
     call void @c_open_file(%Pos %path, %Pos %mode, %Stack %stack)
     ret void
   """
 
   extern control def readFile(fd: Int, buffer: Bytes, offset: Int): Int =
+  js "$effekt.callcc(callback => read(${fd}, ${buffer}, ${offset}, callback))"
   llvm """
     call void @c_read_file(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
     ret void
   """
 
   extern control def writeFile(fd: Int, buffer: Bytes, offset: Int): Int =
+  js "$effekt.callcc(callback => write(${fd}, ${buffer}, ${offset}, callback))"
   llvm """
     call void @c_write_file(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
     ret void
   """
 
   extern control def closeFile(fd: Int): Int =
+  js "$effekt.callcc(callback => close(${fd}, callback))"
   llvm """
     call void @c_close_file(%Int %fd, %Stack %stack)
     ret void
