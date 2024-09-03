@@ -86,9 +86,7 @@ object Transformer {
         shareValues(label.environment, Set())
 
         val arguments = label.environment.map(transform)
-
         emit(callLabel(transform(label), arguments))
-
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
