@@ -9,6 +9,7 @@ on:
     workflows: ["Create Version and Tag"] # 'autorelease.yml'
     types:
       - completed
+
 jobs:
   build-jar:
     name: Build the Effekt compiler and run tests
@@ -29,9 +30,9 @@ jobs:
       uses: actions/setup-java@v3
       with:
         java-version: '11'
-        distribution: 'temurin'
+        distribution: 'zulu'
 
-    - name: Set up Node.js
+    - name: Set up NodeJS
       uses: actions/setup-node@v4
       with:
         node-version: '12.x'
@@ -72,13 +73,13 @@ jobs:
       run: mv $(npm pack) effekt.tgz
 
     - name: Upload Effekt binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: effekt
         path: bin/effekt
 
     - name: Upload the npm package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: effekt-npm-package
         path: effekt.tgz
@@ -89,13 +90,13 @@ jobs:
     needs: [build-jar]
     steps:
       - name: Download JAR artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: effekt
           path: distribution/
 
       - name: Download npm package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: effekt-npm-package
           path: distribution/
@@ -122,7 +123,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_name: Release v${{ steps.generate_release_notes.outputs.name }}
+          release_name: Release v${{ needs.build-jar.outputs.version }}
           tag_name: v${{ needs.build-jar.outputs.version }}
           body: ${{ steps.generate_release_notes.outputs.body }}
           draft: false
@@ -154,12 +155,12 @@ jobs:
     needs: [build-jar, release]
     steps:
       - name: Download npm package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: effekt-npm-package
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '12.x'
           registry-url: 'https://registry.npmjs.org'
