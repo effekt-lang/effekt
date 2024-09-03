@@ -50,19 +50,7 @@ trait Runner[Executable] {
     case OS.POSIX =>
       val computeScriptDir =
         """# Determine the directory of the script
-          |if [ -n "$BASH_SOURCE" ]; then
-          |    # Bash
-          |    SCRIPT_DIR=$(dirname "$BASH_SOURCE")
-          |elif [ -n "$ZSH_VERSION" ]; then
-          |    # Zsh
-          |    SCRIPT_DIR=$(dirname "$0")
-          |elif [ -n "$KSH_VERSION" ]; then
-          |    # Ksh
-          |    SCRIPT_DIR=$(dirname "${.sh.file}")
-          |else
-          |    # POSIX shells (sh, dash, etc.)
-          |    SCRIPT_DIR=$(dirname "$0")
-          |fi
+          |SCRIPT_DIR=$(dirname "$0")
           |""".stripMargin
       IO.createFile(name, s"#!/bin/sh\n${computeScriptDir}\n${command.mkString(" ")} \"$$@\"", true)
       name
