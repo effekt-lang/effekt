@@ -565,7 +565,7 @@ void c_file_close(int32_t fd) {
 
 // DIRECT STYLE
 
-void c_resume_int_handler(uv_fs_t* req) {
+void c_resume_int_fs(uv_fs_t* req) {
     int64_t result = (int64_t)req->result;
     Stack stack = (Stack)req->data;
 
@@ -596,7 +596,7 @@ void c_open_file(struct Pos path, struct Pos modeString, Stack stack) {
 
     // Get the default loop and call fs_open
     uv_loop_t* loop = uv_default_loop();
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_resume_int_handler);
+    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_resume_int_fs);
     int64_t result_i64 = (int64_t)result_i32;
 
     // TODO report error result (UV_EINVAL)
@@ -626,7 +626,7 @@ void c_read_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
     req->data = stack;
 
     // // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, fd, &buf, 1, offset, c_resume_int_handler);
+    uv_fs_read(loop, req, fd, &buf, 1, offset, c_resume_int_fs);
 }
 
 void c_write_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
@@ -647,7 +647,7 @@ void c_write_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
     req->data = stack;
 
     // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, fd, &buf, 1, offset, c_resume_int_handler);
+    uv_fs_write(loop, req, fd, &buf, 1, offset, c_resume_int_fs);
 }
 
 void c_close_file(Int fd, Stack stack) {
@@ -662,9 +662,31 @@ void c_close_file(Int fd, Stack stack) {
 
     req->data = stack;
 
-    uv_fs_close(loop, req, fd, c_resume_int_handler);
+    uv_fs_close(loop, req, fd, c_resume_int_fs);
 }
 
+void c_resume_unit_timer(uv_timer_t* handle) {
+  Stack stack = handle->data;
+  free(handle);
+  resume_Pos(stack, Unit);
+}
+
+void c_wait_timer(Int millis, Stack stack) {
+
+  // Get the default loop
+  uv_loop_t* loop = uv_default_loop();
+
+  // Allocate memory for the timer handle
+  uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+
+  // // Initialize the timer handle
+  uv_timer_init(loop, timer);
+
+  timer->data = stack;
+
+  // Start the timer to call the callback after n ms
+  uv_timer_start(timer, c_resume_unit_timer, millis, 0);
+}
 
 
 #endif

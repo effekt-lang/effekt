@@ -13,3 +13,12 @@ namespace callback {
       ret %Pos zeroinitializer
     """
 }
+
+namespace direct {
+  extern control def wait(millis: Int): Unit =
+    js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
+    llvm """
+      call void @c_wait_timer(%Int %millis, %Stack %stack)
+      ret void
+    """
+}

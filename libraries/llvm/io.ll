@@ -18,6 +18,7 @@ declare void @c_open_file(%Pos, %Pos, %Stack)
 declare void @c_read_file(%Int, %Pos, %Int, %Stack)
 declare void @c_write_file(%Int, %Pos, %Int, %Stack)
 declare void @c_close_file(%Int, %Stack)
+declare void @c_wait_timer(%Int, %Stack)
 
 declare %Pos @c_promise_make()
 declare void @c_promise_resolve(%Pos, %Pos)
