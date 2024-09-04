@@ -33,8 +33,8 @@ type Mode {
  * Reads a file at given path as utf8 encoded string.
  */
 def readFile(path: String): String / Exception[IOError] = {
-  val fd = direct::openFile(path, modeName(ReadOnly()));
-  with on[IOError].finalize { direct::closeFile(fd); () }
+  val fd = direct::open(path, modeName(ReadOnly()));
+  with on[IOError].finalize { direct::close(fd); () }
 
   val readSize = 1048576 // 1MB
   var size = readSize
@@ -42,7 +42,7 @@ def readFile(path: String): String / Exception[IOError] = {
   var offset = 0;
 
   def go(): String = {
-    direct::readFile(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
+    direct::read(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
       case 0 =>
         buffer.slice(0, offset).toUTF8
       case n and n < 0 => panic("Error!")
@@ -68,8 +68,8 @@ def readFile(path: String): String / Exception[IOError] = {
  * Writes the (utf8 encoded) string `contents` into the specified file.
  */
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
-  val fd = direct::openFile(path, modeName(Write()));
-  with on[IOError].finalize { direct::closeFile(fd); () }
+  val fd = direct::open(path, modeName(Write()));
+  with on[IOError].finalize { direct::close(fd); () }
 
   val writeSize = 1048576 // 1MB
 
@@ -81,7 +81,7 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
   def remaining() = size - offset
 
   def go(): Unit =
-    direct::writeFile(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
+    direct::write(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
       case 0 => ()
       case n and n < 0 => panic("Error!")
       case n =>
@@ -140,31 +140,31 @@ namespace direct {
     const fs = require("fs");
   """
 
-  extern control def openFile(path: String, mode: String): Int =
+  extern control def open(path: String, mode: String): Int =
   js "$effekt.callcc(callback => open(${path}, ${mode}, callback))"
   llvm """
-    call void @c_open_file(%Pos %path, %Pos %mode, %Stack %stack)
+    call void @c_fs_open(%Pos %path, %Pos %mode, %Stack %stack)
     ret void
   """
 
-  extern control def readFile(fd: Int, buffer: Bytes, offset: Int): Int =
+  extern control def read(fd: Int, buffer: Bytes, offset: Int): Int =
   js "$effekt.callcc(callback => read(${fd}, ${buffer}, ${offset}, callback))"
   llvm """
-    call void @c_read_file(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
+    call void @c_fs_read(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
     ret void
   """
 
-  extern control def writeFile(fd: Int, buffer: Bytes, offset: Int): Int =
+  extern control def write(fd: Int, buffer: Bytes, offset: Int): Int =
   js "$effekt.callcc(callback => write(${fd}, ${buffer}, ${offset}, callback))"
   llvm """
-    call void @c_write_file(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
+    call void @c_fs_write(%Int %fd, %Pos %buffer, %Int %offset, %Stack %stack)
     ret void
   """
 
-  extern control def closeFile(fd: Int): Int =
+  extern control def close(fd: Int): Int =
   js "$effekt.callcc(callback => close(${fd}, callback))"
   llvm """
-    call void @c_close_file(%Int %fd, %Stack %stack)
+    call void @c_fs_close(%Int %fd, %Stack %stack)
     ret void
   """
 

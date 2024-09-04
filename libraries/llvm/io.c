@@ -27,134 +27,6 @@ void c_io_println_String(String text) {
 }
 
 
-// Promises
-// --------
-
-typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
-
-typedef struct Listeners {
-    struct Neg listener;
-    struct Listeners* next;
-} Listeners;
-
-typedef struct {
-    uint64_t rc;
-    void* eraser;
-    promise_state_t state;
-    // state of {
-    //   case UNRESOLVED => NULL
-    //   case RESOLVED   => Pos (the result)
-    //   case AWAITED    => Nonempty list of listeners
-    // }
-    union {
-        struct Pos pos;
-        Listeners* listeners;
-    } payload;
-} Promise;
-
-void c_promise_erase_listeners(struct Pos promise) {
-    Promise* p = (Promise*)promise.obj;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            return;
-        case AWAITED:
-            {
-                Listeners* current = p->payload.listeners;
-                // Free all listeners
-                while (current != NULL) {
-                    Listeners* k = current;
-                    current = current->next;
-                    eraseNegative(k->listener);
-                    free(k);
-                }
-                p->payload.listeners = NULL;
-            }
-            return;
-        case RESOLVED:
-            erasePositive(p->payload.pos);
-            return;
-    }
-}
-
-void c_promise_resolve(struct Pos promise, struct Pos value) {
-    Promise* p = (Promise*)promise.obj;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            p->state = RESOLVED;
-            p->payload.pos = value; // Store value in payload
-            break;
-        case RESOLVED:
-            fprintf(stderr, "ERROR: Promise already resolved\n");
-            exit(1);
-        case AWAITED: {
-            Listeners* current = p->payload.listeners;
-            p->state = RESOLVED;
-            p->payload.pos = value;
-
-             // Call each listeners
-            while (current != NULL) {
-                sharePositive(value);
-                run_Pos(current->listener, value);
-                Listeners* temp = current;
-                current = current->next;
-                free(temp);
-            }
-            break;
-        }
-    }
-    // do we need to erase promise now? Is it shared before?
-    erasePositive(promise);
-}
-
-void c_promise_await(struct Pos promise, struct Neg listener) {
-    Promise* p = (Promise*)promise.obj;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            p->state = AWAITED;
-            p->payload.listeners = (Listeners*)malloc(sizeof(Listeners));
-            p->payload.listeners->listener = listener;
-            p->payload.listeners->next = NULL;
-            break;
-        case RESOLVED:
-            run_Pos(listener, p->payload.pos);
-            break;
-        case AWAITED: {
-            Listeners* new_node = (Listeners*)malloc(sizeof(Listeners));
-            new_node->listener = listener;
-            new_node->next = NULL;
-
-            // We traverse the listeners to attach this last .
-            // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
-            // But how many listeners will there be?
-            // If really necessary, we can store a second pointer that points to the last one...
-            Listeners* current = p->payload.listeners;
-            while (current->next != NULL) {
-                current = current->next;
-            }
-            current->next = new_node;
-            break;
-        }
-    }
-    erasePositive(promise);
-}
-
-
-struct Pos c_promise_make() {
-    Promise* promise = (Promise*)malloc(sizeof(Promise));
-
-    promise->rc = 0;
-    promise->eraser = (void*)c_promise_erase_listeners;
-    promise->state = UNRESOLVED;
-    promise->payload.pos = Unit;
-
-    return (struct Pos) { .tag = 0, .obj = promise, };
-}
-
-
-
 // Lib UV Bindings
 // ---------------
 // Ideas behind the LLVM / libuv implementation.
@@ -310,21 +182,20 @@ int modeToFlags(const char* flags) {
     }
 }
 
-void c_resume_int_fs(uv_fs_t* req) {
-    int64_t result = (int64_t)req->result;
-    Stack stack = (Stack)req->data;
+void c_resume_int_fs(uv_fs_t* request) {
+    int64_t result = (int64_t)request->result;
+    Stack stack = (Stack)request->data;
 
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
+    uv_fs_req_cleanup(request);
+    free(request);
 
     resume_Int(stack, result);
 }
 
-void c_open_file(struct Pos path, struct Pos modeString, Stack stack) {
+void c_fs_open(struct Pos path, struct Pos modeString, Stack stack) {
     int permissions = 0666;  // rw-rw-rw- permissions
 
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
     // Convert the Effekt String to a 0-terminated string
     char* path_str = c_buffer_as_null_terminated_string(path);
@@ -334,25 +205,25 @@ void c_open_file(struct Pos path, struct Pos modeString, Stack stack) {
     int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
     erasePositive((struct Pos) modeString);
 
-    // Store the stack in the req's data field
-    req->data = stack;
+    // Store the stack in the request's data field
+    request->data = stack;
 
     // TODO fix mode and permissions and stuff
 
     // Get the default loop and call fs_open
     uv_loop_t* loop = uv_default_loop();
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_resume_int_fs);
+    int32_t result_i32 = uv_fs_open(loop, request, path_str, mode, (int32_t)permissions, c_resume_int_fs);
     int64_t result_i64 = (int64_t)result_i32;
 
     // TODO report error result (UV_EINVAL)
 
-    // We can free the string, since libuv copies it into req
+    // We can free the string, since libuv copies it into request
     free(path_str);
 
     return; // result_i64;
 }
 
-void c_read_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
+void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
@@ -366,15 +237,15 @@ void c_read_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
     uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
 
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
-    req->data = stack;
+    request->data = stack;
 
     // // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, fd, &buf, 1, offset, c_resume_int_fs);
+    uv_fs_read(loop, request, fd, &buf, 1, offset, c_resume_int_fs);
 }
 
-void c_write_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
+void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -387,15 +258,15 @@ void c_write_file(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
     uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
 
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
-    req->data = stack;
+    request->data = stack;
 
     // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, fd, &buf, 1, offset, c_resume_int_fs);
+    uv_fs_write(loop, request, fd, &buf, 1, offset, c_resume_int_fs);
 }
 
-void c_close_file(Int fd, Stack stack) {
+void c_fs_close(Int fd, Stack stack) {
     // Get the default loop
     uv_loop_t* loop = uv_default_loop();
 
@@ -403,12 +274,16 @@ void c_close_file(Int fd, Stack stack) {
     // TODO fix names
     // TODO remove comments!!!
 
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
-    req->data = stack;
+    request->data = stack;
 
-    uv_fs_close(loop, req, fd, c_resume_int_fs);
+    uv_fs_close(loop, request, fd, c_resume_int_fs);
 }
+
+
+// Timers
+// ------
 
 void c_resume_unit_timer(uv_timer_t* handle) {
   Stack stack = handle->data;
@@ -416,7 +291,7 @@ void c_resume_unit_timer(uv_timer_t* handle) {
   resume_Pos(stack, Unit);
 }
 
-void c_wait_timer(Int millis, Stack stack) {
+void c_timer_start(Int millis, Stack stack) {
 
   // Get the default loop
   uv_loop_t* loop = uv_default_loop();
@@ -431,6 +306,133 @@ void c_wait_timer(Int millis, Stack stack) {
 
   // Start the timer to call the callback after n ms
   uv_timer_start(timer, c_resume_unit_timer, millis, 0);
+}
+
+
+// Promises
+// --------
+
+typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
+
+typedef struct Listeners {
+    struct Neg listener;
+    struct Listeners* next;
+} Listeners;
+
+typedef struct {
+    uint64_t rc;
+    void* eraser;
+    promise_state_t state;
+    // state of {
+    //   case UNRESOLVED => NULL
+    //   case RESOLVED   => Pos (the result)
+    //   case AWAITED    => Nonempty list of listeners
+    // }
+    union {
+        struct Pos pos;
+        Listeners* listeners;
+    } payload;
+} Promise;
+
+void c_promise_erase_listeners(struct Pos promise) {
+    Promise* p = (Promise*)promise.obj;
+
+    switch (p->state) {
+        case UNRESOLVED:
+            return;
+        case AWAITED:
+            {
+                Listeners* current = p->payload.listeners;
+                // Free all listeners
+                while (current != NULL) {
+                    Listeners* k = current;
+                    current = current->next;
+                    eraseNegative(k->listener);
+                    free(k);
+                }
+                p->payload.listeners = NULL;
+            }
+            return;
+        case RESOLVED:
+            erasePositive(p->payload.pos);
+            return;
+    }
+}
+
+void c_promise_resolve(struct Pos promise, struct Pos value) {
+    Promise* p = (Promise*)promise.obj;
+
+    switch (p->state) {
+        case UNRESOLVED:
+            p->state = RESOLVED;
+            p->payload.pos = value; // Store value in payload
+            break;
+        case RESOLVED:
+            fprintf(stderr, "ERROR: Promise already resolved\n");
+            exit(1);
+        case AWAITED: {
+            Listeners* current = p->payload.listeners;
+            p->state = RESOLVED;
+            p->payload.pos = value;
+
+             // Call each listeners
+            while (current != NULL) {
+                sharePositive(value);
+                run_Pos(current->listener, value);
+                Listeners* temp = current;
+                current = current->next;
+                free(temp);
+            }
+            break;
+        }
+    }
+    // do we need to erase promise now? Is it shared before?
+    erasePositive(promise);
+}
+
+void c_promise_await(struct Pos promise, struct Neg listener) {
+    Promise* p = (Promise*)promise.obj;
+
+    switch (p->state) {
+        case UNRESOLVED:
+            p->state = AWAITED;
+            p->payload.listeners = (Listeners*)malloc(sizeof(Listeners));
+            p->payload.listeners->listener = listener;
+            p->payload.listeners->next = NULL;
+            break;
+        case RESOLVED:
+            run_Pos(listener, p->payload.pos);
+            break;
+        case AWAITED: {
+            Listeners* new_node = (Listeners*)malloc(sizeof(Listeners));
+            new_node->listener = listener;
+            new_node->next = NULL;
+
+            // We traverse the listeners to attach this last .
+            // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
+            // But how many listeners will there be?
+            // If really necessary, we can store a second pointer that points to the last one...
+            Listeners* current = p->payload.listeners;
+            while (current->next != NULL) {
+                current = current->next;
+            }
+            current->next = new_node;
+            break;
+        }
+    }
+    erasePositive(promise);
+}
+
+
+struct Pos c_promise_make() {
+    Promise* promise = (Promise*)malloc(sizeof(Promise));
+
+    promise->rc = 0;
+    promise->eraser = (void*)c_promise_erase_listeners;
+    promise->state = UNRESOLVED;
+    promise->payload.pos = Unit;
+
+    return (struct Pos) { .tag = 0, .obj = promise, };
 }
 
 
