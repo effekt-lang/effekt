@@ -208,7 +208,8 @@ void c_fs_open(struct Pos path, struct Pos modeString, Stack stack) {
     uv_fs_open(uv_default_loop(), request, path_str, mode, 0666, c_resume_int_fs);
     // TODO report result (UV_EINVAL)
 
-    // We must free the string, since libuv copies it into request
+    // We must free the string, since libuv copies it into the request
+    // TODO double check!
     free(path_str);
 
     return;
@@ -247,19 +248,19 @@ void c_fs_close(Int fd, Stack stack) {
 
 
 void c_resume_unit_timer(uv_timer_t* handle) {
-  Stack stack = handle->data;
-  free(handle);
-  resume_Pos(stack, Unit);
+    Stack stack = handle->data;
+    free(handle);
+    resume_Pos(stack, Unit);
 }
 
 void c_timer_start(Int millis, Stack stack) {
 
-  uv_timer_t* timer = malloc(sizeof(uv_timer_t));
-  timer->data = stack;
+    uv_timer_t* timer = malloc(sizeof(uv_timer_t));
+    timer->data = stack;
 
-  uv_timer_init(uv_default_loop(), timer);
+    uv_timer_init(uv_default_loop(), timer);
 
-  uv_timer_start(timer, c_resume_unit_timer, millis, 0);
+    uv_timer_start(timer, c_resume_unit_timer, millis, 0);
 }
 
 

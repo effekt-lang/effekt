@@ -11,13 +11,13 @@ import io/error
  */
 type Mode {
   // Most common modes
-  Append()              // 'a'  created if does not exist
-  ReadAppend()          // 'a+' created if does not exist
   ReadOnly()            // 'r'  exception if does not exist
-  ReadWrite()           // 'w+' created if does not exist, truncated if exists
-  Write()               // 'w'  created if does not exist, truncated if exists
+  WriteOnly()           // 'w'  created if does not exist, truncated if exists
+  AppendOnly()          // 'a'  created if does not exist
 
   // Other modes
+  ReadWrite()           // 'w+' created if does not exist, truncated if exists
+  ReadAppend()          // 'a+' created if does not exist
   AppendExclusive()     // 'ax' created if does not exist, fails if exists
   ReadAppendExclusive() // 'ax+' created if does not exist, fails if exists
   AppendSync()          // 'as' created if does not exist, append in synchronous mode
@@ -68,7 +68,7 @@ def readFile(path: String): String / Exception[IOError] = {
  * Writes the (utf8 encoded) string `contents` into the specified file.
  */
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
-  val fd = direct::open(path, modeName(Write()));
+  val fd = direct::open(path, modeName(WriteOnly()));
   with on[IOError].finalize { direct::close(fd); () }
 
   val writeSize = 1048576 // 1MB
@@ -118,11 +118,11 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
 
 
 def modeName(modes: Mode): String = modes match {
-  case Append()              => "a"
-  case ReadAppend()          => "a+"
   case ReadOnly()            => "r"
+  case WriteOnly()           => "w"
+  case AppendOnly()          => "a"
   case ReadWrite()           => "w+"
-  case Write()               => "w"
+  case ReadAppend()          => "a+"
   case AppendExclusive()     => "ax"
   case ReadAppendExclusive() => "ax+"
   case AppendSync()          => "as"
