@@ -18,6 +18,12 @@ def eventloop(program: Task[Unit]): Unit = direct::eventloop(box {
   try program() with Eventloop {}
 })
 
+def yield(): Unit / Eventloop =
+  direct::yield()
+
+def abort(): Nothing / Eventloop =
+  direct::abort()
+
 namespace direct {
 
   extern io def eventloop(program: () => Unit at {global,io,control}): Unit =
@@ -29,6 +35,20 @@ namespace direct {
     call void @uv_loop_close(ptr %loop)
     ret %Pos zeroinitializer
   """
+
+  extern control def yield(): Unit =
+    js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
+    llvm """
+      call void @c_timer_start(%Int 0, %Stack %stack)
+      ret void
+    """
+
+  extern control def abort(): Nothing =
+    js "$effekt.callcc(callback => { return })"
+    llvm """
+      call void @eraseStack(%Stack %stack)
+      ret void
+    """
 
 }
 
