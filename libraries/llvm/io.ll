@@ -11,6 +11,7 @@ declare void @c_fs_read(%Int, %Pos, %Int, %Stack)
 declare void @c_fs_write(%Int, %Pos, %Int, %Stack)
 declare void @c_fs_close(%Int, %Stack)
 declare void @c_timer_start(%Int, %Stack)
+declare %Int @c_error_number(%Int)
 
 declare %Pos @c_promise_make()
 declare void @c_promise_resolve(%Pos, %Pos)

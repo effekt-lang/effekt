@@ -31,6 +31,12 @@ type Mode {
 
 
 /**
+ * A file descriptor. Should not be inspected.
+ */
+type File = Int
+
+
+/**
  * Reads a file at given path as utf8 encoded string.
  */
 def readFile(path: String): String / Exception[IOError] = {
@@ -118,6 +124,19 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
   }
 
 
+def open(path: String, mode: Mode): File / {Eventloop, Exception[IOError]} =
+  direct::checkResult(direct::open(path, mode))
+
+def read(fd: Int, buffer: Bytes, offset: Int): Int / {Eventloop, Exception[IOError]} =
+  direct::checkResult(direct::read(fd, buffer, offset))
+
+def write(fd: Int, buffer: Bytes, offset: Int): Int / {Eventloop, Exception[IOError]} =
+  direct::checkResult(direct::write(fd, buffer, offset))
+
+def close(fd: Int): Unit / {Eventloop, Exception[IOError]} = {
+  direct::checkResult(direct::close(fd)); ()
+}
+
 namespace direct {
 
   extern js """
@@ -151,6 +170,14 @@ namespace direct {
     call void @c_fs_close(%Int %fd, %Stack %stack)
     ret void
   """
+
+  def checkResult(result: Int): Int / Exception[IOError] =
+  if (result < 0) {
+    val ioError = fromNumber(direct::errorNumber(result));
+    do raise[IOError](ioError, message(ioError))
+  } else {
+    result
+  }
 
 }
 

@@ -52,101 +52,6 @@ void c_io_println_String(String text) {
 // - pooling of request objects (benchmark first!)
 
 
-/**
- * Maps the libuv error code to a stable (platform independent) numeric value.
- *
- * Tries to use most common errno integer values, but introduces fresh values (> 200)
- * for those without common errno values.
- */
-int uv_error_to_errno(int uv_err) {
-    switch (uv_err) {
-        case UV_EPERM:            return 1;    // EPERM
-        case UV_ENOENT:           return 2;    // ENOENT
-        case UV_ESRCH:            return 3;    // ESRCH
-        case UV_EINTR:            return 4;    // EINTR
-        case UV_EIO:              return 5;    // EIO
-        case UV_ENXIO:            return 6;    // ENXIO
-        case UV_E2BIG:            return 7;    // E2BIG
-        case UV_EBADF:            return 9;    // EBADF
-        case UV_EAGAIN:           return 11;   // EAGAIN
-        case UV_ENOMEM:           return 12;   // ENOMEM
-        case UV_EACCES:           return 13;   // EACCES
-        case UV_EFAULT:           return 14;   // EFAULT
-        case UV_EBUSY:            return 16;   // EBUSY
-        case UV_EEXIST:           return 17;   // EEXIST
-        case UV_EXDEV:            return 18;   // EXDEV
-        case UV_ENODEV:           return 19;   // ENODEV
-        case UV_ENOTDIR:          return 20;   // ENOTDIR
-        case UV_EISDIR:           return 21;   // EISDIR
-        case UV_EINVAL:           return 22;   // EINVAL
-        case UV_ENFILE:           return 23;   // ENFILE
-        case UV_EMFILE:           return 24;   // EMFILE
-        case UV_ENOTTY:           return 25;   // ENOTTY
-        case UV_ETXTBSY:          return 26;   // ETXTBSY
-        case UV_EFBIG:            return 27;   // EFBIG
-        case UV_ENOSPC:           return 28;   // ENOSPC
-        case UV_ESPIPE:           return 29;   // ESPIPE
-        case UV_EROFS:            return 30;   // EROFS
-        case UV_EMLINK:           return 31;   // EMLINK
-        case UV_EPIPE:            return 32;   // EPIPE
-        case UV_ERANGE:           return 34;   // ERANGE
-        case UV_ENAMETOOLONG:     return 36;   // ENAMETOOLONG
-        case UV_ELOOP:            return 40;   // ELOOP
-        case UV_EOVERFLOW:        return 75;   // EOVERFLOW
-        case UV_EFTYPE:           return 79;   // EFTYPE
-        case UV_EILSEQ:           return 84;   // EILSEQ
-        case UV_ENOTSOCK:         return 88;   // ENOTSOCK
-        case UV_EDESTADDRREQ:     return 89;   // EDESTADDRREQ
-        case UV_EMSGSIZE:         return 90;   // EMSGSIZE
-        case UV_EPROTOTYPE:       return 91;   // EPROTOTYPE
-        case UV_ENOPROTOOPT:      return 92;   // ENOPROTOOPT
-        case UV_EPROTONOSUPPORT:  return 93;   // EPROTONOSUPPORT
-        case UV_ESOCKTNOSUPPORT:  return 94;   // ESOCKTNOSUPPORT
-        case UV_ENOTSUP:          return 95;   // EOPNOTSUPP
-        case UV_EAFNOSUPPORT:     return 97;   // EAFNOSUPPORT
-        case UV_EADDRINUSE:       return 98;   // EADDRINUSE
-        case UV_EADDRNOTAVAIL:    return 99;   // EADDRNOTAVAIL
-        case UV_ENETDOWN:         return 100;  // ENETDOWN
-        case UV_ENETUNREACH:      return 101;  // ENETUNREACH
-        case UV_ECONNABORTED:     return 103;  // ECONNABORTED
-        case UV_ECONNRESET:       return 104;  // ECONNRESET
-        case UV_ENOBUFS:          return 105;  // ENOBUFS
-        case UV_EISCONN:          return 106;  // EISCONN
-        case UV_ENOTCONN:         return 107;  // ENOTCONN
-        case UV_ETIMEDOUT:        return 110;  // ETIMEDOUT
-        case UV_ECONNREFUSED:     return 111;  // ECONNREFUSED
-        case UV_EHOSTUNREACH:     return 113;  // EHOSTUNREACH
-        case UV_EALREADY:         return 114;  // EALREADY
-        case UV_ECANCELED:        return 125;  // ECANCELED
-
-        case UV_EAI_ADDRFAMILY:   return 200;  // Fresh unique value
-        case UV_EAI_AGAIN:        return 201;  // Fresh unique value
-        case UV_EAI_BADFLAGS:     return 202;  // Fresh unique value
-        case UV_EAI_BADHINTS:     return 203;  // Fresh unique value
-        case UV_EAI_CANCELED:     return 204;  // Fresh unique value
-        case UV_EAI_FAIL:         return 205;  // Fresh unique value
-        case UV_EAI_FAMILY:       return 206;  // Fresh unique value
-        case UV_EAI_MEMORY:       return 207;  // Fresh unique value
-        case UV_EAI_NODATA:       return 208;  // Fresh unique value
-        case UV_EAI_NONAME:       return 209;  // Fresh unique value
-        case UV_EAI_OVERFLOW:     return 210;  // Fresh unique value
-        case UV_EAI_PROTOCOL:     return 211;  // Fresh unique value
-        case UV_EAI_SERVICE:      return 212;  // Fresh unique value
-        case UV_EAI_SOCKTYPE:     return 213;  // Fresh unique value
-        case UV_ECHARSET:         return 215;  // Fresh unique value
-        case UV_ENONET:           return 216;  // Fresh unique value
-        case UV_UNKNOWN:          return 217;  // Fresh unique value
-        case UV_EOF:              return 218;  // Fresh unique value
-
-        case UV_ESHUTDOWN:        return 220;  // Fresh unique value
-
-        // Not available in libuv1-dev on ubuntu
-        //case UV_EUNATCH:          return 219;  // Fresh unique value
-
-        default:                  return -1;   // Unknown error
-    }
-}
-
 void c_resume_int_fs(uv_fs_t* request) {
     int64_t result = (int64_t)request->result;
     Stack stack = (Stack)request->data;
@@ -245,6 +150,101 @@ void c_fs_close(Int fd, Stack stack) {
     // TODO report result (UV_EINVAL)
 }
 
+
+/**
+ * Maps the libuv error code to a stable (platform independent) numeric value.
+ *
+ * Tries to use most common errno integer values, but introduces fresh values (> 200)
+ * for those without common errno values.
+ */
+Int c_error_number(Int errno) {
+    switch (errno) {
+	    case UV_EPERM:            return 1;    // EPERM
+        case UV_ENOENT:           return 2;    // ENOENT
+        case UV_ESRCH:            return 3;    // ESRCH
+        case UV_EINTR:            return 4;    // EINTR
+        case UV_EIO:              return 5;    // EIO
+        case UV_ENXIO:            return 6;    // ENXIO
+        case UV_E2BIG:            return 7;    // E2BIG
+        case UV_EBADF:            return 9;    // EBADF
+        case UV_EAGAIN:           return 11;   // EAGAIN
+        case UV_ENOMEM:           return 12;   // ENOMEM
+        case UV_EACCES:           return 13;   // EACCES
+        case UV_EFAULT:           return 14;   // EFAULT
+        case UV_EBUSY:            return 16;   // EBUSY
+        case UV_EEXIST:           return 17;   // EEXIST
+        case UV_EXDEV:            return 18;   // EXDEV
+        case UV_ENODEV:           return 19;   // ENODEV
+        case UV_ENOTDIR:          return 20;   // ENOTDIR
+        case UV_EISDIR:           return 21;   // EISDIR
+        case UV_EINVAL:           return 22;   // EINVAL
+        case UV_ENFILE:           return 23;   // ENFILE
+        case UV_EMFILE:           return 24;   // EMFILE
+        case UV_ENOTTY:           return 25;   // ENOTTY
+        case UV_ETXTBSY:          return 26;   // ETXTBSY
+        case UV_EFBIG:            return 27;   // EFBIG
+        case UV_ENOSPC:           return 28;   // ENOSPC
+        case UV_ESPIPE:           return 29;   // ESPIPE
+        case UV_EROFS:            return 30;   // EROFS
+        case UV_EMLINK:           return 31;   // EMLINK
+        case UV_EPIPE:            return 32;   // EPIPE
+        case UV_ERANGE:           return 34;   // ERANGE
+        case UV_ENAMETOOLONG:     return 36;   // ENAMETOOLONG
+        case UV_ELOOP:            return 40;   // ELOOP
+        case UV_EOVERFLOW:        return 75;   // EOVERFLOW
+        case UV_EFTYPE:           return 79;   // EFTYPE
+        case UV_EILSEQ:           return 84;   // EILSEQ
+        case UV_ENOTSOCK:         return 88;   // ENOTSOCK
+        case UV_EDESTADDRREQ:     return 89;   // EDESTADDRREQ
+        case UV_EMSGSIZE:         return 90;   // EMSGSIZE
+        case UV_EPROTOTYPE:       return 91;   // EPROTOTYPE
+        case UV_ENOPROTOOPT:      return 92;   // ENOPROTOOPT
+        case UV_EPROTONOSUPPORT:  return 93;   // EPROTONOSUPPORT
+        case UV_ESOCKTNOSUPPORT:  return 94;   // ESOCKTNOSUPPORT
+        case UV_ENOTSUP:          return 95;   // EOPNOTSUPP
+        case UV_EAFNOSUPPORT:     return 97;   // EAFNOSUPPORT
+        case UV_EADDRINUSE:       return 98;   // EADDRINUSE
+        case UV_EADDRNOTAVAIL:    return 99;   // EADDRNOTAVAIL
+        case UV_ENETDOWN:         return 100;  // ENETDOWN
+        case UV_ENETUNREACH:      return 101;  // ENETUNREACH
+        case UV_ECONNABORTED:     return 103;  // ECONNABORTED
+        case UV_ECONNRESET:       return 104;  // ECONNRESET
+        case UV_ENOBUFS:          return 105;  // ENOBUFS
+        case UV_EISCONN:          return 106;  // EISCONN
+        case UV_ENOTCONN:         return 107;  // ENOTCONN
+        case UV_ETIMEDOUT:        return 110;  // ETIMEDOUT
+        case UV_ECONNREFUSED:     return 111;  // ECONNREFUSED
+        case UV_EHOSTUNREACH:     return 113;  // EHOSTUNREACH
+        case UV_EALREADY:         return 114;  // EALREADY
+        case UV_ECANCELED:        return 125;  // ECANCELED
+
+        case UV_EAI_ADDRFAMILY:   return 200;  // Fresh unique value
+        case UV_EAI_AGAIN:        return 201;  // Fresh unique value
+        case UV_EAI_BADFLAGS:     return 202;  // Fresh unique value
+        case UV_EAI_BADHINTS:     return 203;  // Fresh unique value
+        case UV_EAI_CANCELED:     return 204;  // Fresh unique value
+        case UV_EAI_FAIL:         return 205;  // Fresh unique value
+        case UV_EAI_FAMILY:       return 206;  // Fresh unique value
+        case UV_EAI_MEMORY:       return 207;  // Fresh unique value
+        case UV_EAI_NODATA:       return 208;  // Fresh unique value
+        case UV_EAI_NONAME:       return 209;  // Fresh unique value
+        case UV_EAI_OVERFLOW:     return 210;  // Fresh unique value
+        case UV_EAI_PROTOCOL:     return 211;  // Fresh unique value
+        case UV_EAI_SERVICE:      return 212;  // Fresh unique value
+        case UV_EAI_SOCKTYPE:     return 213;  // Fresh unique value
+        case UV_ECHARSET:         return 215;  // Fresh unique value
+        case UV_ENONET:           return 216;  // Fresh unique value
+        case UV_UNKNOWN:          return 217;  // Fresh unique value
+        case UV_EOF:              return 218;  // Fresh unique value
+
+        case UV_ESHUTDOWN:        return 220;  // Fresh unique value
+
+        // Not available in libuv1-dev on ubuntu
+        //case UV_EUNATCH:          return 219;  // Fresh unique value
+
+        default:                  return -1;   // Unknown error
+    }
+}
 
 void c_resume_unit_timer(uv_timer_t* handle) {
     Stack stack = handle->data;
