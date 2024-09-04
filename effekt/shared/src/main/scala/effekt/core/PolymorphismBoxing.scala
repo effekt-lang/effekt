@@ -246,9 +246,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       
       val blockTpe = BlockType.Function(tparams, propTpe.cparams, propTpe.vparams.map(transform), propTpe.bparams.map(transform), transform(propTpe.result))
       val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, transform(body))
-      println(ifce)
-      println(blockTpe)
-      println(implBlock.tpe)
       val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
       Operation(name, transformed.tparams, transformed.cparams, transformed.vparams, transformed.bparams,
         None,
