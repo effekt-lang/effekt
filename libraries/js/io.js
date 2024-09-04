@@ -90,49 +90,6 @@ function errnoToStableId(errorName) {
     return errorMap[errorName] || -1; // Default to -1 for unknown error names
 }
 
-function openFile(path, mode, onSuccess, onFailure) {
-  fs.open(path, mode,
-    (err, fd) => {
-      if (!!err) {
-        console.error(err)
-        return onFailure(errnoToStableId(err.code)).run();
-      } else {
-        return onSuccess(fd).run();
-      }
-    });
-  return $effekt.unit;
-}
-
-function readFile(fd, buffer, offset, onSuccess, onFailure) {
-  let position = offset === -1 ? null : offset;
-  fs.read(fd, toBuffer(buffer), 0, buffer.length, position,
-    (err, bytesRead) => {
-      if (!!err) {
-        return onFailure(errnoToStableId(err.code)).run()
-      } else {
-        return onSuccess(bytesRead).run()
-      }
-    })
-  return $effekt.unit;
-}
-
-/**
- * @see {https://nodejs.org/api/fs.html#fswritefd-buffer-offset-length-position-callback
- */
-function writeFile(fd, buffer, offset, onSuccess, onFailure) {
-  let position = offset === -1 ? null : offset;
-  fs.write(fd, toBuffer(buffer), 0, buffer.length, position,
-    (err, bytesWritten) => {
-      if (!!err) {
-        return onFailure(errnoToStableId(err.code)).run()
-      } else {
-        return onSuccess(bytesWritten).run()
-      }
-    })
-  return $effekt.unit;
-}
-
-
 function open(path, mode, callback) {
   fs.open(path, mode, (err, fd) => {
     if (err) { callback(err.errno) } else { callback(fd) }

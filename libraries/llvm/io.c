@@ -169,17 +169,15 @@ struct Pos c_promise_make() {
 // do not need to manually memory manage the buffer.
 //
 //
-// Callbacks in Data-fields
+// Stacks in Data-fields
 // ------------------------
-// In order to call Effekt-functions as a callback, we store a pointer
-// to their closure into the user-definable data-field (at address 0)
+// In order to return back to Effekt in the callback, we store a pointer
+// to the Effekt stack into the user-definable data-field (at address 0)
 // in each request object.
 //
 //
 // TODO
-// - Error reporting
 // - pooling of request objects (benchmark first!)
-// - always pass by-reference, not by-value? (to work around C ABI issues)
 
 
 /**
@@ -277,72 +275,6 @@ int uv_error_to_errno(int uv_err) {
     }
 }
 
-
-// File Descriptors
-// ----------------
-// Extern type defs at the moment are always treated as %Pos.
-// For this reason, we need to translate the 32bit integer into
-// a %Pos in the following way:
-//
-// +----------------+-------+
-// | filedescriptor | Obj   |
-// | 32bit -> 64bit | NULL  |
-// +----------------+-------+
-struct Pos filedescriptor_to_pos(int32_t fd) {
-    return (struct Pos) { .tag = (int64_t) fd, .obj = NULL, };
-}
-
-int32_t pos_to_filedescriptor(struct Pos fd) {
-    return (int32_t) fd.tag;
-}
-
-struct Pos c_filedescriptor_show(struct Pos fd) {
-  return c_buffer_show_Int(pos_to_filedescriptor(fd));
-}
-
-// Timers
-// ------
-
-void c_timer_handler(uv_timer_t* handle) {
-    // Load callback
-    struct Neg callback = *(struct Neg*)handle->data;
-
-    // Clean up
-    uv_timer_stop(handle);
-    free(handle->data);
-    free(handle);
-
-    // Finally call the callback
-    run(callback);
-}
-
-void c_timer_wait(int64_t n, struct Neg callback) {
-
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    // Allocate memory for the timer handle
-    uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
-
-    // // Initialize the timer handle
-    uv_timer_init(loop, timer);
-
-    // Allocate memory for the callback (of type Neg)
-    struct Neg* payload = (struct Neg*)malloc(sizeof(struct Neg));
-    payload->vtable = callback.vtable;
-    payload->obj = callback.obj;
-
-    // Store the Neg pointer in the timer's data field
-    timer->data = (void*) payload;
-
-    // Start the timer to call the callback after n ms
-    uv_timer_start(timer, c_timer_handler, n, 0);
-}
-
-
-// Opening a File
-// --------------
-
 int modeToFlags(const char* flags) {
     if (strcmp(flags, "r") == 0) {
         return UV_FS_O_RDONLY;
@@ -377,193 +309,6 @@ int modeToFlags(const char* flags) {
         return -1;
     }
 }
-
-typedef struct Callbacks {
-    struct Neg on_success;
-    struct Neg on_failure;
-} Callbacks;
-
-void c_file_open_handler(uv_fs_t* req) {
-    // Extract the file descriptor from the uv_fs_t structure
-    int64_t fd = req->result;
-
-    // Load the callbacks
-    Callbacks* callbacks = (Callbacks*)req->data;
-    struct Neg success = callbacks->on_success;
-    struct Neg failure = callbacks->on_failure;
-
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
-    free(callbacks);
-
-    // Check if file descriptor is valid
-    if (fd >= 0) {
-        eraseNegative(failure);
-        run_Pos(success, filedescriptor_to_pos(fd));
-    } else {
-        eraseNegative(success);
-        run_Int(failure, uv_error_to_errno(fd));
-    }
-}
-
-
-void c_file_open(struct Pos path, struct Pos modeString, struct Neg* success, struct Neg* failure) {
-    int permissions = 0666;  // rw-rw-rw- permissions
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Convert the Effekt String to a 0-terminated string
-    char* path_str = c_buffer_as_null_terminated_string(path);
-    erasePositive((struct Pos) path);
-
-    // Convert the Effekt String representing the opening mode to libuv flags
-    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
-    erasePositive((struct Pos) modeString);
-
-    // Allocate Callbacks on the heap
-    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = *success;
-    callbacks->on_failure = *failure;
-
-    // Store the callbacks in the req's data field
-    req->data = callbacks;
-
-    // Get the default loop and call fs_open
-    uv_loop_t* loop = uv_default_loop();
-
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_file_open_handler);
-    int64_t result_i64 = (int64_t)result_i32;
-
-    // We can free the string, since libuv copies it into req
-    free(path_str);
-
-    return; // result_i64;
-}
-
-
-// Reading a File
-// --------------
-
-void c_file_read_handler(uv_fs_t* req) {
-    // Extract the file descriptor from the uv_fs_t structure
-    int64_t result = req->result;
-
-    // Load the callbacks
-    Callbacks* callbacks = (Callbacks*)req->data;
-    struct Neg success = callbacks->on_success;
-    struct Neg failure = callbacks->on_failure;
-
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
-    free(callbacks);
-
-    if (result >= 0) {
-        eraseNegative(failure);
-        run_Int(success, result);
-    } else {
-        eraseNegative(success);
-        run_Int(failure, uv_error_to_errno(result));
-    }
-}
-
-/**
- * Here we require success and failure to be passed by reference (can be
- * stack-allocated). This is to work around an issue with the C ABI where
- * late arguments are scrambled.
- */
-void c_file_read(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
-
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Allocate Callbacks on the heap
-    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = *success;
-    callbacks->on_failure = *failure;
-
-    // // Store the callbacks in the req's data field
-    req->data = callbacks;
-
-    // // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, fd, &buf, 1, offset, c_file_read_handler);
-}
-
-
-// Writing to a File
-// -----------------
-
-void c_file_write_handler(uv_fs_t* req) {
-    // Extract the result from the uv_fs_t structure
-    int64_t result = req->result;
-
-    // Load the callbacks
-    Callbacks* callbacks = (Callbacks*)req->data;
-    struct Neg success = callbacks->on_success;
-    struct Neg failure = callbacks->on_failure;
-
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
-    free(callbacks);
-
-    if (result >= 0) {
-        eraseNegative(failure);
-        run_Int(success, result);
-    } else {
-        eraseNegative(success);
-        run_Int(failure, uv_error_to_errno(result));
-    }
-}
-
-/**
- * Here we require success and failure to be passed by reference (can be
- * stack-allocated). This is to work around an issue with the C ABI where
- * late arguments are scrambled.
- */
-void c_file_write(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Allocate Callbacks on the heap
-    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = *success;
-    callbacks->on_failure = *failure;
-
-    // Store the callbacks in the req's data field
-    req->data = callbacks;
-
-    // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, fd, &buf, 1, offset, c_file_write_handler);
-}
-
-// ; Closing a File
-// ; --------------
-
-
-void c_file_close(int32_t fd) {
-    uv_fs_t req;
-    uv_loop_t* loop = uv_default_loop();
-    uv_fs_close(loop, &req, fd, NULL);
-}
-
-
-// DIRECT STYLE
 
 void c_resume_int_fs(uv_fs_t* req) {
     int64_t result = (int64_t)req->result;
