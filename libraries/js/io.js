@@ -90,8 +90,42 @@ function errnoToStableId(errorName) {
     return errorMap[errorName] || -1; // Default to -1 for unknown error names
 }
 
+function modeName(mode) {
+  switch (mode.__tag) {
+  case 0: // ReadOnly()
+    return 'r';
+  case 1: // WriteOnly()
+    return 'w';
+  case 2: // AppendOnly()
+    return 'a';
+  case 3: // ReadWrite()
+    return 'w+';
+  case 4: // ReadAppend()
+    return 'a+';
+  case 5: // AppendExclusive()
+    return 'ax';
+  case 6: // ReadAppendExclusive()
+    return 'ax+';
+  case 7: // AppendSync()
+    return 'as';
+  case 8: // ReadAppendSync()
+    return 'as+';
+  case 9: // ReadSync()
+    return 'rs';
+  case 10: // ReadWriteSync()
+    return 'rs+';
+  case 11: // WriteExclusive()
+    return 'wx';
+  case 12: // ReadWriteExclusive()
+    return 'wx+';
+  default:
+    // Invalid tag value
+    return null;
+  }
+}
+
 function open(path, mode, callback) {
-  fs.open(path, mode, (err, fd) => {
+  fs.open(path, modeName(mode), (err, fd) => {
     if (err) { callback(err.errno) } else { callback(fd) }
   })
 }

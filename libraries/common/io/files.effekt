@@ -8,6 +8,7 @@ import io/error
 
 /**
  * Represents the file opening modes with their respective flags
+ * Backends rely on the order of these
  */
 type Mode {
   // Most common modes
@@ -33,7 +34,7 @@ type Mode {
  * Reads a file at given path as utf8 encoded string.
  */
 def readFile(path: String): String / Exception[IOError] = {
-  val fd = direct::open(path, modeName(ReadOnly()));
+  val fd = direct::open(path, ReadOnly());
   with on[IOError].finalize { direct::close(fd); () }
 
   val readSize = 1048576 // 1MB
@@ -68,7 +69,7 @@ def readFile(path: String): String / Exception[IOError] = {
  * Writes the (utf8 encoded) string `contents` into the specified file.
  */
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
-  val fd = direct::open(path, modeName(WriteOnly()));
+  val fd = direct::open(path, WriteOnly());
   with on[IOError].finalize { direct::close(fd); () }
 
   val writeSize = 1048576 // 1MB
@@ -117,30 +118,13 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
   }
 
 
-def modeName(modes: Mode): String = modes match {
-  case ReadOnly()            => "r"
-  case WriteOnly()           => "w"
-  case AppendOnly()          => "a"
-  case ReadWrite()           => "w+"
-  case ReadAppend()          => "a+"
-  case AppendExclusive()     => "ax"
-  case ReadAppendExclusive() => "ax+"
-  case AppendSync()          => "as"
-  case ReadAppendSync()      => "as+"
-  case ReadSync()            => "rs"
-  case ReadWriteSync()       => "rs+"
-  case WriteExclusive()      => "wx"
-  case ReadWriteExclusive()  => "wx+"
-}
-
-
 namespace direct {
 
   extern js """
     const fs = require("fs");
   """
 
-  extern control def open(path: String, mode: String): Int =
+  extern control def open(path: String, mode: Mode): Int =
   js "$effekt.callcc(callback => open(${path}, ${mode}, callback))"
   llvm """
     call void @c_fs_open(%Pos %path, %Pos %mode, %Stack %stack)

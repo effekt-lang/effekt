@@ -147,41 +147,6 @@ int uv_error_to_errno(int uv_err) {
     }
 }
 
-int modeToFlags(const char* flags) {
-    if (strcmp(flags, "r") == 0) {
-        return UV_FS_O_RDONLY;
-    } else if (strcmp(flags, "r+") == 0) {
-        return UV_FS_O_RDWR;
-    } else if (strcmp(flags, "rs") == 0) {
-        return UV_FS_O_RDONLY | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "rs+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "w") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-    } else if (strcmp(flags, "wx") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "w+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-    } else if (strcmp(flags, "wx+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "a") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
-    } else if (strcmp(flags, "ax") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "a+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
-    } else if (strcmp(flags, "ax+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "as") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "as+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-    } else {
-        // Invalid flags string
-        return -1;
-    }
-}
-
 void c_resume_int_fs(uv_fs_t* request) {
     int64_t result = (int64_t)request->result;
     Stack stack = (Stack)request->data;
@@ -192,20 +157,54 @@ void c_resume_int_fs(uv_fs_t* request) {
     resume_Int(stack, result);
 }
 
-void c_fs_open(struct Pos path, struct Pos modeString, Stack stack) {
+int modeFlags(struct Pos mode) {
+    switch (mode.tag) {
+        case 0: // ReadOnly()
+            return UV_FS_O_RDONLY;
+        case 1: // WriteOnly()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+        case 2: // AppendOnly()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
+        case 3: // ReadWrite()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+        case 4: // ReadAppend()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
+        case 5: // AppendExclusive()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+        case 6: // ReadAppendExclusive()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+        case 7: // AppendSync()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+        case 8: // ReadAppendSync()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+        case 9: // ReadSync()
+            return UV_FS_O_RDONLY | UV_FS_O_SYNC;
+        case 10: // ReadWriteSync()
+            return UV_FS_O_RDWR | UV_FS_O_SYNC;
+        case 11: // WriteExclusive()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+        case 12: // ReadWriteExclusive()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+        default:
+            // Invalid tag value
+            return -1;
+    }
+}
+
+void c_fs_open(struct Pos path, struct Pos mode, Stack stack) {
 
     // Convert the Effekt String to a 0-terminated string
     char* path_str = c_buffer_as_null_terminated_string(path);
     erasePositive((struct Pos) path);
 
     // Convert the Effekt String representing the opening mode to libuv flags
-    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
-    erasePositive((struct Pos) modeString);
+    int flags = modeFlags(mode);
+    erasePositive((struct Pos) mode);
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    uv_fs_open(uv_default_loop(), request, path_str, mode, 0666, c_resume_int_fs);
+    uv_fs_open(uv_default_loop(), request, path_str, flags, 0666, c_resume_int_fs);
     // TODO report result (UV_EINVAL)
 
     // We must free the string, since libuv copies it into the request
