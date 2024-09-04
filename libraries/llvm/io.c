@@ -193,9 +193,6 @@ void c_resume_int_fs(uv_fs_t* request) {
 }
 
 void c_fs_open(struct Pos path, struct Pos modeString, Stack stack) {
-    int permissions = 0666;  // rw-rw-rw- permissions
-
-    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
 
     // Convert the Effekt String to a 0-terminated string
     char* path_str = c_buffer_as_null_terminated_string(path);
@@ -205,85 +202,49 @@ void c_fs_open(struct Pos path, struct Pos modeString, Stack stack) {
     int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
     erasePositive((struct Pos) modeString);
 
-    // Store the stack in the request's data field
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    // TODO fix mode and permissions and stuff
+    uv_fs_open(uv_default_loop(), request, path_str, mode, 0666, c_resume_int_fs);
+    // TODO report result (UV_EINVAL)
 
-    // Get the default loop and call fs_open
-    uv_loop_t* loop = uv_default_loop();
-    int32_t result_i32 = uv_fs_open(loop, request, path_str, mode, (int32_t)permissions, c_resume_int_fs);
-    int64_t result_i64 = (int64_t)result_i32;
-
-    // TODO report error result (UV_EINVAL)
-
-    // We can free the string, since libuv copies it into request
+    // We must free the string, since libuv copies it into request
     free(path_str);
 
-    return; // result_i64;
+    return;
 }
 
 void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    // TODO fix types, cast only on assignment!
-    // TODO fix names
-    // TODO remove comments!!!
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    // // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, request, fd, &buf, 1, offset, c_resume_int_fs);
+    uv_buf_t buf = uv_buf_init(c_buffer_bytes(buffer), c_buffer_length(buffer));
+
+    uv_fs_read(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+    // TODO report result (UV_EINVAL)
 }
 
 void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
 
-    // TODO fix types, cast only on assignment!
-    // TODO fix names
-    // TODO remove comments!!!
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, request, fd, &buf, 1, offset, c_resume_int_fs);
+    uv_buf_t buf = uv_buf_init(c_buffer_bytes(buffer), c_buffer_length(buffer));
+
+    uv_fs_write(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+    // TODO report result (UV_EINVAL)
 }
 
 void c_fs_close(Int fd, Stack stack) {
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
 
-    // TODO fix types, cast only on assignment!
-    // TODO fix names
-    // TODO remove comments!!!
-
-    uv_fs_t* request = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    uv_fs_close(loop, request, fd, c_resume_int_fs);
+    uv_fs_close(uv_default_loop(), request, fd, c_resume_int_fs);
+    // TODO report result (UV_EINVAL)
 }
 
-
-// Timers
-// ------
 
 void c_resume_unit_timer(uv_timer_t* handle) {
   Stack stack = handle->data;
@@ -293,18 +254,11 @@ void c_resume_unit_timer(uv_timer_t* handle) {
 
 void c_timer_start(Int millis, Stack stack) {
 
-  // Get the default loop
-  uv_loop_t* loop = uv_default_loop();
-
-  // Allocate memory for the timer handle
-  uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
-
-  // // Initialize the timer handle
-  uv_timer_init(loop, timer);
-
+  uv_timer_t* timer = malloc(sizeof(uv_timer_t));
   timer->data = stack;
 
-  // Start the timer to call the callback after n ms
+  uv_timer_init(uv_default_loop(), timer);
+
   uv_timer_start(timer, c_resume_unit_timer, millis, 0);
 }
 
