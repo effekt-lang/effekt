@@ -18,6 +18,9 @@ def eventloop(program: Task[Unit]): Unit = direct::eventloop(box {
   try program() with Eventloop {}
 })
 
+def spawn(task: Task[Unit]): Unit / Eventloop =
+  direct::spawn(box{ try task() with Eventloop {} })
+
 def yield(): Unit / Eventloop =
   direct::yield()
 
@@ -35,6 +38,14 @@ namespace direct {
     call void @uv_loop_close(ptr %loop)
     ret %Pos zeroinitializer
   """
+
+  extern control def spawn(task: () => Unit at {global,io,control}): Unit =
+    js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
+    llvm """
+      call void @c_timer_start(%Int 0, %Stack %stack)
+      call void @run(%Neg %task)
+      ret void
+    """
 
   extern control def yield(): Unit =
     js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
