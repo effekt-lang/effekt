@@ -30,9 +30,6 @@ class LLVMTests extends EffektTests {
     // *** MALLOC PANIC
     examplesDir / "pos" / "get_put.effekt",
 
-    // unclear
-    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
-
     // Valgrind leak/failure
     examplesDir / "llvm" / "nested.effekt",
     examplesDir / "llvm" / "strings.effekt",
