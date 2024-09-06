@@ -181,7 +181,7 @@ enum Statement {
   /**
    * Pops stacks until it finds one labeled with `prompt`
    */
-  case PopStacksPrompt(name: Variable, prompt: Variable, rest: Statement)
+  case PopStacks(name: Variable, prompt: Variable, rest: Statement)
 
   /**
    * let x = #infix_add(v1, ...); s

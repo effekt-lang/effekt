@@ -349,7 +349,7 @@ next:
     ret void
 }
 
-define %Stack @popStacksPrompt(%Stack %stack, %Prompt %p) {
+define %Stack @popStacks(%Stack %stack, %Prompt %p) {
 entry:
     %isNull = icmp eq %Stack %stack, null
     br i1 %isNull, label %returnNull, label %checkPrompt
@@ -363,7 +363,7 @@ checkPrompt:
 continue:
     %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %nextStack = load %Stack, ptr %nextStack_pointer
-    %result = tail call %Stack @popStacksPrompt(%Stack %nextStack, %Prompt %p)
+    %result = tail call %Stack @popStacks(%Stack %nextStack, %Prompt %p)
     ret %Stack %result
 
 found:

@@ -43,7 +43,7 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ (freeVariables(rest) -- Set(name)) ++ Set(prompt)
     case PushStack(value, rest) =>
       Set(value) ++ freeVariables(rest)
-    case PopStacksPrompt(name, prompt, rest) =>
+    case PopStacks(name, prompt, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(prompt)
     case FreshPrompt(name, rest) =>
       freeVariables(rest) -- Set(name)

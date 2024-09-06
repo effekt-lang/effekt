@@ -481,7 +481,7 @@ object Transformer {
         noteResumption(kparam.id)
         // TODO deal with bidirectional effects
         Clause(vparams.map(transform),
-          PopStacksPrompt(Variable(transform(kparam).name, Type.Stack()), prompt,
+          PopStacks(Variable(transform(kparam).name, Type.Stack()), prompt,
             transform(body)))
 
       // fall back to evidence based solution, this makes it easier to comment out the above line and check whether the evidence

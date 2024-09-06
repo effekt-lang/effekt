@@ -80,7 +80,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case PushStack(stack, rest) =>
       "push stack" <+> stack <> ";" <> line <> toDoc(rest)
 
-    case PopStacksPrompt(name, prompt, rest) =>
+    case PopStacks(name, prompt, rest) =>
       "let" <+> name <+> "=" <+> "shift0p" <+> prompt <> ";" <> line <> toDoc(rest)
 
     case FreshPrompt(name, rest) =>
