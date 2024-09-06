@@ -593,14 +593,13 @@ enum Variable {
 
 case class Variables(vars: Set[Variable]) {
   def ++(other: Variables): Variables = {
-
     // TODO check:
     // assert(leftParam == rightParam, s"Same id occurs free with different types: ${leftParam} !== ${rightParam}.")
     Variables(vars ++ other.vars)
   }
   def --(o: Variables): Variables = {
     val ids = o.vars.map(_.id)
-    Variables(vars.filter { x => ids.contains(x.id) })
+    Variables(vars.filterNot { x => ids.contains(x.id) })
   }
 
   def filter(f: Variable => Boolean): Variables = Variables(vars.filter(f))
@@ -642,7 +641,7 @@ object Variables {
   }
 
   def free(d: Definition): Variables = d match {
-    case Definition.Def(id, block) => free(block)
+    case Definition.Def(id, block) => free(block) - id
     case Definition.Let(id, _, binding) => free(binding)
   }
 

@@ -83,13 +83,14 @@ object Transformer {
               case core.Variable.Block(id, core.BlockType.Interface(tpe, List(stTpe)), capt)
                 if tpe == symbols.builtins.TState.interface => Set(Variable(transform(id), Type.Reference(transform(stTpe))))
 
-              case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info(pid) match {
-                  case BlockInfo.Definition(freeParams, blockParams) =>
+              case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
+                  case Some(BlockInfo.Definition(freeParams, blockParams)) =>
                     BPC.freeParams(pid).toSet
-                  case BlockInfo.Parameter(tpe) =>
+                  case Some(BlockInfo.Parameter(tpe)) =>
                     Set(Variable(transform(pid), transform(tpe)))
-                  case BlockInfo.Resumption =>
+                  case Some(BlockInfo.Resumption) =>
                     Set(Variable(transform(pid), Type.Stack()))
+                  case None => println(s"Missing info: ${pid}"); Set.empty
                 }
               case _ => Set.empty
             }
