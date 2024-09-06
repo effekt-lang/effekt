@@ -41,7 +41,7 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Lifted => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen LiftInference andThen Machine map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 
@@ -56,7 +56,7 @@ class LLVM extends Compiler[String] {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer
     val afterLift = afterCore andThen LiftInference
-    val afterMachine = afterLift andThen Machine map { case (mod, main, prog) => prog }
+    val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
       case machine.Program(decls, prog) =>
         // we don't print declarations here.

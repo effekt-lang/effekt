@@ -99,11 +99,9 @@ case class Clause(parameters: Environment, body: Statement)
  *     │─ [[ PushStack ]]
  *     │─ [[ PopStacks ]]
  *     │─ [[ ForeignCall ]]
- *     │─ [[ ComposeEvidence ]]
  *     │─ [[ LiteralInt ]]
  *     │─ [[ LiteralDouble ]]
  *     │─ [[ LiteralUTF8String ]]
- *     │─ [[ LiteralEvidence ]]
  *     │─ [[ Hole ]]
  *
  * --------------------------------------------------
@@ -197,12 +195,6 @@ enum Statement {
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
 
   /**
-   * Evidence composition, i.e. currently:
-   * let x = ev1 + ev2; s
-   */
-  case ComposeEvidence(name: Variable, ev1: Variable, ev2: Variable, rest: Statement)
-
-  /**
    * Creates a fresh prompt
    * let p = freshPrompt; s
    */
@@ -215,7 +207,6 @@ enum Statement {
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
-  case LiteralEvidence(name: Variable, value: Evidence, rest: Statement)
 
   /**
    * Statement that is executed when a Hole is encountered.

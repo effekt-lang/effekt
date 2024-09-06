@@ -315,7 +315,7 @@ trait Compiler[Executable] {
   }
 
   lazy val Machine = Phase("machine") {
-    case CoreLifted(source, tree, mod, core) =>
+    case CoreTransformed(source, tree, mod, core) =>
       val main = Context.checkMain(mod)
       (mod, main, machine.Transformer.transform(main, core))
   }

@@ -666,7 +666,7 @@ define void @run_i64(%Neg %f, i64 %arg) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %arg, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, i64 %arg, %Stack %stack)
     ret void
 }
 

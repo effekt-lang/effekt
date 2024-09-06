@@ -49,15 +49,11 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) -- Set(name) ++ Set(prompt)
     case FreshPrompt(name, rest) =>
       freeVariables(rest) -- Set(name)
-    case ComposeEvidence(name, ev1, ev2, rest) =>
-      freeVariables(rest) -- Set(name) ++ Set(ev1, ev2)
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralUTF8String(name, utf8, rest) =>
-      freeVariables(rest) - name
-    case LiteralEvidence(name, ev, rest) =>
       freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
       arguments.toSet ++ freeVariables(rest) - name

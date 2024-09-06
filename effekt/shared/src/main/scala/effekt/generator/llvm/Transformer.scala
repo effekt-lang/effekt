@@ -398,11 +398,6 @@ object Transformer {
         emit(Call(name, Ccc(), promptType, freshPrompt, Nil))
         transform(rest)
 
-      case machine.ComposeEvidence(machine.Variable(name, _), ev1, ev2, rest) =>
-        emit(Comment(s"composeEvidence $name, evidence 1 ${ev1.name}, evidence 2 ${ev2.name}"))
-        emit(Add(name, transform(ev1), transform(ev2)))
-        transform(rest)
-
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
         emit(Comment(s"literalInt $name, n=$n"))
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
@@ -423,11 +418,6 @@ object Transformer {
         emit(Call(bind, Ccc(), res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
 
         eraseValues(List(v), freeVariables(rest));
-        transform(rest)
-
-      case machine.LiteralEvidence(machine.Variable(name, _), n, rest) =>
-        emit(Comment(s"literalEvidence $name, n=$n"))
-        emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>

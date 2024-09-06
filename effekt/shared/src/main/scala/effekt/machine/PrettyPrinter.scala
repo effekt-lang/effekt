@@ -95,9 +95,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case FreshPrompt(name, rest) =>
       "let" <+> name <+> "=" <+> "freshPrompt" <> ";" <> line <> toDoc(rest)
 
-    case ComposeEvidence(name, ev1, ev2, rest) =>
-      "let" <+> name <+> "=" <+> ev1 <+> "+" <+> ev2 <> ";" <> line <> toDoc(rest)
-
     case ForeignCall(name, builtin, arguments, rest) =>
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 
@@ -109,9 +106,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralUTF8String(name, utf8, rest) =>
       "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => "\\" + f"$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
-
-    case LiteralEvidence(name, evidence, rest) =>
-      "let" <+> name <+> "=" <+> evidenceToDoc(evidence) <> ";" <> line <> toDoc(rest)
 
     case Hole => "<>"
   }
