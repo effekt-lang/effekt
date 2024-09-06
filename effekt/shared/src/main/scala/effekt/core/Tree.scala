@@ -591,15 +591,34 @@ enum Variable {
   override def hashCode(): Int = id.hashCode
 }
 
-type Variables = Set[Variable]
+case class Variables(vars: Set[Variable]) {
+  def ++(other: Variables): Variables = {
+
+    // TODO check:
+    // assert(leftParam == rightParam, s"Same id occurs free with different types: ${leftParam} !== ${rightParam}.")
+    Variables(vars ++ other.vars)
+  }
+  def --(o: Variables): Variables = {
+    val ids = o.vars.map(_.id)
+    Variables(vars.filter { x => ids.contains(x.id) })
+  }
+
+  def filter(f: Variable => Boolean): Variables = Variables(vars.filter(f))
+
+  def -(id: Id) = Variables(vars.filter { x => x.id != id })
+  def toSet: Set[Variable] = vars
+  def flatMap(f: Variable => Variables): Variables = Variables(vars.flatMap(x => f(x).vars))
+  def map(f: Variable => Variable): Variables = Variables(vars.map(f))
+  def toList: List[Variable] = vars.toList
+}
 
 object Variables {
 
   import core.Type.{TState, TRegion}
 
-  def value(id: Id, tpe: ValueType) = Set(Variable.Value(id, tpe))
-  def block(id: Id, tpe: BlockType, capt: Captures) = Set(Variable.Block(id, tpe, capt))
-  def empty: Variables = Set.empty
+  def value(id: Id, tpe: ValueType) = Variables(Set(Variable.Value(id, tpe)))
+  def block(id: Id, tpe: BlockType, capt: Captures) = Variables(Set(Variable.Block(id, tpe, capt)))
+  def empty: Variables = Variables(Set.empty)
 
   def free(e: Expr): Variables = e match {
     case DirectApp(b, targs, vargs, bargs) => free(b) ++ all(vargs, free) ++ all(bargs, free)
@@ -642,7 +661,7 @@ object Variables {
       var stillFree = Variables.empty
       var boundSoFar = Variables.empty
       defs.foreach { d =>
-        stillFree = stillFree ++ (free(d) -- boundSoFar)
+        stillFree = stillFree ++ (free(d) -- boundSoFar -- bound(d))
         boundSoFar = boundSoFar ++ bound(d)
       }
       stillFree ++ (free(body) -- boundSoFar)

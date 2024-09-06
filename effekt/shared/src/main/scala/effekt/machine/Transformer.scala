@@ -28,6 +28,8 @@ object Transformer {
     val definitions = mod.definitions
     val mainEntry = Jump(Label(mainName, Nil))
 
+    // println(core.PrettyPrinter.show(mod))
+
     findToplevelBlocksParams(definitions)
 
     val transformedDefinitions = definitions.foldLeft(mainEntry) {
@@ -74,7 +76,7 @@ object Transformer {
             noteParameters(bparams)
 
             // TODO does not work for mutually recursive local definitions
-            val freeParams = core.Variables.free(block).flatMap {
+            val freeParams = core.Variables.free(block).toSet.flatMap {
               case core.Variable.Value(id, tpe) => Set(Variable(transform(id), transform(tpe)))
 
               // TODO is this necessary???
@@ -538,7 +540,7 @@ object Transformer {
       case Definition.Def(blockName, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(blockName, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
-      case _ => ()
+      case other => ()
     }
 
   /**

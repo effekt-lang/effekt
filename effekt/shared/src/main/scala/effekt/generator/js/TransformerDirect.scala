@@ -238,7 +238,7 @@ object TransformerDirect extends Transformer {
 
           // to prevent accidentally recursive bindings like `x = () => x`, we need to see which parameters occur in
           // the arguments
-          val freeVars = (vargs.flatMap(Variables.free) ++ bargs.flatMap(Variables.free)).toSet.intersect(params.toSet)
+          val freeVars = (vargs.flatMap(Variables.free(_).toSet) ++ bargs.flatMap(Variables.free(_).toSet)).toSet.intersect(params.toSet)
           val valueSubst = freeVars.collect { case core.Variable.Value(id, tpe) =>
             val tmp = Id(s"tmp")
             stmts.append(js.Const(uniqueName(tmp), nameRef(id)))
@@ -351,7 +351,7 @@ object TransformerDirect extends Transformer {
 
   def toJS(d: core.Definition)(using C: TransformerContext): List[js.Stmt] = d match {
     case d @ Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      C.binding (id, vps.flatMap(Variables.bound) ++ bps.flatMap(Variables.bound)) {
+      C.binding (id, vps.flatMap(Variables.bound(_).toSet) ++ bps.flatMap(Variables.bound(_).toSet)) {
         val translatedBody = toJS(body)(Continuation.Return)
         val isRecursive = C.tailCalled.contains(id)
 
