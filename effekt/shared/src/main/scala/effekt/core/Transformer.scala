@@ -117,10 +117,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             INTERNAL_ERROR("Interface declarations should have annotated types.")
           }))
           val bparamsCapabilities = capabilities.map(transform)
-          //val bparams = bparamsBlocks ++ bparamsCapabilities
-          val bparams = bparamsCapabilities
+          val bparams = bparamsBlocks ++ bparamsCapabilities
           val vparams = vps.map(p => transform(p.tpe.get))
-          val cparams = capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
+          val cparams = bps.map(_.capture) ++ capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
 
           // here we reconstruct the block type
           val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
