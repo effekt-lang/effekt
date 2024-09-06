@@ -19,6 +19,7 @@ def eventloop(program: Task[Unit]): Unit = direct::eventloop(box {
 })
 
 def spawn(task: Task[Unit]): Unit / Eventloop =
+  // TODO installing a handler here is unnecessary
   direct::spawn(box{ try task() with Eventloop {} })
 
 def yield(): Unit / Eventloop =
@@ -70,10 +71,14 @@ extern type Promise[T]
   // = js "{resolve: ƒ, promise: Promise}"
   // = llvm "{tag: 0, obj: Promise*}"
 
-interface Promises {
-  def promise[T](p: Task[T]): Promise[T]
-  def await[T](p: Promise[T]): T
+def promise[T](task: Task[T]): Promise[T] / Eventloop = {
+  val p = promise::make[T]();
+  spawn(box { promise::resolve(p, task()) });
+  return p
 }
+
+def await[T](promise: Promise[T]): T =
+  promise::await(promise)
 
 namespace promise {
   extern js """

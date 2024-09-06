@@ -248,7 +248,6 @@ Int c_error_number(Int errno) {
 
 void c_resume_unit_timer(uv_timer_t* handle) {
     Stack stack = handle->data;
-    free(handle);
     resume_Pos(stack, Unit);
 }
 
@@ -287,13 +286,14 @@ typedef struct {
     } payload;
 } Promise;
 
-void c_promise_erase_listeners(struct Pos promise) {
-    Promise* p = (Promise*)promise.obj;
+void c_promise_erase_listeners(void *envPtr) {
+	struct {promise_state_t state; union {struct Pos value; Listeners listeners;} payload;} *valPtr = envPtr;
+	promise_state_t state = valPtr->state;
 
-    switch (p->state) {
+    switch (state) {
         case UNRESOLVED:
-			Stack head = p->payload.listeners.head;
-			Listeners* tail = p->payload.listeners.tail;
+			Stack head = valPtr->payload.listeners.head;
+			Listeners* tail = valPtr->payload.listeners.tail;
 			if (head != NULL) {
 			    // Erase head
 				eraseStack(head);
@@ -309,9 +309,20 @@ void c_promise_erase_listeners(struct Pos promise) {
 			};
             break;
         case RESOLVED:
-            erasePositive(p->payload.value);
+            erasePositive(valPtr->payload.value);
             break;
     }
+}
+
+void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
+	if (listeners != NULL) {
+		Stack head = listeners->head;
+		Listeners* tail = listeners->tail;
+		free(listeners);
+		c_promise_resume_listeners(tail, value);
+		sharePositive(value);
+		resume_Pos(head, value);
+	}
 }
 
 void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
@@ -319,24 +330,19 @@ void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
 
     switch (p->state) {
         case UNRESOLVED:
-			Stack head = p->payload.listeners.head;
+	        Stack head = p->payload.listeners.head;
 			Listeners* tail = p->payload.listeners.tail;
+
             p->state = RESOLVED;
             p->payload.value = value;
 			resume_Pos(stack, Unit);
+
 			if (head != NULL) {
-				// Execute head
-				resume_Pos(stack, value);
 				// Execute tail
-				Listeners* current = tail;
-				while (current != NULL) {
-					Stack head = current->head;
-					Listeners* tail = current->tail;
-					free(current);
-					sharePositive(value);
-					resume_Pos(head, value);
-					current = tail;
-				};
+				c_promise_resume_listeners(tail, value);
+				// Execute head
+				sharePositive(value);
+				resume_Pos(head, value);
 			};
             break;
 		case RESOLVED:

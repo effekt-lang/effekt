@@ -3,17 +3,17 @@ import io/error
 import io/files
 
 def program(path1: String, path2: String) =  {
-  val f1 = do promise(box {
+  val f1 = promise(box {
     with on[IOError].panic;
     readFile(path1)
   })
-  val f2 = do promise(box {
+  val f2 = promise(box {
     with on[IOError].panic;
     readFile(path2)
   })
 
-  val results1 = do await(f1)
-  val results2 = do await(f2)
+  val results1 = await(f1)
+  val results2 = await(f2)
 
   println(results1)
   println(results2)
@@ -24,7 +24,7 @@ def main() = eventloop(box {
 
   def path(file: String) = "examples/stdlib/io/files/" ++ file
 
-  do promise(box {
+  promise(box {
     program(path("demo_file1.txt"), path("demo_file2.js"))
     println("done reading files.")
   })
