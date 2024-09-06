@@ -31,10 +31,10 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(value) ++ Set.from(values)
     case Allocate(name, init, region, rest) =>
       freeVariables(rest) ++ Set(init, region) -- Set(name)
-    case Load(name, ref, ev, rest) =>
-      Set(ref, ev) ++ freeVariables(rest) -- Set(name)
-    case Store(ref, value, ev, rest) =>
-      Set(ref, value, ev) ++ freeVariables(rest)
+    case Load(name, ref, rest) =>
+      Set(ref) ++ freeVariables(rest) -- Set(name)
+    case Store(ref, value, rest) =>
+      Set(ref, value) ++ freeVariables(rest)
     case PushFrame(frame, rest) =>
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>
@@ -43,8 +43,6 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ (freeVariables(rest) -- Set(name)) ++ Set(prompt)
     case PushStack(value, rest) =>
       Set(value) ++ freeVariables(rest)
-    case PopStacks(name, n, rest) =>
-      freeVariables(rest) -- Set(name) ++ Set(n)
     case PopStacksPrompt(name, prompt, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(prompt)
     case FreshPrompt(name, rest) =>

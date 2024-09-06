@@ -190,13 +190,13 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, evidence, rest) =>
-        emit(Comment(s"allocate $name, type ${tpe}, init ${init.name}, evidence ${evidence.name}"))
+      case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, region, rest) =>
+        emit(Comment(s"allocate $name, type ${tpe}, init ${init.name}, region ${region.name}"))
         val idx = regionIndex(ref.tpe)
 
         val temporary = freshName("tmpEvidence")
         val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), temporary)
-        emit(Call(temporary, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(evidence), getStack())));
+        emit(Call(temporary, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region), getStack())));
 
         val ptr = freshName("pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
@@ -213,13 +213,13 @@ object Transformer {
       case machine.Allocate(_, _, _, _) =>
         ???
 
-      case machine.Load(name, ref, ev, rest) =>
-        emit(Comment(s"load ${name.name}, reference ${ref.name}, evidence ${ev.name}"))
+      case machine.Load(name, ref, rest) =>
+        emit(Comment(s"load ${name.name}, reference ${ref.name}"))
         val idx = regionIndex(ref.tpe)
 
         val ptr = freshName("pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
-        emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
+        emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
         emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
@@ -229,13 +229,13 @@ object Transformer {
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
-      case machine.Store(ref, value, ev, rest) =>
-        emit(Comment(s"store ${ref.name}, value ${value.name}, evidence ${ev.name}"))
+      case machine.Store(ref, value, rest) =>
+        emit(Comment(s"store ${ref.name}, value ${value.name}"))
         val idx = regionIndex(ref.tpe)
 
         val ptr = freshName("pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
-        emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), transform(ev), getStack())))
+        emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
         emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
@@ -368,19 +368,6 @@ object Transformer {
         emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
         emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), getStack())));
         setStack(LocalReference(stackType, newStackName));
-        transform(rest)
-
-      case machine.PopStacks(variable, n, rest) =>
-        emit(Comment(s"popStacks ${variable.name}, n=${n.name}"))
-        // TODO Handle n (n+1 = number of stacks to pop)
-        val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(n))));
-
-        // TODO find solution for renaming
-        emit(BitCast(variable.name, getStack(), stackType));
-        setStack(LocalReference(stackType, newStackName));
-
-        eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.PopStacksPrompt(variable, prompt, rest) =>
@@ -751,7 +738,6 @@ object Transformer {
 
   def newStack = ConstantGlobal(PointerType(), "newStack");
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
-  def popStacks = ConstantGlobal(PointerType(), "popStacks");
   def popStacksPrompt = ConstantGlobal(PointerType(), "popStacksPrompt");
   def freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");

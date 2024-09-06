@@ -12,12 +12,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def format(stmt: Statement): Document = pretty(toDoc(stmt), 2)
 
-  def evidenceToDoc(value: Evidence): Doc = value match {
-    case builtins.Here => "Here"
-    case builtins.There => "There"
-    case n => "There + " + evidenceToDoc(n)
-  }
-
   implicit def toDoc(v: Variable): Doc = string(v.name)
 
   implicit def toDoc(v: Label): Doc = string(v.name)
@@ -65,14 +59,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
-    case Allocate(name, init, ev, rest) =>
-      "let" <+> name <+> "=" <+> "allocate" <> parens(List(init, ev) map toDoc) <> ";" <> line <> toDoc(rest)
+    case Allocate(name, init, region, rest) =>
+      "let" <+> name <+> "=" <+> "allocate" <> parens(List(toDoc(init), toDoc(region))) <> ";" <> line <> toDoc(rest)
 
-    case Load(name, ref, ev, rest) =>
-      "let" <+> name <+> "=" <+> "load" <> parens(List(ref, ev) map toDoc) <> ";" <> line <> toDoc(rest)
+    case Load(name, ref, rest) =>
+      "let" <+> name <+> "=" <+> "load" <> parens(toDoc(ref)) <> ";" <> line <> toDoc(rest)
 
-    case Store(ref, value, ev, rest) =>
-      "store" <> parens(List(ref, ev, value) map toDoc) <> ";" <> line <> toDoc(rest)
+    case Store(ref, value, rest) =>
+      "store" <> parens(List(ref, value) map toDoc) <> ";" <> line <> toDoc(rest)
 
     case PushFrame(frame, rest) =>
       "push" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
@@ -85,9 +79,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case PushStack(stack, rest) =>
       "push stack" <+> stack <> ";" <> line <> toDoc(rest)
-
-    case PopStacks(name, n, rest) =>
-      "let" <+> name <+> "=" <+> "shift0" <+> n <> ";" <> line <> toDoc(rest)
 
     case PopStacksPrompt(name, prompt, rest) =>
       "let" <+> name <+> "=" <+> "shift0p" <+> prompt <> ";" <> line <> toDoc(rest)

@@ -349,20 +349,6 @@ next:
     ret void
 }
 
-define %Stack @popStacks(%Stack %stack, i64 %n) {
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
-    %rest = load %Stack, ptr %stackRest
-    %isZero = icmp eq i64 %n, 0
-    br i1 %isZero, label %done, label %next
-done:
-    store %Stack null, ptr %stackRest
-    ret %Stack %rest
-next:
-    %o = sub i64 %n, 1
-    %result = tail call %Stack @popStacks(%Stack %rest, i64 %o)
-    ret %Stack %result
-}
-
 define %Stack @popStacksPrompt(%Stack %stack, %Prompt %p) {
 entry:
     %isNull = icmp eq %Stack %stack, null

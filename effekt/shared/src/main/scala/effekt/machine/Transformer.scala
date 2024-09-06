@@ -197,9 +197,8 @@ object Transformer {
         val variable = Variable(freshName("app"), Positive());
         val reference = Variable(transform(x), Type.Reference(tpe))
         transform(arg).run { value =>
-          //          Store(reference, value, evValue,
-          //            Construct(variable, builtins.Unit, List(), Return(List(variable))))
-          ???
+          Store(reference, value,
+            Construct(variable, builtins.Unit, List(), Return(List(variable))))
         }
 
       case core.App(core.Member(core.BlockVar(id, tpe, capt), op, annotatedTpe), targs, vargs, bargs) =>
@@ -276,18 +275,19 @@ object Transformer {
           val name = transform(id)
           val variable = Variable(name, tpe)
           val reference = Variable(transform(id), Type.Reference(tpe))
+          val prompt = Variable(transform(region), Type.Int())
           val loadVariable = Variable(freshName(name), tpe)
           val getter = Clause(List(),
-                        Load(loadVariable, reference, ???,
+                        Load(loadVariable, reference,
                           Return(List(loadVariable))))
 
           val setterVariable = Variable(freshName(name), tpe)
           val setter = Clause(List(setterVariable),
-                                Store(reference, setterVariable, ???,
+                                Store(reference, setterVariable,
                                   Return(List())))
 
           // TODO use interface when it's implemented
-          Allocate(reference, value, ???,
+          Allocate(reference, value, prompt,
             //New(variable, List(getter, setter),
               transform(body))
         }
@@ -295,7 +295,6 @@ object Transformer {
       case core.Var(id, init, capture, body) =>
         val stateType = transform(init.tpe)
         val reference = Variable(transform(id), Type.Reference(stateType))
-
         transform(init).run { value =>
           Allocate(reference, value, ???,
             transform(body))
@@ -307,7 +306,7 @@ object Transformer {
         val variable = Variable(freshName("get"), stateType)
 
 
-        Load(variable, reference, ???,
+        Load(variable, reference,
             Return(List(variable)))
 
       case core.Put(id, capt, arg) =>
@@ -316,7 +315,7 @@ object Transformer {
         val variable = Variable(freshName("put"), Positive())
 
         transform(arg).run { value =>
-          Store(reference, value, ???,
+          Store(reference, value,
             Construct(variable, builtins.Unit, List(),
               Return(List(variable))))
         }

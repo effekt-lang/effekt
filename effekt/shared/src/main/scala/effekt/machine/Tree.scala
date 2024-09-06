@@ -144,19 +144,19 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. let x = allocate(42, ev); s
+  *  e.g. let x = allocate(42, r); s
   */
-  case Allocate(name: Variable, init: Variable, ev: Variable, rest: Statement)
+  case Allocate(name: Variable, init: Variable, r: Variable, rest: Statement)
 
   /**
-  * e.g. let y = load(x, ev); s
+  * e.g. let y = load(x); s
   */
-  case Load(name: Variable, ref: Variable, ev: Variable, rest: Statement)
+  case Load(name: Variable, ref: Variable, rest: Statement)
 
   /**
-  * e.g. store(x, 42, ev); s
+  * e.g. store(x, 42); s
   */
-  case Store(ref: Variable, value: Variable, ev: Variable, rest: Statement)
+  case Store(ref: Variable, value: Variable, rest: Statement)
 
   /**
    * e.g. push { (x, ...) => s }; s
@@ -177,12 +177,6 @@ enum Statement {
    * e.g. push k; s
    */
   case PushStack(stack: Variable, rest: Statement)
-
-  /**
-   * e.g. let k = shift0 (n+1); s
-   * NOTE: Pops the stacks until the nth, i.e. the first n+1 ones
-   */
-  case PopStacks(name: Variable, n: Variable, rest: Statement)
 
   /**
    * Pops stacks until it finds one labeled with `prompt`
@@ -231,15 +225,11 @@ enum Type {
 }
 export Type.{ Positive, Negative }
 
-type Evidence = Int
 type Prompt = Int
 
 object builtins {
 
-  val Evidence = Type.Int()
   val Prompt = Type.Int()
-  val Here: Evidence = 0
-  val There: Evidence = 1
 
   /**
    * Blocks types are interfaces with a single operation.
