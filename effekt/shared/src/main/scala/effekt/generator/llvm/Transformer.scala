@@ -395,7 +395,7 @@ object Transformer {
         transform(rest)
 
       case machine.FreshPrompt(machine.Variable(name, _), rest) =>
-        emit(Call(name, Ccc(), promptType, freshPrompt, List(getStack())));
+        emit(Call(name, Ccc(), promptType, freshPrompt, Nil))
         transform(rest)
 
       case machine.ComposeEvidence(machine.Variable(name, _), ev1, ev2, rest) =>

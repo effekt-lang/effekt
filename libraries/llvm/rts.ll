@@ -72,6 +72,17 @@
 ; Unique tags to index into the stack.
 %Prompt = type i64
 
+; fresh prompt generation
+@lastPrompt = private global %Prompt 0
+
+define %Prompt @freshPrompt() {
+entry:
+    %current_val = load %Prompt, %Prompt* @lastPrompt
+    %new_val = add %Prompt %current_val, 1
+    store %Prompt %new_val, %Prompt* @lastPrompt
+    ret %Prompt %new_val
+}
+
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
@@ -269,17 +280,6 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %
 }
 
 ; Stack management
-
-define %Prompt @freshPrompt(%Stack %stack) alwaysinline {
-entry:
-    ; Proposal for syntax: if we compute the address of something in a struct, use the following naming convention:
-    %stack.lastPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
-    %lastPrompt = load %Prompt, ptr %stack.lastPrompt
-
-    %nextPrompt = add %Prompt %lastPrompt, 1
-    store %Prompt %nextPrompt, ptr %stack.lastPrompt
-    ret %Prompt %lastPrompt
-}
 
 define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
@@ -635,7 +635,8 @@ define void @topLevelEraser(%Environment %environment) {
 }
 
 define %Stack @withEmptyStack() {
-    %stack = call %Stack @newStack(%Prompt 0) ; TODO get the last prompt from somewhere
+    %prompt = call %Prompt @freshPrompt()
+    %stack = call %Stack @newStack(%Prompt %prompt) ; TODO maybe get the last prompt from global
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
