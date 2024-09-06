@@ -92,7 +92,7 @@ object Transformer {
               case _ => Set.empty
             }
 
-            noteDefinition(id, bparams.map(transform), freeParams.toList)
+            noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
           case _ => ()
         }
 
