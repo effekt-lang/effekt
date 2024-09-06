@@ -67,8 +67,8 @@ namespace direct {
 // --------
 
 extern type Promise[T]
-  // = js "{promise: Promise, resolve: ƒ}"
-  // = llvm "Promise"
+  // = js "{resolve: ƒ, promise: Promise}"
+  // = llvm "{tag: 0, obj: Promise*}"
 
 interface Promises {
   def promise[T](p: Task[T]): Promise[T]
@@ -89,25 +89,22 @@ namespace promise {
   extern io def make[T](): Promise[T] =
     js "promise$make()"
     llvm """
-      ; Get the default loop and run it.
       %promise = call %Pos @c_promise_make()
       ret %Pos %promise
     """
 
-  extern io def resolve[T](p: Promise[T], value: T): Unit =
-    js "${p}.resolve(${value})"
+  extern control def resolve[T](promise: Promise[T], value: T): Unit =
+    js "$effekt.callcc(callback => { ${promise}.resolve(${value}); callback($effekt.unit)})"
     llvm """
-      ; Get the default loop and run it.
-      call void @c_promise_resolve(%Pos %p, %Pos %value)
-      ret %Pos zeroinitializer
+      call void @c_promise_resolve(%Pos %promise, %Pos %value, %Stack %stack)
+      ret void
     """
 
-  extern io def await[T](p: Promise[T], callback: T => Unit at {io, global}): Unit =
-    js "${p}.promise.then(res => (${callback})(res).run())"
+  extern control def await[T](promise: Promise[T]): T =
+    js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
     llvm """
-      ; Get the default loop and run it.
-      call void @c_promise_await(%Pos %p, %Neg %callback)
-      ret %Pos zeroinitializer
+      call void @c_promise_await(%Pos %promise, %Stack %stack)
+      ret void
     """
 }
 

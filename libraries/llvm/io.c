@@ -266,11 +266,11 @@ void c_timer_start(Int millis, Stack stack) {
 // Promises
 // --------
 
-typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
+typedef enum { UNRESOLVED, RESOLVED } promise_state_t;
 
 typedef struct Listeners {
-    struct Neg listener;
-    struct Listeners* next;
+    Stack head;
+    struct Listeners* tail;
 } Listeners;
 
 typedef struct {
@@ -278,13 +278,12 @@ typedef struct {
     void* eraser;
     promise_state_t state;
     // state of {
-    //   case UNRESOLVED => NULL
+    //   case UNRESOLVED => Possibly empty (head is NULL) list of listeners
     //   case RESOLVED   => Pos (the result)
-    //   case AWAITED    => Nonempty list of listeners
     // }
     union {
-        struct Pos pos;
-        Listeners* listeners;
+        struct Pos value;
+        Listeners listeners;
     } payload;
 } Promise;
 
@@ -293,98 +292,101 @@ void c_promise_erase_listeners(struct Pos promise) {
 
     switch (p->state) {
         case UNRESOLVED:
-            return;
-        case AWAITED:
-            {
-                Listeners* current = p->payload.listeners;
-                // Free all listeners
-                while (current != NULL) {
-                    Listeners* k = current;
-                    current = current->next;
-                    eraseNegative(k->listener);
-                    free(k);
-                }
-                p->payload.listeners = NULL;
-            }
-            return;
+			Stack head = p->payload.listeners.head;
+			Listeners* tail = p->payload.listeners.tail;
+			if (head != NULL) {
+			    // Erase head
+				eraseStack(head);
+				// Erase tail
+				Listeners* current = tail;
+				while (current != NULL) {
+					Stack head = current->head;
+					Listeners* tail = current->tail;
+					free(current);
+					eraseStack(head);
+					current = tail;
+				};
+			};
+            break;
         case RESOLVED:
-            erasePositive(p->payload.pos);
-            return;
+            erasePositive(p->payload.value);
+            break;
     }
 }
 
-void c_promise_resolve(struct Pos promise, struct Pos value) {
+void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
         case UNRESOLVED:
+			Stack head = p->payload.listeners.head;
+			Listeners* tail = p->payload.listeners.tail;
             p->state = RESOLVED;
-            p->payload.pos = value; // Store value in payload
+            p->payload.value = value;
+			resume_Pos(stack, Unit);
+			if (head != NULL) {
+				// Execute head
+				resume_Pos(stack, value);
+				// Execute tail
+				Listeners* current = tail;
+				while (current != NULL) {
+					Stack head = current->head;
+					Listeners* tail = current->tail;
+					free(current);
+					sharePositive(value);
+					resume_Pos(head, value);
+					current = tail;
+				};
+			};
             break;
-        case RESOLVED:
-            fprintf(stderr, "ERROR: Promise already resolved\n");
-            exit(1);
-        case AWAITED: {
-            Listeners* current = p->payload.listeners;
-            p->state = RESOLVED;
-            p->payload.pos = value;
-
-             // Call each listeners
-            while (current != NULL) {
-                sharePositive(value);
-                run_Pos(current->listener, value);
-                Listeners* temp = current;
-                current = current->next;
-                free(temp);
-            }
-            break;
-        }
-    }
-    // do we need to erase promise now? Is it shared before?
+		case RESOLVED:
+			erasePositive(promise);
+			erasePositive(value);
+			eraseStack(stack);
+			fprintf(stderr, "ERROR: Promise already resolved\n");
+			exit(1);
+			break;
+	}
+	// TODO stack overflow?
+    // We need to erase the promise now, since we consume it.
     erasePositive(promise);
 }
 
-void c_promise_await(struct Pos promise, struct Neg listener) {
+void c_promise_await(struct Pos promise, Stack stack) {
     Promise* p = (Promise*)promise.obj;
 
     switch (p->state) {
-        case UNRESOLVED:
-            p->state = AWAITED;
-            p->payload.listeners = (Listeners*)malloc(sizeof(Listeners));
-            p->payload.listeners->listener = listener;
-            p->payload.listeners->next = NULL;
+		case UNRESOLVED:
+			Stack head = p->payload.listeners.head;
+			Listeners* tail = p->payload.listeners.tail;
+			if (head != NULL) {
+				Listeners* node = (Listeners*)malloc(sizeof(Listeners));
+				node->head = head;
+				node->tail = tail;
+				p->payload.listeners.head = stack;
+				p->payload.listeners.tail = node;
+			} else {
+                p->payload.listeners.head = stack;
+			};
             break;
         case RESOLVED:
-            run_Pos(listener, p->payload.pos);
+			struct Pos value = p->payload.value;
+			sharePositive(value);
+            resume_Pos(stack, value);
             break;
-        case AWAITED: {
-            Listeners* new_node = (Listeners*)malloc(sizeof(Listeners));
-            new_node->listener = listener;
-            new_node->next = NULL;
-
-            // We traverse the listeners to attach this last .
-            // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
-            // But how many listeners will there be?
-            // If really necessary, we can store a second pointer that points to the last one...
-            Listeners* current = p->payload.listeners;
-            while (current->next != NULL) {
-                current = current->next;
-            }
-            current->next = new_node;
-            break;
-        }
-    }
+    };
+	// TODO hmm, stack overflow?
     erasePositive(promise);
 }
-
 
 struct Pos c_promise_make() {
     Promise* promise = (Promise*)malloc(sizeof(Promise));
 
     promise->rc = 0;
-    promise->eraser = (void*)c_promise_erase_listeners;
+    promise->eraser = c_promise_erase_listeners;
     promise->state = UNRESOLVED;
-    promise->payload.pos = Unit;
+    promise->payload.listeners.head = NULL;
+    promise->payload.listeners.tail = NULL;
 
     return (struct Pos) { .tag = 0, .obj = promise, };
 }

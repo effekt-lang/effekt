@@ -43,8 +43,10 @@ extern void run_Pos(struct Neg, struct Pos);
 // Reference counting primitives defined in LLVM
 extern void eraseNegative(struct Neg);
 extern void erasePositive(struct Pos);
+extern void eraseStack(Stack);
 
 extern void shareNegative(struct Neg);
 extern void sharePositive(struct Pos);
+extern void shareStack(Stack);
 
 #endif
