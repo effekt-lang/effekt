@@ -184,24 +184,10 @@ def limit[A](n: Int) { program: => Any / Emit[A] }: Unit / Emit[A] = {
     }
   }
 }
-
-def collect[A,R](n: Int){ program: () => R / Emit[A] }: List[A] = {
-  var result: List[A] = Nil()
-  var steps = n
-  try { program(); () }
-  with Emit[A] {
-    def emit(element) = {
-      result = Cons(element, result);
-      steps = steps - 1;
-      if (0 < steps) { resume(()) }
-    }
-  }
-  result.reverse
-}
 ```
 
 ## Rejection Sampling
-The effect `Weight` is also the basis of the rejection handling algorithm
+The effect `weight` is also the basis of the rejection handling algorithm
 
 ```
 def handleRejection[R] { program: () => R / weight }: R / random = {
@@ -252,7 +238,7 @@ def sliceSamplingAlgo[R]() { program: () => R / weight } = {
 
 ### Tracing
 A trace records past samples used by an algorithm. The trace also controls where the algorithm draws samples from in the next iterations.
-Constructing traces is possible by handling the effect `Sample`, not with the default handler, but one that draws new samples and records them in a trace.
+Constructing traces is possible by handling the effect `sample`, not with the default handler, but one that draws new samples and records them in a trace.
 
 ```
 def handleTracing[R] { program: () => R / sample }: (R, Trace) / sample = {
@@ -416,7 +402,7 @@ def metropolisHastingsSingleSite[R](n: Int) { program: () => R / { sample, obser
 ## Examples
 
 ### Linear Regression
-As a short example on how the effects `Sample` and `Observe` can be used in an model, we construct the linear regression model.
+As a short example on how the effects `sample` and `observe` can be used in an model, we construct the linear regression model.
 
 ```
 record Point(x: Double, y: Double)
