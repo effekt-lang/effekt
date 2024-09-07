@@ -203,22 +203,38 @@ def limit[A](n: Int) { program: => Any / Emit[A] }: Unit / Emit[A] = {
 ```
 
 ## Rejection Sampling
-The effect `weight` is also the basis of the rejection handling algorithm
+
+The effect `weight` is the basis of the [rejection sampling algorithm](https://en.wikipedia.org/wiki/Rejection_sampling#) is given by the following handler:
 
 ```
 def handleRejection[R] { program: () => R / weight }: R / random = {
   try { program() }
   with weight { (prob) =>
     if (do random() < prob) { resume(()) }
-    else { handleRejection{ program } }
+    else { handleRejection {program} }
   }
 }
 ```
 
-It is possible to construct the rejection sampling algorithm with the handlers of this library:
+Intuitively, invoking `do weight(p)` in some program `prog` assigns this path the probability of `p` such that `prog` is non-deterministically repeated until it is accepted by the underlying proposal distribution.
+
+```repl
+region _ {
+  with linearCongruentialGenerator(1)
+  with handleSample
+  with handleRejection
+  val N = Gaussian(0.0, 1.0)
+  val sample = do sample(N)
+  println(show(round(sample, 2)))
+  do weight(0.01)
+  println("accepted")
+}
+```
+
+For easier usage, we define a wrapper to be used for rejection sampling:
 
 ```
-def rejectionSampling[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
+def rejectionSampling[R] { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
   def loop(): Unit / Emit[R] = {
     with handleSample
     with handleRejection
