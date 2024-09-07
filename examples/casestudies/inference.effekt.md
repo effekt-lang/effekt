@@ -13,11 +13,9 @@ We require some imports
 
 ```
 import list
-extern pure def pow(x: Double, y: Double): Double =
-  js "Math.pow(${x}, ${y})"
 ```
 
-We need some effects to peform probabilistic operations
+We need some effects to perform probabilistic operations
 
 ```
 effect sample(dist: Distribution): Double
@@ -29,7 +27,7 @@ interface Emit[A] {
 }
 ```
 
-With the effect `sample`, we can sample from a given distribution, and with the effect `observe` we can determine if it is possible to get a given value from a distribution.
+With the effect `sample`, we can sample from a given distribution, and with the effect `observe` we can determine how probable it is to observe a given value under a given distribution (probability density function).
 
 We also need to define some type aliases:
 
@@ -416,16 +414,17 @@ def linearRegression(observations: List[Point]) = {
   val m = do sample(Gaussian(0.0, 3.0))
   val c = do sample(Gaussian(0.0, 2.0))
   observations.foreach {
-    case Point(x,y) => do observe(y, Gaussian((m * x + c), 1.0))
+    case Point(x, y) => do observe(y, Gaussian((m * x + c), 1.0))
   }
   return Point(m, c)
 }
 ```
 
 ### Robot Movements
-It is also possible to construct bigger examples on which we can apply the algorithms of this library.
-In this example, the movements of a robot on a 2D-plane are observed. In the center of this plane, at the coordinates (0, 0), there is a radar station that can measure the distance to the robot at any point in time.
-The current state of the robot, consisting of position and velocity.
+
+It is also possible to construct bigger examples on which we can apply these algorithms.
+In this example, the movements of a robot on a 2D-plane are observed. In the center of this plane, at the coordinates (0, 0), there is a radar station that can measure the distance to the robot at any point in time. We try to predict the state of the robot while taking into account the measurements.
+The current state of the robot consists of the position and velocity.
 
 ```
 record State(x: Double, y: Double, vx: Double, vy: Double)
@@ -437,20 +436,36 @@ def show(s: State): String = {
 }
 ```
 
-In this example we also define a type alias for `Measurement`
+In this example we also define a type alias for `Measurement`:
 
 ```
 type Measurement = Double
-// movement of the robot in one time intervall
+```
+
+For simulating the movement of the robot at a given state, we sample accelerations `xa`, `ya` along the x and y axis from a Gaussian distribution.
+By applying the laws of notion and assuming that the difference between each time step is one, we can derive the update equations given the sampled acceleration for the velocity
+$$\begin{align*}a_t = \frac{d v_t}{d t} \Leftrightarrow v_t - v_{t-1} = a_t \Leftrightarrow v_t = v_{t-1} + a_t\end{align*}$$
+and position
+$$v_t = \frac{d x_t}{d t} \Leftrightarrow d x_t = v_t \Leftrightarrow x_t - x_{t-1} = v_t \Leftrightarrow x_t = v_t + x_{t-1} = v_{t-1} + a_t + x_{t-1}.$$
+
+```
 def move(s: State): State / sample = {
   s match {
-    case State(x, y, vx, vy) =>
-      val xa = do sample(Gaussian(0.0, 1.0))
-      val ya = do sample(Gaussian(0.0, 1.0))
-      return State(x+vx+xa, y+vy+ya, vx+xa, vy+ya)
+    case State(x0, y0, vx0, vy0) =>
+      val xa1 = do sample(Gaussian(0.0, 1.0))
+      val ya1 = do sample(Gaussian(0.0, 1.0))
+      val (x1, y1) = (x0 + vx0 + xa1, y0 + vy0 + ya1)
+      val (vx1, vy1) = (vx0 + xa1, vy0 + ya1)
+      return State(x1, y1, vx1, vy1)
   }
 }
-// measures distance to robot and observes how probable position is given current state
+```
+
+After predicting the next state of the robot, we get a distance measurement from the radar station.
+We then compute the probabilistic distance given the predicted state using the Euclidean distance.
+Next, we adjust our future prediction on the real data by applying the `obeserve` effect opertation to the measurement and a Gaussian distribution with the mean being equal to the distance.
+
+```
 def measure(s: State, m: Measurement): Unit / observe = {
   s match {
     case State(x, y, vx, vy) =>
@@ -458,7 +473,11 @@ def measure(s: State, m: Measurement): Unit / observe = {
       do observe(m, Gaussian(dist, 0.4))
   }
 }
-// approximates next step based on current position and next distance measurement
+```
+
+For convenience, we combine both predicting and updating into one function expecting the current state and the next measurement as arguments.
+
+```
 def step(s0: State, m1: Measurement): State / { sample, observe } = {
   val s1 = move(s0)
   measure(s1, m1)
