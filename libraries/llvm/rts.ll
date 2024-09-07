@@ -117,7 +117,7 @@ declare void @exit(i64)
 ; Prompts
 
 define %Prompt @currentPrompt(%Stack %stack) {
-    %promptPtr = getelementptr %StackValue, %StackValue* %stack, i32 3
+    %promptPtr = getelementptr %StackValue, ptr %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %promptPtr
     ret %Prompt %prompt
 }
