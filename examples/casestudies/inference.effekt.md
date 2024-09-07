@@ -541,7 +541,8 @@ def step(s0: State, m1: Measurement): State / { sample, observe } = {
 ```
 
 ### Epidemic Spreading
-This examples simulates a population in an epidemic with the SIR model. The SIR model divides the population into susceptible **S**, infected **I** and recovered **R**.
+
+This example simulates a population experiencing an epidemic outbreak with the SIR model. The SIR model divides the population into susceptible **S**, infected **I** and recovered **R**.
 
 ```
 record Population(susceptible: Double, infected: Double, recovered: Double)
@@ -551,8 +552,11 @@ def show(s: Population): String = {
   def rounded(d: Double) = round(d, 3).show
   "Population(" ++ susceptible.rounded ++ ", " ++ infected.rounded ++ ", " ++ recovered.rounded ++ ")"
 }
+```
 
-//multiply s,i,r parts of population with transition probabilitys to get new state of population
+Having defined our population state, we now try to predict the population state at the next time step:
+
+```
 def progression(p: Population): Population / sample = {
   p match {
     case Population(s, i, r) =>
@@ -563,7 +567,13 @@ def progression(p: Population): Population / sample = {
       return Population(s1, i1, r1)
   }
 }
-//testing the popultaion(like covid test)
+```
+
+Next, given a population and a positive-rate of COVID-like test, we gauge how likely it is that the positive-rate was observed assuming the test result is distributed according to a Beta distribution. 
+Formally, we compute $\text{Beta}(pr \mid I, 100)$ where $I$ is the number of infected individuals in the predicted population.
+If it is unlikely, the predicted population will be rejected and another one will be proposed.
+
+```
 def test(p: Population, pr: Double): Unit / observe = {
   p match {
     case Population(s, i, r) =>
@@ -572,7 +582,12 @@ def test(p: Population, pr: Double): Unit / observe = {
       do observe(pr, Beta(mean, sampleSize))
   }
 }
-//approximate next state of population based on current state
+```
+
+Like in the previous examples, we combine these two functions into a `step` function:
+
+```
+// approximate next state of population based on current state
 def step(p0: Population, pr1: Double): Population / { sample, observe } = {
   val p1 = progression(p0)
   test(p1, pr1)
