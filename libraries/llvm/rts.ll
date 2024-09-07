@@ -75,18 +75,13 @@
 ; fresh prompt generation
 @lastPrompt = private global %Prompt 0
 
-define %Prompt @freshPrompt() {
-entry:
-    %current_val = load %Prompt, %Prompt* @lastPrompt
-    %new_val = add %Prompt %current_val, 1
-    store %Prompt %new_val, %Prompt* @lastPrompt
-    ret %Prompt %new_val
-}
-
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
 %StackValue = type { %ReferenceCount, %Memory, %Region, %Prompt, %Stack }
+
+
+
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Object}
@@ -117,6 +112,22 @@ declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare void @print(i64)
 declare void @exit(i64)
+
+
+; Prompts
+
+define %Prompt @currentPrompt(%Stack %stack) {
+    %promptPtr = getelementptr %StackValue, %StackValue* %stack, i32 3
+    %prompt = load %Prompt, ptr %promptPtr
+    ret %Prompt %prompt
+}
+
+define %Prompt @freshPrompt() {
+    %current_val = load %Prompt, ptr @lastPrompt
+    %new_val = add %Prompt %current_val, 1
+    store %Prompt %new_val, ptr @lastPrompt
+    ret %Prompt %new_val
+}
 
 ; Garbage collection
 
@@ -204,24 +215,33 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define ptr @getRegionPointer(%Evidence %evidence, %Stack %stack) {
+define ptr @getRegionPointer(%Prompt %p, %Stack %stack) {
 entry:
-    switch %Evidence %evidence, label %else [i64 0, label %here]
+    %isNull = icmp eq %Stack %stack, null
+    br i1 %isNull, label %returnNull, label %checkPrompt
 
-here:
+checkPrompt:
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %currentPrompt = load %Prompt, ptr %prompt_pointer
+    %promptMatch = icmp eq %Prompt %currentPrompt, %p
+    br i1 %promptMatch, label %found, label %continue
+
+continue:
+    %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack = load %Stack, ptr %nextStack_pointer
+    %region = tail call ptr @getRegionPointer(%Prompt %p, %Stack %nextStack)
+    ret ptr %region
+
+found:
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     ret ptr %stackRegion
 
-else:
-    %nextEvidence = sub %Evidence %evidence, 1
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
-    %rest = load %Stack, ptr %stackRest
-    %region = tail call ptr @getRegionPointer(%Evidence %nextEvidence, %Stack %rest)
-    ret ptr %region
+returnNull:
+    ret ptr null
 }
 
-define { ptr, %Reference } @alloc(i64 %index, %Evidence %evidence, %Stack %stack) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(%Evidence %evidence, %Stack %stack)
+define { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
+    %regionPointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
     %stackPointerPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 0
     %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
     %limitPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 2
@@ -271,8 +291,8 @@ realloc:
 
 }
 
-define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %Stack %stack) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(%Evidence %evidence, %Stack %stack)
+define ptr @getPointer(%Reference %reference, i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
+    %regionPointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
     %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
     %base = load %Base, ptr %basePointer
     %pointer = getelementptr i8, ptr %base, %Reference %reference
@@ -668,7 +688,7 @@ define void @run_Pos(%Neg %f, %Pos %arg) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %arg, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %arg, %Stack %stack)
     ret void
 }
 
@@ -683,6 +703,6 @@ define void @run(%Neg %f) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack)
     ret void
 }

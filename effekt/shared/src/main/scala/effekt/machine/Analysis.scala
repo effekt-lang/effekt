@@ -47,6 +47,8 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) -- Set(name) ++ Set(prompt)
     case FreshPrompt(name, rest) =>
       freeVariables(rest) -- Set(name)
+    case CurrentPrompt(name, rest) =>
+      freeVariables(rest) -- Set(name)
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>

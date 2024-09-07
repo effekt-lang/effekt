@@ -195,6 +195,12 @@ enum Statement {
   case FreshPrompt(name: Variable, rest: Statement)
 
   /**
+   * Retrieves the prompt of the currently mounted stack
+   * let n = currentPrompt; s
+   */
+  case CurrentPrompt(name: Variable, rest: Statement)
+
+  /**
    * let x = 42; s
    */
   case LiteralInt(name: Variable, value: Long, rest: Statement)

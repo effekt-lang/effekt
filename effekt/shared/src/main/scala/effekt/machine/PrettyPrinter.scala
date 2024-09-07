@@ -86,6 +86,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case FreshPrompt(name, rest) =>
       "let" <+> name <+> "=" <+> "freshPrompt" <> ";" <> line <> toDoc(rest)
 
+    case CurrentPrompt(name, rest) =>
+      "let" <+> name <+> "=" <+> "currentPrompt" <> ";" <> line <> toDoc(rest)
+
     case ForeignCall(name, builtin, arguments, rest) =>
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 

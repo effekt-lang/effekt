@@ -295,9 +295,12 @@ object Transformer {
       case core.Var(id, init, capture, body) =>
         val stateType = transform(init.tpe)
         val reference = Variable(transform(id), Type.Reference(stateType))
+        val prompt = Variable(freshName("prompt"), builtins.Prompt)
+
         transform(init).run { value =>
-          Allocate(reference, value, ???,
-            transform(body))
+          CurrentPrompt(prompt,
+            Allocate(reference, value, prompt,
+              transform(body)))
         }
 
       case core.Get(id, capt, tpe) =>

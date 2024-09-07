@@ -385,6 +385,10 @@ object Transformer {
         emit(Call(name, Ccc(), promptType, freshPrompt, Nil))
         transform(rest)
 
+      case machine.CurrentPrompt(machine.Variable(name, _), rest) =>
+        emit(Call(name, Ccc(), promptType, currentPrompt, List(getStack())))
+        transform(rest)
+
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
         emit(Comment(s"literalInt $name, n=$n"))
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
@@ -740,6 +744,7 @@ object Transformer {
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
   def popStacks = ConstantGlobal(PointerType(), "popStacks");
   def freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
+  def currentPrompt = ConstantGlobal(PointerType(), "currentPrompt");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
   def withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");
