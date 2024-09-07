@@ -415,6 +415,11 @@ def pow(base: Double, exponent: Int): Double = {
   loop(1.0, exponent)
 }
 
+extern pure def pow(base: Double, exponent: Double): Double =
+  js "Math.pow(${base}, ${exponent})"
+  chez "(expt ${base} ${exponent})"
+  ml "Math.pow ${base} ${exponent}"
+
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
