@@ -188,7 +188,7 @@ object Transformer {
         val tpe = transform(stateType)
         val variable = Variable(freshName("app"), tpe)
         val reference = Variable(transform(x), Type.Reference(tpe))
-        ??? // Load(variable, reference, evValue, Return(List(variable)))
+        Load(variable, reference, Return(List(variable)))
 
       case core.App(core.Member(core.BlockVar(x, core.BlockType.Interface(_, List(stateType)), _), TState.put, annotatedTpe), targs, List(arg), Nil) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -259,11 +259,12 @@ object Transformer {
                   New(transform(id), transform(handler, Some(prompt)), body)
               })))
 
-      case core.Region(core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
+      case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
         val variable = Variable(freshName("region"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
-        val prompt = Variable(freshName("prompt"), builtins.Prompt)
+        val prompt = transform(region) // Variable(freshName("prompt"), builtins.Prompt)
+
 
         FreshPrompt(prompt,
           NewStack(delimiter, prompt, returnClause,
@@ -520,6 +521,7 @@ object Transformer {
   }
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
+    case core.Type.TRegion => Type.Int()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
