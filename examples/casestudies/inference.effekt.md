@@ -10,13 +10,13 @@ This case study shows how we can perform inference over probabilistic models wit
 
 ---
 
-We require some imports
+We require some imports:
 
 ```
 import list
 ```
 
-We need some effects to perform probabilistic operations
+We need some effects to perform probabilistic operations:
 
 ```
 effect sample(dist: Distribution): Double
@@ -132,7 +132,7 @@ def density(value: Double, dist: Distribution): Double = {
 }
 ```
 
-We define default handlers for all effects in this library
+Next, we define default handlers for all effects:
 
 ```
 def handleSample[R] { program: () => R / sample }: R / random = {
@@ -165,7 +165,6 @@ def handleRandom[R] { program: () => R / random }: R = {
 or a pseudo random number generator using a linear congruential generator:
 
 ```
-// pseudo random number generator
 def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
   // parameters from Numerical Recipes (https://en.wikipedia.org/wiki/Linear_congruential_generator)
   val a = 1664525
@@ -281,16 +280,16 @@ Constructing traces is possible by handling the effect `sample`, not with the de
 
 ```
 type Trace = List[Probability]
-```
 
-```
 def handleTracing[R] { program: () => R / sample }: (R, Trace) / sample = {
-  try { (program(), []) }
+  var trace = []
+  val result = try { program() }
   with sample { (dist) =>
     val d = do sample(dist);
-    val (r, trace) = resume(d);
-    (r, Cons(d, trace))
+    trace = Cons(d, trace)
+    resume(d)
   }
+  (result, trace.reverse)
 }
 def handleReusingTrace[R](trace0: Trace) { program: () => R / sample } = handleObserve {
   var trace = trace0
@@ -450,7 +449,7 @@ def metropolisHastingsSingleSite[R](n: Int) { program: () => R / { sample, obser
 
 ### Linear Regression
 
-As a short example of how the effects `sample` and `observe` can be used in an model, we construct a linear regression model.
+As a short example of how the effects `sample` and `observe` can be used in a model, we construct a linear regression model.
 
 ```
 record Point(x: Double, y: Double)
@@ -490,7 +489,7 @@ def show(s: State): String = {
 }
 ```
 
-In this example we also define a type alias for `Measurement`:
+In this example, we also define a type alias for `Measurement`:
 
 ```
 type Measurement = Double
@@ -517,7 +516,7 @@ def move(s: State): State / sample = {
 
 After predicting the next state of the robot, we get a distance measurement from the radar station.
 We then compute the probabilistic distance given the predicted state using the Euclidean distance.
-Next, we try to reconcile our model with the given measurement by applying the `obeserve` effect opertation.
+Next, we try to reconcile our model with the given measurement by applying the `obeserve` effect operation.
 Similar to linear regression example, we reject our prediction if the observation is unlikely given our previously predicted acceleration.
 
 ```
@@ -595,14 +594,17 @@ def step(p0: Population, pr1: Double): Population / { sample, observe } = {
 }
 ```
 
-Calling the algorithms on the examples.
+---
+
+Finally, we can use the implemented inference methods to run some concrete examples:
 
 ```
 type Path = List[State]
 
 def main() = {
   // random number generator used by all examples
-  with linearCongruentialGenerator(1)
+  val seed = 1
+  with linearCongruentialGenerator(seed)
 
   // show instances for the different emitted values
   with onEmit[Point] { s => println(s.show) };
@@ -621,7 +623,7 @@ def main() = {
 
   // Linear Regression
   limit[Point](5) {
-    with rejectionSampling[Point](5)
+    with rejectionSampling[Point]
 
     linearRegression([
       Point(5.0, 5.0),
@@ -634,9 +636,8 @@ def main() = {
   }
 
   // Robot movements
-
   limit[State](5) {
-    with linearCongruentialGenerator(1);
+    with linearCongruentialGenerator(seed);
     with sliceSampling[State](5)
 
     val init = State(0.0, 3.0, 2.0, 0.0)
