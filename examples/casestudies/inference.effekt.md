@@ -449,7 +449,8 @@ def metropolisHastingsSingleSite[R](n: Int) { program: () => R / { sample, obser
 ## Examples
 
 ### Linear Regression
-As a short example on how the effects `sample` and `observe` can be used in an model, we construct the linear regression model.
+
+As a short example of how the effects `sample` and `observe` can be used in an model, we construct a linear regression model.
 
 ```
 record Point(x: Double, y: Double)
@@ -463,11 +464,15 @@ def linearRegression(observations: List[Point]) = {
   val m = do sample(Gaussian(0.0, 3.0))
   val c = do sample(Gaussian(0.0, 2.0))
   observations.foreach {
-    case Point(x, y) => do observe(y, Gaussian((m * x + c), 1.0))
+    case Point(x, y) => do observe(y, Gaussian(m * x + c, 1.0))
   }
   return Point(m, c)
 }
 ```
+
+Remember from earlier that `handleObserve` uses the `weight` effect operation.
+Therefore, the call `do observe(y, Gaussian(...))` can be understood as approximating $\argmax_{\mathbf{\theta} \in \Theta} P(\mathbf{Y} \mid \mathbf{\theta})$ where $\mathbf{Y}$ are the observations and $\mathbf{\theta}$ are the parameters of a Gaussian given by $m \sim \mathcal{N}(0, 3)$ and $c \sim \mathcal{N}(0, 2)$.
+If the chosen parameters do not explain the observations well, it is likely it will be rejected and new parameters will be sampled. Conversely, if the model fits well, it is unlikely it will be rejected.
 
 ### Robot Movements
 
