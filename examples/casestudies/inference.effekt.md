@@ -275,8 +275,13 @@ If the new sample has a lower probability (prob1 < prob0), the sample is down-we
 ## Metropolis-Hastings
 
 ### Tracing
+
 A trace records past samples used by an algorithm. The trace also controls where the algorithm draws samples from in the next iterations.
-Constructing traces is possible by handling the effect `sample`, not with the default handler, but one that draws new samples and records them in a trace.
+Constructing traces is possible by handling the effect `sample`, not with the default handler, but with one that draws new samples and records them in a trace.
+
+```
+type Trace = List[Probability]
+```
 
 ```
 def handleTracing[R] { program: () => R / sample }: (R, Trace) / sample = {
@@ -302,6 +307,7 @@ def handleReusingTrace[R](trace0: Trace) { program: () => R / sample } = handleO
 ```
 
 ### Proposing samples
+
 How the candidates of this algorithm are proposed can vary between different implementations of the algorithm and thus creating inference of the Metropolis-Hastings algorithm.
 The Metropolis-Hastings algorithm proposes a new trace based on the old trace, by recursively adding noise to the samples in the old trace and thus creating a new trace.
 
@@ -318,6 +324,7 @@ def propose(trace: Trace): Trace / sample = {
 ```
 
 ### Metropolis-Hastings algorithm
+
 The algorithm is implemented with a helper function
 
 ```
@@ -358,7 +365,8 @@ def metropolisHastingsAlgo[A] { program: () => A / { sample, weight } } = {
 ```
 
 ### Single-Site Metropolis-Hastings
-To perform inference over the Metropolis-Hastings algorithm, and therefore creating the single-site Metropolis-Hastings algorithm, we just need to alter the implementation of the `propose` function.
+
+To perform inference over the Metropolis-Hastings algorithm, and for creating the single-site Metropolis-Hastings algorithm, we just need to alter the implementation of the `propose` function.
 In this implementation, the noise is added to only one random sample in the trace and the other samples are reused.
 
 ```
@@ -388,13 +396,13 @@ The single-site Metropolis-Hastings algorithm is implemented like the Metropolis
 def metropolisStepSingleSite[A](prob0: Probability, trace0: Trace) { program: Trace => (A, Probability) } = {
   val trace1 = proposeSingleSite(trace0)
   val (result1, prob1) = program(trace1)
-  if (prob1 < prob0){
+  if (prob1 < prob0) {
     do weight(prob1 / prob0)
   }
   ((result1, trace1), prob1)
 }
 def metropolisHastingsSingleSiteAlgo[A] {program: () => A / { sample, weight } } = {
-  val ((result0, trace0), prob0) = handleWeight{
+  val ((result0, trace0), prob0) = handleWeight {
     with handleSample
     with handleTracing
     program()
@@ -416,7 +424,8 @@ def metropolisHastingsSingleSiteAlgo[A] {program: () => A / { sample, weight } }
 ```
 
 ## Wrappers
-In order to make it easier to use these algorithms without having to call the various effect handlers, we constructed wrappers for the algorithms implemented in this library.
+
+In order to make it easier to use these algorithms without having to call the various effect handlers, we constructed wrappers for the algorithms implemented previously.
 
 ```
 def sliceSampling[R](n: Int) { program: () => R / { sample, observe } }: Unit / { random, Emit[R] } = {
