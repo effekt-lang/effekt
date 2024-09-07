@@ -517,7 +517,8 @@ def move(s: State): State / sample = {
 
 After predicting the next state of the robot, we get a distance measurement from the radar station.
 We then compute the probabilistic distance given the predicted state using the Euclidean distance.
-Next, we adjust our future prediction on the real data by applying the `obeserve` effect opertation to the measurement and a Gaussian distribution with the mean being equal to the distance.
+Next, we try to reconcile our model with the given measurement by applying the `obeserve` effect opertation.
+Similar to linear regression example, we reject our prediction if the observation is unlikely given our previously predicted acceleration.
 
 ```
 def measure(s: State, m: Measurement): Unit / observe = {
@@ -529,7 +530,7 @@ def measure(s: State, m: Measurement): Unit / observe = {
 }
 ```
 
-For convenience, we combine both predicting and updating into one function expecting the current state and the next measurement as arguments.
+Putting it all together, we first call `move` for predicting the acceleration and then reconcile it with a given measurement. If the predicted state is unlikely to have produced the measurement, we predict another state. Finally, we return the first state that is not rejected.
 
 ```
 def step(s0: State, m1: Measurement): State / { sample, observe } = {
