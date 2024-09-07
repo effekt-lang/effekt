@@ -248,6 +248,9 @@ def rejectionSampling[R] { program: () => R / { sample, observe } }: Unit / { ra
 
 ## Slice Sampling
 
+The following function is implementing a form of slice sampling — a Markov Chain Monte Carlo (MCMC) algorithm often used in probabilistic programming for sampling from a distribution.
+This algorithm iteratively samples from a distribution and adjusts weights or probabilities to ensure that the samples align with the target distribution.
+
 ```
 def sliceSamplingAlgo[R]() { program: () => R / weight } = {
   val (result, prob) = handleSample { handleWeight { program() }}
@@ -265,6 +268,9 @@ def sliceSamplingAlgo[R]() { program: () => R / weight } = {
   loop(result, prob)
 }
 ```
+
+First, we get an initial sample `result` with its associated probability `prob`. `step` is then used to generate new samples based on the previous result and probability.
+If the new sample has a lower probability (prob1 < prob0), the sample is down-weighted by adjusting the weight using `do weight(prob1 / prob0)`. This ensures that samples with lower probabilities are less likely to be accepted. Finally, using `loop` and `emit`, we emit the sampling results.
 
 ## Metropolis-Hastings
 
