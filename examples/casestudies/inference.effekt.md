@@ -5,6 +5,7 @@ permalink: docs/casestudies/inference
 ---
 
 # Inference
+
 This case study shows how we can perform inference over probabilistic models with the help of effects.
 
 ---
@@ -27,21 +28,20 @@ interface Emit[A] {
 }
 ```
 
-With the effect `sample`, we can sample from a given distribution, and with the effect `observe` we can determine how probable it is to observe a given value under a given distribution (probability density function).
+With the effect `sample`, we can sample from a given distribution, and with the effect `observe` we can determine how probable it is to observe a given value under a given distribution (probability density function (PDF)).
 
 We also need to define some type aliases:
 
 ```
-type Distribution{
+type Distribution {
   Gaussian(mean: Double, variance: Double)
   Uniform(lower: Double, upper: Double)
   Beta(mean: Double, sampleSize: Double)
 }
 type Probability = Double
-type Trace = List[Double]
 ```
 
-Currently, we can support models with Gaussian, uniform or beta distributions.
+Currently, we support models with Gaussian, Uniform or Beta distributions. Thus, we need a way to draw from these distributions and to compute the probability density.
 
 ```
 def draw(dist: Distribution): Double / random = {
@@ -64,9 +64,14 @@ def draw(dist: Distribution): Double / random = {
       return draw(Gaussian(0.5, 1.0 / (4.0 * (2.0 * alpha + 1.0))))
   }
 }
+```
+
+For the Beta distribution, we need to approximate the Gamma function
+
+```
 def gamma(z0: Double): Double = {
   var z = z0
-  //g is a small integer and p is a list of coeficients dependent on g
+  // g is a small integer and p is a list of coeficients dependent on g
   val g = 7.0
   val p = [0.99999999999980993,
     676.5203681218851,
@@ -103,7 +108,11 @@ def gamma(z0: Double): Double = {
     return y
   }
 }
-//probability density function for Gaussian distribution
+```
+
+and then can compute the probability density function at a given value for the aforementioned distributions.
+
+```
 def density(value: Double, dist: Distribution): Double = {
   dist match {
     case Gaussian(mean, variance) =>
@@ -126,18 +135,36 @@ def density(value: Double, dist: Distribution): Double = {
 We define default handlers for all effects in this library
 
 ```
-def handleSample[R] { program: () => R / sample } = {
+def handleSample[R] { program: () => R / sample }: R / random = {
   try { program() }
   with sample { dist => resume(draw(dist)) }
 }
-def handleObserve[R] { program: () => R / observe } = {
+def handleObserve[R] { program: () => R / observe }: R / weight = {
   try { program() }
   with observe { (value, dist) => do weight(density(value, dist)); resume(()) }
 }
+def handleWeight[R] { program: () => R / weight }: (R, Double)  = {
+  var current = 1.0
+  try { (program(), current) }
+  with weight { (prob) =>
+    current = current * prob;
+    resume(())
+  }
+}
+```
+
+For generating random numbers, we either use the `random` function from stdlib
+
+```
 def handleRandom[R] { program: () => R / random }: R = {
   try { program() }
   with random { () => resume(random()) }
 }
+```
+
+or a pseudo random number generator using a linear congruential generator:
+
+```
 // pseudo random number generator
 def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
   // parameters from Numerical Recipes (https://en.wikipedia.org/wiki/Linear_congruential_generator)
@@ -151,17 +178,9 @@ def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
     resume(next().toDouble / m.toDouble)
   }
 }
-def handleWeight[R] { program: () => R / weight }: (R, Double)  = {
-  var current = 1.0
-  try { (program(), current) }
-  with weight { (prob) =>
-    current = current * prob;
-    resume(())
-  }
-}
 ```
 
-With the effect `emit` it is also possible to limit possibly infinite loops. This allows for flexible numbers of steps to be performed with any algorithm that uses the effect `emit`.
+With the effect `emit` it is also possible to limit infinite loops. This allows for flexible numbers of steps to be performed with any algorithm that uses the effect `emit`.
 
 ```
 def onEmit[A] { handler: A => Unit } { program: => Any / Emit[A] }: Unit = {
@@ -170,7 +189,6 @@ def onEmit[A] { handler: A => Unit } { program: => Any / Emit[A] }: Unit = {
     def emit(element) = { handler(element); resume(()) }
   }
 }
-
 def limit[A](n: Int) { program: => Any / Emit[A] }: Unit / Emit[A] = {
   var steps = n
   try { program(); () }
