@@ -12,7 +12,7 @@ besides implementing a handler for it, there is also another way of defining the
 
 ```
 def excImpl: Exception = new Exception {
-  def throw(msg) = println("msg")
+  def throw(msg) = panic(msg)
 }
 ```
 
@@ -44,4 +44,4 @@ try { div(42, 0) { exc } }
 with exc: Exception { def throw(msg) = panic(msg) }
 ```
 
-This capability-passing-style transformation [Schuster et al., 2020](https://doi.org/10.1145/3408975) is normally done implicitly, though.
+This capability-passing-style transformation [Schuster et al., 2020](https://doi.org/10.1145/3408975) is normally done implicitly and ensures that every effect is handled.
