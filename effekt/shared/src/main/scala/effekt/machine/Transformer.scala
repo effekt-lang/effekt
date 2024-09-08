@@ -288,10 +288,21 @@ object Transformer {
                                 Store(reference, setterVariable,
                                   Return(List())))
 
-          // TODO use interface when it's implemented
-          Allocate(reference, value, prompt,
-            //New(variable, List(getter, setter),
-              transform(body))
+          region match {
+            case symbols.builtins.globalRegion =>
+              // TODO currently we use prompt 1 as a quick fix...
+              //    However, this will not work when reinstalling a fresh stack
+              //    We need to truly special case global memory!
+              LiteralInt(prompt, 1L,
+                Allocate(reference, value, prompt,
+                //New(variable, List(getter, setter),
+                  transform(body)))
+            case _ =>
+              // TODO use interface when it's implemented
+              Allocate(reference, value, prompt,
+                //New(variable, List(getter, setter),
+                  transform(body))
+          }
         }
 
       case core.Var(id, init, capture, body) =>
