@@ -194,7 +194,7 @@ object Transformer {
         emit(Comment(s"allocate $name, type ${tpe}, init ${init.name}, region ${region.name}"))
         val idx = regionIndex(ref.tpe)
 
-        val temporary = freshName("tmpEvidence")
+        val temporary = freshName("cell")
         val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), temporary)
         emit(Call(temporary, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region), getStack())));
 
@@ -215,12 +215,14 @@ object Transformer {
 
       case machine.Load(name, ref, rest) =>
         emit(Comment(s"load ${name.name}, reference ${ref.name}"))
+
         val idx = regionIndex(ref.tpe)
 
-        val ptr = freshName("pointer");
+        val ptr = freshName(name.name + "_pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), getStack())))
 
+        // TODO why do we need this?
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
         emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
         shareValue(oldVal)
@@ -233,7 +235,7 @@ object Transformer {
         emit(Comment(s"store ${ref.name}, value ${value.name}"))
         val idx = regionIndex(ref.tpe)
 
-        val ptr = freshName("pointer");
+        val ptr = freshName(ref.name + "pointer");
         val ptrRef = LocalReference(PointerType(), ptr)
         emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), getStack())))
 

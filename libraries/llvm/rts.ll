@@ -89,8 +89,8 @@
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Object}
 
-; Offset within the arena
-%Reference = type i64
+; Reference into an arena (prompt -- cast to 32bit, offset 32bit)
+%Reference = type {i32, i32}
 
 ; Builtin Types
 
@@ -241,14 +241,15 @@ returnNull:
 }
 
 define { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
-    %stackPointerPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 0
-    %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
-    %limitPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 2
+    %region_pointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
 
-    %stackPointer = load %StackPointer, ptr %stackPointerPointer
-    %base = load %Base, ptr %basePointer
-    %limit = load %Limit, ptr %limitPointer
+    %stackPointer_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 0
+    %base_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 1
+    %limit_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 2
+
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer
+    %base = load %Base, ptr %base_pointer
+    %limit = load %Limit, ptr %limit_pointer
 
     %object = icmp ne i64 %index, 0
     %size = select i1 %object, i64 16, i64 8
@@ -259,13 +260,18 @@ define { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) al
     br i1 %cmp, label %continue, label %realloc
 
 continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointerPointer
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer
     %intBase = ptrtoint %Base %base to i64
     %intStackPointer = ptrtoint %StackPointer %stackPointer to i64
-    %offset = sub i64 %intStackPointer, %intBase
+    %offset64 = sub i64 %intStackPointer, %intBase
+
+    %prompt32 = trunc i64 %prompt to i32
+    %offset32 = trunc i64 %offset64 to i32
 
     %ret.0 = insertvalue { ptr, %Reference } undef, %StackPointer %stackPointer, 0
-    %ret.1 = insertvalue { ptr, %Reference } %ret.0, %Reference %offset, 1
+    %ref.1 = insertvalue %Reference undef, i32 %prompt32, 0
+    %ref.2 = insertvalue %Reference %ref.1, i32 %offset32, 1
+    %ret.1 = insertvalue { ptr, %Reference } %ret.0, %Reference %ref.2, 1
     ret { ptr, %Reference } %ret.1
 
 realloc:
@@ -281,21 +287,31 @@ realloc:
     %newStackPointer = getelementptr i8, %Base %newBase, i64 %arenaSize
     %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %size
 
-    store %Base %newBase, ptr %basePointer
-    store %Limit %newlimit, ptr %limitPointer
-    store %StackPointer %newNextStackPointer, ptr %stackPointerPointer
+    store %Base %newBase, ptr %base_pointer
+    store %Limit %newlimit, ptr %limit_pointer
+    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer
+
+    %prompt32_2 = trunc i64 %prompt to i32
+    %arenaSize32 = trunc i64 %arenaSize to i32
 
     %ret..0 = insertvalue { ptr, %Reference } undef, %StackPointer %newStackPointer, 0
-    %ret..1 = insertvalue { ptr, %Reference } %ret..0, %Reference %arenaSize, 1
+    %ref..1 = insertvalue %Reference undef, i32 %prompt32_2, 0
+    %ref..2 = insertvalue %Reference %ref..1, i32 %arenaSize32, 1
+    %ret..1 = insertvalue { ptr, %Reference } %ret..0, %Reference %ref..2, 1
     ret { ptr, %Reference } %ret..1
-
 }
 
-define ptr @getPointer(%Reference %reference, i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
-    %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
-    %base = load %Base, ptr %basePointer
-    %pointer = getelementptr i8, ptr %base, %Reference %reference
+
+define ptr @getPointer(%Reference %reference, i64 %index, %Stack %stack) {
+    %prompt32 = extractvalue %Reference %reference, 0
+    %offset32 = extractvalue %Reference %reference, 1
+    %prompt = zext i32 %prompt32 to i64
+    %offset = zext i32 %offset32 to i64
+
+    %region_pointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
+    %base_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 1
+    %base = load %Base, ptr %base_pointer
+    %pointer = getelementptr i8, ptr %base, i64 %offset
     ret ptr %pointer
 }
 
@@ -307,7 +323,6 @@ define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
 
     %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %n
     store %StackPointer %stackPointer_2, ptr %stackStackPointer
-
     ret %StackPointer %stackPointer
 }
 

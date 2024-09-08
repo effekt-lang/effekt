@@ -186,7 +186,7 @@ object Transformer {
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
-        val variable = Variable(freshName("app"), tpe)
+        val variable = Variable(freshName(x.name.name + "_value"), tpe)
         val reference = Variable(transform(x), Type.Reference(tpe))
         Load(variable, reference, Return(List(variable)))
 
@@ -194,11 +194,12 @@ object Transformer {
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
-        val variable = Variable(freshName("app"), Positive());
+        val variable = Variable(freshName("ignored"), Positive());
         val reference = Variable(transform(x), Type.Reference(tpe))
         transform(arg).run { value =>
           Store(reference, value,
-            Construct(variable, builtins.Unit, List(), Return(List(variable))))
+            Construct(variable, builtins.Unit, List(),
+              Return(List(variable))))
         }
 
       case core.App(core.Member(core.BlockVar(id, tpe, capt), op, annotatedTpe), targs, vargs, bargs) =>

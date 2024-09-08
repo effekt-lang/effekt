@@ -676,8 +676,10 @@ object Variables {
     // are mutable variables now block variables or not?
     case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region, TRegion, Set(region)) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(region)))
     case Stmt.Var(id, init, capture, body) => free(init) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(capture)))
-    case Stmt.Get(id, annotatedCapt, annotatedTpe) => Variables.block(id, core.Type.TState(annotatedTpe), annotatedCapt)
-    case Stmt.Put(id, annotatedCapt, value) => Variables.block(id, core.Type.TState(value.tpe), annotatedCapt)
+    case Stmt.Get(id, annotatedCapt, annotatedTpe) =>
+      Variables.block(id, core.Type.TState(annotatedTpe), annotatedCapt)
+    case Stmt.Put(id, annotatedCapt, value) =>
+      Variables.block(id, core.Type.TState(value.tpe), annotatedCapt) ++ free(value)
 
     case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
     case Stmt.Hole() => Variables.empty
