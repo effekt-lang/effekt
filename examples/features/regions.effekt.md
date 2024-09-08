@@ -69,7 +69,8 @@ def example3() = {
 }
 ```
 
-Here, the type of `closure` is `() => Int at {x}`. The capture set makes closing over `x` explicit. We can also explicitly instantiate a new region and allocate `x` into it:
+Here, the type of `closure` is `() => Int at {x}`. The capture set makes closing over `x` explicit. Each mutable variable is allocated into a equally named region.
+We can also explicitly instantiate a new region and allocate `x` into it:
 
 ```
 def example4() =
