@@ -144,19 +144,19 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. let x = allocate(42, r); s
+  *  e.g. let x = allocate(42, region); s
   */
-  case Allocate(name: Variable, init: Variable, r: Variable, rest: Statement)
+  case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
 
   /**
   * e.g. let y = load(x); s
   */
-  case Load(name: Variable, ref: Variable, rest: Statement)
+  case Load(name: Variable, reference: Variable, rest: Statement)
 
   /**
   * e.g. store(x, 42); s
   */
-  case Store(ref: Variable, value: Variable, rest: Statement)
+  case Store(reference: Variable, value: Variable, rest: Statement)
 
   /**
    * e.g. push { (x, ...) => s }; s
@@ -167,6 +167,18 @@ enum Statement {
    * e.g. return (v1: t1, ...)
    */
   case Return(arguments: Environment)
+
+  /**
+   * Creates a fresh prompt
+   * let p = freshPrompt; s
+   */
+  case FreshPrompt(name: Variable, rest: Statement)
+
+  /**
+   * Retrieves the prompt of the currently mounted stack
+   * let n = currentPrompt; s
+   */
+  case CurrentPrompt(name: Variable, rest: Statement)
 
   /**
    * e.g. let k = stack(p) { (x, ...) => s }; s
@@ -181,24 +193,12 @@ enum Statement {
   /**
    * Pops stacks until it finds one labeled with `prompt`
    */
-  case PopStacks(name: Variable, prompt: Variable, rest: Statement)
 
+  case PopStacks(name: Variable, prompt: Variable, rest: Statement)
   /**
    * let x = #infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
-
-  /**
-   * Creates a fresh prompt
-   * let p = freshPrompt; s
-   */
-  case FreshPrompt(name: Variable, rest: Statement)
-
-  /**
-   * Retrieves the prompt of the currently mounted stack
-   * let n = currentPrompt; s
-   */
-  case CurrentPrompt(name: Variable, rest: Statement)
 
   /**
    * let x = 42; s
@@ -222,6 +222,7 @@ export Statement.*
 enum Type {
   case Positive()
   case Negative()
+  case Prompt()
   case Stack()
   case Int()
   case Byte()
@@ -231,11 +232,7 @@ enum Type {
 }
 export Type.{ Positive, Negative }
 
-type Prompt = Int
-
 object builtins {
-
-  val Prompt = Type.Int()
 
   /**
    * Blocks types are interfaces with a single operation.

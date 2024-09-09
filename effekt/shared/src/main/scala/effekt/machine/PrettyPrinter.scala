@@ -27,11 +27,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(tpe: Type): Doc = tpe match {
     case Positive()          => "Positive"
     case Negative()          => "Negative"
+    case Type.Prompt()       => "Prompt"
+    case Type.Stack()        => "Stack"
     case Type.Int()          => "Int"
     case Type.Byte()         => "Byte"
     case Type.Double()       => "Double"
     case Type.String()       => "String"
-    case Type.Stack()        => "Stack"
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
   }
 
@@ -62,11 +63,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Allocate(name, init, region, rest) =>
       "let" <+> name <+> "=" <+> "allocate" <> parens(List(toDoc(init), toDoc(region))) <> ";" <> line <> toDoc(rest)
 
-    case Load(name, ref, rest) =>
-      "let" <+> name <+> "=" <+> "load" <> parens(toDoc(ref)) <> ";" <> line <> toDoc(rest)
+    case Load(name, reference, rest) =>
+      "let" <+> name <+> "=" <+> "load" <> parens(toDoc(reference)) <> ";" <> line <> toDoc(rest)
 
-    case Store(ref, value, rest) =>
-      "store" <> parens(List(ref, value) map toDoc) <> ";" <> line <> toDoc(rest)
+    case Store(reference, value, rest) =>
+      "store" <> parens(List(reference, value) map toDoc) <> ";" <> line <> toDoc(rest)
 
     case PushFrame(frame, rest) =>
       "push" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)

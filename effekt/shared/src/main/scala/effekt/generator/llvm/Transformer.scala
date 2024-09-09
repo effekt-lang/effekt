@@ -190,40 +190,33 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, region, rest) =>
-        emit(Comment(s"allocate $name, type ${tpe}, init ${init.name}, region ${region.name}"))
-        val idx = regionIndex(ref.tpe)
+      case machine.Allocate(reference, init, region, rest) =>
+        emit(Comment(s"allocate ${reference.name}, type ${reference.tpe}, init ${init.name}, region ${region.name}"))
+        val idx = regionIndex(reference.tpe)
 
-        val temporary = freshName("cell")
-        val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), temporary)
-        emit(Call(temporary, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region), getStack())));
+        val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), freshName("cell"))
+        emit(Call(temporaryRef.name, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region), getStack())));
 
-        val ptr = freshName("pointer");
-        val ptrRef = LocalReference(PointerType(), ptr)
-        emit(ExtractValue(ptr, temporaryRef, 0))
+        val ptrRef = LocalReference(PointerType(), freshName("pointer"))
+        emit(ExtractValue(ptrRef.name, temporaryRef, 0))
 
-        emit(ExtractValue(name, temporaryRef, 1))
-
+        emit(ExtractValue(reference.name, temporaryRef, 1))
 
         emit(Store(ptrRef, transform(init)))
 
         shareValues(List(init), freeVariables(rest))
-        transform(rest);
+        transform(rest)
 
-      case machine.Allocate(_, _, _, _) =>
-        ???
+      case machine.Load(name, reference, rest) =>
+        emit(Comment(s"load ${name.name}, reference ${reference.name}"))
 
-      case machine.Load(name, ref, rest) =>
-        emit(Comment(s"load ${name.name}, reference ${ref.name}"))
+        val idx = regionIndex(reference.tpe)
 
-        val idx = regionIndex(ref.tpe)
+        val ptrRef = LocalReference(PointerType(), freshName(name.name + "_pointer"))
+        emit(Call(ptrRef.name, Ccc(), PointerType(), getPointer, List(transform(reference), ConstantInt(idx), getStack())))
 
-        val ptr = freshName(name.name + "_pointer");
-        val ptrRef = LocalReference(PointerType(), ptr)
-        emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), getStack())))
-
-        // TODO why do we need this?
-        val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
+        // We have to share the old value since now there exists a new reference to it
+        val oldVal = machine.Variable(freshName(reference.name + "_old"), name.tpe)
         emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
         shareValue(oldVal)
 
@@ -231,15 +224,14 @@ object Transformer {
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
-      case machine.Store(ref, value, rest) =>
-        emit(Comment(s"store ${ref.name}, value ${value.name}"))
-        val idx = regionIndex(ref.tpe)
+      case machine.Store(reference, value, rest) =>
+        emit(Comment(s"store ${reference.name}, value ${value.name}"))
+        val idx = regionIndex(reference.tpe)
 
-        val ptr = freshName(ref.name + "pointer");
-        val ptrRef = LocalReference(PointerType(), ptr)
-        emit(Call(ptr, Ccc(), PointerType(), getPointer, List(transform(ref), ConstantInt(idx), getStack())))
+        val ptrRef = LocalReference(PointerType(), freshName(reference.name + "pointer"))
+        emit(Call(ptrRef.name, Ccc(), PointerType(), getPointer, List(transform(reference), ConstantInt(idx), getStack())))
 
-        val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
+        val oldVal = machine.Variable(freshName(reference.name + "_old"), value.tpe)
         emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
         eraseValue(oldVal)
 
@@ -454,11 +446,12 @@ object Transformer {
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive()          => positiveType
     case machine.Negative()          => negativeType
+    case machine.Type.Prompt()       => promptType
+    case machine.Type.Stack()        => stackType
     case machine.Type.Int()          => IntegerType64()
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
     case machine.Type.String()       => positiveType
-    case machine.Type.Stack()        => stackType
     case machine.Type.Reference(tpe) => referenceType
   }
 
@@ -469,11 +462,12 @@ object Transformer {
     tpe match {
       case machine.Positive()        => 16
       case machine.Negative()        => 16
+      case machine.Type.Prompt()     => 8 // TODO Make fat?
+      case machine.Type.Stack()      => 8 // TODO Make fat?
       case machine.Type.Int()        => 8 // TODO Make fat?
       case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
-      case machine.Type.Stack()      => 8 // TODO Make fat?
       case machine.Type.Reference(_) => 8
     }
 
@@ -665,6 +659,7 @@ object Transformer {
     value.tpe match {
       case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), sharePositive, List(transform(value))))
       case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), shareNegative, List(transform(value))))
+      case machine.Type.Prompt()     => ()
       case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), shareStack, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Byte()       => ()
@@ -678,6 +673,7 @@ object Transformer {
     value.tpe match {
       case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), erasePositive, List(transform(value))))
       case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value))))
+      case machine.Type.Prompt()     => ()
       case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), eraseStack, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Byte()       => ()

@@ -75,8 +75,10 @@ object Transformer {
 
             noteParameters(bparams)
 
+            // TODO use existing lambda lifting code
             // TODO does not work for mutually recursive local definitions
-            val freeParams = core.Variables.free(block).toSet.flatMap {
+            val freeVariables = core.Variables.free(block).toSet
+            val freeParams = freeVariables.flatMap {
               case core.Variable.Value(id, tpe) => Set(Variable(transform(id), transform(tpe)))
 
               // TODO is this necessary???
@@ -85,12 +87,16 @@ object Transformer {
 
               case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
                   case Some(BlockInfo.Definition(freeParams, blockParams)) =>
-                    BPC.freeParams(pid).toSet
+                    // For each known free block we have to add its free variables to this one (flat closure)
+                    freeParams.toSet
                   case Some(BlockInfo.Parameter(tpe)) =>
+                    // Unknown free blocks stay free variables
                     Set(Variable(transform(pid), transform(tpe)))
                   case Some(BlockInfo.Resumption) =>
                     Set(Variable(transform(pid), Type.Stack()))
-                  case None => println(s"Missing info: ${pid}"); Set.empty
+                  case None =>
+                    // TODO should not happen, abort with error
+                    Set.empty
                 }
               case _ => Set.empty
             }
@@ -103,26 +109,15 @@ object Transformer {
           case (core.Definition.Let(id, tpe, binding), rest) =>
             transform(binding).run { value =>
               // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
+              // TODO it is important that we use [[binding.tpe]] and not [[tpe]], but why?
               Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), rest)
             }
 
-          case (core.Definition.Def(id, block @ core.BlockLit(tparams, cparams, vparams, bparams, body)), rest) =>
+          case (core.Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)), rest) =>
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
-          case (core.Definition.Def(id, block @ core.New(impl)), rest) =>
-            val interfaceId = impl.interface.name
-            // TODO freeParams?
-            // TODO deal with evidence?
-            val properties = DeclarationContext.getInterface(interfaceId).properties
-            val implTransformed = properties.map({ prop =>
-              impl.operations.find(_._1 == prop.id).get
-            }).map({
-              case core.Operation(_, tparams, cparams, vparams, bparams, kparam, body) =>
-                assert(kparam.isEmpty)
-                // TODO we assume that there are no block params in methods
-                Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
-            })
-            New(Variable(transform(id), transform(impl.interface)), implTransformed, rest)
+          case (core.Definition.Def(id, core.New(impl)), rest) =>
+            New(Variable(transform(id), transform(impl.interface)), transform(impl, None), rest)
 
           case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Member | _: core.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
@@ -130,10 +125,6 @@ object Transformer {
 
       case core.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
-
-      // TODO check whether the optimizer already removes this as part of normalization
-      case core.Val(id, annot, binding, core.Return(core.ValueVar(id2, tpe))) if id == id2 =>
-        transform(binding)
 
       case core.Val(id, annot, binding, rest) =>
         PushFrame(
@@ -173,10 +164,10 @@ object Transformer {
             }
         }
 
-      case core.App(core.Unbox(e), targs, vargs, bargs) =>
-        transform(e).run { x =>
+      case core.App(core.Unbox(expr), targs, vargs, bargs) =>
+        transform(expr).run { block =>
           transform(vargs, bargs).run { (values, blocks) =>
-            Invoke(x, builtins.Apply, values ++ blocks)
+            Invoke(block, builtins.Apply, values ++ blocks)
           }
         }
 
@@ -250,7 +241,7 @@ object Transformer {
         val variable = Variable(freshName("try"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
-        val prompt = Variable(freshName("prompt"), builtins.Prompt)
+        val prompt = Variable(freshName("prompt"), Type.Prompt())
 
         FreshPrompt(prompt,
           NewStack(delimiter, prompt, returnClause,
@@ -264,7 +255,7 @@ object Transformer {
         val variable = Variable(freshName("region"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
-        val prompt = transform(region) // Variable(freshName("prompt"), builtins.Prompt)
+        val prompt = transform(region)
 
 
         FreshPrompt(prompt,
@@ -277,16 +268,7 @@ object Transformer {
           val name = transform(id)
           val variable = Variable(name, tpe)
           val reference = Variable(transform(id), Type.Reference(tpe))
-          val prompt = Variable(transform(region), Type.Int())
-          val loadVariable = Variable(freshName(name), tpe)
-          val getter = Clause(List(),
-                        Load(loadVariable, reference,
-                          Return(List(loadVariable))))
-
-          val setterVariable = Variable(freshName(name), tpe)
-          val setter = Clause(List(setterVariable),
-                                Store(reference, setterVariable,
-                                  Return(List())))
+          val prompt = Variable(transform(region), Type.Prompt())
 
           region match {
             case symbols.builtins.globalRegion =>
@@ -295,12 +277,9 @@ object Transformer {
               //    We need to truly special case global memory!
               LiteralInt(prompt, 1L,
                 Allocate(reference, value, prompt,
-                //New(variable, List(getter, setter),
                   transform(body)))
             case _ =>
-              // TODO use interface when it's implemented
               Allocate(reference, value, prompt,
-                //New(variable, List(getter, setter),
                   transform(body))
           }
         }
@@ -308,7 +287,7 @@ object Transformer {
       case core.Var(id, init, capture, body) =>
         val stateType = transform(init.tpe)
         val reference = Variable(transform(id), Type.Reference(stateType))
-        val prompt = Variable(freshName("prompt"), builtins.Prompt)
+        val prompt = Variable(freshName("prompt"), Type.Prompt())
 
         transform(init).run { value =>
           CurrentPrompt(prompt,
@@ -320,7 +299,6 @@ object Transformer {
         val stateType = transform(tpe)
         val reference = Variable(transform(id), Type.Reference(stateType))
         val variable = Variable(freshName("get"), stateType)
-
 
         Load(variable, reference,
             Return(List(variable)))
@@ -342,6 +320,7 @@ object Transformer {
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
+  // TODO WTF is this
   def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
     (vargs, bargs) match {
       case (Nil, Nil) => pure((Nil, Nil))
@@ -490,9 +469,10 @@ object Transformer {
         DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
     }.map(op => transform(op, prompt))
 
+  // TODO WTF is this
   def transform(op: core.Operation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
     (prompt, op) match {
-      // Since at the moment shift is evidence and not prompt based, here we inline the implementation of shift
+      // Effectful operation, capture the continuation
       case (Some(prompt), core.Operation(name, tparams, cparams, vparams, bparams, Some(kparam), body)) =>
         noteResumption(kparam.id)
         // TODO deal with bidirectional effects
@@ -500,8 +480,7 @@ object Transformer {
           PopStacks(Variable(transform(kparam).name, Type.Stack()), prompt,
             transform(body)))
 
-      // fall back to evidence based solution, this makes it easier to comment out the above line and check whether the evidence
-      // version still works.
+      // No continuation, implementation of an object
       case (_, core.Operation(name, tparams, cparams, vparams, bparams, k, body)) =>
         // TODO note block parameters
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
@@ -533,7 +512,7 @@ object Transformer {
   }
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
-    case core.Type.TRegion => Type.Int()
+    case core.Type.TRegion => Type.Prompt()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()
   }

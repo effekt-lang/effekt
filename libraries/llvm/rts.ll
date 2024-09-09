@@ -117,16 +117,16 @@ declare void @exit(i64)
 ; Prompts
 
 define %Prompt @currentPrompt(%Stack %stack) {
-    %promptPtr = getelementptr %StackValue, ptr %stack, i64 0, i32 3
-    %prompt = load %Prompt, ptr %promptPtr
+    %prompt_pointer = getelementptr %StackValue, ptr %stack, i64 0, i32 3
+    %prompt = load %Prompt, ptr %prompt_pointer
     ret %Prompt %prompt
 }
 
 define %Prompt @freshPrompt() {
-    %current_val = load %Prompt, ptr @lastPrompt
-    %new_val = add %Prompt %current_val, 1
-    store %Prompt %new_val, ptr @lastPrompt
-    ret %Prompt %new_val
+    %currentPrompt = load %Prompt, ptr @lastPrompt
+    %newPrompt = add %Prompt %currentPrompt, 1
+    store %Prompt %newPrompt, ptr @lastPrompt
+    ret %Prompt %newPrompt
 }
 
 ; Garbage collection
@@ -215,29 +215,22 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define ptr @getRegionPointer(%Prompt %p, %Stack %stack) {
+define ptr @getRegionPointer(%Prompt %prompt, %Stack %stack) {
 entry:
-    %isNull = icmp eq %Stack %stack, null
-    br i1 %isNull, label %returnNull, label %checkPrompt
-
-checkPrompt:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %currentPrompt = load %Prompt, ptr %prompt_pointer
-    %promptMatch = icmp eq %Prompt %currentPrompt, %p
+    %promptMatch = icmp eq %Prompt %currentPrompt, %prompt
     br i1 %promptMatch, label %found, label %continue
 
 continue:
     %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %nextStack = load %Stack, ptr %nextStack_pointer
-    %region = tail call ptr @getRegionPointer(%Prompt %p, %Stack %nextStack)
+    %region = tail call ptr @getRegionPointer(%Prompt %prompt, %Stack %nextStack)
     ret ptr %region
 
 found:
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     ret ptr %stackRegion
-
-returnNull:
-    ret ptr null
 }
 
 define { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
@@ -384,21 +377,17 @@ next:
     ret void
 }
 
-define %Stack @popStacks(%Stack %stack, %Prompt %p) {
+define %Stack @popStacks(%Stack %stack, %Prompt %prompt) {
 entry:
-    %isNull = icmp eq %Stack %stack, null
-    br i1 %isNull, label %returnNull, label %checkPrompt
-
-checkPrompt:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %currentPrompt = load %Prompt, ptr %prompt_pointer
-    %promptMatch = icmp eq %Prompt %currentPrompt, %p
+    %promptMatch = icmp eq %Prompt %currentPrompt, %prompt
     br i1 %promptMatch, label %found, label %continue
 
 continue:
     %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %nextStack = load %Stack, ptr %nextStack_pointer
-    %result = tail call %Stack @popStacks(%Stack %nextStack, %Prompt %p)
+    %result = tail call %Stack @popStacks(%Stack %nextStack, %Prompt %prompt)
     ret %Stack %result
 
 found:
@@ -406,9 +395,6 @@ found:
     %nextStack2 = load %Stack, ptr %nextStack2_pointer
     store %Stack null, ptr %nextStack2_pointer
     ret %Stack %nextStack2
-
-returnNull:
-    ret %Stack null
 }
 
 define void @eraseMemory(%Memory %memory) {
@@ -656,8 +642,9 @@ define void @topLevelEraser(%Environment %environment) {
 }
 
 define %Stack @withEmptyStack() {
+    ; TODO all stacks share the same source of fresh prompts
     %prompt = call %Prompt @freshPrompt()
-    %stack = call %Stack @newStack(%Prompt %prompt) ; TODO maybe get the last prompt from global
+    %stack = call %Stack @newStack(%Prompt %prompt)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
