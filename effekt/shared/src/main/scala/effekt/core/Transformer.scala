@@ -425,9 +425,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case List(MatchGuard.BooleanGuard(cond)) =>
           insertBindings { core.If(transformAsPure(cond), thenBranch, elseBranch) }
         case _ =>
-          val thenClause = preprocess(Nil, guards, thenBranch)
-          val elseClause = preprocess(Nil, Nil, elseBranch)
-          PatternMatchingCompiler.compile(List(thenClause, elseClause))
+          insertBindings {
+            val thenClause = preprocess(Nil, guards, thenBranch)
+            val elseClause = preprocess(Nil, Nil, elseBranch)
+            PatternMatchingCompiler.compile(List(thenClause, elseClause))
+          }
       }
 
       Context.bind(loopName, Block.BlockLit(Nil, Nil, Nil, Nil, loopBody))
