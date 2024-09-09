@@ -41,8 +41,7 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
 
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
     case Ccc() => "ccc"
-    case Tailcc() => "tailcc"
-    case TailccPerhaps() => "tailcc"
+    case Tailcc(_) => "tailcc"
   }
 
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
@@ -62,14 +61,14 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Ccc(), _, nonglobal, _) =>
       C.abort(s"cannot call non-global operand: $nonglobal")
-    case Call(_, Tailcc(), VoidType(), ConstantGlobal(_, name), arguments) =>
-      s"musttail call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Tailcc(), VoidType(), LocalReference(_, name), arguments) =>
-      s"musttail call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Tailcc(), tpe, _, _) =>
+    case Call(_, Tailcc(false), VoidType(), ConstantGlobal(_, name), arguments) =>
+      s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>
+      s"call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(result, Tailcc(true), resultType, function, arguments) =>
+      s"musttail ${show(Call(result, Tailcc(false), resultType, function, arguments))}"
+    case Call(_, Tailcc(_), tpe, _, _) =>
       C.abort(s"tail call to non-void function returning: $tpe")
-    case Call(result, TailccPerhaps(), resultType, function, arguments) =>
-      show(Call(result, Tailcc(), resultType, function, arguments)).stripPrefix("musttail ")
 
     case Load(result, tpe, LocalReference(PointerType(), name)) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}"

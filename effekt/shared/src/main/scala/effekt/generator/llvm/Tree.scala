@@ -16,8 +16,7 @@ export Definition.*
 
 enum CallingConvention {
   case Ccc()
-  case Tailcc()
-  case TailccPerhaps()
+  case Tailcc(musttail: Boolean)
 }
 export CallingConvention.*
 

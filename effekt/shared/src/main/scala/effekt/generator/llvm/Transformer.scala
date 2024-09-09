@@ -29,12 +29,12 @@ object Transformer {
       val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
       val instructions = BC.instructions; BC.instructions = null;
 
-      val transitionJump = Call("_", TailccPerhaps(), VoidType(), ConstantGlobal(FunctionType(VoidType(), Nil), "effektMainTailcc"), List())
+      val transitionJump = Call("_", Tailcc(false), VoidType(), ConstantGlobal(FunctionType(VoidType(), Nil), "effektMainTailcc"), List())
       val transitionBlock = BasicBlock("transition", List(transitionJump), RetVoid())
       val transitionFunction = Function(Ccc(), VoidType(), "effektMain", List(), List(transitionBlock))
 
       val entryBlock = BasicBlock("entry", instructions, terminator)
-      val effektMain = Function(Tailcc(), VoidType(), "effektMainTailcc", List(), entryBlock :: basicBlocks)
+      val effektMain = Function(Tailcc(true), VoidType(), "effektMainTailcc", List(), entryBlock :: basicBlocks)
       declarations.map(transform) ++ definitions :+ transitionFunction :+ effektMain
   }
 
@@ -517,16 +517,16 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Tailcc(), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
+    val function = Function(Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
 
     emit(function)
   }
 
   def callLabel(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(), VoidType(), name, arguments :+ getStack())
+    Call("_", Tailcc(true), VoidType(), name, arguments :+ getStack())
 
   def callLabelTransition(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", TailccPerhaps(), VoidType(), name, arguments :+ getStack())
+    Call("_", Tailcc(false), VoidType(), name, arguments :+ getStack())
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
