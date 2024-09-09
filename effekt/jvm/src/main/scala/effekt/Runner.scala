@@ -170,8 +170,8 @@ object JSNodeRunner extends Runner[String] {
     
     // NOTE: This is a hack since this file cannot use ES imports & exports
     //       because it doesn't have the .mjs ending. Sigh.
-    //       Also, we add the 'file://' prefix to satisfy Windows.
-    val jsScript = s"import('file://${mjsFileName}').then(({main}) => { main(); })"
+    //       Also, we add the 'file:' prefix to satisfy Windows.
+    val jsScript = s"import('file:${mjsFileName}').then(({main}) => { main(); })"
 
     os match {
       case OS.POSIX =>
