@@ -434,12 +434,12 @@ extern pure def round(d: Double): Int =
 
 extern pure def floor(d: Double): Int =
   js "Math.floor(${d})"
-  chez "(floor ${d})"
+  chez "(flonum->fixnum (floor ${d}))"
   ml "Real.floor ${d}"
 
 extern pure def ceil(d: Double): Int =
   js "Math.ceil(${d})"
-  chez "(ceiling ${d})"
+  chez "(flonum->fixnum (ceiling ${d}))"
   ml "Real.ceil ${d}"
 
 def min(n: Int, m: Int): Int =
