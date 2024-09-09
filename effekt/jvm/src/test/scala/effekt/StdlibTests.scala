@@ -68,6 +68,7 @@ class StdlibLLVMTests extends StdlibTests {
     examplesDir / "stdlib" / "list" / "zip.effekt",
     examplesDir / "stdlib" / "list" / "deleteat.effekt",
     examplesDir / "stdlib" / "list" / "join.effekt",
+    examplesDir / "stdlib" / "list" / "modifyat.effekt",
     examplesDir / "stdlib" / "list" / "updateat.effekt",
     examplesDir / "stdlib" / "list" / "insert.effekt",
     examplesDir / "stdlib" / "list" / "fill.effekt",
