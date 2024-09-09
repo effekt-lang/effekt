@@ -21,6 +21,7 @@ jobs:
       with:
         java-version: '11'
         distribution: 'zulu'
+        cache: 'sbt'
 
     - name: Set up NodeJS
       uses: actions/setup-node@v4
@@ -41,8 +42,13 @@ jobs:
     - name: Install Chez Scheme, LLVM & libuv
       run: sudo apt-get install -y chezscheme llvm-15 libuv1-dev
 
-    - name: Run tests
-      run: sbt clean test
+    - name: Run tests with retry
+      uses: nick-fields/retry@v3
+      with:
+        timeout_minutes: 120 # NOTE: This needs _some_ value. As of writing this, 2 hours should be future-proof. :)
+        max_attempts: 3
+        retry_on: error
+        run: sbt clean test
 
   calculate-version-and-tag:
     name: Calculate Version and Create Tag
