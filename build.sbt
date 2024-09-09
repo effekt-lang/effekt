@@ -2,6 +2,7 @@ import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
 import benchmarks._
+import Version.effektVersion
 
 // additional targets that can be used in sbt
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
@@ -11,9 +12,7 @@ lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
-lazy val bumpVersion = taskKey[Unit]("Bumps the minor version number, rewriting this file (used in CI).")
-
-lazy val effektVersion = "0.2.2"
+lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used in CI).")
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -162,7 +161,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       Process(s"${mvn.value} versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
     },
 
-    bumpVersion := {
+    bumpMinorVersion := {
       val versionPattern = """(\d+)\.(\d+)\.(\d+)""".r
       val newVersion = effektVersion match {
         case versionPattern(major, minor, patch) =>
@@ -171,13 +170,13 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
           sys.error(s"Invalid version format: $effektVersion")
       }
 
-      // Update the build.sbt file
-      val buildSbt = (ThisBuild / baseDirectory).value / "build.sbt"
-      IO.writeLines(buildSbt, IO.readLines(buildSbt).map {
-         case line if line.startsWith("lazy val effektVersion =") =>
-          s"""lazy val effektVersion = "$newVersion""""
-        case other => other
-      })
+      val versionFile = (ThisBuild / baseDirectory).value / "project" / "Version.scala"
+      IO.write(versionFile,
+        s"""// Don't change this file without changing the CI too!
+           |import sbt.*
+           |import sbt.Keys.*
+           |object Version { lazy val effektVersion = "$newVersion" }
+           |""".stripMargin)
 
       println(newVersion)
     },
