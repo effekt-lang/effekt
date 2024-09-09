@@ -2,7 +2,7 @@ import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
 import benchmarks._
-import Version.effektVersion
+import EffektVersion.effektVersion
 
 // additional targets that can be used in sbt
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
@@ -170,12 +170,12 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
           sys.error(s"Invalid version format: $effektVersion")
       }
 
-      val versionFile = (ThisBuild / baseDirectory).value / "project" / "Version.scala"
+      val versionFile = (ThisBuild / baseDirectory).value / "project" / "EffektVersion.scala"
       IO.write(versionFile,
         s"""// Don't change this file without changing the CI too!
            |import sbt.*
            |import sbt.Keys.*
-           |object Version { lazy val effektVersion = "$newVersion" }
+           |object EffektVersion { lazy val effektVersion = "$newVersion" }
            |""".stripMargin)
 
       println(newVersion)

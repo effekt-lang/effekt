@@ -29,8 +29,8 @@ jobs:
       - name: Bump version using sbt
         id: set-version
         run: |
-          # Capture the output of 'sbt bumpVersion'
-          full_output=$(sbt 'bumpVersion' -error)
+          # Capture the output of 'sbt bumpMinorVersion'
+          full_output=$(sbt 'bumpMinorVersion' -error)
 
           # Extract the actual version number using grep
           new_version=$(echo "$full_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)
@@ -56,7 +56,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
-          git add build.sbt
+          git add project/EffektVersion.scala
           git add package.json
           git add pom.xml
           git commit -m "Bump version to ${{ steps.set-version.outputs.VERSION }}"
