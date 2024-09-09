@@ -25,20 +25,16 @@ class LLVMTests extends EffektTests {
     // sanitizer/valgrind: segfault
     examplesDir / "pos" / "parametrized.effekt",
 
-    // Valgrind leak/failure
-    examplesDir / "llvm" / "nested.effekt",
+    // Valgrind leak, unclear
     examplesDir / "llvm" / "strings.effekt",
     examplesDir / "llvm" / "polymorphism_map.effekt",
     examplesDir / "pos" / "parser.effekt",
-    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "type_parameters_blocks.effekt",
-    examplesDir / "pos" / "long_string.effekt",
-    examplesDir / "pos" / "string_concat_pr493.effekt",
-    examplesDir / "pos" / "string" / "substring.effekt", // a lot
-    examplesDir / "pos" / "string" / "indexOf.effekt", // a lot
+    
+    // Valgrind leak in array_new
     examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt", // + c_ref_fresh
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
