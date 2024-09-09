@@ -10,6 +10,8 @@ class LLVMTests extends EffektTests {
 
   def backendName = "llvm"
 
+  override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
+
   override lazy val positives: List[File] = List(
     examplesDir / "llvm",
     examplesDir / "pos",
@@ -21,7 +23,6 @@ class LLVMTests extends EffektTests {
 
     // unsure
     examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
-    examplesDir / "ml" / "probabilistic.effekt", // crashes with "PANIC: Reached a hole in the program"
 
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
@@ -29,12 +30,32 @@ class LLVMTests extends EffektTests {
     // *** MALLOC PANIC
     examplesDir / "pos" / "get_put.effekt",
 
-    // showing of strings with escaped " is wrong / different from other backends
-    examplesDir / "pos" / "escaped_linebreaks.effekt",
-    examplesDir / "pos" / "multiline_string.effekt",
-
-    // unclear
-    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
+    // Valgrind leak/failure
+    examplesDir / "llvm" / "nested.effekt",
+    examplesDir / "llvm" / "strings.effekt",
+    examplesDir / "llvm" / "polymorphism_map.effekt",
+    examplesDir / "pos" / "parser.effekt",
+    examplesDir / "pos" / "matchdef.effekt",
+    examplesDir / "pos" / "type_parameters_blocks.effekt",
+    examplesDir / "pos" / "long_string.effekt",
+    examplesDir / "pos" / "matchblock.effekt",
+    examplesDir / "pos" / "overloading.effekt",
+    examplesDir / "pos" / "withstatement.effekt",
+    examplesDir / "pos" / "dequeue.effekt",
+    examplesDir / "pos" / "higherorder_io_control.effekt",
+    examplesDir / "pos" / "infer" / "infer_overload.effekt",
+    examplesDir / "pos" / "bug1.effekt",
+    examplesDir / "pos" / "string_concat_pr493.effekt",
+    examplesDir / "pos" / "string" / "substring.effekt",
+    examplesDir / "pos" / "string" / "indexOf.effekt",
+    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt",
   )
 
   /**
@@ -70,9 +91,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "capture" / "mbed.effekt",
     examplesDir / "pos" / "lib_test.effekt",
 
-    // foreign functions with block arguments
-    examplesDir / "pos" / "liftinference.effekt",
-
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
     examplesDir / "pos" / "unsafe_cont.effekt",
@@ -90,14 +108,9 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "object"/ "higher_order_compose_op.effekt",
 
     // first class functions closing over capabilities
-    examplesDir / "pos" / "capture" / "borrows.effekt",
-    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
-    examplesDir / "pos" / "capture" / "regions.effekt",
-    examplesDir / "pos" / "lambdas" / "annotated.effekt",
-    examplesDir / "pos" / "lambdas" / "scheduler.effekt",
+    examplesDir / "pos" / "capture" / "state_eff.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
     examplesDir / "pos" / "file.effekt",
-    examplesDir / "benchmarks" / "generator.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",

@@ -584,17 +584,20 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 
 
 // Bitwise operations
-// ===============
+// ==================
 extern pure def bitwiseShl(x: Int, y: Int): Int =
   js "(${x} << ${y})"
+  chez "(ash ${x} ${y})"
   llvm "%z = shl %Int %x, %y ret %Int %z"
 
 extern pure def bitwiseAnd(x: Int, y: Int): Int =
   js "(${x} & ${y})"
+  chez "(logand ${x} ${y})"
   llvm "%z = and %Int %x, %y ret %Int %z"
 
 extern pure def bitwiseXor(x: Int, y: Int): Int =
   js "(${x} ^ ${y})"
+  chez "(logxor ${x} ${y})"
   llvm "%z = xor %Int %x, %y ret %Int %z"
 
 
@@ -652,10 +655,15 @@ interface Control {
   def continue(): Unit
 }
 
-def loop { f: () => Unit / Control }: Unit = try {
+def loop { f: () => Unit }: Unit = {
   def go(): Unit = { f(); go() }
   go()
-} with Control {
+}
+
+def loop { f: {Control} => Unit }: Unit = try {
+  def go(): Unit = { f {label}; go() }
+  go()
+} with label: Control {
   def break() = ()
   def continue() = loop { f }
 }
@@ -663,15 +671,27 @@ def loop { f: () => Unit / Control }: Unit = try {
 /**
  * Calls provided action repeatedly. `start` is inclusive, `end` is not.
  */
-def each(start: Int, end: Int) { action: (Int) => Unit / Control } = {
+def each(start: Int, end: Int) { action: (Int) => Unit } = {
+  def loop(i: Int): Unit =
+    if (i < end) { action(i); loop(i + 1) }
+
+  loop(start)
+}
+
+/**
+ * Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
+ */
+def each(start: Int, end: Int) { action: (Int) {Control} => Unit } = {
   var i = start;
-  loop {
-    if (i < end) { val el = i; i = i + 1; action(el) }
-    else { do break() }
+  loop { {l} =>
+    if (i < end) { val el = i; i = i + 1; action(el){l} }
+    else { l.break() }
   }
 }
 
-def repeat(n: Int) { action: () => Unit / Control } = each(0, n) { n => action() }
+def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
+
+def repeat(n: Int) { action: () {Control} => Unit } = each(0, n) { (n) {l} => action() {l} }
 
 namespace internal {
   namespace boxing {
@@ -684,7 +704,7 @@ namespace internal {
     extern pure def boxInt(n: Int): BoxedInt =
       llvm """
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxInt(b: BoxedInt): Int =
@@ -698,7 +718,7 @@ namespace internal {
       llvm """
         %extended = sext i8 %n to i64
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxByte(b: BoxedByte): Byte =
@@ -712,7 +732,7 @@ namespace internal {
     extern pure def boxChar(c: Char): BoxedChar =
       llvm """
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %c, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxChar(b: BoxedChar): Char =
@@ -730,7 +750,7 @@ namespace internal {
       llvm """
         %n = bitcast double %d to i64
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
-        %boxed2 = insertvalue %Pos %boxed1, %Obj null, 1
+        %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxDouble(b: BoxedDouble): Double =

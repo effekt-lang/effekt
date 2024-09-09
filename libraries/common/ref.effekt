@@ -1,5 +1,7 @@
 module ref
 
+import effekt
+
 extern js """
 function set$impl(ref, value) {
   ref.value = value;

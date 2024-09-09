@@ -19,7 +19,7 @@ class LexerTests extends munit.FunSuite {
     try {
       Lexer(StringSource(prog, "")).run()
     } catch {
-        case LexerError(msg, _, _) => fail(msg)
+        case LexerError(msg, start, end) => fail(s"$msg at $start...$end")
     }
 
   def assertFailure(prog: String)(using Location): Unit =
@@ -43,6 +43,18 @@ class LexerTests extends munit.FunSuite {
       `return`, `box`, `{`, `(`, `)`, `=>`, `(`, Ident("x"), `,`, Ident("y"), `)`, `}`, Newline,
       EOF
     )
+  }
+
+  test("braces") {
+    assertFailure("${}")
+    assertFailure("\" before ${ ${} } after\"")
+
+    assertSuccess("}")
+    assertSuccess("{}}")
+    assertSuccess("{ 42 ")
+    assertSuccess("\"${}}}}\"")
+    assertSuccess("\"}\"")
+    assertSuccess("\" before ${ \"${ 42 }\" } after\"")
   }
 
   test("numbers") {

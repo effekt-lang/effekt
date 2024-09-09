@@ -22,5 +22,6 @@ def nested() =
   }
 
 def main() = {
-   nested() + 1
+  nested() + 1;
+  ()
 }

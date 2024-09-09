@@ -42,15 +42,32 @@ trait Runner[Executable] {
   /**
    * Creates a OS-specific script file that will execute the command when executed,
    * forwarding command line arguments.
+   * `$SCRIPT_DIR` refers to the directory the script is in.
+   * 
    * @return the actual name of the generated script (might be `!= name`)
    */
   def createScript(name: String, command: String*): String = os match {
     case OS.POSIX =>
-      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")} \"$$@\"", true)
+      val computeScriptDir =
+        """# Determine the directory of the script
+          |SCRIPT_DIR=$(dirname "$(realpath "$0")")
+          |""".stripMargin
+      IO.createFile(name, s"#!/bin/sh\n${computeScriptDir}\n${command.mkString(" ")} \"$$@\"", true)
       name
     case OS.Windows =>
+      val computeScriptDir =
+        """setlocal enabledelayedexpansion
+          |
+          |:: Get the directory of the batch file
+          |set "SCRIPT_DIR=%~dp0"
+          |
+          |:: Remove trailing backslash
+          |set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+          |""".stripMargin
       val batName = name + ".bat"
-      IO.createFile(batName, "@echo off\r\n" + command.mkString(" ") + " %*")
+      // replace UNIX-style variables in command: $SCRIPT_DIR  -->  %SCRIPT_DIR%
+      val cmd = command.mkString(" ").replaceAll("\\$([A-Za-z_][A-Za-z0-9_]*)", "%$1%")
+      IO.createFile(batName, s"@echo off\r\n${computeScriptDir}\r\n${cmd} %*")
       batName
   }
 
@@ -71,8 +88,13 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
+    val valgrindArgs = Seq("--leak-check=full", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
+    val process = if (C.config.valgrind())
+      Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
+    else
+      Process(execFile, Context.config.runArgs())
 
-    val exitCode = Process(execFile, Context.config.runArgs()).run(new ProcessLogger {
+    val exitCode = process.run(new ProcessLogger {
 
       override def out(s: => String): Unit = {
         C.config.output().emitln(s)
@@ -86,6 +108,7 @@ trait Runner[Executable] {
 
     if (exitCode != 0) {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
+      if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
   }
 
@@ -119,7 +142,7 @@ trait Runner[Executable] {
   }
 }
 
-object JSRunner extends Runner[String] {
+object JSNodeRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "mjs"
@@ -141,12 +164,15 @@ object JSRunner extends Runner[String] {
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val mjsFilePath = (out / path).canonicalPath.escape
+    
+    // create "executable" using shebang besides the .js file
+    val mjsFileName = path.unixPath.split("/").last
+    
     // NOTE: This is a hack since this file cannot use ES imports & exports
     //       because it doesn't have the .mjs ending. Sigh.
     //       Also, we add the 'file://' prefix to satisfy Windows.
-    val jsScript = s"import('file://${mjsFilePath}').then(({main}) => { main(); })"
+    val jsScript = s"import('file://${mjsFileName}').then(({main}) => { main(); })"
 
-    // create "executable" using shebang besides the .js file
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
@@ -156,10 +182,48 @@ object JSRunner extends Runner[String] {
 
       case OS.Windows =>
         val jsMainFilePath = mjsFilePath.stripSuffix(s".$extension") + "__main.mjs"
+        val jsMainFileName = mjsFileName.stripSuffix(s".$extension") + "__main.mjs"
         val exePath = mjsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsMainFilePath, jsScript)
-        createScript(exePath, "node", jsMainFilePath)
+        createScript(exePath, "node", "$SCRIPT_DIR/" + jsMainFileName)
     }
+}
+object JSWebRunner extends Runner[String] {
+  import scala.sys.process.Process
+
+  val extension = "js"
+
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
+
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+
+  def checkSetup(): Either[String, Unit] =
+    Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
+
+  /**
+   * Creates an openable `.html` file besides the given `.js` file ([[path]])
+   * and then errors out, printing it's path.
+   */
+  def build(path: String)(using C: Context): String =
+    import java.nio.file.Path
+    val out = C.config.outputPath().getAbsolutePath
+    val jsFilePath = (out / path).unixPath
+    val jsFileName = path.unixPath.split("/").last
+    val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
+    val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
+    val htmlContent =
+      s"""<!DOCTYPE html>
+         |<html>
+         |  <body>
+         |    <script type="text/javascript" src="${jsFileName}"></script>
+         |    <script type="text/javascript">
+         |      window.onload=${mainName};
+         |    </script>
+         |  </body>
+         |</html>
+         |""".stripMargin
+    IO.createFile(htmlFilePath, htmlContent, false)
+    C.abort(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
 }
 
 trait ChezRunner extends Runner[String] {
@@ -181,7 +245,8 @@ trait ChezRunner extends Runner[String] {
     val out = C.config.outputPath().getAbsolutePath
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
-    createScript(exeScriptPath, "scheme", "--script", schemeFilePath)
+    val schemeFileName = ("./" + (path.unixPath.split('/').last)).escape
+    createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName)
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -272,7 +337,11 @@ object LLVMRunner extends Runner[String] {
 
     val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    val gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+
+    if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,leak,undefined", "-fstack-protector-all", "-Og", "-g")
+    if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
+
     exec(gccArgs: _*)
 
     executableFile

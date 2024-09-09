@@ -1,0 +1,8 @@
+interface Greet { def sayHello(): Unit }
+
+def main() = {
+  var f = box { () } // ERROR escape
+  try { f = box { g.sayHello() } }
+  with g: Greet { def sayHello() = println("hello!") }
+  f()
+}

@@ -1,0 +1,29 @@
+import args
+import bench
+
+def benchmark(testSize: Int) { run: Int => Int } = commandLineArgs() match {
+  // test mode
+  case Nil() => println(run(testSize))
+
+  // bench mode
+  case Cons(problemSize, _) =>
+    with on[WrongFormat].panic;
+
+    val n = problemSize.toInt
+
+    val before = relativeTimestamp()
+    relevant(run(n))
+    val after = relativeTimestamp()
+    val nanos = after - before
+    println(nanos)
+}
+
+/**
+ * The inliner might remove unused computation (if pure), which is not desired
+ * for benchmarking. Since externs are opaque to the optimizer, just wrap the
+ * result of the computation to benchmark in `relevant`.
+ */
+extern io def relevant(value: Int): Unit =
+  default { () }
+
+def main() = ()

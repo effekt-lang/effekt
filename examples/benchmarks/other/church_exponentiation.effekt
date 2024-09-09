@@ -1,0 +1,24 @@
+import examples/benchmarks/runner
+
+type Succ[Z] = Z => Z at {}
+
+type Church[Z] = Succ[Z] => (Z => Z at {}) at {}
+
+def succ[Z](num: Church[Z]): Church[Z] =
+  box { (s: Succ[Z]) => box { (z: Z) => s(num(s)(z)) } }
+
+def u0[Z](): Church[Z] = box { (s: Succ[Z]) => box { (z: Z) => z } }
+def u3[Z](): Church[Z] = succ(succ(succ(u0())))
+def u27[Z](): Church[Z] = u3()(u3())
+
+def intToChurch[Z](n: Int): Church[Z] =
+  if (n == 0) u0()
+  else succ(intToChurch(n - 1))
+
+def churchToInt(num: Church[Int]): Int =
+  num(box { (x: Int) => x + 1 })(0)
+
+def run(n: Int) = churchToInt(intToChurch(n)(u27()))
+
+def main() = benchmark(4){run}
+

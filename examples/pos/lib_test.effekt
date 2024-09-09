@@ -21,5 +21,7 @@ def main() = {
       val y = 2;
       do assert(x * y == 4, "2 * 2 should be 4!")
     }
-  }
+  };
+
+  ()
 }

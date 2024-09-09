@@ -6,5 +6,6 @@ def hofPoly { f : [A](A) => Poly[A] }: Poly[Int] = f(42)
 
 def main() = {
    hofMono {ConstructMono};
-   hofPoly {ConstructPoly}
+   hofPoly {ConstructPoly};
+   ()
 }

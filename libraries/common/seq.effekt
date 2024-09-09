@@ -563,13 +563,8 @@ def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchEleme
   }
 }
 
-def each[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
 
-  def consume(a: A): Unit =
-    try { f(a) } with Control {
-      def break() = outer.break()
-      def continue() = ()
-    }
+def each[A](seq: Seq[A]) { consume: (A) => Unit }: Unit = {
 
   def go(digit: Digit[A]): Unit = digit match {
     case One(a) => consume(a)
@@ -603,18 +598,21 @@ def each[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
     case Single(v) => consume(v)
     case Deep(_, p, m, s) => go(p); go(m); go(s)
   }
+}
+
+def each[A](seq: Seq[A]) { f: (A) {Control} => Unit }: Unit = try {
+  seq.each { (el) =>
+    try { f(el) {inner} } with inner: Control {
+      def break() = outer.break()
+      def continue() = ()
+    }
+  }
 } with outer: Control {
   def break() = ()
   def continue() = ()
 }
 
-def eachReverse[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
-
-  def consume(a: A): Unit =
-    try { f(a) } with Control {
-      def break() = outer.break()
-      def continue() = ()
-    }
+def eachReverse[A](seq: Seq[A]) { consume: A => Unit }: Unit = {
 
   def go(digit: Digit[A]): Unit = digit match {
     case One(a) => consume(a)
@@ -648,6 +646,15 @@ def eachReverse[A](seq: Seq[A]) { f: A => Unit / Control }: Unit = try {
     case Single(v) => consume(v)
     case Deep(_, p, m, s) => go(s); go(m); go(p)
   }
+}
+
+def eachReverse[A](seq: Seq[A]) { f: (A) {Control} => Unit }: Unit = try {
+  seq.eachReverse { (el) =>
+    try { f(el) {inner} } with inner: Control {
+      def break() = outer.break()
+      def continue() = ()
+    }
+  }
 } with outer: Control {
   def break() = ()
   def continue() = ()
@@ -666,8 +673,6 @@ def toSeq[A](l: List[A]): Seq[A] = {
   }
   go(l, Empty())
 }
-
-
 
 
 record Split[A, R](prefix: R, element: A, suffix: R)
@@ -864,9 +869,15 @@ def toList[A](digit: Digit[A]): List[A] = digit match {
   case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
 }
 
-def map[A, B](seq: Seq[A]) { f: A => B / Control }: Seq[B] = {
+def map[A, B](seq: Seq[A]) { f: A => B }: Seq[B] = {
   var result: Seq[B] = Empty()
   seq.each { a => result = result.consRight(f(a)) }
+  result
+}
+
+def map[A, B](seq: Seq[A]) { f: (A) {Control} => B }: Seq[B] = {
+  var result: Seq[B] = Empty()
+  seq.each { (a) {label} => result = result.consRight(f(a) {label}) }
   result
 }
 

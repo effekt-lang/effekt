@@ -127,7 +127,7 @@ object TransformerDirect extends Transformer {
   def toJS(expr: core.Expr)(using TransformerContext): js.Expr = expr match {
     case Literal((), _) => $effekt.field("unit")
     case Literal(s: String, _) => JsString(escape(s))
-    case literal: Literal => js.RawExpr(literal.value.toString)
+    case literal: Literal => js.RawLiteral(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), vargs.map(toJS) ++ bargs.map(toJS))
     case PureApp(b, targs, vargs) => js.Call(toJS(b), vargs map toJS)

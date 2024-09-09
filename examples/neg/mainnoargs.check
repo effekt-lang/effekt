@@ -1,3 +1,3 @@
-[error] examples/neg/mainnoargs.effekt:1:1: Main does not take arguments
-module mainnoargs
-^
+[error] examples/neg/mainnoargs.effekt:3:1: Main does not take arguments
+def main(n: Int) = println(n)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

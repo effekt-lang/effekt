@@ -116,7 +116,7 @@ def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int):
   val offsetValid = offset >= 0 && offset + length <= to.size
 
   def go(i: Int, j: Int, length: Int): Unit =
-    if (length >= 0) {
+    if (length > 0) {
       to.unsafeSet(j, from.unsafeGet(i))
       go(i + 1, j + 1, length - 1)
     }
@@ -167,19 +167,29 @@ def toList[T](arr: Array[T]): List[T] = {
   l
 }
 
-def foreach[T](arr: Array[T]){ action: T => Unit / Control }: Unit = {
+def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
   each(0, arr.size) { i =>
     val x: T = arr.unsafeGet(i)
     action(x)
   }
-}
 
-def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit / Control }: Unit = {
+def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    val x: T = arr.unsafeGet(i)
+    action(x) {label}
+  }
+
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
     val x: T = arr.unsafeGet(i)
     action(i, x)
   }
-}
+
+def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    val x: T = arr.unsafeGet(i)
+    action(i, x) {label}
+  }
 
 def sum(list: Array[Int]): Int = {
   var acc = 0

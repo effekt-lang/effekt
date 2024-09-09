@@ -16,4 +16,5 @@ def main() = {
   bar() && foo()
   println("")
   bar() || foo()
+  ()
 }

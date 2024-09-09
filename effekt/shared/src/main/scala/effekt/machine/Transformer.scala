@@ -32,7 +32,8 @@ object Transformer {
     // collect all information
     val declarations = mod.externs.map(transform)
     val definitions = mod.definitions
-    val mainEntry = Jump(Label(mainName, List()))
+    val evidence = Variable(freshName("ev"), builtins.Evidence)
+    val mainEntry = LiteralEvidence(evidence, builtins.Here, Jump(Label(mainName, List(evidence))))
 
     findToplevelBlocksParams(definitions)
 
@@ -193,7 +194,7 @@ object Transformer {
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
-        val variable = Variable(freshName("x"), tpe)
+        val variable = Variable(freshName("app"), tpe)
         val reference = Variable(transform(x), Type.Reference(tpe))
         transform(ev).run { evValue =>
           Load(variable, reference, evValue, Return(List(variable)))
@@ -203,7 +204,7 @@ object Transformer {
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
-        val variable = Variable(freshName("x"), Positive());
+        val variable = Variable(freshName("app"), Positive());
         val reference = Variable(transform(x), Type.Reference(tpe))
         transform(arg).run { value =>
           transform(ev).run { evValue =>
@@ -257,7 +258,7 @@ object Transformer {
 
         noteParameters(ids)
 
-        val variable = Variable(freshName("a"), transform(body.tpe))
+        val variable = Variable(freshName("try"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
@@ -278,7 +279,7 @@ object Transformer {
         }
 
       case lifted.Region(lifted.BlockLit(tparams, List(ev, id), body)) =>
-        val variable = Variable(freshName("a"), transform(body.tpe))
+        val variable = Variable(freshName("region"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
@@ -324,7 +325,7 @@ object Transformer {
       case lifted.Get(id, ev, tpe) =>
         val stateType = transform(tpe)
         val reference = Variable(transform(id), Type.Reference(stateType))
-        val variable = Variable(freshName("x"), stateType)
+        val variable = Variable(freshName("get"), stateType)
 
         transform(ev).run { evidence =>
           Load(variable, reference, evidence,
@@ -334,7 +335,7 @@ object Transformer {
       case lifted.Put(id, ev, arg) =>
         val stateType = transform(arg.tpe)
         val reference = Variable(transform(id), Type.Reference(stateType))
-        val variable = Variable(freshName("x"), Positive())
+        val variable = Variable(freshName("put"), Positive())
 
         transform(arg).run { value =>
           transform(ev).run { evidence =>
@@ -358,12 +359,12 @@ object Transformer {
 
   def transform(scopes: List[lifted.Lift])(using ErrorReporter): Binding[Variable] = scopes match {
     case Nil =>
-      val name = Variable(freshName("evidence_zero"), builtins.Evidence)
+      val name = Variable(freshName("evidenceZero"), builtins.Evidence)
       Binding { k => LiteralEvidence(name, builtins.Here, k(name)) }
     case lift :: Nil =>
       pure(transform(lift))
     case lift :: rest =>
-      val name = Variable(freshName("evidence_composed"), builtins.Evidence)
+      val name = Variable(freshName("evidenceComposed"), builtins.Evidence)
       Binding { k =>
         transform(rest).run { value =>
           ComposeEvidence(name, transform(lift), value, k(name))
@@ -397,13 +398,13 @@ object Transformer {
     case lifted.BlockLit(tparams, params, body) =>
       noteParameters(params)
       val parameters = params.map(transform);
-      val variable = Variable(freshName("g"), Negative())
+      val variable = Variable(freshName("blockLit"), Negative())
       Binding { k =>
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
 
     case lifted.New(impl) =>
-      val variable = Variable(freshName("g"), Negative())
+      val variable = Variable(freshName("new"), Negative())
       Binding { k =>
         New(variable, transform(impl), k(variable))
       }
@@ -417,38 +418,38 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.Literal((), _) =>
-      val variable = Variable(freshName("x"), Positive());
+      val variable = Variable(freshName("literal"), Positive());
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
     case lifted.Literal(value: Long, _) =>
-      val variable = Variable(freshName("x"), Type.Int());
+      val variable = Variable(freshName("longLiteral"), Type.Int());
       Binding { k =>
         LiteralInt(variable, value, k(variable))
       }
 
     // for characters
     case lifted.Literal(value: Int, _) =>
-      val variable = Variable(freshName("x"), Type.Int());
+      val variable = Variable(freshName("intLiteral"), Type.Int());
       Binding { k =>
         LiteralInt(variable, value, k(variable))
       }
 
     case lifted.Literal(value: Boolean, _) =>
-      val variable = Variable(freshName("x"), Positive())
+      val variable = Variable(freshName("booleanLiteral"), Positive())
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
     case lifted.Literal(v: Double, _) =>
-      val literal_binding = Variable(freshName("x"), Type.Double());
+      val literal_binding = Variable(freshName("doubleLiteral"), Type.Double());
       Binding { k =>
         LiteralDouble(literal_binding, v, k(literal_binding))
       }
 
     case lifted.Literal(javastring: String, _) =>
-      val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
+      val literal_binding = Variable(freshName("utf8StringLiteral"), Type.String());
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
@@ -456,7 +457,7 @@ object Transformer {
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>
       if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-      val variable = Variable(freshName("x"), transform(tpe.result))
+      val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(args).flatMap { values =>
         Binding { k =>
           ForeignCall(variable, transform(blockName), values, k(variable))
@@ -464,7 +465,7 @@ object Transformer {
       }
 
     case lifted.Make(data, constructor, args) =>
-      val variable = Variable(freshName("x"), transform(data));
+      val variable = Variable(freshName("make"), transform(data));
       val tag = DeclarationContext.getConstructorTag(constructor)
 
       transform(args).flatMap { values =>
@@ -477,7 +478,7 @@ object Transformer {
       // TODO all of this can go away, if we desugar records in the translation to core!
       val fields = DeclarationContext.getField(field).constructor.fields
       val fieldIndex = fields.indexWhere(_.id == field)
-      val variables = fields.map { f => Variable(freshName("n"), transform(tpe)) }
+      val variables = fields.map { f => Variable(freshName("select"), transform(tpe)) }
       transform(target).flatMap { value =>
         Binding { k =>
           Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)
@@ -486,7 +487,7 @@ object Transformer {
 
     case lifted.Run(stmt) =>
       // NOTE: `stmt` is guaranteed to be of type `tpe`.
-      val variable = Variable(freshName("x"), transform(stmt.tpe))
+      val variable = Variable(freshName("run"), transform(stmt.tpe))
       Binding { k =>
         PushFrame(Clause(List(variable), k(variable)), transform(stmt))
       }

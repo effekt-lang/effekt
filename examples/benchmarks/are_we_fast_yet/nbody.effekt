@@ -1,0 +1,176 @@
+import examples/benchmarks/runner
+
+import array
+
+record Body(
+  x: Double,
+  y: Double,
+  z: Double,
+  vx: Double,
+  vy: Double,
+  vz: Double,
+  mass: Double
+)
+
+def run(n: Int) = {
+
+  val PI = 3.141592653589793
+  val SOLAR_MASS = 4.0 * PI * PI
+  val DAYS_PER_YEAR = 365.24
+
+  def makeBody(
+      x: Double,
+      y: Double,
+      z: Double,
+      vx: Double,
+      vy: Double,
+      vz: Double,
+      mass: Double): Body =
+    Body(x, y, z, vx * DAYS_PER_YEAR, vy * DAYS_PER_YEAR, vz * DAYS_PER_YEAR, mass * SOLAR_MASS)
+
+  val jupiter = makeBody(
+    4.84143144246472090,
+    -1.16032004402742839,
+    -0.10362204447112311,
+    0.001660076642744037,
+    0.007699011184197404,
+    -0.0000690460016972063,
+    0.0009547919384243266
+  )
+
+  val saturn = makeBody(
+    8.34336671824458,
+    4.124798564124305,
+    -0.4035234171143214,
+    -0.002767425107268624,
+    0.004998528012349172,
+    0.00002304172975737639,
+    0.0002858859806661308
+  )
+
+  val uranus = makeBody(
+    12.89436956213913,
+    -15.11115140169863,
+    -0.22330757889265574,
+    0.002964601375647616,
+    0.0023784717395948095,
+    -0.000029658956854023755,
+    0.00004366244043351563
+  )
+
+  val neptune = makeBody(
+    15.379697114850917,
+    -25.919314609987964,
+    0.17925877295037118,
+    0.002680677724903893,
+    0.001628241700382423,
+    -0.00009515922545197159,
+    0.00005151389020466115
+  )
+
+  val sun = makeBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+
+  def createBodies(): Array[Body] = {
+    val bodies = allocate[Body](5)
+
+    bodies.unsafeSet(0, sun);
+    bodies.unsafeSet(1, jupiter);
+    bodies.unsafeSet(2, saturn);
+    bodies.unsafeSet(3, uranus);
+    bodies.unsafeSet(4, neptune);
+
+    var px = 0.0;
+    var py = 0.0;
+    var pz = 0.0;
+
+    bodies.foreach { b =>
+      px = px + b.vx * b.mass;
+      py = py + b.vy * b.mass;
+      pz = pz + b.vz * b.mass;
+    }
+
+    def offsetMomentum(body: Body, px: Double, py: Double, pz: Double) =
+      Body(
+        body.x, body.y, body.z,
+        0.0 -(px / SOLAR_MASS),
+        0.0 -(py / SOLAR_MASS),
+        0.0 -(pz / SOLAR_MASS),
+        body.mass)
+
+    bodies.unsafeSet(0, sun.offsetMomentum(px, py, pz))
+
+    bodies
+  }
+
+  def advance(bodies: Array[Body], dt: Double) = {
+    each(0, bodies.size) { i =>
+      each(i + 1, bodies.size) { j =>
+        val iBody = bodies.unsafeGet(i);
+        val jBody = bodies.unsafeGet(j);
+
+        val dx = iBody.x - jBody.x;
+        val dy = iBody.y - jBody.y;
+        val dz = iBody.z - jBody.z;
+
+        val dSquared = dx * dx + dy * dy + dz * dz;
+        val distance = sqrt(dSquared);
+        val mag = dt / (dSquared * distance);
+
+        bodies.unsafeSet(i, Body(
+          iBody.x, iBody.y, iBody.z,
+          iBody.vx - dx * jBody.mass * mag,
+          iBody.vy - dy * jBody.mass * mag,
+          iBody.vz - dz * jBody.mass * mag,
+          iBody.mass
+        ));
+
+        bodies.unsafeSet(j, Body(
+          jBody.x, jBody.y, jBody.z,
+          jBody.vx + dx * iBody.mass * mag,
+          jBody.vy + dy * iBody.mass * mag,
+          jBody.vz + dz * iBody.mass * mag,
+          jBody.mass
+        ))
+      }
+    }
+
+    each(0, bodies.size) { i =>
+      val body = bodies.unsafeGet(i);
+      bodies.unsafeSet(i, Body(
+        body.x + dt * body.vx,
+        body.y + dt * body.vy,
+        body.z + dt * body.vz,
+        body.vx,
+        body.vy,
+        body.vz,
+        body.mass
+      ))
+    }
+  };
+
+  def energy(bodies: Array[Body]): Double = {
+    var e = 0.0;
+    each(0, bodies.size()){ i =>
+      val iBody = bodies.unsafeGet(i);
+      e = e + 0.5 * iBody.mass * (iBody.vx * iBody.vx + iBody.vy * iBody.vy + iBody.vz * iBody.vz);
+
+      each(i + 1, bodies.size){ j =>
+        val jBody = bodies.unsafeGet(j);
+        val dx = iBody.x - jBody.x;
+        val dy = iBody.y - jBody.y;
+        val dz = iBody.z - jBody.z;
+
+        val distance = sqrt(dx * dx + dy * dy + dz * dz);
+        e = e - (iBody.mass * jBody.mass) / distance;
+      }
+    }
+    e
+  }
+
+  val bodies = createBodies();
+  each(0, n) { _ =>  bodies.advance(0.01) };
+  toInt(bodies.energy * 1000000000.0)
+}
+
+def main() = benchmark(1){run}
+

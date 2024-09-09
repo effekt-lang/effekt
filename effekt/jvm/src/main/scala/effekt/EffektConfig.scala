@@ -6,6 +6,8 @@ import kiama.util.REPLConfig
 import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--")) {
+  // Print version information on `--version` and `--help`
+  version(s"Effekt ${effekt.util.Version.effektVersion}")
 
   // Common
   // ------
@@ -50,7 +52,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   )
 
   val backend: ScallopOption[Backend[_]] = choice(
-    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
+    choices = List("js", "js-web", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
@@ -151,6 +153,16 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     name = "time",
     descr = "Measure the time spent in each compilation phase",
     required = false,
+    group = debugging
+  )
+
+  lazy val valgrind = toggle(
+    "valgrind",
+    descrYes = "Execute files using valgrind",
+    descrNo = "Don't execute files using valgrind",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
     group = debugging
   )
 
