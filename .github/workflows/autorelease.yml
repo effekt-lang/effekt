@@ -48,7 +48,8 @@ jobs:
         timeout_minutes: 120 # NOTE: This needs _some_ value. As of writing this, 2 hours should be future-proof. :)
         max_attempts: 3
         retry_on: error
-        run: sbt clean test
+        command: sbt clean test
+        new_command_on_retry: sbt testQuick # should only rerun failed tests
 
   calculate-version-and-tag:
     name: Calculate Version and Create Tag
