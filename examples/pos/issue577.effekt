@@ -1,0 +1,12 @@
+
+def foo(): Int = {
+  var queue: Bool = true
+  while (queue is true) {
+    queue = false
+  }
+  0
+}
+
+def main() = {
+  println(foo())
+}

@@ -42,15 +42,32 @@ trait Runner[Executable] {
   /**
    * Creates a OS-specific script file that will execute the command when executed,
    * forwarding command line arguments.
+   * `$SCRIPT_DIR` refers to the directory the script is in.
+   * 
    * @return the actual name of the generated script (might be `!= name`)
    */
   def createScript(name: String, command: String*): String = os match {
     case OS.POSIX =>
-      IO.createFile(name, s"#!/bin/sh\n${command.mkString(" ")} \"$$@\"", true)
+      val computeScriptDir =
+        """# Determine the directory of the script
+          |SCRIPT_DIR=$(dirname "$(realpath "$0")")
+          |""".stripMargin
+      IO.createFile(name, s"#!/bin/sh\n${computeScriptDir}\n${command.mkString(" ")} \"$$@\"", true)
       name
     case OS.Windows =>
+      val computeScriptDir =
+        """setlocal enabledelayedexpansion
+          |
+          |:: Get the directory of the batch file
+          |set "SCRIPT_DIR=%~dp0"
+          |
+          |:: Remove trailing backslash
+          |set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+          |""".stripMargin
       val batName = name + ".bat"
-      IO.createFile(batName, "@echo off\r\n" + command.mkString(" ") + " %*")
+      // replace UNIX-style variables in command: $SCRIPT_DIR  -->  %SCRIPT_DIR%
+      val cmd = command.mkString(" ").replaceAll("\\$([A-Za-z_][A-Za-z0-9_]*)", "%$1%")
+      IO.createFile(batName, s"@echo off\r\n${computeScriptDir}\r\n${cmd} %*")
       batName
   }
 
@@ -147,8 +164,10 @@ object JSNodeRunner extends Runner[String] {
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).canonicalPath.escape
+    val jsFileName = path.unixPath.split("/").last
     // create "executable" using shebang besides the .js file
-    val jsScript = s"require('${jsFilePath}').main()"
+    val jsScript = s"require('./${jsFileName}').main()"
+
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
@@ -158,9 +177,10 @@ object JSNodeRunner extends Runner[String] {
 
       case OS.Windows =>
         val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
+        val jsMainFileName = jsFileName.stripSuffix(s".$extension") + "__main.js"
         val exePath = jsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsMainFilePath, jsScript)
-        createScript(exePath, "node", jsMainFilePath)
+        createScript(exePath, "node", "$SCRIPT_DIR/" + jsMainFileName)
     }
 }
 object JSWebRunner extends Runner[String] {
@@ -183,7 +203,7 @@ object JSWebRunner extends Runner[String] {
     import java.nio.file.Path
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).unixPath
-    val jsFileName = jsFilePath.split("/").last
+    val jsFileName = path.unixPath.split("/").last
     val htmlFilePath = jsFilePath.stripSuffix(s".$extension") + ".html"
     val mainName = "$" + jsFileName.stripSuffix(".js") + ".main"
     val htmlContent =
@@ -220,7 +240,8 @@ trait ChezRunner extends Runner[String] {
     val out = C.config.outputPath().getAbsolutePath
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
-    createScript(exeScriptPath, "scheme", "--script", schemeFilePath)
+    val schemeFileName = ("./" + (path.unixPath.split('/').last)).escape
+    createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName)
 }
 
 object ChezMonadicRunner extends ChezRunner {

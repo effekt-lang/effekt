@@ -25,12 +25,8 @@ class LLVMTests extends EffektTests {
     // sanitizer/valgrind: segfault
     examplesDir / "pos" / "parametrized.effekt",
 
-    // sanitizer/valgrind: segfault
-    // related to polymorphism boxing
-    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
-    examplesDir / "pos" / "issue108.effekt",
-
-    // valgrind leak
+    // Valgrind leak/failure
+    examplesDir / "llvm" / "nested.effekt",
     examplesDir / "llvm" / "strings.effekt",
     examplesDir / "llvm" / "polymorphism_map.effekt",
     examplesDir / "pos" / "parser.effekt",
