@@ -132,45 +132,6 @@ object Transformer {
             transform(binding)
         )
 
-      // TODO deal with BlockLit
-      case core.App(core.BlockVar(id, tpe, capt), targs, vargs, bargs) =>
-        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-        BPC.info(id) match {
-          // Unknown Jump
-          case BlockInfo.Parameter(t : core.BlockType.Function) =>
-            transform(vargs, bargs).run { (values, blocks) =>
-              Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
-            }
-
-          case BlockInfo.Parameter(t : core.BlockType.Interface) =>
-            E.panic("Cannot call an object (need to select a member first)")
-
-          // Continuation Call
-          case BlockInfo.Resumption =>
-            // TODO what to do when blocks is non empty?
-            transform(vargs, bargs).run { (values, blocks) =>
-              PushStack(Variable(transform(id), Type.Stack()),
-                Return(values))
-            }
-
-          // Known Jump
-          case BlockInfo.Definition(freeParams, blockParams) =>
-            val environment = blockParams ++ freeParams
-            transform(vargs, bargs).run { (values, blocks) =>
-              val args = values ++ blocks
-              // Here we actually need a substitution to prepare the environment for the jump
-              Substitute(environment.zip(args), Jump(Label(transform(id), environment)))
-            }
-        }
-
-      case core.App(core.Unbox(expr), targs, vargs, bargs) =>
-        transform(expr).run { block =>
-          transform(vargs, bargs).run { (values, blocks) =>
-            Invoke(block, builtins.Apply, values ++ blocks)
-          }
-        }
-
       // hardcoded translation for get and put.
       // TODO remove this when interfaces are correctly translated
       case core.App(core.Member(core.BlockVar(x, core.BlockType.Interface(_, List(stateType)), _), TState.get, annotatedTpe), targs, Nil, Nil) =>
@@ -193,28 +154,26 @@ object Transformer {
               Return(List(variable))))
         }
 
-      case core.App(core.Member(core.BlockVar(id, tpe, capt), op, annotatedTpe), targs, vargs, bargs) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-        val opTag = {
-          tpe match
-            case core.BlockType.Interface(ifceId, _) =>
-              DeclarationContext.getPropertyTag(op)
-            case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
-        }
-        transform(vargs, bargs).run { (values, blocks) =>
-          Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
-        }
+      case core.App(callee, targs, vargs, bargs) =>
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-      case core.App(core.Member(core.Unbox(core.ValueVar(id, core.ValueType.Boxed(tpe, capt))), op, annotatedTpe), targs, vargs, bargs) =>
-        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-        val opTag = {
-          tpe match
-            case core.BlockType.Interface(ifceId, _) =>
-              DeclarationContext.getPropertyTag(op)
-            case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
-        }
-        transform(vargs, bargs).run { (values, blocks) =>
-          Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
+        transformCallee(callee).run { callee =>
+          transform(vargs, bargs).run { (values, blocks) =>
+            callee match {
+              case Callee.Known(label) =>
+                // Here we actually need a substitution to prepare the environment for the jump
+                Substitute(label.environment.zip(values ++ blocks), Jump(label))
+              case Callee.UnknownFunction(variable, tpe) =>
+                Invoke(variable, builtins.Apply, values ++ blocks)
+              case Callee.Method(receiver, tpe, tag) =>
+                Invoke(receiver, tag, values ++ blocks)
+              case Callee.Continuation(variable) =>
+                PushStack(variable, Return(values))
+
+              case Callee.UnknownObject(variable, tpe) =>
+                E.panic("Cannot call an object.")
+            }
+          }
         }
 
       case core.If(cond, thenStmt, elseStmt) =>
@@ -320,11 +279,11 @@ object Transformer {
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
-  // TODO WTF is this
+  // Merely sequences the transformation of the arguments monadically
   def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
     (vargs, bargs) match {
       case (Nil, Nil) => pure((Nil, Nil))
-      case (Nil, barg :: bargs) => transform(barg).flatMap { block =>
+      case (Nil, barg :: bargs) => transformBlockArg(barg).flatMap { block =>
         transform(Nil, bargs).flatMap { (values, blocks) => pure(values, block :: blocks) }
       }
       case (varg :: vargs, bargs) => transform(varg).flatMap { value =>
@@ -332,7 +291,60 @@ object Transformer {
       }
     }
 
-  def transform(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+  // Callees can be:
+  // - known
+  // - unknown
+  // - methods
+  // - continuations
+  enum Callee {
+    case Known(label: machine.Label)
+    case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
+    case UnknownObject(variable: machine.Variable, tpe: core.BlockType.Interface)
+    case Method(receiver: machine.Variable, tpe: core.BlockType.Interface, tag: Int)
+    case Continuation(variable: machine.Variable)
+  }
+
+  def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
+    case core.BlockVar(id, tpe, capt) =>
+        BPC.info(id) match {
+          // Unknown Jump to function
+          case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
+            pure(Callee.UnknownFunction(Variable(transform(id), transform(tpe)), tpe))
+
+          // Unknown object as a receiver
+          case BlockInfo.Parameter(tpe: core.BlockType.Interface) =>
+            pure(Callee.UnknownObject(Variable(transform(id), transform(tpe)), tpe))
+
+          // Continuation Call
+          case BlockInfo.Resumption =>
+            pure(Callee.Continuation(Variable(transform(id), Type.Stack())))
+
+          // Known Jump
+          case BlockInfo.Definition(freeParams, blockParams) =>
+            pure(Callee.Known(machine.Label(transform(id), blockParams ++ freeParams)))
+        }
+    case core.Member(block, op, annotatedTpe) => transformCallee(block).flatMap {
+      case Callee.UnknownObject(id, tpe) =>
+        val opTag = DeclarationContext.getPropertyTag(op)
+        pure(Callee.Method(id, tpe, opTag))
+      case _ =>
+        E.panic("Receiver of a method call needs to be an object")
+    }
+    case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
+    case core.Unbox(pure) =>
+      transform(pure).map { f =>
+        pure.tpe match {
+          case core.ValueType.Boxed(tpe: core.BlockType.Function, capt) => Callee.UnknownFunction(f, tpe)
+          case core.ValueType.Boxed(tpe: core.BlockType.Interface, capt) => Callee.UnknownObject(f, tpe)
+          case _ => E.panic("Can only unbox boxed types")
+        }
+      }
+    case core.New(impl) =>
+      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
+  }
+
+  def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, capt) if isDefinition(id) =>
       // passing a function directly, so we need to eta-expand
       // TODO cache the closure somehow to prevent it from being created on every call
@@ -457,7 +469,7 @@ object Transformer {
       }
 
     case core.Box(block, annot) =>
-      transform(block)
+      transformBlockArg(block)
 
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")
@@ -469,7 +481,6 @@ object Transformer {
         DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
     }.map(op => transform(op, prompt))
 
-  // TODO WTF is this
   def transform(op: core.Operation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
     (prompt, op) match {
       // Effectful operation, capture the continuation
@@ -600,6 +611,7 @@ object Transformer {
     def flatMap[B](rest: A => Binding[B]): Binding[B] = {
       Binding(k => run(a => rest(a).run(k)))
     }
+    def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
   }
 
   def pure[A](a: A): Binding[A] = Binding(k => k(a))
