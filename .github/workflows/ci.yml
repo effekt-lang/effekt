@@ -6,6 +6,10 @@ on:
       - master
   pull_request:
 
+env:
+  JAVA_VERSION: '11'
+  NODE_VERSION: '12.x'
+
 jobs:
   run-hello-world:
     strategy:
@@ -19,17 +23,17 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Set up JDK 11
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: ${{ env.JAVA_VERSION }}
         distribution: 'zulu'
         cache: 'sbt'
 
-    - name: Set up NodeJS
+    - name: Set up NodeJS ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v4
       with:
-        node-version: '12.x'
+        node-version: ${{ env.NODE_VERSION }}
 
     - name: Run tests
       run: sbt "effektJVM/clean; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\\/]*coverage.*"
@@ -46,10 +50,10 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Set up JDK 11
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: ${{ env.JAVA_VERSION }}
         distribution: 'zulu'
         cache: 'sbt'
 
@@ -84,10 +88,10 @@ jobs:
     - name: Install libuv
       run: sudo apt-get install libuv1-dev
 
-    - name: Set up NodeJS
+    - name: Set up NodeJS ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v4
       with:
-        node-version: '12.x'
+        node-version: ${{ env.NODE_VERSION }}
 
     - name: Run tests
       run: EFFEKT_VALGRIND=1 sbt clean test
