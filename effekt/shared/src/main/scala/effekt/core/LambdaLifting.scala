@@ -227,8 +227,8 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
   // saturate free variables transitively
   def resolveFreeVariables(vars: Variables): Variables =
     vars.flatMap {
-      case x: Variable.Value => Set(x)
-      case f: Variable.Block => resolve(f.id).getOrElse(Set(f))
+      case x: Variable.Value => Variables(Set(x))
+      case f: Variable.Block => resolve(f.id).getOrElse(Variables(Set(f)))
     }
 
   def resolve(id: Id): Option[Variables] =

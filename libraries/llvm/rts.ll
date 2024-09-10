@@ -69,10 +69,19 @@
 ; The "meta" stack (a stack of stacks) -- a pointer to a %StackValue
 %Stack = type ptr
 
+; Unique tags to index into the stack.
+%Prompt = type i64
+
+; fresh prompt generation
+@lastPrompt = private global %Prompt 0
+
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %ReferenceCount, %Memory, %Region, %Stack }
+%StackValue = type { %ReferenceCount, %Memory, %Region, %Prompt, %Stack }
+
+
+
 
 ; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Object}
@@ -80,8 +89,8 @@
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Object}
 
-; Offset within the arena
-%Reference = type i64
+; Reference into an arena (prompt -- cast to 32bit, offset 32bit)
+%Reference = type {i32, i32}
 
 ; Builtin Types
 
@@ -103,6 +112,22 @@ declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare void @print(i64)
 declare void @exit(i64)
+
+
+; Prompts
+
+define %Prompt @currentPrompt(%Stack %stack) {
+    %prompt_pointer = getelementptr %StackValue, ptr %stack, i64 0, i32 3
+    %prompt = load %Prompt, ptr %prompt_pointer
+    ret %Prompt %prompt
+}
+
+define %Prompt @freshPrompt() {
+    %currentPrompt = load %Prompt, ptr @lastPrompt
+    %newPrompt = add %Prompt %currentPrompt, 1
+    store %Prompt %newPrompt, ptr @lastPrompt
+    ret %Prompt %newPrompt
+}
 
 ; Garbage collection
 
@@ -190,31 +215,34 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define ptr @getRegionPointer(%Evidence %evidence, %Stack %stack) {
+define ptr @getRegionPointer(%Prompt %prompt, %Stack %stack) {
 entry:
-    switch %Evidence %evidence, label %else [i64 0, label %here]
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %currentPrompt = load %Prompt, ptr %prompt_pointer
+    %promptMatch = icmp eq %Prompt %currentPrompt, %prompt
+    br i1 %promptMatch, label %found, label %continue
 
-here:
+continue:
+    %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack = load %Stack, ptr %nextStack_pointer
+    %region = tail call ptr @getRegionPointer(%Prompt %prompt, %Stack %nextStack)
+    ret ptr %region
+
+found:
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     ret ptr %stackRegion
-
-else:
-    %nextEvidence = sub %Evidence %evidence, 1
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
-    %rest = load %Stack, ptr %stackRest
-    %region = tail call ptr @getRegionPointer(%Evidence %nextEvidence, %Stack %rest)
-    ret ptr %region
 }
 
-define { ptr, %Reference } @alloc(i64 %index, %Evidence %evidence, %Stack %stack) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(%Evidence %evidence, %Stack %stack)
-    %stackPointerPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 0
-    %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
-    %limitPointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 2
+define { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
+    %region_pointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
 
-    %stackPointer = load %StackPointer, ptr %stackPointerPointer
-    %base = load %Base, ptr %basePointer
-    %limit = load %Limit, ptr %limitPointer
+    %stackPointer_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 0
+    %base_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 1
+    %limit_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 2
+
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer
+    %base = load %Base, ptr %base_pointer
+    %limit = load %Limit, ptr %limit_pointer
 
     %object = icmp ne i64 %index, 0
     %size = select i1 %object, i64 16, i64 8
@@ -225,13 +253,18 @@ define { ptr, %Reference } @alloc(i64 %index, %Evidence %evidence, %Stack %stack
     br i1 %cmp, label %continue, label %realloc
 
 continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointerPointer
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer
     %intBase = ptrtoint %Base %base to i64
     %intStackPointer = ptrtoint %StackPointer %stackPointer to i64
-    %offset = sub i64 %intStackPointer, %intBase
+    %offset64 = sub i64 %intStackPointer, %intBase
+
+    %prompt32 = trunc i64 %prompt to i32
+    %offset32 = trunc i64 %offset64 to i32
 
     %ret.0 = insertvalue { ptr, %Reference } undef, %StackPointer %stackPointer, 0
-    %ret.1 = insertvalue { ptr, %Reference } %ret.0, %Reference %offset, 1
+    %ref.1 = insertvalue %Reference undef, i32 %prompt32, 0
+    %ref.2 = insertvalue %Reference %ref.1, i32 %offset32, 1
+    %ret.1 = insertvalue { ptr, %Reference } %ret.0, %Reference %ref.2, 1
     ret { ptr, %Reference } %ret.1
 
 realloc:
@@ -247,21 +280,31 @@ realloc:
     %newStackPointer = getelementptr i8, %Base %newBase, i64 %arenaSize
     %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %size
 
-    store %Base %newBase, ptr %basePointer
-    store %Limit %newlimit, ptr %limitPointer
-    store %StackPointer %newNextStackPointer, ptr %stackPointerPointer
+    store %Base %newBase, ptr %base_pointer
+    store %Limit %newlimit, ptr %limit_pointer
+    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer
+
+    %prompt32_2 = trunc i64 %prompt to i32
+    %arenaSize32 = trunc i64 %arenaSize to i32
 
     %ret..0 = insertvalue { ptr, %Reference } undef, %StackPointer %newStackPointer, 0
-    %ret..1 = insertvalue { ptr, %Reference } %ret..0, %Reference %arenaSize, 1
+    %ref..1 = insertvalue %Reference undef, i32 %prompt32_2, 0
+    %ref..2 = insertvalue %Reference %ref..1, i32 %arenaSize32, 1
+    %ret..1 = insertvalue { ptr, %Reference } %ret..0, %Reference %ref..2, 1
     ret { ptr, %Reference } %ret..1
-
 }
 
-define ptr @getPointer(%Reference %reference, i64 %index, %Evidence %evidence, %Stack %stack) alwaysinline {
-    %regionPointer = call ptr @getRegionPointer(%Evidence %evidence, %Stack %stack)
-    %basePointer = getelementptr %Region, ptr %regionPointer, i64 0, i64 %index, i32 1
-    %base = load %Base, ptr %basePointer
-    %pointer = getelementptr i8, ptr %base, %Reference %reference
+
+define ptr @getPointer(%Reference %reference, i64 %index, %Stack %stack) {
+    %prompt32 = extractvalue %Reference %reference, 0
+    %offset32 = extractvalue %Reference %reference, 1
+    %prompt = zext i32 %prompt32 to i64
+    %offset = zext i32 %offset32 to i64
+
+    %region_pointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
+    %base_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 1
+    %base = load %Base, ptr %base_pointer
+    %pointer = getelementptr i8, ptr %base, i64 %offset
     ret ptr %pointer
 }
 
@@ -273,7 +316,6 @@ define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
 
     %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %n
     store %StackPointer %stackPointer_2, ptr %stackStackPointer
-
     ret %StackPointer %stackPointer
 }
 
@@ -301,10 +343,10 @@ define %Memory @newMemory() {
     ret %Memory %memory.2
 }
 
-define %Stack @newStack() {
+define %Stack @newStack(%Prompt %prompt) {
 
     ; TODO find actual size of stack
-    %stack = call ptr @malloc(i64 112)
+    %stack = call ptr @malloc(i64 120)
 
     ; TODO initialize to zero and grow later
     %stackMemory = call %Memory @newMemory()
@@ -312,15 +354,16 @@ define %Stack @newStack() {
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
-    %stack.3 = insertvalue %StackValue %stack.2, %Stack zeroinitializer, 3
+    %stack.3 = insertvalue %StackValue %stack.2, %Prompt %prompt, 3
+    %stack.4 = insertvalue %StackValue %stack.3, %Stack zeroinitializer, 4
 
-    store %StackValue %stack.3, %Stack %stack
+    store %StackValue %stack.4, %Stack %stack
 
     ret %Stack %stack
 }
 
 define void @pushStack(%Stack %stack, %Stack %oldStack) {
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
     br i1 %isNull, label %done, label %next
@@ -334,18 +377,24 @@ next:
     ret void
 }
 
-define %Stack @popStacks(%Stack %stack, i64 %n) {
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
-    %rest = load %Stack, ptr %stackRest
-    %isZero = icmp eq i64 %n, 0
-    br i1 %isZero, label %done, label %next
-done:
-    store %Stack null, ptr %stackRest
-    ret %Stack %rest
-next:
-    %o = sub i64 %n, 1
-    %result = tail call %Stack @popStacks(%Stack %rest, i64 %o)
+define %Stack @popStacks(%Stack %stack, %Prompt %prompt) {
+entry:
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %currentPrompt = load %Prompt, ptr %prompt_pointer
+    %promptMatch = icmp eq %Prompt %currentPrompt, %prompt
+    br i1 %promptMatch, label %found, label %continue
+
+continue:
+    %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack = load %Stack, ptr %nextStack_pointer
+    %result = tail call %Stack @popStacks(%Stack %nextStack, %Prompt %prompt)
     ret %Stack %result
+
+found:
+    %nextStack2_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack2 = load %Stack, ptr %nextStack2_pointer
+    store %Stack null, ptr %nextStack2_pointer
+    ret %Stack %nextStack2
 }
 
 define void @eraseMemory(%Memory %memory) {
@@ -390,7 +439,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
 define %Stack @underflowStack(%Stack %stack) {
     %stackMemory = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
@@ -468,7 +517,7 @@ copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newOldReferenceCount, ptr %stackReferenceCount
 
-    %newHead = call ptr @malloc(i64 112)
+    %newHead = call ptr @malloc(i64 120)
     br label %loop
 
 loop:
@@ -477,16 +526,19 @@ loop:
 
     %stackMemory = getelementptr %StackValue, %Stack %old, i64 0, i32 1
     %stackRegion = getelementptr %StackValue, %Stack %old, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 3
+    %stackPrompt = getelementptr %StackValue, %Stack %old, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
+    %prompt = load %Prompt, ptr %stackPrompt
     %rest = load %Stack, ptr %stackRest
 
     %newStackReferenceCount = getelementptr %StackValue, %Stack %newStack, i64 0, i32 0
     %newStackMemory = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newStackRegion = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
-    %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %newStackPrompt = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 4
 
     %newMemory = call %Memory @copyMemory(%Memory %memory)
 
@@ -498,12 +550,13 @@ loop:
     store %ReferenceCount 0, ptr %newStackReferenceCount
     store %Memory %newMemory, ptr %newStackMemory
     store %Region %newRegion, ptr %newStackRegion
+    store %Prompt %prompt, ptr %newStackPrompt
 
     %isNull = icmp eq %Stack %rest, null
     br i1 %isNull, label %stop, label %next
 
 next:
-    %nextNew = call ptr @malloc(i64 112)
+    %nextNew = call ptr @malloc(i64 120)
     store %Stack %nextNew, ptr %newStackRest
     br label %loop
 
@@ -533,7 +586,7 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     free:
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %stackPointer = load %StackPointer, ptr %stackStackPointer
     %region = load %Region, ptr %stackRegion
@@ -589,7 +642,9 @@ define void @topLevelEraser(%Environment %environment) {
 }
 
 define %Stack @withEmptyStack() {
-    %stack = call %Stack @newStack()
+    ; TODO all stacks share the same source of fresh prompts
+    %prompt = call %Prompt @freshPrompt()
+    %stack = call %Stack @newStack(%Prompt %prompt)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
@@ -619,7 +674,7 @@ define void @run_i64(%Neg %f, i64 %arg) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %arg, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, i64 %arg, %Stack %stack)
     ret void
 }
 
@@ -635,7 +690,7 @@ define void @run_Pos(%Neg %f, %Pos %arg) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %arg, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %arg, %Stack %stack)
     ret void
 }
 
@@ -650,6 +705,6 @@ define void @run(%Neg %f) {
     %functionPointer = load ptr, ptr %functionPointerPointer
 
     ; call
-    tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack)
     ret void
 }

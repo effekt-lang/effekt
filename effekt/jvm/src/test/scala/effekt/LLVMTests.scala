@@ -106,8 +106,6 @@ class LLVMTests extends EffektTests {
 
     // first class functions closing over capabilities
     examplesDir / "pos" / "capture" / "state_eff.effekt",
-    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
-    examplesDir / "pos" / "file.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",

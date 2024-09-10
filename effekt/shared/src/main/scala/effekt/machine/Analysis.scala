@@ -31,29 +31,29 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(value) ++ Set.from(values)
     case Allocate(name, init, region, rest) =>
       freeVariables(rest) ++ Set(init, region) -- Set(name)
-    case Load(name, ref, ev, rest) =>
-      Set(ref, ev) ++ freeVariables(rest) -- Set(name)
-    case Store(ref, value, ev, rest) =>
-      Set(ref, value, ev) ++ freeVariables(rest)
+    case Load(name, ref, rest) =>
+      Set(ref) ++ freeVariables(rest) -- Set(name)
+    case Store(ref, value, rest) =>
+      Set(ref, value) ++ freeVariables(rest)
     case PushFrame(frame, rest) =>
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>
       Set.from(values)
-    case NewStack(name, frame, rest) =>
-      freeVariables(frame) ++ (freeVariables(rest) -- Set(name))
+    case NewStack(name, prompt, frame, rest) =>
+      freeVariables(frame) ++ (freeVariables(rest) -- Set(name)) ++ Set(prompt)
     case PushStack(value, rest) =>
       Set(value) ++ freeVariables(rest)
-    case PopStacks(name, n, rest) =>
-      freeVariables(rest) -- Set(name) ++ Set(n)
-    case ComposeEvidence(name, ev1, ev2, rest) =>
-      freeVariables(rest) -- Set(name) ++ Set(ev1, ev2)
+    case PopStacks(name, prompt, rest) =>
+      freeVariables(rest) -- Set(name) ++ Set(prompt)
+    case FreshPrompt(name, rest) =>
+      freeVariables(rest) -- Set(name)
+    case CurrentPrompt(name, rest) =>
+      freeVariables(rest) -- Set(name)
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralUTF8String(name, utf8, rest) =>
-      freeVariables(rest) - name
-    case LiteralEvidence(name, ev, rest) =>
       freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
       arguments.toSet ++ freeVariables(rest) - name
