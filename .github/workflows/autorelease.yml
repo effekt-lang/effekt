@@ -6,6 +6,10 @@ on:
     - cron: '0 3 * * 1'  # Every Monday at 3am UTC
   workflow_dispatch: # For manual triggering
 
+env:
+  JAVA_VERSION: '11'
+  NODE_VERSION: '12.x'
+
 jobs:
   run-tests: # redux of usual CI defined in `ci.yml`
     name: Run tests
@@ -16,17 +20,17 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Set up JDK 11
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: ${{ env.JAVA_VERSION }}
         distribution: 'zulu'
         cache: 'sbt'
 
-    - name: Set up NodeJS
+    - name: Set up NodeJS ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v4
       with:
-        node-version: '12.x'
+        node-version: ${{ env.NODE_VERSION }}
 
     - name: Install MLton
       run: |
