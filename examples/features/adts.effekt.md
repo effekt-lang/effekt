@@ -41,10 +41,11 @@ def containsFile(fs: FileSystem, name: String): Bool =
   } else { false }
 ```
 
-A pattern match with `match` consists of one or more clauses delimited by `case`. There is an exhaustivity check such 
-that you need to handle all cases of the scrutinee. Pattern guards, starting with `and`, can be used to refine matches
-with further conditions that evaluate to a `Bool`. Optionally, like with `if` expressions, a `match` expression can be 
-followed by an `else` branch. Instead of an `else` branch in a `match` expression, you may also use a wildcard pattern
+A pattern match (initiated with the keyword `match`) consists of one or more clauses delimited by `case`. 
+There is an exhaustivity check helping you to handle all cases of the scrutinee. 
+Pattern guards, starting with `and`, can be used to refine matches with further conditions that evaluate to a `Bool`. 
+Optionally, like with `if` expressions, a `match` expression can be followed by an `else` branch to provide a default case. 
+Instead of an `else` branch in a `match` expression, you may also use a wildcard pattern
 (`case _ => ...`).
 
 ```effekt:repl
