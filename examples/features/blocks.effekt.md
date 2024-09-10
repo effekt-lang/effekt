@@ -11,7 +11,15 @@ interface Yield[A] {
   def yield(x: A): Unit
 }
 ```
+## Values vs. Computation
+Following Paul Levy's [Call-By-Push-Value](https://www.cs.bham.ac.uk/~pbl/papers/thesisqmwphd.pdf) Effekt distinguishes between **values** (such as `42`, `true`, or instances of datatypes) and **computation**.
 
+Examples of "computation" in Effekt are:
+- blocks (this is what we call functions),
+- instances of interfaces (objects), and
+- regions
+
+Functions (and all other computation) are _second-class_ in Effekt. To make this difference explicit, we pass values in parenthesis (e.g. `f(42)`) and computation in braces (e.g. `f { x => println(x) }`).
 Functions are second-class in Effekt. While you cannot pass them as first-class values to other functions as argument, you can pass them as second-class blocks.
 
 ```
