@@ -170,7 +170,11 @@ struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
 struct Pos c_buffer_eq(const struct Pos left, const struct Pos right) {
     uint64_t left_len = c_buffer_length(left);
     uint64_t right_len = c_buffer_length(right);
-    if (left_len != right_len) return BooleanFalse;
+    if (left_len != right_len) {
+        erasePositive(left);
+        erasePositive(right);
+        return BooleanFalse;
+    }
     for (uint64_t j = 0; j < left_len; ++j) {
         if (c_buffer_bytes(left)[j] != c_buffer_bytes(right)[j]) {
             erasePositive(left);

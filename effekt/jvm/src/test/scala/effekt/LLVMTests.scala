@@ -26,9 +26,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "parametrized.effekt",
 
     // Valgrind leak, unclear
-    examplesDir / "llvm" / "strings.effekt",
     examplesDir / "llvm" / "polymorphism_map.effekt",
-    examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "type_parameters_blocks.effekt",
     
     // Valgrind leak in array_new
