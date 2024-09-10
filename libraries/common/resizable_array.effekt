@@ -94,7 +94,7 @@ def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / Exception[
 //
 // O(n)
 def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
-  with on[OutOfBounds].default { <> }
+  with on[OutOfBounds].panic
   val oldRaw = arr.rawContentPtr.get
   if (oldRaw.size != capacity) { 
     val newRaw = array::allocate(capacity)
