@@ -1,0 +1,133 @@
+module union_find
+import resizable_array
+import test
+
+// Classic mutable union-find datastructur on integer indices,
+// with union-by-rank and path compression.
+record UnionFind(rawElements: ResizableArray[Int])
+
+namespace internal {
+  // -(rk + 1) for roots
+  // parent for inner nodes
+  def isRoot(u: UnionFind, s: Int): Bool / Exception[MissingValue] = {
+    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
+    u.rawElements.get(s) < 0
+  }
+  def parent(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
+    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
+    val c = u.rawElements.get(s)
+    if (c < 0) { 
+      do raise(MissingValue(), "Root node " ++ s.show ++ " has no parent.") 
+    } else { 
+      c
+    }
+  }
+  def rank(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
+    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
+    val c = u.rawElements.get(s)
+    if (c < 0) {
+      -1 * c - 1
+    } else {
+      do raise(MissingValue(), "Only root nodes have a rank.")
+    }
+  }
+  def setParent(u: UnionFind, child: Int, parent: Int) = {
+    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ child.show) }
+    u.rawElements.set(child, parent)
+  }
+  def setRank(u: UnionFind, root: Int, rank: Int) = {
+    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ root.show) }
+    u.rawElements.set(root, -1 * rank - 1)
+  }
+}
+
+def unionFind(): UnionFind =
+  UnionFind(resizableArray())
+
+def unionFind(capacity: Int): UnionFind =
+  UnionFind(resizableArray(capacity))
+
+// Make a new set in the union-find datastructure and return its index
+//
+// O(1) amortized, worst-case O(n) if the capacity does not suffice
+def makeSet(u: UnionFind): Int = {
+  u.rawElements.add(-1)
+}
+
+// Find the representative of the given element.
+//
+// O(inverse-ackermann(n)) amortized
+def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
+  def goFind(s: Int): Int = {
+    if (u.internal::isRoot(s)) {
+      s
+    } else {
+      goFind(u.internal::parent(s))
+    }
+  }
+  val root = goFind(s)
+
+  def goCompress(s: Int): Unit = { 
+    if (not(u.internal::isRoot(s))) {
+      val p = u.internal::parent(s)
+      u.internal::setParent(s, root)
+      goCompress(p)
+    }
+  }
+  goCompress(s)
+
+  root
+}
+
+// Make it such that the sets *represented by* x and y are merged
+//
+// O(1)
+def unionRoots(u: UnionFind, x: Int, y: Int): Int / Exception[MissingValue] = {
+  if(not(u.internal::isRoot(x) && u.internal::isRoot(y))) { 
+    panic("unionRoots should only be called on representatives")
+  }
+
+  def addChild(root: Int, child: Int) = {
+    if (u.internal::rank(root) == u.internal::rank(child)) {
+      u.internal::setRank(root, u.internal::rank(root) + 1)
+    }
+    u.internal::setParent(child, root)
+    root
+  }
+
+  if (x == y) {
+    x
+  } else if (u.internal::rank(x) < u.internal::rank(y)) {
+    addChild(y, x)
+  } else {
+    addChild(x, y)
+  }
+}
+
+// Make it so a and b are in the same set
+//
+// O(inverse-ackermann(n)) amortized
+def union(u: UnionFind, a: Int, b: Int): Int / Exception[MissingValue] = {
+  val x = u.find(a)
+  val y = u.find(b)
+  u.unionRoots(x, y)
+}
+
+def main() = {
+  val r = suite("UnionFindTests") {
+    test("three elements") {
+      with on[MissingValue].default { assertTrue(false, "MissingValue exception") }
+      val u = unionFind()
+      val a = u.makeSet()
+      val b = u.makeSet()
+      val c = u.makeSet()
+      assert(u.find(a), a)
+      assert(u.find(b), b)
+      assert(u.find(c), c)
+      u.union(a,b)
+      assert(u.find(a), u.find(b))
+      assert(u.find(c), c)
+    }
+  }
+  ()
+}
