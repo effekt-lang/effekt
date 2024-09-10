@@ -113,21 +113,23 @@ def union(u: UnionFind, a: Int, b: Int): Int / Exception[MissingValue] = {
   u.unionRoots(x, y)
 }
 
-def main() = {
-  val r = suite("UnionFindTests") {
-    test("three elements") {
-      with on[MissingValue].default { assertTrue(false, "MissingValue exception") }
-      val u = unionFind()
-      val a = u.makeSet()
-      val b = u.makeSet()
-      val c = u.makeSet()
-      assert(u.find(a), a)
-      assert(u.find(b), b)
-      assert(u.find(c), c)
-      u.union(a,b)
-      assert(u.find(a), u.find(b))
-      assert(u.find(c), c)
+namespace examples {
+  def main() = {
+    val r = suite("UnionFindTests") {
+      test("three elements") {
+        with on[MissingValue].default { assertTrue(false, "MissingValue exception") }
+        val u = unionFind()
+        val a = u.makeSet()
+        val b = u.makeSet()
+        val c = u.makeSet()
+        assert(u.find(a), a)
+        assert(u.find(b), b)
+        assert(u.find(c), c)
+        u.union(a,b)
+        assert(u.find(a), u.find(b))
+        assert(u.find(c), c)
+      }
     }
+    ()
   }
-  ()
 }
