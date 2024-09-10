@@ -1,26 +1,27 @@
 {
-  "name": "effekt",
+  "name": "@effekt-lang/effekt",
   "author": "Jonathan Brachthäuser",
   "version": "0.2.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/effekt-lang/effekt.git"
   },
-  "description": "A language with effects and handlers",
+  "description": "A language with lexical effect handlers and lightweight effect polymorphism",
   "main": "index.js",
   "scripts": {},
   "bin": {
     "effekt": "bin/effekt",
     "effekt.sh": "bin/effekt.sh"
   },
-  "private": true,
   "preferGlobal": true,
   "license": "MIT",
   "dependencies": {},
   "files": [
     "bin",
     "libraries",
-    "licenses"
+    "licenses",
+    "README.md",
+    "LICENSE"
   ],
   "bugs": {
     "url": "https://github.com/effekt-lang/effekt/issues"
