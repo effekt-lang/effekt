@@ -291,11 +291,6 @@ object Transformer {
       }
     }
 
-  // Callees can be:
-  // - known
-  // - unknown
-  // - methods
-  // - continuations
   enum Callee {
     case Known(label: machine.Label)
     case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
