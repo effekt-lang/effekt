@@ -4,7 +4,7 @@ import ref
 import array
 import test
 
-record ResizableArray[T](size_: Ref[Int], rawContentPtr: Ref[Array[T]])
+record ResizableArray[T](rawSizePtr: Ref[Int], rawContentPtr: Ref[Array[T]])
 
 // These numbers should be optimized based on benchmarking
 // According to https://en.wikipedia.org/wiki/Dynamic_array most use 1.5 or 2
@@ -18,7 +18,7 @@ val shrinkThreshold = 0.4
 // Number of elements in the dynamic array
 //
 // O(1)
-def size[T](arr: ResizableArray[T]) = arr.size_.get
+def size[T](arr: ResizableArray[T]) = arr.rawSizePtr.get
 
 // Allocate a new, empty dynamic array with given initial capacity
 def resizableArray[T](capacity: Int): ResizableArray[T] = {
@@ -148,7 +148,7 @@ def setResizing[T](arr: ResizableArray[T], index: Int, value: T): Unit / Excepti
   }
   ensureCapacity(arr, index + 1)
   arr.rawContentPtr.get.unsafeSet(index, value)
-  arr.size_.set(index + 1)
+  arr.rawSizePtr.set(index + 1)
 }
 
 // Add a new element at the end of the resizable array.
@@ -167,7 +167,7 @@ def add[T](arr: ResizableArray[T], value: T): Int = {
 // O(1) amortized, O(n) worst case
 def popRight[T](arr: ResizableArray[T]): T / Exception[OutOfBounds] = {
   arr.boundsCheck(arr.size - 1)
-  arr.size_.set(arr.size - 1)
+  arr.rawSizePtr.set(arr.size - 1)
   val r = arr.unsafeGet(arr.size)
   arr.maybeShrink()
   r
