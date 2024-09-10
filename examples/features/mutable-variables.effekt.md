@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Variables
+permalink: docs/tutorials/variables
+---
+
 # Mutable Variables
 
 Like in many other languages, there are also mutable variables in Effekt. Whereas values are defined using the `val` keyword, mutable variables use the `var` keyword.

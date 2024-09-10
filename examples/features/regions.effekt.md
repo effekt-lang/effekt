@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Regions
+permalink: docs/tutorials/regions
+---
+
 # Regions
 
 ## State and continuations

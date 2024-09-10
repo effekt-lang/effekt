@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Blocks
+permalink: docs/tutorial/blocks
+---
+
 # Blocks
 
 ```effekt:hidden

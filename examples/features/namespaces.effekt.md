@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Namespaces
+permalink: docs/tutorials/namespaces
+---
+
 # Namespaces
 
 For defininig a namespace, the keyword `namespace` followed by the name of the namespace is to be used. Enclosed in curly braces, the namespace can include

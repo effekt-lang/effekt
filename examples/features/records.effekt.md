@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Records
+permalink: docs/tutorials/records
+---
+
 # Tuples & records
 
 A tuple is written as comma-separated list delimited by parentheses:

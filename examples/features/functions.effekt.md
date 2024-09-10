@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Functions
+permalink: docs/tutorials/functions
+---
+
 # Functions
 
 For defining a function, you may use similar syntax know from other languages such as Scala:

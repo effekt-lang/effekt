@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Loops
+permalink: docs/tutorials/loops
+---
+
 # Loops
 
 Effekt includes a (completely standard) built-in `while` loop expression as its sole native looping construct.

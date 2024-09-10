@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Values
+permalink: docs/tutorials/values
+---
+
 # Values
 
 Values in Effekt are terms that are pure in the sense that they cannot have any side-effecting behaviour. This includes

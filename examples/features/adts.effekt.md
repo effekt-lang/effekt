@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Datatypes
+permalink: docs/tutorials/adts
+---
+
 # Algebraic Datatypes
 
 Defining a datatype in Effekt is similar to other languages.

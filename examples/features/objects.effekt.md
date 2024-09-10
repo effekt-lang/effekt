@@ -1,4 +1,10 @@
-# Object
+---
+layout: docs
+title: Objects
+permalink: docs/tutorials/objects
+---
+
+# Objects
 
 Given an effect interface;
 

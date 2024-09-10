@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Effects
+permalink: docs/tutorials/effects
+---
+
 # Effects and handlers
 
 TODO mention effect safety

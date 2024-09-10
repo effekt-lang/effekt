@@ -1,3 +1,9 @@
+---
+layout: docs
+title: HelloWorld
+permalink: docs/tutorials/hello-world
+---
+
 # Hello, World
 
 Here is the classical "hello, world" program in Effekt.

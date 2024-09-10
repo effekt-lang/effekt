@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Captures
+permalink: docs/tutorials/captures
+---
+
 # Captures
 
 ## Notes (TO BE IGNORED)

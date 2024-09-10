@@ -1,3 +1,9 @@
+---
+layout: docs
+title: FFI
+permalink: docs/tutorials/ffi
+---
+
 # FFI (Foreign Function Interface)
 
 ## `extern def`
