@@ -102,19 +102,21 @@ def size[T](heap: Heap[T]): Int = {
   heap.rawContents.size
 }
 
-def main() = {
-  with on[OutOfBounds].panic();
-  val h = heap[Int](fun(x: Int, y: Int){
-    if (x < y) {
-      Less()
-    } else Greater()  // hacky, should sometimes be Equal()
-  })
-  h.insert(12)
-  h.insert(10)
-  h.insert(7)
-  h.insert(11)
-  h.insert(14)
-  while(h.size > 0) {
-    println(h.deleteMin())
+namespace examples {
+  def main() = {
+    with on[OutOfBounds].panic();
+    val h = heap[Int](box { (x: Int, y: Int) =>
+      if (x < y) {
+        Less()
+      } else Greater()  // hacky, should sometimes be Equal()
+    })
+    h.insert(12)
+    h.insert(10)
+    h.insert(7)
+    h.insert(11)
+    h.insert(14)
+    while(h.size > 0) {
+      println(h.deleteMin())
+    }
   }
 }
