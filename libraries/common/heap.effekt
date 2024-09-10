@@ -1,0 +1,120 @@
+module heap
+import resizable_array
+
+// Resizable 2-ary min-heap, backed by a resizable array
+// `cmp` defines the ordering of elements
+record Heap[T](rawContents: ResizableArray[T], cmp: (T, T) => Ordering at {})
+
+// Make a new Heap with the given comparison operation
+def heap[T](cmp: (T,T) => Ordering at {}) = 
+  Heap[T](resizableArray(), cmp)
+
+// Make a new Heap with the given comparison operation and initial capacity
+def heap[T](cmp: (T,T) => Ordering at {}, capacity: Int) = 
+  Heap[T](resizableArray(capacity), cmp)
+
+namespace internal {
+  def left(idx: Int) = 2 * idx + 1
+  def right(idx: Int) = 2 * idx + 2
+  def parent(idx: Int) = (idx - 1) / 2
+
+  def bubbleUp[A](heap: Heap[A], idx: Int) = {
+    val arr = heap.rawContents
+    arr.boundsCheck(idx) // idx > parent(idx), parent(parent(idx)) etc
+
+    def go(idx: Int): Unit = {
+      if (idx > 0 and (heap.cmp)(arr.unsafeGet(parent(idx)), arr.unsafeGet(idx)) is Greater()) {
+        arr.unsafeSwap(parent(idx), idx)
+        go(parent(idx))
+      }
+    }
+    go(idx)
+  }
+  def sinkDown[A](heap: Heap[A], idx: Int) = {
+    val arr = heap.rawContents
+
+    def infixLt(x: A, y: A) = {
+      if ((heap.cmp)(x,y) is Less()) { true } else { false }
+    }
+    
+    def go(idx: Int): Unit = {
+      if (right(idx) < arr.size) {
+        val v = arr.unsafeGet(idx)
+        val l = arr.unsafeGet(left(idx))
+        val r = arr.unsafeGet(right(idx))
+        if (l < v && r < v) {
+          // swap with the smaller one
+          if (l < r) {
+            arr.unsafeSwap(left(idx), idx)
+            go(left(idx))
+          } else {
+            arr.unsafeSwap(right(idx), idx)
+            go(right(idx))
+          }
+        } else if (l < v) {
+          arr.unsafeSwap(left(idx), idx)
+          go(left(idx))
+        } else if (r < v) {
+          arr.unsafeSwap(right(idx), idx)
+          go(right(idx))
+        }
+      } else if (left(idx) < arr.size) {
+        if (arr.unsafeGet(left(idx)) < arr.unsafeGet(idx)) {
+          arr.unsafeSwap(left(idx), idx)
+          go(left(idx))
+        }
+      } // else: we are at the bottom
+    }
+    go(idx)
+  }
+}
+
+// Insert value into heap
+//
+// O(log n) worst case if capacity suffices, O(1) average
+def insert[T](heap: Heap[T], value: T): Unit = {
+  with on[OutOfBounds].panic();
+  val idx = heap.rawContents.add(value)
+  internal::bubbleUp(heap, idx)
+}
+
+// find and return (but not remove) the minimal element in this heap
+//
+// O(1)
+def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
+  heap.rawContents.get(0)
+}
+
+// find and remove the minimal element in this heap
+//
+// O(log n)
+def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
+  val res = heap.rawContents.get(0)
+  heap.rawContents.unsafeSet(0, heap.rawContents.popRight())
+  internal::sinkDown(heap, 0)
+  res
+}
+
+// Number of elements in the heap
+//
+// O(1)
+def size[T](heap: Heap[T]): Int = {
+  heap.rawContents.size
+}
+
+def main() = {
+  with on[OutOfBounds].panic();
+  val h = heap[Int](fun(x: Int, y: Int){
+    if (x < y) {
+      Less()
+    } else Greater()  // hacky, should sometimes be Equal()
+  })
+  h.insert(12)
+  h.insert(10)
+  h.insert(7)
+  h.insert(11)
+  h.insert(14)
+  while(h.size > 0) {
+    println(h.deleteMin())
+  }
+}
