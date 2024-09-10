@@ -375,8 +375,11 @@ object Transformer {
         New(variable, transform(impl, None), k(variable))
       }
 
-    case core.Member(b, field, annotatedTpe) => ???
-    case core.Unbox(e) => ???
+    case core.Member(b, field, annotatedTpe) =>
+      E.panic("Cannot pass member selection as argument")
+
+    case core.Unbox(pure) =>
+      transform(pure)
   }
 
   def transform(expr: core.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match {
