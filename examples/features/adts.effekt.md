@@ -15,10 +15,10 @@ type FileSystem {
 }
 ```
 
-Each definition starts with the `type` keyword and is followed by the name of the datatype. Enclosed by curly braces
-and separated by newlines, variants consisting of a name and optional fields can be defined.
+A datatype definition starts with the `type` keyword and is followed by the name of the datatype. 
+Variants are enclosed by curly braces and separated by newlines (or semicolons) and consist of a name and a (non-optional) list of fields.
 
-Creating instances of this datatype functions just as you might expect:
+Constructing values of this datatype works as you might expect:
 
 ```effekt:repl
 val file = File("README.md", "Effekt")
