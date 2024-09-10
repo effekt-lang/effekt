@@ -22,8 +22,8 @@ def myMap[A, B](xs: List[A]) { f: A => B }: List[B] =
   }
 ```
 
-The block parameter `f` is enclosed by curly braces and is syntactically separated from the value paramters. Of course, there may also be multiple block parameters
-each enclosed by curly braces.
+The block parameter `f` is enclosed in curly braces and syntactically separated from the value parameters. 
+While multiple value parameters are separated by comma, multiple block parameters are expressed enclosing each in curly braces.
 
 ```effekt:repl
 [1, 2, 3].myMap { x => x * 2 }
