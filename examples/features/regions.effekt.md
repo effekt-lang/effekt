@@ -8,10 +8,10 @@ permalink: docs/tutorial/regions
 
 ## State and continuations
 
-Consider the following handle for non-determinism:
+Consider the following handler for non-determinism:
 
 ```
-interface Amb { def flip(): Boolean }
+interface Amb { def flip(): Bool }
 
 def allChoices { prog: () => Unit / Amb }: Unit = {
   try { prog() }
@@ -93,7 +93,7 @@ By doing so, the type of `closure` becomes `() => Int at {r}` and thereby signif
 Additionally, regions are second-class like blocks and objects and thus can be passed to functions. We use this for rewriting the opening example from the previous section:
 
 ```
-def prog {r: Region} = {
+def exampleProgram {r: Region} = {
   var x in r = 1
   if (do flip()) { x = 2 }
   else { () }
