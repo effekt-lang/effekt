@@ -8,6 +8,12 @@ permalink: docs/tutorial/computation
 
 ## Values vs. Computation
 
+```effekt:hidden
+interface Yield[A] {
+  def yield(x: A): Unit
+}
+```
+
 Following Paul Levy's [Call-By-Push-Value](https://www.cs.bham.ac.uk/~pbl/papers/thesisqmwphd.pdf) Effekt distinguishes between **values** (such as `42`, `true`, or instances of datatypes) and **computation**.
 
 Examples of "computation" in Effekt are:
@@ -36,7 +42,7 @@ In the previous example, the block passed to `myMap` did not use any effect oper
 the argument passed for `f` is effectful?
 
 ```
-def example(): List[Int] / Yield[Int] = [1, 2, 3].map { x => do yield[Int](x); x * 2 }
+def example(): List[Int] / Yield[Int] = [1, 2, 3].map { x => do yield(x); x * 2 }
 ```
 
 We can apply a "contract"-based reading to understand effects. The expanded type of `myMap`
