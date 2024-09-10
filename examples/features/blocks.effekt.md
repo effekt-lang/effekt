@@ -36,5 +36,15 @@ the argument passed for `f` is effectful?
 def example(): List[Int] / Yield[Int] = [1, 2, 3].map { x => do yield[Int](x); x * 2 }
 ```
 
-Since effects are considered as requirements for the calling context and the signature of `f` does not mention any, the implementation of `myMap` cannot handle any effects
-occuring in `f`. The effects used in the passed block need to be handled exactly where the block is defined, that is, at the call-site of `myMap`.
+We can apply a "contract"-based reading to understand effects. The expanded type of `myMap`
+
+```effekt
+myMap[A, B](xs: List[A]) { f: A => B / {} }: List[B] / {}
+``
+has an empty effect set on `f` and an empty effect set on `myMap`. 
+In general, effects in covariant positions (like those on `myMap`) are part of the precondition and considered as _requirements_ for the calling context.
+In contrast, effects in contravariant positions (like those on `f`) are part of the postcondition and can be read as provided (that is, "myMap provides these capabilities to `f`").
+
+This reading is consistent with something we call _effect parametricity_: since the signature of `f` does not mention any effects, the implementation of `myMap` cannot handle any effects occurring in `f`. 
+
+The effects used in the passed block thus need to be handled exactly where the block is defined, that is, at the call-site of `myMap`. 
