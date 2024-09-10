@@ -1,17 +1,13 @@
 ---
 layout: docs
-title: Blocks
-permalink: docs/tutorial/blocks
+title: Computation
+permalink: docs/tutorial/computation
 ---
 
-# Blocks
+# Computation
 
-```effekt:hidden
-interface Yield[A] {
-  def yield(x: A): Unit
-}
-```
 ## Values vs. Computation
+
 Following Paul Levy's [Call-By-Push-Value](https://www.cs.bham.ac.uk/~pbl/papers/thesisqmwphd.pdf) Effekt distinguishes between **values** (such as `42`, `true`, or instances of datatypes) and **computation**.
 
 Examples of "computation" in Effekt are:
@@ -47,11 +43,29 @@ We can apply a "contract"-based reading to understand effects. The expanded type
 
 ```effekt
 myMap[A, B](xs: List[A]) { f: A => B / {} }: List[B] / {}
-``
+```
+
 has an empty effect set on `f` and an empty effect set on `myMap`. 
 In general, effects in covariant positions (like those on `myMap`) are part of the precondition and considered as _requirements_ for the calling context.
 In contrast, effects in contravariant positions (like those on `f`) are part of the postcondition and can be read as provided (that is, "myMap provides these capabilities to `f`").
 
 This reading is consistent with something we call _effect parametricity_: since the signature of `f` does not mention any effects, the implementation of `myMap` cannot handle any effects occurring in `f`. 
 
-The effects used in the passed block thus need to be handled exactly where the block is defined, that is, at the call-site of `myMap`. 
+The effects used in the passed block thus need to be handled exactly where the block is defined, that is, at the call-site of `myMap`.
+
+## Comparison
+
+|   | Values (First-class) | Computation (Second-class) |
+|---|:---|---:|
+| Term-level | `42`, `"hello"`, `true`, `Cons(1, Nil)`, `box { [A](x: A) => x }` ... | `{ [A](x: A) => x }`, `new Exception`, `region r`, `unbox exc`  |
+| | Literals, instances of datatypes and boxed computations | Blocks, objects and regions |
+| Type-level | `Int`, `String`, `Bool`, `List[Int]`, `[A](A) => A at {}`...  | `{ [A](A) => A }`, `{exc: Exception}`, `{r: Region}`  |
+
+On the term-level, `box`ing offers a way of transforming a second-class computation into a first-class value.
+Conversely, `unbox`ing does the reverse and converts a first-class boxed computation back into a second-class computation.
+On the type-level, `at {...}` serves the same purpose as `box`.
+Further information can be found in the section about captures and objects.
+
+## References
+
+- [Call-By-Push-Value](https://www.cs.bham.ac.uk/~pbl/papers/thesisqmwphd.pdf)
