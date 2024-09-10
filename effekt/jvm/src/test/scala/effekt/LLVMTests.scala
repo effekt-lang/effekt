@@ -21,9 +21,6 @@ class LLVMTests extends EffektTests {
   lazy val bugs: List[File] = List(
     examplesDir / "pos" / "issue108.effekt", // seg faults!
 
-    // unsure
-    examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
-
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
