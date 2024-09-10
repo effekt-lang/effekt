@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Effects
-permalink: docs/tutorials/effects
+permalink: docs/tutorial/effects
 ---
 
 # Effects and handlers

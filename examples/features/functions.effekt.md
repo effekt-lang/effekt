@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Functions
-permalink: docs/tutorials/functions
+permalink: docs/tutorial/functions
 ---
 
 # Functions

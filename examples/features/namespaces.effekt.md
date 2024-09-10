@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Namespaces
-permalink: docs/tutorials/namespaces
+permalink: docs/tutorial/namespaces
 ---
 
 # Namespaces

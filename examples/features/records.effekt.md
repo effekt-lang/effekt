@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Records
-permalink: docs/tutorials/records
+permalink: docs/tutorial/records
 ---
 
 # Tuples & records

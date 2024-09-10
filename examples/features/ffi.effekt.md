@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: FFI
-permalink: docs/tutorials/ffi
+permalink: docs/tutorial/ffi
 ---
 
 # FFI (Foreign Function Interface)

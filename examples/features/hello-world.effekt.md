@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: HelloWorld
-permalink: docs/tutorials/hello-world
+permalink: docs/tutorial/hello-world
 ---
 
 # Hello, World
