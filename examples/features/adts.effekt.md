@@ -24,7 +24,7 @@ Constructing values of this datatype works as you might expect:
 val file = File("README.md", "Effekt")
 ```
 
-Even though, each variant looks like a record here, selectors like with records do not work here.
+While records allow selecting fields directly, this is not true on variants of a datatype.
 
 ```effekt:repl
 file.name // fails
