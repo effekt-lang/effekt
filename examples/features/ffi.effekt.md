@@ -1,8 +1,8 @@
-# FFI
+# FFI (Foreign Function Interface)
 
 ## `extern def`
 
-Effekt allows defining extern functions via FFI.
+Effekt allows communicating with the host platform (for instance JavaScript) by defining extern functions via FFI.
 Let's start with the JavaScript backend by defining a function that adds two numbers:
 
 ```effekt
@@ -25,7 +25,7 @@ extern def ref[T](init: T): Ref[T] =
 
 ## `extern include`
 
-Sometimes, you want to include a whole JavaScript files containing your favourite JavaScript library
+Sometimes, you want to include a whole JavaScript file containing your favourite JavaScript library
 so that you can write bindings for it later.
 You can do that in Effekt with the following code:
 
@@ -43,8 +43,8 @@ Use `extern` strings!
 ```effekt
 extern js """
   function set$impl(ref, value) {
-	  ref.value = value;
-	  return $effekt.unit;
+    ref.value = value;
+    return $effekt.unit;
   }
 """
 
@@ -61,9 +61,9 @@ Now you can call `set` on your reference!
 You can and should annotate the capture of your extern function as `extern <capture> def ...`
 
 - no capture, usually denoted as `pure`, also writable as `{}`
-- if you want to allocate into a global scope, use `global`
-- if your operation does I/O (like for example `println`), use `io` (this is the default capture)
-- if your operation does other control effects, use `control`
+- if you want to allocate into a global scope (e.g. the JavaScript heap), use `global`
+- if your operation performs I/O (like for example `println`), use `io` (this is the default capture)
+- if your operation captures the continuation use `control` (in the JS backend, control definitions should return a monadic value of type `Control`)
 - of course, you can mix and match: `extern def {global, io, control} ...`
 
 > NOTE: TODO: if pure, means compiler can remove them, inline them, etc.!
