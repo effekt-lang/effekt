@@ -242,6 +242,90 @@ object Transformer {
         shareValues(List(value), freeVariables(rest))
         transform(rest)
 
+      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
+        val environment = List(init)
+        val returnAddressName = freshName("returnAddress")
+        val returnValue = freshName("returnValue")
+        val returnType = transform(retType)
+        val parameters = List(Parameter(returnType, returnValue))
+
+        defineLabel(returnAddressName, parameters) {
+          emit(Comment(s"var $name / return address"))
+          popEnvironmentFrom(getStack(), environment)
+          eraseValue(init)
+          val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
+          popReturnAddressFrom(getStack(), nextReturn.name)
+          emit(callLabel(nextReturn, List(LocalReference(returnType, returnValue))))
+          RetVoid()
+        }
+
+        val sharerName = freshName("sharer");
+        defineFunction(sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
+          emit(Comment(s"sharer, ${environment.length} free variables"))
+
+          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+          emit(GetElementPtr(nextStackPointer.name, environmentType(environment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+          loadEnvironmentAt(nextStackPointer, environment);
+
+          shareValues(environment, Set.from(environment));
+          emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
+          RetVoid()
+        }
+
+        val eraserName = freshName("eraser");
+        defineFunction(eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
+          emit(Comment(s"eraser, ${environment.length} free variables"))
+
+          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+          emit(GetElementPtr(nextStackPointer.name, environmentType(environment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+          loadEnvironmentAt(nextStackPointer, environment);
+
+          eraseValues(environment, Set());
+          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(nextStackPointer)));
+          RetVoid()
+        }
+
+        emit(Call(name, Ccc(), referenceType, newReference, List(getStack())))
+
+        shareValues(environment, freeVariables(rest));
+        pushEnvironmentOnto(getStack(), environment);
+        pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
+
+        transform(rest)
+
+      case machine.Var(_, _, _, _) => ???
+
+      case machine.LoadVar(name, ref, rest) =>
+        emit(Comment(s"loadvar ${name.name}, reference ${ref.name}"))
+
+        val ptr = freshName(name.name + "_pointer");
+        val ptrRef = LocalReference(PointerType(), ptr)
+        emit(Call(ptr, Ccc(), PointerType(), getVarPointer, List(transform(ref), getStack())))
+
+        // TODO why do we need this?
+        val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        shareValue(oldVal)
+
+        emit(Load(name.name, transform(name.tpe), ptrRef))
+        eraseValues(List(name), freeVariables(rest))
+        transform(rest)
+
+      case machine.StoreVar(ref, value, rest) =>
+        emit(Comment(s"storevar ${ref.name}, value ${value.name}"))
+
+        val ptr = freshName(ref.name + "pointer");
+        val ptrRef = LocalReference(PointerType(), ptr)
+        emit(Call(ptr, Ccc(), PointerType(), getVarPointer, List(transform(ref), getStack())))
+
+        val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        eraseValue(oldVal)
+
+        emit(Store(ptrRef, transform(value)))
+        shareValues(List(value), freeVariables(rest))
+        transform(rest)
+
       case machine.PushFrame(frame, rest) =>
         val frameEnvironment = freeVariables(frame).toList;
 
@@ -743,6 +827,9 @@ object Transformer {
 
   def alloc = ConstantGlobal(PointerType(), "alloc")
   def getPointer = ConstantGlobal(PointerType(), "getPointer")
+
+  def newReference = ConstantGlobal(PointerType(), "newReference")
+  def getVarPointer = ConstantGlobal(PointerType(), "getVarPointer")
 
   def newStack = ConstantGlobal(PointerType(), "newStack");
   def pushStack = ConstantGlobal(PointerType(), "pushStack");
