@@ -69,6 +69,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Store(reference, value, rest) =>
       "store" <> parens(List(reference, value) map toDoc) <> ";" <> line <> toDoc(rest)
 
+    case Var(name, init, _, rest) =>
+      "var" <+> name <+> "=" <+> toDoc(init) <> ";" <> line <> toDoc(rest)
+
+    case LoadVar(name, reference, rest) =>
+      "let" <+> name <+> "=" <+> "loadVar" <> parens(toDoc(reference)) <> ";" <> line <> toDoc(rest)
+
+    case StoreVar(reference, value, rest) =>
+      "storeVar" <> parens(List(reference, value) map toDoc) <> ";" <> line <> toDoc(rest)
+
     case PushFrame(frame, rest) =>
       "push" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
