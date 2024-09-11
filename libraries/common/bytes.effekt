@@ -13,7 +13,7 @@ extern type Bytes
 extern io def bytes(capacity: Int): Bytes =
   js "(new Uint8Array(${capacity}))"
   llvm """
-    %buf = call %Pos @c_buffer_construct_uninitialized(i64 %capacity)
+    %buf = call %Pos @c_buffer_construct_uninitialized(i64 ${capacity})
     ret %Pos %buf
   """
 
@@ -27,7 +27,7 @@ def copy(b: Bytes): Bytes = {
 extern io def copy(from: Bytes, to: Bytes, startFrom: Int, startTo: Int, length: Int): Unit =
   js "bytes$copy(${from}, ${to}, ${startFrom}, ${startTo}, ${length})"
   llvm """
-    call void @c_buffer_copy(%Pos %from, %Pos %to, i64 %startFrom, i64 %startTo, i64 %length)
+    call void @c_buffer_copy(%Pos ${from}, %Pos ${to}, i64 ${startFrom}, i64 ${startTo}, i64 ${length})
     ; return Unit
     ret %Pos zeroinitializer
   """
@@ -35,14 +35,14 @@ extern io def copy(from: Bytes, to: Bytes, startFrom: Int, startTo: Int, length:
 extern pure def size(b: Bytes): Int =
   js "${b}.length"
   llvm """
-    %size = call i64 @c_buffer_length(%Pos %b)
+    %size = call i64 @c_buffer_length(%Pos ${b})
     ret i64 %size
   """
 
 extern io def read(b: Bytes, index: Int): Byte =
   js "(${b})[${index}]"
   llvm """
-    %byte = call i8 @c_buffer_index(%Pos %b, i64 %index)
+    %byte = call i8 @c_buffer_index(%Pos ${b}, i64 ${index})
     ret i8 %byte
   """
 
@@ -50,7 +50,7 @@ extern io def read(b: Bytes, index: Int): Byte =
 extern io def write(b: Bytes, index: Int, value: Byte): Unit =
   js "bytes$set(${b}, ${index}, ${value})"
   llvm """
-    call void @c_buffer_set(%Pos %b, i64 %index, i8 %value)
+    call void @c_buffer_set(%Pos ${b}, i64 ${index}, i8 ${value})
     ; return Unit
     ret %Pos zeroinitializer
   """
@@ -75,7 +75,7 @@ def truncated(b: Bytes, n: Int): Bytes =
 extern pure def fromUTF8(s: String): Bytes =
   js "(new TextEncoder().encode(${s}))"
   llvm """
-    %copy = call %Pos @c_buffer_clone(%Pos %s)
+    %copy = call %Pos @c_buffer_clone(%Pos ${s})
     ret %Pos %copy
   """
 
@@ -83,7 +83,7 @@ extern pure def toUTF8(b: Bytes): String =
   js "(new TextDecoder('utf-8').decode(${b}))"
   // assuming the buffer is already in UTF-8
   llvm """
-    %copy = call %Pos @c_buffer_clone(%Pos %b)
+    %copy = call %Pos @c_buffer_clone(%Pos ${b})
     ret %Pos %copy
   """
 
@@ -94,7 +94,7 @@ namespace unsafe {
   extern io def slice(b: Bytes, offset: Int, length: Int): Bytes =
     js "new Uint8Array(${b}.buffer, ${offset}, ${length})"
     llvm """
-      %buf = call %Pos @c_buffer_slice(%Pos %b, i64 %offset, i64 %length)
+      %buf = call %Pos @c_buffer_slice(%Pos ${b}, i64 ${offset}, i64 ${length})
       ret %Pos %buf
     """
 

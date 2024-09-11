@@ -17,7 +17,7 @@ extern global def allocate[T](size: Int): Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
-    %z = call %Pos @c_array_new(%Int %size)
+    %z = call %Pos @c_array_new(%Int ${size})
     ret %Pos %z
   """
 
@@ -55,7 +55,7 @@ extern pure def size[T](arr: Array[T]): Int =
   chez "(vector-length ${arr})"
   ml "Array.length ${arr}"
   llvm """
-    %z = call %Int @c_array_size(%Pos %arr)
+    %z = call %Int @c_array_size(%Pos ${arr})
     ret %Int %z
   """
 
@@ -70,7 +70,7 @@ extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   chez "(vector-ref ${arr} ${index})"
   ml "Array.sub (${arr}, ${index})"
   llvm """
-    %z = call %Pos @c_array_get(%Pos %arr, %Int %index)
+    %z = call %Pos @c_array_get(%Pos ${arr}, %Int ${index})
     ret %Pos %z
   """
 
@@ -92,7 +92,7 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   ml "Array.update (${arr}, ${index}, ${value})"
   llvm """
-    %z = call %Pos @c_array_set(%Pos %arr, %Int %index, %Pos %value)
+    %z = call %Pos @c_array_set(%Pos ${arr}, %Int ${index}, %Pos ${value})
     ret %Pos %z
   """
 
