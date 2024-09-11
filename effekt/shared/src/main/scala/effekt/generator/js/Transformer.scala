@@ -136,14 +136,21 @@ trait Transformer {
 
   // Externs
   // -------
-  def normalizeExternStrings(l: List[String])(using Context): List[String] = {
-    val start = l.head
-    val end = l.last
-    val mid = l.tail.init
-    if (start.matches("""^\s.*""") || end.matches(""".*\s$""")) {
-      Context.warning("Extern string in js has trailing / leading whitespace. This will be removed.")
-    }
-    start.stripLeading() +: mid :+ end.stripTrailing()
+  def normalizeExternStrings(l: List[String])(using Context): List[String] = l match {
+    case Nil => Nil
+    case List(s) =>
+      if (s.matches("""^\s.*""") || s.matches(""".*\s$""")) {
+        Context.warning("Extern string in js has trailing / leading whitespace. This will be removed.")
+      }
+      List(s.strip())
+    case l =>
+      val start = l.head
+      val end = l.last
+      val mid = l.tail.init
+      if (start.matches("""^\s.*""") || end.matches(""".*\s$""")) {
+        Context.warning("Extern string in js has trailing / leading whitespace. This will be removed.")
+      }
+      start.stripLeading() +: mid :+ end.stripTrailing()
   }
 
   // Separate Compilation (Website)
