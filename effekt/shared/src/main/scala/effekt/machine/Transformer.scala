@@ -46,7 +46,7 @@ object Transformer {
 
       val transformedParams = vparams.map(transform)
       noteDefinition(name, transformedParams, Nil)
-      Extern(transform(name), transformedParams, transform(ret), false, transform(body))
+      Extern(transform(name), transformedParams, transform(ret), capture.contains(symbols.builtins.ControlCapability.capture), transform(body))
 
     case core.Extern.Include(ff, contents) =>
       Include(ff, contents)
