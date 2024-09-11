@@ -81,7 +81,7 @@ namespace llvm {
 
   extern io def argument(i: Int): String =
     llvm """
-      %s = call %Pos @c_get_arg(%Int %i)
+      %s = call %Pos @c_get_arg(%Int ${i})
       ret %Pos %s
     """
 

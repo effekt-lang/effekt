@@ -181,7 +181,7 @@ extern io def closeFile(fd: FileDescriptor): Unit =
   js "fs.close(${fd}, () => $effekt.unit)"
   llvm """
     ; extract the filedescriptor from the tag of the Pos
-    %tag = extractvalue %Pos %fd, 0
+    %tag = extractvalue %Pos ${fd}, 0
     %fd_int = trunc i64 %tag to i32
 
     call void @c_file_close(i32 %fd_int)
@@ -218,7 +218,7 @@ namespace callback {
       %onFailure_ptr = alloca %Neg
       store %Neg %onFailure, %Neg* %onFailure_ptr
 
-      call void @c_file_open(%Pos %path, %Pos %mode, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      call void @c_file_open(%Pos ${path}, %Pos ${mode}, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 
@@ -228,17 +228,17 @@ namespace callback {
     js "readFile(${fd}, ${buffer}, ${offset}, ${onSuccess}, ${onFailure})"
     llvm """
       ; extract the filedescriptor from the tag of the Pos
-      %tag = extractvalue %Pos %fd, 0
+      %tag = extractvalue %Pos %${fd}, 0
       %fd_int = trunc i64 %tag to i32
 
       ; stack allocate
       %onSuccess_ptr = alloca %Neg
-      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+      store %Neg ${onSuccess}, %Neg* %onSuccess_ptr
 
       %onFailure_ptr = alloca %Neg
-      store %Neg %onFailure, %Neg* %onFailure_ptr
+      store %Neg ${onFailure}, %Neg* %onFailure_ptr
 
-      call void @c_file_read(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      call void @c_file_read(i32 %fd_int, %Pos ${buffer}, i64 noundef ${offset}, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 
@@ -248,17 +248,17 @@ namespace callback {
     js "writeFile(${fd}, ${buffer}, ${offset}, ${onSuccess}, ${onFailure})"
     llvm """
       ; extract the filedescriptor from the tag of the Pos
-      %tag = extractvalue %Pos %fd, 0
+      %tag = extractvalue %Pos ${fd}, 0
       %fd_int = trunc i64 %tag to i32
 
       ; stack allocate
       %onSuccess_ptr = alloca %Neg
-      store %Neg %onSuccess, %Neg* %onSuccess_ptr
+      store %Neg ${onSuccess}, %Neg* %onSuccess_ptr
 
       %onFailure_ptr = alloca %Neg
-      store %Neg %onFailure, %Neg* %onFailure_ptr
+      store %Neg ${onFailure}, %Neg* %onFailure_ptr
 
-      call void @c_file_write(i32 %fd_int, %Pos %buffer, i64 noundef %offset, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
+      call void @c_file_write(i32 %fd_int, %Pos ${buffer}, i64 noundef ${offset}, ptr %onSuccess_ptr, ptr %onFailure_ptr) #0
       ret %Pos zeroinitializer
     """
 }
