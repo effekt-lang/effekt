@@ -8,7 +8,7 @@ import effekt.namer.Namer
 import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ResolveExternDefs, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
-import effekt.util.messages.FatalPhaseError
+import effekt.util.messages.{ FatalPhaseError, CompilerPanic }
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
@@ -116,25 +116,35 @@ trait Compiler[Executable] {
     CachedParser(source).map { res => res.tree }
 
   /**
-   * Used by
+   * This is the second-most important entry-point besides [[Driver.compileSource]].
+   * It is used by
    * - Namer to resolve dependencies
    * - Server / Driver to typecheck and report type errors in VSCode
    */
-  def runFrontend(source: Source)(using Context): Option[Module] =
-    Frontend(source).map { res =>
-      val mod = res.mod
-      validate(source, mod)
-      mod
-    }
-
-  /**
-   * Used by the server to typecheck, report type errors and show
-   * captures at boxes and definitions
-   */
-  def runMiddleend(source: Source)(using Context): Option[Module] =
-    (Frontend andThen Middleend)(source).map { res =>
-      validate(res.source, res.mod)
-      res.mod
+  def runFrontend(source: Source)(using C: Context): Option[Module] =
+    try {
+      val res = Frontend(source).map { res =>
+        val mod = res.mod
+        validate(source, mod)
+        mod
+      }
+      if C.messaging.hasErrors then None else res
+    } catch {
+      case FatalPhaseError(msg) =>
+        C.report(msg)
+        None
+      case e @ CompilerPanic(msg) =>
+        C.report(msg)
+        e.getStackTrace.foreach { line =>
+          C.info("  at " + line)
+        }
+        None
+      case e =>
+        C.info("Effekt Compiler Crash: " + e.getMessage)
+        e.getStackTrace.foreach { line =>
+          C.info("  at " + line)
+        }
+        None
     }
 
   /**
@@ -224,28 +234,28 @@ trait Compiler[Executable] {
        * Wellformedness checks (exhaustivity, non-escape)
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      Wellformedness
+      Wellformedness andThen
+      /**
+       * Resolves `extern`s for the current backend
+       * [[Typechecked]] --> [[Typechecked]]
+       */
+      ResolveExternDefs andThen
+      /**
+       * Uses annotated effects to translate to explicit capability passing
+       * [[Typechecked]] --> [[Typechecked]]
+       */
+      ExplicitCapabilities andThen
+      /**
+       * Computes and annotates the capture of each subexpression
+       * [[Typechecked]] --> [[Typechecked]]
+       */
+      AnnotateCaptures
   }
 
   /**
    * Middleend
    */
   val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
-    /**
-     * Resolves `extern`s for the current backend
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    ResolveExternDefs andThen
-    /**
-     * Uses annotated effects to translate to explicit capability passing
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    ExplicitCapabilities andThen
-    /**
-     * Computes and annotates the capture of each subexpression
-     * [[Typechecked]] --> [[Typechecked]]
-     */
-    AnnotateCaptures andThen
     /**
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
@@ -305,7 +315,7 @@ trait Compiler[Executable] {
   }
 
   lazy val Machine = Phase("machine") {
-    case CoreLifted(source, tree, mod, core) =>
+    case CoreTransformed(source, tree, mod, core) =>
       val main = Context.checkMain(mod)
       (mod, main, machine.Transformer.transform(main, core))
   }

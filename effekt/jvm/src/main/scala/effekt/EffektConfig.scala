@@ -6,6 +6,8 @@ import kiama.util.REPLConfig
 import org.rogach.scallop.{ ScallopOption, fileConverter, fileListConverter, longConverter, stringConverter, stringListConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--")) {
+  // Print version information on `--version` and `--help`
+  version(s"Effekt ${effekt.util.Version.effektVersion}")
 
   // Common
   // ------

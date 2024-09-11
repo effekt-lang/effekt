@@ -101,16 +101,14 @@ namespace promise {
   extern control def resolve[T](promise: Promise[T], value: T): Unit =
     js "$effekt.callcc(callback => { ${promise}.resolve(${value}); callback($effekt.unit)})"
     llvm """
-      call void @c_promise_resolve(%Pos %promise, %Pos %value, %Stack %stack)
+      call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
       ret void
     """
 
   extern control def await[T](promise: Promise[T]): T =
     js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
     llvm """
-      call void @c_promise_await(%Pos %promise, %Stack %stack)
+      call void @c_promise_await(%Pos ${promise}, %Stack %stack)
       ret void
     """
 }
-
-

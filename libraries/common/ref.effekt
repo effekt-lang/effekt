@@ -34,7 +34,7 @@ extern global def ref[T](init: T): Ref[T] =
   chez "(box ${init})"
   ml "ref ${init}"
   llvm """
-    %z = call %Pos @c_ref_fresh(%Pos %init)
+    %z = call %Pos @c_ref_fresh(%Pos ${init})
     ret %Pos %z
   """
 
@@ -46,7 +46,7 @@ extern global def get[T](ref: Ref[T]): T =
   chez "(unbox ${ref})"
   ml "!${ref}"
   llvm """
-    %z = call %Pos @c_ref_get(%Pos %ref)
+    %z = call %Pos @c_ref_get(%Pos ${ref})
     ret %Pos %z
   """
 
@@ -58,6 +58,6 @@ extern global def set[T](ref: Ref[T], value: T): Unit =
   chez "(set-box! ${ref} ${value})"
   ml "${ref} := ${value}"
   llvm """
-    %z = call %Pos @c_ref_set(%Pos %ref, %Pos %value)
+    %z = call %Pos @c_ref_set(%Pos ${ref}, %Pos ${value})
     ret %Pos %z
   """

@@ -369,7 +369,7 @@ trait TransformerMonadic extends Transformer {
         // f17.apply(null, sc.__data)
         case (c, block@BlockLit(tparams, cparams, vparams, bparams, body)) =>
           val fields = D.getConstructor(c).fields.map(_.id)
-          val freeVars = core.Variables.free(body).map(_.id)
+          val freeVars = core.Variables.free(body).toSet.map(_.id)
 
           val params = vparams.map { p => p.id }
           def isUsed(x: Id) = freeVars contains x

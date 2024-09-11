@@ -4,12 +4,12 @@ package core
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 import effekt.symbols
-import effekt.symbols.{ TmpBlock, TmpValue }
-import effekt.{ CoreTransformed, Phase }
-import effekt.symbols.builtins.{ TBoolean, TDouble, TInt, TChar, TByte, TState, TUnit }
+import effekt.symbols.{TmpBlock, TmpValue}
+import effekt.{CoreTransformed, Phase}
+import effekt.symbols.builtins.{TBoolean, TByte, TChar, TDouble, TInt, TState, TUnit}
 import effekt.symbols.ErrorMessageInterpolator
-import scala.util.boundary
 
+import scala.util.boundary
 import scala.annotation.targetName
 
 /**
@@ -215,8 +215,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
       Block.BlockVar(id, transform(annotatedTpe), annotatedCapt)
     case b: Block.BlockLit => transform(b)
-    case Block.Member(block, field, annotatedTpe) =>
-      Block.Member(transform(block), field, transform(annotatedTpe))
+    case Block.Member(block, field, annotatedTpe) => // TODO properly box/unbox arguments and result
+      val tpe = block.tpe.asInstanceOf[core.BlockType.Interface]
+      PContext.findInterface(tpe.name) match {
+        case None => // assume it's an external interface and will be handled elsewhere
+          Block.Member(transform(block), field, transform(annotatedTpe))
+        case Some(ifce) =>
+          val prop = ifce.properties.find { p => p.id == field }.getOrElse { Context.abort(s"Cannot find field ${field} in declaration ${ifce}") }
+          val propTpe = Type.substitute(prop.tpe.asInstanceOf[BlockType.Function], (ifce.tparams zip (tpe.targs.map(transformArg))).toMap, Map.empty)
+          val coerce = coercer[Block](transform(propTpe), transform(annotatedTpe))
+          coerce(Block.Member(transform(block), field, transform(propTpe)))
+      }
     case Block.Unbox(pure) =>
       Block.Unbox(transform(pure))
     case Block.New(impl) =>
@@ -225,17 +234,40 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(implementation: Implementation)(using PContext): Implementation = implementation match {
     case Implementation(BlockType.Interface(symbol, targs), operations) =>
-      Implementation(BlockType.Interface(symbol, targs map transform), operations map transform(targs))
+      val ifce = PContext.findInterface(symbol).getOrElse { Context.abort(s"No declaration for interface ${symbol}") }
+      Implementation(BlockType.Interface(symbol, targs map transformArg), operations map transform(ifce, targs))
 
   }
 
-  def transform(targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
-    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-      val blockTpe = BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), transform(body.tpe))
+  def transform(ifce: Interface, targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
+    case Operation(name, tparams, cparams, vparams, bparams, None, body) =>
+      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
+      val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
+      
+      val blockTpe = BlockType.Function(tparams, propTpe.cparams, propTpe.vparams.map(transform), propTpe.bparams.map(transform), transform(propTpe.result))
       val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, transform(body))
       val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
       Operation(name, transformed.tparams, transformed.cparams, transformed.vparams, transformed.bparams,
-        resume map transform,
+        None,
+        transformed.body)
+    case Operation(name, tparams, cparams, vparams, bparams, Some(resume), body) =>
+      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
+      val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
+      val answerTpe = body.tpe
+      val propResumeParam = if (bparams.isEmpty) {
+        BlockType.Function(Nil, Nil, List(propTpe.result), Nil, answerTpe)
+      } else {
+        BlockType.Function(Nil, resume.capt.toList, Nil, List(
+          BlockType.Function(Nil, propTpe.cparams, Nil, propTpe.bparams.map(transform), transform(propTpe.result))
+        ), answerTpe)
+      }
+
+      val blockTpe = BlockType.Function(tparams, resume.capt.toList, propTpe.vparams.map(transform), List(transform(propResumeParam)), transform(answerTpe))
+      val implBlock: Block.BlockLit = Block.BlockLit(tparams, resume.capt.toList, vparams, List(resume), transform(body))
+      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
+      assert(transformed.bparams.length == 1)
+      Operation(name, transformed.tparams, Nil, transformed.vparams, Nil,
+        Some(transformed.bparams.head),
         transformed.body)
   }
 
@@ -516,7 +548,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
           Block.BlockLit(ftparams, bparams.map(_.id), vparams, bparams,
             Def(inner, block,
-              Stmt.Val(result, rcoercer.from, Stmt.App(Block.BlockVar(inner, block.tpe, block.capt), targs map transformArg, vargs, bargs),
+              Stmt.Val(result, rcoercer.from, Stmt.App(Block.BlockVar(inner, block.tpe, block.capt),  (targs map transformArg) ++ (ftparams map core.ValueType.Var.apply), vargs, bargs),
                 Stmt.Return(rcoercer(Pure.ValueVar(result, rcoercer.from))))))
         }
 

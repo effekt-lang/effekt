@@ -21,17 +21,11 @@ class LLVMTests extends EffektTests {
   lazy val bugs: List[File] = List(
     examplesDir / "pos" / "issue108.effekt", // seg faults!
 
-    // unsure
-    examplesDir / "pos" / "parametrized.effekt", // just doesn't print anything
-
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
     // *** MALLOC PANIC
     examplesDir / "pos" / "get_put.effekt",
-
-    // unclear
-    examplesDir / "pos" / "higher_rank_polymorphism.effekt",
 
     // Valgrind leak/failure
     examplesDir / "llvm" / "nested.effekt",
@@ -112,8 +106,6 @@ class LLVMTests extends EffektTests {
 
     // first class functions closing over capabilities
     examplesDir / "pos" / "capture" / "state_eff.effekt",
-    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
-    examplesDir / "pos" / "file.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",

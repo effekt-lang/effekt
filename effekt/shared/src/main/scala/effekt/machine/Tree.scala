@@ -99,11 +99,9 @@ case class Clause(parameters: Environment, body: Statement)
  *     │─ [[ PushStack ]]
  *     │─ [[ PopStacks ]]
  *     │─ [[ ForeignCall ]]
- *     │─ [[ ComposeEvidence ]]
  *     │─ [[ LiteralInt ]]
  *     │─ [[ LiteralDouble ]]
  *     │─ [[ LiteralUTF8String ]]
- *     │─ [[ LiteralEvidence ]]
  *     │─ [[ Hole ]]
  *
  * --------------------------------------------------
@@ -146,19 +144,19 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. let x = allocate(42, ev); s
+  *  e.g. let x = allocate(42, region); s
   */
-  case Allocate(name: Variable, init: Variable, ev: Variable, rest: Statement)
+  case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
 
   /**
-  * e.g. let y = load(x, ev); s
+  * e.g. let y = load(x); s
   */
-  case Load(name: Variable, ref: Variable, ev: Variable, rest: Statement)
+  case Load(name: Variable, reference: Variable, rest: Statement)
 
   /**
-  * e.g. store(x, 42, ev); s
+  * e.g. store(x, 42); s
   */
-  case Store(ref: Variable, value: Variable, ev: Variable, rest: Statement)
+  case Store(reference: Variable, value: Variable, rest: Statement)
 
   /**
    * e.g. push { (x, ...) => s }; s
@@ -171,9 +169,21 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * e.g. let k = stack { (x, ...) => s }; s
+   * Creates a fresh prompt
+   * let p = freshPrompt; s
    */
-  case NewStack(name: Variable, frame: Clause, rest: Statement)
+  case FreshPrompt(name: Variable, rest: Statement)
+
+  /**
+   * Retrieves the prompt of the currently mounted stack
+   * let n = currentPrompt; s
+   */
+  case CurrentPrompt(name: Variable, rest: Statement)
+
+  /**
+   * e.g. let k = stack(p) { (x, ...) => s }; s
+   */
+  case NewStack(name: Variable, prompt: Variable, frame: Clause, rest: Statement)
 
   /**
    * e.g. push k; s
@@ -181,21 +191,14 @@ enum Statement {
   case PushStack(stack: Variable, rest: Statement)
 
   /**
-   * e.g. let k = shift0 (n+1); s
-   * NOTE: Pops the stacks until the nth, i.e. the first n+1 ones
+   * Pops stacks until it finds one labeled with `prompt`
    */
-  case PopStacks(name: Variable, n: Variable, rest: Statement)
 
+  case PopStacks(name: Variable, prompt: Variable, rest: Statement)
   /**
    * let x = #infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
-
-  /**
-   * Evidence composition, i.e. currently:
-   * let x = ev1 + ev2; s
-   */
-  case ComposeEvidence(name: Variable, ev1: Variable, ev2: Variable, rest: Statement)
 
   /**
    * let x = 42; s
@@ -204,7 +207,6 @@ enum Statement {
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
-  case LiteralEvidence(name: Variable, value: Evidence, rest: Statement)
 
   /**
    * Statement that is executed when a Hole is encountered.
@@ -220,6 +222,7 @@ export Statement.*
 enum Type {
   case Positive()
   case Negative()
+  case Prompt()
   case Stack()
   case Int()
   case Byte()
@@ -229,12 +232,7 @@ enum Type {
 }
 export Type.{ Positive, Negative }
 
-type Evidence = Int
 object builtins {
-
-  val Evidence = Type.Int()
-  val Here: Evidence = 0
-  val There: Evidence = 1
 
   /**
    * Blocks types are interfaces with a single operation.
