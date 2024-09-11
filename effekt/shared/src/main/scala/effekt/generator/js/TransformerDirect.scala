@@ -101,7 +101,8 @@ object TransformerDirect extends Transformer {
       js.RawStmt(contents)
   }
 
-  def toJS(t: Template[Pure])(using TransformerContext): js.Expr = js.RawExpr(t.strings, t.args.map(toJS))
+  def toJS(t: Template[Pure])(using TransformerContext): js.Expr = 
+    js.RawExpr(normalizeExternStrings(t.strings), t.args.map(toJS))
 
   def toJS(b: core.Block)(using C: TransformerContext): js.Expr = b match {
     // [[ f ]] = f

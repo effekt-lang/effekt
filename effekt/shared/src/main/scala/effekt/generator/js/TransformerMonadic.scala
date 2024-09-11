@@ -126,7 +126,7 @@ trait TransformerMonadic extends Transformer {
   }
 
   def toJS(t: Template[Pure])(using DeclarationContext, Context): js.Expr =
-    js.RawExpr(t.strings, t.args.map(toJS))
+    js.RawExpr(normalizeExternStrings(t.strings), t.args.map(toJS))
 
   def toJS(b: core.Block)(using DeclarationContext, Context): js.Expr = b match {
     case BlockVar(v, _, _) =>
