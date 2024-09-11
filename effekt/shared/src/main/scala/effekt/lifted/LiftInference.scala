@@ -103,17 +103,20 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
     case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), capt.contains(builtins.ControlCapability.capture), transform(body))
+      val self = Param.EvidenceParam(EvidenceSymbol()) // will never be used!
+      val eparams = bps map {
+        case core.BlockParam(id, tpe, capt) => Param.EvidenceParam(EvidenceSymbol())
+      }
+      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret),
+        body match {
+          case core.ExternBody.StringExternBody(ff, bbody) =>
+            ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
+          case core.ExternBody.Unsupported(err) =>
+            import effekt.source.FeatureFlag.Default
+            ExternBody.Unsupported(err)
+        })
     case core.Extern.Include(ff, contents) =>
       Extern.Include(ff, contents)
-  }
-
-  def transform(body: core.ExternBody)(using Environment, ErrorReporter): lifted.ExternBody = body match {
-    case core.ExternBody.StringExternBody(ff, bbody) =>
-      ExternBody.StringExternBody(ff, Template(bbody.strings, bbody.args.map(transform)))
-    case core.ExternBody.Unsupported(err) =>
-      import effekt.source.FeatureFlag.Default
-      ExternBody.Unsupported(err)
   }
 
   def transform(p: core.Param.ValueParam): lifted.Param.ValueParam = p match {
@@ -175,13 +178,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Region(lifted.BlockLit(tparams, Param.EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, ErrorReporter)))
 
     case core.Region(_) => ErrorReporter.panic("Should not happen. Regions always take block literals as body.")
-
-    case core.App(core.BlockVar(b: symbols.ExternFunction, tpe, _), targs, vargs, bargs) =>
-      if (bargs.nonEmpty) {
-        ErrorReporter.panic("Extern control definitions must not take block arguments")
-      } else {
-        App(BlockVar(b, transform(tpe)), targs.map(transform), vargs map transform)
-      }
 
     case core.App(b: core.Block, targs, vargs, bargs) =>
 

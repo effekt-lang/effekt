@@ -201,7 +201,7 @@ object Transformer {
   }
 
   def toML(ext: Extern)(using TransformerContext, ErrorReporter): ml.Binding = ext match {
-    case Extern.Def(id, tparams, params, ret, _, body) =>
+    case Extern.Def(id, tparams, params, ret, body) =>
 
       ml.FunBind(name(id), params map { p => ml.Param.Named(name(p.id)) }, body match {
         case ExternBody.StringExternBody(_, contents) => toML(contents)

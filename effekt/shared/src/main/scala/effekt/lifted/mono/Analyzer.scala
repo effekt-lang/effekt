@@ -103,7 +103,7 @@ def analyze(e: Extern)(using C: ErrorReporter, F: FlowAnalysis): Unit = e match 
   //                     |        ^
   //                     \________/
   // We have to assume that the evidence will flow directly into f.
-  case Extern.Def(id, tparams, params, ret, _, body) =>
+  case Extern.Def(id, tparams, params, ret, body) =>
     // FOR NOW: we only add empty evidence
     val x: Evidences.FlowVar = F.freshVariable(0, e)
     val vparams = params.collect { case p : Param.ValueParam => p.tpe }

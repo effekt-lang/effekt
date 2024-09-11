@@ -169,7 +169,7 @@ def elaborate(m: ModuleDecl)(using T: TransformationContext): ModuleDecl = {
 }
 
 def elaborate(e: Extern)(using T: TransformationContext): Extern = e match {
-  case Extern.Def(id, tparams, params, ret, control, body) =>
+  case Extern.Def(id, tparams, params, ret, body) =>
     // We cannot monomorphize externs.
     // So what happens if they take a block param? Monomorphization changes the calling convention
     // of block params; but externs cannot know / account for this.
@@ -192,7 +192,7 @@ def elaborate(e: Extern)(using T: TransformationContext): Extern = e match {
     val bps = (bids zip ftpe.bparams) map {
       case (id, tpe) => Param.BlockParam(id, T.elaborate(tpe))
     }
-    Extern.Def(id, tparams, vps ++ bps, ret, control, body)
+    Extern.Def(id, tparams, vps ++ bps, ret, body)
   case i @ Extern.Include(ff, contents) => i
 }
 
