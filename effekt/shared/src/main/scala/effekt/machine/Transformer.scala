@@ -2,7 +2,7 @@ package effekt
 package machine
 
 import effekt.context.Context
-import effekt.core.{ DeclarationContext, Definition, given }
+import effekt.core.{ DeclarationContext, Definition, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
@@ -27,8 +27,6 @@ object Transformer {
     val declarations = mod.externs.map(transform)
     val definitions = mod.definitions
     val mainEntry = Jump(Label(mainName, Nil))
-
-    // println(core.PrettyPrinter.show(mod))
 
     findToplevelBlocksParams(definitions)
 
@@ -67,30 +65,38 @@ object Transformer {
     stmt match {
       case core.Scope(definitions, rest) =>
 
+        // (1) Collect all the information about free variabls of local definitions
         definitions.foreach {
           case Definition.Def(id,  block @ core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
 
             noteParameters(bparams)
 
             // TODO use existing lambda lifting code
-            // TODO does not work for mutually recursive local definitions
+
+            // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
             val freeVariables = core.Variables.free(block).toSet
             val freeParams = freeVariables.flatMap {
-              case core.Variable.Value(id, tpe) => Set(Variable(transform(id), transform(tpe)))
+              case core.Variable.Value(id, tpe) =>
+                Set(Variable(transform(id), transform(tpe)))
 
-              // TODO is this necessary???
-              case core.Variable.Block(id, core.BlockType.Interface(tpe, List(stTpe)), capt)
-                if tpe == symbols.builtins.TState.interface => Set(Variable(transform(id), Type.Reference(transform(stTpe))))
+              // Mutable variables are blocks and can be free, but do not have info.
+              case core.Variable.Block(id, core.Type.TState(stTpe), capt) =>
+                Set(Variable(transform(id), Type.Reference(transform(stTpe))))
 
               case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
+                  // For each known free block we have to add its free variables to this one (flat closure)
                   case Some(BlockInfo.Definition(freeParams, blockParams)) =>
-                    // For each known free block we have to add its free variables to this one (flat closure)
                     freeParams.toSet
+
+                  // Unknown free blocks stay free variables
                   case Some(BlockInfo.Parameter(tpe)) =>
-                    // Unknown free blocks stay free variables
                     Set(Variable(transform(pid), transform(tpe)))
+
+                  // The resumption is free
                   case Some(BlockInfo.Resumption) =>
                     Set(Variable(transform(pid), Type.Stack()))
+
+                  // Everything else is considered bound or global
                   case None =>
                     // TODO should not happen, abort with error
                     Set.empty
@@ -102,11 +108,12 @@ object Transformer {
           case _ => ()
         }
 
+        // (2) Actually translate the definitions
         definitions.foldRight(transform(rest)) {
           case (core.Definition.Let(id, tpe, binding), rest) =>
             transform(binding).run { value =>
               // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-              // TODO it is important that we use [[binding.tpe]] and not [[tpe]], but why?
+              // TODO it is important that we use the inferred [[binding.tpe]] and not the annotated type [[tpe]], but why?
               Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), rest)
             }
 
@@ -131,7 +138,7 @@ object Transformer {
 
       // hardcoded translation for get and put.
       // TODO remove this when interfaces are correctly translated
-      case core.App(core.Member(core.BlockVar(x, core.BlockType.Interface(_, List(stateType)), _), TState.get, annotatedTpe), targs, Nil, Nil) =>
+      case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.get, _), targs, Nil, Nil) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
@@ -139,7 +146,7 @@ object Transformer {
         val reference = Variable(transform(x), Type.Reference(tpe))
         Load(variable, reference, Return(List(variable)))
 
-      case core.App(core.Member(core.BlockVar(x, core.BlockType.Interface(_, List(stateType)), _), TState.put, annotatedTpe), targs, List(arg), Nil) =>
+      case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.put, _), targs, List(arg), Nil) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val tpe = transform(stateType)
@@ -157,13 +164,16 @@ object Transformer {
         transformCallee(callee).run { callee =>
           transform(vargs, bargs).run { (values, blocks) =>
             callee match {
+              // Here we actually need a substitution to prepare the environment for the jump
               case Callee.Known(label) =>
-                // Here we actually need a substitution to prepare the environment for the jump
                 Substitute(label.environment.zip(values ++ blocks), Jump(label))
+
               case Callee.UnknownFunction(variable, tpe) =>
                 Invoke(variable, builtins.Apply, values ++ blocks)
+
               case Callee.Method(receiver, tpe, tag) =>
                 Invoke(receiver, tag, values ++ blocks)
+
               case Callee.Continuation(variable) =>
                 PushStack(variable, Return(values))
 
@@ -194,9 +204,9 @@ object Transformer {
 
         noteParameters(bparams)
 
-        val variable = Variable(freshName("try"), transform(body.tpe))
+        val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
-        val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val delimiter = Variable(freshName("delimiter"), Type.Stack())
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
         FreshPrompt(prompt,
@@ -208,11 +218,10 @@ object Transformer {
               })))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
-        val variable = Variable(freshName("region"), transform(body.tpe))
+        val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
-        val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val delimiter = Variable(freshName("delimiter"), Type.Stack())
         val prompt = transform(region)
-
 
         FreshPrompt(prompt,
           NewStack(delimiter, prompt, returnClause,
@@ -278,15 +287,10 @@ object Transformer {
 
   // Merely sequences the transformation of the arguments monadically
   def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
-    (vargs, bargs) match {
-      case (Nil, Nil) => pure((Nil, Nil))
-      case (Nil, barg :: bargs) => transformBlockArg(barg).flatMap { block =>
-        transform(Nil, bargs).flatMap { (values, blocks) => pure(values, block :: blocks) }
-      }
-      case (varg :: vargs, bargs) => transform(varg).flatMap { value =>
-        transform(vargs, bargs).flatMap { (values, blocks) => pure(value :: values, blocks) }
-      }
-    }
+    for {
+      values <- traverse(vargs)(transform)
+      blocks <- traverse(bargs)(transformBlockArg)
+    } yield (values, blocks)
 
   enum Callee {
     case Known(label: machine.Label)
@@ -338,9 +342,9 @@ object Transformer {
 
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, capt) if isDefinition(id) =>
-      // passing a function directly, so we need to eta-expand
+      // Passing a top-level function directly, so we need to eta-expand turning it into a closure
       // TODO cache the closure somehow to prevent it from being created on every call
-      val parameters = BPC.blockParams(id)
+      val parameters = BPC.params(id)
       val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
       val environment = getBlocksParams(id)
       Binding { k =>
@@ -379,7 +383,7 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case core.Literal((), _) =>
-      val variable = Variable(freshName("literal"), Positive());
+      val variable = Variable(freshName("unitLiteral"), Positive());
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
@@ -523,7 +527,7 @@ object Transformer {
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
 
-  def transform(id: Symbol): String =
+  def transform(id: Id): String =
     s"${id.name}_${id.id}"
 
   def requiresBoxing(tpe: core.ValueType): Boolean = {
@@ -552,32 +556,32 @@ object Transformer {
   class BlocksParamsContext() {
     var info: Map[Symbol, BlockInfo] = Map()
 
-    def definition(id: Symbol): BlockInfo.Definition = info(id) match {
+    def definition(id: Id): BlockInfo.Definition = info(id) match {
       case d : BlockInfo.Definition => d
       case BlockInfo.Parameter(tpe) => sys error s"Expected a function definition, but got a block parameter: ${id}"
       case BlockInfo.Resumption => sys error s"Expected a function definition, but got a continuation: ${id}"
     }
-    def blockParams(id: Symbol): Environment = definition(id).blockParams
-    def freeParams(id: Symbol): Environment = definition(id).freeParams
+    def params(id: Id): Environment = definition(id).params
+    def free(id: Id): Environment = definition(id).free
   }
   enum BlockInfo {
-    case Definition(freeParams: Environment, blockParams: Environment)
+    case Definition(free: Environment, params: Environment)
     case Parameter(tpe: core.BlockType)
     case Resumption
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
-  def noteDefinition(id: Symbol, blockParams: Environment, freeParams: Environment)(using BC: BlocksParamsContext): Unit =
+  def noteDefinition(id: Id, params: Environment, free: Environment)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: BlockInfo)")
-    BC.info += (id -> BlockInfo.Definition(freeParams, blockParams))
+    BC.info += (id -> BlockInfo.Definition(free, params))
 
-  def noteResumption(id: Symbol)(using BC: BlocksParamsContext): Unit =
+  def noteResumption(id: Id)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Resumption)")
     BC.info += (id -> BlockInfo.Resumption)
 
 
-  def noteParameter(id: Symbol, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
+  def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
     BC.info += (id -> BlockInfo.Parameter(tpe))
 
@@ -586,17 +590,17 @@ object Transformer {
       case core.BlockParam(id, tpe, capt) => noteParameter(id, tpe)
     }
 
-  def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
+  def getBlocksParams(id: Id)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
     case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
   }
 
-  def isResumption(id: Symbol)(using BC: BlocksParamsContext): Boolean =
+  def isResumption(id: Id)(using BC: BlocksParamsContext): Boolean =
     BC.info(id) match {
       case BlockInfo.Resumption => true
       case _ => false
     }
 
-  def isDefinition(id: Symbol)(using BC: BlocksParamsContext): Boolean =
+  def isDefinition(id: Id)(using BC: BlocksParamsContext): Boolean =
     BC.info(id) match {
       case d: BlockInfo.Definition => true
       case _ => false
@@ -608,6 +612,12 @@ object Transformer {
     }
     def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
   }
+
+  def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
+    l match {
+      case Nil => pure(Nil)
+      case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
+    }
 
   def pure[A](a: A): Binding[A] = Binding(k => k(a))
 }
