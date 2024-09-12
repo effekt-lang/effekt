@@ -48,6 +48,12 @@ class Namespace(
   def getNamespace(name: String): Namespace =
     namespaces.getOrElseUpdate(name, Namespace.empty)
 
+  def operations: Map[String, Set[Operation]] =
+    types.values.toSet.flatMap {
+      case BlockTypeConstructor.Interface(_, _, operations) => operations.toSet
+      case _ => Set.empty
+    }.groupMap(_.name.name)(op => op)
+
   /**
    * Convert to immutable bindings
    */
@@ -171,10 +177,16 @@ object scopes {
     def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
       all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
 
+    def lookupOverloadedMethod(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
+      all(id.path, scope) { namespace =>
+        // an overloaded method can be a term...
+        namespace.terms.getOrElse(id.name, Set.empty).filter(filter) ++
+        // or an operation
+        namespace.operations.getOrElse(id.name, Set.empty).filter(filter)
+      }
+
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
-      all(path, scope) { _.terms.getOrElse(name, Set.empty).collect {
-        case o: Operation => o
-      }}
+      all(path, scope) { _.operations.getOrElse(name, Set.empty) }
 
     // can be a term OR a type symbol
     def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =

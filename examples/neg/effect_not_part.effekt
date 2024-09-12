@@ -1,6 +1,6 @@
 module examples/pos/effect_not_part
 
-effect Exception[A](msg: String): A
+effect Exception(msg: String): Nothing
 
 // TODO If we move `State` below `state` then it is not resolved
 interface State {
