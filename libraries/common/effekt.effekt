@@ -127,7 +127,7 @@ extern pure def length(str: String): Int =
   ml "String.size ${str}"
   llvm """
     %x = call %Int @c_buffer_length(%Pos ${str})
-    call void @erasePositive(%Pos %str)
+    call void @erasePositive(%Pos ${str})
     ret %Int %x
   """
 
