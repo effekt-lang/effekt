@@ -13,7 +13,7 @@ void c_array_erase_fields(void *envPtr) {
   uint64_t *sizePtr = envPtr;
   struct Pos *dataPtr = envPtr + sizeof(uint64_t);
   uint64_t size = *sizePtr;
-  for(uint64_t i = 0; i < size; i++) {
+  for (uint64_t i = 0; i < size; i++) {
     erasePositive(dataPtr[i]);
   }
 }
