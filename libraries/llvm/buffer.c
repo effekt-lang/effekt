@@ -39,6 +39,7 @@ uint64_t c_buffer_offset(const struct Pos buffer) {
 }
 
 // Function to get the length from Pos
+// WARNING: This does not erase the Pos argument!
 uint64_t c_buffer_length(const struct Pos buffer) {
     return (uint32_t)(buffer.tag & 0xFFFFFFFF); // Extract length from the lower 32 bits
 }
