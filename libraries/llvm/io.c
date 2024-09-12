@@ -290,18 +290,22 @@ void c_promise_erase_listeners(void *envPtr) {
 	struct {promise_state_t state; union {struct Pos value; Listeners listeners;} payload;} *valPtr = envPtr;
 	promise_state_t state = valPtr->state;
 
+    Stack head;
+    Listeners* tail;
+    Listeners* current;
+
     switch (state) {
         case UNRESOLVED:
-			Stack head = valPtr->payload.listeners.head;
-			Listeners* tail = valPtr->payload.listeners.tail;
+            head = valPtr->payload.listeners.head;
+			tail = valPtr->payload.listeners.tail;
 			if (head != NULL) {
 			    // Erase head
 				eraseStack(head);
 				// Erase tail
-				Listeners* current = tail;
+				current = tail;
 				while (current != NULL) {
-					Stack head = current->head;
-					Listeners* tail = current->tail;
+					head = current->head;
+					tail = current->tail;
 					free(current);
 					eraseStack(head);
 					current = tail;
@@ -328,10 +332,13 @@ void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
 void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
     Promise* p = (Promise*)promise.obj;
 
+    Stack head;
+    Listeners* tail;
+
     switch (p->state) {
         case UNRESOLVED:
-	        Stack head = p->payload.listeners.head;
-			Listeners* tail = p->payload.listeners.tail;
+	        head = p->payload.listeners.head;
+			tail = p->payload.listeners.tail;
 
             p->state = RESOLVED;
             p->payload.value = value;
@@ -361,12 +368,17 @@ void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
 void c_promise_await(struct Pos promise, Stack stack) {
     Promise* p = (Promise*)promise.obj;
 
+    Stack head;
+    Listeners* tail;
+    Listeners* node;
+    struct Pos value;
+
     switch (p->state) {
 		case UNRESOLVED:
-			Stack head = p->payload.listeners.head;
-			Listeners* tail = p->payload.listeners.tail;
+			head = p->payload.listeners.head;
+			tail = p->payload.listeners.tail;
 			if (head != NULL) {
-				Listeners* node = (Listeners*)malloc(sizeof(Listeners));
+				node = (Listeners*)malloc(sizeof(Listeners));
 				node->head = head;
 				node->tail = tail;
 				p->payload.listeners.head = stack;
@@ -376,7 +388,7 @@ void c_promise_await(struct Pos promise, Stack stack) {
 			};
             break;
         case RESOLVED:
-			struct Pos value = p->payload.value;
+			value = p->payload.value;
 			sharePositive(value);
             resume_Pos(stack, value);
             break;
