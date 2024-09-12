@@ -159,7 +159,7 @@ void c_fs_close(Int fd, Stack stack) {
  */
 Int c_error_number(Int errno) {
     switch (errno) {
-	    case UV_EPERM:            return 1;    // EPERM
+        case UV_EPERM:            return 1;    // EPERM
         case UV_ENOENT:           return 2;    // ENOENT
         case UV_ESRCH:            return 3;    // ESRCH
         case UV_EINTR:            return 4;    // EINTR
@@ -287,8 +287,8 @@ typedef struct {
 } Promise;
 
 void c_promise_erase_listeners(void *envPtr) {
-	struct {promise_state_t state; union {struct Pos value; Listeners listeners;} payload;} *valPtr = envPtr;
-	promise_state_t state = valPtr->state;
+    struct {promise_state_t state; union {struct Pos value; Listeners listeners;} payload;} *valPtr = envPtr;
+    promise_state_t state = valPtr->state;
 
     Stack head;
     Listeners* tail;
@@ -297,20 +297,20 @@ void c_promise_erase_listeners(void *envPtr) {
     switch (state) {
         case UNRESOLVED:
             head = valPtr->payload.listeners.head;
-			tail = valPtr->payload.listeners.tail;
-			if (head != NULL) {
-			    // Erase head
-				eraseStack(head);
-				// Erase tail
-				current = tail;
-				while (current != NULL) {
-					head = current->head;
-					tail = current->tail;
-					free(current);
-					eraseStack(head);
-					current = tail;
-				};
-			};
+            tail = valPtr->payload.listeners.tail;
+            if (head != NULL) {
+                // Erase head
+                eraseStack(head);
+                // Erase tail
+                current = tail;
+                while (current != NULL) {
+                    head = current->head;
+                    tail = current->tail;
+                    free(current);
+                    eraseStack(head);
+                    current = tail;
+                };
+            };
             break;
         case RESOLVED:
             erasePositive(valPtr->payload.value);
@@ -319,14 +319,14 @@ void c_promise_erase_listeners(void *envPtr) {
 }
 
 void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
-	if (listeners != NULL) {
-		Stack head = listeners->head;
-		Listeners* tail = listeners->tail;
-		free(listeners);
-		c_promise_resume_listeners(tail, value);
-		sharePositive(value);
-		resume_Pos(head, value);
-	}
+    if (listeners != NULL) {
+        Stack head = listeners->head;
+        Listeners* tail = listeners->tail;
+        free(listeners);
+        c_promise_resume_listeners(tail, value);
+        sharePositive(value);
+        resume_Pos(head, value);
+    }
 }
 
 void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
@@ -337,30 +337,30 @@ void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
 
     switch (p->state) {
         case UNRESOLVED:
-	        head = p->payload.listeners.head;
-			tail = p->payload.listeners.tail;
+            head = p->payload.listeners.head;
+            tail = p->payload.listeners.tail;
 
             p->state = RESOLVED;
             p->payload.value = value;
-			resume_Pos(stack, Unit);
+            resume_Pos(stack, Unit);
 
-			if (head != NULL) {
-				// Execute tail
-				c_promise_resume_listeners(tail, value);
-				// Execute head
-				sharePositive(value);
-				resume_Pos(head, value);
-			};
+            if (head != NULL) {
+                // Execute tail
+                c_promise_resume_listeners(tail, value);
+                // Execute head
+                sharePositive(value);
+                resume_Pos(head, value);
+            };
             break;
-		case RESOLVED:
-			erasePositive(promise);
-			erasePositive(value);
-			eraseStack(stack);
-			fprintf(stderr, "ERROR: Promise already resolved\n");
-			exit(1);
-			break;
-	}
-	// TODO stack overflow?
+        case RESOLVED:
+            erasePositive(promise);
+            erasePositive(value);
+            eraseStack(stack);
+            fprintf(stderr, "ERROR: Promise already resolved\n");
+            exit(1);
+            break;
+    }
+    // TODO stack overflow?
     // We need to erase the promise now, since we consume it.
     erasePositive(promise);
 }
@@ -374,26 +374,26 @@ void c_promise_await(struct Pos promise, Stack stack) {
     struct Pos value;
 
     switch (p->state) {
-		case UNRESOLVED:
-			head = p->payload.listeners.head;
-			tail = p->payload.listeners.tail;
-			if (head != NULL) {
-				node = (Listeners*)malloc(sizeof(Listeners));
-				node->head = head;
-				node->tail = tail;
-				p->payload.listeners.head = stack;
-				p->payload.listeners.tail = node;
-			} else {
+        case UNRESOLVED:
+            head = p->payload.listeners.head;
+            tail = p->payload.listeners.tail;
+            if (head != NULL) {
+                node = (Listeners*)malloc(sizeof(Listeners));
+                node->head = head;
+                node->tail = tail;
                 p->payload.listeners.head = stack;
-			};
+                p->payload.listeners.tail = node;
+            } else {
+                p->payload.listeners.head = stack;
+            };
             break;
         case RESOLVED:
-			value = p->payload.value;
-			sharePositive(value);
+            value = p->payload.value;
+            sharePositive(value);
             resume_Pos(stack, value);
             break;
     };
-	// TODO hmm, stack overflow?
+    // TODO hmm, stack overflow?
     erasePositive(promise);
 }
 
