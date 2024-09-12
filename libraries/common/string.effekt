@@ -279,7 +279,7 @@ extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
   chez "(string (integer->char ${ch}))"
   llvm """
-    %z = call %Pos @c_buffer_show_Char(%Int %ch)
+    %z = call %Pos @c_buffer_show_Char(%Int ${ch})
     ret %Pos %z
   """
 
@@ -302,7 +302,7 @@ extern pure def infixLt(x: Char, y: Char): Bool =
   chez "(< ${x} ${y})"
   ml "(${x}: int) < ${y}"
   llvm """
-    %z = icmp slt %Int %x, %y
+    %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -313,7 +313,7 @@ extern pure def infixLte(x: Char, y: Char): Bool =
   chez "(<= ${x} ${y})"
   ml "(${x}: int) <= ${y}"
   llvm """
-    %z = icmp sle %Int %x, %y
+    %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -324,7 +324,7 @@ extern pure def infixGt(x: Char, y: Char): Bool =
   chez "(> ${x} ${y})"
   ml "(${x}: int) > ${y}"
   llvm """
-    %z = icmp sgt %Int %x, %y
+    %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -335,7 +335,7 @@ extern pure def infixGte(x: Char, y: Char): Bool =
   chez "(>= ${x} ${y})"
   ml "(${x}: int) >= ${y}"
   llvm """
-    %z = icmp sge %Int %x, %y
+    %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -390,6 +390,6 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
   chez "(char->integer (string-ref ${str} ${n}))"
   ml "(Char.ord (String.sub (${str}, ${n})))"
   llvm """
-    %x = call %Int @c_buffer_character_at(%Pos %str, i64 %n)
+    %x = call %Int @c_buffer_character_at(%Pos ${str}, i64 ${n})
     ret %Int %x
   """

@@ -46,7 +46,7 @@ extern def println(value: String): Unit =
   js "$effekt.println(${value})"
   chez "(println_impl ${value})"
   llvm """
-    call void @c_io_println_String(%Pos %value)
+    call void @c_io_println_String(%Pos ${value})
     ret %Pos zeroinitializer ; Unit
   """
   ml { print(value); print("\n") }
@@ -65,7 +65,7 @@ extern pure def show(value: Int): String =
   chez "(show-number ${value})"
   ml "show'int ${value}"
   llvm """
-    %z = call %Pos @c_buffer_show_Int(%Int %value)
+    %z = call %Pos @c_buffer_show_Int(%Int ${value})
     ret %Pos %z
   """
 
@@ -76,7 +76,7 @@ extern pure def show(value: Double): String =
   chez "(show-number ${value})"
   ml "show'real ${value}"
   llvm """
-    %z = call %Pos @c_buffer_show_Double(%Double %value)
+    %z = call %Pos @c_buffer_show_Double(%Double ${value})
     ret %Pos %z
   """
 
@@ -91,13 +91,13 @@ extern pure def show(value: Char): String =
   chez "(string (integer->char ${value}))"
   ml "str (chr ${value})"
   llvm """
-    %z = call %Pos @c_buffer_show_Char(%Int %value)
+    %z = call %Pos @c_buffer_show_Char(%Int ${value})
     ret %Pos %z
   """
 
 extern pure def show(value: Byte): String =
   llvm """
-    %z = call %Pos @c_buffer_show_Byte(i8 %value)
+    %z = call %Pos @c_buffer_show_Byte(i8 ${value})
     ret %Pos %z
   """
 
@@ -117,7 +117,7 @@ extern pure def infixConcat(s1: String, s2: String): String =
   chez "(string-append ${s1} ${s2})"
   ml "${s1} ^ ${s2}"
   llvm """
-    %spz = call %Pos @c_buffer_concatenate(%Pos %s1, %Pos %s2)
+    %spz = call %Pos @c_buffer_concatenate(%Pos ${s1}, %Pos ${s2})
     ret %Pos %spz
   """
 
@@ -126,7 +126,7 @@ extern pure def length(str: String): Int =
   chez "(string-length ${str})"
   ml "String.size ${str}"
   llvm """
-    %x = call %Int @c_buffer_length(%Pos %str)
+    %x = call %Int @c_buffer_length(%Pos ${str})
     call void @erasePositive(%Pos %str)
     ret %Int %x
   """
@@ -136,7 +136,7 @@ extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
   ml "String.extract (${str}, ${from}, SOME (${to} - ${from}))"
   llvm """
-    %x = call %Pos @c_buffer_substring(%Pos %str, i64 %from, i64 %to)
+    %x = call %Pos @c_buffer_substring(%Pos ${str}, i64 ${from}, i64 ${to})
     ret %Pos %x
   """
 
@@ -219,7 +219,7 @@ extern pure def infixEq(x: Int, y: Int): Bool =
   chez "(equal? ${x} ${y})"
   ml "${x} = ${y}"
   llvm """
-    %z = icmp eq %Int %x, %y
+    %z = icmp eq %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -230,7 +230,7 @@ extern pure def infixNeq(x: Int, y: Int): Bool =
   chez "(not (equal? ${x} ${y}))"
   ml "${x} <> ${y}"
   llvm """
-    %z = icmp ne %Int %x, %y
+    %z = icmp ne %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -241,7 +241,7 @@ extern pure def infixEq(x: Char, y: Char): Bool =
   chez "(equal? ${x} ${y})"
   ml "${x} = ${y}"
   llvm """
-    %z = icmp eq %Int %x, %y
+    %z = icmp eq %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -252,7 +252,7 @@ extern pure def infixNeq(x: Char, y: Char): Bool =
   chez "(not (equal? ${x} ${y}))"
   ml "${x} <> ${y}"
   llvm """
-    %z = icmp ne %Int %x, %y
+    %z = icmp ne %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -263,7 +263,7 @@ extern pure def infixEq(x: String, y: String): Bool =
   chez "(equal? ${x} ${y})"
   ml "${x} = ${y}"
   llvm """
-    %res = call %Pos @c_buffer_eq(%Pos %x, %Pos %y)
+    %res = call %Pos @c_buffer_eq(%Pos ${x}, %Pos ${y})
     ret %Pos %res
   """
 
@@ -274,8 +274,8 @@ extern pure def infixEq(x: Bool, y: Bool): Bool =
   chez "(equal? ${x} ${y})"
   ml "${x} = ${y}"
   llvm """
-    %slim_x = extractvalue %Pos %x, 0
-    %slim_y = extractvalue %Pos %y, 0
+    %slim_x = extractvalue %Pos ${x}, 0
+    %slim_y = extractvalue %Pos ${y}, 0
     %slim_z = icmp eq i64 %slim_x, %slim_y
     %fat_z = zext i1 %slim_z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
@@ -287,8 +287,8 @@ extern pure def infixNeq(x: Bool, y: Bool): Bool =
   chez "(not (equal? ${x} ${y}))"
   ml "${x} <> ${y}"
   llvm """
-    %slim_x = extractvalue %Pos %x, 0
-    %slim_y = extractvalue %Pos %y, 0
+    %slim_x = extractvalue %Pos ${x}, 0
+    %slim_y = extractvalue %Pos ${y}, 0
     %slim_z = icmp ne i64 %slim_x, %slim_y
     %fat_z = zext i1 %slim_z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
@@ -376,7 +376,7 @@ extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
   chez "(sqrt ${x})"
   ml "Math.sqrt ${x}"
-  llvm "%z = call %Double @llvm.sqrt.f64(double %x) ret %Double %z"
+  llvm "%z = call %Double @llvm.sqrt.f64(double ${x}) ret %Double %z"
 
 extern llvm """
 declare double @llvm.sqrt.f64(double %x)
@@ -420,13 +420,13 @@ extern pure def toInt(d: Double): Int =
   js "Math.trunc(${d})"
   chez "(flonum->fixnum ${d})"
   ml "Real.trunc ${d}"
-  llvm "%z = fptosi double %d to %Int ret %Int %z"
+  llvm "%z = fptosi double ${d} to %Int ret %Int %z"
 
 extern pure def toDouble(d: Int): Double =
   js "${d}"
   chez "${d}"
   ml "Real.fromInt ${d}"
-  llvm "%z = sitofp i64 %d to double ret double %z"
+  llvm "%z = sitofp i64 ${d} to double ret double %z"
 
 extern pure def round(d: Double): Int =
   js "Math.round(${d})"
@@ -461,7 +461,7 @@ extern pure def infixLt(x: Int, y: Int): Bool =
   chez "(< ${x} ${y})"
   ml "(${x}: int) < ${y}"
   llvm """
-    %z = icmp slt %Int %x, %y
+    %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -472,7 +472,7 @@ extern pure def infixLte(x: Int, y: Int): Bool =
   chez "(<= ${x} ${y})"
   ml "(${x}: int) <= ${y}"
   llvm """
-    %z = icmp sle %Int %x, %y
+    %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -483,7 +483,7 @@ extern pure def infixGt(x: Int, y: Int): Bool =
   chez "(> ${x} ${y})"
   ml "(${x}: int) > ${y}"
   llvm """
-    %z = icmp sgt %Int %x, %y
+    %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -494,7 +494,7 @@ extern pure def infixGte(x: Int, y: Int): Bool =
   chez "(>= ${x} ${y})"
   ml "(${x}: int) >= ${y}"
   llvm """
-    %z = icmp sge %Int %x, %y
+    %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -515,7 +515,7 @@ extern pure def infixLt(x: Double, y: Double): Bool =
   chez "(< ${x} ${y})"
   ml "(${x}: real) < ${y}"
   llvm """
-    %z = fcmp olt %Double %x, %y
+    %z = fcmp olt %Double ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -531,7 +531,7 @@ extern pure def infixGt(x: Double, y: Double): Bool =
   chez "(> ${x} ${y})"
   ml "(${x}: real) > ${y}"
   llvm """
-    %z = fcmp ogt %Double %x, %y
+    %z = fcmp ogt %Double ${x}, ${y}
     %fat_z = zext i1 %z to i64
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
@@ -571,7 +571,7 @@ extern pure def not(b: Bool): Bool =
   chez "(not ${b})"
   ml "not ${b}"
   llvm """
-    %p = extractvalue %Pos %b, 0
+    %p = extractvalue %Pos ${b}, 0
     %q = xor i64 1, %p
     %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0
     ret %Pos %adt_q
@@ -589,28 +589,28 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 extern pure def bitwiseShl(x: Int, y: Int): Int =
   js "(${x} << ${y})"
   chez "(ash ${x} ${y})"
-  llvm "%z = shl %Int %x, %y ret %Int %z"
+  llvm "%z = shl %Int ${x}, ${y} ret %Int %z"
 
 extern pure def bitwiseAnd(x: Int, y: Int): Int =
   js "(${x} & ${y})"
   chez "(logand ${x} ${y})"
-  llvm "%z = and %Int %x, %y ret %Int %z"
+  llvm "%z = and %Int ${x}, ${y} ret %Int %z"
 
 extern pure def bitwiseXor(x: Int, y: Int): Int =
   js "(${x} ^ ${y})"
   chez "(logxor ${x} ${y})"
-  llvm "%z = xor %Int %x, %y ret %Int %z"
+  llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
 
 
 // Byte operations
 // ===============
 extern pure def toByte(n: Int): Byte =
   js "${n}"
-  llvm "%z = trunc %Int %n to %Byte ret %Byte %z"
+  llvm "%z = trunc %Int ${n} to %Byte ret %Byte %z"
 
 extern pure def toInt(n: Byte): Int =
   js "${n}"
-  llvm "%z = zext %Byte %n to %Int ret %Int %z"
+  llvm "%z = zext %Byte ${n} to %Int ret %Int %z"
 
 
 // Undefined and Null
@@ -704,27 +704,27 @@ namespace internal {
     extern type BoxedInt
     extern pure def boxInt(n: Int): BoxedInt =
       llvm """
-        %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 ${n}, 0
         %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxInt(b: BoxedInt): Int =
       llvm """
-        %unboxed = extractvalue %Pos %b, 0
+        %unboxed = extractvalue %Pos ${b}, 0
         ret %Int %unboxed
       """
 
     extern type BoxedByte
     extern pure def boxByte(n: Byte): BoxedByte =
       llvm """
-        %extended = sext i8 %n to i64
+        %extended = sext i8 ${n} to i64
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
         %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxByte(b: BoxedByte): Byte =
       llvm """
-        %unboxed = extractvalue %Pos %b, 0
+        %unboxed = extractvalue %Pos ${b}, 0
         %truncated = trunc i64 %unboxed to i8
         ret i8 %truncated
       """
@@ -732,13 +732,13 @@ namespace internal {
     extern type BoxedChar
     extern pure def boxChar(c: Char): BoxedChar =
       llvm """
-        %boxed1 = insertvalue %Pos zeroinitializer, i64 %c, 0
+        %boxed1 = insertvalue %Pos zeroinitializer, i64 ${c}, 0
         %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxChar(b: BoxedChar): Char =
       llvm """
-        %unboxed = extractvalue %Pos %b, 0
+        %unboxed = extractvalue %Pos ${b}, 0
         ret %Int %unboxed
       """
 
@@ -749,14 +749,14 @@ namespace internal {
     extern type BoxedDouble
     extern pure def boxDouble(d: Double): BoxedDouble =
       llvm """
-        %n = bitcast double %d to i64
+        %n = bitcast double ${d} to i64
         %boxed1 = insertvalue %Pos zeroinitializer, i64 %n, 0
         %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
         ret %Pos %boxed2
       """
     extern pure def unboxDouble(b: BoxedDouble): Double =
       llvm """
-        %unboxed = extractvalue %Pos %b, 0
+        %unboxed = extractvalue %Pos ${b}, 0
         %d = bitcast i64 %unboxed to double
         ret %Double %d
       """

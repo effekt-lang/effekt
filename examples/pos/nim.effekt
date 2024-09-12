@@ -65,21 +65,21 @@ def gametree { prog: => Player / Move } = try { Winner(prog()) } with Move { (p,
 // ----------------
 // Cheating
 // ----------------
-effect Cheat[A](p: Player): A
-effect Error[A](msg: String): A
+effect cheat(p: Player): Nothing
+effect error(msg: String): Nothing
 
-def printError { prog: => Unit / Error } = try { prog() } with Error[A] { (msg) =>
+def printError { prog: => Unit / error } = try { prog() } with error { (msg) =>
   println(msg)
 }
 
-def cheatReport[R] { prog: => R / Cheat }: R / Error =
-  try { prog() } with Cheat[A] { (p) =>
-    do Error(genericShow(p) ++ " cheated!")
+def cheatReport[R] { prog: => R / cheat }: R / error =
+  try { prog() } with cheat { (p) =>
+    do error(genericShow(p) ++ " cheated!")
   }
 
 def check { prog: => Player / Move } = try { prog() } with Move { (p, n) =>
   val m = do Move(p, n);
-  if (m <= 3) { resume(m) } else { do Cheat(p) }
+  if (m <= 3) { resume(m) } else { do cheat(p) }
 }
 
 def pc  { prog: => Player / Move } = try { prog() } with Move { (p, n) =>

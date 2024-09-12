@@ -452,9 +452,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def operationDef(): Def =
     nonterminal:
       `effect` ~> operation() match {
-        case op =>
+        case op @ Operation(id, tps, vps, bps, ret) =>
           // TODO is the `true` flag used at all anymore???
-          InterfaceDef(IdDef(op.id.name), Nil, List(op), true)
+          InterfaceDef(IdDef(id.name), tps, List(Operation(id, Nil, vps, bps, ret) withPositionOf op))
       }
 
   def operation(): Operation =
@@ -465,7 +465,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def interfaceDef(): InterfaceDef =
     nonterminal:
-      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`, true)
+      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`)
 
   def namespaceDef(): Def =
     nonterminal:
@@ -697,11 +697,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
       // Interface[...] { () => ... }
       // Interface[...] { case ... => ... }
-      def operationImplementation() = idRef() ~ maybeTypeParams() ~ implicitResume ~ functionArg() match {
+      def operationImplementation() = idRef() ~ maybeTypeArgs() ~ implicitResume ~ functionArg() match {
         case (id ~ tps ~ k ~ BlockLiteral(_, vps, bps, body)) =>
           val synthesizedId = IdRef(Nil, id.name).withPositionOf(id)
-          val interface = BlockTypeRef(id, Nil).withPositionOf(id): BlockTypeRef
-          val operation = OpClause(synthesizedId, tps, vps, bps, None, body, k).withRangeOf(id, body)
+          val interface = BlockTypeRef(id, tps).withPositionOf(id): BlockTypeRef
+          val operation = OpClause(synthesizedId, Nil, vps, bps, None, body, k).withRangeOf(id, body)
           Implementation(interface, List(operation))
       }
 

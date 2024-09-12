@@ -228,7 +228,7 @@ enum Def extends Definition {
 
   case NamespaceDef(id: IdDef, definitions: List[Def])
 
-  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
+  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation])
   case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
   case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
 

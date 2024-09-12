@@ -3,7 +3,7 @@ type EMPTY {}
 extern io def exit(errorCode: Int): Unit =
   js   "(function() { process.exit(${errorCode}) })()"
   llvm """
-    call void @exit(i64 %errorCode)
+    call void @exit(i64 ${errorCode})
     ret %Pos zeroinitializer ;
   """
 

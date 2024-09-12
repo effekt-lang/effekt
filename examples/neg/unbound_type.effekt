@@ -3,8 +3,8 @@ module examples/pos/lexer
 import string
 import text/regex
 
-effect EOS[A](): A
-effect LexerError[A](msg: String, pos: Position): A
+effect EOS(): Nothing
+effect LexerError(msg: String, pos: Position): Nothing
 
 interface Lexer {
   def peek(): Option[Token]
