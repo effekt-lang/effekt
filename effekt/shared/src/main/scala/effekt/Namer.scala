@@ -132,7 +132,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.InterfaceDef(id, tparams, ops, isEffect) =>
+    case source.InterfaceDef(id, tparams, ops) =>
       val effectName = Context.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
@@ -315,7 +315,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
 
-    case source.InterfaceDef(id, tparams, operations, isEffect) =>
+    case source.InterfaceDef(id, tparams, operations) =>
       // symbol has already been introduced by the previous traversal
       val interface = Context.symbolOf(id).asInterface
       interface.operations = operations.map {
@@ -345,7 +345,6 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
         }
       }
-      if (isEffect) interface.operations.foreach { op => Context.bind(op) }
 
     case source.NamespaceDef(id, definitions) =>
       Context.namespace(id.name) {
@@ -840,7 +839,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
 
-    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[BlockSymbol])
+    val syms = scope.lookupOverloadedMethod(id, term => term.isInstanceOf[BlockSymbol])
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve function ${id.name}")

@@ -12,7 +12,7 @@ interface Exc {
     def raise[A](): A
 }
 
-effect Exception[A](msg: String): A
+effect raise(msg: String): Nothing
 
 // TODO If we move `State` below `state` then it is not resolved
 interface State {
@@ -20,12 +20,12 @@ interface State {
     def set(n: Int): Unit
 }
 
-def state[R](init: Int) { f: => R / { State, Exception } }: Unit = {
+def state[R](init: Int) { f: => R / { State, raise } }: Unit = {
     var s = init;
     try { f(); () } with State {
         def get() = resume(s)
         def set(n) = { s = n; resume(()) }
-    } with Exception[A] { msg => println(msg) }
+    } with raise { msg => println(msg) }
 
 }
 

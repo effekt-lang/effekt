@@ -1,6 +1,6 @@
 module probabilistic
 
-effect IndexOutOfBounds[A](): A
+effect indexOutOfBounds(): Nothing
 
 type List[A] {
   Nil();
@@ -12,13 +12,13 @@ def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
   case Cons(a, rest) => concat(rest, Cons(a, l2))
 }
 
-def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
-  case Nil() => do IndexOutOfBounds()
+def lookup[A](l: List[A], idx: Int): A / indexOutOfBounds = l match {
+  case Nil() => do indexOutOfBounds()
   case Cons(n, rest) => if (idx == 0) n else lookup(rest, idx - 1)
 }
 
-def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l match {
-  case Nil() => do IndexOutOfBounds()
+def updateAt[A](l: List[A], idx: Int, el: A): List[A] / indexOutOfBounds = l match {
+  case Nil() => do indexOutOfBounds()
   case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
 }
 
@@ -61,50 +61,50 @@ def heap[R] { prog: => R / Heap } = {
   }
 }
 
-effect Flip(prob: Double): Ref
-effect Disj(x: Ref, y: Ref): Ref
-effect Prior(x: Ref, prob: Double): Unit
+effect flip(prob: Double): Ref
+effect disj(x: Ref, y: Ref): Ref
+effect prior(x: Ref, prob: Double): Unit
 
-effect Score(prob: Double): Unit
-effect Fork(): Bool
-effect Fail[A](): A
+effect score(prob: Double): Unit
+effect fork(): Bool
+effect fail(): Nothing
 
 def obs(r: Ref, a: Bool) =
   do get(r) match {
     case Unobserved() => do put(r, Observed(a))
-    case Observed(y) => if (a == y) { () } else { do Fail() }
+    case Observed(y) => if (a == y) { () } else { do fail() }
   }
 
-def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
-  if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
+def choose3[R] { x: => R } { y: => R } { z: => R } : R / fork =
+  if (do fork()) { x() } else if (do fork()) { y() } else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
-def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
+def handleProb[R] { prog: => R / { score, fork, fail } } = {
   val empty: List[Weighted[R]] = Nil();
   try {
     var current = 1.0;
     try {
       val res = prog();
       Cons(MkWeighted(current, res), empty)
-    } with Score { p => current = current * p; resume(()) }
-  } with Fork { () => concat(resume(true), resume(false)) }
-    with Fail[A] { () => empty }
+    } with score { p => current = current * p; resume(()) }
+  } with fork { () => concat(resume(true), resume(false)) }
+    with fail { () => empty }
 }
 
 def fresh(): Ref / Heap = do empty(Unobserved())
 
-def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+def handleLang(expected: Bool) { prog: Ref => Ref / { flip, disj, prior }}: Var / {indexOutOfBounds, score, fail, fork} = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
-  with Flip { p =>
+  with flip { p =>
     val res: Ref = fresh();
     resume(res);
     do get(res) match {
       case Unobserved() => ()
-      case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
+      case Observed(b) => if (b) { do score(p) } else { do score(1.0 - p) }
     }
-  } with Disj { (x, y) =>
+  } with disj { (x, y) =>
     val res: Ref = fresh();
     resume(res);
     do get(res) match {
@@ -117,27 +117,27 @@ def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var 
         obs(x, true); obs(y, true)
       } } else { obs(x, false); obs(y, false) }
     }
-  } with Prior { (x, p) =>
+  } with prior { (x, p) =>
     resume(());
     do get(x) match {
       case Unobserved() => ()
-      case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
+      case Observed(b) => if (b) { do score(p) } else { do score(1.0 - p) }
     }
   };
   do get(input)
 }
 
 def test() = {
-  if (do Fork()) {
-    do Score(0.2);
+  if (do fork()) {
+    do score(0.2);
     false
   } else {
-    do Score(0.8);
-    if (do Fork()) {
-      do Score(0.6);
+    do score(0.8);
+    if (do fork()) {
+      do score(0.6);
       true
     } else {
-      do Score(0.4);
+      do score(0.4);
       false
     }
   }
@@ -159,9 +159,9 @@ def heapTest() = heap {
   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
 }
 
-def catch[R] { p: => R / IndexOutOfBounds }: Unit =
+def catch[R] { p: => R / indexOutOfBounds }: Unit =
   try { p(); () }
-  with IndexOutOfBounds[A] { () => println("Index out of bounds!") }
+  with indexOutOfBounds { () => println("Index out of bounds!") }
 
 def main() = {
   val res = handleProb {
@@ -176,7 +176,7 @@ def main() = {
   catch {
     val res = handleProb {
       handleLang(true) { r =>
-        do Disj(do Flip(0.2), r)
+        do disj(do flip(0.2), r)
       }
     };
     inspect(res)

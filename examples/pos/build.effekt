@@ -3,43 +3,43 @@ module examples/pos/build
 type Key = String
 type Val = Int
 
-effect Need(key: Key): Val
-effect NeedInput(key: Key): Val
-effect KeyNotFound[A](key: Key): A
+effect need(key: Key): Val
+effect needInput(key: Key): Val
+effect keyNotFound(key: Key): Nothing
 
 type Store = List[(Key,Val)]
 
-def find(store: Store, key: Key): Val / KeyNotFound = {
+def find(store: Store, key: Key): Val / keyNotFound = {
     store match {
-        case Nil() => do KeyNotFound(key)
+        case Nil() => do keyNotFound(key)
         case Cons((k, v), xs) => if (k == key) { v } else { find(xs, key) }
     }
 }
 
-def build(target: Key) { tasks: Key => Val / { Need } }: Val / {} =
+def build(target: Key) { tasks: Key => Val / { need } }: Val / {} =
     try { tasks(target) }
-    with Need { requestedKey =>
+    with need { requestedKey =>
         resume(build(requestedKey) { k => tasks(k) })
     }
 
 // effect transformer "memo"
-def memo[R] { prog: => R / { Need } } = {
+def memo[R] { prog: => R / { need } } = {
     var store: Store = Nil();
     try {
         prog()
-    } with Need { (key) =>
+    } with need { (key) =>
         try {
             resume(find(store, key))
-        } with KeyNotFound[A] { (k) =>
-            val v = do Need(k);
+        } with keyNotFound { (k) =>
+            val v = do need(k);
             store = Cons((k, v), store);
             resume(v)
         }
     }
 }
 
-def supplyInput[R](store: Store) { prog: => R / { NeedInput } } = {
-    try { prog() } with NeedInput { (key) => resume(find(store, key)) }
+def supplyInput[R](store: Store) { prog: => R / { needInput } } = {
+    try { prog() } with needInput { (key) => resume(find(store, key)) }
 }
 
 
@@ -48,19 +48,19 @@ def supplyInput[R](store: Store) { prog: => R / { NeedInput } } = {
 //  |  A | B
 // 1| 10 | A1 + A2
 // 2| 20 | B1 * 2
-def example1(key: Key): Val / { Need, NeedInput } = {
+def example1(key: Key): Val / { need, needInput } = {
     println(key);
-    if (key == "B1") do Need("A1") + do Need("A2")
-    else if (key == "B2") do Need("B1") * 2
-    else do NeedInput(key)
+    if (key == "B1") do need("A1") + do need("A2")
+    else if (key == "B2") do need("B1") * 2
+    else do needInput(key)
 }
 
-// Needing the same key twice
+// needing the same key twice
 def example2(key: Key) = {
     println(key);
-    if (key == "B1") do Need("A1") + do Need("A2")
-    else if (key == "B2") do Need("B1") * do Need("B1")
-    else do NeedInput(key)
+    if (key == "B1") do need("A1") + do need("A2")
+    else if (key == "B2") do need("B1") * do need("B1")
+    else do needInput(key)
 }
 
 def main() = {
@@ -74,5 +74,5 @@ def main() = {
         println("");
         val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
         println(result3)
-    } with KeyNotFound[A] { (key) => println("Key not found: " ++ key) }
+    } with keyNotFound { (key) => println("Key not found: " ++ key) }
 }
