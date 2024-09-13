@@ -48,7 +48,7 @@ object Transformer {
       case machine.Extern(functionName, parameters, returnType, control, body) =>
         val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         if (control) {
-          VerbatimFunction(Tailcc(), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body))
+          VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body))
         } else {
           VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body))
         }
