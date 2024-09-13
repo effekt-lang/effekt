@@ -367,11 +367,11 @@ def fromNumber(number: Int): IOError = number match {
 namespace direct {
 
   extern pure def errorNumber(errno: Int): Int =
-  js "errorNumber(${errno})"
-  llvm """
-    %z = call %Int @c_error_number(%Int %errno)
-    ret %Int %z
-  """
+    js "errorNumber(${errno})"
+    llvm """
+      %z = call %Int @c_error_number(%Int %errno)
+      ret %Int %z
+    """
 
 }
 

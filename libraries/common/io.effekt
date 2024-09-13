@@ -14,49 +14,39 @@ type Task[T] = () => T at {io, async, global}
 
 def eventloop(program: Task[Unit]): Unit = direct::eventloop(box program)
 
-def spawn(task: Task[Unit]): Unit =
-  direct::spawn(box task)
+extern async def spawn(task: Task[Unit]): Unit =
+  js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
+  llvm """
+    call void @c_timer_start(%Int 0, %Stack %stack)
+    call void @run(%Neg ${task})
+    ret void
+  """
 
-def yield(): Unit =
-  direct::yield()
+extern async def yield(): Unit =
+  js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
+  llvm """
+    call void @c_timer_start(%Int 0, %Stack %stack)
+    ret void
+  """
 
-def abort(): Nothing =
-  direct::abort()
+extern async def abort(): Nothing =
+  js "$effekt.callcc(callback => { return })"
+  llvm """
+    call void @eraseStack(%Stack %stack)
+    ret void
+  """
 
 namespace direct {
 
-  extern io def eventloop(program: () => Unit at {global,io,async}): Unit =
-  js "${program}().run()"
-  llvm """
-    call void @run(%Neg ${program})
-    %loop = call ptr @uv_default_loop()
-    call i32 @uv_run(ptr %loop, i32 0)
-    call void @uv_loop_close(ptr %loop)
-    ret %Pos zeroinitializer
-  """
-
-  extern async def spawn(task: () => Unit at {global,io,async}): Unit =
-    js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
+  extern io def eventloop(program: Task[Unit]): Unit =
+    js "${program}().run()"
     llvm """
-      call void @c_timer_start(%Int 0, %Stack %stack)
-      call void @run(%Neg ${task})
-      ret void
+      call void @run(%Neg ${program})
+      %loop = call ptr @uv_default_loop()
+      call i32 @uv_run(ptr %loop, i32 0)
+      call void @uv_loop_close(ptr %loop)
+      ret %Pos zeroinitializer
     """
-
-  extern async def yield(): Unit =
-    js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
-    llvm """
-      call void @c_timer_start(%Int 0, %Stack %stack)
-      ret void
-    """
-
-  extern async def abort(): Nothing =
-    js "$effekt.callcc(callback => { return })"
-    llvm """
-      call void @eraseStack(%Stack %stack)
-      ret void
-    """
-
 }
 
 // Promises
@@ -68,12 +58,23 @@ extern type Promise[T]
 
 def promise[T](task: Task[T]): Promise[T] = {
   val p = promise::make[T]();
-  spawn(box { promise::resolve(p, task()) });
+  spawn(box { p.resolve(task()) });
   return p
 }
 
-def await[T](promise: Promise[T]): T =
-  promise::await(promise)
+extern async def await[T](promise: Promise[T]): T =
+  js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
+  llvm """
+    call void @c_promise_await(%Pos ${promise}, %Stack %stack)
+    ret void
+  """
+
+extern async def resolve[T](promise: Promise[T], value: T): Unit =
+  js "$effekt.callcc(callback => { ${promise}.resolve(${value}); callback($effekt.unit)})"
+  llvm """
+    call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
+    ret void
+  """
 
 namespace promise {
   extern js """
@@ -91,19 +92,5 @@ namespace promise {
     llvm """
       %promise = call %Pos @c_promise_make()
       ret %Pos %promise
-    """
-
-  extern async def resolve[T](promise: Promise[T], value: T): Unit =
-    js "$effekt.callcc(callback => { ${promise}.resolve(${value}); callback($effekt.unit)})"
-    llvm """
-      call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
-      ret void
-    """
-
-  extern async def await[T](promise: Promise[T]): T =
-    js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
-    llvm """
-      call void @c_promise_await(%Pos ${promise}, %Stack %stack)
-      ret void
     """
 }

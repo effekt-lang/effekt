@@ -2,14 +2,9 @@ module io/time
 
 import io
 
-def wait(millis: Int): Unit =
-  direct::wait(millis)
-
-namespace direct {
-  extern async def wait(millis: Int): Unit =
-    js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
-    llvm """
-      call void @c_timer_start(%Int ${millis}, %Stack %stack)
-      ret void
-    """
-}
+extern async def wait(millis: Int): Unit =
+  js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
+  llvm """
+    call void @c_timer_start(%Int ${millis}, %Stack %stack)
+    ret void
+  """
