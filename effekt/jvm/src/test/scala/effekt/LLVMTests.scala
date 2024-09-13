@@ -19,40 +19,23 @@ class LLVMTests extends EffektTests {
   )
 
   lazy val bugs: List[File] = List(
-    examplesDir / "pos" / "issue108.effekt", // seg faults!
-
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
-    // *** MALLOC PANIC
-    examplesDir / "pos" / "get_put.effekt",
+    // sanitizer/valgrind: segfault
+    examplesDir / "pos" / "parametrized.effekt",
 
-    // Valgrind leak/failure
-    examplesDir / "llvm" / "nested.effekt",
-    examplesDir / "llvm" / "strings.effekt",
+    // Valgrind leak, unclear
     examplesDir / "llvm" / "polymorphism_map.effekt",
-    examplesDir / "pos" / "parser.effekt",
-    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "type_parameters_blocks.effekt",
-    examplesDir / "pos" / "long_string.effekt",
-    examplesDir / "pos" / "matchblock.effekt",
-    examplesDir / "pos" / "overloading.effekt",
-    examplesDir / "pos" / "withstatement.effekt",
-    examplesDir / "pos" / "dequeue.effekt",
-    examplesDir / "pos" / "higherorder_io_control.effekt",
-    examplesDir / "pos" / "infer" / "infer_overload.effekt",
-    examplesDir / "pos" / "bug1.effekt",
-    examplesDir / "pos" / "string_concat_pr493.effekt",
-    examplesDir / "pos" / "string" / "substring.effekt",
-    examplesDir / "pos" / "string" / "indexOf.effekt",
-    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt",
+    
+    // Valgrind leak in array_new
     examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt", // + c_ref_fresh
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
-    examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt",
   )
 
   /**

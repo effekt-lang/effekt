@@ -32,13 +32,14 @@ struct Pos c_buffer(const uint32_t offset, const uint32_t length, void* obj) {
     };
 }
 
-void c_buffer_erase_noop(void *envPtr) {}
+void c_buffer_erase_noop(void *envPtr) { (void)envPtr; }
 
 uint64_t c_buffer_offset(const struct Pos buffer) {
     return (uint32_t)(buffer.tag >> 32); // Extract offset from the upper 32 bits
 }
 
 // Function to get the length from Pos
+// WARNING: This does not erase the Pos argument!
 uint64_t c_buffer_length(const struct Pos buffer) {
     return (uint32_t)(buffer.tag & 0xFFFFFFFF); // Extract length from the lower 32 bits
 }
@@ -60,13 +61,14 @@ struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     return c_buffer(0, n, obj);
 }
 
-// TODO this allocates, copies, and frees immediately... improve this
 struct Pos c_buffer_construct_zeroed(const uint64_t n) {
-    uint8_t *zeroes = calloc(n, sizeof *zeroes);
+    uint8_t *zeroes = calloc(sizeof(struct Header) + n, sizeof *zeroes);
     ASSERT_NON_NULL(zeroes)
-    const struct Pos buffer = c_buffer_construct(n, zeroes);
-    free(zeroes);
-    return buffer;
+
+    struct Header *header = (void*) zeroes;
+    *header = (struct Header) { .rc = 0, .eraser = c_buffer_erase_noop, };
+
+    return c_buffer(0, n, zeroes);
 }
 
 struct Pos c_buffer_construct_uninitialized(const uint64_t n) {
@@ -93,7 +95,7 @@ struct Pos c_buffer_clone(const struct Pos buffer) {
 
 void c_buffer_copy(const struct Pos from, struct Pos to, uint64_t startFrom, uint64_t startTo, uint64_t length) {
     // Check bounds
-    if (startFrom < 0 || startTo < 0 || (startFrom + length > c_buffer_length(from)) || (startTo + length > c_buffer_length(to))) {
+    if ((startFrom + length > c_buffer_length(from)) || (startTo + length > c_buffer_length(to))) {
         return;
     }
 
@@ -169,7 +171,11 @@ struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
 struct Pos c_buffer_eq(const struct Pos left, const struct Pos right) {
     uint64_t left_len = c_buffer_length(left);
     uint64_t right_len = c_buffer_length(right);
-    if (left_len != right_len) return BooleanFalse;
+    if (left_len != right_len) {
+        erasePositive(left);
+        erasePositive(right);
+        return BooleanFalse;
+    }
     for (uint64_t j = 0; j < left_len; ++j) {
         if (c_buffer_bytes(left)[j] != c_buffer_bytes(right)[j]) {
             erasePositive(left);
