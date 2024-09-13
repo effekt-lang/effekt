@@ -10,22 +10,17 @@ extern include js "../js/io.js"
 // Event Loop
 // ----------
 
-interface Eventloop {}
+type Task[T] = () => T at {io, control, global}
 
-type Task[T] = () => T / Eventloop at {io, control, global}
+def eventloop(program: Task[Unit]): Unit = direct::eventloop(box program)
 
-def eventloop(program: Task[Unit]): Unit = direct::eventloop(box {
-  try program() with Eventloop {}
-})
+def spawn(task: Task[Unit]): Unit =
+  direct::spawn(box task)
 
-def spawn(task: Task[Unit]): Unit / Eventloop =
-  // TODO installing a handler here is unnecessary
-  direct::spawn(box{ try task() with Eventloop {} })
-
-def yield(): Unit / Eventloop =
+def yield(): Unit =
   direct::yield()
 
-def abort(): Nothing / Eventloop =
+def abort(): Nothing =
   direct::abort()
 
 namespace direct {
@@ -71,7 +66,7 @@ extern type Promise[T]
   // = js "{resolve: ƒ, promise: Promise}"
   // = llvm "{tag: 0, obj: Promise*}"
 
-def promise[T](task: Task[T]): Promise[T] / Eventloop = {
+def promise[T](task: Task[T]): Promise[T] = {
   val p = promise::make[T]();
   spawn(box { promise::resolve(p, task()) });
   return p
