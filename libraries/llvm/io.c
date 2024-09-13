@@ -124,7 +124,8 @@ void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    uv_buf_t buf = uv_buf_init(c_buffer_bytes(buffer), c_buffer_length(buffer));
+    char* bytes = (char*) c_buffer_bytes(buffer); // libuv expects signed integers
+    uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
 
     uv_fs_read(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
     // TODO report result (UV_EINVAL)
@@ -135,7 +136,8 @@ void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    uv_buf_t buf = uv_buf_init(c_buffer_bytes(buffer), c_buffer_length(buffer));
+    char* bytes = (char*) c_buffer_bytes(buffer); // libuv expects signed integers
+    uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
 
     uv_fs_write(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
     // TODO report result (UV_EINVAL)
