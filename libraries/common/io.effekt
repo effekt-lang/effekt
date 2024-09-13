@@ -36,18 +36,6 @@ extern async def abort(): Nothing =
     ret void
   """
 
-namespace direct {
-
-  extern io def eventloop(program: Task[Unit]): Unit =
-    js "${program}().run()"
-    llvm """
-      call void @run(%Neg ${program})
-      %loop = call ptr @uv_default_loop()
-      call i32 @uv_run(ptr %loop, i32 0)
-      call void @uv_loop_close(ptr %loop)
-      ret %Pos zeroinitializer
-    """
-}
 
 // Promises
 // --------
@@ -92,5 +80,18 @@ namespace promise {
     llvm """
       %promise = call %Pos @c_promise_make()
       ret %Pos %promise
+    """
+}
+
+namespace internal {
+
+  extern io def eventloop(program: Task[Unit]): Unit =
+    js "${program}().run()"
+    llvm """
+      call void @run(%Neg ${program})
+      %loop = call ptr @uv_default_loop()
+      call i32 @uv_run(ptr %loop, i32 0)
+      call void @uv_loop_close(ptr %loop)
+      ret %Pos zeroinitializer
     """
 }

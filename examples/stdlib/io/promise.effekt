@@ -4,10 +4,10 @@ def main() = eventloop(box {
 
   val p = promise::make[String]()
 
-  spawn(box { println("Resolved 1: " ++ promise::await(p)) });
-  spawn(box { println("Resolved 2: " ++ promise::await(p)) });
-  spawn(box { println("Resolved 3: " ++ promise::await(p)) });
+  spawn(box { println("Resolved 1: " ++ p.await()) });
+  spawn(box { println("Resolved 2: " ++ p.await()) });
+  spawn(box { println("Resolved 3: " ++ p.await()) });
 
-  promise::resolve(p, "42")
+  p.resolve("42")
 
 })

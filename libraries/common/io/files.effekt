@@ -125,19 +125,19 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
 
 
 def open(path: String, mode: Mode): File / Exception[IOError] =
-  direct::checkResult(direct::open(path, mode))
+  internal::checkResult(internal::open(path, mode))
 
 def read(fd: Int, buffer: Bytes, offset: Int): Int / Exception[IOError] =
-  direct::checkResult(direct::read(fd, buffer, offset))
+  internal::checkResult(internal::read(fd, buffer, offset))
 
 def write(fd: Int, buffer: Bytes, offset: Int): Int / Exception[IOError] =
-  direct::checkResult(direct::write(fd, buffer, offset))
+  internal::checkResult(internal::write(fd, buffer, offset))
 
 def close(fd: Int): Unit / Exception[IOError] = {
-  direct::checkResult(direct::close(fd)); ()
+  internal::checkResult(internal::close(fd)); ()
 }
 
-namespace direct {
+namespace internal {
 
   extern js """
     const fs = require("fs");
@@ -173,7 +173,7 @@ namespace direct {
 
   def checkResult(result: Int): Int / Exception[IOError] =
     if (result < 0) {
-      val ioError = fromNumber(direct::errorNumber(result));
+      val ioError = fromNumber(internal::errorNumber(result));
       do raise[IOError](ioError, message(ioError))
     } else {
       result

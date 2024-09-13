@@ -364,7 +364,7 @@ def fromNumber(number: Int): IOError = number match {
   case _ => panic("Not a valid error code: " ++ show(number))
 }
 
-namespace direct {
+namespace internal {
 
   extern pure def errorNumber(errno: Int): Int =
     js "errorNumber(${errno})"
@@ -374,5 +374,3 @@ namespace direct {
     """
 
 }
-
-
