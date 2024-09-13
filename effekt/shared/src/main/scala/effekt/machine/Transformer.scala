@@ -454,7 +454,7 @@ object Transformer {
       // TODO all of this can go away, if we desugar records in the translation to core!
       val fields = DeclarationContext.getField(field).constructor.fields
       val fieldIndex = fields.indexWhere(_.id == field)
-      val variables = fields.map { f => Variable(freshName("select"), transform(tpe)) }
+      val variables = fields.map { f => Variable(freshName("select"), transform(f.tpe)) }
       transform(target).flatMap { value =>
         Binding { k =>
           Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)

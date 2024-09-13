@@ -1,0 +1,6 @@
+effect apply[A, B](a: A): B
+
+def main() = {
+  def f = new apply[Int, Int] { a => a + 1 };
+  println(f.apply(42))
+}

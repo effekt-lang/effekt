@@ -106,7 +106,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _: source.VarDef | _: source.RegDef =>
       Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
 
-    case d @ source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
+    case d @ source.InterfaceDef(id, tparamsInterface, ops) =>
       val interface = d.symbol
       List(core.Interface(interface, interface.tparams, interface.operations.map {
         case op @ symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>

@@ -206,7 +206,7 @@ def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
     case Success(res) => Success(res)
   }
   def fail[A](msg) = Failure(msg)
-} with LexerError[A] { (msg, pos) =>
+} with LexerError { (msg, pos) =>
   Failure(msg)
 }
 ```

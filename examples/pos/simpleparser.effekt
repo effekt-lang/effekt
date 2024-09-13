@@ -3,48 +3,48 @@ module examples/pos/simpleparser
 import string
 import text/regex
 
-effect Fail[A](msg: String) : A
+effect fail(msg: String): Nothing
 
-def stringToInt(str: String): Int / { Fail } = {
-  with default[WrongFormat, Int] { do Fail("cannot convert input to integer") };
+def stringToInt(str: String): Int / { fail } = {
+  with default[WrongFormat, Int] { do fail("cannot convert input to integer") };
   str.toInt
 }
 
-def perhapsAdd(): Int / { Fail } = stringToInt("1") + stringToInt("2")
+def perhapsAdd(): Int / { fail } = stringToInt("1") + stringToInt("2")
 
-def handledExample() = try { perhapsAdd() } with Fail[A] { (msg) => println(msg); 0 }
+def handledExample() = try { perhapsAdd() } with fail { (msg) => println(msg); 0 }
 
 
-effect Next(): String
+effect next(): String
 
-def print3(): Unit / { Next } = {
-  println(do Next());
-  println(do Next());
-  println(do Next())
+def print3(): Unit / { next } = {
+  println(do next());
+  println(do next());
+  println(do next())
 }
 
-def alwaysHello[R] { prog: () => R / Next }: R / {} =
-  try { prog() } with Next { () => resume("hello") }
+def alwaysHello[R] { prog: () => R / next }: R / {} =
+  try { prog() } with next { () => resume("hello") }
 
-def number() : Int / { Next, Fail } =
-  stringToInt(do Next())
+def number() : Int / { next, fail } =
+  stringToInt(do next())
 
-def feed[R](input: List[String]) { prog: () => R / Next } : R / Fail = {
+def feed[R](input: List[String]) { prog: () => R / next } : R / fail = {
   var remaining = input;
-  try { prog() } with Next { () =>
+  try { prog() } with next { () =>
     remaining match {
-      case Nil() => do Fail("End of input")
+      case Nil() => do fail("End of input")
       case Cons(element, rest) => remaining = rest; resume(element)
     }
   }
 }
 
 
-effect Flip(): Bool
+effect flip(): Bool
 
-def many[R] { prog: () => R }: List[R] / Flip = {
+def many[R] { prog: () => R }: List[R] / flip = {
   var result: List[R] = Nil();
-  while (do Flip()) {
+  while (do flip()) {
     result = Cons(prog(), result)
   };
   reverse(result)
@@ -55,12 +55,12 @@ type Result[R] {
   Failure(msg: String)
 }
 
-def backtrack[R] { prog: () => R / { Fail, Flip } }: Result[R] / {} =
+def backtrack[R] { prog: () => R / { fail, flip } }: Result[R] / {} =
   try {
     Success(prog())
-  } with Fail[A] { (msg) =>
+  } with fail { (msg) =>
     Failure(msg)
-  } with Flip { () =>
+  } with flip { () =>
     resume(true) match {
       case Failure(msg) => resume(false)
       case Success(res) => Success(res)
@@ -68,7 +68,7 @@ def backtrack[R] { prog: () => R / { Fail, Flip } }: Result[R] / {} =
   }
 
 
-effect Parser = { Fail, Flip, Next }
+effect Parser = { fail, flip, next }
 
 def manyNumbers() : List[Int] / Parser = many { number() }
 

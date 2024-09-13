@@ -1,8 +1,8 @@
 module examples/pos/withstatement
 
-effect Exc[A](msg: String): A
+effect raise(msg: String): Nothing
 
-def printer { p: => Unit / Exc }: Unit = try { p() } with Exc[A] { (msg) =>
+def printer { p: => Unit / raise }: Unit = try { p() } with raise { (msg) =>
   println(msg)
 }
 
@@ -18,7 +18,7 @@ def user(): Unit = {
         val x = 2;
         println("hello " ++ show(x))
     };
-    do Exc[Unit]("raised exception");
+    do raise("raised exception");
     println("world")
 }
 

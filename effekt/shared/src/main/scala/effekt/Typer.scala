@@ -679,7 +679,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case d @ source.ExternResource(id, tpe) =>
       Context.bind(d.symbol)
 
-    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
+    case d @ source.InterfaceDef(id, tparams, ops) =>
       d.symbol.operations.foreach { op =>
         if (op.effects.toList contains op.appliedInterface) {
           Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")

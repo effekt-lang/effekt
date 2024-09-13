@@ -8,10 +8,10 @@ def bar = new Bar {
   def op[Int](n) = () // WARN shadows
 }
 
-def main(): Int =
-  try {
+def main(): Unit =
+  try { // WARN not to be used
     //...
-    0
-  } with Foo[Int] { // WARN shadows
-    (x: Int) => 12
+    ()
+  } with Foo[Int] {
+    (x: Int) => ()
   }
