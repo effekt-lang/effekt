@@ -250,6 +250,10 @@ Int c_error_number(Int errno) {
 
 void c_resume_unit_timer(uv_timer_t* handle) {
     Stack stack = handle->data;
+
+    uv_timer_stop(handle);
+    uv_close((uv_handle_t*)handle, (uv_close_cb)free);
+
     resume_Pos(stack, Unit);
 }
 
