@@ -12,7 +12,7 @@ extern include js "../js/io.js"
 
 type Task[T] = () => T at {io, async, global}
 
-def eventloop(program: Task[Unit]): Unit = direct::eventloop(box program)
+def eventloop(program: Task[Unit]): Unit = internal::eventloop(box program)
 
 extern async def spawn(task: Task[Unit]): Unit =
   js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
