@@ -6,7 +6,7 @@ interface Foo {
 }
 
 // add for other lift-based backends, if they get added!
-extern control def fancy { f: Unit => Int }: Int =
+extern async def fancy { f: Unit => Int }: Int =
   chezLift "foo"
   llvm "foo"
   default { <> }

@@ -143,28 +143,28 @@ namespace direct {
     const fs = require("fs");
   """
 
-  extern control def open(path: String, mode: Mode): Int =
+  extern async def open(path: String, mode: Mode): Int =
   js "$effekt.callcc(callback => open(${path}, ${mode}, callback))"
   llvm """
     call void @c_fs_open(%Pos ${path}, %Pos ${mode}, %Stack %stack)
     ret void
   """
 
-  extern control def read(fd: Int, buffer: Bytes, offset: Int): Int =
+  extern async def read(fd: Int, buffer: Bytes, offset: Int): Int =
   js "$effekt.callcc(callback => read(${fd}, ${buffer}, ${offset}, callback))"
   llvm """
     call void @c_fs_read(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
     ret void
   """
 
-  extern control def write(fd: Int, buffer: Bytes, offset: Int): Int =
+  extern async def write(fd: Int, buffer: Bytes, offset: Int): Int =
   js "$effekt.callcc(callback => write(${fd}, ${buffer}, ${offset}, callback))"
   llvm """
     call void @c_fs_write(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
     ret void
   """
 
-  extern control def close(fd: Int): Int =
+  extern async def close(fd: Int): Int =
   js "$effekt.callcc(callback => close(${fd}, callback))"
   llvm """
     call void @c_fs_close(%Int ${fd}, %Stack %stack)

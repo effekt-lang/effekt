@@ -10,7 +10,7 @@ extern include js "../js/io.js"
 // Event Loop
 // ----------
 
-type Task[T] = () => T at {io, control, global}
+type Task[T] = () => T at {io, async, global}
 
 def eventloop(program: Task[Unit]): Unit = direct::eventloop(box program)
 
@@ -25,7 +25,7 @@ def abort(): Nothing =
 
 namespace direct {
 
-  extern io def eventloop(program: () => Unit at {global,io,control}): Unit =
+  extern io def eventloop(program: () => Unit at {global,io,async}): Unit =
   js "${program}().run()"
   llvm """
     call void @run(%Neg ${program})
@@ -35,7 +35,7 @@ namespace direct {
     ret %Pos zeroinitializer
   """
 
-  extern control def spawn(task: () => Unit at {global,io,control}): Unit =
+  extern async def spawn(task: () => Unit at {global,io,async}): Unit =
     js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
     llvm """
       call void @c_timer_start(%Int 0, %Stack %stack)
@@ -43,14 +43,14 @@ namespace direct {
       ret void
     """
 
-  extern control def yield(): Unit =
+  extern async def yield(): Unit =
     js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
     llvm """
       call void @c_timer_start(%Int 0, %Stack %stack)
       ret void
     """
 
-  extern control def abort(): Nothing =
+  extern async def abort(): Nothing =
     js "$effekt.callcc(callback => { return })"
     llvm """
       call void @eraseStack(%Stack %stack)
@@ -93,14 +93,14 @@ namespace promise {
       ret %Pos %promise
     """
 
-  extern control def resolve[T](promise: Promise[T], value: T): Unit =
+  extern async def resolve[T](promise: Promise[T], value: T): Unit =
     js "$effekt.callcc(callback => { ${promise}.resolve(${value}); callback($effekt.unit)})"
     llvm """
       call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
       ret void
     """
 
-  extern control def await[T](promise: Promise[T]): T =
+  extern async def await[T](promise: Promise[T]): T =
     js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
     llvm """
       call void @c_promise_await(%Pos ${promise}, %Stack %stack)
