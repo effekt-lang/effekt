@@ -289,8 +289,9 @@ typedef struct {
 } Promise;
 
 void c_promise_erase_listeners(void *envPtr) {
-    struct {promise_state_t state; union {struct Pos value; Listeners listeners;} payload;} *valPtr = envPtr;
-    promise_state_t state = valPtr->state;
+    // envPtr points to a Promise _after_ the eraser, so let's adjust it to point to the promise.
+    Promise *promise = (Promise*) (envPtr - offsetof(Promise, state));
+    promise_state_t state = promise->state;
 
     Stack head;
     Listeners* tail;
@@ -298,8 +299,8 @@ void c_promise_erase_listeners(void *envPtr) {
 
     switch (state) {
         case UNRESOLVED:
-            head = valPtr->payload.listeners.head;
-            tail = valPtr->payload.listeners.tail;
+            head = promise->payload.listeners.head;
+            tail = promise->payload.listeners.tail;
             if (head != NULL) {
                 // Erase head
                 eraseStack(head);
@@ -315,7 +316,7 @@ void c_promise_erase_listeners(void *envPtr) {
             };
             break;
         case RESOLVED:
-            erasePositive(valPtr->payload.value);
+            erasePositive(promise->payload.value);
             break;
     }
 }
