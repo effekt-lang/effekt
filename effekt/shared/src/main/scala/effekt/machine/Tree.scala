@@ -193,8 +193,8 @@ enum Statement {
   /**
    * Pops stacks until it finds one labeled with `prompt`
    */
-
   case PopStacks(name: Variable, prompt: Variable, rest: Statement)
+
   /**
    * let x = #infix_add(v1, ...); s
    */
@@ -205,7 +205,14 @@ enum Statement {
    */
   case LiteralInt(name: Variable, value: Long, rest: Statement)
 
+  /**
+   * let x = 42.2; s
+   */
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
+
+  /**
+   * let x = "hello"; s
+   */
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 
   /**
