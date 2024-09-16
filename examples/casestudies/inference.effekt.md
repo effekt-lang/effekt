@@ -13,7 +13,7 @@ This case study shows how we can perform inference over probabilistic models wit
 We require some imports:
 
 ```
-import list
+import exception
 ```
 
 We need some effects to perform probabilistic operations:
@@ -50,7 +50,7 @@ def draw(dist: Distribution): Double / random = {
       val u1 = do random();
       val u2 = do random();
       val sigma = variance
-      //box-muller transform
+      // box-muller transform
       val mag = sigma * sqrt(-2.0 * log(u1))
       val z0 = mag * cos(2.0 * PI * u2)
       return z0 + mean
@@ -82,26 +82,19 @@ def gamma(z0: Double): Double = {
     -0.13857109526572012,
     9.9843695780195716 * pow(10.0, 0.0 - 6.0),
     1.5056327351493116 * pow(10.0, 0.0 - 7.0)]
-  // takes the i-th element of a list
-  def takeith(i: Double, p0: List[Double]): Double = {
-    p0 match {
-      case Nil() => panic("empty list")
-      case Cons(p, ps) =>
-        if(i == 1.0) {p}
-        else {takeith(i - 1.0, ps)}
-    }
-  }
-  //lanczos approximation
+  
+  // lanczos approximation
   if (z < 0.5) {
     val y = PI / (sin(PI * z) * gamma(1.0 - z))
     return y
   } else {
+    with on[OutOfBounds].panic
     z = z - 1.0
-    var x = takeith(1.0, p)
-    var i = 2.0
-    while (i <= 9.0) {
-      x = x + (takeith(i, p) / (z + i - 1.0))
-      i = i + 1.0
+    var x = p.get(0)
+    var i = 1
+    while (i <= 8) {
+      x = x + (p.get(i) / (z + i.toDouble - 1.0))
+      i = i + 1
     }
     val t = z + g + 0.5
     val y = sqrt(2.0 * PI) * pow(t, (z + 0.5)) * exp(0.0 - t) * x
@@ -156,10 +149,9 @@ def handleWeight[R] { program: () => R / weight }: (R, Double)  = {
 For generating random numbers, we either use the `random` function from stdlib
 
 ```
-def handleRandom[R] { program: () => R / random }: R = {
+def handleRandom[R] { program: () => R / random }: R =
   try { program() }
   with random { () => resume(random()) }
-}
 ```
 
 or a pseudo random number generator using a linear congruential generator:
@@ -182,12 +174,11 @@ def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
 With the effect `emit` it is also possible to limit infinite loops. This allows for flexible numbers of steps to be performed with any algorithm that uses the effect `emit`.
 
 ```
-def onEmit[A] { handler: A => Unit } { program: => Any / Emit[A] }: Unit = {
+def onEmit[A] { handler: A => Unit } { program: => Any / Emit[A] }: Unit =
   try { program(); () }
   with Emit[A] {
     def emit(element) = { handler(element); resume(()) }
   }
-}
 def limit[A](n: Int) { program: => Any / Emit[A] }: Unit / Emit[A] = {
   var steps = n
   try { program(); () }
@@ -496,13 +487,10 @@ type Measurement = Double
 ```
 
 For simulating the movement of the robot at a given state, we sample accelerations `xa`, `ya` along the x and y axis from a Gaussian distribution.
-By applying the laws of notion and assuming that the difference between each time step is one, we can derive the update equations given the sampled acceleration for the velocity
-$$\begin{align*}a_t = \frac{d v_t}{d t} \Leftrightarrow v_t - v_{t-1} = a_t \Leftrightarrow v_t = v_{t-1} + a_t\end{align*}$$
-and position
-$$v_t = \frac{d x_t}{d t} \Leftrightarrow d x_t = v_t \Leftrightarrow x_t - x_{t-1} = v_t \Leftrightarrow x_t = v_t + x_{t-1} = v_{t-1} + a_t + x_{t-1}.$$
+By applying the laws of motion and assuming that the difference between each time step is one, we can derive the update equations given the sampled acceleration for the velocity and the position.
 
 ```
-def move(s: State): State / sample = {
+def move(s: State): State / sample =
   s match {
     case State(x0, y0, vx0, vy0) =>
       val xa1 = do sample(Gaussian(0.0, 1.0))
@@ -511,7 +499,6 @@ def move(s: State): State / sample = {
       val (vx1, vy1) = (vx0 + xa1, vy0 + ya1)
       return State(x1, y1, vx1, vy1)
   }
-}
 ```
 
 After predicting the next state of the robot, we get a distance measurement from the radar station.
