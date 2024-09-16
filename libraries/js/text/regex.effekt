@@ -1,33 +1,186 @@
 module text/regex
 
 import string
+import option
+import list
+
 
 extern type Regex
 
-record Match(matched: String, index: Int)
+// matches and groups
+record Range(start: Int, end: Int)
+record Group(content: String, index: Option[Range])
+record Match(content: String, start: Int, end: Int,  groups: List[Group])
 
-extern pure def regex(str: String): Regex =
-  js "new RegExp(${str})"
+/**
+ * Constructs a Regex object from a pattern string.
+ *
+ * This function creates a Regex object with the global flag set by default.
+ * The resulting Regex object is stateful, meaning its internal state
+ * changes after each match when used with methods like `exec`.
+ *
+ * @param pattern The regular expression pattern as a string.
+ * @return A Regex object that can be used with the `exec` function.
+ *
+ * Note: To extract substring indices for capturing groups, the 'd' flag
+ * must be explicitly set using the overloaded `regex(pattern: String, flags: String)` function.
+ * Without the 'd' flag, indices of capture groups will always be `None`.
+ *
+ * Example usage:
+ * ```effekt
+ * val simpleRegex = regex("\\w+")
+ * val math = exec(simpleRegex, "Hello World")
+ * ```
+ *
+ * For more control over flags, use the overloaded version:
+ * ```effekt
+ * val regexWithIndices = regex("(\\w+)", "gd")
+ * ```
+ */
+def regex(pattern: String): Regex = regex(pattern, "g")
 
-def exec(reg: Regex, str: String): Option[Match] =
-   undefinedToOption(reg.unsafeExec(str)) match {
-    case None() => None()
-    case Some(v) => Some(Match(v.matched, v.index))
-  }
 
-// internal representation { matched: String, index: Int }
+/**
+ * Constructs a Regex object from a pattern string and optional flags.
+ *
+ * @param pattern The regular expression pattern as a string.
+ * @param flags A string containing any combination of the following flags:
+ *   - `g`: Global search (find all matches rather than stopping after the first match)
+ *   - `i`: Case-insensitive search
+ *   - `m`: Multi-line search (^ and $ match start/end of each line)
+ *   - `d`: Generate indices for substring matches
+ *
+ * @return A Regex object that can be used with the `exec` function.
+ *
+ * Example usage:
+ * ```effekt
+ * val simpleRegex = regex("\\w+")
+ * val complexRegex = regex("(\\w+)\\s(\\d+)", "gi")
+ * ```
+ *
+ * Note: The `d` flag is required for extracting substring indices of groups.
+ * If not present, the indices of capture groups will always be `None`.
+ */
+def regex(pattern: String, flags: String): Regex = {
+    extRegex(pattern, flags)
+}
+
+extern pure def extRegex(str: String): Regex = js "new RegExp(${str})"
+extern pure def extRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
+
+/**
+ * Executes the regex against the given string.
+ *
+ * @param reg The Regex object to execute.
+ * @param str The string to match against.
+ * @return Option[Match] A Some(Match) if a match is found, None otherwise.
+ *
+ * The returned Match object contains:
+ * - content: The full matched string.
+ * - start: The starting index of the match.
+ * - end: The ending index of the match.
+ * - groups: A list of Group objects for each capturing group.
+ *
+ * Each Group object contains:
+ * - content: The matched substring for this group.
+ * - index: An Option[Range] with start and end indices if the 'd' flag is set, None otherwise.
+ *
+ * Note: This function is stateful when the global flag 'g' is set on the Regex object.
+ * Subsequent calls with the same Regex and string will return the next match in the string.
+ *
+ * Example usage:
+ * ```effekt
+ * val rx = regex("(\\w+)\\s(\\d+)", "g")
+ * val text = "Hello 123 World 456"
+ * while (true) {
+ *   exec(rx, text) match = {
+ *      Some(m) =>
+ *          println("content: " ++ m.content ++ "range: " ++ m.start.show() ++ ", " ++ m.end.show()))
+ *      None() => break
+ * }
+ * ```
+ */
+def exec(reg: Regex, str: String): Option[Match] = {
+    def toGroup(g: GroupMatch): Group = Group(
+        content(g),
+        zip(undefinedToOption(start(g)), undefinedToOption(end(g))) { (s, e) => Range(s, e)}
+    )
+
+    undefinedToOption(reg.unsafeExec(str)) match {
+        case None() => None()
+        case Some(v) =>
+        val fullMatch = fullMatch(v)
+        Some(Match(
+            fullMatch.content,
+            fullMatch.start,
+            fullMatch.end,
+            v.subGroups.toList().map{toGroup}
+        ))
+    }
+}
+
+// internal representation
+extern type GroupMatch
+extern pure def content(g: GroupMatch): String = js "${g}.content"
+extern pure def start(g: GroupMatch): Int = js "${g}.start"
+extern pure def end(g: GroupMatch): Int = js "${g}.end"
+
 extern type RegexMatch
-extern pure def matched(r: RegexMatch): String = js "${r}.matched"
-extern pure def index(r: RegexMatch): Int = js "${r}.index"
+extern pure def fullMatch(r: RegexMatch): GroupMatch = js "${r}.fullMatch"
+extern pure def subGroups(r: RegexMatch): Array[GroupMatch] = js "${r}.groups"
 
 extern js """
 function regex$exec(reg, str) {
-  var res = reg.exec(str);
-  if (res === null) { return undefined }
-  else { return { matched: res[0], index: res.index } }
+  var match = reg.exec(str);
+  if (match === null)  return undefined
+
+  var fullMatch = { content: match[0], start: match.index, end: reg.lastIndex };
+  var groups = [];
+  for (var i = 1; i < match.length; i++) {
+    if (match[i] !== undefined) {
+        if (match.indices !== undefined && match.indices[i] !== undefined) {
+            groups.push({
+                content: match[i],
+                start: match.indices[i][0],
+                end: match.indices[i][1]
+            });
+        } else {
+            groups.push({
+                content: match[i],
+            });
+        }
+    }else {
+        // Push an empty string if an intermediate group is undefined
+        groups.push({content: ""});}
+  }
+
+  return { fullMatch: fullMatch, groups: groups };
 }
+
 """
 
 // internals
 extern io def unsafeExec(reg: Regex, str: String): RegexMatch =
   js "regex$exec(${reg}, ${str})"
+
+
+// Debug show
+def debug(m: Match): String = {
+    val start = m.start.show()
+    val end = m.end.show()
+    val groups = m.groups.map{it => it.debug()}.join("\n")
+
+    "matched: " ++ m.content ++
+    "\nfrom: (" ++ start ++ ", " ++ end ++ ")" ++
+    "\nGroups: \n" ++ groups
+}
+
+def debug(g: Group): String = {
+    val range = g.index.map{ it => it.debug() }.getOrElse{"None"}
+
+    g.content ++  "\nfrom: " ++ range
+}
+
+def debug(r: Range): String = {
+    "(" ++ r.start.show() ++ ", " ++ r.end.show() ++ ")"
+}
