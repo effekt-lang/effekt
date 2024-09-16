@@ -106,19 +106,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Debug GitHub App authentication
-        run: |
-          echo "Authenticated user:"
-          gh api user --jq '{login: .login, id: .id, type: .type}'
-          
-          echo "Repository permissions:"
-          gh api repos/${{ github.repository }} --jq '.permissions'
-          
-          echo "Branch protection rules:"
-          gh api repos/${{ github.repository }}/branches/${{ github.ref_name }}/protection --jq '.restrictions'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
       - name: Commit and push changes
         run: |
           echo "Verifying token and auth status:"
