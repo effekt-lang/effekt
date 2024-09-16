@@ -115,8 +115,12 @@ jobs:
           git add pom.xml
           git commit -m "Bump version to ${{ steps.set-version.outputs.VERSION }}"
           git push
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Create and push tag
         run: |
           git tag v${{ steps.set-version.outputs.VERSION }}
           git push origin v${{ steps.set-version.outputs.VERSION }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
