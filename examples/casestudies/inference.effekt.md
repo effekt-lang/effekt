@@ -624,7 +624,6 @@ def main() = {
 
   // Robot movements
   limit[State](5) {
-    with linearCongruentialGenerator(seed);
     with sliceSampling[State](5)
 
     val init = State(0.0, 3.0, 2.0, 0.0)
