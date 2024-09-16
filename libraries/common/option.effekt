@@ -49,6 +49,19 @@ def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
   try { Some(p()) }
   with Exception[E] { def raise(_, _) = None() }
 
+// zip two options with a transform to one. Only (Some[A] Some[B]) will result
+// in Some[C]
+def zip[A, B, C](a: Option[A], b: Option[B]) {transform: (A,B) => C}: Option[C] = {
+    a match {
+        case None() => None()
+        case Some(x) =>
+            b match {
+                case None() => None()
+                case Some(y) => Some(transform(x,y))
+            }
+    }
+}
+
 // Interop with FFI
 // ---------------
 // These functions should only be used by libraries that interface with FFI
