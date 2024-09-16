@@ -461,7 +461,7 @@ def linearRegression(observations: List[Point]) = {
 ```
 
 Remember from earlier that `handleObserve` uses the `weight` effect operation.
-Therefore, the call `do observe(y, Gaussian(...))` can be understood as approximating $\argmax_{\mathbf{\theta} \in \Theta} P(\mathbf{Y} \mid \mathbf{\theta})$ where $\mathbf{Y}$ are the observations and $\mathbf{\theta}$ are the parameters of a Gaussian given by $m \sim \mathcal{N}(0, 3)$ and $c \sim \mathcal{N}(0, 2)$.
+Therefore, the call `do observe(y, Gaussian(...))` can be understood as $P(\mathbf{Y} \mid \mathbf{\theta})$ where $\mathbf{Y}$ are the observations and $\mathbf{\theta}$ are the parameters of a Gaussian given by $m \sim \mathcal{N}(0, 3)$ and $c \sim \mathcal{N}(0, 2)$.
 If the chosen parameters do not explain the observations well, it is likely it will be rejected and new parameters will be sampled. Conversely, if the model fits well, it is unlikely it will be rejected.
 
 ### Robot Movements
