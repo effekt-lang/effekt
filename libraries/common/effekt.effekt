@@ -408,11 +408,12 @@ extern pure def exp(x: Double): Double =
   ml "Math.exp ${x}"
 
 def pow(base: Double, exponent: Int): Double = {
-  def loop(acc: Double, exponent: Int): Double = {
+  def loop(base: Double, exponent: Int, acc: Double): Double = {
     if (exponent == 0) acc
-    else loop(acc * base, exponent - 1)
+    else if (exponent.mod(2) == 0) loop(base * base, exponent / 2, acc)  // even exponent
+    else loop(base, exponent - 1, acc * base)  // odd exponent
   }
-  loop(1.0, exponent)
+  loop(base, exponent, 1.0)
 }
 
 extern pure def pow(base: Double, exponent: Double): Double =
