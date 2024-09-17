@@ -62,11 +62,8 @@ def regex(pattern: String): Regex = regex(pattern, "g")
  * If not present, the indices of capture groups will always be `None`.
  */
 def regex(pattern: String, flags: String): Regex = {
-  extRegex(pattern, flags)
+  internal::unsafeRegex(pattern, flags)
 }
-
-extern pure def extRegex(str: String): Regex = js "new RegExp(${str})"
-extern pure def extRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
 
 /**
  * Executes the regex against the given string.
@@ -106,16 +103,15 @@ def exec(reg: Regex, str: String): Option[Match] = {
     zip(undefinedToOption(start(g)), undefinedToOption(end(g))) { (s, e) => Range(s, e)}
   )
 
-  undefinedToOption(reg.unsafeExec(str)) match {
-    case None() => None()
-    case Some(v) =>
-    val fullMatch = fullMatch(v)
-    Some(Match(
+  val regexMatch = internal::unsafeExec(reg, str).undefinedToOption()
+  regexMatch.map { it =>
+    val fullMatch = fullMatch(it)
+    Match(
       fullMatch.content,
       fullMatch.start,
       fullMatch.end,
-      v.subGroups.toList().map{toGroup}
-    ))
+      subGroups(it).toList().map{toGroup}
+    )
   }
 }
 
@@ -159,28 +155,31 @@ function regex$exec(reg, str) {
 
 """
 
-// internals
-extern io def unsafeExec(reg: Regex, str: String): RegexMatch =
-  js "regex$exec(${reg}, ${str})"
+// internal calls
+namespace internal {
+  extern io def unsafeExec(reg: Regex, str: String): RegexMatch = js "regex$exec(${reg}, ${str})"
+
+  extern pure def unsafeRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
+}
 
 
-// Debug show
-def debug(m: Match): String = {
+// Show
+def show(m: Match): String = {
   val start = m.start.show()
   val end = m.end.show()
-  val groups = m.groups.map{it => it.debug()}.join("\n")
+  val groups = m.groups.map{it => it.show()}.join("\n")
 
   "matched: " ++ m.content ++
   "\nfrom: (" ++ start ++ ", " ++ end ++ ")" ++
   "\nGroups: \n" ++ groups
 }
 
-def debug(g: Group): String = {
-  val range = g.index.map{ it => it.debug() }.getOrElse{"None"}
+def show(g: Group): String = {
+  val range = g.index.show{it => show(it)}
 
   g.content ++  "\nfrom: " ++ range
 }
 
-def debug(r: Range): String = {
+def show(r: Range): String = {
   "(" ++ r.start.show() ++ ", " ++ r.end.show() ++ ")"
 }
