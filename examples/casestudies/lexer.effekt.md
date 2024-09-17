@@ -125,10 +125,10 @@ First, we define the different token types as a list of pairs of regular express
 record TokenRx(kind: TokenKind, rx: Regex)
 
 val tokenDesriptors = [
-  TokenRx(Number(), "^[0-9]+".regex([])),
-  TokenRx(Ident(),  "^[a-zA-Z]+".regex([])),
-  TokenRx(Punct(),  "^[=,.()\\[\\]{}:]".regex([])),
-  TokenRx(Space(),  "^[ \t\n]+".regex([]))
+  TokenRx(Number(), "^[0-9]+".regex),
+  TokenRx(Ident(),  "^[a-zA-Z]+".regex),
+  TokenRx(Punct(),  "^[=,.()\\[\\]{}:]".regex),
+  TokenRx(Space(),  "^[ \t\n]+".regex)
 ]
 ```
 
