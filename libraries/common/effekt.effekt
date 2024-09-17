@@ -408,6 +408,20 @@ extern pure def exp(x: Double): Double =
   chez "(exp ${x})"
   ml "Math.exp ${x}"
 
+def pow(base: Double, exponent: Int): Double = {
+  def loop(base: Double, exponent: Int, acc: Double): Double = {
+    if (exponent == 0) acc
+    else if (exponent.mod(2) == 0) loop(base * base, exponent / 2, acc)  // even exponent
+    else loop(base, exponent - 1, acc * base)  // odd exponent
+  }
+  loop(base, exponent, 1.0)
+}
+
+extern pure def pow(base: Double, exponent: Double): Double =
+  js "Math.pow(${base}, ${exponent})"
+  chez "(expt ${base} ${exponent})"
+  ml "Math.pow ${base} ${exponent}"
+
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
@@ -432,6 +446,11 @@ extern pure def round(d: Double): Int =
   js "Math.round(${d})"
   chez "(round ${d})"
   ml "Real.round ${d}"
+
+def round(d: Double, digits: Int): Double = {
+  val factor = pow(10.0, digits)
+  round(d * factor).toDouble / factor
+}
 
 extern pure def floor(d: Double): Int =
   js "Math.floor(${d})"
