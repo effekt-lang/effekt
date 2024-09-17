@@ -125,10 +125,10 @@ First, we define the different token types as a list of pairs of regular express
 record TokenRx(kind: TokenKind, rx: Regex)
 
 val tokenDesriptors = [
-  TokenRx(Number(), "^[0-9]+".regex),
-  TokenRx(Ident(),  "^[a-zA-Z]+".regex),
-  TokenRx(Punct(),  "^[=,.()\\[\\]{}:]".regex),
-  TokenRx(Space(),  "^[ \t\n]+".regex)
+  TokenRx(Number(), "^[0-9]+".regex([])),
+  TokenRx(Ident(),  "^[a-zA-Z]+".regex([])),
+  TokenRx(Punct(),  "^[=,.()\\[\\]{}:]".regex([])),
+  TokenRx(Space(),  "^[ \t\n]+".regex([]))
 ]
 ```
 
@@ -163,7 +163,7 @@ the input stream, without advancing it. Its companion `tryMatchAll` returns the 
 matched by any of the matches in the given description list.
 ```
   def tryMatch(desc: TokenRx): Option[Token] =
-      desc.rx.exec(input()).map { m => Token(desc.kind, m.matched, position()) }
+      desc.rx.exec(input()).map { m => Token(desc.kind, m.content, position()) }
 
   def tryMatchAll(descs: List[TokenRx]): Option[Token] = descs match {
     case Nil() => None()
