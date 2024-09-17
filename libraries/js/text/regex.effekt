@@ -194,9 +194,12 @@ def show(m: Match): String = {
   val end = m.end.show()
   val groups = m.groups.map{it => it.show()}.join("\n")
 
-  "matched: " ++ m.content ++
-  "\nfrom: (" ++ start ++ ", " ++ end ++ ")" ++
-  "\nGroups: \n" ++ groups
+  [
+    "matched: " ++ m.content,
+    "from: (" ++ start ++ ", " ++ end ++ ")",
+    "Groups:",
+    groups
+  ].join("\n")
 }
 
 def show(g: Group): String = {
