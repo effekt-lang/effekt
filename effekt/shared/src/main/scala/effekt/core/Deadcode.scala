@@ -87,9 +87,9 @@ class Reachable(entrypoints: Set[Id], definitions: Map[Id, Definition]) {
 
   @tailrec
   private def process(b: Block): Unit = b match {
-    case Block.BlockVar(id, _, _) => process(id)
-    case Block.BlockLit(_, _, _, _, body) => process(body)
-    case Block.Member(block, _, _) => process(block)
+    case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
+    case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
+    case Block.Member(block, field, annotatedTpe) => process(block)
     case Block.Unbox(pure) => process(pure)
     case Block.New(impl) => process(impl)
   }
@@ -124,21 +124,17 @@ class Reachable(entrypoints: Set[Id], definitions: Map[Id, Definition]) {
   }
 
   private def process(e: Expr): Unit = e match {
-    case DirectApp(b, _, vargs, bargs) =>
-      process(b)
+    case DirectApp(b, targs, vargs, bargs) =>
+      process(b);
       vargs.foreach(process)
       bargs.foreach(process)
     case Run(s) => process(s)
-    case Pure.ValueVar(id, _) => process(id)
-    case Pure.Literal(_, _) => ()
-    case Pure.PureApp(b, _, vargs) =>
-      process(b)
-      vargs.foreach(process)
-    case Pure.Make(_, tag, vargs) =>
-      process(tag)
-      vargs.foreach(process)
-    case Pure.Select(target, _, _) => process(target)
-    case Pure.Box(b, _) => process(b)
+    case Pure.ValueVar(id, annotatedType) => process(id)
+    case Pure.Literal(value, annotatedType) => ()
+    case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
+    case Pure.Make(data, tag, vargs) => process(tag); vargs.foreach(process)
+    case Pure.Select(target, field, annotatedType) => process(target)
+    case Pure.Box(b, annotatedCapture) => process(b)
   }
 
   @inline
