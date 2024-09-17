@@ -41,8 +41,8 @@ object Inline {
     val defs = m.definitions.map(d => d.id -> d).toMap
     val context = InlineContext(mutable.Map.from(usage), defs, maxInlineSize)
 
-    val (updatedDefs, _) = rewrite(m.definitions)(using context)
-    (m.copy(definitions = updatedDefs), context.inlineCount.value)
+    val (updatedDefs, _) = rewrite(m.definitions.toVector)(using context)
+    (m.copy(definitions = updatedDefs.toList), context.inlineCount.value)
   }
 
   def full(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl =
@@ -56,6 +56,7 @@ object Inline {
     }
     tree
 
+  @inline
   def shouldInline(id: Id)(using ctx: InlineContext): Boolean =
     ctx.usage.get(id) match {
       case None => false
@@ -84,7 +85,7 @@ object Inline {
       case Some(Usage.Many) => true
     }
 
-  def rewrite(definitions: List[Definition])(using ctx: InlineContext): (List[Definition], InlineContext) =
+  def rewrite(definitions: Vector[Definition])(using ctx: InlineContext): (Vector[Definition], InlineContext) =
     given allDefs: InlineContext = ctx ++ definitions.map(d => d.id -> d).toMap
 
     val filtered = definitions.collect {
@@ -121,8 +122,8 @@ object Inline {
 
   def rewrite(s: Stmt)(using InlineContext): Stmt = s match {
     case Stmt.Scope(definitions, body) =>
-      val (defs, ctx) = rewrite(definitions)
-      scope(defs, rewrite(body)(using ctx))
+      val (defs, ctx) = rewrite(definitions.toVector)
+      scope(defs.toList, rewrite(body)(using ctx))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))

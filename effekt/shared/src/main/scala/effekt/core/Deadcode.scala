@@ -5,6 +5,9 @@ import effekt.core.Block.BlockLit
 import effekt.core.Pure.ValueVar
 import effekt.core.normal.*
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 class Deadcode(entrypoints: Set[Id], definitions: Map[Id, Definition]) extends core.Tree.Rewrite {
 
   val reachable = Reachable(entrypoints, definitions)
@@ -41,69 +44,60 @@ object Deadcode {
  *
  * TODO this could also be extended to cover record and interface declarations.
  */
-class Reachable(
-  var reachable: Map[Id, Usage],
-  var stack: List[Id],
-  var seen: Set[Id]
-) {
+class Reachable(entrypoints: Set[Id], definitions: Map[Id, Definition]) {
+  private val reachable = mutable.Map[Id, Usage]()
+  private val seen = mutable.Set[Id]()
+  private val stack = mutable.Stack[Id]()
 
-  def within(id: Id)(f: => Unit): Unit = {
-    stack = id :: stack
-    f
-    stack = stack.tail
+  def analyze(): Map[Id, Usage] = {
+    entrypoints.foreach(process)
+    reachable.toMap
   }
 
-  def process(d: Definition)(using defs: Map[Id, Definition]): Unit =
-    if stack.contains(d.id) then
-      reachable = reachable.updated(d.id, Usage.Recursive)
-    else d match {
-      case Definition.Def(id, block) =>
-        seen = seen + id
-        within(id) { process(block) }
+  private def within(id: Id)(f: => Unit): Unit = {
+    stack.push(id)
+    f
+    stack.pop()
+  }
 
-      case Definition.Let(id, _, binding) =>
-        seen = seen + id
-        process(binding)
-    }
-
-  def process(id: Id)(using defs: Map[Id, Definition]): Unit =
+  private def process(id: Id): Unit = {
     if (stack.contains(id)) {
-      reachable = reachable.updated(id, Usage.Recursive)
-      return;
+      reachable(id) = Usage.Recursive
+      return
     }
 
-    val count = reachable.get(id) match {
-      case Some(Usage.Once) => Usage.Many
-      case Some(Usage.Many) => Usage.Many
-      case Some(Usage.Recursive) => Usage.Recursive
-      case None => Usage.Once
+    reachable.get(id) match {
+      case Some(Usage.Once) => reachable(id) = Usage.Many
+      case Some(Usage.Many | Usage.Recursive) => // Do nothing
+      case None => reachable(id) = Usage.Once
     }
-    reachable = reachable.updated(id, count)
+
     if (!seen.contains(id)) {
-      defs.get(id).foreach(process)
+      seen.add(id)
+      definitions.get(id).foreach(process)
     }
+  }
 
-  def process(b: Block)(using defs: Map[Id, Definition]): Unit =
-    b match {
-      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
-      case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
-      case Block.Member(block, field, annotatedTpe) => process(block)
-      case Block.Unbox(pure) => process(pure)
-      case Block.New(impl) => process(impl)
-    }
+  private def process(d: Definition): Unit = d match {
+    case Definition.Def(id, block) =>
+      within(id) { process(block) }
+    case Definition.Let(id, _, binding) =>
+      process(binding)
+  }
 
-  def process(s: Stmt)(using defs: Map[Id, Definition]): Unit = s match {
+  @tailrec
+  private def process(b: Block): Unit = b match {
+    case Block.BlockVar(id, _, _) => process(id)
+    case Block.BlockLit(_, _, _, _, body) => process(body)
+    case Block.Member(block, _, _) => process(block)
+    case Block.Unbox(pure) => process(pure)
+    case Block.New(impl) => process(impl)
+  }
+
+  private def process(s: Stmt): Unit = s match {
     case Stmt.Scope(definitions, body) =>
-      var currentDefs = defs
-      definitions.foreach {
-        case d: Definition.Def =>
-          currentDefs += d.id -> d // recursive
-          process(d)(using currentDefs)
-        case d: Definition.Let =>
-          process(d)(using currentDefs)
-          currentDefs += d.id -> d // non-recursive
-      }
-      process(body)(using currentDefs)
+      definitions.foreach(process)
+      process(body)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -129,43 +123,40 @@ class Reachable(
     case Stmt.Hole() => ()
   }
 
-  def process(e: Expr)(using defs: Map[Id, Definition]): Unit = e match {
-    case DirectApp(b, targs, vargs, bargs) =>
-      process(b);
+  private def process(e: Expr): Unit = e match {
+    case DirectApp(b, _, vargs, bargs) =>
+      process(b)
       vargs.foreach(process)
       bargs.foreach(process)
     case Run(s) => process(s)
-    case Pure.ValueVar(id, annotatedType) => process(id)
-    case Pure.Literal(value, annotatedType) => ()
-    case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, vargs) => process(tag); vargs.foreach(process)
-    case Pure.Select(target, field, annotatedType) => process(target)
-    case Pure.Box(b, annotatedCapture) => process(b)
+    case Pure.ValueVar(id, _) => process(id)
+    case Pure.Literal(_, _) => ()
+    case Pure.PureApp(b, _, vargs) =>
+      process(b)
+      vargs.foreach(process)
+    case Pure.Make(_, tag, vargs) =>
+      process(tag)
+      vargs.foreach(process)
+    case Pure.Select(target, _, _) => process(target)
+    case Pure.Box(b, _) => process(b)
   }
 
-  def process(i: Implementation)(using defs: Map[Id, Definition]): Unit =
-    i.operations.foreach { op => process(op.body) }
-
+  @inline
+  private def process(i: Implementation): Unit =
+    i.operations.foreach(op => process(op.body))
 }
 
 object Reachable {
-  def apply(entrypoints: Set[Id], definitions: Map[Id, Definition]): Map[Id, Usage] = {
-    val analysis = new Reachable(Map.empty, Nil, Set.empty)
-    entrypoints.foreach(d => analysis.process(d)(using definitions))
-    analysis.reachable
-  }
+  def apply(entrypoints: Set[Id], definitions: Map[Id, Definition]): Map[Id, Usage] =
+    new Reachable(entrypoints, definitions).analyze()
 
-  def apply(m: ModuleDecl): Map[Id, Usage] = {
-    val analysis = new Reachable(Map.empty, Nil, Set.empty)
-    val defs = m.definitions.map(d => d.id -> d).toMap
-    m.definitions.foreach(d => analysis.process(d)(using defs))
-    analysis.reachable
-  }
+  def apply(m: ModuleDecl): Map[Id, Usage] =
+    apply(m.definitions.map(_.id).toSet, m.definitions.map(d => d.id -> d).toMap)
 
   def apply(s: Stmt.Scope): Map[Id, Usage] = {
-    val analysis = new Reachable(Map.empty, Nil, Set.empty)
-    analysis.process(s)(using Map.empty)
-    analysis.reachable
+    val analysis = new Reachable(Set.empty, Map.empty)
+    analysis.process(s)
+    analysis.reachable.toMap
   }
 }
 
