@@ -13,18 +13,42 @@ record Group(content: String, index: Option[Range])
 record Match(content: String, start: Int, end: Int,  groups: List[Group])
 
 /**
+ * Specifies flags that modify regular expression behavior.
+ *
+ * Flags:
+ * - Global: Matches all occurrences in the input string.
+ * - IgnoreCase: Performs case-insensitive matching.
+ * - Multiline: Treats ^ and $ as start/end of each line.
+ * - GenerateIndices: Enables capture group index retrieval.
+ *
+ * Usage:
+ * ```effekt
+ * val regex = regex("pattern", [Global(), IgnoreCase(), GenerateIndices()])
+ * ```
+ *
+ * Note: GenerateIndices is required for capture group indexing.
+ * Without it, capture group indices will be None.
+ */
+type RegexFlags {
+  Global();
+  IgnoreCase();
+  Multiline();
+  GenerateIndices();
+}
+
+/**
  * Constructs a Regex object from a pattern string.
  *
- * This function creates a Regex object with the global flag set by default.
+ * This function creates a Regex object with the `Global` flag set by default.
  * The resulting Regex object is stateful, meaning its internal state
  * changes after each match when used with methods like `exec`.
  *
  * @param pattern The regular expression pattern as a string.
  * @return A Regex object that can be used with the `exec` function.
  *
- * Note: To extract substring indices for capturing groups, the 'd' flag
- * must be explicitly set using the overloaded `regex(pattern: String, flags: String)` function.
- * Without the 'd' flag, indices of capture groups will always be `None`.
+ * Note: To extract substring indices for capturing groups, the `GenerateIndices` flag
+ * must be explicitly set using the overloaded `regex(pattern: String, flags: List[RegexFlags])` function.
+ * Without this flag, indices of capture groups will always be `None`.
  *
  * Example usage:
  * ```effekt
@@ -34,34 +58,35 @@ record Match(content: String, start: Int, end: Int,  groups: List[Group])
  *
  * For more control over flags, use the overloaded version:
  * ```effekt
- * val regexWithIndices = regex("(\\w+)", "gd")
+ * val regexWithIndices = regex("(\\w+)", [Global(), GenerateIndices()])
  * ```
  */
-def regex(pattern: String): Regex = regex(pattern, "g")
+def regex(pattern: String): Regex = regex(pattern, [Global()])
 
 
 /**
  * Constructs a Regex object from a pattern string and optional flags.
  *
  * @param pattern The regular expression pattern as a string.
- * @param flags A string containing any combination of the following flags:
- *   - `g`: Global search (find all matches rather than stopping after the first match)
- *   - `i`: Case-insensitive search
- *   - `m`: Multi-line search (^ and $ match start/end of each line)
- *   - `d`: Generate indices for substring matches
+ * @param flags A List of RegexFlags containing any combination of the following flags:
+ *   - `Global` Global search (find all matches rather than stopping after the first match)
+ *   - `IgnoreCase` Case-insensitive search
+ *   - `Multiline Multi-line search (^ and $ match start/end of each line)
+ *   - `GenerateIndices Generate indices for substring matches
  *
  * @return A Regex object that can be used with the `exec` function.
  *
  * Example usage:
  * ```effekt
  * val simpleRegex = regex("\\w+")
- * val complexRegex = regex("(\\w+)\\s(\\d+)", "gi")
+ * val complexRegex = regex("(\\w+)\\s(\\d+)", [Global(), GenerateIndices()]))
  * ```
  *
- * Note: The `d` flag is required for extracting substring indices of groups.
+ * Note: The `GenerateIndices` flag is required for extracting substring indices of groups.
  * If not present, the indices of capture groups will always be `None`.
  */
-def regex(pattern: String, flags: String): Regex = {
+def regex(pattern: String, flags: List[RegexFlags]): Regex = {
+  val flags = flags.map{it => it.show()}.join("")
   internal::unsafeRegex(pattern, flags)
 }
 
@@ -182,4 +207,13 @@ def show(g: Group): String = {
 
 def show(r: Range): String = {
   "(" ++ r.start.show() ++ ", " ++ r.end.show() ++ ")"
+}
+
+def show(f: RegexFlags): String = {
+  f match {
+    case Global() => "g"
+    case IgnoreCase() => "i"
+    case Multiline() => "m"
+    case GenerateIndices() => "d"
+  }
 }
