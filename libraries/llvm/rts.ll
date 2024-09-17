@@ -75,11 +75,12 @@
 ; fresh prompt generation
 @lastPrompt = private global %Prompt 0
 
-; This is used for two purposes:
-;   - a refied first-class list of stacks (cyclic linked-list)
-;   - as part of an intrusive linked-list of stacks (meta stack)
-%MetaStack = type { %ReferenceCount, %Memory, %Region, %Prompt, %MetaStackPointer }
+; This is used as part of an intrusive linked-list of stacks (meta stack)
+%MetaStack = type { %ReferenceCount, %Memory, %Region, %MetaStackPointer }
 
+%ResumptionPointer = type ptr
+
+%Resumption = type { %ReferenceCount, %MetaStackPointer, %Memory, %Region, %Resumption }
 
 
 
