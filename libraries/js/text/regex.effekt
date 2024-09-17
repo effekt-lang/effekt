@@ -39,9 +39,7 @@ type RegexFlags {
 /**
  * Constructs a Regex object from a pattern string.
  *
- * This function creates a Regex object with the `Global` flag set by default.
- * The resulting Regex object is stateful, meaning its internal state
- * changes after each match when used with methods like `exec`.
+ * This function creates a Regex object with no flags set.
  *
  * @param pattern The regular expression pattern as a string.
  * @return A Regex object that can be used with the `exec` function.
@@ -61,7 +59,7 @@ type RegexFlags {
  * val regexWithIndices = regex("(\\w+)", [Global(), GenerateIndices()])
  * ```
  */
-def regex(pattern: String): Regex = regex(pattern, [Global()])
+def regex(pattern: String): Regex = regex(pattern, [])
 
 
 /**
@@ -69,7 +67,8 @@ def regex(pattern: String): Regex = regex(pattern, [Global()])
  *
  * @param pattern The regular expression pattern as a string.
  * @param flags A List of RegexFlags containing any combination of the following flags:
- *   - `Global` Global search (find all matches rather than stopping after the first match)
+ *   - `Global` Global search (find all matches rather than stopping after the first match).
+*       This flags makes the regex object stateful and `exec` will return the next match on each call.
  *   - `IgnoreCase` Case-insensitive search
  *   - `Multiline Multi-line search (^ and $ match start/end of each line)
  *   - `GenerateIndices Generate indices for substring matches
