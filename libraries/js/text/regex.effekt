@@ -9,8 +9,8 @@ extern type Regex
 
 // matches and groups
 record Range(start: Int, end: Int)
-record Group(content: String, index: Option[Range])
-record Match(content: String, start: Int, end: Int,  groups: List[Group])
+record Group(matched: String, index: Option[Range])
+record Match(matched: String, start: Int, end: Int,  groups: List[Group])
 
 /**
  * Specifies flags that modify regular expression behavior.
@@ -97,13 +97,13 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  * @return Option[Match] A Some(Match) if a match is found, None otherwise.
  *
  * The returned Match object contains:
- * - content: The full matched string.
+ * - matched: The full matched string.
  * - start: The starting index of the match.
  * - end: The ending index of the match.
  * - groups: A list of Group objects for each capturing group.
  *
  * Each Group object contains:
- * - content: The matched substring for this group.
+ * - matched: The matched substring for this group.
  * - index: An Option[Range] with start and end indices if the 'd' flag is set, None otherwise.
  *
  * Note: This function is stateful when the global flag 'g' is set on the Regex object.
@@ -116,14 +116,14 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  * while (true) {
  *  exec(rx, text) match = {
  *    Some(m) =>
- *      println("content: " ++ m.content ++ "range: " ++ m.start.show() ++ ", " ++ m.end.show()))
+ *      println("matched: " ++ m.matched ++ "range: " ++ m.start.show() ++ ", " ++ m.end.show()))
  *    None() => break
  * }
  * ```
  */
 def exec(reg: Regex, str: String): Option[Match] = {
   def toGroup(g: GroupMatch): Group = Group(
-    content(g),
+    matched(g),
     zip(undefinedToOption(start(g)), undefinedToOption(end(g))) { (s, e) => Range(s, e)}
   )
 
@@ -131,7 +131,7 @@ def exec(reg: Regex, str: String): Option[Match] = {
   regexMatch.map { it =>
     val fullMatch = fullMatch(it)
     Match(
-      fullMatch.content,
+      fullMatch.matched,
       fullMatch.start,
       fullMatch.end,
       subGroups(it).toList().map{toGroup}
@@ -141,7 +141,7 @@ def exec(reg: Regex, str: String): Option[Match] = {
 
 // internal representation
 extern type GroupMatch
-extern pure def content(g: GroupMatch): String = js "${g}.content"
+extern pure def matched(g: GroupMatch): String = js "${g}.matched"
 extern pure def start(g: GroupMatch): Int = js "${g}.start"
 extern pure def end(g: GroupMatch): Int = js "${g}.end"
 
@@ -154,24 +154,24 @@ function regex$exec(reg, str) {
   const match = reg.exec(str);
   if (match === null)  return undefined
 
-  const fullMatch = { content: match[0], start: match.index, end: reg.lastIndex };
+  const fullMatch = { matched: match[0], start: match.index, end: reg.lastIndex };
   var groups = [];
   for (var i = 1; i < match.length; i++) {
     if (match[i] !== undefined) {
       if (match.indices !== undefined && match.indices[i] !== undefined) {
         groups.push({
-          content: match[i],
+          matched: match[i],
           start: match.indices[i][0],
           end: match.indices[i][1]
         });
       } else {
         groups.push({
-          content: match[i],
+          matched: match[i],
         });
       }
     }else {
       // Push an empty string if an intermediate group is undefined
-      groups.push({content: ""});}
+      groups.push({matched: ""});}
   }
 
   return { fullMatch: fullMatch, groups: groups };
@@ -194,7 +194,7 @@ def show(m: Match): String = {
   val groups = m.groups.map{it => it.show()}.join("\n")
 
   [
-    "matched: " ++ m.content,
+    "matched: " ++ m.matched,
     "from: (" ++ start ++ ", " ++ end ++ ")",
     "Groups:",
     groups
@@ -204,7 +204,7 @@ def show(m: Match): String = {
 def show(g: Group): String = {
   val range = g.index.show{it => show(it)}
 
-  g.content ++  "\nfrom: " ++ range
+  g.matched ++  "\nfrom: " ++ range
 }
 
 def show(r: Range): String = {

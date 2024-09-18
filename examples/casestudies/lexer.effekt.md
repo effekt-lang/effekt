@@ -163,7 +163,7 @@ the input stream, without advancing it. Its companion `tryMatchAll` returns the 
 matched by any of the matches in the given description list.
 ```
   def tryMatch(desc: TokenRx): Option[Token] =
-      desc.rx.exec(input()).map { m => Token(desc.kind, m.content, position()) }
+      desc.rx.exec(input()).map { m => Token(desc.kind, m.matched, position()) }
 
   def tryMatchAll(descs: List[TokenRx]): Option[Token] = descs match {
     case Nil() => None()
