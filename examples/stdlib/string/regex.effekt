@@ -37,7 +37,7 @@ def main() = {
   // stateless regex
   val rgx1 = regex("\\w+ \\w+")
   rgx1.exec(src).printMatched()
-  rgx1.exec(src).m2.printMatched()
+  rgx1.exec(src).printMatched()
 
   // stateful regex
   val rgx2 = regex("\\w+ \\w+", [Global()])
@@ -48,7 +48,7 @@ def main() = {
   rgx2.exec(src).printMatched()
 
   // indices
-  val rgx3 = regex("\\w+ \\w+")
+  val rgx3 = regex("\\w+ \\w+", [Global()])
   rgx3.exec(src).printIndices()
 
   // capture groups
