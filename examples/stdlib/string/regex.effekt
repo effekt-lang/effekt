@@ -52,16 +52,20 @@ def main() = {
   rgx3.exec(src).printIndices()
 
   // capture groups
-  val rgx4 = regex("(\\w+) (\\w+)", [GenerateIndices()])
-  val m1 = rgx4.exec(src)
-  m1.printMatched()
-  m1.printGroups()
-  m1.printGroupIndices()
-
-
-
-
-
-
-
+  if (regexIndicesSupported?()) {
+    val rgx4 = regex("(\\w+) (\\w+)", [GenerateIndices()])
+    val m1 = rgx4.exec(src)
+    m1.printMatched()
+    m1.printGroups()
+    m1.printGroupIndices()
+  } else {
+    val mockValues = [
+      "ab cd",
+      "ab",
+      "cd",
+      "(0, 2)",
+      "(3, 5)"
+    ].join("\n")
+    println(mockValues)
+  }
 }

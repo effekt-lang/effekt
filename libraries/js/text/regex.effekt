@@ -19,7 +19,8 @@ record Match(matched: String, start: Int, end: Int,  groups: List[Group])
  * - Global: Matches all occurrences in the input string.
  * - IgnoreCase: Performs case-insensitive matching.
  * - Multiline: Treats ^ and $ as start/end of each line.
- * - GenerateIndices: Enables capture group index retrieval.
+ * - GenerateIndices: Enables capture group index retrieval. This flag is ignored
+ *   when using Node.js versions below 16.0.0.
  *
  * Usage:
  * ```effekt
@@ -46,7 +47,8 @@ type RegexFlags {
  *
  * Note: To extract substring indices for capturing groups, the `GenerateIndices` flag
  * must be explicitly set using the overloaded `regex(pattern: String, flags: List[RegexFlags])` function.
- * Without this flag, indices of capture groups will always be `None`.
+ * This flag is ignored in Node versions < 16.0.0. Without this flag, indices of capture groups will
+ * always be `None`.
  *
  * Example usage:
  * ```effekt
@@ -71,7 +73,8 @@ def regex(pattern: String): Regex = regex(pattern, [])
 *       This flags makes the regex object stateful and `exec` will return the next match on each call.
  *   - `IgnoreCase` Case-insensitive search
  *   - `Multiline Multi-line search (^ and $ match start/end of each line)
- *   - `GenerateIndices Generate indices for substring matches
+ *   - `GenerateIndices Generate indices for substring matches. This flag is ignored when using Node
+ *      version < 16.0.0
  *
  * @return A Regex object that can be used with the `exec` function.
  *
@@ -85,7 +88,13 @@ def regex(pattern: String): Regex = regex(pattern, [])
  * If not present, the indices of capture groups will always be `None`.
  */
 def regex(pattern: String, flags: List[RegexFlags]): Regex = {
-  val flags = flags.map{it => it.show()}.join("")
+  def showGuard(flag: RegexFlags): String = {
+    flag match {
+      case GenerateIndices() => if (regexIndicesSupported?()) {flag.show()} else {""}
+      case _ => flag.show()
+    }
+  }
+  val flags = flags.map{it => it.showGuard()}.join("")
   internal::unsafeRegex(pattern, flags)
 }
 
@@ -184,7 +193,19 @@ namespace internal {
   extern io def unsafeExec(reg: Regex, str: String): RegexMatch = js "regex$exec(${reg}, ${str})"
 
   extern pure def unsafeRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
+
+  extern pure def nodeMajorVersion(): Int = js """process$version()"""
 }
+
+def regexIndicesSupported?(): Bool = internal::nodeMajorVersion() >= 16
+
+extern js """
+  function process$version() {
+    const v = process.version
+    const parts = v.split('.')
+    return parseInt(parts[0].replace('v', ''))
+  }
+"""
 
 
 // Show
