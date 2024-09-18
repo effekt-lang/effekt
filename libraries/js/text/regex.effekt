@@ -99,7 +99,7 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  * The returned Match object contains:
  * - matched: The full matched string.
  * - start: The starting index of the match.
- * - end: The ending index of the match.
+ * - end: The ending index of the match if `Global` flag is set, otherwise 0
  * - groups: A list of Group objects for each capturing group.
  *
  * Each Group object contains:
