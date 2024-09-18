@@ -1,0 +1,67 @@
+module example/stdlib/text/regex
+
+import text/regex
+
+def printSome[T](it: Option[T]) {f: T => String}: Unit = {
+  it match {
+    case Some(v) => println(f(v))
+    case None() => println("None")
+  }
+}
+
+def printMatched(m: Option[Match]) = printSome(m) { it => it.matched }
+
+def printIndices(m: Option[Match]) = printSome(m) { it =>
+    "(" ++ it.start.show() ++ ", " ++ it.end.show() ++ ")"
+  }
+
+def printGroups(m: Option[Match]) = printSome(m) { it =>
+    it.groups.map { g => g.matched() }.join("\n")
+  }
+
+def printGroupIndices(m: Option[Match]) = {
+  def show(it: Option[Range]): String = {
+    it match {
+      case Some(r) => r.show()
+      case None() => "None"
+    }
+  }
+  printSome(m) { it =>
+    it.groups.map { g => g.index().show() }.join("\n")
+  }
+}
+
+def main() = {
+  val src = "ab cd efg hij k l m n"
+
+  // stateless regex
+  val rgx1 = regex("\\w+ \\w+")
+  rgx1.exec(src).printMatched()
+  rgx1.exec(src).m2.printMatched()
+
+  // stateful regex
+  val rgx2 = regex("\\w+ \\w+", [Global()])
+  rgx2.exec(src).printMatched()
+  rgx2.exec(src).printMatched()
+  rgx2.exec(src).printMatched()
+  rgx2.exec(src).printMatched()
+  rgx2.exec(src).printMatched()
+
+  // indices
+  val rgx3 = regex("\\w+ \\w+")
+  rgx3.exec(src).printIndices()
+
+  // capture groups
+  val rgx4 = regex("(\\w+) (\\w+)", [GenerateIndices()])
+  val m1 = rgx4.exec(src)
+  m1.printMatched()
+  m1.printGroups()
+  m1.printGroupIndices()
+
+
+
+
+
+
+
+}
