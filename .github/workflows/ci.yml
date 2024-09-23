@@ -8,7 +8,7 @@ on:
 
 env:
   JAVA_VERSION: '11'
-  NODE_VERSION: '12.x'
+  NODE_VERSION: '16.x'
 
 jobs:
   run-hello-world:
