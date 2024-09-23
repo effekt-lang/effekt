@@ -1,5 +1,12 @@
 module toplevelval
 
+def inc(y: Int) = y + 1
+
 val x = 1 + 2
 
-def main() = println(x)
+val z = inc(inc(x))
+
+def main() = {
+  println(x)
+  println(z)
+}
