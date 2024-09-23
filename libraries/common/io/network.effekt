@@ -96,10 +96,9 @@ namespace examples {
   def main() = {
     val port = 8080
     println("Starting server on http://localhost:" ++ port.show)
-    eventloop(box {
-      server("localhost", port, box {
-        helloWorldApp()
-      })
+
+    server("localhost", port, box {
+      helloWorldApp()
     })
   }
 }

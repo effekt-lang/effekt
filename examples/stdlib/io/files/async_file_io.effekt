@@ -19,7 +19,7 @@ def program(path1: String, path2: String) =  {
   println(results2)
 }
 
-def main() = eventloop(box {
+def main() = {
   println("Running program")
 
   def path(file: String) = "examples/stdlib/io/files/" ++ file
@@ -30,4 +30,4 @@ def main() = eventloop(box {
   })
 
   println("Done")
-})
+}

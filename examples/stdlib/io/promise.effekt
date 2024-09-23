@@ -1,6 +1,6 @@
 import io
 
-def main() = eventloop(box {
+def main() = {
 
   val p = promise::make[String]()
 
@@ -10,4 +10,4 @@ def main() = eventloop(box {
 
   p.resolve("42")
 
-})
+}

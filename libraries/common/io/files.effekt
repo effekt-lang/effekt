@@ -189,10 +189,10 @@ namespace examples {
     do writeFile(to, contents)
   }
 
-  def main() = internal::eventloop(box {
+  def main() = {
     with on[IOError].panic;
     with filesystem;
 
     copy("README.md", "out/test.md")
-  })
+  }
 }

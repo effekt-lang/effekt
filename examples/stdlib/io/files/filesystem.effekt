@@ -9,9 +9,9 @@ def process(filename: String): Unit / { Files } = {
   println(contents)
 }
 
-def main() = eventloop(box {
+def main() = {
   with on[IOError].panic;
   with filesystem;
 
   process("demo_file1.txt")
-})
+}

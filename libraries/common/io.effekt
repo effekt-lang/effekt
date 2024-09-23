@@ -12,8 +12,6 @@ extern include js "../js/io.js"
 
 type Task[T] = () => T at {io, async, global}
 
-def eventloop(program: Task[Unit]): Unit = internal::eventloop(box program)
-
 extern async def spawn(task: Task[Unit]): Unit =
   js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
   llvm """
@@ -80,18 +78,5 @@ namespace promise {
     llvm """
       %promise = call %Pos @c_promise_make()
       ret %Pos %promise
-    """
-}
-
-namespace internal {
-
-  extern io def eventloop(program: Task[Unit]): Unit =
-    js "${program}().run()"
-    llvm """
-      call void @run(%Neg ${program})
-      %loop = call ptr @uv_default_loop()
-      call i32 @uv_run(ptr %loop, i32 0)
-      call void @uv_loop_close(ptr %loop)
-      ret %Pos zeroinitializer
     """
 }

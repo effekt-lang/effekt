@@ -58,9 +58,9 @@ namespace examples {
     do writeLine("Hi " ++ name ++ ", nice to meet you!")
   }
 
-  def main() = eventloop(box {
+  def main() = {
     with console;
     greeter()
-  })
+  }
 
 }
