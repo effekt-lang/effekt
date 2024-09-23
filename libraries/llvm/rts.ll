@@ -116,13 +116,13 @@ declare void @exit(i64)
 
 ; Prompts
 
-define %Prompt @currentPrompt(%Stack %stack) {
+define private %Prompt @currentPrompt(%Stack %stack) {
     %prompt_pointer = getelementptr %StackValue, ptr %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer
     ret %Prompt %prompt
 }
 
-define %Prompt @freshPrompt() {
+define private %Prompt @freshPrompt() {
     %currentPrompt = load %Prompt, ptr @lastPrompt
     %newPrompt = add %Prompt %currentPrompt, 1
     store %Prompt %newPrompt, ptr @lastPrompt
@@ -131,7 +131,7 @@ define %Prompt @freshPrompt() {
 
 ; Garbage collection
 
-define %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
+define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
     ; This magical 16 is the size of the object header
     %size = add i64 %environmentSize, 16
     %object = call ptr @malloc(i64 %size)
@@ -142,13 +142,13 @@ define %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
     ret %Object %object
 }
 
-define %Environment @objectEnvironment(%Object %object) alwaysinline {
+define private %Environment @objectEnvironment(%Object %object) alwaysinline {
     ; Environment is stored right after header
     %environment = getelementptr %Header, ptr %object, i64 1
     ret %Environment %environment
 }
 
-define void @shareObject(%Object %object) alwaysinline {
+define private void @shareObject(%Object %object) alwaysinline {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
 
@@ -175,7 +175,7 @@ define void @shareNegative(%Neg %val) alwaysinline {
     ret void
 }
 
-define void @eraseObject(%Object %object) alwaysinline {
+define private void @eraseObject(%Object %object) alwaysinline {
     %isNull = icmp eq %Object %object, null
     br i1 %isNull, label %done, label %next
 
@@ -215,7 +215,7 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define ptr @getRegionPointer(%Prompt %prompt, %Stack %stack) {
+define private ptr @getRegionPointer(%Prompt %prompt, %Stack %stack) {
 entry:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %currentPrompt = load %Prompt, ptr %prompt_pointer
@@ -233,7 +233,7 @@ found:
     ret ptr %stackRegion
 }
 
-define { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
+define private { ptr, %Reference } @alloc(i64 %index, %Prompt %prompt, %Stack %stack) alwaysinline {
     %region_pointer = call ptr @getRegionPointer(%Prompt %prompt, %Stack %stack)
 
     %stackPointer_pointer = getelementptr %Region, ptr %region_pointer, i64 0, i64 %index, i32 0
@@ -295,7 +295,7 @@ realloc:
 }
 
 
-define ptr @getPointer(%Reference %reference, i64 %index, %Stack %stack) {
+define private ptr @getPointer(%Reference %reference, i64 %index, %Stack %stack) {
     %prompt32 = extractvalue %Reference %reference, 0
     %offset32 = extractvalue %Reference %reference, 1
     %prompt = zext i32 %prompt32 to i64
@@ -308,7 +308,7 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Stack %stack) {
     ret ptr %pointer
 }
 
-define %Stack @getStack(%Stack %stack, %Prompt %prompt) {
+define private %Stack @getStack(%Stack %stack, %Prompt %prompt) {
     %promptPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %thisPrompt = load %Prompt, ptr %promptPointer
     %found = icmp eq %Prompt %prompt, %thisPrompt
@@ -324,7 +324,7 @@ recurse:
     ret %Stack %result
 }
 
-define ptr @getVarPointer(%Reference %reference, %Stack %stack) {
+define private ptr @getVarPointer(%Reference %reference, %Stack %stack) {
     %prompt32 = extractvalue %Reference %reference, 0
     %offset32 = extractvalue %Reference %reference, 1
     %prompt = zext i32 %prompt32 to i64
@@ -337,7 +337,7 @@ define ptr @getVarPointer(%Reference %reference, %Stack %stack) {
     ret ptr %varPointer
 }
 
-define %Reference @newReference(%Stack %stack) alwaysinline {
+define private %Reference @newReference(%Stack %stack) alwaysinline {
     %stackPointerPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %basePointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
 
@@ -361,7 +361,7 @@ define %Reference @newReference(%Stack %stack) alwaysinline {
 
 ; Stack management
 
-define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
+define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
 
@@ -370,7 +370,7 @@ define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     ret %StackPointer %stackPointer
 }
 
-define %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
+define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
 
@@ -383,7 +383,7 @@ define %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
 
 ; Meta-stack management
 
-define %Memory @newMemory() {
+define private %Memory @newMemory() {
     %stackPointer = call %StackPointer @malloc(i64 268435456)
     %limit = getelementptr i8, ptr %stackPointer, i64 268435456
 
@@ -394,7 +394,7 @@ define %Memory @newMemory() {
     ret %Memory %memory.2
 }
 
-define %Stack @newStack(%Prompt %prompt) {
+define private %Stack @newStack(%Prompt %prompt) {
 
     ; TODO find actual size of stack
     %stack = call ptr @malloc(i64 120)
@@ -413,7 +413,7 @@ define %Stack @newStack(%Prompt %prompt) {
     ret %Stack %stack
 }
 
-define void @pushStack(%Stack %stack, %Stack %oldStack) {
+define private void @pushStack(%Stack %stack, %Stack %oldStack) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
@@ -428,7 +428,7 @@ next:
     ret void
 }
 
-define %Stack @popStacks(%Stack %stack, %Prompt %prompt) {
+define private %Stack @popStacks(%Stack %stack, %Prompt %prompt) {
 entry:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %currentPrompt = load %Prompt, ptr %prompt_pointer
@@ -448,13 +448,13 @@ found:
     ret %Stack %nextStack2
 }
 
-define void @eraseMemory(%Memory %memory) {
+define private void @eraseMemory(%Memory %memory) {
     %stackPointer = extractvalue %Memory %memory, 0
     call void @free(%StackPointer %stackPointer)
     ret void
 }
 
-define void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
+define private void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
     %done = icmp uge ptr %elementPointer, %end
     br i1 %done, label %return, label %erase
 
@@ -470,7 +470,7 @@ return:
     ret void
 }
 
-define void @eraseRegion(%Region %region) alwaysinline {
+define private void @eraseRegion(%Region %region) alwaysinline {
     %valuesBase = extractvalue %Region %region, 0, 1
     call void @free(%Base %valuesBase)
 
@@ -487,7 +487,7 @@ define void @eraseRegion(%Region %region) alwaysinline {
     ret void
 }
 
-define %Stack @underflowStack(%Stack %stack) {
+define private %Stack @underflowStack(%Stack %stack) {
     %stackMemory = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
@@ -503,7 +503,7 @@ define %Stack @underflowStack(%Stack %stack) {
     ret %Stack %rest
 }
 
-define %Memory @copyMemory(%Memory %memory) alwaysinline {
+define private %Memory @copyMemory(%Memory %memory) alwaysinline {
     %stackPointer = extractvalue %Memory %memory, 0
     %base = extractvalue %Memory %memory, 1
     %limit = extractvalue %Memory %memory, 2
@@ -530,7 +530,7 @@ define %Memory @copyMemory(%Memory %memory) alwaysinline {
     ret %Memory %memory.2
 }
 
-define %Region @copyRegion(%Region %region) alwaysinline {
+define private %Region @copyRegion(%Region %region) alwaysinline {
     %memory.0 = extractvalue %Region %region, 0
     %memory.1 = extractvalue %Region %region, 1
     %memory.2 = extractvalue %Region %region, 2
@@ -554,7 +554,7 @@ define %Region @copyRegion(%Region %region) alwaysinline {
     ret %Region %region.2
 }
 
-define %Stack @uniqueStack(%Stack %stack) alwaysinline {
+define private %Stack @uniqueStack(%Stack %stack) alwaysinline {
 
 entry:
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
@@ -616,7 +616,7 @@ stop:
     ret %Stack %newHead
 }
 
-define void @shareStack(%Stack %stack) alwaysinline {
+define private void @shareStack(%Stack %stack) alwaysinline {
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
@@ -624,7 +624,7 @@ define void @shareStack(%Stack %stack) alwaysinline {
     ret void
 }
 
-define void @eraseStack(%Stack %stack) alwaysinline {
+define private void @eraseStack(%Stack %stack) alwaysinline {
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
@@ -658,7 +658,7 @@ done:
     ret void
 }
 
-define void @shareFrames(%StackPointer %stackPointer) alwaysinline {
+define private void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
     %stackSharer = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 1
     %sharer = load %Sharer, ptr %stackSharer
@@ -666,7 +666,7 @@ define void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     ret void
 }
 
-define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
+define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
     %stackEraser = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 2
     %eraser = load %Eraser, ptr %stackEraser
@@ -676,23 +676,23 @@ define void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define tailcc void @topLevel(%Pos %val, %Stack %stack) {
+define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
     %rest = call %Stack @underflowStack(%Stack %stack)
     ; assert %rest == null
     ret void
 }
 
-define void @topLevelSharer(%Environment %environment) {
+define private void @topLevelSharer(%Environment %environment) {
     ; TODO this should never be called
     ret void
 }
 
-define void @topLevelEraser(%Environment %environment) {
+define private void @topLevelEraser(%Environment %environment) {
     ; TODO this should never be called
     ret void
 }
 
-define %Stack @withEmptyStack() {
+define private %Stack @withEmptyStack() {
     ; TODO all stacks share the same source of fresh prompts
     %prompt = call %Prompt @freshPrompt()
     %stack = call %Stack @newStack(%Prompt %prompt)
