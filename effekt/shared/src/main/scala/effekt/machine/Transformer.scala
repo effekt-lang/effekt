@@ -256,9 +256,8 @@ object Transformer {
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
         transform(init).run { value =>
-          CurrentPrompt(prompt,
-            Allocate(reference, value, prompt,
-              transform(body)))
+          Var(reference, value, transform(body.tpe),
+            transform(body))
         }
 
       case core.Get(id, capt, tpe) =>
@@ -266,7 +265,7 @@ object Transformer {
         val reference = Variable(transform(id), Type.Reference(stateType))
         val variable = Variable(freshName("get"), stateType)
 
-        Load(variable, reference,
+        LoadVar(variable, reference,
             Return(List(variable)))
 
       case core.Put(id, capt, arg) =>
@@ -275,7 +274,7 @@ object Transformer {
         val variable = Variable(freshName("put"), Positive())
 
         transform(arg).run { value =>
-          Store(reference, value,
+          StoreVar(reference, value,
             Construct(variable, builtins.Unit, List(),
               Return(List(variable))))
         }

@@ -159,6 +159,21 @@ enum Statement {
   case Store(reference: Variable, value: Variable, rest: Statement)
 
   /**
+   *  e.g. var x = 42; s
+   */
+  case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
+
+  /**
+  * e.g. let y = loadVar(x); s
+  */
+  case LoadVar(name: Variable, ref: Variable, rest: Statement)
+
+  /**
+  * e.g. storeVar(x, 42); s
+  */
+  case StoreVar(ref: Variable, value: Variable, rest: Statement)
+
+  /**
    * e.g. push { (x, ...) => s }; s
    */
   case PushFrame(frame: Clause, rest: Statement)

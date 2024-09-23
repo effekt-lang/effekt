@@ -35,6 +35,12 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(ref) ++ freeVariables(rest) -- Set(name)
     case Store(ref, value, rest) =>
       Set(ref, value) ++ freeVariables(rest)
+    case Var(name, init, tpe, rest) => 
+      freeVariables(rest) ++ Set(init) -- Set(name)
+    case LoadVar(name, ref, rest) =>
+      Set(ref) ++ freeVariables(rest) -- Set(name)
+    case StoreVar(ref, value, rest) =>
+      Set(ref, value) ++ freeVariables(rest)
     case PushFrame(frame, rest) =>
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>

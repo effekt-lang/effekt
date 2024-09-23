@@ -308,6 +308,57 @@ define ptr @getPointer(%Reference %reference, i64 %index, %Stack %stack) {
     ret ptr %pointer
 }
 
+define %Stack @getStack(%Stack %stack, %Prompt %prompt) {
+    %promptPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %thisPrompt = load %Prompt, ptr %promptPointer
+    %found = icmp eq %Prompt %prompt, %thisPrompt
+    br i1 %found, label %done, label %recurse
+
+done:
+    ret %Stack %stack
+
+recurse:
+    %nextStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %nextStack = load %Stack, ptr %nextStackPointer
+    %result = call %Stack @getStack(%Stack %nextStack, %Prompt %prompt)
+    ret %Stack %result
+}
+
+define ptr @getVarPointer(%Reference %reference, %Stack %stack) {
+    %prompt32 = extractvalue %Reference %reference, 0
+    %offset32 = extractvalue %Reference %reference, 1
+    %prompt = zext i32 %prompt32 to i64
+    %offset = zext i32 %offset32 to i64
+
+    %targetStack = call %Stack @getStack(%Stack %stack, %Prompt %prompt)
+    %basePointer = getelementptr %StackValue, %Stack %targetStack, i64 0, i32 1, i32 1
+    %base = load %Base, ptr %basePointer
+    %varPointer = getelementptr i8, %Base %base, i64 %offset
+    ret ptr %varPointer
+}
+
+define %Reference @newReference(%Stack %stack) alwaysinline {
+    %stackPointerPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %basePointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
+
+    %stackPointer = load %StackPointer, ptr %stackPointerPointer
+    %base = load %StackPointer, ptr %basePointer
+
+    %intStack = ptrtoint %StackPointer %stackPointer to i64
+    %intBase = ptrtoint %StackPointer %base to i64
+
+    %offset = sub i64 %intStack, %intBase
+    %offset32 = trunc i64 %offset to i32
+
+    %prompt = call %Prompt @currentPrompt(%Stack %stack)
+    %prompt32 = trunc %Prompt %prompt to i32
+
+    %reference..1 = insertvalue %Reference undef, i32 %prompt32, 0
+    %reference = insertvalue %Reference %reference..1, i32 %offset32, 1
+
+    ret %Reference %reference
+}
+
 ; Stack management
 
 define %StackPointer @stackAllocate(%Stack %stack, i64 %n) {

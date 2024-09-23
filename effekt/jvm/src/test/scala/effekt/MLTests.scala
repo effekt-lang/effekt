@@ -54,6 +54,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "either.effekt",
     examplesDir / "pos" / "namespaces.effekt",
     examplesDir / "pos" / "exists.effekt", // now show instance for existentials
+    examplesDir / "casestudies" / "inference.effekt.md",
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "triples.effekt",
