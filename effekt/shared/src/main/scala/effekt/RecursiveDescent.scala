@@ -292,7 +292,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def toplevel(): Def =
     nonterminal:
       peek.kind match {
-        case `val`       => valDef()
+        case `val`       => constDef()
         case `def`       => defDef()
         case `interface` => interfaceDef()
         case `type`      => typeOrAliasDef()
@@ -359,6 +359,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def valDef(): Def =
     nonterminal:
       ValDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt())
+
+  def constDef(): Def =
+    nonterminal:
+      ConstDef(`val` ~> idDef(), maybeValueTypeAnnotation(), `=` ~> stmt())
 
   /**
    * In statement position, val-definitions can also be destructing:

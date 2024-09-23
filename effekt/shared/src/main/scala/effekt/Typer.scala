@@ -806,6 +806,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), effBinding)
 
+      // toplevel constant definitions
+      case d @ source.ConstDef(id, annot, binding) =>
+        val Result(t, effBinding) = d.symbol.tpe match {
+          case Some(t) =>
+            val Result(_, eff) = binding checkAgainst t
+            // use annotated, not inferred type
+            Result(t, eff)
+          case None => checkStmt(binding, None)
+        }
+
+        Context.bind(d.symbol, t)
+
+        Result((), effBinding)
+
       // regions
       case d @ source.RegDef(id, annot, reg, binding) =>
         val sym = d.symbol

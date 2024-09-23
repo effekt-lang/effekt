@@ -226,6 +226,7 @@ enum Def extends Definition {
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
 
+  case ConstDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case NamespaceDef(id: IdDef, definitions: List[Def])
 
   case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation])
@@ -573,7 +574,7 @@ object Named {
 
   type Params = ValueParam | BlockParam
   type Externs = ExternDef | ExternResource | ExternInterface | ExternType
-  type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
+  type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | ConstDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
   type Types = ValueTypeRef | BlockTypeRef
@@ -588,6 +589,7 @@ object Named {
     case VarDef       => symbols.Binder.VarBinder
     case RegDef       => symbols.Binder.RegBinder
     case DefDef       => symbols.Binder.DefBinder
+    case ConstDef     => symbols.Binder.ConstBinder
     case InterfaceDef => symbols.BlockTypeConstructor.Interface
     case DataDef      => symbols.TypeConstructor.DataType
     case RecordDef    => symbols.TypeConstructor.Record

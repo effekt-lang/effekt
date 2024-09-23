@@ -99,6 +99,9 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RegDef(id, annot, region, binding) =>
       ()
 
+    case d @ source.ConstDef(id, annot, binding) =>
+      ()
+
     case source.NamespaceDef(id, definitions) =>
       Context.namespace(id.name) {
         definitions.foreach(preresolve)
@@ -259,6 +262,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
+    case d @ source.ConstDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, ConstBinder(Context.nameFor(id), tpe, d))
 
     // Local mutable state
     case d @ source.VarDef(id, annot, binding) =>
@@ -515,7 +522,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Assign(id, expr) => Context.resolveVar(id) match {
       case _: VarBinder | _: RegBinder => resolveGeneric(expr)
-      case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
+      case _: ValBinder | _: ValueParam | _: ConstBinder => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }

@@ -2,15 +2,16 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{Annotations, Context, ContextOps}
+import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
+import effekt.core
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{MatchGuard, MatchPattern, ResolveExternDefs}
-import effekt.symbols.Binder.{RegBinder, VarBinder}
+import effekt.source.{ MatchGuard, MatchPattern, ResolveExternDefs }
+import effekt.symbols.Binder.{ RegBinder, VarBinder }
 import effekt.typer.Substitutions
-import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
+import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -77,15 +78,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = d.symbol
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
-    case v @ source.ValDef(id, tpe, binding) if pureOrIO(binding) =>
-      val transformed = transform(binding)
-      val transformedTpe = v.symbol.tpe match {
-        case Some(tpe) => transform(tpe)
-        case None => transformed.tpe
-      }
-      List(Definition.Let(v.symbol, transformedTpe, Run(transformed)))
+    case v @ source.ConstDef(id, tpe, binding) if isPure(binding) =>
+      List(Definition.Def(v.symbol, BlockLit(Nil, Nil, Nil, Nil, transform(binding))))
 
-    case v @ source.ValDef(id, _, binding) =>
+    case v @ source.ConstDef(id, _, binding) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
     case v @ source.DefDef(id, annot, binding) =>
@@ -105,6 +101,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case _: source.VarDef | _: source.RegDef =>
       Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
+
+    case _: source.ValDef =>
+      Context.at(d) { Context.abort("Local constant definitions not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops) =>
       val interface = d.symbol
@@ -155,12 +154,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   /**
-   * In core, we only export value binders and proper functions
+   * In core, we only export proper functions
    */
   def transform(exports: Bindings): List[Id] = exports.terms.flatMap {
     case (name, syms) => syms.collect {
       case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
-      case sym: ValBinder => sym
     }
   }.toList ++ exports.namespaces.values.flatMap(transform)
 
@@ -231,6 +229,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
       case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")
+      case d: source.Def.ConstDef => Context.panic("Only allowed on the toplevel")
 
       // For now we forget about all of the following definitions in core:
       case d: source.Def.Alias => transform(rest)
@@ -369,6 +368,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val stateType = Context.blockTypeOf(sym)
         val getType = operationType(stateType, TState.get)
         Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
+
+      // translates references to global variables to function calls
+      case sym: ConstBinder =>
+        val tpe = Context.valueTypeOf(sym) // toplevel constants _were_ values, and are _now_ blocks
+        Run(App(core.BlockVar(sym, core.BlockType.Function(Nil, Nil, Nil, Nil, transform(tpe)), Set.empty), Nil, Nil, Nil))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }

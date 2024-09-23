@@ -234,6 +234,10 @@ trait Intelligence {
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value binder", signature, None)
 
+    case c: ConstBinder =>
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Toplevel constant", signature, None)
+
     case c: DefBinder =>
       val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
       SymbolInfo(c, "Block binder", signature, None)

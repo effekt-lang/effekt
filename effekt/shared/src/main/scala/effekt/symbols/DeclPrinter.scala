@@ -32,6 +32,10 @@ object DeclPrinter extends ParenPrettyPrinter {
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       pp"var ${b.name}: ${tpe}"
 
+    case b @ ConstBinder(name, tps, decl) =>
+      val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
+      pp"val ${name}: ${tpe}"
+
     case TypeAlias(name, tparams, tpe) =>
       val tps = show(tparams)
       "type" <+> name.toString <> tps <+> "=" <+> pp"$tpe"

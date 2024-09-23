@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef}
+import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef, ConstDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -197,6 +197,7 @@ enum Binder extends TermSymbol {
   case RegBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: RegDef) extends Binder, RefBinder
   case VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder, RefBinder, TrackedParam
   case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
+  case ConstBinder(name: Name, tpe: Option[ValueType], decl: ConstDef) extends Binder, ValueSymbol
 }
 export Binder.*
 
