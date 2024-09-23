@@ -109,11 +109,15 @@ void c_fs_open(struct Pos path, struct Pos mode, Stack stack) {
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    uv_fs_open(uv_default_loop(), request, path_str, flags, 0666, c_resume_int_fs);
-    // TODO report result (UV_EINVAL)
+    int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0666, c_resume_int_fs);
 
-    // We must free the string, since libuv copies it into the request
-    // TODO double check!
+	if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+	}
+
+    // We must free the string either way, since libuv copies it into the request
     free(path_str);
 
     return;
@@ -127,8 +131,13 @@ void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
     char* bytes = (char*) c_buffer_bytes(buffer); // libuv expects signed integers
     uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
 
-    uv_fs_read(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
-    // TODO report result (UV_EINVAL)
+    int result = uv_fs_read(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+
+	if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
 }
 
 void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
@@ -139,8 +148,13 @@ void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
     char* bytes = (char*) c_buffer_bytes(buffer); // libuv expects signed integers
     uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
 
-    uv_fs_write(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
-    // TODO report result (UV_EINVAL)
+    int result = uv_fs_write(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+
+	if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
 }
 
 void c_fs_close(Int fd, Stack stack) {
@@ -148,8 +162,13 @@ void c_fs_close(Int fd, Stack stack) {
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    uv_fs_close(uv_default_loop(), request, fd, c_resume_int_fs);
-    // TODO report result (UV_EINVAL)
+    int result = uv_fs_close(uv_default_loop(), request, fd, c_resume_int_fs);
+
+	if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
 }
 
 
