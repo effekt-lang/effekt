@@ -1,6 +1,6 @@
 import io
 import io/error
-import io/files
+import io/filesystem
 
 def program(path1: String, path2: String) =  {
   val f1 = promise(box {
@@ -22,7 +22,7 @@ def program(path1: String, path2: String) =  {
 def main() = {
   println("Running program")
 
-  def path(file: String) = "examples/stdlib/io/files/" ++ file
+  def path(file: String) = "examples/stdlib/io/filesystem/" ++ file
 
   promise(box {
     program(path("demo_file1.txt"), path("demo_file2.js"))

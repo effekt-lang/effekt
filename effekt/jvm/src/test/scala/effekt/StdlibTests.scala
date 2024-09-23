@@ -61,8 +61,8 @@ class StdlibLLVMTests extends StdlibTests {
 
     // Valgrind leak/failure
     examplesDir / "stdlib" / "bytes" / "bytes.effekt",
-    examplesDir / "stdlib" / "io" / "files" / "async_file_io.effekt",
-    examplesDir / "stdlib" / "io" / "files" / "filesystem.effekt",
+    examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
+    examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
     examplesDir / "stdlib" / "io" / "time.effekt",
     examplesDir / "stdlib" / "list" / "flatmap.effekt",
     examplesDir / "stdlib" / "list" / "zip.effekt",

@@ -1,4 +1,4 @@
-module io/files
+module io/filesystem
 
 import bytes
 
