@@ -127,13 +127,13 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
 def open(path: String, mode: Mode): File / Exception[IOError] =
   internal::checkResult(internal::open(path, mode))
 
-def read(fd: Int, buffer: Bytes, offset: Int): Int / Exception[IOError] =
+def read(fd: File, buffer: Bytes, offset: Int): Int / Exception[IOError] =
   internal::checkResult(internal::read(fd, buffer, offset))
 
-def write(fd: Int, buffer: Bytes, offset: Int): Int / Exception[IOError] =
+def write(fd: File, buffer: Bytes, offset: Int): Int / Exception[IOError] =
   internal::checkResult(internal::write(fd, buffer, offset))
 
-def close(fd: Int): Unit / Exception[IOError] = {
+def close(fd: File): Unit / Exception[IOError] = {
   internal::checkResult(internal::close(fd)); ()
 }
 
