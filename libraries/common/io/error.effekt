@@ -369,7 +369,7 @@ namespace internal {
   extern pure def errorNumber(errno: Int): Int =
     js "errorNumber(${errno})"
     llvm """
-      %z = call %Int @c_error_number(%Int %errno)
+      %z = call %Int @c_error_number(%Int ${errno})
       ret %Int %z
     """
 

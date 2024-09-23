@@ -1,0 +1,53 @@
+module wordcount
+
+import io
+import io/error
+import io/filesystem
+
+record Output(chars: Int, words: Int, lines: Int)
+
+def formatWith(output: Output, filename: String): String =
+  output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
+
+def isSpace(c: Char) =
+  c == ' ' || c.toInt == 9 || c.toInt == 10 || c.toInt == 11 || c.toInt == 12 || c.toInt == 13
+  // \n \r \t \v \f
+
+def isNewline(c: Char) = c.toInt == 10 // \n
+
+def countWords(input: String): Output = {
+  val len = input.length
+
+  var chars = 0
+  var words = 0
+  var lines = 0
+  var wasSpace = true
+
+  each(0, len) { i =>
+    val c = input.unsafeCharAt(i)
+    val currentIsSpace = isSpace(c)
+
+    chars = chars + 1
+
+    if (wasSpace && not(currentIsSpace)) {
+      words = words + 1
+    }
+
+    if (isNewline(c)) {
+      lines = lines + 1
+    }
+
+    wasSpace = currentIsSpace
+  }
+
+  Output(chars, words, lines)
+}
+
+def main() = {
+  with on[IOError].panic;
+
+  val filename = "examples/stdlib/io/filesystem/demo_file1.txt"
+  val contents = readFile(filename)
+  val output = countWords(contents).formatWith(filename)
+  println(output)
+}
