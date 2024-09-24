@@ -80,8 +80,5 @@ class StdlibLLVMTests extends StdlibTests {
     examplesDir / "stdlib" / "list" / "build.effekt",
     examplesDir / "stdlib" / "string" / "strings.effekt",
     examplesDir / "stdlib" / "string" / "unicode.effekt",
-
-    // missing support for top-level constants for ANSI escapes
-    examplesDir / "stdlib" / "test",
   )
 }
