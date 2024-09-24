@@ -39,8 +39,6 @@ You can do that in Effekt with the following code:
 extern include js "./mycoollibrary.js"
 ```
 
-> NOTE: Do not run this code on the website ^
-
 ## `extern` strings
 
 Do you want to quickly define some inline JavaScript function instead of creating a whole `.js` file for it?
@@ -66,13 +64,11 @@ Now you can call `set` on your reference!
 
 You can and should annotate the capture of your extern function as `extern <capture> def ...`
 
-- no capture, usually denoted as `pure`, also writable as `{}`
+- no capture, usually denoted as `pure`, also writable as `{}`. If a extern definition is annotated as `pure`, it will be considered for inlining by the compiler.
 - if you want to allocate into a global scope (e.g. the JavaScript heap), use `global`
-- if your operation performs I/O (like for example `println`), use `io` (this is the default capture)
-- if your operation captures the continuation use `control` (in the JS backend, control definitions should return a monadic value of type `Control`)
+- if your function performs I/O (like for example `println`), use `io` (this is the default capture)
+- if your function captures the continuation use `async` (in the JS backend, control definitions should return a monadic value of type `async`)
 - of course, you can mix and match: `extern def {global, io, control} ...`
-
-> NOTE: TODO: if pure, means compiler can remove them, inline them, etc.!
 
 For example the following function gets the current timestamp via the JavaScript FFI, which is an operation that is not pure (it has a side effect):
 
@@ -82,7 +78,6 @@ extern io def now(): Int =
 ```
 
 For example the `ref` and `set` functions above should have been annotated as `extern global def` as they allocate globally.
-> NOTE: FIXME ^
 
 If you want to add your own tracked resource `foo` of type `MyResource`, Effekt supports the following:
 
