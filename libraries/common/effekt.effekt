@@ -446,6 +446,10 @@ extern pure def round(d: Double): Int =
   js "Math.round(${d})"
   chez "(round ${d})"
   ml "Real.round ${d}"
+  llvm """
+    %i = call double @llvm.round.f64(double ${d})
+    %z = fptosi double %i to %Int ret %Int %z
+  """
 
 def round(d: Double, digits: Int): Double = {
   val factor = pow(10.0, digits)
@@ -456,11 +460,19 @@ extern pure def floor(d: Double): Int =
   js "Math.floor(${d})"
   chez "(flonum->fixnum (floor ${d}))"
   ml "Real.floor ${d}"
+  llvm """
+    %i = call double @llvm.floor.f64(double ${d})
+    %z = fptosi double %i to %Int ret %Int %z
+  """
 
 extern pure def ceil(d: Double): Int =
   js "Math.ceil(${d})"
   chez "(flonum->fixnum (ceiling ${d}))"
   ml "Real.ceil ${d}"
+  llvm """
+    %i = call double @llvm.ceil.f64(double ${d})
+    %z = fptosi double %i to %Int ret %Int %z
+  """
 
 def min(n: Int, m: Int): Int =
   if (n < m) n else m
