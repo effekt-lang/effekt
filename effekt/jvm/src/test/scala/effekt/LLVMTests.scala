@@ -28,7 +28,7 @@ class LLVMTests extends EffektTests {
     // Valgrind leak, unclear
     examplesDir / "llvm" / "polymorphism_map.effekt",
     examplesDir / "pos" / "type_parameters_blocks.effekt",
-    
+
     // Valgrind leak in array_new
     examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
@@ -67,9 +67,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "records.effekt",
 
     // toplevel def and let bindings
-    examplesDir / "pos" / "toplevelval.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
-    examplesDir / "pos" / "lib_test.effekt",
 
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",

@@ -144,33 +144,33 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. let x = allocate(42, region); s
-  */
+   * e.g. let x = allocate(42, region); s
+   */
   case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
 
   /**
-  * e.g. let y = load(x); s
-  */
+   * e.g. let y = load(x); s
+   */
   case Load(name: Variable, reference: Variable, rest: Statement)
 
   /**
-  * e.g. store(x, 42); s
-  */
+   * e.g. store(x, 42); s
+   */
   case Store(reference: Variable, value: Variable, rest: Statement)
 
   /**
-   *  e.g. var x = 42; s
+   * e.g. var x = 42; s
    */
   case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
 
   /**
-  * e.g. let y = loadVar(x); s
-  */
+   * e.g. let y = loadVar(x); s
+   */
   case LoadVar(name: Variable, ref: Variable, rest: Statement)
 
   /**
-  * e.g. storeVar(x, 42); s
-  */
+   * e.g. storeVar(x, 42); s
+   */
   case StoreVar(ref: Variable, value: Variable, rest: Statement)
 
   /**
@@ -208,8 +208,8 @@ enum Statement {
   /**
    * Pops stacks until it finds one labeled with `prompt`
    */
-
   case PopStacks(name: Variable, prompt: Variable, rest: Statement)
+
   /**
    * let x = #infix_add(v1, ...); s
    */
@@ -219,7 +219,6 @@ enum Statement {
    * let x = 42; s
    */
   case LiteralInt(name: Variable, value: Long, rest: Statement)
-
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 
