@@ -11,7 +11,7 @@ permalink: docs/tutorial/ffi
 Effekt allows communicating with the host platform (for instance JavaScript) by defining extern functions via FFI.
 Let's start with the JavaScript backend by defining a function that adds two numbers:
 
-```effekt
+```
 extern def add(n: Int, m: Int): Int =
   js "${n} + ${m}"
 ```
@@ -22,7 +22,7 @@ Every call of `add(n, m)` is replaced with `n + m` in the JavaScript backend.
 
 It's often useful to define opaque extern types to encapsulate a foreign type:
 
-```effekt
+```
 extern type Ref[T]
 
 extern def ref[T](init: T): Ref[T] =
@@ -35,7 +35,7 @@ Sometimes, you want to include a whole JavaScript file containing your favourite
 so that you can write bindings for it later.
 You can do that in Effekt with the following code:
 
-```effekt
+```effekt:sketch
 extern include js "./mycoollibrary.js"
 ```
 
@@ -46,7 +46,7 @@ extern include js "./mycoollibrary.js"
 Do you want to quickly define some inline JavaScript function instead of creating a whole `.js` file for it?
 Use `extern` strings!
 
-```effekt
+```
 extern js """
   function set$impl(ref, value) {
     ref.value = value;
@@ -85,7 +85,8 @@ For example the `ref` and `set` functions above should have been annotated as `e
 > NOTE: FIXME ^
 
 If you want to add your own tracked resource `foo` of type `MyResource`, Effekt supports the following:
-```effekt
+
+```
 extern interface MyResource
 extern resource foo: MyResource
 ```
@@ -94,7 +95,7 @@ extern resource foo: MyResource
 
 Effekt has a lot of different backends. One `extern def` can support multiple backends, so here's how to `mul`tiply two numbers on different backends:
 
-```effekt
+```
 extern pure def mul(x: Int, y: Int): Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
@@ -104,7 +105,7 @@ extern pure def mul(x: Int, y: Int): Int =
 
 You can also use multiline strings if you need to splice in a lot of code and `default { ... }` to specify a default implementation in Effekt:
 
-```effekt
+```
 // used as a fallback impl for `not`
 def primNot(b: Bool) = if b then false else true
 

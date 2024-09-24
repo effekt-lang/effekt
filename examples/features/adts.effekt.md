@@ -56,3 +56,20 @@ Furthermore, you can use partial matches in positions where a `Bool` is expected
 ```effekt:repl
 if (file is File(name, content)) println("The file " ++ name ++ " has a content length of " ++ show(content.length))
 ```
+
+## Lambda match
+
+In case there is a function definition, where a block is expected as argument, like here:
+
+```
+def withFile(name: String) { prog: FileSystem => Unit }: Unit = <> 
+```
+
+You can omit the argument if you want to pattern match on it directly:
+
+```effekt:repl
+withFile("README.md") {
+  case File(_, _) => <>
+  case Directory(_, _) => <>
+}
+```

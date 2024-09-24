@@ -8,6 +8,8 @@ permalink: docs/tutorial/effects
 
 TODO mention effect safety
 
+## Non-resumptive effects
+
 For getting started with effects and handlers, we define the popular exception effect, consisting just of one effect operation `throw`:
 
 ```
@@ -46,6 +48,8 @@ unsafeDiv(42, 0)
 ```
 
 Each handler consists of a `try` block, followed by one one more handlers, starting with `with`, followed by the name of the effect and definitions for each of the effect's declared operations.
+
+## Resumptive effects
 
 Besides exceptions, we can also emulate other useful mechanism with effects. For example generator functions using the 
 `Yield` effect.
@@ -92,4 +96,66 @@ def genFibs(limit: Int): List[Int] / {} = {
 
 ```effekt:repl
 genFibs(15)
+```
+
+## Singleton operation
+
+Often you want to declare an interface that is entirely defined by just one operation. In this case you can declare it as a singleton operation:
+
+```effekt:hide
+extern def time(): Int =
+  js "Date.now()"
+```
+
+```
+effect tell(): Int
+```
+
+The handler for this interface uses a slightly different more concise syntax like it is used in the literature:
+
+```
+def tellTime[A] { prog: () => A / tell }: A =
+  try { prog() }
+  with tell { () =>
+    resume(time())
+  }
+```
+
+```effekt:repl
+tellTime {
+  val start = do tell()
+  val end = do tell()
+  println("took " ++ show(end - start))
+}
+```
+
+## `with` handler
+
+```
+def limited[A](n: Int) { prog: () => Unit / Yield[A] }: List[A] = {
+  var buff: List[A] = []
+  var yields = 0
+  try { 
+    prog()
+    buff
+  } with Yield[A] {
+    def yield(x) =
+      if (yields >= n) { buff }
+      else {
+        buff = Cons(x, buff)
+        yields = yields + 1
+        resume(())
+      }
+  }
+}
+
+def run() = {
+  with limited[Int](1)
+  do yield(1)
+  do yield(2)
+}
+```
+
+```effekt:repl
+run()
 ```
