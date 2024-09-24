@@ -379,14 +379,14 @@ object Transformer {
       transform(pure)
   }
 
-  def transform(expr: core.Expr)(using C: BlocksParamsContext, D: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
 
-    case core.ValueVar(id, tpe) if C.globals contains id =>
+    case core.ValueVar(id, tpe) if BC.globals contains id =>
       val variable = Variable(freshName("run"), transform(tpe))
       Binding { k =>
         // TODO this might introduce too many pushes.
         PushFrame(Clause(List(variable), k(variable)),
-          Substitute(Nil, Jump(C.globals(id))))
+          Substitute(Nil, Jump(BC.globals(id))))
       }
 
     case core.ValueVar(id, tpe) =>
@@ -551,14 +551,14 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[core.Definition])(using C: BlocksParamsContext, E: ErrorReporter): Unit =
+  def findToplevelBlocksParams(definitions: List[core.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
       case Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
       case Definition.Let(id, tpe, binding) =>
         noteDefinition(id, Nil, Nil)
-        C.globals = C.globals + (id -> Label(transform(id), Nil))
+        noteGlobal(id)
       case other => ()
     }
 
@@ -604,6 +604,9 @@ object Transformer {
     ps.foreach {
       case core.BlockParam(id, tpe, capt) => noteParameter(id, tpe)
     }
+
+  def noteGlobal(id: Id)(using BC: BlocksParamsContext): Unit =
+    BC.globals += (id -> Label(transform(id), Nil))
 
   def getBlocksParams(id: Id)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
     case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
