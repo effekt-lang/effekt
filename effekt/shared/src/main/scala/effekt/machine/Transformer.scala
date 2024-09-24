@@ -33,8 +33,10 @@ object Transformer {
     val transformedDefinitions = definitions.foldLeft(mainEntry) {
       case (rest, core.Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body))) =>
         Def(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body), rest)
+      case (rest, core.Definition.Let(id, tpe, binding)) =>
+        Def(BC.globals(id), transform(binding).run { value => Return(List(value)) }, rest)
       case (rest, d) =>
-        ErrorReporter.abort(s"Toplevel def and let bindings not yet supported: ${d}")
+        ErrorReporter.abort(s"Toplevel object definitions not yet supported: ${d}")
     }
 
     Program(declarations, transformedDefinitions)
@@ -377,7 +379,16 @@ object Transformer {
       transform(pure)
   }
 
-  def transform(expr: core.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: core.Expr)(using C: BlocksParamsContext, D: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
+
+    case core.ValueVar(id, tpe) if C.globals contains id =>
+      val variable = Variable(freshName("run"), transform(tpe))
+      Binding { k =>
+        // TODO this might introduce too many pushes.
+        PushFrame(Clause(List(variable), k(variable)),
+          Substitute(Nil, Jump(C.globals(id))))
+      }
+
     case core.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -540,11 +551,14 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[core.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
+  def findToplevelBlocksParams(definitions: List[core.Definition])(using C: BlocksParamsContext, E: ErrorReporter): Unit =
     definitions.foreach {
-      case Definition.Def(blockName, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
-        noteDefinition(blockName, vparams.map(transform) ++ bparams.map(transform), Nil)
+      case Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
+        noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
+      case Definition.Let(id, tpe, binding) =>
+        noteDefinition(id, Nil, Nil)
+        C.globals = C.globals + (id -> Label(transform(id), Nil))
       case other => ()
     }
 
@@ -553,7 +567,9 @@ object Transformer {
    */
 
   class BlocksParamsContext() {
-    var info: Map[Symbol, BlockInfo] = Map()
+    var info: Map[Symbol, BlockInfo] = Map.empty
+
+    var globals: Map[Id, Label] = Map.empty
 
     def definition(id: Id): BlockInfo.Definition = info(id) match {
       case d : BlockInfo.Definition => d
