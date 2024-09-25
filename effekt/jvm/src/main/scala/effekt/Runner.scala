@@ -321,6 +321,9 @@ object LLVMRunner extends Runner[String] {
     val llPath  = basePath + ".ll"
     val optPath = basePath + ".opt.ll"
     val objPath = basePath + ".o"
+    val linkedLibraries = Seq(
+      "-lm", // Math library
+    ) ++ libuvArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val gcc = gccCmd.getOrElse(missing("gcc"))
@@ -332,7 +335,7 @@ object LLVMRunner extends Runner[String] {
 
     val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ libuvArgs
+    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
 
     if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all", "-Og", "-g", "-Wall", "-Wextra")
     if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
