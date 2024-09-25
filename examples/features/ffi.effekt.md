@@ -102,7 +102,7 @@ You can also use multiline strings if you need to splice in a lot of code and `d
 
 ```
 // used as a fallback impl for `not`
-def primNot(b: Bool) = if b then false else true
+def primNot(b: Bool) = if (b) false else true
 
 extern pure def not(b: Bool): Bool =
   js "!${b}"
@@ -113,6 +113,10 @@ extern pure def not(b: Bool): Bool =
     ret %Pos %adt_q
   """
   default { primNot(b) }
+```
+
+```effekt:repl
+now()
 ```
 
 ## Reference

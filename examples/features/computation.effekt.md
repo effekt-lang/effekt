@@ -63,7 +63,7 @@ The effects used in the passed block thus need to be handled exactly where the b
 |---|:---|---:|
 | Term-level | `42`, `"hello"`, `true`, `Cons(1, Nil)`, `box { [A](x: A) => x }` ... | `{ [A](x: A) => x }`, `new Exception`, `region r`, `unbox exc`  |
 | | Literals, instances of datatypes and boxed computations | Blocks, objects and regions |
-| Type-level | `Int`, `String`, `Bool`, `List[Int]`, `[A](A) => A at {}`...  | `{ [A](A) => A }`, `{exc: Exception}`, `{r: Region}`  |
+| Type-level | `Int`, `String`, `Bool`, `List[Int]`, `[A](A) => A at {}`...  | `[A](A) => A`, `Exception`, `Region`  |
 
 On the term-level, `box`ing offers a way of transforming a second-class computation into a first-class value.
 Conversely, `unbox`ing does the reverse and converts a first-class boxed computation back into a second-class computation.

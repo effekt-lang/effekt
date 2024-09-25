@@ -30,7 +30,6 @@ def example1() = {
   var x = 1
   allChoices {
     if (do flip()) { x = 2 }
-    else { () }
     println(x)
   }
 }
@@ -49,7 +48,6 @@ def example2() = {
   allChoices {
     var x = 1
     if (do flip()) { x = 2 }
-    else { () }
     println(x)
   }
 }
@@ -96,7 +94,6 @@ Additionally, regions are second-class, like blocks and objects, and thus can be
 def exampleProgram {r: Region} = {
   var x in r = 1
   if (do flip()) { x = 2 }
-  else { () }
   println(x)
 }
 
