@@ -18,8 +18,14 @@ def sum(xs: List[Int]): Int = {
 }
 ```
 
-It is not permitted to have unintialized variables, that is, there are no mere declarations of variables. Therefore, the following is not allowed:
+It is not permitted to have unintialized variables, that is, there are no mere declarations of variables. Therefore, the following is **not** allowed:
 
-```effekt:repl
-var x: Int
+```effekt:sketch
+def main() = {
+  var x: Int; // ERROR: Expected = but got ;
+  ()
+}
+
 ```
+
+At runtime, mutable variables are allocated on the stack -- see also [regions](./regions) and [captures](./captures).
