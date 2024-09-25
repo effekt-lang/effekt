@@ -156,13 +156,27 @@ def collect[A](n: Int) { prog: () => Unit / Yield[A] }: List[A] = {
   }
   yielded
 }
+```
+Let us define another handler for `Yield` to filter values:
+```
+def filter[A] { keep: A => Bool } { prog: () => Unit / Yield[A] }: Unit / Yield[A] =
+  try prog()
+  with Yield[A] {
+    def yield(x) = if (keep(x)) { do yield(x); resume(()) } else { resume(()) }
+  }
+```
 
-def genFibs2(limit: Int) = {
-  with collect[Int](limit)
+We can avoid the nesting of higher-order function calls like `collect[Int](limit) { filter { x => x.mod(2) == 0 } { fib() } }` and write:
+```
+def evenFibs(limit: Int): List[Int] = {
+  with collect(limit)
+  with filter { x => x.mod(2) == 0 }
   fib()
 }
 ```
 
+
+
 ```effekt:repl
-genFibs2(15).foreach { x => println(x) }
+evenFibs(15).foreach { x => println(x) }
 ```
