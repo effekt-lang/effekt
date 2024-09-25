@@ -3,10 +3,6 @@ module io
 import ref
 import queue
 
-extern include llvm "../llvm/io.ll"
-extern include js "../js/io.js"
-
-
 // Event Loop
 // ----------
 
@@ -47,6 +43,12 @@ def promise[T](task: Task[T]): Promise[T] = {
   spawn(box { p.resolve(task()) });
   return p
 }
+
+extern llvm """
+  declare %Pos @c_promise_make()
+  declare void @c_promise_resolve(%Pos, %Pos)
+  declare void @c_promise_await(%Pos, %Neg)
+"""
 
 extern async def await[T](promise: Promise[T]): T =
   js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"

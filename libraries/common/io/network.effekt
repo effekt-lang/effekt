@@ -4,7 +4,7 @@ import bytes
 import io
 
 namespace js {
-  extern js """
+  extern jsNode """
     const net = require('node:net');
 
     function listen(server, port, host, listener) {
@@ -16,18 +16,18 @@ namespace js {
   extern type JSServer // = net.Server
   extern type JSSocket // = net.Socket
   extern io def server(): JSServer =
-    js "net.createServer()"
+    jsNode "net.createServer()"
   extern io def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, async, global}): Unit =
-    js "listen(${server}, ${port}, ${host}, (socket) => (${listener})(socket).run())"
+    jsNode "listen(${server}, ${port}, ${host}, (socket) => (${listener})(socket).run())"
 
   extern async def send(socket: JSSocket, data: Bytes): Unit =
-    js "$effekt.callcc(callback => ${socket}.write(${data}, callback))"
+    jsNode "$effekt.callcc(callback => ${socket}.write(${data}, callback))"
 
   extern async def receive(socket: JSSocket): Bytes =
-    js "$effekt.callcc(callback => ${socket}.once('data', callback))"
+    jsNode "$effekt.callcc(callback => ${socket}.once('data', callback))"
 
   extern async def end(socket: JSSocket): Unit =
-    js "$effekt.callcc(callback => ${socket}.end(callback))"
+    jsNode "$effekt.callcc(callback => ${socket}.end(callback))"
 }
 
 interface Socket {

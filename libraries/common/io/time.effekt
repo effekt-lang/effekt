@@ -1,5 +1,8 @@
 module io/time
 
+extern llvm """
+  declare void @c_timer_start(%Int, %Stack)
+"""
 
 extern async def wait(millis: Int): Unit =
   js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
