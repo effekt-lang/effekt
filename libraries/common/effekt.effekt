@@ -378,10 +378,6 @@ extern pure def sqrt(x: Double): Double =
   ml "Math.sqrt ${x}"
   llvm "%z = call %Double @llvm.sqrt.f64(double ${x}) ret %Double %z"
 
-extern llvm """
-declare double @llvm.sqrt.f64(double %x)
-"""
-
 def square(x: Double): Double = x * x
 
 def neg(n: Double): Double =
@@ -447,7 +443,7 @@ extern pure def round(d: Double): Int =
   chez "(round ${d})"
   ml "Real.round ${d}"
   llvm """
-    %i = call double @llvm.round.f64(double ${d})
+    %i = call %Double @llvm.round.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
 
@@ -461,7 +457,7 @@ extern pure def floor(d: Double): Int =
   chez "(flonum->fixnum (floor ${d}))"
   ml "Real.floor ${d}"
   llvm """
-    %i = call double @llvm.floor.f64(double ${d})
+    %i = call %Double @llvm.floor.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
 
@@ -470,7 +466,7 @@ extern pure def ceil(d: Double): Int =
   chez "(flonum->fixnum (ceiling ${d}))"
   ml "Real.ceil ${d}"
   llvm """
-    %i = call double @llvm.ceil.f64(double ${d})
+    %i = call %Double @llvm.ceil.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
 
