@@ -61,7 +61,7 @@ Opposed to the previous example, the state of `x` actually backtracks:
 example2()
 ```
 
-This is because the state is allocated on the stack, and thus, the captured continuation includes the initial state of `x` and is therefore restored when resumed.
+This is because the state (like mutable variables) is allocated on the stack, and thus, the captured continuation includes the initial state of `x` and is therefore restored when resumed.
 
 ## Explicit region-based allocation
 
@@ -75,7 +75,7 @@ def example3() = {
 }
 ```
 
-Here, the type of `closure` is `() => Int at {x}`. The capture set makes closing over `x` explicit. Each mutable variable is allocated into an equally named region.
+Here, the type of `closure` is `() => Int at {x}`. The [capture set](./captures) makes closing over `x` explicit. Each mutable variable is allocated into an equally named region.
 We can also explicitly instantiate a new region and allocate `x` into it:
 
 ```
@@ -118,7 +118,7 @@ def example2Region() =
 Running it will give us the same result:
 
 ```effekt:repl
-example1Region();
+example1Region()
 ```
 
 ## Global
