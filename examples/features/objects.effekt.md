@@ -52,16 +52,18 @@ This is no coincidence: there is a close correspondence between interfaces and e
 In fact, we can also implement the `Counter` interface with an effect handler:
 
 ```
-def counterAsEffect() =
+def counterAsEffect() = {
+  var count = 0;
   try {
-    println(c.get())
-    c.increment()
-    c.increment()
-    println(c.get())
+    println(do get())
+    do increment()
+    do increment()
+    println(do get())
   } with Counter {
     def increment() = { count = count + 1; resume(()) } // note the resume
     def get() = resume(count) // note the resume here as well
   }
+}
 ```
 ```effekt:repl
 counterAsEffect()
@@ -69,13 +71,15 @@ counterAsEffect()
 Explicitly binding the capability makes the correspondence very clear:
 
 ```
-def counterAsEffect2() =
+def counterAsEffect2() = {
+  var count = 0;
   try {
     useCounter {counter}
   } with counter: Counter {
     def increment() = { count = count + 1; resume(()) }
     def get() = resume(count)
   }
+}
 ```
 
 ```effekt:repl
