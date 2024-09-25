@@ -620,7 +620,7 @@ stop:
     ret %Stack %newHead
 }
 
-define private void @shareStack(%Stack %stack) alwaysinline {
+define void @shareStack(%Stack %stack) alwaysinline {
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
@@ -628,7 +628,7 @@ define private void @shareStack(%Stack %stack) alwaysinline {
     ret void
 }
 
-define private void @eraseStack(%Stack %stack) alwaysinline {
+define void @eraseStack(%Stack %stack) alwaysinline {
     %stackReferenceCount = getelementptr %StackValue, %Stack %stack, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %stackReferenceCount
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
