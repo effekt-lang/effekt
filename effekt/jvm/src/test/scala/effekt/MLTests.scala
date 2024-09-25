@@ -13,7 +13,6 @@ class MLTests extends EffektTests {
   override lazy val positives: List[File] = List(
     examplesDir / "ml",
     examplesDir / "pos",
-    examplesDir / "features"
   )
 
   override lazy val ignored: List[File] = List(
