@@ -1,137 +1,155 @@
 
+const os = require('os');
+
 /**
  * Maps the error code to a Effekt-stable (platform independent) numeric value.
  *
  * Tries to use most common errno integer values, but introduces fresh values (> 200)
  * for those without common errno values.
  */
-function errnoToStableId(errorName) {
-    const errorMap = {
-        EPERM: 1,
-        ENOENT: 2,
-        ESRCH: 3,
-        EINTR: 4,
-        EIO: 5,
-        ENXIO: 6,
-        E2BIG: 7,
-        EBADF: 9,
-        EAGAIN: 11,
-        ENOMEM: 12,
-        EACCES: 13,
-        EFAULT: 14,
-        EBUSY: 16,
-        EEXIST: 17,
-        EXDEV: 18,
-        ENODEV: 19,
-        ENOTDIR: 20,
-        EISDIR: 21,
-        EINVAL: 22,
-        ENFILE: 23,
-        EMFILE: 24,
-        ENOTTY: 25,
-        ETXTBSY: 26,
-        EFBIG: 27,
-        ENOSPC: 28,
-        ESPIPE: 29,
-        EROFS: 30,
-        EMLINK: 31,
-        EPIPE: 32,
-        ERANGE: 34,
-        ENAMETOOLONG: 36,
-        ELOOP: 40,
-        EOVERFLOW: 75,
-        EFTYPE: 79,
-        EILSEQ: 84,
-        ENOTSOCK: 88,
-        EDESTADDRREQ: 89,
-        EMSGSIZE: 90,
-        EPROTOTYPE: 91,
-        ENOPROTOOPT: 92,
-        EPROTONOSUPPORT: 93,
-        ESOCKTNOSUPPORT: 94,
-        ENOTSUP: 95,
-        EAFNOSUPPORT: 97,
-        EADDRINUSE: 98,
-        EADDRNOTAVAIL: 99,
-        ENETDOWN: 100,
-        ENETUNREACH: 101,
-        ECONNABORTED: 103,
-        ECONNRESET: 104,
-        ENOBUFS: 105,
-        EISCONN: 106,
-        ENOTCONN: 107,
-        ETIMEDOUT: 110,
-        ECONNREFUSED: 111,
-        EHOSTUNREACH: 113,
-        EALREADY: 114,
-        ECANCELED: 125,
-        EAI_ADDRFAMILY: 200,
-        EAI_AGAIN: 201,
-        EAI_BADFLAGS: 202,
-        EAI_BADHINTS: 203,
-        EAI_CANCELED: 204,
-        EAI_FAIL: 205,
-        EAI_FAMILY: 206,
-        EAI_MEMORY: 207,
-        EAI_NODATA: 208,
-        EAI_NONAME: 209,
-        EAI_OVERFLOW: 210,
-        EAI_PROTOCOL: 211,
-        EAI_SERVICE: 212,
-        EAI_SOCKTYPE: 213,
-        ECHARSET: 215,
-        ENONET: 216,
-        UNKNOWN: 217,
-        EOF: 218,
-        EUNATCH: 219,
-        ESHUTDOWN: 220
+function errorNumber(errno) {
+    const errnoMap = {
+        [os.constants.errno.EPERM]: 1,
+        [os.constants.errno.ENOENT]: 2,
+        [os.constants.errno.ESRCH]: 3,
+        [os.constants.errno.EINTR]: 4,
+        [os.constants.errno.EIO]: 5,
+        [os.constants.errno.ENXIO]: 6,
+        [os.constants.errno.E2BIG]: 7,
+        [os.constants.errno.EBADF]: 9,
+        [os.constants.errno.EAGAIN]: 11,
+        [os.constants.errno.ENOMEM]: 12,
+        [os.constants.errno.EACCES]: 13,
+        [os.constants.errno.EFAULT]: 14,
+        [os.constants.errno.EBUSY]: 16,
+        [os.constants.errno.EEXIST]: 17,
+        [os.constants.errno.EXDEV]: 18,
+        [os.constants.errno.ENODEV]: 19,
+        [os.constants.errno.ENOTDIR]: 20,
+        [os.constants.errno.EISDIR]: 21,
+        [os.constants.errno.EINVAL]: 22,
+        [os.constants.errno.ENFILE]: 23,
+        [os.constants.errno.EMFILE]: 24,
+        [os.constants.errno.ENOTTY]: 25,
+        [os.constants.errno.ETXTBSY]: 26,
+        [os.constants.errno.EFBIG]: 27,
+        [os.constants.errno.ENOSPC]: 28,
+        [os.constants.errno.ESPIPE]: 29,
+        [os.constants.errno.EROFS]: 30,
+        [os.constants.errno.EMLINK]: 31,
+        [os.constants.errno.EPIPE]: 32,
+        [os.constants.errno.ERANGE]: 34,
+        [os.constants.errno.ENAMETOOLONG]: 36,
+        [os.constants.errno.ELOOP]: 40,
+        [os.constants.errno.EOVERFLOW]: 75,
+        [os.constants.errno.EFTYPE]: 79,
+        [os.constants.errno.EILSEQ]: 84,
+        [os.constants.errno.ENOTSOCK]: 88,
+        [os.constants.errno.EDESTADDRREQ]: 89,
+        [os.constants.errno.EMSGSIZE]: 90,
+        [os.constants.errno.EPROTOTYPE]: 91,
+        [os.constants.errno.ENOPROTOOPT]: 92,
+        [os.constants.errno.EPROTONOSUPPORT]: 93,
+        [os.constants.errno.ESOCKTNOSUPPORT]: 94,
+        [os.constants.errno.ENOTSUP]: 95,
+        [os.constants.errno.EAFNOSUPPORT]: 97,
+        [os.constants.errno.EADDRINUSE]: 98,
+        [os.constants.errno.EADDRNOTAVAIL]: 99,
+        [os.constants.errno.ENETDOWN]: 100,
+        [os.constants.errno.ENETUNREACH]: 101,
+        [os.constants.errno.ECONNABORTED]: 103,
+        [os.constants.errno.ECONNRESET]: 104,
+        [os.constants.errno.ENOBUFS]: 105,
+        [os.constants.errno.EISCONN]: 106,
+        [os.constants.errno.ENOTCONN]: 107,
+        [os.constants.errno.ETIMEDOUT]: 110,
+        [os.constants.errno.ECONNREFUSED]: 111,
+        [os.constants.errno.EHOSTUNREACH]: 113,
+        [os.constants.errno.EALREADY]: 114,
+        [os.constants.errno.ECANCELED]: 125,
+        [os.constants.errno.EAI_ADDRFAMILY]: 200,
+        [os.constants.errno.EAI_AGAIN]: 201,
+        [os.constants.errno.EAI_BADFLAGS]: 202,
+        [os.constants.errno.EAI_BADHINTS]: 203,
+        [os.constants.errno.EAI_CANCELED]: 204,
+        [os.constants.errno.EAI_FAIL]: 205,
+        [os.constants.errno.EAI_FAMILY]: 206,
+        [os.constants.errno.EAI_MEMORY]: 207,
+        [os.constants.errno.EAI_NODATA]: 208,
+        [os.constants.errno.EAI_NONAME]: 209,
+        [os.constants.errno.EAI_OVERFLOW]: 210,
+        [os.constants.errno.EAI_PROTOCOL]: 211,
+        [os.constants.errno.EAI_SERVICE]: 212,
+        [os.constants.errno.EAI_SOCKTYPE]: 213,
+        [os.constants.errno.ECHARSET]: 215,
+        [os.constants.errno.ENONET]: 216,
+        [os.constants.errno.UNKNOWN]: 217,
+        [os.constants.errno.EOF]: 218,
+        [os.constants.errno.EUNATCH]: 219,
+        [os.constants.errno.ESHUTDOWN]: 220
     };
-
-    return errorMap[errorName] || -1; // Default to -1 for unknown error names
+    return errnoMap[-errno] || -1; // Default to -1 for unknown error names
 }
 
-function openFile(path, mode, onSuccess, onFailure) {
-  fs.open(path, mode,
-    (err, fd) => {
-      if (!!err) {
-        console.error(err)
-        return onFailure(errnoToStableId(err.code)).run();
-      } else {
-        return onSuccess(fd).run();
-      }
-    });
-  return $effekt.unit;
+function modeName(mode) {
+  switch (mode.__tag) {
+  case 0: // ReadOnly()
+    return 'r';
+  case 1: // WriteOnly()
+    return 'w';
+  case 2: // AppendOnly()
+    return 'a';
+  case 3: // ReadWrite()
+    return 'w+';
+  case 4: // ReadAppend()
+    return 'a+';
+  case 5: // AppendExclusive()
+    return 'ax';
+  case 6: // ReadAppendExclusive()
+    return 'ax+';
+  case 7: // AppendSync()
+    return 'as';
+  case 8: // ReadAppendSync()
+    return 'as+';
+  case 9: // ReadSync()
+    return 'rs';
+  case 10: // ReadWriteSync()
+    return 'rs+';
+  case 11: // WriteExclusive()
+    return 'wx';
+  case 12: // ReadWriteExclusive()
+    return 'wx+';
+  default:
+    // Invalid tag value
+    return null;
+  }
 }
 
-function readFile(fd, buffer, offset, onSuccess, onFailure) {
+function open(path, mode, callback) {
+  fs.open(path, modeName(mode), (err, fd) => {
+    if (err) { callback(err.errno) } else { callback(fd) }
+  })
+}
+
+function read(fd, buffer, offset, callback) {
   let position = offset === -1 ? null : offset;
-  fs.read(fd, toBuffer(buffer), 0, buffer.length, position,
-    (err, bytesRead) => {
-      if (!!err) {
-        return onFailure(errnoToStableId(err.code)).run()
-      } else {
-        return onSuccess(bytesRead).run()
-      }
-    })
-  return $effekt.unit;
+  fs.read(fd, toBuffer(buffer), 0, buffer.length, position, (err, bytesRead) => {
+    if (err) { callback(err.errno) } else { callback(bytesRead) }
+  })
 }
 
-/**
- * @see {https://nodejs.org/api/fs.html#fswritefd-buffer-offset-length-position-callback
- */
-function writeFile(fd, buffer, offset, onSuccess, onFailure) {
+function write(fd, buffer, offset, callback) {
   let position = offset === -1 ? null : offset;
-  fs.write(fd, toBuffer(buffer), 0, buffer.length, position,
-    (err, bytesWritten) => {
-      if (!!err) {
-        return onFailure(errnoToStableId(err.code)).run()
-      } else {
-        return onSuccess(bytesWritten).run()
-      }
-    })
-  return $effekt.unit;
+  fs.write(fd, toBuffer(buffer), 0, buffer.length, position, (err, bytesWritten) => {
+    if (err) { callback(err.errno) } else { callback(bytesWritten) }
+  })
 }
 
+function close(fd, callback) {
+  fs.close(fd, (err) => {
+    if (err) { callback(err.errno) } else { callback(0) }
+  })
+}
 
 
 /**

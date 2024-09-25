@@ -1,22 +1,22 @@
 import io
 import io/time
 
-def main() = eventloop(box {
+def main() = {
 
-  val p1 = do promise(box {
+  val p1 = promise(box {
     println("Start p1");
     wait(250)
     println("Stop p1");
     1
   })
 
-  val p2 = do promise(box {
+  val p2 = promise(box {
     println("Start p2");
     wait(150)
     println("Stop p2");
     2
   })
 
-  println("p1: " ++ do await(p1).show)
-  println("p2: " ++ do await(p2).show)
-})
+  println("p1: " ++ await(p1).show)
+  println("p2: " ++ await(p2).show)
+}

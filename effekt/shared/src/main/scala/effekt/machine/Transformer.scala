@@ -44,23 +44,24 @@ object Transformer {
 
   def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case core.Extern.Def(name, tps, cparams, vparams, bparams, ret, capture, body) =>
-      if (bparams.nonEmpty) then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
+      if bparams.nonEmpty then ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
 
       val transformedParams = vparams.map(transform)
       noteDefinition(name, transformedParams, Nil)
-      val tBody = body match {
-        case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
-          ExternBody.StringExternBody(ff, Template(strings, args map {
-            case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))
-            case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
-          }))
-        case core.ExternBody.Unsupported(err) =>
-          ExternBody.Unsupported(err)
-      }
-      Extern(transform(name), transformedParams, transform(ret), tBody)
+      Extern(transform(name), transformedParams, transform(ret), capture.contains(symbols.builtins.AsyncCapability.capture), transform(body))
 
     case core.Extern.Include(ff, contents) =>
       Include(ff, contents)
+  }
+
+  def transform(body: core.ExternBody)(using ErrorReporter): machine.ExternBody = body match {
+    case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
+      ExternBody.StringExternBody(ff, Template(strings, args map {
+        case core.ValueVar(id, tpe) => Variable(transform(id), transform(tpe))
+        case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
+      }))
+    case core.ExternBody.Unsupported(err) =>
+      ExternBody.Unsupported(err)
   }
 
   def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =

@@ -1,0 +1,196 @@
+module io/filesystem
+
+import bytes
+
+import io/error
+
+
+/**
+ * Represents the file opening modes with their respective flags
+ * Backends rely on the order of these
+ */
+type Mode {
+  // Most common modes
+  ReadOnly()            // 'r'  exception if does not exist
+  WriteOnly()           // 'w'  created if does not exist, truncated if exists
+  AppendOnly()          // 'a'  created if does not exist
+
+  // Other modes
+  ReadWrite()           // 'w+' created if does not exist, truncated if exists
+  ReadAppend()          // 'a+' created if does not exist
+  AppendExclusive()     // 'ax' created if does not exist, fails if exists
+  ReadAppendExclusive() // 'ax+' created if does not exist, fails if exists
+  AppendSync()          // 'as' created if does not exist, append in synchronous mode
+  ReadAppendSync()      // 'as+' created if does not exist, append in synchronous mode
+  ReadSync()            // 'rs' exception if does not exist, read in synchronous mode
+  ReadWriteSync()       // 'rs+' exception if does not exist, read/write in synchronous mode
+  WriteExclusive()      // 'wx' created if does not exist, truncated if exists, fails if exists
+  ReadWriteExclusive()  // 'wx+' created if does not exist, truncated if exists, fails if exists
+}
+
+
+/**
+ * A file descriptor. Should not be inspected.
+ */
+type File = Int
+
+
+/**
+ * Reads a file at given path as utf8 encoded string.
+ */
+def readFile(path: String): String / Exception[IOError] = {
+  val fd = open(path, ReadOnly());
+  with on[IOError].finalize { close(fd); () }
+
+  val readSize = 1048576 // 1MB
+  var size = readSize
+  var buffer = bytes(size)
+  var offset = 0;
+
+  def go(): String = {
+    read(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
+      case 0 =>
+        buffer.slice(0, offset).toUTF8
+      case n and n < 0 => panic("Error!")
+      case n =>
+        offset = offset + n
+
+        // we are at maximum capacity
+        if (n == readSize && (offset + readSize) > size) {
+          val newSize   = size * 2
+          val newBuffer = bytes(newSize)
+          copy(buffer, newBuffer, 0, 0, size)
+          buffer = newBuffer
+          size = newSize
+        }
+        go()
+    }
+  }
+
+  go()
+}
+
+/**
+ * Writes the (utf8 encoded) string `contents` into the specified file.
+ */
+def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
+  val fd = open(path, WriteOnly());
+  with on[IOError].finalize { close(fd); () }
+
+  val writeSize = 1048576 // 1MB
+
+  // this induces a memcpy that is not strictly necessary, since we use the buffer read-only
+  val buffer = contents.fromUTF8
+  val size = buffer.size
+
+  var offset = 0;
+  def remaining() = size - offset
+
+  def go(): Unit =
+    write(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
+      case 0 => ()
+      case n and n < 0 => panic("Error!")
+      case n =>
+        offset = offset + n;
+        if (remaining() > 0) go()
+    }
+
+  go()
+}
+
+
+/**
+ * An abstract interface applications can program against.
+ *
+ * Can be interpreted with the `filesystem` handler, or virtualized etc.
+ *
+ * See example below.
+ */
+interface Files {
+  def readFile(path: String): String
+  def writeFile(path: String, contents: String): Unit
+}
+
+/**
+ * Using the file system via node.js
+ */
+def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO move Exception to be bidirectional
+  try { program() }
+  with Files {
+    def readFile(path) = resume(readFile(path))
+    def writeFile(path, contents) = resume(writeFile(path, contents))
+  }
+
+
+def open(path: String, mode: Mode): File / Exception[IOError] =
+  internal::checkResult(internal::open(path, mode))
+
+def read(fd: File, buffer: Bytes, offset: Int): Int / Exception[IOError] =
+  internal::checkResult(internal::read(fd, buffer, offset))
+
+def write(fd: File, buffer: Bytes, offset: Int): Int / Exception[IOError] =
+  internal::checkResult(internal::write(fd, buffer, offset))
+
+def close(fd: File): Unit / Exception[IOError] = {
+  internal::checkResult(internal::close(fd)); ()
+}
+
+namespace internal {
+
+  extern js """
+    const fs = require("fs");
+  """
+
+  extern async def open(path: String, mode: Mode): Int =
+    js "$effekt.callcc(callback => open(${path}, ${mode}, callback))"
+    llvm """
+      call void @c_fs_open(%Pos ${path}, %Pos ${mode}, %Stack %stack)
+      ret void
+    """
+
+  extern async def read(fd: Int, buffer: Bytes, offset: Int): Int =
+    js "$effekt.callcc(callback => read(${fd}, ${buffer}, ${offset}, callback))"
+    llvm """
+      call void @c_fs_read(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
+      ret void
+    """
+
+  extern async def write(fd: Int, buffer: Bytes, offset: Int): Int =
+    js "$effekt.callcc(callback => write(${fd}, ${buffer}, ${offset}, callback))"
+    llvm """
+      call void @c_fs_write(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
+      ret void
+    """
+
+  extern async def close(fd: Int): Int =
+    js "$effekt.callcc(callback => close(${fd}, callback))"
+    llvm """
+      call void @c_fs_close(%Int ${fd}, %Stack %stack)
+      ret void
+    """
+
+  def checkResult(result: Int): Int / Exception[IOError] =
+    if (result < 0) {
+      val ioError = fromNumber(internal::errorNumber(result));
+      do raise[IOError](ioError, message(ioError))
+    } else {
+      result
+    }
+}
+
+namespace examples {
+
+  // Example illustrating using abstract files interface
+  // and interpreting it into asynchronous IO
+  def copy(from: String, to: String): Unit / Files = {
+    val contents = do readFile(from)
+    do writeFile(to, contents)
+  }
+
+  def main() = {
+    with on[IOError].panic;
+    with filesystem;
+
+    copy("README.md", "out/test.md")
+  }
+}

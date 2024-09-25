@@ -387,8 +387,8 @@ case class CaptureSet(captures: Set[Capture]) extends Captures {
     // mutable state is now in CPS and not considered IO anymore.
     def isMutableState = c.isInstanceOf[LexicalRegion]
     def isResource = c.isInstanceOf[Resource]
-    def isControl = c == builtins.ControlCapability.capture
-    !(isControl || isMutableState) && (isIO || isResource)
+    def isAsync = c == builtins.AsyncCapability.capture
+    !(isAsync || isMutableState) && (isIO || isResource)
   }
 
   def pure: Boolean = captures.isEmpty

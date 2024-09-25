@@ -47,7 +47,7 @@ case class Program(declarations: List[Declaration], program: Statement)
  * Toplevel declarations for FFI
  */
 enum Declaration {
-  case Extern(name: String, parameters: Environment, returnType: Type, body: ExternBody)
+  case Extern(name: String, parameters: Environment, returnType: Type, async: Boolean, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 export Declaration.*
@@ -219,7 +219,15 @@ enum Statement {
    * let x = 42; s
    */
   case LiteralInt(name: Variable, value: Long, rest: Statement)
+
+  /**
+   * let x = 42.2; s
+   */
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
+
+  /**
+   * let x = "hello"; s
+   */
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 
   /**

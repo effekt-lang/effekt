@@ -43,7 +43,7 @@ trait Runner[Executable] {
    * Creates a OS-specific script file that will execute the command when executed,
    * forwarding command line arguments.
    * `$SCRIPT_DIR` refers to the directory the script is in.
-   * 
+   *
    * @return the actual name of the generated script (might be `!= name`)
    */
   def createScript(name: String, command: String*): String = os match {

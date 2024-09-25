@@ -45,26 +45,28 @@ object Transformer {
 
   def transform(declaration: machine.Declaration)(using ErrorReporter): Definition =
     declaration match {
-      case machine.Extern(functionName, parameters, returnType, body ) =>
-        body match {
-          case machine.ExternBody.StringExternBody(_, contents) =>
-            VerbatimFunction(transform(returnType), functionName, parameters.map {
-              case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-            }, "; declaration extern\n    " ++ transform(contents))
-          case u: machine.ExternBody.Unsupported =>
-            u.report
-            VerbatimFunction(transform(returnType), functionName, parameters.map {
-                case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-              },
-              """call void @hole()
-                |unreachable
-                |""".stripMargin)
+      case machine.Extern(functionName, parameters, returnType, async, body) =>
+        val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
+        if (async) {
+          VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body))
+        } else {
+          VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body))
         }
       case machine.Include(ff, content) =>
         Verbatim("; declaration include" ++ content)
     }
 
-  def transform(t: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(t.strings, t.args.map {
+  def transform(body: machine.ExternBody)(using ErrorReporter): String = body match {
+    case machine.ExternBody.StringExternBody(_, contents) =>
+      "; declaration extern\n    " ++ transform(contents)
+    case u: machine.ExternBody.Unsupported =>
+      u.report
+      """call void @hole()
+        |unreachable
+        |""".stripMargin
+    }
+
+  def transform(template: Template[machine.Variable]): String = "; variable\n    " ++ intercalate(template.strings, template.args.map {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
   }).mkString
 
@@ -515,20 +517,20 @@ object Transformer {
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 
-  def positiveType = NamedType("Pos");
+  val positiveType = NamedType("Pos");
   // TODO multiple methods (should be pointer to vtable)
-  def negativeType = NamedType("Neg");
-  def methodType = PointerType();
-  def returnAddressType = NamedType("ReturnAddress");
-  def sharerType = NamedType("Sharer");
-  def eraserType = NamedType("Eraser");
-  def frameHeaderType = NamedType("FrameHeader");
-  def environmentType = NamedType("Environment");
-  def objectType = NamedType("Object");
-  def stackPointerType = NamedType("StackPointer");
-  def stackType = NamedType("Stack");
-  def promptType = NamedType("Prompt");
-  def referenceType = NamedType("Reference");
+  val negativeType = NamedType("Neg");
+  val methodType = PointerType();
+  val returnAddressType = NamedType("ReturnAddress");
+  val sharerType = NamedType("Sharer");
+  val eraserType = NamedType("Eraser");
+  val frameHeaderType = NamedType("FrameHeader");
+  val environmentType = NamedType("Environment");
+  val objectType = NamedType("Object");
+  val stackPointerType = NamedType("StackPointer");
+  val stackType = NamedType("Stack");
+  val promptType = NamedType("Prompt");
+  val referenceType = NamedType("Reference");
 
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive()          => positiveType
@@ -560,12 +562,12 @@ object Transformer {
 
   def regionIndex(tpe: machine.Type): Int =
     tpe match {
-          case machine.Type.Reference(machine.Type.Int()) => 0
-          case machine.Type.Reference(machine.Type.Double()) => 0
-          case machine.Type.Reference(machine.Type.Positive()) => 1
-          case machine.Type.Reference(machine.Type.Negative()) => 1
-          case machine.Type.Reference(machine.Type.String()) => 2
-          case _ => ???
+      case machine.Type.Reference(machine.Type.Int()) => 0
+      case machine.Type.Reference(machine.Type.Double()) => 0
+      case machine.Type.Reference(machine.Type.Positive()) => 1
+      case machine.Type.Reference(machine.Type.Negative()) => 1
+      case machine.Type.Reference(machine.Type.String()) => 2
+      case _ => ???
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -735,15 +737,10 @@ object Transformer {
     loop(values)
   }
 
-  def eraseValues(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    environment.map { value =>
-      if !freeInBody.map(substitute).contains(substitute(value)) then {
-        eraseValue(value)
-      } else {
-        ()
-      }
+  def eraseValues(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit =
+    environment.foreach { value =>
+      if !freeInBody.map(substitute).contains(substitute(value)) then eraseValue(value)
     }
-  }
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
@@ -805,43 +802,42 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer));
   }
 
-  def malloc = ConstantGlobal(PointerType(), "malloc");
-  def free = ConstantGlobal(PointerType(), "free");
+  val malloc = ConstantGlobal(PointerType(), "malloc");
+  val free = ConstantGlobal(PointerType(), "free");
 
-  def newObject = ConstantGlobal(PointerType(), "newObject");
-  def objectEnvironment = ConstantGlobal(PointerType(), "objectEnvironment");
+  val newObject = ConstantGlobal(PointerType(), "newObject");
+  val objectEnvironment = ConstantGlobal(PointerType(), "objectEnvironment");
 
-  def shareObject = ConstantGlobal(PointerType(), "shareObject");
-  def sharePositive = ConstantGlobal(PointerType(), "sharePositive");
-  def shareNegative = ConstantGlobal(PointerType(), "shareNegative");
-  def shareStack = ConstantGlobal(PointerType(), "shareStack");
-  def shareFrames = ConstantGlobal(PointerType(), "shareFrames");
-  def shareString = ConstantGlobal(PointerType(), "sharePositive");
+  val shareObject = ConstantGlobal(PointerType(), "shareObject");
+  val sharePositive = ConstantGlobal(PointerType(), "sharePositive");
+  val shareNegative = ConstantGlobal(PointerType(), "shareNegative");
+  val shareStack = ConstantGlobal(PointerType(), "shareStack");
+  val shareFrames = ConstantGlobal(PointerType(), "shareFrames");
+  val shareString = ConstantGlobal(PointerType(), "sharePositive");
 
-  def eraseObject = ConstantGlobal(PointerType(), "eraseObject");
-  def erasePositive = ConstantGlobal(PointerType(), "erasePositive");
-  def eraseNegative = ConstantGlobal(PointerType(), "eraseNegative");
-  def eraseStack = ConstantGlobal(PointerType(), "eraseStack");
-  def eraseFrames = ConstantGlobal(PointerType(), "eraseFrames");
-  def eraseString = ConstantGlobal(PointerType(), "erasePositive");
+  val eraseObject = ConstantGlobal(PointerType(), "eraseObject");
+  val erasePositive = ConstantGlobal(PointerType(), "erasePositive");
+  val eraseNegative = ConstantGlobal(PointerType(), "eraseNegative");
+  val eraseStack = ConstantGlobal(PointerType(), "eraseStack");
+  val eraseFrames = ConstantGlobal(PointerType(), "eraseFrames");
+  val eraseString = ConstantGlobal(PointerType(), "erasePositive");
 
-  def alloc = ConstantGlobal(PointerType(), "alloc")
-  def getPointer = ConstantGlobal(PointerType(), "getPointer")
+  val alloc = ConstantGlobal(PointerType(), "alloc")
+  val getPointer = ConstantGlobal(PointerType(), "getPointer")
 
-  def newReference = ConstantGlobal(PointerType(), "newReference")
-  def getVarPointer = ConstantGlobal(PointerType(), "getVarPointer")
+  val newReference = ConstantGlobal(PointerType(), "newReference")
+  val getVarPointer = ConstantGlobal(PointerType(), "getVarPointer")
 
-  def newStack = ConstantGlobal(PointerType(), "newStack");
-  def pushStack = ConstantGlobal(PointerType(), "pushStack");
-  def popStacks = ConstantGlobal(PointerType(), "popStacks");
-  def freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
-  def currentPrompt = ConstantGlobal(PointerType(), "currentPrompt");
-  def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
-  def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
-  def withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");
-  def stackAllocate = ConstantGlobal(PointerType(), "stackAllocate");
-  def stackDeallocate = ConstantGlobal(PointerType(), "stackDeallocate");
-
+  val newStack = ConstantGlobal(PointerType(), "newStack");
+  val pushStack = ConstantGlobal(PointerType(), "pushStack");
+  val popStacks = ConstantGlobal(PointerType(), "popStacks");
+  val freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
+  val currentPrompt = ConstantGlobal(PointerType(), "currentPrompt");
+  val underflowStack = ConstantGlobal(PointerType(), "underflowStack");
+  val uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
+  val withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");
+  val stackAllocate = ConstantGlobal(PointerType(), "stackAllocate");
+  val stackDeallocate = ConstantGlobal(PointerType(), "stackDeallocate");
 
   /**
    * Extra info in context

@@ -280,7 +280,7 @@ def name(error: IOError): String = error match {
  *
  * See documentation of type IOError for further information.
  */
-def fromCode(code: Int): IOError = code match {
+def fromNumber(number: Int): IOError = number match {
   case 1 => EPERM()
   case 2 => ENOENT()
   case 3 => ESRCH()
@@ -361,5 +361,16 @@ def fromCode(code: Int): IOError = code match {
   case 219 => EUNATCH()
   case 220 => ESHUTDOWN()
 
-  case _ => panic("Not a valid error code: " ++ show(code))
+  case _ => panic("Not a valid error code: " ++ show(number))
+}
+
+namespace internal {
+
+  extern pure def errorNumber(errno: Int): Int =
+    js "errorNumber(${errno})"
+    llvm """
+      %z = call %Int @c_error_number(%Int ${errno})
+      ret %Int %z
+    """
+
 }

@@ -27,134 +27,6 @@ void c_io_println_String(String text) {
 }
 
 
-// Promises
-// --------
-
-typedef enum { UNRESOLVED, RESOLVED, AWAITED } promise_state_t;
-
-typedef struct Listeners {
-    struct Neg listener;
-    struct Listeners* next;
-} Listeners;
-
-typedef struct {
-    uint64_t rc;
-    void* eraser;
-    promise_state_t state;
-    // state of {
-    //   case UNRESOLVED => NULL
-    //   case RESOLVED   => Pos (the result)
-    //   case AWAITED    => Nonempty list of listeners
-    // }
-    union {
-        struct Pos pos;
-        Listeners* listeners;
-    } payload;
-} Promise;
-
-void c_promise_erase_listeners(struct Pos promise) {
-    Promise* p = (Promise*)promise.obj;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            return;
-        case AWAITED:
-            {
-                Listeners* current = p->payload.listeners;
-                // Free all listeners
-                while (current != NULL) {
-                    Listeners* k = current;
-                    current = current->next;
-                    eraseNegative(k->listener);
-                    free(k);
-                }
-                p->payload.listeners = NULL;
-            }
-            return;
-        case RESOLVED:
-            erasePositive(p->payload.pos);
-            return;
-    }
-}
-
-void c_promise_resolve(struct Pos promise, struct Pos value) {
-    Promise* p = (Promise*)promise.obj;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            p->state = RESOLVED;
-            p->payload.pos = value; // Store value in payload
-            break;
-        case RESOLVED:
-            fprintf(stderr, "ERROR: Promise already resolved\n");
-            exit(1);
-        case AWAITED: {
-            Listeners* current = p->payload.listeners;
-            p->state = RESOLVED;
-            p->payload.pos = value;
-
-             // Call each listeners
-            while (current != NULL) {
-                sharePositive(value);
-                run_Pos(current->listener, value);
-                Listeners* temp = current;
-                current = current->next;
-                free(temp);
-            }
-            break;
-        }
-    }
-    // do we need to erase promise now? Is it shared before?
-    erasePositive(promise);
-}
-
-void c_promise_await(struct Pos promise, struct Neg listener) {
-    Promise* p = (Promise*)promise.obj;
-
-    switch (p->state) {
-        case UNRESOLVED:
-            p->state = AWAITED;
-            p->payload.listeners = (Listeners*)malloc(sizeof(Listeners));
-            p->payload.listeners->listener = listener;
-            p->payload.listeners->next = NULL;
-            break;
-        case RESOLVED:
-            run_Pos(listener, p->payload.pos);
-            break;
-        case AWAITED: {
-            Listeners* new_node = (Listeners*)malloc(sizeof(Listeners));
-            new_node->listener = listener;
-            new_node->next = NULL;
-
-            // We traverse the listeners to attach this last .
-            // This has O(n) for EACH await -- reverse on resolve would be O(n) ONCE.
-            // But how many listeners will there be?
-            // If really necessary, we can store a second pointer that points to the last one...
-            Listeners* current = p->payload.listeners;
-            while (current->next != NULL) {
-                current = current->next;
-            }
-            current->next = new_node;
-            break;
-        }
-    }
-    erasePositive(promise);
-}
-
-
-struct Pos c_promise_make() {
-    Promise* promise = (Promise*)malloc(sizeof(Promise));
-
-    promise->rc = 0;
-    promise->eraser = (void*)c_promise_erase_listeners;
-    promise->state = UNRESOLVED;
-    promise->payload.pos = Unit;
-
-    return (struct Pos) { .tag = 0, .obj = promise, };
-}
-
-
-
 // Lib UV Bindings
 // ---------------
 // Ideas behind the LLVM / libuv implementation.
@@ -169,17 +41,139 @@ struct Pos c_promise_make() {
 // do not need to manually memory manage the buffer.
 //
 //
-// Callbacks in Data-fields
+// Stacks in Data-fields
 // ------------------------
-// In order to call Effekt-functions as a callback, we store a pointer
-// to their closure into the user-definable data-field (at address 0)
+// In order to return back to Effekt in the callback, we store a pointer
+// to the Effekt stack into the user-definable data-field (at address 0)
 // in each request object.
 //
 //
 // TODO
-// - Error reporting
 // - pooling of request objects (benchmark first!)
-// - always pass by-reference, not by-value? (to work around C ABI issues)
+
+
+void c_resume_int_fs(uv_fs_t* request) {
+    int64_t result = (int64_t)request->result;
+    Stack stack = (Stack)request->data;
+
+    uv_fs_req_cleanup(request);
+    free(request);
+
+    resume_Int(stack, result);
+}
+
+int modeFlags(struct Pos mode) {
+    switch (mode.tag) {
+        case 0: // ReadOnly()
+            return UV_FS_O_RDONLY;
+        case 1: // WriteOnly()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+        case 2: // AppendOnly()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
+        case 3: // ReadWrite()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
+        case 4: // ReadAppend()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
+        case 5: // AppendExclusive()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+        case 6: // ReadAppendExclusive()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
+        case 7: // AppendSync()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+        case 8: // ReadAppendSync()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
+        case 9: // ReadSync()
+            return UV_FS_O_RDONLY | UV_FS_O_SYNC;
+        case 10: // ReadWriteSync()
+            return UV_FS_O_RDWR | UV_FS_O_SYNC;
+        case 11: // WriteExclusive()
+            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+        case 12: // ReadWriteExclusive()
+            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
+        default:
+            // Invalid tag value
+            return -1;
+    }
+}
+
+void c_fs_open(struct Pos path, struct Pos mode, Stack stack) {
+
+    // Convert the Effekt String to a 0-terminated string
+    char* path_str = c_buffer_as_null_terminated_string(path);
+    erasePositive((struct Pos) path);
+
+    // Convert the Effekt String representing the opening mode to libuv flags
+    int flags = modeFlags(mode);
+    erasePositive((struct Pos) mode);
+
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
+    request->data = stack;
+
+    int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0666, c_resume_int_fs);
+
+    if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
+
+    // We must free the string either way, since libuv copies it into the request
+    free(path_str);
+
+    return;
+}
+
+void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
+
+    char* bytes = c_buffer_bytes(buffer); // libuv expects signed integers
+    uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
+    // erasePositive(buffer);
+    // TODO we should erase the buffer but abort if this was the last reference
+
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
+    request->data = stack;
+
+    int result = uv_fs_read(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+
+    if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
+}
+
+void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
+
+    char* bytes = c_buffer_bytes(buffer); // libuv expects signed integers
+    uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
+    // erasePositive(buffer);
+    // TODO we should erase the buffer but abort if this was the last reference
+
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
+    request->data = stack;
+
+    int result = uv_fs_write(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+
+    if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
+}
+
+void c_fs_close(Int fd, Stack stack) {
+
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
+    request->data = stack;
+
+    int result = uv_fs_close(uv_default_loop(), request, fd, c_resume_int_fs);
+
+    if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
+}
 
 
 /**
@@ -188,8 +182,8 @@ struct Pos c_promise_make() {
  * Tries to use most common errno integer values, but introduces fresh values (> 200)
  * for those without common errno values.
  */
-int uv_error_to_errno(int uv_err) {
-    switch (uv_err) {
+Int c_error_number(Int errno) {
+    switch (errno) {
         case UV_EPERM:            return 1;    // EPERM
         case UV_ENOENT:           return 2;    // ENOENT
         case UV_ESRCH:            return 3;    // ESRCH
@@ -277,289 +271,172 @@ int uv_error_to_errno(int uv_err) {
     }
 }
 
+void c_resume_unit_timer(uv_timer_t* handle) {
+    Stack stack = handle->data;
 
-// File Descriptors
-// ----------------
-// Extern type defs at the moment are always treated as %Pos.
-// For this reason, we need to translate the 32bit integer into
-// a %Pos in the following way:
-//
-// +----------------+-------+
-// | filedescriptor | Obj   |
-// | 32bit -> 64bit | NULL  |
-// +----------------+-------+
-struct Pos filedescriptor_to_pos(int32_t fd) {
-    return (struct Pos) { .tag = (int64_t) fd, .obj = NULL, };
-}
-
-int32_t pos_to_filedescriptor(struct Pos fd) {
-    return (int32_t) fd.tag;
-}
-
-struct Pos c_filedescriptor_show(struct Pos fd) {
-  return c_buffer_show_Int(pos_to_filedescriptor(fd));
-}
-
-// Timers
-// ------
-
-void c_timer_handler(uv_timer_t* handle) {
-    // Load callback
-    struct Neg callback = *(struct Neg*)handle->data;
-
-    // Clean up
     uv_timer_stop(handle);
-    free(handle->data);
-    free(handle);
+    uv_close((uv_handle_t*)handle, (uv_close_cb)free);
 
-    // Finally call the callback
-    run(callback);
+    resume_Pos(stack, Unit);
 }
 
-void c_timer_wait(int64_t n, struct Neg callback) {
+void c_timer_start(Int millis, Stack stack) {
 
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
+    uv_timer_t* timer = malloc(sizeof(uv_timer_t));
+    timer->data = stack;
 
-    // Allocate memory for the timer handle
-    uv_timer_t* timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+    uv_timer_init(uv_default_loop(), timer);
 
-    // // Initialize the timer handle
-    uv_timer_init(loop, timer);
-
-    // Allocate memory for the callback (of type Neg)
-    struct Neg* payload = (struct Neg*)malloc(sizeof(struct Neg));
-    payload->vtable = callback.vtable;
-    payload->obj = callback.obj;
-
-    // Store the Neg pointer in the timer's data field
-    timer->data = (void*) payload;
-
-    // Start the timer to call the callback after n ms
-    uv_timer_start(timer, c_timer_handler, n, 0);
+    uv_timer_start(timer, c_resume_unit_timer, millis, 0);
 }
 
 
-// Opening a File
-// --------------
+// Promises
+// --------
 
-int modeToFlags(const char* flags) {
-    if (strcmp(flags, "r") == 0) {
-        return UV_FS_O_RDONLY;
-    } else if (strcmp(flags, "r+") == 0) {
-        return UV_FS_O_RDWR;
-    } else if (strcmp(flags, "rs") == 0) {
-        return UV_FS_O_RDONLY | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "rs+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "w") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-    } else if (strcmp(flags, "wx") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "w+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-    } else if (strcmp(flags, "wx+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "a") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
-    } else if (strcmp(flags, "ax") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "a+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
-    } else if (strcmp(flags, "ax+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-    } else if (strcmp(flags, "as") == 0) {
-        return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-    } else if (strcmp(flags, "as+") == 0) {
-        return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-    } else {
-        // Invalid flags string
-        return -1;
+typedef enum { UNRESOLVED, RESOLVED } promise_state_t;
+
+typedef struct Listeners {
+    Stack head;
+    struct Listeners* tail;
+} Listeners;
+
+typedef struct {
+    uint64_t rc;
+    void* eraser;
+    promise_state_t state;
+    // state of {
+    //   case UNRESOLVED => Possibly empty (head is NULL) list of listeners
+    //   case RESOLVED   => Pos (the result)
+    // }
+    union {
+        struct Pos value;
+        Listeners listeners;
+    } payload;
+} Promise;
+
+void c_promise_erase_listeners(void *envPtr) {
+    // envPtr points to a Promise _after_ the eraser, so let's adjust it to point to the promise.
+    Promise *promise = (Promise*) (envPtr - offsetof(Promise, state));
+    promise_state_t state = promise->state;
+
+    Stack head;
+    Listeners* tail;
+    Listeners* current;
+
+    switch (state) {
+        case UNRESOLVED:
+            head = promise->payload.listeners.head;
+            tail = promise->payload.listeners.tail;
+            if (head != NULL) {
+                // Erase head
+                eraseStack(head);
+                // Erase tail
+                current = tail;
+                while (current != NULL) {
+                    head = current->head;
+                    tail = current->tail;
+                    free(current);
+                    eraseStack(head);
+                    current = tail;
+                };
+            };
+            break;
+        case RESOLVED:
+            erasePositive(promise->payload.value);
+            break;
     }
 }
 
-typedef struct Callbacks {
-    struct Neg on_success;
-    struct Neg on_failure;
-} Callbacks;
-
-void c_file_open_handler(uv_fs_t* req) {
-    // Extract the file descriptor from the uv_fs_t structure
-    int64_t fd = req->result;
-
-    // Load the callbacks
-    Callbacks* callbacks = (Callbacks*)req->data;
-    struct Neg success = callbacks->on_success;
-    struct Neg failure = callbacks->on_failure;
-
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
-    free(callbacks);
-
-    // Check if file descriptor is valid
-    if (fd >= 0) {
-        eraseNegative(failure);
-        run_Pos(success, filedescriptor_to_pos(fd));
-    } else {
-        eraseNegative(success);
-        run_i64(failure, uv_error_to_errno(fd));
+void c_promise_resume_listeners(Listeners* listeners, struct Pos value) {
+    if (listeners != NULL) {
+        Stack head = listeners->head;
+        Listeners* tail = listeners->tail;
+        free(listeners);
+        c_promise_resume_listeners(tail, value);
+        sharePositive(value);
+        resume_Pos(head, value);
     }
 }
 
+void c_promise_resolve(struct Pos promise, struct Pos value, Stack stack) {
+    Promise* p = (Promise*)promise.obj;
 
-void c_file_open(struct Pos path, struct Pos modeString, struct Neg* success, struct Neg* failure) {
-    int permissions = 0666;  // rw-rw-rw- permissions
+    Stack head;
+    Listeners* tail;
 
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
+    switch (p->state) {
+        case UNRESOLVED:
+            head = p->payload.listeners.head;
+            tail = p->payload.listeners.tail;
 
-    // Convert the Effekt String to a 0-terminated string
-    char* path_str = c_buffer_as_null_terminated_string(path);
-    erasePositive((struct Pos) path);
+            p->state = RESOLVED;
+            p->payload.value = value;
+            resume_Pos(stack, Unit);
 
-    // Convert the Effekt String representing the opening mode to libuv flags
-    int32_t mode = modeToFlags(c_buffer_as_null_terminated_string(modeString));
-    erasePositive((struct Pos) modeString);
-
-    // Allocate Callbacks on the heap
-    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = *success;
-    callbacks->on_failure = *failure;
-
-    // Store the callbacks in the req's data field
-    req->data = callbacks;
-
-    // Get the default loop and call fs_open
-    uv_loop_t* loop = uv_default_loop();
-
-    int32_t result_i32 = uv_fs_open(loop, req, path_str, mode, (int32_t)permissions, c_file_open_handler);
-    int64_t result_i64 = (int64_t)result_i32;
-
-    // We can free the string, since libuv copies it into req
-    free(path_str);
-
-    return; // result_i64;
-}
-
-
-// Reading a File
-// --------------
-
-void c_file_read_handler(uv_fs_t* req) {
-    // Extract the file descriptor from the uv_fs_t structure
-    int64_t result = req->result;
-
-    // Load the callbacks
-    Callbacks* callbacks = (Callbacks*)req->data;
-    struct Neg success = callbacks->on_success;
-    struct Neg failure = callbacks->on_failure;
-
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
-    free(callbacks);
-
-    if (result >= 0) {
-        eraseNegative(failure);
-        run_i64(success, result);
-    } else {
-        eraseNegative(success);
-        run_i64(failure, uv_error_to_errno(result));
+            if (head != NULL) {
+                // Execute tail
+                c_promise_resume_listeners(tail, value);
+                // Execute head
+                sharePositive(value);
+                resume_Pos(head, value);
+            };
+            break;
+        case RESOLVED:
+            erasePositive(promise);
+            erasePositive(value);
+            eraseStack(stack);
+            fprintf(stderr, "ERROR: Promise already resolved\n");
+            exit(1);
+            break;
     }
+    // TODO stack overflow?
+    // We need to erase the promise now, since we consume it.
+    erasePositive(promise);
 }
 
-/**
- * Here we require success and failure to be passed by reference (can be
- * stack-allocated). This is to work around an issue with the C ABI where
- * late arguments are scrambled.
- */
-void c_file_read(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
+void c_promise_await(struct Pos promise, Stack stack) {
+    Promise* p = (Promise*)promise.obj;
 
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
+    Stack head;
+    Listeners* tail;
+    Listeners* node;
+    struct Pos value;
 
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Allocate Callbacks on the heap
-    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = *success;
-    callbacks->on_failure = *failure;
-
-    // // Store the callbacks in the req's data field
-    req->data = callbacks;
-
-    // // Argument `1` here means: we pass exactly one buffer
-    uv_fs_read(loop, req, fd, &buf, 1, offset, c_file_read_handler);
+    switch (p->state) {
+        case UNRESOLVED:
+            head = p->payload.listeners.head;
+            tail = p->payload.listeners.tail;
+            if (head != NULL) {
+                node = (Listeners*)malloc(sizeof(Listeners));
+                node->head = head;
+                node->tail = tail;
+                p->payload.listeners.head = stack;
+                p->payload.listeners.tail = node;
+            } else {
+                p->payload.listeners.head = stack;
+            };
+            break;
+        case RESOLVED:
+            value = p->payload.value;
+            sharePositive(value);
+            resume_Pos(stack, value);
+            break;
+    };
+    // TODO hmm, stack overflow?
+    erasePositive(promise);
 }
 
+struct Pos c_promise_make() {
+    Promise* promise = (Promise*)malloc(sizeof(Promise));
 
-// Writing to a File
-// -----------------
+    promise->rc = 0;
+    promise->eraser = c_promise_erase_listeners;
+    promise->state = UNRESOLVED;
+    promise->payload.listeners.head = NULL;
+    promise->payload.listeners.tail = NULL;
 
-void c_file_write_handler(uv_fs_t* req) {
-    // Extract the result from the uv_fs_t structure
-    int64_t result = req->result;
-
-    // Load the callbacks
-    Callbacks* callbacks = (Callbacks*)req->data;
-    struct Neg success = callbacks->on_success;
-    struct Neg failure = callbacks->on_failure;
-
-    // Free request structure
-    uv_fs_req_cleanup(req);
-    free(req);
-    free(callbacks);
-
-    if (result >= 0) {
-        eraseNegative(failure);
-        run_i64(success, result);
-    } else {
-        eraseNegative(success);
-        run_i64(failure, uv_error_to_errno(result));
-    }
-}
-
-/**
- * Here we require success and failure to be passed by reference (can be
- * stack-allocated). This is to work around an issue with the C ABI where
- * late arguments are scrambled.
- */
-void c_file_write(int32_t fd, struct Pos buffer, int64_t offset, struct Neg* success, struct Neg* failure) {
-    // Get the default loop
-    uv_loop_t* loop = uv_default_loop();
-
-    uint8_t* buffer_data = c_buffer_bytes(buffer);
-    int32_t len = (int32_t)c_buffer_length(buffer);
-
-    uv_buf_t buf = uv_buf_init((char*)buffer_data, len);
-
-    uv_fs_t* req = (uv_fs_t*)malloc(sizeof(uv_fs_t));
-
-    // Allocate Callbacks on the heap
-    Callbacks* callbacks = (Callbacks*)malloc(sizeof(Callbacks));
-    callbacks->on_success = *success;
-    callbacks->on_failure = *failure;
-
-    // Store the callbacks in the req's data field
-    req->data = callbacks;
-
-    // Argument `1` here means: we pass exactly one buffer
-    uv_fs_write(loop, req, fd, &buf, 1, offset, c_file_write_handler);
-}
-
-// ; Closing a File
-// ; --------------
-
-
-void c_file_close(int32_t fd) {
-    uv_fs_t req;
-    uv_loop_t* loop = uv_default_loop();
-    uv_fs_close(loop, &req, fd, NULL);
+    return (struct Pos) { .tag = 0, .obj = promise, };
 }
 
 

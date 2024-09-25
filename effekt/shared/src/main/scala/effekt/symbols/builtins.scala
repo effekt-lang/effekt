@@ -50,8 +50,8 @@ object builtins {
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
   val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil))
 
-  val ControlSymbol = Interface(Name.local("Control"), Nil, Nil)
-  val ControlCapability = ExternResource(name("control"), InterfaceType(ControlSymbol, Nil))
+  val AsyncSymbol = Interface(Name.local("Async"), Nil, Nil)
+  val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil))
 
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
@@ -94,7 +94,7 @@ object builtins {
 
   val rootCaptures: Map[String, Capture] = Map(
     "io" -> IOCapability.capture,
-    "control" -> ControlCapability.capture,
+    "async" -> AsyncCapability.capture,
     "global" -> globalRegion.capture
   )
 

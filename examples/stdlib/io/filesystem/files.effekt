@@ -1,17 +1,17 @@
 import io
 import io/error
-import io/files
+import io/filesystem
 
 def process(filename: String): Unit / { Files } = {
-  val path = "examples/stdlib/io/files/" ++ filename
+  val path = "examples/stdlib/io/filesystem/" ++ filename
   val contents = do readFile(path)
 
   println(contents)
 }
 
-def main() = eventloop(box {
+def main() = {
   with on[IOError].panic;
   with filesystem;
 
   process("demo_file1.txt")
-})
+}

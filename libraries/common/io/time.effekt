@@ -1,15 +1,9 @@
 module io/time
 
-import io
 
-def wait(millis: Int): Unit / AsyncIO =
-  do performIO(box { k => callback::wait(millis, box { () => k(()) }) })
-
-namespace callback {
-  extern io def wait(millis: Int, onTimeout: () => Unit at {io, global}): Unit =
-    js "setTimeout(() => (${onTimeout})().run(), ${millis})"
-    llvm """
-      call void @c_timer_wait(i64 ${millis}, %Neg ${onTimeout})
-      ret %Pos zeroinitializer
-    """
-}
+extern async def wait(millis: Int): Unit =
+  js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
+  llvm """
+    call void @c_timer_start(%Int ${millis}, %Stack %stack)
+    ret void
+  """

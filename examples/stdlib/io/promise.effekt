@@ -1,12 +1,13 @@
 import io
 
 def main() = {
-  val p = promise::make[Int]()
 
-  promise::await(p, box { n => println("Resolved 1: " ++ show(n)) })
-  promise::await(p, box { n => println("Resolved 2: " ++ show(n)) })
-  promise::await(p, box { n => println("Resolved 3: " ++ show(n)) })
+  val p = promise::make[String]()
 
-  promise::resolve(p, 42)
+  spawn(box { println("Resolved 1: " ++ p.await()) });
+  spawn(box { println("Resolved 2: " ++ p.await()) });
+  spawn(box { println("Resolved 3: " ++ p.await()) });
+
+  p.resolve("42")
 
 }

@@ -35,8 +35,8 @@ object TransformerMonadicWhole extends TransformerMonadic {
   override def canInline(f: Extern): Boolean = f match {
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
       val hasBlockParameters = bparams.nonEmpty
-      val isControlEffecting = annotatedCapture contains symbols.builtins.ControlCapability.capture
-      !hasBlockParameters && !isControlEffecting
+      val isAsynchronous = annotatedCapture contains symbols.builtins.AsyncCapability.capture
+      !hasBlockParameters && !isAsynchronous
     case Extern.Include(ff, contents) => false
   }
 
