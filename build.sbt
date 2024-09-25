@@ -87,6 +87,9 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // Test configuration
     // ------------------
     Test / parallelExecution := true,
+    // run tests forked and in parallel
+    Test / fork := true,
+    Test / testForkedParallel := true,
 
     Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
