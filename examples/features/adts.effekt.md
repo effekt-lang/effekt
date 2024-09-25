@@ -6,7 +6,7 @@ permalink: docs/tutorial/adts
 
 # Algebraic Datatypes
 
-Sumtypes with potentially multiple different variants can be expressed by _algebraic datatypes_.
+Sum types with potentially multiple different variants can be expressed by _algebraic datatypes_.
 
 Defining a datatype in Effekt is similar to other languages.
 
@@ -69,7 +69,7 @@ In all positions where a block is expected, like here
 ```
 def withFile(name: String) { prog: FileSystem => Unit }: Unit = <>
 ```
-you can directly pattern match on the single argument without need to bind the parameter:
+you can directly pattern match on the single argument without needing to bind the parameter:
 
 ```effekt:repl
 withFile("README.md") {

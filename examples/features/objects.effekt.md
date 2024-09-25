@@ -43,7 +43,7 @@ Notice that even though we are using the `Exception` effect, the set of to be ha
 div(42, 0) { excImpl }
 ```
 
-You may also explicitly bind the capability defined by the implementation of handler and pass it to `div` as a computation:
+You may also explicitly bind the capability defined by the implementation of the handler and pass it to `div` as a computation:
 
 ```effekt:repl
 try { div(42, 0) { exc } }

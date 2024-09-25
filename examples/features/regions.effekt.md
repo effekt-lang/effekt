@@ -23,7 +23,7 @@ def allChoices { prog: () => Unit / Amb }: Unit = {
 }
 ```
 
-Multiple resumptions and mutable state need to be handled with care such that the state is appropiately restored upon each resumption.
+Multiple resumptions and mutable state need to be handled with care such that the state is appropriately restored upon each resumption.
 
 ```
 def example1() = {
@@ -36,13 +36,13 @@ def example1() = {
 }
 ```
 
-In this example, `x` is defined outside of the handler `allChoices`. Thus, when resuming for the second time, the changes made to `x` carry over:
+In this example, `x` is defined outside the handler `allChoices`. Thus, when resuming for the second time, the changes made to `x` carry over:
 
 ```effekt:repl
 example1()
 ```
 
-However, if we define `x` within the handler, the behaviour is a different one.
+However, if we define `x` within the handler, the behavior is a different one.
 
 ```
 def example2() = {
@@ -61,11 +61,11 @@ Opposed to the previous example, the state of `x` actually backtracks:
 example2()
 ```
 
-This is because the state is allocated on the stack and thus, the captured continuation includes the initial state of `x` and is therefore restored when resumed.
+This is because the state is allocated on the stack, and thus, the captured continuation includes the initial state of `x` and is therefore restored when resumed.
 
 ## Explicit region-based allocation
 
-All mutable variables are allocated in regions. These become visible when trying to close over references to mutable variables:
+All mutable variables are allocated into regions. These become visible when trying to close over references to mutable variables:
 
 ```
 def example3() = {
@@ -75,7 +75,7 @@ def example3() = {
 }
 ```
 
-Here, the type of `closure` is `() => Int at {x}`. The capture set makes closing over `x` explicit. Each mutable variable is allocated into a equally named region.
+Here, the type of `closure` is `() => Int at {x}`. The capture set makes closing over `x` explicit. Each mutable variable is allocated into an equally named region.
 We can also explicitly instantiate a new region and allocate `x` into it:
 
 ```
@@ -88,9 +88,9 @@ def example4() =
 ```
 
 By doing so, the type of `closure` becomes `() => Int at {r}` and thereby signifying that `closure` closes over something allocated in the region `r`.
-`closure` may only ever be unboxed where region `r` is still in scope. Otherwise, accessing `closure` outside of `r` would exceed the lifetime given to `x` by allocating it in `r`.
+`closure` may only ever be unboxed where region `r` is still in scope. Otherwise, accessing `closure` outside `r` would exceed the lifetime given to `x` by allocating it into `r`.
 
-Additionally, regions are second-class like blocks and objects and thus can be passed to functions. We use this for rewriting the opening example from the previous section:
+Additionally, regions are second-class, like blocks and objects, and thus can be passed to functions. We use this for rewriting the opening example from the previous section:
 
 ```
 def exampleProgram {r: Region} = {

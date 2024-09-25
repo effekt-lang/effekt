@@ -8,7 +8,7 @@ permalink: docs/tutorial/ffi
 
 ## `extern def`
 
-Effekt allows communicating with the host platform (for instance JavaScript) by defining extern functions via FFI.
+Effekt allows communicating with the host platform (for instance, JavaScript) by defining extern functions via FFI.
 Let's start with the JavaScript backend by defining a function that adds two numbers:
 
 ```
@@ -31,7 +31,7 @@ extern def ref[T](init: T): Ref[T] =
 
 ## `extern include`
 
-Sometimes, you want to include a whole JavaScript file containing your favourite JavaScript library
+Sometimes, you want to include a whole JavaScript file containing your favorite JavaScript library
 so that you can write bindings for it later.
 You can do that in Effekt with the following code:
 
@@ -64,20 +64,20 @@ Now you can call `set` on your reference!
 
 You can and should annotate the capture of your extern function as `extern <capture> def ...`
 
-- no capture, usually denoted as `pure`, also writable as `{}`. If a extern definition is annotated as `pure`, it will be considered for inlining by the compiler.
+- no capture, usually denoted as `pure`, also writable as `{}`. If an extern definition is annotated as `pure`, it will be considered for inlining by the compiler.
 - if you want to allocate into a global scope (e.g. the JavaScript heap), use `global`
-- if your function performs I/O (like for example `println`), use `io` (this is the default capture)
-- if your function captures the continuation use `async` (in the JS backend, control definitions should return a monadic value of type `async`)
+- if your function performs I/O (like `println`), use `io` (this is the default capture)
+- if your function captures the continuation, use `async` (in the JS backend, control definitions should return a monadic value of type `async`)
 - of course, you can mix and match: `extern def {global, io, control} ...`
 
-For example the following function gets the current timestamp via the JavaScript FFI, which is an operation that is not pure (it has a side effect):
+For example, the following function gets the current timestamp via the JavaScript FFI, which is an operation that is not pure (it has a side effect):
 
 ```
 extern io def now(): Int =
   js "Date.now()"
 ```
 
-For example the `ref` and `set` functions above should have been annotated as `extern global def` as they allocate globally.
+For example, the `ref` and `set` functions above should have been annotated as `extern global def` as they allocate globally.
 
 If you want to add your own tracked resource `foo` of type `MyResource`, Effekt supports the following:
 

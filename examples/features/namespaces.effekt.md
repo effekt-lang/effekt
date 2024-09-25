@@ -6,7 +6,7 @@ permalink: docs/tutorial/namespaces
 
 # Namespaces
 
-For defininig a namespace, the keyword `namespace` followed by the name of the namespace is to be used. Enclosed in curly braces, the namespace can include
+For defining a namespace, the keyword `namespace` followed by the name of the namespace is to be used. Enclosed in curly braces, the namespace can include
 function, type and effect definitions as well as further nested namespaces:
 
 ```

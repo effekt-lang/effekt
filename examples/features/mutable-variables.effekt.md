@@ -18,7 +18,7 @@ def sum(xs: List[Int]): Int = {
 }
 ```
 
-It is not permitted to have unintialized variables, that is, there are no mere declarations of variables. Therefore, the following is **not** allowed:
+It is not permitted to have uninitialized variables, that is, there are no mere declarations of variables. Therefore, the following is **not** allowed:
 
 ```effekt:sketch
 def main() = {

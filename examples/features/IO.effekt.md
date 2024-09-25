@@ -38,10 +38,10 @@ def headOf(srcPath: String, destPath: String, lines: Int): Unit / Files = {
 
 Since our function uses effect operations of the effect `Files`, we have to handle it.
 This can be done using the effect handler `filesystem` given in the standard library.
-Note, that IO is done asynchronously by default in Effekt.
+Note that IO is done asynchronously by default in Effekt.
 That is why the `fileystem` handler expects the effects `AsyncIO` to be handled.
-Furthermore, since our path might not exist, we have to also handle the case an exception is thrown.
-Luckily, for these effects there are already handlers present in the standard library we can use:
+Furthermore, since our path might not exist, we have to also handle the case where an exception is thrown.
+Luckily, for these effects, there are already handlers present in the standard library we can use:
 
 ```
 def main() = eventloop(box {

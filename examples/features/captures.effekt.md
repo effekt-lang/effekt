@@ -64,9 +64,9 @@ Aspects
 ## Captures
 
 Functions are second-class in Effekt, but for a good reason. Functions closing over capabilities must not be returned, otherwise it can not be guaranteed that these capabilities are still in scope.
-Thus, we explicitly have to keep track of these captures and ensure they are in scope upon envoking.
+Thus, we explicitly have to keep track of these captures and ensure they are in scope upon invoking.
 
-Consider the following example where `divide` is being passed a explicit capability:
+Consider the following example where `divide` is being passed an explicit capability:
 
 ```
 def divide(n: Int, m: Int) {exc: Exception}: Int =
@@ -96,7 +96,7 @@ def example() = try {
 By directly returning `exc` from the `try` expression, we break the lexical effect handling reasoning since `exc` is only defined within the `try` body.
 For the same reason, returning a closure is not an option either.
 
-For preventing capabilities escaping their scope, Effekt uses captures. In case of the previous example, the return type of `example` is `Exception at {exc}`. This is called
+To prevent capabilities from escaping their scope, Effekt uses captures. In the case of the previous example, the return type of `example` is `Exception at {exc}`. This is called
 a boxed computation. A boxed computation may only be used after unboxing it, which is only permitted when all its captures are in scope.
 
 ## Boxing
@@ -111,7 +111,7 @@ def parallelWrong { f: () => Unit } { g: () => Unit }: Unit = <>
 ```
 
 Since `parallelWrong` expects two arbitrary blocks as arguments, these blocks may capture arbitrary capabilities.
-Running both in parallel can have non-deterministic side-effects or introduce data races.
+Running both in parallel can have non-deterministic side effects or introduce data races.
 Thus, we need to enforce that both `f` and `g` are pure, that is, do not capture any capabilities.
 
 ```
@@ -130,7 +130,7 @@ parallel(
 )
 ```
 
-Here both arguments have the capture set `{io}` while the expected capture set is expected to be empty `{}`. Hence, this call does not type-check.
+Here, both arguments have the capture set `{io}` while the expected capture set is expected to be empty `{}`. Hence, this call does not type-check.
 
 ## Built-in 
 

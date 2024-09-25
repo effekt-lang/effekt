@@ -51,7 +51,7 @@ def worker() = loop { {l} =>
 
 The operations `break` and `continue` have their usual semantics, except that they are handled by `loop` as operations of the algebraic effect `Control`.
 
-Additionally, the standard library also includes the fucntions `each` and `repeat`.
+Additionally, the standard library also includes the functions `each` and `repeat`.
 
 ```effekt:repl
 each(1, 11) { (n) => if (n.mod(2) == 0) println(n)  }
@@ -63,7 +63,7 @@ You may also use the operations `break` and `continue` when binding a label (her
 ```effekt:repl
 each(1, 11) { (n) {l} => if (n.mod(2) == 0) println(n) else l.continue() }
 ```
-`repeat` just expects one value argument that controls, how often the passed block argument is to be executed. Again, you may bind a label to use the operations of the `Control` effect here.
+`repeat` just expects one value argument that controls how often the passed block argument is to be executed. Again, you may bind a label to use the operations of the `Control` effect here.
 
 ```effekt:repl
 repeat(2) { println("Effekt!") }

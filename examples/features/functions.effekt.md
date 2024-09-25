@@ -6,7 +6,7 @@ permalink: docs/tutorial/functions
 
 # Functions
 
-For defining a function, you may use similar syntax know from other languages such as Scala:
+For defining a function, you may use similar syntax known from other languages, such as Scala:
 
 ```
 def fib(n: Int): Int =
@@ -29,7 +29,7 @@ Perhaps unusual, you can also call `fib` using Effekt's implementation of [Unifo
 ```effekt:repl
 5.fib()
 ```
-Here, the receiver (before the `.`) is simply passed as first argument to function `fib`. If there are no additional arguments, you can also omit the parenthesis:
+Here, the receiver (before the `.`) is simply passed as the first argument to the function `fib`. If there are no additional arguments, you can also omit the parenthesis:
 
 ```effekt:repl
 5.fib.show.println
@@ -60,7 +60,7 @@ def fibNested(n: Int): Int = {
 ```effekt:repl
 fibNested(5)
 ```
-Only on the toplevel, functions can be mutually recursive.
+Only at the top level functions can be mutually recursive.
 
 ```effekt
 def even(n: Int): Bool = if (n <= 0) true else odd(n - 1)

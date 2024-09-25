@@ -60,11 +60,11 @@ def unsafeDiv(a: Double, b: Double): Double / {} =
 unsafeDiv(42.0, 0.0)
 ```
 
-Each handler consists of a `try` block, followed by one one more handlers, starting with `with`, followed by the name of the effect and definitions for each of the effect's declared operations.
+Each handler consists of a `try` block, followed by one more handlers, starting with `with`, followed by the name of the effect and definitions for each of the effect's declared operations.
 
 ## Resumptive effects
 
-Besides exceptions, we can also emulate other useful mechanism with effects. For example generator functions using the
+Besides exceptions, we can also emulate other useful mechanisms with effects. For example, a generator functions using the
 `Yield` effect.
 
 ```
@@ -73,9 +73,9 @@ interface Yield[A] {
 }
 ```
 
-When invoking the `yield` operation, we pass a value to be yielded to the lexically nearest handler discharging the
+When invoking the `yield` operation, we pass a value to be yielded to the lexically nearest handler, discharging the
 `Yield` effect. Recall our `fib` functions from earlier. We may also write it as a generator that runs infinitely while
-yielding each fibonacci number in the process.
+yielding each Fibonacci number in the process.
 
 ```
 // Infinite fibonacci sequence as a generator function
@@ -111,7 +111,7 @@ genFibs(15).foreach { x => println(x) }
 
 ## Singleton operation
 
-Often we want to declare an interface that is entirely defined by just one operation (like a "single-abstract-method" in Java). In this case you can declare it as a singleton operation:
+Often, we want to declare an interface that is entirely defined by just one operation (like a "single-abstract-method" in Java). In this case, you can declare it as a singleton operation:
 ```
 effect tell(): Int
 ```

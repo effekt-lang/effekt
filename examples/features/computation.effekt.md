@@ -15,7 +15,7 @@ Examples of "computation" in Effekt are:
 - instances of interfaces (also known as "objects"), and
 - regions
 
-Functions (and all other computation) are _second-class_ in Effekt. To make this difference explicit, we pass values in parenthesis (e.g. `f(42)`) and computation in braces (e.g. `f { x => println(x) }`).
+Functions (and all other computation tyoes) are _second-class_ in Effekt. To make this difference explicit, we pass values in parentheses (e.g. `f(42)`) and computation in braces (e.g. `f { x => println(x) }`).
 
 ```
 def myMap[A, B](xs: List[A]) { f: A => B }: List[B] =
@@ -26,7 +26,7 @@ def myMap[A, B](xs: List[A]) { f: A => B }: List[B] =
 ```
 
 The block parameter `f` is enclosed in curly braces and syntactically separated from the value parameters.
-While multiple value parameters are separated by comma, multiple block parameters are expressed enclosing each in curly braces.
+While multiple value parameters are separated by commas, multiple block parameters are expressed by enclosing each in curly braces.
 
 ```effekt:repl
 [1, 2, 3].myMap { x => x * 2 }
