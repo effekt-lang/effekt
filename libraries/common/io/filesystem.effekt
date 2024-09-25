@@ -2,7 +2,6 @@ module io/filesystem
 
 import bytes
 
-import io
 import io/error
 
 
@@ -103,8 +102,7 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
 /**
  * An abstract interface applications can program against.
  *
- * Can be interpreted into AsyncIO with the `filesystem`
- * handler, or virtualized etc.
+ * Can be interpreted with the `filesystem` handler, or virtualized etc.
  *
  * See example below.
  */

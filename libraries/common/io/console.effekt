@@ -1,53 +1,48 @@
 module io/console
 
-import io
-import io/time // just for testing
-
-extern js """
-  const readline = require('node:readline');
-"""
 
 interface Console {
   def readLine(): String
   def writeLine(content: String): Unit
 }
 
+/**
+ * Handler for the console effect, using the Console available in js
+ */
+def console[R] { program: () => R / Console }: R = {
+  val c = js::newConsole()
+  try {
+    val r = program()
+    js::close(c)
+    return r
+  } with Console {
+    def readLine() = resume(js::readLine(c))
+    def writeLine(message) = resume(js::writeLine(c, message))
+  }
+}
+
 namespace js {
+
+  extern js """
+    const readline = require('node:readline');
+  """
+
   extern type JSConsole
-  extern {io} def newConsole(): JSConsole =
+
+  extern io def newConsole(): JSConsole =
     js """readline.createInterface({
         input: process.stdin,
         output: process.stdout,
       })"""
-  extern {io} def close(console: JSConsole): Unit =
+
+  extern io def close(console: JSConsole): Unit =
     js "${console}.close()"
 
-  extern {io} def readline(console: JSConsole, k: String => Unit at {io, global}): Unit =
-    js "${console}.question('', input => (${k})(input).run())"
-}
+  extern async def readLine(console: JSConsole): String =
+    js "$effekt.callcc(callback => ${console}.once('line', callback))"
 
-/**
- * Handler for the console effect, using the Console available in js
- */
-def console[R] { prog: => R / Console }: R / AsyncIO = {
-  val c = js::newConsole()
-  try { val res = prog(); js::close(c); res } with Console {
-    def readLine() = {
-      resume(do performIO[String](box { write =>
-        js::readline(c, write)
-      }))
-    }
-    def writeLine(content) = resume(println(content))
-  }
-}
-
-// TODO we could also use stdin and out to implement the Console effect:
-namespace alternative {
-  extern {io} def writeStdoutCallback(message: String, k: () => Unit at {io, global}): Unit =
-    js "process.stdout.write(${message}, 'utf-8', () => (${k})().run())"
-
-  def write(message: String): Unit / IO =
-    do performIO[Unit](box { write => writeStdoutCallback(message, box { write(()) })})
+  extern io def writeLine(console: JSConsole, message: String): Unit =
+    js "${console}.output.write(${message} + '\\n')"
 }
 
 namespace examples {

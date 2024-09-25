@@ -1,6 +1,5 @@
 module io/time
 
-import io
 
 extern async def wait(millis: Int): Unit =
   js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
