@@ -261,20 +261,7 @@ object Transformer {
           RetVoid()
         }
 
-        val sharerName = freshName("sharer");
-        defineFunction(sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment(s"sharer, ${environment.length} free variables"))
-
-          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(GetElementPtr(nextStackPointer.name, environmentType(environment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-          loadEnvironmentAt(nextStackPointer, environment);
-
-          shareValues(environment, Set.from(environment));
-          emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
-          RetVoid()
-        }
-        val sharer = ConstantGlobal(sharerName) // TODO!!
-
+        val sharer = getSharer(environment, StackFrameSharer)
         val eraser = getEraser(environment, StackFrameEraser)
 
         emit(Call(name, Ccc(), referenceType, newReference, List(getStack())))
@@ -332,21 +319,7 @@ object Transformer {
           transform(frame.body);
         }
 
-        // TODO cache based on environment
-        val sharerName = freshName("sharer");
-        defineFunction(sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment(s"pushFrame / sharer, ${frameEnvironment.length} free variables"))
-
-          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-          loadEnvironmentAt(nextStackPointer, frameEnvironment);
-
-          shareValues(frameEnvironment, Set.from(frameEnvironment));
-          emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
-          RetVoid()
-        }
-        val sharer = ConstantGlobal(sharerName) // TODO!!
-
+        val sharer = getSharer(frameEnvironment, StackFrameSharer)
         val eraser = getEraser(frameEnvironment, StackFrameEraser)
 
         shareValues(frameEnvironment, freeVariables(rest));
@@ -390,20 +363,7 @@ object Transformer {
           transform(frame.body);
         }
 
-        // TODO cache based on environment (this is different from other sharers)
-        val sharerName = freshName("sharer");
-        defineFunction(sharerName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment(s"Reset / sharer, ${frameEnvironment.length} free variables"))
-
-          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-          loadEnvironmentAt(nextStackPointer, frameEnvironment);
-
-          shareValues(frameEnvironment, Set.from(frameEnvironment));
-          RetVoid()
-        }
-        val sharer = ConstantGlobal(sharerName) // TODO!
-
+        val sharer = getSharer(frameEnvironment, StackSharer)
         val eraser = getEraser(frameEnvironment, StackEraser)
 
         shareValues(frameEnvironment, freeVariables(rest));
@@ -596,6 +556,7 @@ object Transformer {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
+    // TODO: re-add comments based on eraser kind
     C.erasers.getOrElseUpdate((types, kind), {
       kind match {
         case ObjectEraser =>
@@ -615,12 +576,36 @@ object Transformer {
             loadEnvironmentAt(nextStackPointer, freshEnvironment);
 
             eraseValues(freshEnvironment, Set());
-            val next = if (kind == StackEraser) free else eraseFrames
+            val next = if (kind == StackEraser) free else eraseFrames // TODO: improve this (in RTS?)
             emit(Call("_", Ccc(), VoidType(), next, List(nextStackPointer)));
             RetVoid()
           };
           eraser
       }
+    })
+  }
+
+  def getSharer(environment: machine.Environment, kind: SharerKind)(using C: ModuleContext): Operand = {
+    val types = environment.map{ _.tpe };
+    val freshEnvironment = environment.map{
+      case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
+    };
+
+    // TODO: re-add comments based on sharer kind
+    C.sharers.getOrElseUpdate((types, kind), {
+      val sharer = ConstantGlobal(freshName("sharer"));
+      defineFunction(sharer.name, List(Parameter(stackPointerType, "stackPointer"))) {
+        val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+        emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+        loadEnvironmentAt(nextStackPointer, freshEnvironment);
+
+        shareValues(freshEnvironment, Set.from(freshEnvironment));
+
+        if (kind == StackFrameSharer) // TODO: improve this (in RTS?)
+          emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
+        RetVoid()
+      }
+      sharer
     })
   }
 
@@ -827,6 +812,7 @@ object Transformer {
     var counter = 0;
     var definitions: List[Definition] = List();
     val erasers = mutable.HashMap[(List[machine.Type], EraserKind), Operand]();
+    val sharers = mutable.HashMap[(List[machine.Type], SharerKind), Operand]();
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =
