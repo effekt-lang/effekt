@@ -11,7 +11,7 @@ function, type and effect definitions as well as further nested namespaces:
 
 ```
 namespace outer {
-  
+
   def double(n: Int): Int = n * 2
 
   namespace inner {
@@ -23,5 +23,19 @@ namespace outer {
 You may use double colons for accessing namespaces:
 
 ```effekt:repl
-outer::inner::double(outer::inner::x)
+outer::double(outer::inner::x)
+```
+
+Namespace definitions can omit the braces to range over the rest of the current scope.
+```
+namespace flat {
+  namespace outer
+  def double(n: Int): Int = n * 2
+
+  namespace inner
+  val x = 21
+}
+```
+```effekt:repl
+flat::outer::double(flat::outer::inner::x)
 ```
