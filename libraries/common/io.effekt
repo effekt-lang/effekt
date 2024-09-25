@@ -8,6 +8,10 @@ import queue
 
 type Task[T] = () => T at {io, async, global}
 
+extern llvm """
+  declare void @c_timer_start(%Int, %Stack)
+"""
+
 extern async def spawn(task: Task[Unit]): Unit =
   js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
   llvm """
