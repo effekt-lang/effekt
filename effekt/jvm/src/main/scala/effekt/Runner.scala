@@ -145,7 +145,7 @@ trait Runner[Executable] {
 object JSNodeRunner extends Runner[String] {
   import scala.sys.process.Process
 
-  val extension = "js"
+  val extension = "mjs"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
@@ -158,27 +158,32 @@ object JSNodeRunner extends Runner[String] {
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
 
   /**
-   * Creates an executable `.js` file besides the given `.js` file ([[path]])
+   * Creates an executable `.mjs` file besides the given `.mjs` file ([[path]])
    * and then returns the absolute path of the created executable.
    */
   def build(path: String)(using C: Context): String =
     val out = C.config.outputPath().getAbsolutePath
-    val jsFilePath = (out / path).canonicalPath.escape
-    val jsFileName = path.unixPath.split("/").last
+    val mjsFilePath = (out / path).canonicalPath.escape
+    
     // create "executable" using shebang besides the .js file
-    val jsScript = s"require('./${jsFileName}').main()"
+    val mjsFileName = path.unixPath.split("/").last
+    
+    // NOTE: This is a hack since this file cannot use ES imports & exports
+    //       because it doesn't have the .mjs ending. Sigh.
+    //       Also, we add the 'file:' prefix to satisfy Windows.
+    val jsScript = s"import('file:${mjsFileName}').then(({main}) => { main(); })"
 
     os match {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
-        val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
+        val jsScriptFilePath = mjsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
         jsScriptFilePath
 
       case OS.Windows =>
-        val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
-        val jsMainFileName = jsFileName.stripSuffix(s".$extension") + "__main.js"
-        val exePath = jsFilePath.stripSuffix(s".$extension")
+        val jsMainFilePath = mjsFilePath.stripSuffix(s".$extension") + "__main.mjs"
+        val jsMainFileName = mjsFileName.stripSuffix(s".$extension") + "__main.mjs"
+        val exePath = mjsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsMainFilePath, jsScript)
         createScript(exePath, "node", "$SCRIPT_DIR/" + jsMainFileName)
     }
