@@ -556,12 +556,13 @@ object Transformer {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
-    // TODO: re-add comments based on eraser kind
     C.erasers.getOrElseUpdate((types, kind), {
       kind match {
         case ObjectEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
           defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
+            emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
+
             // TODO avoid unnecessary loads
             loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment);
             eraseValues(freshEnvironment, Set());
@@ -571,6 +572,8 @@ object Transformer {
         case StackEraser | StackFrameEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
           defineFunction(eraser.name, List(Parameter(stackPointerType, "stackPointer"))) {
+            emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
+
             val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
             emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
             loadEnvironmentAt(nextStackPointer, freshEnvironment);
@@ -591,10 +594,11 @@ object Transformer {
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
 
-    // TODO: re-add comments based on sharer kind
     C.sharers.getOrElseUpdate((types, kind), {
       val sharer = ConstantGlobal(freshName("sharer"));
       defineFunction(sharer.name, List(Parameter(stackPointerType, "stackPointer"))) {
+        emit(Comment(s"${kind} sharer, ${freshEnvironment.length} free variables"))
+
         val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
         emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
         loadEnvironmentAt(nextStackPointer, freshEnvironment);
