@@ -63,6 +63,13 @@ object Operand {
 }
 export Operand.*
 
+enum EraserKind {
+  case ObjectEraser
+  case StackEraser
+  case StackFrameEraser
+}
+export EraserKind.*
+
 /**
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Type
  */

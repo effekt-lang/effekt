@@ -273,25 +273,15 @@ object Transformer {
           emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
           RetVoid()
         }
+        val sharer = ConstantGlobal(sharerName) // TODO!!
 
-        val eraserName = freshName("eraser");
-        defineFunction(eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment(s"eraser, ${environment.length} free variables"))
-
-          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(GetElementPtr(nextStackPointer.name, environmentType(environment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-          loadEnvironmentAt(nextStackPointer, environment);
-
-          eraseValues(environment, Set());
-          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(nextStackPointer)));
-          RetVoid()
-        }
+        val eraser = getEraser(environment, StackFrameEraser)
 
         emit(Call(name, Ccc(), referenceType, newReference, List(getStack())))
 
         shareValues(environment, freeVariables(rest));
         pushEnvironmentOnto(getStack(), environment);
-        pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
+        pushReturnAddressOnto(getStack(), returnAddressName, sharer, eraser);
 
         transform(rest)
 
@@ -355,24 +345,13 @@ object Transformer {
           emit(Call("_", Ccc(), VoidType(), shareFrames, List(nextStackPointer)));
           RetVoid()
         }
+        val sharer = ConstantGlobal(sharerName) // TODO!!
 
-        // TODO cache based on environment (careful, this is different from other erasers)
-        val eraserName = freshName("eraser");
-        defineFunction(eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment(s"pushFrame / eraser, ${frameEnvironment.length} free variables"))
-
-          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-          loadEnvironmentAt(nextStackPointer, frameEnvironment);
-
-          eraseValues(frameEnvironment, Set());
-          emit(Call("_", Ccc(), VoidType(), eraseFrames, List(nextStackPointer)));
-          RetVoid()
-        }
+        val eraser = getEraser(frameEnvironment, StackFrameEraser)
 
         shareValues(frameEnvironment, freeVariables(rest));
         pushEnvironmentOnto(getStack(), frameEnvironment);
-        pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
+        pushReturnAddressOnto(getStack(), returnAddressName, sharer, eraser);
 
         transform(rest)
 
@@ -423,27 +402,14 @@ object Transformer {
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           RetVoid()
         }
+        val sharer = ConstantGlobal(sharerName) // TODO!
 
-        // TODO cache based on environment (careful, this is different from other erasers)
-        val eraserName = freshName("eraser");
-        defineFunction(eraserName, List(Parameter(stackPointerType, "stackPointer"))) {
-          emit(Comment(s"Reset / eraser, ${frameEnvironment.length} free variables"))
-
-
-          val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-          emit(GetElementPtr(nextStackPointer.name, environmentType(frameEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-          loadEnvironmentAt(nextStackPointer, frameEnvironment);
-
-          eraseValues(frameEnvironment, Set());
-          // TODO consider doing the following in the RTS
-          emit(Call("_", Ccc(), VoidType(), free, List(nextStackPointer)));
-          RetVoid()
-        }
+        val eraser = getEraser(frameEnvironment, StackEraser)
 
         shareValues(frameEnvironment, freeVariables(rest));
 
         pushEnvironmentOnto(getStack(), frameEnvironment);
-        pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
+        pushReturnAddressOnto(getStack(), returnAddressName, sharer, eraser);
 
         transform(rest)
 
@@ -624,22 +590,38 @@ object Transformer {
     }
   }
 
-  def getEraser(environment: machine.Environment)(using C: ModuleContext): Operand = {
+  def getEraser(environment: machine.Environment, kind: EraserKind)(using C: ModuleContext): Operand = {
     val types = environment.map{ _.tpe };
     val freshEnvironment = environment.map{
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
-    val eraser = ConstantGlobal(freshName("eraser"));
 
-    C.erasers.getOrElseUpdate(types, {
-      defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
-        // TODO avoid unnecessary loads
-        loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment);
-        eraseValues(freshEnvironment, Set());
-        RetVoid()
-      };
-      eraser
-    });
+    C.erasers.getOrElseUpdate((types, kind), {
+      kind match {
+        case ObjectEraser =>
+          val eraser = ConstantGlobal(freshName("eraser"));
+          defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
+            // TODO avoid unnecessary loads
+            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment);
+            eraseValues(freshEnvironment, Set());
+            RetVoid()
+          };
+          eraser
+        case StackEraser | StackFrameEraser =>
+          val eraser = ConstantGlobal(freshName("eraser"));
+          defineFunction(eraser.name, List(Parameter(stackPointerType, "stackPointer"))) {
+            val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+            emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+            loadEnvironmentAt(nextStackPointer, freshEnvironment);
+
+            eraseValues(freshEnvironment, Set());
+            val next = if (kind == StackEraser) free else eraseFrames
+            emit(Call("_", Ccc(), VoidType(), next, List(nextStackPointer)));
+            RetVoid()
+          };
+          eraser
+      }
+    })
   }
 
   def produceObject(role: String, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
@@ -649,7 +631,7 @@ object Transformer {
       val objectReference = LocalReference(objectType, freshName(role));
       val environmentReference = LocalReference(environmentType, freshName("environment"));
       val size = ConstantInt(environmentSize(environment));
-      val eraser = getEraser(environment)
+      val eraser = getEraser(environment, ObjectEraser)
 
       emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
       emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
@@ -770,7 +752,7 @@ object Transformer {
     }
   }
 
-  def pushReturnAddressOnto(stack: Operand, returnAddressName: String, sharerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def pushReturnAddressOnto(stack: Operand, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext): Unit = {
 
     val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
     // TODO properly find size
@@ -785,8 +767,8 @@ object Transformer {
     emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
 
     emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
-    emit(Store(sharerPointer, ConstantGlobal(sharerName)));
-    emit(Store(eraserPointer, ConstantGlobal(eraserName)));
+    emit(Store(sharerPointer, sharer));
+    emit(Store(eraserPointer, eraser));
   }
 
   def popReturnAddressFrom(stack: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -844,7 +826,7 @@ object Transformer {
   class ModuleContext() {
     var counter = 0;
     var definitions: List[Definition] = List();
-    val erasers = mutable.HashMap[List[machine.Type], Operand]();
+    val erasers = mutable.HashMap[(List[machine.Type], EraserKind), Operand]();
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =
