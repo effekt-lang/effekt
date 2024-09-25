@@ -1,5 +1,6 @@
 module io/console
 
+import io
 
 interface Console {
   def readLine(): String
