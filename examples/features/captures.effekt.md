@@ -6,63 +6,6 @@ permalink: docs/tutorial/captures
 
 # Captures
 
-## Notes (TO BE IGNORED)
-
-Boxing is almost never needed. The cases where you need it are complex yet interesting. While it appears to be complicated, it guarantees safety and helps writing correct programs.
-
-Aspects
-
-- disallowing effects (only `{ io, global }` since these can be run without a handler or pure `{}`)
-  - FFI on click (event-handler)
-  ```
-  do promise(box { println("hello") })
-  ```
-- storing the resumption/continuation (scheduler, reified generator)
-- classes-pattern
-  ```
-  interface Counter {
-    def tick(): Unit
-    def current(): Int
-  }
-
-  def newCounter(init: Int): Counter at {global} = {
-    var state in global = init // or pass a region
-    box new Counter {
-      def tick() = state = state + 1
-      def current() = state
-    }
-  }
-  /*
-  class GlobalCounter(init: Int): Counter {
-    var state in global = init // or pass a region
-    def tick() = state = state + 1
-    def current() = state
-  }
-  */
-
-  def myCounter = unbox newCounter(0)
-  ```
-  alternative we can write it in "CPS" to avoid boxing
-  ```
-  def counter[R](init: Int) { prog: {Counter} => R }: R = {
-    var state = init // NO region needed here
-    def c = new Counter {
-      def tick() = state = state + 1
-      def current() = state
-    }
-    prog {c}
-  }
-
-  // ...
-  with def myCounter = counter(0);
-  ...
-  ```
-  - on term level unbox, box
-  - `at` at type level
-  - capability, resource, region, lifetime, coeffect
-
-## Captures
-
 Functions are second-class in Effekt, but for a good reason. Functions closing over capabilities must not be returned, otherwise it can not be guaranteed that these capabilities are still in scope.
 Thus, we explicitly have to keep track of these captures and ensure they are in scope upon invoking.
 
