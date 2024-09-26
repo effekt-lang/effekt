@@ -11,26 +11,14 @@ aims to be significantly more lightweight in its concepts.
 Also, Effekt comes with no warranty and there are (probably) many bugs -- If this does not discourage you, feel free to
 play with it and give us your feedback :)
 
+## Examples
+
+If you are looking for examples of the Effekt language, we invite you to look at the [casestudies](https://github.com/effekt-lang/effekt/tree/master/examples/casestudies) and the [language tour](https://effekt-lang.org/tour).
+
 ## Installation
 
-You need to have Java (>= 11) and Node (>= 16) and npm installed.
+Please navigate to the [getting-started guide](https://effekt-lang.org/docs/getting-started#installing-effekt) on our [website](https://effekt-lang.org) for detailed instructions of how to install Effekt.
 
-The recommended way of installing Effekt is by running:
+## Contributing
 
-```
-npm install -g https://github.com/effekt-lang/effekt/releases/latest/download/effekt.tgz
-```
-
-Alternatively, you can download the `effekt.tgz` file from [another release](https://github.com/effekt-lang/effekt/releases) and then run
-
-```
-npm install -g effekt.tgz
-```
-
-This will make the `effekt` command globally available. You can start the Effekt REPL by entering:
-
-```
-> effekt
-```
-
-You can find more information about the Effekt language and how to use it on the website (<https://effekt-lang.org>).
+Thanks for considering to contribute to the Effekt compiler! For setting up your local environment, please check out our [contributing guide](https://effekt-lang.org/contributing.html) on the [website](https://effekt-lang.org).
