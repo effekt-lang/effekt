@@ -371,7 +371,7 @@ namespace internal {
   """
 
   extern jsNode """
-    const os = require('os');
+    const os = require('node:os');
 
     /**
      * Maps the error code to a Effekt-stable (platform independent) numeric value.
