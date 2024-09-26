@@ -58,6 +58,9 @@ Effekt establishes the principle of _direct-style IO first_.
 
 This means, if we want to open a file, we do not have to choose between a callback-based variant, a promise-based one, or a direct-style one. All of them are derivable from a single operation -- in direct style:
 
+```effekt:prelude:hide
+import io/error
+```
 ```effekt:repl
 on[IOError].panic { readFile("test1.txt") }
 ```
