@@ -125,7 +125,7 @@ void c_fs_open(struct Pos path, struct Pos mode, Stack stack) {
 
 void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
-    char* bytes = c_buffer_bytes(buffer); // libuv expects signed integers
+    char* bytes = (char*)c_buffer_bytes(buffer); // libuv expects signed integers
     uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
     // erasePositive(buffer);
     // TODO we should erase the buffer but abort if this was the last reference
@@ -144,7 +144,7 @@ void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
 void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
 
-    char* bytes = c_buffer_bytes(buffer); // libuv expects signed integers
+    char* bytes = (char*)c_buffer_bytes(buffer); // libuv expects signed integers
     uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
     // erasePositive(buffer);
     // TODO we should erase the buffer but abort if this was the last reference
