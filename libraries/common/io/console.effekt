@@ -24,26 +24,26 @@ def console[R] { program: () => R / Console }: R = {
 
 namespace js {
 
-  extern js """
+  extern jsNode """
     const readline = require('node:readline');
   """
 
   extern type JSConsole
 
   extern io def newConsole(): JSConsole =
-    js """readline.createInterface({
+    jsNode """readline.createInterface({
         input: process.stdin,
         output: process.stdout,
       })"""
 
   extern io def close(console: JSConsole): Unit =
-    js "${console}.close()"
+    jsNode "${console}.close()"
 
   extern async def readLine(console: JSConsole): String =
-    js "$effekt.callcc(callback => ${console}.once('line', callback))"
+    jsNode "$effekt.callcc(callback => ${console}.once('line', callback))"
 
   extern io def writeLine(console: JSConsole, message: String): Unit =
-    js "${console}.output.write(${message} + '\\n')"
+    jsNode "${console}.output.write(${message} + '\\n')"
 }
 
 namespace examples {

@@ -3,19 +3,19 @@ module io
 import ref
 import queue
 
-extern include llvm "../llvm/io.ll"
-extern include js "../js/io.js"
-
-
 // Event Loop
 // ----------
 
 type Task[T] = () => T at {io, async, global}
 
+extern llvm """
+  declare void @c_yield(%Stack)
+"""
+
 extern async def spawn(task: Task[Unit]): Unit =
   js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
   llvm """
-    call void @c_timer_start(%Int 0, %Stack %stack)
+    call void @c_yield(%Stack %stack)
     call void @run(%Neg ${task})
     ret void
   """
@@ -23,7 +23,7 @@ extern async def spawn(task: Task[Unit]): Unit =
 extern async def yield(): Unit =
   js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
   llvm """
-    call void @c_timer_start(%Int 0, %Stack %stack)
+    call void @c_yield(%Stack %stack)
     ret void
   """
 
@@ -47,6 +47,12 @@ def promise[T](task: Task[T]): Promise[T] = {
   spawn(box { p.resolve(task()) });
   return p
 }
+
+extern llvm """
+  declare %Pos @c_promise_make()
+  declare void @c_promise_resolve(%Pos, %Pos)
+  declare void @c_promise_await(%Pos, %Neg)
+"""
 
 extern async def await[T](promise: Promise[T]): T =
   js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
