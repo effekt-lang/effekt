@@ -2,7 +2,6 @@ package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.generator.js.TransformerMonadicSeparate
-import effekt.lifted.LiftInference
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
@@ -120,19 +119,6 @@ class LanguageServer extends Intelligence {
       return null
     }
     core.PrettyPrinter.format(mainCore.core.definitions)
-  }
-
-  @JSExport
-  def showLiftedCore(path: String): String = {
-    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
-      return null
-    }
-
-    val liftedCore = LiftInference.run(mainCore).getOrElseAborting {
-      return null
-    }
-
-    lifted.PrettyPrinter.format(liftedCore.core.definitions)
   }
 
   @JSExport

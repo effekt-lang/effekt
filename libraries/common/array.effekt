@@ -24,15 +24,13 @@ extern global def allocate[T](size: Int): Array[T] =
 /**
  * Creates a new Array of size `size` filled with the value `init`
  */
-extern global def array[T](size: Int, init: T): Array[T] =
-  ml "Array.array (${size}, ${init})"
-  default {
-    val arr = allocate[T](size);
-    each(0, size) { i =>
-      unsafeSet(arr, i, init)
-    };
-    arr
-  }
+def array[T](size: Int, init: T): Array[T] = {
+  val arr = allocate[T](size);
+  each(0, size) { i =>
+    unsafeSet(arr, i, init)
+  };
+  arr
+}
 
 /**
  * Converts a List `list` to an Array
@@ -53,7 +51,6 @@ def fromList[T](list: List[T]): Array[T] = {
 extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
-  ml "Array.length ${arr}"
   llvm """
     %z = call %Int @c_array_size(%Pos ${arr})
     ret %Int %z
@@ -68,17 +65,16 @@ extern pure def size[T](arr: Array[T]): Int =
 extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
-  ml "Array.sub (${arr}, ${index})"
   llvm """
     %z = call %Pos @c_array_get(%Pos ${arr}, %Int ${index})
     ret %Pos %z
   """
 
 extern js """
-function array$set(arr, index, value) {
-  arr[index] = value;
-  return $effekt.unit
-}
+  function array$set(arr, index, value) {
+    arr[index] = value;
+    return $effekt.unit
+  }
 """
 
  /**
@@ -90,7 +86,6 @@ function array$set(arr, index, value) {
 extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
-  ml "Array.update (${arr}, ${index}, ${value})"
   llvm """
     %z = call %Pos @c_array_set(%Pos ${arr}, %Int ${index}, %Pos ${value})
     ret %Pos %z

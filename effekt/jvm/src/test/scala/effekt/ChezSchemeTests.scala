@@ -21,8 +21,6 @@ abstract class ChezSchemeTests extends EffektTests {
 
     examplesDir / "llvm",
 
-    examplesDir / "ml",
-
     // bidirectional handlers
     examplesDir / "pos" / "maps.effekt",
 
@@ -66,21 +64,4 @@ class ChezSchemeMonadicTests extends ChezSchemeTests {
 
 class ChezSchemeCallCCTests extends ChezSchemeTests {
   def backendName = "chez-callcc"
-}
-class ChezSchemeLiftTests extends ChezSchemeTests {
-
-  def backendName = "chez-lift"
-
-  override def ignored: List[File] = super.ignored ++ List(
-    // regions are not yet supported
-    examplesDir / "benchmarks" / "other" / "generator.effekt",
-    examplesDir / "pos" / "capture" / "regions.effekt",
-    examplesDir / "pos" / "capture" / "selfregion.effekt",
-    // boxing is not (yet) supported for lift-based backends
-    examplesDir / "pos" / "file.effekt",
-
-    // known issues:
-    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
-    examplesDir / "pos" / "capture" / "ffi_blocks.effekt", // ffi is passed evidence, which it does not need
-  )
 }

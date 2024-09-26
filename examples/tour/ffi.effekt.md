@@ -118,7 +118,6 @@ Here's how to `mul`tiply two numbers on different backends:
 extern pure def mul(x: Int, y: Int): Int =
   js "(${x} * ${y})"
   chez "(* ${x} ${y})"
-  ml "(${x}: int) * ${y}"
   llvm "%z = mul %Int ${x}, ${y} ret %Int %z"
 ```
 

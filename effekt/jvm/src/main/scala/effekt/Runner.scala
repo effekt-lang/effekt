@@ -255,11 +255,6 @@ object ChezCallCCRunner extends ChezRunner {
     path / ".." / "chez" / "common",
     path / ".." / "chez" / "callcc")
 }
-object ChezLiftRunner extends ChezRunner {
-  override def includes(path: File): List[File] = List(
-    path / ".." / "chez" / "common",
-    path / ".." / "chez" / "lift")
-}
 
 object LLVMRunner extends Runner[String] {
   import scala.sys.process.Process
@@ -343,36 +338,4 @@ object LLVMRunner extends Runner[String] {
     exec(gccArgs: _*)
 
     executableFile
-}
-
-
-object MLRunner extends Runner[String] {
-  import scala.sys.process.Process
-
-  val extension = "sml"
-
-  def standardLibraryPath(root: File): File = root / "libraries" / "common"
-
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
-
-  override def includes(path: File): List[File] = List(path / ".." / "ml")
-
-  def checkSetup(): Either[String, Unit] =
-    if canRunExecutable("mlton") then Right(())
-    else Left("Cannot find mlton. This is required to use the ML backend.")
-
-  /**
-   * Compile the MLton source file (`<...>.sml`) to an executable.
-   *
-   * Requires the MLton compiler to be installed on the machine.
-   * Assumes [[path]] has the format "SOMEPATH.sml".
-   */
-  override def build(path: String)(using C: Context): String =
-    val out = C.config.outputPath()
-    val buildFile = (out / "main.mlb").canonicalPath
-    val executable = (out / "mlton-main").canonicalPath
-    exec("mlton",
-      "-default-type", "int64", // to avoid integer overflows
-      "-output", executable, buildFile)
-    executable
 }
