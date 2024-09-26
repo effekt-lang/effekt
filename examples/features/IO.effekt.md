@@ -6,6 +6,17 @@ permalink: docs/tutorial/io
 
 # Asynchronous IO (Input-Output)
 
+```effekt:ignore
+import io
+import io/filesystem
+import io/error
+```
+
+```effekt:prelude:hide
+import io
+import io/error
+```
+
 ```effekt:hide
 import io
 import io/error
