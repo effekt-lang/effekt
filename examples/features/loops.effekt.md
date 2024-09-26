@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Loops
-permalink: docs/tutorial/loops
+permalink: tour/loops
 ---
 
 # Loops

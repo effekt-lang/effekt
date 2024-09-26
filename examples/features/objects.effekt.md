@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Objects
-permalink: docs/tutorial/objects
+permalink: tour/objects
 ---
 
 # Objects

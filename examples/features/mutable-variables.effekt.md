@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Variables
-permalink: docs/tutorial/variables
+permalink: tour/variables
 ---
 
 # Mutable Variables

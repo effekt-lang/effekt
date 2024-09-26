@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Captures
-permalink: docs/tutorial/captures
+permalink: tour/captures
 ---
 
 # Captures

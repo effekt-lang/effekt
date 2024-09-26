@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Datatypes
-permalink: docs/tutorial/adts
+permalink: tour/adts
 ---
 
 # Algebraic Datatypes

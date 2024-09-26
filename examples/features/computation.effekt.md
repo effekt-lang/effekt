@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Computation
-permalink: docs/tutorial/computation
+permalink: tour/computation
 ---
 
 # Computation

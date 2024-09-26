@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: IO
-permalink: docs/tutorial/io
+permalink: tour/io
 ---
 
 # Asynchronous IO (Input-Output)

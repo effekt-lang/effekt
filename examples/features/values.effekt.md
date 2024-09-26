@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Values
-permalink: docs/tutorial/values
+permalink: tour/values
 ---
 
 # Values

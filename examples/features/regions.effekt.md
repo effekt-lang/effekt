@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Regions
-permalink: docs/tutorial/regions
+permalink: tour/regions
 ---
 
 # Regions
