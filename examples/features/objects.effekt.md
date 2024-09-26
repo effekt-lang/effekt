@@ -15,7 +15,7 @@ interface Counter {
 }
 ```
 
-Interfaces are [_computation types_](./computation.md) and we can write a program that expects a counter to work on:
+Interfaces are [_computation types_](./computation) and we can write a program that expects a counter to work on:
 
 ```
 def useCounter {c: Counter} = {
