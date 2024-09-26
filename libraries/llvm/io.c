@@ -281,13 +281,16 @@ void c_resume_unit_timer(uv_timer_t* handle) {
 }
 
 void c_timer_start(Int millis, Stack stack) {
-
     uv_timer_t* timer = malloc(sizeof(uv_timer_t));
     timer->data = stack;
 
     uv_timer_init(uv_default_loop(), timer);
 
     uv_timer_start(timer, c_resume_unit_timer, millis, 0);
+}
+
+void c_yield(Stack stack) {
+    c_timer_start(0, stack);
 }
 
 

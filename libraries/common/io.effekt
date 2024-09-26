@@ -9,13 +9,13 @@ import queue
 type Task[T] = () => T at {io, async, global}
 
 extern llvm """
-  declare void @c_timer_start(%Int, %Stack)
+  declare void @c_yield(%Stack)
 """
 
 extern async def spawn(task: Task[Unit]): Unit =
   js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
   llvm """
-    call void @c_timer_start(%Int 0, %Stack %stack)
+    call void @c_yield(%Stack %stack)
     call void @run(%Neg ${task})
     ret void
   """
@@ -23,7 +23,7 @@ extern async def spawn(task: Task[Unit]): Unit =
 extern async def yield(): Unit =
   js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
   llvm """
-    call void @c_timer_start(%Int 0, %Stack %stack)
+    call void @c_yield(%Stack %stack)
     ret void
   """
 

@@ -41,7 +41,7 @@ type File = Int
  */
 def readFile(path: String): String / Exception[IOError] = {
   val fd = open(path, ReadOnly());
-  with on[IOError].finalize { close(fd); () }
+  with on[IOError].finalize { close(fd) }
 
   val readSize = 1048576 // 1MB
   var size = readSize
@@ -76,7 +76,7 @@ def readFile(path: String): String / Exception[IOError] = {
  */
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
   val fd = open(path, WriteOnly());
-  with on[IOError].finalize { close(fd); () }
+  with on[IOError].finalize { close(fd) }
 
   val writeSize = 1048576 // 1MB
 
