@@ -1,0 +1,9 @@
+def main() = {
+  val list: List[Int] = [1, 2, 3, 4, 5]
+  println(list.foldLeft(0) { (x, y) => x + y } == list.foldRight(0) { (x, y) => x + y })
+  println(list.foldLeft(0) { (x, y) => x + y })
+
+  val empty: List[Int] = []
+  println(empty.foldLeft(0) { (x, y) => x + y } == empty.foldLeft(0) { (x, y) => x * y })
+  println(empty.foldLeft(0) { (x, y) => x + y })
+}
