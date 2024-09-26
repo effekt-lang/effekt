@@ -11,7 +11,6 @@ extern resource stack: StackLocal
 extern interface Array[T]
 extern {stack} def makeArray[T](size: Int): Array[T] at {stack} =
   js   "${size}"
-  ml   "${size}"
   chez "${size}"
 
 def parameter[T] {a: Array[T]} = {

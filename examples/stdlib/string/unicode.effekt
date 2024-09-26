@@ -46,7 +46,7 @@ def main() = {
       charOrOutOfBounds { "f😅o😅o".charAt(expectedLength - 1) }
       println("f😅o😅o".length == expectedLength)
 
-    // ML does not support unicode
+    // Unknown platform probably doesn't support unicode
     case _ => ()
   }
 }
@@ -55,5 +55,4 @@ extern pure def platform(): String =
   chez { "chez" }
   llvm { "llvm" }
   js { "js" }
-  ml { "ml" }
   default { "other" }
