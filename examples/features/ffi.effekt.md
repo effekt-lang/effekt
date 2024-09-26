@@ -6,6 +6,18 @@ permalink: docs/tutorial/ffi
 
 # FFI (Foreign Function Interface)
 
+Not all functions of the standard library can be defined in Effekt itself (for example, what does it mean to print?).
+For some functions, we need to reach out to the host platform. This is what the FFI is for.
+
+When defining FFI, try to follow the following principle:
+
+> **keep the FFI surface minimal**
+
+The reasoning for this is:
+
+1. less foreign types and less foreign functions means more compatibility across backends (JS and LLVM are the most important)
+2. foreign types and functions are opaque for the Effekt optimizer and thus cannot be optimized
+
 ## `extern def`
 
 Effekt allows communicating with the host platform (for instance, JavaScript) by defining extern functions via FFI.
@@ -23,10 +35,13 @@ Every call of `add(n, m)` is replaced with `n + m` in the JavaScript backend.
 It's often useful to define opaque extern types to encapsulate a foreign type:
 
 ```
-extern type Ref[T]
+extern type MyRef[T]
 
-extern def ref[T](init: T): Ref[T] =
+extern def myRef[T](init: T): MyRef[T] =
   js "{ value: ${init} }"
+
+extern def get[T](ref: MyRef[T]): T =
+  js "${ref}.value"
 ```
 
 ## `extern include`
@@ -48,26 +63,35 @@ Use `extern` strings!
 extern js """
   function set$impl(ref, value) {
     ref.value = value;
-    return $effekt.unit;
+    return $effekt.unit; // this is the Unit-value of Effekt
   }
 """
 
-extern def set[T](ref: Ref[T], value: T): Unit =
+extern def set[T](ref: MyRef[T], value: T): Unit =
   js "set$impl(${ref}, ${value})"
 ```
 
 Now you can call `set` on your reference!
+```
+def example() = {
+  val r = myRef(42)
+  r.set(r.get + 1)
+  r.get
+}
+```
+```effekt:repl
+example()
+```
 
 ## Captures
 
-> NOTE: Link captures/boxing/regions, etc.
-
-You can and should annotate the capture of your extern function as `extern <capture> def ...`
+Not all extern definitions are pure.
+Since Effekt doesn't know anything about externs, you should manually annotate the [capture](./captures) of your extern function as `extern <capture> def ...`
 
 - no capture, usually denoted as `pure`, also writable as `{}`. If an extern definition is annotated as `pure`, it will be considered for inlining by the compiler.
-- if you want to allocate into a global scope (e.g. the JavaScript heap), use `global`
+- if you want to allocate into the [global region](./regions) (e.g. the JavaScript heap), use `global`
 - if your function performs I/O (like `println`), use `io` (this is the default capture)
-- if your function captures the continuation, use `async` (in the JS backend, control definitions should return a monadic value of type `async`)
+- if your function captures the continuation, [use `async`](./io) (in the JS backend, control definitions should return a monadic value of type `async`)
 - of course, you can mix and match: `extern def {global, io, control} ...`
 
 For example, the following function gets the current timestamp via the JavaScript FFI, which is an operation that is not pure (it has a side effect):
@@ -77,7 +101,7 @@ extern io def now(): Int =
   js "Date.now()"
 ```
 
-For example, the `ref` and `set` functions above should have been annotated as `extern global def` as they allocate globally.
+For example, the `myRef` and `set` functions above should have been annotated as `extern global def` as they allocate globally.
 
 If you want to add your own tracked resource `foo` of type `MyResource`, Effekt supports the following:
 
@@ -88,7 +112,8 @@ extern resource foo: MyResource
 
 ## Other backends
 
-Effekt has a lot of different backends. One `extern def` can support multiple backends, so here's how to `mul`tiply two numbers on different backends:
+Effekt has a lot of different backends. One `extern def` can support multiple backends.
+Here's how to `mul`tiply two numbers on different backends:
 
 ```
 extern pure def mul(x: Int, y: Int): Int =
