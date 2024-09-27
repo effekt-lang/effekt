@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Functions
 permalink: tour/functions
 ---

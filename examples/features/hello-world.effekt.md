@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: HelloWorld
 permalink: tour/hello-world
 ---

@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Datatypes
 permalink: tour/adts
 ---

@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Records
 permalink: tour/records
 ---

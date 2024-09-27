@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Effects
 permalink: tour/effects
 ---

@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: FFI
 permalink: tour/ffi
 ---

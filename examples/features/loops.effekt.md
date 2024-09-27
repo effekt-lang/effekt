@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Loops
 permalink: tour/loops
 ---

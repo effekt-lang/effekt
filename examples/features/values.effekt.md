@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Values
 permalink: tour/values
 ---

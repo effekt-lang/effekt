@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: IO
 permalink: tour/io
 ---

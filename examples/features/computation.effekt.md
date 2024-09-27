@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Computation
 permalink: tour/computation
 ---

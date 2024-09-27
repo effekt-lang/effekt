@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Namespaces
 permalink: tour/namespaces
 ---

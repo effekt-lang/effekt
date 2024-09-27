@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Captures
 permalink: tour/captures
 ---

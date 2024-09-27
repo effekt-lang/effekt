@@ -1,5 +1,4 @@
 ---
-layout: docs
 title: Objects
 permalink: tour/objects
 ---
