@@ -55,3 +55,7 @@ $effekt.println = function println$impl(str) {
 }
 
 $effekt.unit = { __unit: true }
+
+$effekt.emptyMatch = function() { throw "empty match" }
+
+$effekt.hole = function() { throw "not implemented, yet" }

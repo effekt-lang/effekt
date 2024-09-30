@@ -44,11 +44,11 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     Frontend andThen Middleend andThen DirectStyleMutableState
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.MakeStackSafe andThen core.LambdaLifting map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.LambdaLifting map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      val doc = pretty(TransformerMonadicWhole.compile(input, mainSymbol).commonjs)
+      val doc = pretty(TransformerCps.compile(input, mainSymbol).commonjs)
       (Map(mainFile -> doc.layout), mainFile)
   }
 

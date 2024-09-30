@@ -192,10 +192,17 @@ enum Stmt {
 }
 export Stmt.*
 
-def Const(name: JSName, binding: Expr): Stmt = js.Const(Pattern.Variable(name), binding)
+def Const(name: JSName, binding: Expr): Stmt = binding match {
+  case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts)
+  case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt))
+  case _ => js.Const(Pattern.Variable(name), binding)
+}
+
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
 // Some smart constructors
+def Call(receiver: Expr, args: Expr*): Expr = Call(receiver, args.toList)
+
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
 
 def Lambda(params: List[JSName], body: Expr): Expr = Lambda(params, Return(body))
@@ -211,6 +218,41 @@ def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
 }
 
 val Undefined = RawLiteral("undefined")
+
+def Lambda(params: List[JSName], stmts: List[Stmt]): Expr = stmts match {
+  case Nil => ???
+  case js.Return(e) :: Nil => Lambda(params, e)
+  case stmt :: Nil => Lambda(params, stmt)
+  case stmts => Lambda(params, Block(stmts))
+}
+
+// TODO inline
+def Lambda(params: List[JSName], body: Binding[Stmt]): Expr = Lambda(params, body.stmts)
+
+case class Binding[A](run: (A => List[js.Stmt]) => List[js.Stmt]) {
+  def flatMap[B](rest: A => Binding[B]): Binding[B] = {
+    Binding(k => run(a => rest(a).run(k)))
+  }
+  def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
+}
+extension (b: Binding[js.Stmt]) {
+  def block: js.Stmt = js.MaybeBlock(b.stmts)
+  def toExpr: js.Expr = b.stmts match {
+    case Nil => ???
+    case js.Return(e) :: Nil => e
+    case stmts => js.Call(js.Lambda(Nil, Block(stmts)), Nil)
+  }
+  def stmts: List[js.Stmt] = b.run(x => List(x))
+}
+
+def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
+  l match {
+    case Nil => pure(Nil)
+    case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
+  }
+
+def pure[A](a: A): Binding[A] = Binding(k => k(a))
+
 
 object monadic {
 
