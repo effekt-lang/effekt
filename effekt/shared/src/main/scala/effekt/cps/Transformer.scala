@@ -117,8 +117,8 @@ object Transformer {
     case core.Stmt.Try(core.Block.BlockLit(_, _, _, capabilityParams, body), handlers) =>
       // here we pass the prompt as a block since conceptually it is tracked
       val prompt = Id("p")
-      val ks2 = Id("ks_try")
-      val k2 = Id("k_try")
+      val ks2 = Id("ks")
+      val k2 = Id("k")
       Reset(Block.BlockLit(Nil, List(prompt), ks2, k2, {
         val capabilities = (capabilityParams zip handlers).map { case (p, h) =>
           Def(p.id, New(transform(h, Some(prompt))))
@@ -227,7 +227,7 @@ enum Continuation {
     this match {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
       case Continuation.Static(hint, k) =>
-        val ks = Id("ks_reify")
+        val ks = Id("ks")
         cps.Cont.ContLam(hint, ks, k(Pure.ValueVar(hint), ks))
     }
 }

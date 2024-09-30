@@ -9,14 +9,7 @@ import effekt.core.{ DeclarationContext, Id }
 
 
 // TODO
-// 1. inline builtins again
 // 2. get rid of separate compilation for JS
-
-// TODO Also add some thunks here (like in factorial_accumulator) since the recursive call is immediate and not guarded
-//  def countDown(n: Int): Int =
-//    if (n >= 0) countDown(n - 1) else 0
-//
-//  def main() = println(countDown(10000))
 object TransformerCps extends Transformer {
 
   val RUN   = Variable(JSName("RUN"))
@@ -222,7 +215,7 @@ object TransformerCps extends Transformer {
       }
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
       pure(maybeThunking(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
-        requiringThunk { toJS(k) }))))
+        noThunking { toJS(k) }))))
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
       val args = vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks), toJS(k))
       pure(MethodCall(toJS(callee), memberNameRef(method), args:_*))
