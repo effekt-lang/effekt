@@ -9,16 +9,20 @@ import effekt.core.{ DeclarationContext, Id }
 
 
 // TODO
-// 1. get to run
-// 2. insert trampolining Thunks.
-// 3. inline builtins again
-// 4. get rid of separate compilation for JS
+// 1. inline builtins again
+// 2. get rid of separate compilation for JS
+
+// TODO Also add some thunks here (like in factorial_accumulator) since the recursive call is immediate and not guarded
+//  def countDown(n: Int): Int =
+//    if (n >= 0) countDown(n - 1) else 0
 //
+//  def main() = println(countDown(10000))
 object TransformerCps extends Transformer {
 
   val RUN   = Variable(JSName("RUN"))
   val RESET = Variable(JSName("RESET"))
   val SHIFT = Variable(JSName("SHIFT"))
+  val THUNK = Variable(JSName("THUNK"))
 
   def run(body: js.Expr): js.Stmt =
     js.Return(Call(RUN, body))
@@ -180,7 +184,11 @@ object TransformerCps extends Transformer {
   }
 
   def toJSExpr(s: cps.Stmt)(using D: DeclarationContext, C: Context): Binding[js.Expr] = s match {
-    case cps.Stmt.Jump(k, arg, ks) => pure(js.Call(nameRef(k), toJS(arg), toJS(ks)))
+    case cps.Stmt.Jump(k, arg, ks) =>
+      // TODO maybe improve precision?
+      val jump = js.Call(nameRef(k), toJS(arg), toJS(ks))
+      pure(Call(THUNK, js.Lambda(Nil, jump)))
+
     case cps.Stmt.Scope(defs, body) =>
       Binding { k =>
         defs.map(toJS) ++ toJSExpr(body).run(k)
