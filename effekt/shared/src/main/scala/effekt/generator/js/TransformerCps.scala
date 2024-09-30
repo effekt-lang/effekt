@@ -28,7 +28,10 @@ object TransformerCps extends Transformer {
   def thunked(stmt: js.Stmt): js.Stmt = js.Return(js.Lambda(Nil, stmt))
   def thunked(expr: js.Expr): js.Expr = js.Lambda(Nil, expr)
 
-  case class TransformerContext(requiresThunk: Boolean)
+  case class TransformerContext(
+    requiresThunk: Boolean,
+    bindings: Map[Id, js.Expr],
+    externs: Map[Id, cps.Extern.Def])
 
   def requiringThunk[T](prog: TransformerContext ?=> T)(using C: TransformerContext): T =
     prog(using C.copy(requiresThunk = true))
@@ -44,6 +47,12 @@ object TransformerCps extends Transformer {
 
   def run(body: js.Expr): js.Stmt =
     js.Return(Call(RUN, body))
+
+  def lookup(id: Id)(using C: TransformerContext): js.Expr = C.bindings.getOrElse(id, nameRef(id))
+
+  def bindingAll[R](bs: List[(Id, js.Expr)])(body: TransformerContext ?=> R)(using C: TransformerContext): R =
+    body(using C.copy(bindings = C.bindings ++ bs))
+
 
   /**
    * Entrypoint used by the compiler to compile whole programs
@@ -64,18 +73,14 @@ object TransformerCps extends Transformer {
   def toJS(module: cps.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext, Context): js.Module =
     module match {
       case cps.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
-        given TransformerContext(false)
+        given TransformerContext(false, Map.empty, externs.collect { case d: Extern.Def => (d.id, d) }.toMap)
 
         val name    = JSName(jsModuleName(module.path))
-        // TODO inline
-        //    val externs = module.externs.collect {
-        //      case d if !canInline(d) => toJS(d)
-        //    }
-        val externs = module.externs.map(toJS)
-        val decls   = module.declarations.flatMap(toJS)
+        val jsExterns = module.externs.filterNot(canInline).map(toJS)
+        val jsDecls   = module.declarations.flatMap(toJS)
         val stmts   = module.definitions.map(toJS)
         val state   = generateStateAccessors
-        js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
+        js.Module(name, imports, exports, state ++ jsDecls ++ jsExterns ++ stmts)
     }
 
   def toJS(d: cps.ToplevelDefinition)(using DeclarationContext, Context, TransformerContext): js.Stmt = d match {
@@ -135,13 +140,14 @@ object TransformerCps extends Transformer {
     case Cont.ContLam(result, ks, body) => js.Lambda(List(nameDef(result), nameDef(ks)), toJSStmt(body))
   }
 
-  def toJS(e: cps.Expr)(using DeclarationContext, Context, TransformerContext): js.Expr = e match {
-    case cps.Pure.ValueVar(id) => nameRef(id)
+  def toJS(e: cps.Expr)(using D: DeclarationContext, C: Context, T: TransformerContext): js.Expr = e match {
+    case cps.Pure.ValueVar(id) => lookup(id)
     case cps.Pure.Literal(()) => $effekt.field("unit")
     case cps.Pure.Literal(s: String) => JsString(escape(s))
     case literal: cps.Pure.Literal => js.RawExpr(literal.value.toString)
+    case DirectApp(id, vargs, Nil) => inlineExtern(id, vargs)
     case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(toJS))
-    case cps.Pure.PureApp(id, vargs) => js.Call(nameRef(id), vargs.map(toJS))
+    case cps.Pure.PureApp(id, vargs) => inlineExtern(id, vargs)
     case cps.Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case cps.Pure.Select(target, field) => js.Member(toJS(target), memberNameRef(field))
     case cps.Pure.Box(b) => toJS(b)
@@ -236,5 +242,21 @@ object TransformerCps extends Transformer {
     // TODO this might be horrible since we create a thunk
     case cps.Stmt.Match(sc, Nil, None) => pure($effekt.call("emptyMatch"))
     case cps.Stmt.Match(sc, clauses, default) => pure(js.Call(js.Lambda(Nil, toJSStmt(s))))
+  }
+
+  def inlineExtern(id: Id, args: List[cps.Pure])(using C: Context, D: DeclarationContext, T: TransformerContext): js.Expr =
+    T.externs.get(id) match {
+      case Some(cps.Extern.Def(id, params, Nil, annotatedCapture,
+        ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !annotatedCapture.contains(symbols.builtins.AsyncCapability.capture) =>
+          bindingAll(params.zip(args.map(toJS))) {
+            js.RawExpr(strings, templateArgs.map(toJS))
+          }
+      case _ => js.Call(nameRef(id), args.map(toJS))
+    }
+
+  def canInline(extern: cps.Extern): Boolean = extern match {
+    case cps.Extern.Def(id, vparams, Nil, annotatedCapture, ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs))) =>
+      !annotatedCapture.contains(symbols.builtins.AsyncCapability.capture)
+    case _ => false
   }
 }

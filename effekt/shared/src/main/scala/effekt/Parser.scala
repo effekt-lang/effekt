@@ -12,7 +12,9 @@ import scala.language.implicitConversions
 /**
  * String templates containing unquotes `${... : T}`
  */
-case class Template[+T](strings: List[String], args: List[T])
+case class Template[+T](strings: List[String], args: List[T]) {
+  def map[R](f: T => R): Template[R] = Template(strings, args.map(f))
+}
 
 object Parser extends Phase[Source, Parsed] {
 
