@@ -97,11 +97,14 @@ function SHIFT(p, body, ks, k) {
   meta.stack = null
   return body(resumption, meta, k1)
 }
-const TOPLEVEL_K = (x, ks) => x
+const TOPLEVEL_K = (x, ks) => { throw x }
 const TOPLEVEL_KS = { prompt: 0, rest: null }
 
 function RUN(comp) {
   let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
-  while (a.thunk) { a = a() }
-  return a
+  try {
+    while (true) { a = a() }
+  } catch (e) {
+    return e
+  }
 }

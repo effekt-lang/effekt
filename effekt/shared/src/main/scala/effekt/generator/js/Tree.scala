@@ -253,7 +253,6 @@ def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
 
 def pure[A](a: A): Binding[A] = Binding(k => k(a))
 
-
 object monadic {
 
   opaque type Control = Expr
