@@ -243,43 +243,6 @@ def string[T] { prog: => T / Stream }: (T, String) = <>
 def printing[T] { prog: => T / Stream }: T = <>
 
 
-// ANSI escape codes
-namespace ANSI {
-  val CSI = "\u001b["
-
-  def escape(s: String) = CSI ++ s ++ "m"
-
-  val BLACK = escape("30")
-  val RED = escape("31")
-  val GREEN = escape("32")
-  val YELLOW = escape("33")
-  val BLUE = escape("34")
-  val MAGENTA = escape("35")
-  val CYAN = escape("36")
-  val WHITE = escape("37")
-
-  val BG_BLACK = escape("40")
-  val BG_RED = escape("41")
-  val BG_GREEN = escape("42")
-  val BG_YELLOW = escape("43")
-  val BG_BLUE = escape("44")
-  val BG_MAGENTA = escape("45")
-  val BG_CYAN = escape("46")
-  val BG_WHITE = escape("47")
-
-  val RESET = escape("0")
-
-  val BOLD = escape("1")
-  val FAINT = escape("2")
-  val ITALIC = escape("3")
-  val UNDERLINE = escape("4")
-  val BLINK = escape("5")
-  val REVERSE = escape("7")
-  val CROSSOUT = escape("9")
-  val OVERLINE = escape("53")
-}
-
-
 // Characters
 // ----------
 //
