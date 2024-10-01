@@ -30,29 +30,6 @@ class StdlibChezSchemeMonadicTests extends StdlibChezTests {
 class StdlibChezSchemeCallCCTests extends StdlibChezTests {
   def backendName: String = "chez-callcc"
 }
-class StdlibChezSchemeLiftTests extends StdlibChezTests {
-  def backendName: String = "chez-lift"
-}
-class StdlibMLTests extends StdlibTests {
-  def backendName: String = "ml"
-
-  override def ignored: List[File] = List(
-    // For every function using `foreach`:
-    // [error] Effect polymorphic recursion is not allowed. The following definition is effect polymorphic since unification variable X occurs in instantiation ...
-    examplesDir / "stdlib" / "list" / "join.effekt",
-    examplesDir / "stdlib" / "list" / "flatmap.effekt",
-
-    // unicode is not supported in the ML backend
-    examplesDir / "stdlib" / "string" / "unicode.effekt",
-
-    // missing support for multibyte character escape in a string
-    examplesDir / "stdlib" / "test",
-
-    // Not implemented yet
-    examplesDir / "stdlib" / "bytes",
-    examplesDir / "stdlib" / "io",
-  )
-}
 class StdlibLLVMTests extends StdlibTests {
   def backendName: String = "llvm"
 

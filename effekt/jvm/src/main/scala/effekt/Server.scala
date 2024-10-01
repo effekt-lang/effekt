@@ -2,7 +2,6 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
-import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
@@ -66,7 +65,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
     val stage = showIR match {
       case "core" => Stage.Core
-      case "lifted-core" => Stage.Lifted
       case "machine" => Stage.Machine
       case "target" => Stage.Target
       case _ => unsupported

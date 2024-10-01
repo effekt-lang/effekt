@@ -49,7 +49,7 @@ enum Expr {
   // handle is a macro, stable across Chez variants, so we add it to the language.
   case Handle(handlers: List[Expr], body: Expr)
 
-  // handler is part of a macro used by chez-callcc and chez-monadic (not chez-lifted)
+  // handler is part of a macro used by chez-callcc and chez-monadic
   case Handler(constructorName: ChezName, operations: List[Operation])
 }
 export Expr.*

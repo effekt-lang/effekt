@@ -1,5 +1,0 @@
-def f(): Int = 2
-
-def main() = {
-    println(f())
-}

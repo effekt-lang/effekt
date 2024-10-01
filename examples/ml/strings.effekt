@@ -1,9 +1,0 @@
-def main() = {
-  val str = "Hello" ++ " " ++ "World!";
-  println(str)
-  println(str.startsWith("Hello"))
-  println(str.startsWith("ello"))
-  println(str.endsWith("!"))
-  println(str.endsWith("World"))
-  println(str.substring(6))
-}

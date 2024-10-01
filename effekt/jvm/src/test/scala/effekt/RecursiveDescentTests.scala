@@ -629,7 +629,6 @@ class RecursiveDescentTests extends munit.FunSuite {
       "extern def println(value: String): Unit =" +
       "js \"$effekt.println(${value})\"" +
       "chez \"(println_impl ${value})\"" +
-      "ml { print(value); print(\"\\n\") }" +
       "llvm \"\"\"call void @c_io_println_String(%Pos %value); ret %Pos zeroinitializer ; Unit\"\"\"" + "\n" +
       "extern js \"\"\" function \"\"\""
     )

@@ -52,7 +52,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   )
 
   val backend: ScallopOption[Backend[_]] = choice(
-    choices = List("js", "js-web", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
+    choices = List("js", "js-web", "chez-callcc", "chez-monadic", "llvm"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
@@ -129,7 +129,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   private val debugging = group("Compiler Development")
 
   val showIR: ScallopOption[Option[Stage]] = choice(
-    choices = List("none", "core", "lifted", "machine", "target"),
+    choices = List("none", "core", "machine", "target"),
     name = "ir-show",
     descr = "The intermediate presentation that should be printed.",
     default = Some("none"),

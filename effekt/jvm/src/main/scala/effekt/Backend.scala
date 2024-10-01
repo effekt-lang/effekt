@@ -31,8 +31,6 @@ object Backend {
     case "js-web"       => Backend("js-web", js.JavaScriptWeb(), JSWebRunner)
     case "chez-monadic" => Backend("chez-monadic", chez.ChezSchemeMonadic(), ChezMonadicRunner)
     case "chez-callcc"  => Backend("chez-callcc", chez.ChezSchemeCallCC(), ChezCallCCRunner)
-    case "chez-lift"    => Backend("chez-lift", chez.ChezSchemeLift(), ChezLiftRunner)
     case "llvm"         => Backend("llvm", llvm.LLVM(), LLVMRunner)
-    case "ml"           => Backend("ml", ml.ML(), MLRunner)
   }
 }

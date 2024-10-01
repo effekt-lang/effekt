@@ -57,18 +57,6 @@ jobs:
         distribution: 'zulu'
         cache: 'sbt'
 
-    - name: Install MLton
-      if: matrix.os != 'windows-latest'
-      run: |
-        curl -L https://github.com/MLton/mlton/releases/download/on-20210117-release/mlton-20210117-1.amd64-linux-glibc2.31.tgz --output mlton.tgz
-        tar -xzf mlton.tgz
-        mv mlton-20210117-1.amd64-linux-glibc2.31 $GITHUB_WORKSPACE/mlton
-        chmod +x $GITHUB_WORKSPACE/mlton/bin/mlton
-        echo "Trying to call directly"
-        $GITHUB_WORKSPACE/mlton/bin/mlton
-        echo "Adding mlton to path"
-        echo "$GITHUB_WORKSPACE/mlton/bin" >> $GITHUB_PATH
-
     - name: Update apt database
       if: matrix.os != 'windows-latest'
       run: sudo apt-get update

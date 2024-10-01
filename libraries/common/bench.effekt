@@ -8,12 +8,10 @@ type Nanos = Int
  * The actual precision varies across the different backends.
  * - js: Milliseconds
  * - chez: Microseconds
- * - ml: Microseconds
  */
 extern io def timestamp(): Nanos =
   js "Date.now() * 1000000"
   chez "(timestamp)"
-  ml "IntInf.toInt (Time.toNanoseconds (Time.now ()))"
   llvm """
     %time_ptr = alloca { i64, i64 }
     call i32 @clock_gettime(i32 0, ptr %time_ptr)

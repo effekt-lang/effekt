@@ -53,7 +53,6 @@ def wrongFormat(msg: String): Nothing / Exception[WrongFormat] =
 extern io def panic[R](msg: String): R =
   js "(function() { throw ${msg} })()"
   chez "(raise ${msg})"
-  ml "raise Fail ${msg}"
   llvm """
     call void @c_io_println_String(%Pos ${msg})
     call void @exit(i32 1)
