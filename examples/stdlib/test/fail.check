@@ -1,0 +1,9 @@
+Arithmetic
+✓ addition
+✕ faulty addition
+  2 + 2 should be 4!
+✓ multiplication
+
+ 2 pass
+ 1 fail
+ 3 tests total

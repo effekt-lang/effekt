@@ -1,7 +1,8 @@
 import test
 
 def main() = {
-  suite("Test test suite") {
+  // Don't print out times in CI.
+  suite("Test test suite", false) {
     test("Test test assertTrue") {
       assertTrue(true)
       assertTrue(true, "true")
