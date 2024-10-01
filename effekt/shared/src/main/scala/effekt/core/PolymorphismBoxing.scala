@@ -357,8 +357,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val tVargs = vargs map transform
       val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
-      if (pure.toString.contains("unbox")) {
-        println("!") }
       fcoercer.callPure(b, (vcoercers zip tVargs).map(_(_)))
     case Pure.Make(data, tag, vargs) =>
       val dataDecl = PContext.getData(data.name)
