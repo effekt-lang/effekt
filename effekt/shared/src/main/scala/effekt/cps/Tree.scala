@@ -135,3 +135,74 @@ case class MetaCont(id: Id)
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree
 
 case class Operation(name: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt)
+
+
+// unless we need some more information, we keep it simple for now:
+type Variable = Id
+type Variables = Set[Id]
+
+object Variables {
+
+  def value(id: Id) = Set(id)
+  def block(id: Id) = Set(id)
+  def cont(id: Id) = Set(id)
+  def meta(id: Id) = Set(id)
+
+  def empty: Variables = Set.empty
+
+  def all[T](t: IterableOnce[T], f: T => Variables): Variables =
+    t.iterator.foldLeft(Variables.empty) { case (xs, t) => f(t) ++ xs }
+
+
+  def free(e: Expr): Variables = e match {
+    case DirectApp(id, vargs, bargs) => block(id) ++ all(vargs, free) ++ all(bargs, free)
+    case Pure.ValueVar(id) => value(id)
+    case Pure.Literal(value) => empty
+    case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)
+    case Pure.Make(data, tag, vargs) => all(vargs, free)
+    case Pure.Select(target, field) => free(target)
+    case Pure.Box(b) => free(b)
+  }
+
+  def free(b: Block): Variables = b match {
+    case Block.BlockVar(id) => block(id)
+    case Block.BlockLit(vparams, bparams, ks, k, body) => free(body) -- vparams -- bparams - ks - k
+    case Block.Unbox(pure) => free(pure)
+    case Block.New(impl) => free(impl)
+  }
+
+  def free(impl: Implementation): Variables = all(impl.operations, free)
+
+  def free(op: Operation): Variables = op match {
+    case Operation(name, vparams, bparams, ks, k, body) =>
+      free(body) -- all(vparams, value) -- all(bparams, block) -- meta(ks) -- cont(k)
+  }
+  def free(s: Stmt): Variables = s match {
+    case Stmt.Jump(k, arg, ks) => cont(k) ++ free(arg) ++ free(ks)
+    case Stmt.Scope(definitions, body) =>
+      all(definitions, free) ++ free(body) -- all(definitions, d => block(d.id))
+    case Stmt.App(callee, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
+    case Stmt.Invoke(callee, method, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
+    case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
+    case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(clauses, free) ++ all(default, free)
+    case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
+    case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
+    case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
+    case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
+    case Stmt.Hole() => empty
+  }
+
+  def free(cl: (Id, Clause)): Variables = cl match {
+    case (_, Clause(vparams, body)) => free(body) -- all(vparams, value)
+  }
+
+  def free(d: Def): Variables = d match {
+    case Def(id, binding) => free(binding) -- block(id)
+  }
+
+  def free(ks: MetaCont): Variables = meta(ks.id)
+  def free(k: Cont): Variables = k match {
+    case Cont.ContVar(id) => cont(id)
+    case Cont.ContLam(result, ks, body) => free(body) -- value(result) -- meta(ks)
+  }
+}
