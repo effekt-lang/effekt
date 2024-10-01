@@ -44,7 +44,7 @@ jobs:
         command: sbt clean test
         new_command_on_retry: sbt testQuick # should only rerun failed tests
 
-  bump-version:
+  set-version:
     name: Bump Version
     needs: [run-tests]
     runs-on: ubuntu-latest
@@ -92,7 +92,7 @@ jobs:
 
   commit-and-push:
     name: Commit and Push Changes
-    needs: [bump-version]
+    needs: [set-version]
     runs-on: ubuntu-latest
     steps:
       # Login as a GitHub App in order to bypass rules about committing to `master` directly
@@ -130,14 +130,14 @@ jobs:
           git add project/EffektVersion.scala
           git add package.json
           git add pom.xml
-          git commit -m "Bump version to ${{ steps.set-version.outputs.VERSION }}"
+          git commit -m "Bump version to ${{ needs.set-version.outputs.new_version }}"
           git push
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Create and push tag
         run: |
-          git tag v${{ steps.set-version.outputs.VERSION }}
-          git push origin v${{ steps.set-version.outputs.VERSION }}
+          git tag v${{ needs.set-version.outputs.new_version }}
+          git push origin v${{ needs.set-version.outputs.new_version }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
