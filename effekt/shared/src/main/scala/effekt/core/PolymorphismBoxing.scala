@@ -357,6 +357,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val tVargs = vargs map transform
       val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
+      if (pure.toString.contains("unbox")) {
+        println("!") }
       fcoercer.callPure(b, (vcoercers zip tVargs).map(_(_)))
     case Pure.Make(data, tag, vargs) =>
       val dataDecl = PContext.getData(data.name)
@@ -509,11 +511,11 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   class FunctionIdentityCoercer[Ty <: BlockType, Te <: Block](
       from: Ty, to: Ty, targs: List[ValueType]) extends IdentityCoercer[Ty, Te](from, to) with FunctionCoercer[Ty, Te] {
     override def call(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt =
-      Stmt.App(block, targs map transformArg, vargs.map(transform), bargs map transform)
+      Stmt.App(block, targs map transformArg, vargs, bargs)
     override def callPure(block: Te, vargs: List[Pure])(using PContext): Pure =
-      Pure.PureApp(block, targs map transformArg, vargs map transform)
+      Pure.PureApp(block, targs map transformArg, vargs)
     override def callDirect(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Expr =
-      DirectApp(block, targs map transformArg, vargs map transform, bargs map transform)
+      DirectApp(block, targs map transformArg, vargs, bargs)
   }
   def coercer[B >: Block.BlockLit <: Block](fromtpe: BlockType, totpe: BlockType, targs: List[ValueType] = List())(using PContext): FunctionCoercer[BlockType, B] =
     (fromtpe, totpe) match {
