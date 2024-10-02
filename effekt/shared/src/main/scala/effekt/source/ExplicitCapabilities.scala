@@ -5,6 +5,8 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.Rewrite
+import effekt.source.ExternBody.EffektExternBody
+import effekt.source.ExternBody.StringExternBody
 
 
 /**
@@ -34,6 +36,20 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
+    case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      val rewrittenBodies = bodies.map {
+        case b @ source.ExternBody.StringExternBody(ff, body) =>
+          val rewrittenTemplate =
+            body.copy(
+              args = body.args.map { rewrite }
+            )
+          b.copy(template = rewrittenTemplate)
+        case b @ source.ExternBody.EffektExternBody(ff, body) =>
+          val rewrittenBody = rewrite(body) 
+          b.copy(body = rewrittenBody)
+        case u: source.ExternBody.Unsupported => u
+      }
+      extDef.copy(bodies = rewrittenBodies)
   }
 
   override def expr(using Context) = {
