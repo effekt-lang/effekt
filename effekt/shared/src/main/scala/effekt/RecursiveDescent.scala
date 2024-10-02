@@ -73,7 +73,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // always points to the latest non-space position
   var position: Int = 0
 
-  def peek: Token = tokens(position)
+  extension(token: Token) def failOnErrorToken: Token = token.kind match {
+    case TokenKind.Error(err) => fail(err.msg)
+    case _ => token
+  }
+
+  def peek: Token = tokens(position).failOnErrorToken
 
   /**
    * Negative lookahead
@@ -89,7 +94,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def go(position: Int, offset: Int): Token =
       if position >= tokens.length then fail("Unexpected end of file")
 
-      tokens(position) match {
+      tokens(position).failOnErrorToken match {
         case token if isSpace(token.kind) => go(position + 1, offset)
         case token if offset <= 0 => token
         case _ => go(position + 1, offset - 1)
@@ -107,7 +112,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def hasNext(): Boolean = position < tokens.length
   def next(): Token =
-    val t = tokens(position)
+    val t = tokens(position).failOnErrorToken
     skip()
     t
 
