@@ -12,6 +12,7 @@
 #include "sanity.c"
 #include "types.c"
 #include "buffer.c"
+#include "bytearray.c"
 #include "io.c"
 #include "hole.c"
 #include "ref.c"
