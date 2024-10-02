@@ -1,25 +1,25 @@
 module map
 
-// Ordered finite immutable map, backed by balanced binary trees of logarithmic depth.
-// Currently use `genericCompare` as a comparison primitive, which means the map is now working only in the JS backend.
-// 
-// Please don't use the internal constructors `Bin` & `Tip` directly,
-// they might change down the line and are not considered stable.
+/// Ordered finite immutable map, backed by balanced binary trees of logarithmic depth.
+/// Currently use `genericCompare` as a comparison primitive, which means the map is now working only in the JS backend.
+///
+/// Please don't use the internal constructors `Bin` & `Tip` directly,
+/// they might change down the line and are not considered stable.
 type Map[K, V] {
   Bin(size: Int, k: K, v: V, left: Map[K, V], right: Map[K, V]);
   Tip()
 }
 
-// Create a new empty map.
-//
-// O(1)
+/// Create a new empty map.
+///
+/// O(1)
 def empty[K, V](): Map[K, V] = {
   Tip()
 }
 
-// Check if map `m` is empty.
-//
-// O(1)
+/// Check if map `m` is empty.
+///
+/// O(1)
 def isEmpty[K, V](m: Map[K, V]): Bool = {
   m match {
     case Tip() => true
@@ -27,9 +27,9 @@ def isEmpty[K, V](m: Map[K, V]): Bool = {
   }
 }
 
-// Check if map `m` is nonempty.
-//
-// O(1)
+/// Check if map `m` is nonempty.
+///
+/// O(1)
 def nonEmpty[K, V](m: Map[K, V]): Bool = {
   m match {
     case Tip() => false
@@ -37,16 +37,16 @@ def nonEmpty[K, V](m: Map[K, V]): Bool = {
   }
 }
 
-// Create a new map containing only the mapping from `k` to `v`.
-//
-// O(1)
+/// Create a new map containing only the mapping from `k` to `v`.
+///
+/// O(1)
 def singleton[K, V](k: K, v: V): Map[K, V] = {
   Bin(1, k, v, Tip(), Tip())
 }
 
-// Get the size of the map (the number of keys/values).
-//
-// O(1)
+/// Get the size of the map (the number of keys/values).
+///
+/// O(1)
 def size[K, V](m: Map[K, V]): Int = {
   m match {
     case Tip() => 0
@@ -54,10 +54,10 @@ def size[K, V](m: Map[K, V]): Int = {
   }
 }
 
-// Insert a new key `k` and value `v` into the map `m`.
-// If the key `k` is already present in `m`, its associated value is replaced with `v`.
-//
-// O(log N)
+/// Insert a new key `k` and value `v` into the map `m`.
+/// If the key `k` is already present in `m`, its associated value is replaced with `v`.
+///
+/// O(log N)
 def put[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = m match {
   case Tip() => singleton(k, v)
   case Bin(size, k2, v2, l, r) =>
@@ -68,10 +68,10 @@ def put[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = m match {
     }
 }
 
-// Insert a new key `k` and value `v` into the map `m`.
-// If the key `k` is already present in `m` with value `v2`, the function `combine` is called on `k`, `v`, `v2`.
-//
-// O(log N)
+/// Insert a new key `k` and value `v` into the map `m`.
+/// If the key `k` is already present in `m` with value `v2`, the function `combine` is called on `k`, `v`, `v2`.
+///
+/// O(log N)
 def putWithKey[K, V](m: Map[K, V], k: K, v: V) { combine: (K, V, V) => V } : Map[K, V] = m match {
   case Tip() => singleton(k, v)
   case Bin(size, k2, v2, l, r) =>
@@ -82,9 +82,9 @@ def putWithKey[K, V](m: Map[K, V], k: K, v: V) { combine: (K, V, V) => V } : Map
     }
 }
 
-// Lookup the value at a key `k` in the map `m`.
-//
-// O(log N)
+/// Lookup the value at a key `k` in the map `m`.
+///
+/// O(log N)
 def get[K, V](m: Map[K, V], k: K): Option[V] = {
   m match {
     case Tip() => None()
@@ -97,10 +97,10 @@ def get[K, V](m: Map[K, V], k: K): Option[V] = {
   }  
 }
 
-// Lookup the value at a key `k` in the map `m`.
-// If there is no key, use the `default` block to retrieve a default value.
-//
-// O(log N)
+/// Lookup the value at a key `k` in the map `m`.
+/// If there is no key, use the `default` block to retrieve a default value.
+///
+/// O(log N)
 def getOrElse[K, V](m: Map[K, V], k: K) { default : => V }: V = {
   get(m, k) match {
     case None() => default()
@@ -108,9 +108,9 @@ def getOrElse[K, V](m: Map[K, V], k: K) { default : => V }: V = {
   }  
 }
 
-// Check if map `m` contains a key `k`.
-//
-// O(log N)
+/// Check if map `m` contains a key `k`.
+///
+/// O(log N)
 def contains[K, V](m: Map[K, V], k: K): Bool = {
   get(m, k) match {
     case None() => false
@@ -118,9 +118,9 @@ def contains[K, V](m: Map[K, V], k: K): Bool = {
   }
 }
 
-// Get minimum in the map `m`.
-//
-// O(log N)
+/// Get minimum in the map `m`.
+///
+/// O(log N)
 def getMin[K, V](m: Map[K, V]): Option[(K, V)] = {
   def go(k: K, v: V, m: Map[K, V]): (K, V) = {
     m match {
@@ -135,9 +135,9 @@ def getMin[K, V](m: Map[K, V]): Option[(K, V)] = {
   }
 }
 
-// Get maximum in the map `m`.
-//
-// O(log N)
+/// Get maximum in the map `m`.
+///
+/// O(log N)
 def getMax[K, V](m: Map[K, V]): Option[(K, V)] = {
   def go(k: K, v: V, m: Map[K, V]): (K, V) = {
     m match {
@@ -152,9 +152,9 @@ def getMax[K, V](m: Map[K, V]): Option[(K, V)] = {
   }
 }
 
-// Map a function `f` over values in map `m`.
-//
-// O(N)
+/// Map a function `f` over values in map `m`.
+///
+/// O(N)
 def map[K, V1, V2](m: Map[K, V1]) { f : (K, V1) => V2 }: Map[K, V2] = {
   m match {
     case Tip() => Tip()
@@ -163,21 +163,21 @@ def map[K, V1, V2](m: Map[K, V1]) { f : (K, V1) => V2 }: Map[K, V2] = {
   }
 }
 
-// Map a function `f` over values in map `m`.
-//
-// O(N)
+/// Map a function `f` over values in map `m`.
+///
+/// O(N)
 def map[K, V1, V2](m: Map[K, V1]) { f : V1 => V2 }: Map[K, V2] = {
   m.map { (_k, v) => f(v) }
 }
 
-// Traverse all keys and their associated values in map `m` in order,
-// running the function `action` on a key and its associated value.
-//
-// Law: `m.foreach { action } === m.toList.foreach { action }`
-// 
-// O(N)
-//
-// TODO: Support {Control} for early exits.
+/// Traverse all keys and their associated values in map `m` in order,
+/// running the function `action` on a key and its associated value.
+///
+/// Law: `m.foreach { action } === m.toList.foreach { action }`
+///
+/// O(N)
+///
+/// TODO: Support {Control} for early exits.
 def foreach[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit = {
   def go(m: Map[K, V]): Unit = {
     m match {
@@ -191,9 +191,9 @@ def foreach[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit = {
   go(m)
 }
 
-// Convert a map `m` into a list of (key, value) pairs.
-//
-// O(N)
+/// Convert a map `m` into a list of (key, value) pairs.
+///
+/// O(N)
 def toList[K, V](m: Map[K, V]): List[(K, V)] = {
   var acc = Nil()
   m.foreach { (k, v) =>
@@ -202,9 +202,9 @@ def toList[K, V](m: Map[K, V]): List[(K, V)] = {
   acc.reverse
 }
 
-// Get a list of keys of the map `m`.
-//
-// O(N)
+/// Get a list of keys of the map `m`.
+///
+/// O(N)
 def keys[K, V](m: Map[K, V]): List[K] = {
   var acc = Nil()
   m.foreach { (k, _v) =>
@@ -213,9 +213,9 @@ def keys[K, V](m: Map[K, V]): List[K] = {
   acc.reverse  
 }
 
-// Get a list of values of the map `m`.
-//
-// O(N)
+/// Get a list of values of the map `m`.
+///
+/// O(N)
 def values[K, V](m: Map[K, V]): List[V] = {
   var acc = Nil()
   m.foreach { (_k, v) =>
@@ -224,12 +224,12 @@ def values[K, V](m: Map[K, V]): List[V] = {
   acc.reverse   
 }
 
-// Create a map from a list of (key, value) pairs.
-// If the list contains more than one value for the same key,
-// only the last value is used in the map.
-// 
-// O(N) if the list is sorted by key,
-// O(N log N) otherwise
+/// Create a map from a list of (key, value) pairs.
+/// If the list contains more than one value for the same key,
+/// only the last value is used in the map.
+///
+/// O(N) if the list is sorted by key,
+/// O(N log N) otherwise
 def fromList[K, V](pairs: List[(K, V)]): Map[K, V] = {
   pairs match {
     case Nil() => Tip()
@@ -316,10 +316,10 @@ def fromList[K, V](pairs: List[(K, V)]): Map[K, V] = {
   }
 }
 
-// Remove a key `k` from a map `m`.
-// If `k` is not in `m`, `m` is returned.
-//
-// O(log N)
+/// Remove a key `k` from a map `m`.
+/// If `k` is not in `m`, `m` is returned.
+///
+/// O(log N)
 def delete[K, V](m: Map[K, V], k: K): Map[K, V] = {
   m match {
     case Tip() => Tip()
@@ -332,10 +332,10 @@ def delete[K, V](m: Map[K, V], k: K): Map[K, V] = {
   }
 }
 
-// Can be used to insert, delete, or update a value.
-// Law: `get(m.alter(k){f}, k) === f(get(m, k))`
-//
-// O(log N)
+/// Can be used to insert, delete, or update a value.
+/// Law: `get(m.alter(k){f}, k) === f(get(m, k))`
+///
+/// O(log N)
 def alter[K, V](m: Map[K, V], k: K) { f : Option[V] => Option[V] }: Map[K, V] = {
   m match {
     case Tip() =>
@@ -356,9 +356,9 @@ def alter[K, V](m: Map[K, V], k: K) { f : Option[V] => Option[V] }: Map[K, V] = 
   }
 }
 
-// Update or delete a value associated with key `k` in map `m`.
-//
-// O(log N)
+/// Update or delete a value associated with key `k` in map `m`.
+///
+/// O(log N)
 def update[K, V](m: Map[K, V], k: K) { f: (K, V) => Option[V] }: Map[K, V] = {
   m match {
     case Tip() => Tip()
@@ -375,16 +375,16 @@ def update[K, V](m: Map[K, V], k: K) { f: (K, V) => Option[V] }: Map[K, V] = {
   }
 }
 
-// Update or delete a value associated with key `k` in map `m`.
-//
-// O(log N)
+/// Update or delete a value associated with key `k` in map `m`.
+///
+/// O(log N)
 def update[K, V](m: Map[K, V], k: K) { f : V => Option[V] }: Map[K, V] = {
   m.update(k) { (_k, v) => f(v) }
 }
 
-// Get `n`-th (key, value) pair in the map `m`.
-//
-// O(log N)
+/// Get `n`-th (key, value) pair in the map `m`.
+///
+/// O(log N)
 def getIndex[K, V](m: Map[K, V], n: Int): Option[(K, V)] = {
   m match {
     case Tip() => None()
@@ -398,10 +398,10 @@ def getIndex[K, V](m: Map[K, V], n: Int): Option[(K, V)] = {
   }
 }
 
-// Construct a new map which contains all elements of `m1`
-// except those where the key is found in `m2`.
-//
-// O(???)
+/// Construct a new map which contains all elements of `m1`
+/// except those where the key is found in `m2`.
+///
+/// O(???)
 def difference[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
   (m1, m2) match {
     case (Tip(), m2) => Tip()
@@ -415,10 +415,10 @@ def difference[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
   }
 }
 
-// Construct a new map which contains the elements of both `m1` and `m2`.
-// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
-//
-// O(???)
+/// Construct a new map which contains the elements of both `m1` and `m2`.
+/// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
+///
+/// O(???)
 def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (K, V, V) => V }: Map[K, V] = {
   // Internal function similar to `putWithKey`, but right-biased.
   // Only used here, recursively.
@@ -450,18 +450,18 @@ def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (K, V, V) => V }: Map[
   }
 }
 
-// Construct a new map which contains the elements of both `m1` and `m2`.
-// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
-//
-// O(???)
+/// Construct a new map which contains the elements of both `m1` and `m2`.
+/// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
+///
+/// O(???)
 def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (V, V) => V }: Map[K, V] = {
   union(m1, m2) { (k, v1, v2) => combine(v1, v2) }
 }
 
-// Construct a new map which contains the elements of both `m1` and `m2`.
-// Left-biased: Uses values from `m1` if there are duplicate keys.
-//
-// O(???)
+/// Construct a new map which contains the elements of both `m1` and `m2`.
+/// Left-biased: Uses values from `m1` if there are duplicate keys.
+///
+/// O(???)
 def union[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
   union(m1, m2) { (k, v1, v2) => v1 }
 }
@@ -592,7 +592,7 @@ def minViewSure[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): MinView[K, V] = {
   }
 }
 
-// Internal: Glues two balanced trees (with respect to each other) together.
+/// Internal: Glues two balanced trees (with respect to each other) together.
 def glue[K, V](l: Map[K, V], r: Map[K, V]): Map[K, V] = {
   (l, r) match {
     case (Tip(), r) => r
@@ -640,7 +640,7 @@ def link[K, V](k: K, v: V, l: Map[K, V], r: Map[K, V]): Map[K, V] = {
   }
 }
 
-// Internal: merge two trees
+/// Internal: merge two trees
 def link2[K, V](l: Map[K, V], r: Map[K, V]): Map[K, V] = {
   (l, r) match {
     case (Tip(), r) => r
@@ -670,7 +670,7 @@ def putMax[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = {
 
 // Section: internal utilities for tests:
 
-// Check if a map `m` is balanced.
+/// Check if a map `m` is balanced.
 def isBalanced[K, V](m: Map[K, V]): Bool = {
   m match {
     case Tip() => true
