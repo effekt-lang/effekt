@@ -6,6 +6,10 @@ permalink: docs/casestudies/scheduler
 
 # Scheduler
 
+```effekt:prelude:hide
+import dequeue
+```
+
 Writing a safe, cooperatively threaded scheduler in an effect safe manner can be hard, as it requires treating continuations as first-class values.
 Continuations might indirectly close over other capabilities, and we want to prevent that capabilities from leaving their defining scope indirectly through continuations.
 
@@ -23,7 +27,7 @@ interface Proc {
 }
 ```
 
-For the handler of a program `prog` that requires the `Proc` effect to be handled, we first create a queue, storing thunks of the continuation of processes.
+For the handler of a program `prog` that requires the `Proc` effect to be handled, we first create a `queue`, storing thunks of the continuation of processes.
 We define `yield` to push a thunk of the continuation onto the queue.
 Similarly, `fork` pushes two thunks of the continuation onto the queue. One will resume with `true` and the other with `false`.
 Finally, `exit`ing just is a NOP.
@@ -57,9 +61,13 @@ def scheduler { prog: => Unit / Proc } = region this {
 }
 ```
 
-Note that as `prog` is a second-class argument, it can use additional capabilities that are not reflected in its type (but are on its binder) due to System C's contextual effect polymorphism.
+Note that as `prog` is a second-class argument, it can use additional capabilities that are not reflected in its type (but are on its binder) due to Effekt's contextual effect polymorphism.
 In particular, these capabilities may be captured on the continuation term resume.
-However, as those capabilities are second class, they cannot leak through the resumption and the entire program is safe. In particular, the resumption cannot leak even though it is stored in the mutable cell `queue`, as `queue` is second-class itself and valid only within the context of the scheduler region.
+For that reason, we have to annotate it as a capture for the first-class function stored in the `queue`.
+Furthermore, since the handler uses mutable state, namely `queue`, `resume` also captures it when `box`ing it.
+However, as those capabilities are second-class, they cannot leak through the resumption and the entire program is safe. In particular, the resumption cannot leak even though it is stored in the mutable cell `queue`, as `queue` is second-class itself and valid only within the context of the scheduler region.
+You can think about it like a lifetime annotation: we are only allowed to use the thunked continuations in the form of first-class functions, while `queue` is still alive.
+Since `run` is within the same region `queue` is allocated in, forcing the thunks is allowed.
 
 For convenience, we define a helper function for `fork`ing:
 
@@ -72,7 +80,6 @@ Finally, we run some examples using our `scheduler` by `fork`ing once to get two
 
 ```
 def main() = {
-  println("Example 1")
   scheduler {
     fork {
       println("hello 1")
@@ -96,7 +103,3 @@ def main() = {
 ```
 
 Try guessing first what you expect the output to be and then run it:
-
-```effekt:repl
-main()
-```
