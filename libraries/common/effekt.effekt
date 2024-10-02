@@ -550,10 +550,18 @@ def infixAnd { first: => Bool } { second: => Bool }: Bool =
 
 // Bitwise operations
 // ==================
+
+/// Arithmetic left shift
 extern pure def bitwiseShl(x: Int, y: Int): Int =
   js "(${x} << ${y})"
   chez "(ash ${x} ${y})"
   llvm "%z = shl %Int ${x}, ${y} ret %Int %z"
+
+/// Arithmetic right shift
+extern pure def bitwiseShr(x: Int, y: Int): Int =
+  js "(${x} >> ${y})"
+  chez "(ash ${x} (- ${y}))"
+  llvm "%z = ashr %Int %x, %y ret %Int %z"
 
 extern pure def bitwiseAnd(x: Int, y: Int): Int =
   js "(${x} & ${y})"
