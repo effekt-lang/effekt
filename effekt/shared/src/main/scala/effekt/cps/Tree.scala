@@ -100,9 +100,9 @@ enum Stmt extends Tree {
   case LetExpr(id: Id, binding: Expr, body: Stmt)
   case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
 
-  // (Type-monomorphic?) Regions
-  //  case Region(body: Block)
-  //  case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
+  // Regions
+  case Region(id: Id, ks: MetaCont, body: Stmt)
+  case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
   // [[capture]] is a binding occurence.
@@ -192,6 +192,9 @@ object Variables {
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(clauses, free) ++ all(default, free)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
+
+    case Stmt.Region(id, ks, body) => free(ks) ++ (free(body) -- block(id))
+    case Stmt.Alloc(id, init, region, body) => free(init) ++ block(region) ++ (free(body) -- block(id))
 
     case Stmt.Var(id, init, ks, body) => free(init) ++ free(ks) ++ (free(body) -- block(id))
     case Stmt.Dealloc(ref, body) => block(ref) ++ free(body)

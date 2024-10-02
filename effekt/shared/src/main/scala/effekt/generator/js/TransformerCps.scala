@@ -79,8 +79,13 @@ object TransformerCps extends Transformer {
         val jsExterns = module.externs.filterNot(canInline).map(toJS)
         val jsDecls   = module.declarations.flatMap(toJS)
         val stmts   = module.definitions.map(toJS)
-        val state   = generateStateAccessors
-        js.Module(name, imports, exports, state ++ jsDecls ++ jsExterns ++ stmts)
+
+        val state = js.Const(
+          nameDef(symbols.builtins.globalRegion),
+          js.Variable(JSName("global"))
+        ) :: Nil
+
+        js.Module(name, imports, exports, jsDecls ++ jsExterns ++ state ++ stmts)
     }
 
   def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
@@ -222,7 +227,7 @@ object TransformerCps extends Transformer {
       }
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
       pure(maybeThunking(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
-        noThunking { toJS(k) }))))
+        requiringThunk { toJS(k) }))))
 
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
       val args = vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks), toJS(k))
@@ -240,7 +245,21 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), toJS(binding)) :: toJSExpr(body).run(k)
       }
 
-    // const x = ks.arena.fresh(1);
+    // const r = ks.arena.newRegion(); body
+    case cps.Stmt.Region(id, ks, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
+          toJSExpr(body).run(k)
+      }
+
+    // const x = r.alloc(init); body
+    case cps.Stmt.Alloc(id, init, region, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.MethodCall(nameRef(region), JSName("fresh"), toJS(init))) ::
+          toJSExpr(body).run(k)
+      }
+
+    // const x = ks.arena.fresh(1); body
     case cps.Stmt.Var(id, init, ks, body) =>
       Binding { k =>
         js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::

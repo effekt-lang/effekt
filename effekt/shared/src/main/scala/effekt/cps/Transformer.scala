@@ -2,6 +2,7 @@ package effekt
 package cps
 
 import core.Id
+import symbols.builtins.TState
 
 case class TransformationContext(values: Map[Id, Pure], blocks: Map[Id, Block]) {
   def lookupValue(id: Id): Pure = values.getOrElse(id, ValueVar(id))
@@ -93,6 +94,13 @@ object Transformer {
         binding(id, value) { transform(body, ks, k) }
       })
 
+    case core.Stmt.App(core.Block.Member(ref: core.Block.BlockVar, TState.get, tpe), Nil, Nil, Nil) =>
+      val x = Id("x")
+      cps.Get(ref.id, x, k(ValueVar(x), ks))
+
+    case core.Stmt.App(core.Block.Member(ref: core.Block.BlockVar, TState.put, tpe), Nil, List(value), Nil) =>
+      cps.Put(ref.id, transform(value), k(cps.Pure.Literal(()), ks))
+
     case core.Stmt.App(callee, targs, vargs, bargs) => callee match {
       case core.Block.Member(block, field, tpe) =>
         Invoke(transform(block), field, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
@@ -130,9 +138,16 @@ object Transformer {
 
     case core.Stmt.Hole() => Hole()
 
-    // later...
-    case core.Stmt.Region(body) => TODO
-    case core.Stmt.Alloc(id, init, region, body) => TODO
+    case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>
+      cps.Region(region.id, MetaCont(ks),
+        transform(body, ks,
+          Continuation.Static(Id("tmp")) { (x, ks) =>
+            Dealloc(region.id, k(x, ks))
+          }))
+    case core.Stmt.Region(_) => sys error "Shouldn't happen"
+
+    case core.Stmt.Alloc(id, init, region, body) =>
+      cps.Alloc(id, transform(init), region, transform(body, ks, k))
 
     case core.Stmt.Var(id, init, capture, body) =>
       // Var(id: Id, init: Pure, ks: MetaCont, body: Stmt)

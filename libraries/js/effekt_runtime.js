@@ -15,42 +15,9 @@ function Cell(init, region) {
   return cell;
 }
 
-function Arena() {
-  return {
-    fields: [], // Array[Cell],
-    fresh: function(init) {
-      const cell = Cell(init)
-      this.fields.push(cell)
-      return cell;
-    },
-    backup: function() {
-      return this.fields.map(c => c.backup())
-    },
-    restore: function(backup) {
-      this.fields = backup.map(c => c());
-      return this
-    }
-  }
-}
-
 const global = {
-  fresh: function(init) { return Cell(init) },
-  backup: function() {},
-  restore: function(_) {}
+  fresh: Cell
 }
-
-
-let _prompt = 1;
-
-const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { prompt: 0, state: global, arena: global, rest: null }
-
-function THUNK(f) {
-  f.thunk = true
-  return f
-}
-
-const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
 function Arena(_region) {
   const region = _region;
@@ -62,6 +29,13 @@ function Arena(_region) {
       return cell;
     },
     region: _region,
+    newRegion: function() {
+      // a region aggregates weak references
+      const nested = Arena([])
+      // this doesn't work yet, since Arena.backup doesn't return a thunk
+      region.push(new WeakRef(nested))
+      return nested;
+    },
     backup: function() {
       const _backup = []
       let nextIndex = 0;
@@ -74,21 +48,35 @@ function Arena(_region) {
           nextIndex++
         }
       }
-      return _backup;
+      function restore() {
+        const region = []
+        let nextIndex = 0;
+        for (const restoreCell of _backup) {
+          region[nextIndex] = new WeakRef(restoreCell())
+          nextIndex++
+        }
+        return Arena(region)
+      }
+      return restore;
     }
   }
 }
 
-function restoreArena(_backup) {
-  // console.log("Restoring from", _backup)
-  const region = []
-  let nextIndex = 0;
-  for (const restoreCell of _backup) {
-    region[nextIndex] = new WeakRef(restoreCell())
-    nextIndex++
-  }
-  return Arena(region)
+
+let _prompt = 1;
+
+const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
+const TOPLEVEL_KS = { prompt: 0, arena: Arena([]), rest: null }
+
+function THUNK(f) {
+  f.thunk = true
+  return f
 }
+
+const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
+
+// const r = ks.arena.newRegion(); body
+// const x = r.alloc(init); body
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {
@@ -127,7 +115,7 @@ function SHIFT(p, body, ks, k) {
     let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
     let toRewind = cont
     while (!!toRewind) {
-      meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: restoreArena(toRewind.backup), rest: meta }
+      meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
       toRewind = toRewind.rest
     }
 
