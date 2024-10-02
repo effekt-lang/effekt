@@ -102,4 +102,7 @@ def main() = {
 }
 ```
 
-Try guessing first what you expect the output to be and then run it:
+Try guessing first what you expect the output to be and then run it with `main()`:
+
+```effekt:repl
+```
