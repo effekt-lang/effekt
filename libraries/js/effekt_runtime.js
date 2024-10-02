@@ -2,26 +2,17 @@
 // Common Runtime
 // --------------
 
-// Regions
-// TODO maybe use weak refs (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakRef)
-function Cell(init) {
-  var _value = init;
-  const cell = ({
+
+function Cell(init, region) {
+  const cell = {
+    value: init,
     backup: function() {
-      var _backup = _value
-      var cell = this;
-      return () => { _value = _backup; return cell }
+      const _backup = cell.value;
+      // restore function (has a STRONG reference to `this`)
+      return () => { cell.value = _backup; return cell }
     }
-  });
-  // $getOp and $putOp are auto generated from the compiler
-  cell[$getOp] = function() {
-    return _value
-  };
-  cell[$putOp] = function(v) {
-    _value = v;
-    return $effekt.unit;
-  };
-  return cell
+  }
+  return cell;
 }
 
 function Arena() {
@@ -51,6 +42,9 @@ const global = {
 
 let _prompt = 1;
 
+const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
+const TOPLEVEL_KS = { prompt: 0, state: global, arena: global, rest: null }
+
 function THUNK(f) {
   f.thunk = true
   return f
@@ -58,53 +52,99 @@ function THUNK(f) {
 
 const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
+function Arena(_region) {
+  const region = _region;
+  return {
+    fresh: function(init) {
+      const cell = Cell(init);
+      // region keeps track what to backup, but we do not need to backup unreachable cells
+      region.push(new WeakRef(cell))
+      return cell;
+    },
+    region: _region,
+    backup: function() {
+      const _backup = []
+      let nextIndex = 0;
+      for (const ref of region) {
+        // console.log(ref)
+        const cell = ref.deref()
+        // only backup live cells
+        if (cell) {
+          _backup[nextIndex] = cell.backup()
+          nextIndex++
+        }
+      }
+      return _backup;
+    }
+  }
+}
+
+function restoreArena(_backup) {
+  // console.log("Restoring from", _backup)
+  const region = []
+  let nextIndex = 0;
+  for (const restoreCell of _backup) {
+    region[nextIndex] = new WeakRef(restoreCell())
+    nextIndex++
+  }
+  return Arena(region)
+}
+
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {
   const prompt = _prompt++;
-  const rest = { stack: k, prompt: ks.prompt, rest: ks.rest }
-  return prog(prompt, { prompt, rest }, RETURN)
+  const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
+  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+}
+
+function DEALLOC(ks) {
+  ks.arena.length = ks.arena.length - 1
 }
 
 function SHIFT(p, body, ks, k) {
+
+  // console.log("Shifting", p, ks)
+
   // TODO avoid constructing this object
-  let meta = { stack: k, prompt: ks.prompt, rest: ks.rest }
+  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let cont = null
 
   while (!!meta && meta.prompt !== p) {
-    cont = { stack: meta.stack, prompt: meta.prompt, rest: cont }
+    cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
     meta = meta.rest
   }
   if (!meta) { throw `Prompt not found ${p}` }
 
   // package the prompt itself
-  cont = { stack: meta.stack, prompt: meta.prompt, rest: cont }
+  cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
   meta = meta.rest
 
   function resumption(a, ks, k) {
-    let meta = { stack: k, prompt: ks.prompt, rest: ks.rest }
+    //console.log("Resuming", ks.arena)
+    let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
     let toRewind = cont
     while (!!toRewind) {
-      meta = { stack: toRewind.stack, prompt: toRewind.prompt, rest: meta }
+      meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: restoreArena(toRewind.backup), rest: meta }
       toRewind = toRewind.rest
     }
 
-    let k2 = meta.stack // TODO instead copy meta here, like elsewhere?
+    const k2 = meta.stack // TODO instead copy meta here, like elsewhere?
     meta.stack = null
-    return THUNK(() => k2(a, meta))
+    return () => k2(a, meta)
   }
 
   let k1 = meta.stack
   meta.stack = null
   return body(resumption, meta, k1)
 }
-const TOPLEVEL_K = (x, ks) => { throw x }
-const TOPLEVEL_KS = { prompt: 0, rest: null }
 
 function RUN(comp) {
   let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
   try {
     while (true) { a = a() }
   } catch (e) {
-    return e
+    // console.log(e)
+    if (e.computationIsDone) return e
+    else throw e
   }
 }
