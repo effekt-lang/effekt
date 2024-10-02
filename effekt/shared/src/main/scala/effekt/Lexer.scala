@@ -430,7 +430,7 @@ class Lexer(source: Source) {
         case Some('\n') if !delim.isMultiline =>
           return err("Linebreaks are not allowed in single-line strings.")
         // handle escape sequences
-        case Some('\\') => {
+        case Some('\\') if !delim.isMultiline => {
           expect('\\')
           peek() match {
             case Some('"') => consume(); stringContent.addOne('"')
