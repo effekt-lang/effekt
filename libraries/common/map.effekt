@@ -668,47 +668,49 @@ def putMax[K, V](m: Map[K, V], k: K, v: V): Map[K, V] = {
   }
 }
 
-// Section: internal utilities for tests:
+/// Section: internal utilities
+namespace internal {
+  // Section: for tests and invariants:
 
-/// Check if a map `m` is balanced.
-def isBalanced[K, V](m: Map[K, V]): Bool = {
-  m match {
-    case Tip() => true
-    case Bin(_, _, _, l, r) =>
-      val bothSmall = l.size() + r.size() <= 1
-      val leftSmallEnough = l.size() <= delta * r.size()
-      val rightSmallEnough = r.size() <= delta * l.size()
-      (bothSmall || (leftSmallEnough && rightSmallEnough)) && isBalanced(l) && isBalanced(r)
-  }
-}
-
-// Section: prettyprinting for tree maps and list maps
-
-def prettyMap[K, V](m: Map[K, V]): String = {
-  // Helper function to recursively build the string representation of the tree
-  def go(t: Map[K, V], prefix: String, isTail: Bool): String = {
-    t match {
-      case Tip() => ""
-      case Bin(_, k, v, l, r) =>
-        val pair = k.genericShow ++ " → " ++ v.genericShow 
-        val currentLine = prefix ++ (if (isTail) "└── " else "├── ") ++ pair ++ "\n"
-
-        val newPrefix = prefix ++ (if (isTail) "    " else "│   ")
-        val leftStr = go(l, newPrefix, false)
-        val rightStr = go(r, newPrefix, true)
-
-        currentLine ++ leftStr ++ rightStr
+  /// Check if a map `m` is balanced.
+  def isBalanced[K, V](m: Map[K, V]): Bool = {
+    m match {
+      case Tip() => true
+      case Bin(_, _, _, l, r) =>
+        val bothSmall = l.size() + r.size() <= 1
+        val leftSmallEnough = l.size() <= delta * r.size()
+        val rightSmallEnough = r.size() <= delta * l.size()
+        (bothSmall || (leftSmallEnough && rightSmallEnough)) && isBalanced(l) && isBalanced(r)
     }
   }
 
-  // Start the recursion with the initial map, an empty prefix, and true for the root being the tail
-  go(m, "", true)
-}
+  // Section: prettyprinting for tree maps and list maps:
 
-def prettyPairs[K, V](list: List[(K, V)]): String = {
-  val res: String = 
-    list.map { case (k, v) => k.genericShow ++ " → " ++ v.genericShow }
-        .join(", ")
+  def prettyMap[K, V](m: Map[K, V]): String = {
+    // Helper function to recursively build the string representation of the tree
+    def go(t: Map[K, V], prefix: String, isTail: Bool): String = {
+      t match {
+        case Tip() => ""
+        case Bin(_, k, v, l, r) =>
+          val pair = k.genericShow ++ " → " ++ v.genericShow
+          val currentLine = prefix ++ (if (isTail) "└── " else "├── ") ++ pair ++ "\n"
 
-  "[" ++ res ++ "]"
-}
+          val newPrefix = prefix ++ (if (isTail) "    " else "│   ")
+          val leftStr = go(l, newPrefix, false)
+          val rightStr = go(r, newPrefix, true)
+
+          currentLine ++ leftStr ++ rightStr
+      }
+    }
+
+    // Start the recursion with the initial map, an empty prefix, and true for the root being the tail
+    go(m, "", true)
+  }
+
+  def prettyPairs[K, V](list: List[(K, V)]): String = {
+    val res: String =
+      list.map { case (k, v) => k.genericShow ++ " → " ++ v.genericShow }
+          .join(", ")
+
+    "[" ++ res ++ "]"
+  }
