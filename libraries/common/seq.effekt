@@ -1,4 +1,3 @@
-module seq
 /// This file implements the [[Seq]] type as a general purpose functional sequence.
 ///
 /// Implemented as a 2-3 finger tree, it supports
@@ -9,6 +8,7 @@ module seq
 ///
 /// More information on finger trees:
 ///   https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf
+module seq
 
 /// Sequences of elements
 ///
