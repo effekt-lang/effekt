@@ -15,10 +15,13 @@ import scala.util.boundary.break
 
 
 case class Fail(message: String, position: Int) extends Throwable(null, null, false, false)
+case class SoftFail(message: String, positionStart: Int, positionEnd: Int)
 
 class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source) {
 
   import scala.collection.mutable.ListBuffer
+
+  val softFails: ListBuffer[SoftFail] = ListBuffer[SoftFail]()
 
   def parse(input: Input)(using C: Context): Option[ModuleDecl] =
 
@@ -29,7 +32,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       //val after = System.currentTimeMillis()
       //println(s"${input.source.name}: ${after - before}ms")
 
-      res
+      // Report soft fails
+      softFails.foreach {
+        case SoftFail(msg, from, to) =>
+          val source = input.source
+          val fromPos = source.offsetToPosition(tokens(from).start)
+          val toPos = source.offsetToPosition(tokens(to).end)
+          val range = Range(fromPos, toPos)
+          C.report(effekt.util.messages.ParseError(msg, Some(range)))
+      }
+
+      if (softFails.isEmpty) { res } else { None }
     } catch {
       case Fail(msg, pos) =>
         val source = input.source
@@ -711,6 +724,23 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       (`def` ~> idRef()) ~ paramsOpt() ~ maybeReturnAnnotation() ~ (`=` ~> stmt()) match {
         case id ~ (tps, vps, bps) ~ ret ~ body =>
+         if (isSemi) {
+           semi()
+
+           val startPosition = position
+
+           if (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
+              // consume until the next `def` or `}` or EOF
+              while (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
+                next()
+              }
+
+              val endPosition = position
+              val msg = "Unexpected tokens after operation definition. Expected either a new operation definition or the end of the implementation."
+              softFail(msg, startPosition, endPosition)
+            }
+          }
+
           // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
           OpClause(id, tps, vps, bps, ret, body, implicitResume)
       }
@@ -721,7 +751,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def matchClause(): MatchClause =
     nonterminal:
-      MatchClause(`case` ~> matchPattern(), manyWhile(`and` ~> matchGuard(), `and`), `=>` ~> stmts())
+      MatchClause(
+        `case` ~> matchPattern(),
+        manyWhile(`and` ~> matchGuard(), `and`),
+        // allow a statement enclosed in braces or without braces
+        // both is allowed since match clauses are already delimited by `case`
+        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts() })
+      )
 
   def matchGuards() =
     nonterminal:
@@ -1213,6 +1249,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * Aborts parsing with the given message
    */
   def fail(message: String): Nothing = throw Fail(message, position)
+
+  def softFail(message: String, start: Int, end: Int): Unit = {
+    softFails += SoftFail(message, start, end)
+  }
 
   /**
    * Guards `thn` by token `t` and consumes the token itself, if present.
