@@ -3,6 +3,6 @@ interface Eff {
 }
 
 def e: Eff = new Eff {
-  def op() = println("42"); 42 // ERROR Unexpected tokens after operation definition
-  def foo() = 42 // ERROR Operation foo is not part of interface Eff
+  def op() = println("42"); 42
+  def foo() = 42
 }
