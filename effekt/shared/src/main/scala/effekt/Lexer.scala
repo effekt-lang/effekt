@@ -438,6 +438,7 @@ class Lexer(source: Source) {
             case Some('t') => consume(); stringContent.addOne('\t')
             case Some('r') => consume(); stringContent.addOne('\r')
             case Some('\\') => consume(); stringContent.addOne('\\')
+            case Some('$') => consume(); stringContent.addOne('$')
             case Some('u') => {
               consume()
               val escapeStart = current
