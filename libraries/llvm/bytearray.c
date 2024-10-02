@@ -17,7 +17,7 @@
 void c_bytearray_erase_noop(void *envPtr) { (void)envPtr; }
 
 struct Pos c_bytearray_new(const Int size) {
-  void *objPtr = calloc(sizeof(struct Header) + size, 1);
+  void *objPtr = malloc(sizeof(struct Header) + size);
   struct Header *headerPtr = objPtr;
   *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
   return (struct Pos) {
