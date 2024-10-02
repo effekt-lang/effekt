@@ -85,7 +85,7 @@ trait ModuleDB { self: Context =>
       val tpe = C.functionTypeOf(main)
       val controlEffects = tpe.effects
       if (controlEffects.nonEmpty) {
-        C.abort(pp"Main cannot have user defined effects, but includes effects: ${controlEffects}")
+        C.abort(pp"Main cannot have effects, but includes effects: ${controlEffects}")
       }
 
       tpe.result match {
