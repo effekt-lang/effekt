@@ -1,8 +1,0 @@
-interface MyInterface {
-  def myOp(): Int
-}
-
-def obj = new MyInterface {
-  def myOp() = println("42"); 42
-  def myOtherOp() = 42
-}
