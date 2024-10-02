@@ -462,7 +462,12 @@ class Lexer(source: Source) {
     expect('\'')
     // exclude opening and closing '
     val cs = StringContext.processEscapes(slice(start + 1, current - 1))
-    TokenKind.Chr(cs.codePointAt(0))
+    if (cs.codePointCount(0, cs.length) > 1) {
+      TokenKind.Error(LexerError("Character literal consists " +
+        "of multiple code points.", start, current))
+    } else {
+      TokenKind.Chr(cs.codePointAt(0))
+    }
   }
 
   lazy val hexadecimal = ('a' to 'f') ++ ('A' to 'F') ++ ('0' to '9')
