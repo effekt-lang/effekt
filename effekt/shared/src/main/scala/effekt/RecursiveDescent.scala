@@ -37,7 +37,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case SoftFail(msg, from, to) =>
           val source = input.source
           val fromPos = source.offsetToPosition(tokens(from).start)
-          val toPos = source.offsetToPosition(tokens(to).end) // NOTE(jiribenes): I think this is correct, we don't need the +1, right?
+          val toPos = source.offsetToPosition(tokens(to).end)
           val range = Range(fromPos, toPos)
           C.report(effekt.util.messages.ParseError(msg, Some(range)))
       }
@@ -729,7 +729,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
            val startPosition = position
 
-           // TODO(jiribenes): would be nice to abstract this and have a `consumeUntil` function
            if (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
               // consume until the next `def` or `}` or EOF
               while (!peek(`}`) && !peek(`def`) && !peek(EOF)) {
