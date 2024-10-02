@@ -461,7 +461,7 @@ class Lexer(source: Source) {
     consumeWhile(_ != '\'')
     expect('\'')
     // exclude opening and closing '
-    val cs = slice(start + 1, current - 1)
+    val cs = StringContext.processEscapes(slice(start + 1, current - 1))
     TokenKind.Chr(cs.codePointAt(0))
   }
 

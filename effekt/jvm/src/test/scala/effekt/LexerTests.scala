@@ -102,9 +102,9 @@ class LexerTests extends munit.FunSuite {
   test("characters") {
     assertTokensEq("' '", Chr(' '), EOF)
     assertTokensEq("'😅'", Chr(0x1F605), EOF)
-    assertTokensEq("'\\'", Chr('\\'), EOF)
-    assertTokensEq("'\n'", Chr('\n'), EOF)
-    assertTokensEq("'\t'", Chr('\t'), EOF)
+    assertTokensEq("'\\\\'", Chr('\\'), EOF)
+    assertTokensEq("'\\n'", Chr('\n'), EOF)
+    assertTokensEq("'\\t'", Chr('\t'), EOF)
     assertTokensEq("\\u0000", Chr(0), EOF)
     assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
     assertTokensEq("\\u10FFFF{ val", Chr(0x10FFFF), `{`, `val`, EOF)
