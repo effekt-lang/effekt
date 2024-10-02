@@ -42,7 +42,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           C.report(effekt.util.messages.ParseError(msg, Some(range)))
       }
 
-      res
+      if (softFails.empty) { res } else { None }
     } catch {
       case Fail(msg, pos) =>
         val source = input.source
