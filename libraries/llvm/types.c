@@ -7,8 +7,8 @@ typedef double Double;
 typedef uint8_t Byte;
 
 struct Header {
-  uint64_t rc;
-  void (*eraser)(void *);
+    uint64_t rc;
+    void (*eraser)(void *);
 };
 
 struct Pos {

@@ -30,6 +30,10 @@ Int c_bytearray_size(const struct Pos arr) {
   return arr.tag;
 }
 
+char *c_bytearray_data(const struct Pos arr) {
+  return arr.obj + sizeof(struct Header);
+}
+
 Byte c_bytearray_get(const struct Pos arr, const Int index) {
   Byte *dataPtr = arr.obj + sizeof(struct Header);
   Byte element = dataPtr[index];

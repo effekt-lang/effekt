@@ -39,6 +39,32 @@ extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
     ret %Pos %z
   """
 
+def resize(source: ByteArray, size: Int): ByteArray = {
+  val target = allocate(size)
+  val n = min(source.size, target.size)
+  def go(i: Int): ByteArray =
+    if (i < n) {
+      target.unsafeSet(i, source.unsafeGet(i))
+      go(i + 1)
+    } else {
+      target
+    }
+  go(0)
+}
+
+extern pure def fromUTF8(str: String): ByteArray =
+  js "(new TextEncoder().encode(${str}))"
+  llvm """
+    ret %Pos ${str}
+  """
+
+extern pure def toUTF8(arr: ByteArray): String =
+  js "(new TextDecoder('utf-8').decode(${arr}))"
+  // assuming the buffer is already in UTF-8
+  llvm """
+    ret %Pos ${arr}
+  """
+
 extern js """
   function bytes$set(bytes, index, value) {
     bytes[index] = value;
