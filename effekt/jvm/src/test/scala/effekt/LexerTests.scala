@@ -109,7 +109,7 @@ class LexerTests extends munit.FunSuite {
     assertTokensEq("\\uFFFF", Chr(0xFFFF), EOF)
     assertTokensEq("\\u10FFFF{ val", Chr(0x10FFFF), `{`, `val`, EOF)
     assertTokensEq("val s =\\u0000+ 1", `val`, Ident("s"), `=`, Chr(0), `+`, Integer(1), EOF)
-    assertFailure("''")
+    assertTokensEq("''", Error(LexerError("Empty character literal", 0, 2)), EOF)
   }
 
   test("multi line strings") {
