@@ -12,7 +12,7 @@ extern js """
 /// Global, mutable references
 extern type Ref[T]
 
-/// Allocates a new reference of size `size`, keeping its value _undefined_.
+/// Allocates a new reference, keeping its value _undefined_.
 /// Prefer using `ref` constructor instead to ensure that the value is defined.
 extern global def allocate[T](): Ref[T] =
   js "{ value: undefined }"

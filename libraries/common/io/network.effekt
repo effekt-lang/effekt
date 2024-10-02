@@ -1,6 +1,6 @@
 module io/network
 
-import bytes
+import bytearray
 import io
 
 namespace js {
@@ -20,19 +20,19 @@ namespace js {
   extern io def listen(server: JSServer, port: Int, host: String, listener: JSSocket => Unit at {io, async, global}): Unit =
     jsNode "listen(${server}, ${port}, ${host}, (socket) => $effekt.runToplevel((ks, k) => (${listener})(socket, ks, k)))"
 
-  extern async def send(socket: JSSocket, data: Bytes): Unit =
-    jsNode "$effekt.capture(k => ${socket}.write(${data}, k))"
+  extern async def send(socket: JSSocket, data: ByteArray): Unit =
+    jsNode "$effekt.capture(callback => ${socket}.write(${data}, callback))"
 
-  extern async def receive(socket: JSSocket): Bytes =
-    jsNode "$effekt.capture(k => ${socket}.once('data', k))"
+  extern async def receive(socket: JSSocket): ByteArray =
+    jsNode "$effekt.capture(callback => ${socket}.once('data', callback))"
 
   extern async def end(socket: JSSocket): Unit =
     jsNode "$effekt.capture(k => ${socket}.end(k))"
 }
 
 interface Socket {
-  def send(message: Bytes): Unit
-  def receive(): Bytes
+  def send(message: ByteArray): Unit
+  def receive(): ByteArray
   def end(): Unit
 }
 

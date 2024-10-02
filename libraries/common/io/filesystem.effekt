@@ -1,6 +1,6 @@
 module io/filesystem
 
-import bytes
+import bytearray
 
 import io
 import io/error
@@ -34,29 +34,21 @@ type File = Int
 
 /// Reads a file at given path as utf8 encoded string.
 def readFile(path: String): String / Exception[IOError] = {
-  val fd = open(path, ReadOnly());
-  with on[IOError].finalize { close(fd) }
+  val file = open(path, ReadOnly());
+  with on[IOError].finalize { close(file) }
 
-  val readSize = 1048576 // 1MB
-  var size = readSize
-  var buffer = bytes(size)
-  var offset = 0;
+  val chunkSize = 1048576 // 1MB
+  var buffer = bytearray::allocate(chunkSize)
+  var offset = 0
 
   def go(): String = {
-    read(fd, buffer.slice(offset, min(readSize, size - offset)), -1) match {
+    read(file, buffer, offset, chunkSize, -1) match {
       case 0 =>
-        buffer.slice(0, offset).toUTF8
-      case n and n < 0 => panic("Error!")
+        buffer.resize(offset).toUTF8
       case n =>
         offset = offset + n
-
-        // we are at maximum capacity
-        if (n == readSize && (offset + readSize) > size) {
-          val newSize   = size * 2
-          val newBuffer = bytes(newSize)
-          copy(buffer, newBuffer, 0, 0, size)
-          buffer = newBuffer
-          size = newSize
+        if (offset + chunkSize > buffer.size) {
+          buffer = buffer.resize(2 * buffer.size)
         }
         go()
     }
@@ -67,26 +59,18 @@ def readFile(path: String): String / Exception[IOError] = {
 
 /// Writes the (utf8 encoded) string `contents` into the specified file.
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
-  val fd = open(path, WriteOnly());
-  with on[IOError].finalize { close(fd) }
+  val file = open(path, WriteOnly());
+  with on[IOError].finalize { close(file) }
 
-  val writeSize = 1048576 // 1MB
-
-  // this induces a memcpy that is not strictly necessary, since we use the buffer read-only
+  val chunkSize = 1048576 // 1MB
   val buffer = contents.fromUTF8
-  val size = buffer.size
-
   var offset = 0;
-  def remaining() = size - offset
 
-  def go(): Unit =
-    write(fd, buffer.slice(offset, min(writeSize, remaining())), -1) match {
-      case 0 => ()
-      case n and n < 0 => panic("Error!")
-      case n =>
-        offset = offset + n;
-        if (remaining() > 0) go()
-    }
+  def go(): Unit = {
+    val n = write(file, buffer, offset, min(buffer.size - offset, chunkSize), -1)
+    offset = offset + n
+    if (offset < buffer.size) { go() }
+  }
 
   go()
 }
@@ -114,14 +98,14 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
 def open(path: String, mode: Mode): File / Exception[IOError] =
   internal::checkResult(internal::open(path, mode))
 
-def read(fd: File, buffer: Bytes, offset: Int): Int / Exception[IOError] =
-  internal::checkResult(internal::read(fd, buffer, offset))
+def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
+  internal::checkResult(internal::read(file, buffer, offset, size, position))
 
-def write(fd: File, buffer: Bytes, offset: Int): Int / Exception[IOError] =
-  internal::checkResult(internal::write(fd, buffer, offset))
+def write(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
+  internal::checkResult(internal::write(file, buffer, offset, size, position))
 
-def close(fd: File): Unit / Exception[IOError] = {
-  internal::checkResult(internal::close(fd)); ()
+def close(file: File): Unit / Exception[IOError] = {
+  internal::checkResult(internal::close(file)); ()
 }
 
 namespace internal {
@@ -174,27 +158,27 @@ namespace internal {
     const fs = require("fs");
 
     function open(path, mode, callback) {
-      fs.open(path, modeName(mode), (err, fd) => {
-        if (err) { callback(err.errno) } else { callback(fd) }
+      fs.open(path, modeName(mode), (err, file) => {
+        if (err) { callback(err.errno) } else { callback(file) }
       })
     }
 
-    function read(fd, buffer, offset, callback) {
-      let position = offset === -1 ? null : offset;
-      fs.read(fd, toBuffer(buffer), 0, buffer.length, position, (err, bytesRead) => {
+    function read(file, buffer, offset, size, position, callback) {
+      let positionOrNull = position === -1 ? null : position;
+      fs.read(file, toBuffer(buffer), offset, size, positionOrNull, (err, bytesRead) => {
         if (err) { callback(err.errno) } else { callback(bytesRead) }
       })
     }
 
-    function write(fd, buffer, offset, callback) {
-      let position = offset === -1 ? null : offset;
-      fs.write(fd, toBuffer(buffer), 0, buffer.length, position, (err, bytesWritten) => {
+    function write(file, buffer, offset, size, position, callback) {
+      let positionOrNull = position === -1 ? null : position;
+      fs.write(file, toBuffer(buffer), offset, size, positionOrNull, (err, bytesWritten) => {
         if (err) { callback(err.errno) } else { callback(bytesWritten) }
       })
     }
 
-    function close(fd, callback) {
-      fs.close(fd, (err) => {
+    function close(file, callback) {
+      fs.close(file, (err) => {
         if (err) { callback(err.errno) } else { callback(0) }
       })
     }
@@ -202,36 +186,36 @@ namespace internal {
 
   extern llvm """
     declare void @c_fs_open(%Pos, %Pos, %Stack)
-    declare void @c_fs_read(%Int, %Pos, %Int, %Stack)
-    declare void @c_fs_write(%Int, %Pos, %Int, %Stack)
+    declare void @c_fs_read(%Int, %Pos, %Int, %Int, %Int, %Stack)
+    declare void @c_fs_write(%Int, %Pos, %Int, %Int, %Int, %Stack)
     declare void @c_fs_close(%Int, %Stack)
   """
 
   extern async def open(path: String, mode: Mode): Int =
-    jsNode "$effekt.capture(k => open(${path}, ${mode}, k))"
+    jsNode "$effekt.capture(callback => open(${path}, ${mode}, callback))"
     llvm """
       call void @c_fs_open(%Pos ${path}, %Pos ${mode}, %Stack %stack)
       ret void
     """
 
-  extern async def read(fd: Int, buffer: Bytes, offset: Int): Int =
-    jsNode "$effekt.capture(k => read(${fd}, ${buffer}, ${offset}, k))"
+  extern async def read(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int): Int =
+    jsNode "$effekt.capture(callback => read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
-      call void @c_fs_read(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
+      call void @c_fs_read(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
-  extern async def write(fd: Int, buffer: Bytes, offset: Int): Int =
-    jsNode "$effekt.capture(k => write(${fd}, ${buffer}, ${offset}, k))"
+  extern async def write(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int): Int =
+    jsNode "$effekt.capture(callback => write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
-      call void @c_fs_write(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
+      call void @c_fs_write(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
-  extern async def close(fd: Int): Int =
-    jsNode "$effekt.capture(k => close(${fd}, k))"
+  extern async def close(file: Int): Int =
+    jsNode "$effekt.capture(callback => close(${file}, callback))"
     llvm """
-      call void @c_fs_close(%Int ${fd}, %Stack %stack)
+      call void @c_fs_close(%Int ${file}, %Stack %stack)
       ret void
     """
 
