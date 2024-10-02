@@ -15,7 +15,7 @@
  *       | Rc  | Eraser | Contents ... |
  *       +--------------+--------------+
  *
- * The eraser is always a null pointer since it does not need to do anything.
+ * The eraser does nothing.
  */
 
 // TODO It may be performance-advantageous to implement this C file's semantics

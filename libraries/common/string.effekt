@@ -14,7 +14,6 @@ import result
 /**
  * Strings
  * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
- * - ML: Strings are sequences of 8-bit characters (https://smlfamily.github.io/Basis/string.html)
  * - Chez: Strings are sequences of unicode characters (?)
  * - LLVM: UTF-8 (characters can take from 1-4 bytes).
  */
@@ -245,7 +244,7 @@ def printing[T] { prog: => T / Stream }: T = <>
 // ----------
 //
 //   JS: Int (Unicode codepoints)
-//   CS: ?
+//   Chez: ?
 //   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
 
 extern pure def toString(ch: Char): String =
@@ -356,6 +355,6 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
   llvm """
-    %x = call %Int @c_buffer_character_at(%Pos ${str}, i64 ${n})
+    %x = call %Int @c_buffer_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
   """
