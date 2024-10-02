@@ -1,0 +1,4 @@
+def main() = {
+  println("\\u000A is the Unicode representation of \\n")
+  println("💩\u1f4a9")
+}
