@@ -20,8 +20,8 @@ void c_io_println_Double(const Double x) {
 }
 
 void c_io_println_String(String text) {
-    for (uint64_t j = 0; j < c_buffer_length(text); ++j)
-        putchar(c_buffer_bytes(text)[j]);
+    for (uint64_t j = 0; j < c_bytearray_size(text); ++j)
+        putchar(c_bytearray_data(text)[j]);
     erasePositive(text);
     putchar('\n');
 }
@@ -99,7 +99,7 @@ int modeFlags(struct Pos mode) {
 void c_fs_open(String path, struct Pos mode, Stack stack) {
 
     // Convert the Effekt String to a 0-terminated string
-    char* path_str = c_buffer_as_null_terminated_string(path);
+    char* path_str = c_bytearray_into_nullterminated_string(path);
     erasePositive((struct Pos) path);
 
     // Convert the Effekt String representing the opening mode to libuv flags

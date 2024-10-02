@@ -489,7 +489,7 @@ object Transformer {
         val res = positiveType
         val args = List(ConstantInt(utf8.size), ConstantGlobal(PointerType(), s"$bind.lit"))
         val argsT = List(IntegerType64(), PointerType())
-        emit(Call(bind, Ccc(), res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
+        emit(Call(bind, Ccc(), res, ConstantGlobal(FunctionType(res, argsT), "c_bytearray_construct"), args))
 
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
