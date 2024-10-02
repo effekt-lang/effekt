@@ -509,11 +509,12 @@ class Lexer(source: Source) {
         case _ => consume()
       }
     }
+
     // exclude //
     val comment = slice(start + 2, current)
-
     if comment.startsWith("/") then
-      val doc_comment = slice(start + 1, current)
+      // exclude ///
+      val doc_comment = slice(start + 3, current)
       TokenKind.DocComment(doc_comment)
     else
       TokenKind.Comment(comment)
