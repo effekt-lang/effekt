@@ -1,41 +1,32 @@
 module seq
+/// This file implements the [[Seq]] type as a general purpose functional sequence.
+///
+/// Implemented as a 2-3 finger tree, it supports
+/// - prepend and append in amortized O(1),
+/// - concat(m, n) in O(log(min(m, n)))
+/// - first and last in amortized O(1)
+/// - size in amortized O(1)
+///
+/// More information on finger trees:
+///   https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf
 
-/**
- * This file implements the [[Seq]] type as a general purpose functional sequence.
- *
- * Implemented as a 2-3 finger tree, it supports
- * - prepend and append in amortized O(1),
- * - concat(m, n) in O(log(min(m, n)))
- * - first and last in amortized O(1)
- * - size in amortized O(1)
- *
- * More information on finger trees:
- *   https://www.staff.city.ac.uk/~ross/papers/FingerTree.pdf
- */
-
-/**
- * Sequences of elements
- *
- * They are represented as 2-3 finger trees.
- */
+/// Sequences of elements
+///
+/// They are represented as 2-3 finger trees.
 type Seq[A] {
   Empty()
   Single(value: A)
   Deep(size: Int, prefix: Digit[A], middle: Tree[A], suffix: Digit[A])
 }
 
-/**
- * Result of splitting a sequence at the front or back.
- */
+/// Result of splitting a sequence at the front or back.
 type View[A] {
   IsEmpty()
   View(element: A, remainder: Seq[A])
 }
 
-/**
- * Exception[NoSuchElement] is raised when accessing non-existing elements
- * or splitting empty collections.
- */
+/// Exception[NoSuchElement] is raised when accessing non-existing elements
+/// or splitting empty collections.
 record NoSuchElement()
 
 
@@ -61,11 +52,9 @@ record IndexOutOfBounds()
 // Internal Types
 // --------------
 
-/**
- * Internal grouping of 1-4 elements
- *
- * It is called digit since Okasaki (1998) calls finger trees "numerical operations".
- */
+/// Internal grouping of 1-4 elements
+///
+/// It is called digit since Okasaki (1998) calls finger trees "numerical operations".
 type Digit[A] {
   One(value: A)
   Two(first: A, second: A)
@@ -73,9 +62,7 @@ type Digit[A] {
   Four(first: A, second: A, third: A, fourth: A)
 }
 
-/**
- * Internal representation of a 2-3 tree
- */
+/// Internal representation of a 2-3 tree
 type Node[A] {
   // These are necessary to avoid polymorphic recursion
   Leaf2(first: A, second: A)
@@ -84,12 +71,10 @@ type Node[A] {
   Node3(size: Int, first: Node[A], second: Node[A], third: Node[A])
 }
 
-/**
- * Internal duplicate of Seq
- *
- * splitting into two type parameters is necessary since our MLton backend does
- * not support mutually recursive data type declarations.
- */
+/// Internal duplicate of Seq
+///
+/// splitting into two type parameters is necessary since our MLton backend does
+/// not support mutually recursive data type declarations.
 type Finger[A, N] {
   NoFinger()
   SingleFinger(value: Node[A])
@@ -141,9 +126,7 @@ def size[A](tree: Tree[A]): Int = tree match {
   case DeepFinger(size, _, _, _) => size
 }
 
-/**
- * The size of the given sequence
- */
+/// The size of the given sequence
 def size[A](seq: Seq[A]): Int = seq match {
   case Empty() => 0
   case Single(value) => 1
@@ -408,9 +391,7 @@ def reverse[A](seq: Seq[A]): Seq[A] = {
 }
 
 
-/**
- * Random access
- */
+/// Random access
 def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
 
   // invariant for all internal functions: element is in the sequence
@@ -485,9 +466,7 @@ def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
   }
 }
 
-/**
- * Random access
- */
+/// Random access
 def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchElement] = {
 
   // invariant for all internal functions: element is in the sequence

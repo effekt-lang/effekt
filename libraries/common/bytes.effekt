@@ -1,15 +1,11 @@
 module bytes
 
-/**
- * A memory managed, mutable, fixed-length buffer of bytes.
- */
+/// A memory managed, mutable, fixed-length buffer of bytes.
 extern type Bytes
   // = llvm "%Pos"
   // = js "Uint8Array"
 
-/**
- * Allocates new bytes with the given `capacity`, setting its values to `0`.
- */
+/// Allocates new bytes with the given `capacity`, setting its values to `0`.
 extern io def bytes(capacity: Int): Bytes =
   js "(new Uint8Array(${capacity}))"
   llvm """
@@ -55,9 +51,7 @@ extern io def write(b: Bytes, index: Int, value: Byte): Unit =
     ret %Pos zeroinitializer
   """
 
-/**
- * Returns an *aliased* slice of b starting at offset with the given length
- */
+/// Returns an *aliased* slice of b starting at offset with the given length
 def slice(b: Bytes, offset: Int, length: Int): Bytes = {
   def validOffset() = offset >= 0 && offset < b.size
   def validLength() = length >= 0 && (offset + length) <= b.size
@@ -66,9 +60,7 @@ def slice(b: Bytes, offset: Int, length: Int): Bytes = {
 }
 
 
-/**
- * Returns a view into the buffer, with the length truncated to n
- */
+/// Returns a view into the buffer, with the length truncated to n
 def truncated(b: Bytes, n: Int): Bytes =
   b.slice(0, n)
 
@@ -88,9 +80,7 @@ extern pure def toUTF8(b: Bytes): String =
   """
 
 namespace unsafe {
-  /**
-   * Unsafe: offset and length are not checked.
-   */
+  /// Unsafe: offset and length are not checked.
   extern io def slice(b: Bytes, offset: Int, length: Int): Bytes =
     js "new Uint8Array(${b}.buffer, ${offset}, ${length})"
     llvm """

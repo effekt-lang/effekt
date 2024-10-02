@@ -2,13 +2,11 @@ module bench
 
 type Nanos = Int
 
-/**
- * The current time (since UNIX Epoch) in nanoseconds.
- *
- * The actual precision varies across the different backends.
- * - js: Milliseconds
- * - chez: Microseconds
- */
+/// The current time (since UNIX Epoch) in nanoseconds.
+///
+/// The actual precision varies across the different backends.
+/// - js: Milliseconds
+/// - chez: Microseconds
 extern io def timestamp(): Nanos =
   js "Date.now() * 1000000"
   chez "(timestamp)"
@@ -32,12 +30,10 @@ extern jsNode """
   const { performance } = require('node:perf_hooks');
 """
 
-/**
- * High-precision timestamp in nanoseconds that should be for measurements.
- *
- * This timestamp should only be used for **relative** measurements,
- * as gives no guarantees on the absolute time (unlike a UNIX timestamp).
- */
+/// High-precision timestamp in nanoseconds that should be for measurements.
+///
+/// This timestamp should only be used for **relative** measurements,
+/// as gives no guarantees on the absolute time (unlike a UNIX timestamp).
 extern io def relativeTimestamp(): Nanos =
   js "Math.round(performance.now() * 1000000)"
   default { timestamp() }
@@ -48,9 +44,7 @@ namespace Duration {
   def diff(fromNanos: Nanos, toNanos: Nanos): Duration = toNanos - fromNanos
 }
 
-/**
- * Runs the block and returns the time in nanoseconds
- */
+/// Runs the block and returns the time in nanoseconds
 def timed { block: => Unit }: Duration = {
   val before = relativeTimestamp()
   block()
@@ -70,9 +64,7 @@ def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
   run(iterations, true)
 }
 
-/**
- * Takes a duration in nanoseconds and formats it in milliseconds with precision of two decimal digits.
- */
+/// Takes a duration in nanoseconds and formats it in milliseconds with precision of two decimal digits.
 def formatMs(nanos: Nanos): String = {
   val micros = nanos / 1000000
   val sub = (nanos.mod(1000000).toDouble / 10000.0).round
