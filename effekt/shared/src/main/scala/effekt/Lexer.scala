@@ -453,7 +453,8 @@ class Lexer(source: Source) {
                   consume()
                   val escapeStart = current
                   consumeWhile(c => c != '}')
-                  slice(escapeStart, current)
+                  expect('}')
+                  slice(escapeStart, current - 1)
                 case _ => err("Invalid escape sequence.", current - 1, current)
               }
 
