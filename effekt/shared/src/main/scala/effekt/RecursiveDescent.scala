@@ -108,7 +108,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def isSpace(kind: TokenKind): Boolean =
     kind match {
-      case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
+      case TokenKind.Space | TokenKind.Comment(_) | TokenKind.DocComment(_) | TokenKind.Newline => true
       case _ => false
     }
 
