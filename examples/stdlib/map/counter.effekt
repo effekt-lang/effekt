@@ -35,5 +35,5 @@ def main() = {
   test("do")
   test("Effekt")
 
-  println(ctr.toList.prettyPairs)
+  println(map::internal::prettyPairs(ctr.toList))
 }
