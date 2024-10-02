@@ -32,6 +32,7 @@ enum TokenKind {
   case Ident(id: String)
   // misc
   case Comment(msg: String)
+  case DocComment(msg: String)
   case Newline
   case Space
   case EOF
@@ -118,17 +119,18 @@ object TokenKind {
 
   def explain(kind: TokenKind): String = kind match {
     case t if keywords.contains(t) => s"keyword ${kind}"
-    case Ident(n)          => s"identifier ${n}"
-    case Integer(n)        => s"integer ${n}"
-    case Float(d)          => s"float ${d}"
-    case Str(s, true)      => s"multi-line string"
-    case Str(s, false)     => s"string \"${s}\""
-    case Chr(c)            => s"character '${c}'"
-    case Comment(contents) => "comment"
-    case Newline           => "newline"
-    case Space             => "space"
-    case EOF               => "end of file"
-    case other             => other.toString
+    case Ident(n)             => s"identifier ${n}"
+    case Integer(n)           => s"integer ${n}"
+    case Float(d)             => s"float ${d}"
+    case Str(s, true)         => s"multi-line string"
+    case Str(s, false)        => s"string \"${s}\""
+    case Chr(c)               => s"character '${c}'"
+    case Comment(contents)    => "comment"
+    case DocComment(contents) => "doc comment"
+    case Newline              => "newline"
+    case Space                => "space"
+    case EOF                  => "end of file"
+    case other                => other.toString
   }
 
   val keywords = Vector(
@@ -509,7 +511,12 @@ class Lexer(source: Source) {
     }
     // exclude //
     val comment = slice(start + 2, current)
-    TokenKind.Comment(comment)
+
+    if comment.startsWith("/") then
+      val doc_comment = slice(start + 1, current)
+      TokenKind.DocComment(doc_comment)
+    else
+      TokenKind.Comment(comment)
   }
 
   @tailrec
