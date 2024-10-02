@@ -721,7 +721,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def matchClause(): MatchClause =
     nonterminal:
-      MatchClause(`case` ~> matchPattern(), manyWhile(`and` ~> matchGuard(), `and`), `=>` ~> stmts())
+      MatchClause(
+        `case` ~> matchPattern(),
+        manyWhile(`and` ~> matchGuard(), `and`),
+        // allow a statement enclosed in braces or without braces
+        // both is allowed since match clauses are already delimited by `case`
+        `=>` ~> (if (peek(`{`)) { stmt() } else { stmts() })
+      )
 
   def matchGuards() =
     nonterminal:
