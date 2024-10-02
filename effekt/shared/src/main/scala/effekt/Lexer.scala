@@ -441,10 +441,24 @@ class Lexer(source: Source) {
             case Some('$') => consume(); stringContent.addOne('$')
             case Some('u') => {
               consume()
-              val escapeStart = current
-              consumeWhile(c => c.isDigit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
+
+              def isHexDigit(c: Char) = c.isDigit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+
+              val hexCodePoint = peek() match {
+                case Some(c) if isHexDigit(c) =>
+                  val escapeStart = current
+                  consumeWhile(isHexDigit)
+                  slice(escapeStart, current)
+                case Some('{') =>
+                  consume()
+                  val escapeStart = current
+                  consumeWhile(c => c != '}')
+                  slice(escapeStart, current)
+                case _ => err("Invalid escape sequence.", current - 1, current)
+              }
+
               try {
-                val codePoint = Integer.parseInt(slice(escapeStart, current), 16)
+                val codePoint = Integer.parseInt(hexCodePoint, 16)
                 stringContent.append(String.valueOf(Character.toChars(codePoint)))
               } catch {
                 case e: NumberFormatException => err(e.toString)
