@@ -158,6 +158,14 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseExpr(
+          """x match {
+            |  case 0 => { 42 }
+            |  case 1 => { 1; 2 }
+            |  case _ => 42
+            |}
+            |""".stripMargin)
+
+    parseExpr(
       """x match {
         |  case Some(b) => acc = Cons(b, acc)
         |}
