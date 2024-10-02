@@ -301,7 +301,7 @@ enum Stmt extends Tree {
   // creates a fresh state handler to model local (backtrackable) state.
   // [[capture]] is a binding occurence.
   // e.g. state(init) { [x]{x: Ref} => ... }
-  case Var(id: Id, init: Expr, capture: Id, body: Stmt)
+  case Var(id: Id, init: Pure, capture: Id, body: Stmt)
   case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
   case Put(id: Id, annotatedCapt: Captures, value: Pure)
 

@@ -16,6 +16,7 @@ object TransformerCps extends Transformer {
   val RESET = Variable(JSName("RESET"))
   val SHIFT = Variable(JSName("SHIFT"))
   val THUNK = Variable(JSName("THUNK"))
+  val DEALLOC = Variable(JSName("DEALLOC"))
 
 
   def thunked(stmt: js.Stmt): js.Stmt = js.Return(js.Lambda(Nil, stmt))
@@ -238,6 +239,27 @@ object TransformerCps extends Transformer {
       Binding { k =>
         js.Const(nameDef(id), toJS(binding)) :: toJSExpr(body).run(k)
       }
+
+    // const x = ks.arena.fresh(1);
+    case cps.Stmt.Var(id, init, ks, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
+          toJSExpr(body).run(k)
+      }
+    // DEALLOC(ref); body
+    case cps.Stmt.Dealloc(ref, body) =>
+      Binding { k =>
+        js.ExprStmt(js.Call(DEALLOC, nameRef(ref))) :: toJSExpr(body).run(k)
+      }
+    // const id = ref.value; body
+    case cps.Stmt.Get(ref, id, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.Member(nameRef(ref), JSName("value"))) :: toJSExpr(body).run(k)
+      }
+    // ref.value = _value; body
+    case cps.Stmt.Put(ref, value, body) => Binding { k =>
+      js.Assign(js.Member(nameRef(ref), JSName("value")), toJS(value)) :: toJSExpr(body).run(k)
+    }
 
     case cps.Stmt.Reset(prog, ks, k) => pure(Call(RESET, toJS(prog), toJS(ks), toJS(k)))
     case cps.Stmt.Shift(prompt, body, ks, k) => pure(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k)))

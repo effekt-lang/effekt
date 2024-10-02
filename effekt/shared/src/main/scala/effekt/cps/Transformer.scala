@@ -133,9 +133,21 @@ object Transformer {
     // later...
     case core.Stmt.Region(body) => TODO
     case core.Stmt.Alloc(id, init, region, body) => TODO
-    case core.Stmt.Var(id, init, capture, body) => TODO
-    case core.Stmt.Get(id, annotatedCapt, annotatedTpe) => TODO
-    case core.Stmt.Put(id, annotatedCapt, value) => TODO
+
+    case core.Stmt.Var(id, init, capture, body) =>
+      // Var(id: Id, init: Pure, ks: MetaCont, body: Stmt)
+      cps.Var(id, transform(init), MetaCont(ks),
+        transform(body, ks,
+          Continuation.Static(Id("tmp")) { (x, ks) =>
+            Dealloc(id, k(x, ks))
+          }))
+
+    case core.Stmt.Get(ref, annotatedCapt, annotatedTpe) =>
+      val x = Id("x")
+      cps.Get(ref, x, k(ValueVar(x), ks))
+
+    case core.Stmt.Put(ref, annotatedCapt, value) =>
+      cps.Put(ref, transform(value), k(cps.Pure.Literal(()), ks))
   }
 
   def transformClause(clause: core.Block.BlockLit, ks: Id, k: Continuation)(using C: TransformationContext): Clause =

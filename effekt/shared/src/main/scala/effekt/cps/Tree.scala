@@ -106,10 +106,15 @@ enum Stmt extends Tree {
 
   // creates a fresh state handler to model local (backtrackable) state.
   // [[capture]] is a binding occurence.
-  // e.g. state(init) { [x]{x: Ref} => ... }
-  //  case Var(id: Id, init: Expr, capture: Id, body: Stmt)
-  //  case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
-  //  case Put(id: Id, annotatedCapt: Captures, value: Pure)
+  // val id = ks.fresh(init); body
+  case Var(id: Id, init: Pure, ks: MetaCont, body: Stmt)
+  // dealloc(ref); body
+  case Dealloc(ref: Id, body: Stmt)
+
+  // val id = !ref; body
+  case Get(ref: Id, id: Id, body: Stmt)
+
+  case Put(ref: Id, value: Pure, body: Stmt)
 
   // reset( { (p, ks, k) => STMT }, ks, k)
   case Reset(prog: BlockLit, ks: MetaCont, k: Cont)
@@ -187,6 +192,12 @@ object Variables {
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(clauses, free) ++ all(default, free)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
+
+    case Stmt.Var(id, init, ks, body) => free(init) ++ free(ks) ++ (free(body) -- block(id))
+    case Stmt.Dealloc(ref, body) => block(ref) ++ free(body)
+    case Stmt.Get(ref, id, body) => block(ref) ++ (free(body) -- value(id))
+    case Stmt.Put(ref, value, body) => block(ref) ++ free(value) ++ free(body)
+
     case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
     case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Hole() => empty

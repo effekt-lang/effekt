@@ -98,7 +98,10 @@ function RESET(prog, ks, k) {
 }
 
 function DEALLOC(ks) {
-  ks.arena.length = ks.arena.length - 1
+  const arena = ks.arena
+  if (!!arena) {
+    arena.length = arena.length - 1
+  }
 }
 
 function SHIFT(p, body, ks, k) {

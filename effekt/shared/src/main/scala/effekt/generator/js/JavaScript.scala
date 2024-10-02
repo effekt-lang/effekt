@@ -41,7 +41,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   // ------------------------
   // Source => Core [=> DirectStyleState] => JS
   lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend andThen DirectStyleMutableState
+    Frontend andThen Middleend
   }
 
   lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer andThen core.LambdaLifting map {
