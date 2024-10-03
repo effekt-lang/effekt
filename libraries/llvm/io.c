@@ -20,8 +20,8 @@ void c_io_println_Double(const Double x) {
 }
 
 void c_io_println_String(String text) {
-    for (uint64_t j = 0; j < c_buffer_length(text); ++j)
-        putchar(c_buffer_bytes(text)[j]);
+    for (uint64_t j = 0; j < c_bytearray_size(text); ++j)
+        putchar(c_bytearray_data(text)[j]);
     erasePositive(text);
     putchar('\n');
 }
@@ -96,10 +96,10 @@ int modeFlags(struct Pos mode) {
     }
 }
 
-void c_fs_open(struct Pos path, struct Pos mode, Stack stack) {
+void c_fs_open(String path, struct Pos mode, Stack stack) {
 
     // Convert the Effekt String to a 0-terminated string
-    char* path_str = c_buffer_as_null_terminated_string(path);
+    char* path_str = c_bytearray_into_nullterminated_string(path);
     erasePositive((struct Pos) path);
 
     // Convert the Effekt String representing the opening mode to libuv flags
@@ -123,17 +123,16 @@ void c_fs_open(struct Pos path, struct Pos mode, Stack stack) {
     return;
 }
 
-void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
+void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
-    char* bytes = (char*)c_buffer_bytes(buffer); // libuv expects signed integers
-    uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
+    uv_buf_t buf = uv_buf_init(c_bytearray_data(buffer) + offset, size);
     // erasePositive(buffer);
     // TODO we should erase the buffer but abort if this was the last reference
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    int result = uv_fs_read(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+    int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
@@ -142,17 +141,16 @@ void c_fs_read(Int fd, struct Pos buffer, Int offset, Stack stack) {
     }
 }
 
-void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
+void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
-    char* bytes = (char*)c_buffer_bytes(buffer); // libuv expects signed integers
-    uv_buf_t buf = uv_buf_init(bytes, c_buffer_length(buffer));
+    uv_buf_t buf = uv_buf_init(c_bytearray_data(buffer) + offset, size);
     // erasePositive(buffer);
     // TODO we should erase the buffer but abort if this was the last reference
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    int result = uv_fs_write(uv_default_loop(), request, fd, &buf, 1, offset, c_resume_int_fs);
+    int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
@@ -161,12 +159,12 @@ void c_fs_write(Int fd, struct Pos buffer, Int offset, Stack stack) {
     }
 }
 
-void c_fs_close(Int fd, Stack stack) {
+void c_fs_close(Int file, Stack stack) {
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    int result = uv_fs_close(uv_default_loop(), request, fd, c_resume_int_fs);
+    int result = uv_fs_close(uv_default_loop(), request, file, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
