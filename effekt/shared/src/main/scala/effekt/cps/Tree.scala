@@ -22,7 +22,7 @@ case class ModuleDecl(
 
 enum ToplevelDefinition {
   case Def(id: Id, block: Block)
-  case Val(id: Id, binding: Stmt) // this is a let-run
+  case Val(id: Id, ks: Id, k: Id, binding: Stmt) // this is a let-run
   case Let(id: Id, binding: Pure)
 }
 

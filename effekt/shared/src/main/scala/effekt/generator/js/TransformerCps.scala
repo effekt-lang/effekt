@@ -90,7 +90,8 @@ object TransformerCps extends Transformer {
 
   def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
     case cps.ToplevelDefinition.Def(id, block) => js.Const(nameDef(id), requiringThunk { toJS(block) })
-    case cps.ToplevelDefinition.Val(id, binding) => ???
+    case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
+      js.Const(nameDef(id), Call(RUN, js.Lambda(List(nameDef(ks), nameDef(k)), toJSStmt(binding))))
     case cps.ToplevelDefinition.Let(id, binding) => js.Const(nameDef(id), toJS(binding))
   }
 

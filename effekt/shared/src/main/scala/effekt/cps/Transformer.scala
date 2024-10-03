@@ -30,7 +30,10 @@ object Transformer {
 
   def transformToplevel(definition: core.Definition)(using TransformationContext): ToplevelDefinition = definition match {
     case core.Definition.Def(id, block) => ToplevelDefinition.Def(id, transform(block))
-    case core.Definition.Let(id, tpe, core.Run(stmt)) => ???
+    case core.Definition.Let(id, tpe, core.Run(stmt)) =>
+      val ks = Id("ks")
+      val k = Id("k")
+      ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
     case core.Definition.Let(id, tpe, binding: core.DirectApp) => sys error "Not supported"
     case core.Definition.Let(id, tpe, p: core.Pure) => ToplevelDefinition.Let(id, transform(p))
   }
