@@ -20,8 +20,6 @@ def binding[R](id: Id, block: Block)(body: TransformationContext ?=> R)(using C:
 
 object Transformer {
 
-  def TODO = Stmt.Hole()
-
   def transform(module: core.ModuleDecl): ModuleDecl = module match {
     case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
       given TransformationContext(Map.empty, Map.empty)
@@ -206,8 +204,6 @@ object Transformer {
 
       case _ => sys error "Should not happen"
     }
-
-  // TODO ALWAYS LOOKUP BlockVars!!!!!!
 
   def transform(pure: core.Pure)(using C: TransformationContext): Pure = pure match {
     case core.Pure.ValueVar(id, annotatedType) => C.lookupValue(id)
