@@ -130,12 +130,12 @@ function SHIFT(p, body, ks, k) {
 }
 
 function RUN(comp) {
-  let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
   try {
+    let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
     while (true) { a = a() }
   } catch (e) {
     // console.log(e)
-    if (e.computationIsDone) return e
+    if (e.computationIsDone) return e.result
     else throw e
   }
 }

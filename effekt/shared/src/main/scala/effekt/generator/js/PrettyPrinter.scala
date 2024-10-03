@@ -28,6 +28,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case RawLiteral(content)          => string(content)
     case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els)
+    case Lambda(params, Return(obj: js.Object)) => parens(params map toDoc) <+> "=>" <> nested(parens(toDoc(expr)))
     case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
     case Lambda(params, Block(stmts)) => parens(params map toDoc) <+> "=>" <+> jsBlock(stmts.map(toDoc))
     case Lambda(params, body)         => parens(params map toDoc) <+> "=>" <+> jsBlock(toDoc(body))
@@ -40,6 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDocParens(e: Expr): Doc = e match {
     case e: IfExpr => parens(toDoc(e))
     case e: Lambda => parens(toDoc(e))
+    case o: js.Object => parens(toDoc(e))
     case e => toDoc(e)
   }
 

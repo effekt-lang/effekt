@@ -194,7 +194,12 @@ object TransformerCps extends Transformer {
         clauses.map { case (tag, clause) => toJS(scrutinee, tag, clause) },
         default.map { s => toJSStmt(s).stmts }))
 
-    case other => toJSExpr(other).map { expr => js.Return(expr) }
+    // TODO check whether expr is a forced thunk and
+    //   it would be better not to generate them in the first place...
+    case other => toJSExpr(other).map {
+      case js.Call(js.Lambda(Nil, stmt), Nil) => stmt
+      case expr => js.Return(expr)
+    }
   }
 
   def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, List[js.Stmt]) =

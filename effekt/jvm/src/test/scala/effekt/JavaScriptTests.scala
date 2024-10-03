@@ -34,10 +34,13 @@ class JavaScriptTests extends EffektTests {
     // bidirectional
     examplesDir / "pos" / "object" / "higher_order_compose_op.effekt",
     examplesDir / "pos" / "bidirectional",
+    examplesDir / "pos" / "type_omission_op.effekt",
 
     // toplevel val / run
     examplesDir / "pos" / "toplevelval.effekt",
-    examplesDir / "pos" / "raytracer.effekt"
+    examplesDir / "pos" / "raytracer.effekt",
+    examplesDir / "casestudies" / "naturalisticdsls.effekt.md",
+    examplesDir / "casestudies" / "anf.effekt.md"
   )
 }
 
