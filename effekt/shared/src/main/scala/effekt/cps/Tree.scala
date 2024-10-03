@@ -31,7 +31,7 @@ enum ToplevelDefinition {
  */
 enum Extern extends Tree {
   // TODO async defs!
-  case Def(id: Id, vparams: List[Id], bparams: List[Id], annotatedCapture: Captures, body: ExternBody)
+  case Def(id: Id, vparams: List[Id], bparams: List[Id], async: Boolean, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 sealed trait ExternBody extends Tree

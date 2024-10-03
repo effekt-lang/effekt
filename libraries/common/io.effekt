@@ -13,7 +13,10 @@ extern llvm """
 """
 
 extern async def spawn(task: Task[Unit]): Unit =
-  js "$effekt.callcc(callback => { setTimeout(() => callback($effekt.unit), 0); ${task}().run()})"
+  js """
+    setTimeout(() => RESUME($effekt.unit), 0);
+    return RUN(${task});
+  """
   llvm """
     call void @c_yield(%Stack %stack)
     call void @run(%Neg ${task})
@@ -21,14 +24,19 @@ extern async def spawn(task: Task[Unit]): Unit =
   """
 
 extern async def yield(): Unit =
-  js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), 0))"
+  js """
+    setTimeout(() => RESUME($effekt.unit), 0);
+    return ABORT($effekt.unit);
+  """
   llvm """
     call void @c_yield(%Stack %stack)
     ret void
   """
 
 extern async def abort(): Nothing =
-  js "$effekt.callcc(callback => { return })"
+  js """
+    return ABORT(undefined);
+  """
   llvm """
     call void @eraseStack(%Stack %stack)
     ret void
@@ -55,14 +63,22 @@ extern llvm """
 """
 
 extern async def await[T](promise: Promise[T]): T =
-  js "$effekt.callcc(callback => ${promise}.promise.then(res => callback(res)))"
+  js """
+    ${promise}.promise.then(RESUME);
+    return ABORT(undefined);
+  """
   llvm """
     call void @c_promise_await(%Pos ${promise}, %Stack %stack)
     ret void
   """
 
 extern async def resolve[T](promise: Promise[T], value: T): Unit =
-  js "$effekt.callcc(callback => { ${promise}.resolve(${value}); callback($effekt.unit)})"
+  js """
+    ${promise}.resolve(${value});
+    // Here we resume manually and not using RESUME since we do not want to
+    // install a trampoline, but return to the outer one.
+    return () => k($effekt.unit, ks);
+  """
   llvm """
     call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
     ret void

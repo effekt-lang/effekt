@@ -55,7 +55,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(stmt: Stmt): Doc = stmt match {
-    case RawStmt(raw)                  => string(raw) //  vsep(raw.split('\n').toList.map(c => text(c)))
+    case RawStmt(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDocAsAtom)))
     case Block(stmts)                  => jsBlock(stmts map toDoc)
     case Return(expr)                  => "return" <+> toDoc(expr) <> ";"
     case ExprStmt(expr)                => toDoc(expr) <> ";"

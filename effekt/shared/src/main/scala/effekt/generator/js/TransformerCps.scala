@@ -12,7 +12,7 @@ import effekt.core.{ DeclarationContext, Id }
 // 2. get rid of separate compilation for JS
 object TransformerCps extends Transformer {
 
-  val RUN   = Variable(JSName("RUN"))
+  val RUN_TOPLEVEL = Variable(JSName("RUN_TOPLEVEL"))
   val RESET = Variable(JSName("RESET"))
   val SHIFT = Variable(JSName("SHIFT"))
   val THUNK = Variable(JSName("THUNK"))
@@ -44,7 +44,7 @@ object TransformerCps extends Transformer {
     if T.requiresThunk then thunked(expr) else expr
 
   def run(body: js.Expr): js.Stmt =
-    js.Return(Call(RUN, body))
+    js.Return(Call(RUN_TOPLEVEL, body))
 
   def lookup(id: Id)(using C: TransformerContext): js.Expr = C.bindings.getOrElse(id, nameRef(id))
 
@@ -91,14 +91,37 @@ object TransformerCps extends Transformer {
   def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
     case cps.ToplevelDefinition.Def(id, block) => js.Const(nameDef(id), requiringThunk { toJS(block) })
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
-      js.Const(nameDef(id), Call(RUN, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding))))
+      js.Const(nameDef(id), Call(RUN_TOPLEVEL, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding))))
     case cps.ToplevelDefinition.Let(id, binding) => js.Const(nameDef(id), toJS(binding))
   }
 
   def toJSParam(id: Id): JSName = nameDef(id)
 
   def toJS(e: cps.Extern)(using C: TransformerContext): js.Stmt = e match {
-    case cps.Extern.Def(id, vps, bps, capt, body) =>
+    case cps.Extern.Def(id, vps, bps, true, body) =>
+      body match {
+        case ExternBody.StringExternBody(_, template) =>
+          val ks = JSName("ks")
+          val k = JSName("k")
+
+          // function foo_0(ARGS, ks_0, k_0) {
+          //   function RESUME(a) {
+          //     return trampoline(() => k_0(a, ks_0));
+          //   }
+          //   return BODY
+          // }
+          js.Function(nameDef(id), (vps ++ bps).map(toJSParam) ++ List(ks, k), List(
+            js.Function(JSName("RESUME"), List(JSName("a")), List(
+              js.Return(js.Call(js.Variable(JSName("TRAMPOLINE")), js.Lambda(Nil,
+                js.Call(js.Variable(k), js.Variable(JSName("a")), js.Variable(ks))))))),
+            js.RawStmt(template.strings, template.args.map(toJS))))
+
+        case ExternBody.Unsupported(err) =>
+          C.errors.report(err)
+          js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return(monadic.Run(monadic.Builtin("hole")))))
+      }
+
+    case cps.Extern.Def(id, vps, bps, false, body) =>
       body match {
         case ExternBody.StringExternBody(_, contents) =>
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return(toJS(contents))))
@@ -278,8 +301,8 @@ object TransformerCps extends Transformer {
 
   def inlineExtern(id: Id, args: List[cps.Pure])(using T: TransformerContext): js.Expr =
     T.externs.get(id) match {
-      case Some(cps.Extern.Def(id, params, Nil, annotatedCapture,
-        ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !annotatedCapture.contains(symbols.builtins.AsyncCapability.capture) =>
+      case Some(cps.Extern.Def(id, params, Nil, async,
+        ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !async =>
           bindingAll(params.zip(args.map(toJS))) {
             js.RawExpr(strings, templateArgs.map(toJS))
           }
@@ -287,8 +310,7 @@ object TransformerCps extends Transformer {
     }
 
   def canInline(extern: cps.Extern): Boolean = extern match {
-    case cps.Extern.Def(id, vparams, Nil, annotatedCapture, ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs))) =>
-      !annotatedCapture.contains(symbols.builtins.AsyncCapability.capture)
+    case cps.Extern.Def(_, _, Nil, async, ExternBody.StringExternBody(_, Template(_, _))) => !async
     case _ => false
   }
 }

@@ -129,13 +129,35 @@ function SHIFT(p, body, ks, k) {
   return body(resumption, meta, k1)
 }
 
-function RUN(comp) {
+function RUN_TOPLEVEL(comp) {
   try {
     let a = comp(TOPLEVEL_KS, TOPLEVEL_K)
     while (true) { a = a() }
   } catch (e) {
-    // console.log(e)
     if (e.computationIsDone) return e.result
     else throw e
   }
+}
+
+// trampolines the given computation (like RUN_TOPLEVEL, but doesn't provide continuations)
+function TRAMPOLINE(comp) {
+  let a = comp;
+  try {
+    while (true) {
+      a = a()
+    }
+  } catch (e) {
+    if (e.computationIsDone) return e.result
+    else throw e
+  }
+}
+
+// keeps the current trampoline going and dispatches the given task
+function RUN(task) {
+  return () => task(TOPLEVEL_KS, TOPLEVEL_K)
+}
+
+// aborts the current continuation
+function ABORT(value) {
+  throw { computationIsDone: true, result: value }
 }

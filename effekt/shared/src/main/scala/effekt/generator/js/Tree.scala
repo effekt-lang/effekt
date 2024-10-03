@@ -125,6 +125,7 @@ enum Expr {
 export Expr.*
 
 def RawExpr(str: String): js.Expr = Expr.RawExpr(List(str), Nil)
+def RawStmt(str: String): js.Stmt = Stmt.RawStmt(List(str), Nil)
 
 implicit class JavaScriptInterpolator(private val sc: StringContext) extends AnyVal {
   def js(args: Expr*): Expr = RawExpr(sc.parts.toList, args.toList)
@@ -144,7 +145,7 @@ enum Stmt {
   case Return(expr: Expr)
 
   // A raw JS String
-  case RawStmt(raw: String)
+  case RawStmt(raw: List[String], args: List[Expr])
 
   // e.g. const x = <EXPR>
   case Const(pattern: Pattern, binding: Expr)
