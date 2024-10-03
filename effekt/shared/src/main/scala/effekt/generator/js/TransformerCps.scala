@@ -91,7 +91,7 @@ object TransformerCps extends Transformer {
   def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
     case cps.ToplevelDefinition.Def(id, block) => js.Const(nameDef(id), requiringThunk { toJS(block) })
     case cps.ToplevelDefinition.Val(id, ks, k, binding) =>
-      js.Const(nameDef(id), Call(RUN, js.Lambda(List(nameDef(ks), nameDef(k)), toJSStmt(binding))))
+      js.Const(nameDef(id), Call(RUN, js.Lambda(List(nameDef(ks), nameDef(k)), toJS(binding))))
     case cps.ToplevelDefinition.Let(id, binding) => js.Const(nameDef(id), toJS(binding))
   }
 
@@ -126,7 +126,7 @@ object TransformerCps extends Transformer {
   def toJS(b: cps.Block)(using TransformerContext): js.Expr = b match {
     case cps.BlockVar(v) => nameRef(v)
     case cps.BlockLit(vps, bps, ks, k, body) =>
-      js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJSStmt(body))
+      js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJS(body))
     case cps.Unbox(e)     => toJS(e)
     case cps.New(handler) => toJS(handler)
   }
@@ -135,15 +135,17 @@ object TransformerCps extends Transformer {
     case cps.Implementation(interface, operations) =>
       js.Object(operations.map {
         case cps.Operation(id, vps, bps, ks, k, body) =>
-          nameDef(id) -> js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJSStmt(body))
+          nameDef(id) -> js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJS(body))
       })
   }
 
   def toJS(ks: cps.MetaCont): js.Expr = nameRef(ks.id)
 
-  def toJS(k: cps.Cont)(using TransformerContext): js.Expr = k match {
-    case Cont.ContVar(id) => nameRef(id)
-    case Cont.ContLam(result, ks, body) => js.Lambda(List(nameDef(result), nameDef(ks)), toJSStmt(body))
+  def toJS(k: cps.Cont)(using T: TransformerContext): js.Expr = k match {
+    case Cont.ContVar(id) =>
+      nameRef(id)
+    case Cont.ContLam(result, ks, body) =>
+      js.Lambda(List(nameDef(result), nameDef(ks)), toJS(body))
   }
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
@@ -160,23 +162,23 @@ object TransformerCps extends Transformer {
   }
 
   // in JS statement position (e.g. function body)
-  def toJSStmt(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {
+  def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {
     case cps.Stmt.Scope(defs, body) =>
       Binding { k =>
-        defs.map(toJS) ++ toJSStmt(body).run(k)
+        defs.map(toJS) ++ toJS(body).run(k)
       }
 
     case cps.Stmt.If(cond, thn, els) =>
-      pure(js.If(toJS(cond), toJSStmt(thn).block, toJSStmt(els).block))
+      pure(js.If(toJS(cond), toJS(thn).block, toJS(els).block))
 
     case cps.Stmt.LetExpr(id, binding, body) =>
       Binding { k =>
-        js.Const(nameDef(id), toJS(binding)) :: toJSStmt(body).run(k)
+        js.Const(nameDef(id), toJS(binding)) :: toJS(body).run(k)
       }
 
     case cps.Stmt.LetCont(id, binding, body) =>
       Binding { k =>
-        js.Const(nameDef(id), toJS(binding)) :: requiringThunk { toJSStmt(body) }.run(k)
+        js.Const(nameDef(id), toJS(binding)) :: requiringThunk { toJS(body) }.run(k)
       }
 
     case cps.Stmt.Match(sc, Nil, None) =>
@@ -193,14 +195,65 @@ object TransformerCps extends Transformer {
 
       pure(js.Switch(js.Member(scrutinee, `tag`),
         clauses.map { case (tag, clause) => toJS(scrutinee, tag, clause) },
-        default.map { s => toJSStmt(s).stmts }))
+        default.map { s => toJS(s).stmts }))
 
-    // TODO check whether expr is a forced thunk and
-    //   it would be better not to generate them in the first place...
-    case other => toJSExpr(other).map {
-      case js.Call(js.Lambda(Nil, stmt), Nil) => stmt
-      case expr => js.Return(expr)
+    case cps.Stmt.Jump(k, arg, ks) =>
+      pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
+
+    case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
+      pure(js.Return(maybeThunking(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
+        requiringThunk { toJS(k) })))))
+
+    case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
+      val args = vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks), toJS(k))
+      pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)))
+
+    // const r = ks.arena.newRegion(); body
+    case cps.Stmt.Region(id, ks, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
+          toJS(body).run(k)
+      }
+
+    // const x = r.alloc(init); body
+    case cps.Stmt.Alloc(id, init, region, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.MethodCall(nameRef(region), JSName("fresh"), toJS(init))) ::
+          toJS(body).run(k)
+      }
+
+    // const x = ks.arena.fresh(1); body
+    case cps.Stmt.Var(id, init, ks, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
+          toJS(body).run(k)
+      }
+    // DEALLOC(ref); body
+    case cps.Stmt.Dealloc(ref, body) =>
+      Binding { k =>
+        js.ExprStmt(js.Call(DEALLOC, nameRef(ref))) ::
+          toJS(body).run(k)
+      }
+    // const id = ref.value; body
+    case cps.Stmt.Get(ref, id, body) =>
+      Binding { k =>
+        js.Const(nameDef(id), js.Member(nameRef(ref), JSName("value"))) ::
+          toJS(body).run(k)
+      }
+    // ref.value = _value; body
+    case cps.Stmt.Put(ref, value, body) => Binding { k =>
+      js.Assign(js.Member(nameRef(ref), JSName("value")), toJS(value)) ::
+        toJS(body).run(k)
     }
+
+    case cps.Stmt.Reset(prog, ks, k) =>
+      pure(js.Return(Call(RESET, toJS(prog), toJS(ks), toJS(k))))
+
+    case cps.Stmt.Shift(prompt, body, ks, k) =>
+      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k))))
+
+    case cps.Stmt.Hole() =>
+      pure(js.Return($effekt.call("hole")))
   }
 
   def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, List[js.Stmt]) =
@@ -216,83 +269,11 @@ object TransformerCps extends Transformer {
           js.Const(nameDef(p), js.Member(scrutinee, memberNameRef(f)))
         }
 
-        (tag, extractedFields ++ toJSStmt(body).stmts)
+        (tag, extractedFields ++ toJS(body).stmts)
     }
 
   def toJS(d: cps.Def)(using T: TransformerContext): js.Stmt = d match {
     case cps.Def(id, block) => js.Const(nameDef(id), requiringThunk { toJS(block) })
-  }
-
-  def toJSExpr(s: cps.Stmt)(using T: TransformerContext): Binding[js.Expr] = s match {
-    case cps.Stmt.Jump(k, arg, ks) =>
-      pure(maybeThunking { js.Call(nameRef(k), toJS(arg), toJS(ks)) })
-
-    case cps.Stmt.Scope(defs, body) =>
-      Binding { k =>
-        defs.map(toJS) ++ toJSExpr(body).run(k)
-      }
-    case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
-      pure(maybeThunking(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
-        requiringThunk { toJS(k) }))))
-
-    case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
-      val args = vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks), toJS(k))
-      pure(MethodCall(toJS(callee), memberNameRef(method), args:_*))
-
-    case cps.Stmt.If(cond, thn, els) => pure(js.IfExpr(toJS(cond), toJSStmt(thn).toExpr, toJSStmt(els).toExpr))
-
-    case cps.Stmt.LetExpr(id, binding, body) =>
-      Binding { k =>
-        js.Const(nameDef(id), toJS(binding)) :: toJSExpr(body).run(k)
-      }
-
-    case cps.Stmt.LetCont(id, binding, body) =>
-      Binding { k =>
-        js.Const(nameDef(id), toJS(binding)) :: toJSExpr(body).run(k)
-      }
-
-    // const r = ks.arena.newRegion(); body
-    case cps.Stmt.Region(id, ks, body) =>
-      Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("newRegion"))) ::
-          toJSExpr(body).run(k)
-      }
-
-    // const x = r.alloc(init); body
-    case cps.Stmt.Alloc(id, init, region, body) =>
-      Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(nameRef(region), JSName("fresh"), toJS(init))) ::
-          toJSExpr(body).run(k)
-      }
-
-    // const x = ks.arena.fresh(1); body
-    case cps.Stmt.Var(id, init, ks, body) =>
-      Binding { k =>
-        js.Const(nameDef(id), js.MethodCall(js.Member(toJS(ks), JSName("arena")), JSName("fresh"), toJS(init))) ::
-          toJSExpr(body).run(k)
-      }
-    // DEALLOC(ref); body
-    case cps.Stmt.Dealloc(ref, body) =>
-      Binding { k =>
-        js.ExprStmt(js.Call(DEALLOC, nameRef(ref))) :: toJSExpr(body).run(k)
-      }
-    // const id = ref.value; body
-    case cps.Stmt.Get(ref, id, body) =>
-      Binding { k =>
-        js.Const(nameDef(id), js.Member(nameRef(ref), JSName("value"))) :: toJSExpr(body).run(k)
-      }
-    // ref.value = _value; body
-    case cps.Stmt.Put(ref, value, body) => Binding { k =>
-      js.Assign(js.Member(nameRef(ref), JSName("value")), toJS(value)) :: toJSExpr(body).run(k)
-    }
-
-    case cps.Stmt.Reset(prog, ks, k) => pure(Call(RESET, toJS(prog), toJS(ks), toJS(k)))
-    case cps.Stmt.Shift(prompt, body, ks, k) => pure(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k)))
-    case cps.Stmt.Hole() => pure($effekt.call("hole"))
-    case cps.Stmt.Match(sc, Nil, None) => pure($effekt.call("emptyMatch"))
-
-    // TODO this might be horrible since we create a thunk
-    case cps.Stmt.Match(sc, clauses, default) => pure(js.Call(js.Lambda(Nil, toJSStmt(s))))
   }
 
   def inlineExtern(id: Id, args: List[cps.Pure])(using T: TransformerContext): js.Expr =
