@@ -1,0 +1,18 @@
+ask: true
+can: true
+you: true
+see: false
+do: true
+Effekt: true
+Cons(Effekt, Cons(and, Cons(ask, Cons(but, Cons(can, Cons(do, Cons(fellow, Cons(for, Cons(language, Cons(man, Cons(my, Cons(not, Cons(of, Cons(programmers, Cons(programs, Cons(so, Cons(the, Cons(together, Cons(we, Cons(what, Cons(will, Cons(world, Cons(you, Cons(your, Nil()))))))))))))))))))))))))
+true
+Cons(Effekt, Cons(and, Cons(ask, Cons(but, Cons(can, Cons(do, Cons(fellow, Cons(for, Cons(language, Cons(man, Cons(my, Cons(not, Cons(of, Cons(programmers, Cons(programs, Cons(so, Cons(the, Cons(together, Cons(we, Cons(what, Cons(will, Cons(world, Cons(you, Cons(your, Nil()))))))))))))))))))))))))
+true
+Cons(after, Cons(around, Cons(better, Cons(do, Cons(ever, Cons(faster, Cons(harder, Cons(hour, Cons(is, Cons(it, Cons(make, Cons(makes, Cons(more, Cons(never, Cons(over, Cons(stronger, Cons(than, Cons(the, Cons(us, Cons(work, Cons(world, Nil())))))))))))))))))))))
+true
+lyrics / speech:
+Cons(after, Cons(around, Cons(better, Cons(ever, Cons(faster, Cons(harder, Cons(hour, Cons(is, Cons(it, Cons(make, Cons(makes, Cons(more, Cons(never, Cons(over, Cons(stronger, Cons(than, Cons(us, Cons(work, Nil()))))))))))))))))))
+speech / lyrics:
+Cons(after, Cons(around, Cons(better, Cons(ever, Cons(faster, Cons(harder, Cons(hour, Cons(is, Cons(it, Cons(make, Cons(makes, Cons(more, Cons(never, Cons(over, Cons(stronger, Cons(than, Cons(us, Cons(work, Nil()))))))))))))))))))
+speech u lyrics:
+Cons(Effekt, Cons(after, Cons(and, Cons(around, Cons(ask, Cons(better, Cons(but, Cons(can, Cons(do, Cons(ever, Cons(faster, Cons(fellow, Cons(for, Cons(harder, Cons(hour, Cons(is, Cons(it, Cons(language, Cons(make, Cons(makes, Cons(man, Cons(more, Cons(my, Cons(never, Cons(not, Cons(of, Cons(over, Cons(programmers, Cons(programs, Cons(so, Cons(stronger, Cons(than, Cons(the, Cons(together, Cons(us, Cons(we, Cons(what, Cons(will, Cons(work, Cons(world, Cons(you, Cons(your, Nil()))))))))))))))))))))))))))))))))))))))))))
