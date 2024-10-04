@@ -1,0 +1,85 @@
+import set
+
+def unique(words: List[String]): Set[String] = {
+  var s: Set[String] = set::empty();
+
+  list::foreach(words) { word =>
+    s = s.insert(word)
+  }
+
+  s
+}
+
+def main() = {
+  // John F. Kennedy's Inaugural Address Jan 20 1961; modified for Effekt
+  val words: List[String] = [
+    "and", "so", "my", "fellow", "Effekt", "programmers",
+    "ask", "not", "what", "your", "language", "can", "do", "for", "you",
+    "ask", "what", "you", "can", "do", "for", "your", "language",
+    "my", "fellow", "programmers", "of", "the", "world",
+    "ask", "not", "what", "Effekt", "will", "do", "for", "you",
+    "but", "what", "together", "we", "can", "do", "for", "the", "programs", "of", "man"
+  ]
+
+  val uniqueWords: Set[String] = unique(words)
+
+  def test(word: String) = {
+    val present = uniqueWords.contains(word)
+    println(word ++ ": " ++ present.show)
+  }
+
+  test("ask")
+  test("can")
+  test("you")
+  test("see")
+  test("do")
+  test("Effekt")
+
+  // ---
+
+  println(uniqueWords.toList)
+  println(uniqueWords.toList.isSortedBy { (x, y) => x <= y })
+
+  println(set::fromList(words).toList)
+  println(set::fromList(words).toList.isSortedBy { (x, y) => x <= y })
+
+  // ---
+
+  // around the World / Harder, Better, Faster, Stronger by Daft Punk from Alive 2007
+  val alive2007: List[String] = [
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+
+    "work", "it", "make", "it", "do", "it", "makes", "us",
+    "harder", "better", "faster", "stronger",
+    "more", "than", "hour", "hour", "never",
+    "ever", "after", "work", "is", "over",
+
+    "work", "it", "make", "it", "do", "it", "makes", "us",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world",
+
+    "harder", "better", "faster", "stronger",
+    "around", "the", "world", "around", "the", "world",
+    "around", "the", "world", "around", "the", "world"
+  ]
+
+  val uniqueLyrics = unique(alive2007)
+  println(uniqueLyrics.toList)
+  println(uniqueLyrics.toList.isSortedBy { (a, b) => a <= b })
+
+  println("lyrics / speech:")
+  println(uniqueLyrics.difference(uniqueWords).toList)
+
+  println("speech / lyrics:")
+  println(uniqueLyrics.difference(uniqueWords).toList)
+
+  println("speech u lyrics:")
+  println(uniqueLyrics.union(uniqueWords).toList)
+}
