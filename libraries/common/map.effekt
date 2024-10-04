@@ -420,8 +420,7 @@ def difference[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
 ///
 /// O(???)
 def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (K, V, V) => V }: Map[K, V] = {
-  // Internal function similar to `putWithKey`, but right-biased.
-  // Only used here, recursively.
+  /// Internal function similar to `putWithKey`, but right-biased. Only used here, recursively.
   def putWithKeyR(m: Map[K, V], k: K, v: V): Map[K, V] = {
     m match {
       case Tip() => singleton(k, v)
@@ -454,9 +453,8 @@ def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (K, V, V) => V }: Map[
 /// When a key is associated with a value in both `m1` and `m2`, the new value is determined using the `combine` function.
 ///
 /// O(???)
-def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (V, V) => V }: Map[K, V] = {
+def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (V, V) => V }: Map[K, V] =
   union(m1, m2) { (k, v1, v2) => combine(v1, v2) }
-}
 
 /// Construct a new map which contains the elements of both `m1` and `m2`.
 /// Left-biased: Uses values from `m1` if there are duplicate keys.
@@ -608,7 +606,7 @@ def glue[K, V](l: Map[K, V], r: Map[K, V]): Map[K, V] = {
   }
 }
 
-def splitLookup[K, V](m: Map[K, V], k: K): Tuple3[Map[K, V], Option[V], Map[K, V]] = {
+def splitLookup[K, V](m: Map[K, V], k: K): (Map[K, V], Option[V], Map[K, V]) = {
   m match {
     case Tip() => (Tip(), None(), Tip())
     case Bin(_, k2, v2, l, r) =>
