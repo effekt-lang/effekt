@@ -33,6 +33,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   override def compile(source: Source)(using C: Context) = Compile(source)
 
+  def compileWeb(source: Source)(using C: Context) = CompileWeb(source)
+
 
   // The Compilation Pipeline
   // ------------------------
@@ -46,6 +48,17 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
       val doc = pretty(TransformerCps.compile(input, mainSymbol).commonjs)
+      (Map(mainFile -> doc.layout), mainFile)
+  }
+
+  /**
+   * Like [[Compile]], but uses module layout [[js.Module.virtual]]
+   */
+  lazy val CompileWeb = allToCore(Core) andThen Aggregate andThen core.Optimizer map {
+    case input @ CoreTransformed(source, tree, mod, core) =>
+      val mainSymbol = Context.checkMain(mod)
+      val mainFile = path(mod)
+      val doc = pretty(TransformerCps.compile(input, mainSymbol).virtual)
       (Map(mainFile -> doc.layout), mainFile)
   }
 

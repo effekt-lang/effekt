@@ -54,14 +54,16 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
    * Generates the Javascript module skeleton for virtual modules that are compiled separately
    *
    * {{{
-   *   const MYMODULE = {}
+   *   const $effekt = {}
    *   // ... contents of the module
-   *   module.exports = Object.assign(MYMODULE, {
+   *   module.exports = {
    *     // EXPORTS...
-   *   })
+   *   }
    * }}}
    */
   def virtual : List[Stmt] = {
+    val effekt = js.Const(JSName("$effekt"), js.Object())
+
     val importStmts = imports.map {
       // const MOD = load(PATH)
       case Import.All(name, file) =>
@@ -74,13 +76,9 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
 
     val declaration = js.Const(name, js.Object())
 
-    // module.exports = Object.assign(MODULE, { EXPORTS })
-    val exportStatement = js.ExprStmt(js.Call(RawExpr("module.exports = Object.assign"), List(
-      js.Variable(name),
-      js.Object(exports.map { e => e.name -> e.expr })
-    )))
-
-    importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
+    // module.exports = { EXPORTS }
+    val exportStatement = js.Assign(RawExpr("module.exports"), js.Object(exports.map { e => e.name -> e.expr }))
+    List(effekt) ++ importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
   }
 }
 

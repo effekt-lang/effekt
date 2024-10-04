@@ -1,12 +1,11 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.generator.js.TransformerMonadicSeparate
 import effekt.lifted.LiftInference
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
-
+import effekt.generator.js.JavaScriptWeb
 import kiama.util.{ Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
@@ -134,7 +133,7 @@ class LanguageServer extends Intelligence {
    object compileWhole extends Phase[Source, String] {
      val phaseName = "compile"
      def run(src: Source)(using Context) =
-      context.compiler.compile(src).map {
+      context.compiler.compileWeb(src).map {
         case (files, mainPath) =>
           files.foreach { case (path, content) => writeFile(path, content) }
           mainPath
