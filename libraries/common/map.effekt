@@ -460,9 +460,38 @@ def union[K, V](m1: Map[K, V], m2: Map[K, V]) { combine : (V, V) => V }: Map[K, 
 /// Left-biased: Uses values from `m1` if there are duplicate keys.
 ///
 /// O(???)
-def union[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] = {
-  union(m1, m2) { (k, v1, v2) => v1 }
-}
+def union[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] =
+  union[K, V](m1, m2) { (k, v1, v2) => v1 }
+
+/// Construct a new map which combines all elements that are in both `m1` and `m2` using the `combine` function.
+///
+/// O(???)
+def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B]) { combine: (K, A, B) => C }: Map[K, C] =
+  (m1, m2) match {
+    case (Tip(), _) => Tip()
+    case (_, Tip()) => Tip()
+    case (Bin(_, k, v1, l1, r1), _) =>
+      val (l2, mid, r2) = m2.splitLookup(k)
+      val left = l1.intersection(l2) { combine }
+      val right = r1.intersection(r2) { combine }
+      mid match {
+        case Some(v2) => link(k, combine(k, v1, v2), left, right)
+        case None() => link2(left, right)
+      }
+  }
+
+/// Construct a new map which combines all elements that are in both `m1` and `m2` using the `combine` function.
+///
+/// O(???)
+def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B]) { combine: (A, B) => C }: Map[K, C] =
+  m1.intersection[K, A, B, C](m2) { (k, v1, v2) => combine(v1, v2) }
+
+/// Construct a new map which combines all elements that are in both `m1` and `m2`.
+/// Left-biased: Always uses values from `m1`.
+///
+/// O(???)
+def intersection[K, A, B](m1: Map[K, A], m2: Map[K, B]): Map[K, A] =
+  m1.intersection[K, A, B, A](m2) { (k, v1, v2) => v1 }
 
 // -------------
 // Internal

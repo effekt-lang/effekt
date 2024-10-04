@@ -190,6 +190,17 @@ def union[A](s1: Set[A], s2: Set[A]): Set[A] = {
   }
 }
 
+/// Construct a new set which contains only elements which are in both of `s1` and `s2`.
+///
+/// O(???)
+def intersection[A](s1: Set[A], s2: Set[A]): Set[A] = {
+  s1.internal::viaInplace { m1 =>
+    s2.internal::via { m2 =>
+      m1.intersection(m2)
+    }
+  }
+}
+
 // -------------
 // Internal
 

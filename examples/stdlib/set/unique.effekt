@@ -36,17 +36,28 @@ def main() = {
   test("Effekt")
 
   // ---
+  println("")
 
-  println(uniqueWords.toList)
-  println(uniqueWords.toList.isSortedBy { (x, y) => x <= y })
+  def testSorted(s: Set[String]) = {
+    val sorted = s.toList.isSortedBy { (x, y) => x <= y }
+    if (sorted) {
+      println("sorted")
+    } else {
+      println("unsorted")
+    }
+  }
 
-  println(set::fromList(words).toList)
-  println(set::fromList(words).toList.isSortedBy { (x, y) => x <= y })
+  println(uniqueSpeech.toList)
+  testSorted(uniqueSpeech)
+
+  println(set::fromList(speech).toList)
+  testSorted(set::fromList(speech))
 
   // ---
+  println("")
 
-  // around the World / Harder, Better, Faster, Stronger by Daft Punk from Alive 2007
-  val alive2007: List[String] = [
+  // Around the World / Harder, Better, Faster, Stronger by Daft Punk (Alive 2007)
+  val lyrics: List[String] = [
     "around", "the", "world", "around", "the", "world",
     "around", "the", "world", "around", "the", "world",
     "around", "the", "world", "around", "the", "world",
@@ -70,16 +81,23 @@ def main() = {
     "around", "the", "world", "around", "the", "world"
   ]
 
-  val uniqueLyrics = unique(alive2007)
+  val uniqueLyrics = unique(lyrics)
+
   println(uniqueLyrics.toList)
-  println(uniqueLyrics.toList.isSortedBy { (a, b) => a <= b })
+  testSorted(uniqueLyrics)
+
+  // ---
+  println("")
 
   println("lyrics / speech:")
-  println(uniqueLyrics.difference(uniqueWords).toList)
+  println(uniqueLyrics.difference(uniqueSpeech).toList)
 
   println("speech / lyrics:")
-  println(uniqueLyrics.difference(uniqueWords).toList)
+  println(uniqueSpeech.difference(uniqueLyrics).toList)
+
+  println("speech n lyrics:")
+  println(uniqueLyrics.intersection(uniqueSpeech).toList)
 
   println("speech u lyrics:")
-  println(uniqueLyrics.union(uniqueWords).toList)
+  println(uniqueLyrics.union(uniqueSpeech).toList)
 }
