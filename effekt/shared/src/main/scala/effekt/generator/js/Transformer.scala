@@ -12,7 +12,7 @@ import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
 import scala.collection.mutable
 
 /**
- * Parent of the monadic and direct-style transformer.
+ * Parent all JS transformers.
  *
  * Shares generic JS specific definitions
  */

@@ -19,7 +19,7 @@ object WebTests extends TestSuite {
 
     def load(path: String): js.Dynamic =
       val mod = loadedModules.getOrElse(path, Loaded(null, 0))
-      val fullpath = "out/" + path
+      val fullpath = path
       val lastModified = server.lastModified(fullpath)
       if (lastModified > mod.timestamp) {
         val contents = server.readFile(fullpath)
@@ -51,8 +51,7 @@ object WebTests extends TestSuite {
     def run(includes: List[String], content: String) = {
       server.writeFile("interactive.effekt", includes.map(i => s"import $i").mkString("\n") + s"\n\n${content}")
       val mainFile = server.compileFile("interactive.effekt")
-
-      load(mainFile.replace("out/", "")).main().run()
+      load(mainFile).main()
     }
 
     test("Can read files from the stdlib") {

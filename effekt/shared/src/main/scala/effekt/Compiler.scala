@@ -178,13 +178,6 @@ trait Compiler[Executable] {
    */
   def compile(source: Source)(using Context): Option[(Map[String, String], Executable)]
 
-  /**
-   * Should compile [[source]] with this backend, the compilation result should only include
-   * the contents of this file, not its dependencies. Only used by the website and implemented
-   * by the JS backend. All other backends can return `None`.
-   */
-  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, String)] = None
-
 
   // The Compiler Compiler Phases:
   // -----------------------------

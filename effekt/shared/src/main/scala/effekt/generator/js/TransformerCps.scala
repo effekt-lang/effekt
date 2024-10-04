@@ -7,9 +7,6 @@ import effekt.context.assertions.*
 import effekt.cps.*
 import effekt.core.{ DeclarationContext, Id }
 
-
-// TODO
-// 2. get rid of separate compilation for JS
 object TransformerCps extends Transformer {
 
   val RUN_TOPLEVEL = Variable(JSName("RUN_TOPLEVEL"))
