@@ -144,13 +144,12 @@ extern io def random(): Double =
 
 // Equality
 // ========
-/**
- * Result of comparison between two objects according to some order:
- *
- * - `Less()` means that the first object is *before* the first in the order,
- * - `Equal()` means that the two objects are the same in the order,
- * - and `Greater()` means that the second object is *before* the first in the order.
- */
+
+/// Result of comparison between two objects according to some order:
+///
+/// - `Less()` means that the first object is *before* the first in the order,
+/// - `Equal()` means that the two objects are the same in the order,
+/// - and `Greater()` means that the second object is *before* the first in the order.
 type Ordering {
   Less();
   Equal();
@@ -160,7 +159,8 @@ type Ordering {
 extern pure def genericCompareImpl[R](x: R, y: R): Int =
   js "$effekt.compare(${x}, ${y})"
 
- // Compares two values of the same type, returning an `Ordering`.
+/// Compares two values of the same type, returning an `Ordering`.
+/// Only available on the JavaScript backend.
 def genericCompare[R](x: R, y: R): Ordering = {
   genericCompareImpl(x, y) match {
     case -1 => Less()
@@ -182,9 +182,7 @@ def println(o: Ordering): Unit = println(o.show)
 // Comparison ops
 // ==============
 
-/**
- * Structural equality: Not available in the LLVM backend
- */
+/// Structural equality: Not available in the LLVM backend
 extern pure def equals[R](x: R, y: R): Bool =
   js "$effekt.equals(${x}, ${y})"
   chez "(equal? ${x} ${y})"
@@ -594,16 +592,12 @@ extern pure def toInt(n: Byte): Int =
 //   chez: #f
 //   llvm: null?
 
-/**
- * The value used by the FFI to represent undefined values
- */
+/// The value used by the FFI to represent undefined values
 extern pure def undefined[A](): A =
   js "undefined"
   chez "#f"
 
-/**
- * Is an FFI value undefined?
- */
+/// Is an FFI value undefined?
 extern pure def isUndefined[A](value: A): Bool =
   js "(${value} === undefined || ${value} === null)"
   chez "(eq? ${value} #f)"
@@ -638,9 +632,7 @@ def loop { f: {Control} => Unit }: Unit = try {
   def continue() = loop { f }
 }
 
-/**
- * Calls provided action repeatedly. `start` is inclusive, `end` is not.
- */
+/// Calls provided action repeatedly. `start` is inclusive, `end` is not.
 def each(start: Int, end: Int) { action: (Int) => Unit } = {
   def loop(i: Int): Unit =
     if (i < end) { action(i); loop(i + 1) }
@@ -648,9 +640,7 @@ def each(start: Int, end: Int) { action: (Int) => Unit } = {
   loop(start)
 }
 
-/**
- * Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
- */
+/// Calls provided action repeatedly with support for breaking. `start` is inclusive, `end` is not.
 def each(start: Int, end: Int) { action: (Int) {Control} => Unit } = {
   var i = start;
   loop { {l} =>

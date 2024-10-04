@@ -7,9 +7,7 @@ interface Console {
   def writeLine(content: String): Unit
 }
 
-/**
- * Handler for the console effect, using the Console available in js
- */
+/// Handler for the console effect, using the Console available in js
 def console[R] { program: () => R / Console }: R = {
   val c = js::newConsole()
   try {

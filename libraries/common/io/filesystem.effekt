@@ -6,10 +6,8 @@ import io
 import io/error
 
 
-/**
- * Represents the file opening modes with their respective flags
- * Backends rely on the order of these
- */
+/// Represents the file opening modes with their respective flags
+/// Backends rely on the order of these
 type Mode {
   // Most common modes
   ReadOnly()            // 'r'  exception if does not exist
@@ -30,15 +28,11 @@ type Mode {
 }
 
 
-/**
- * A file descriptor. Should not be inspected.
- */
+/// A file descriptor. Should not be inspected.
 type File = Int
 
 
-/**
- * Reads a file at given path as utf8 encoded string.
- */
+/// Reads a file at given path as utf8 encoded string.
 def readFile(path: String): String / Exception[IOError] = {
   val fd = open(path, ReadOnly());
   with on[IOError].finalize { close(fd) }
@@ -71,9 +65,7 @@ def readFile(path: String): String / Exception[IOError] = {
   go()
 }
 
-/**
- * Writes the (utf8 encoded) string `contents` into the specified file.
- */
+/// Writes the (utf8 encoded) string `contents` into the specified file.
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
   val fd = open(path, WriteOnly());
   with on[IOError].finalize { close(fd) }
@@ -100,21 +92,17 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
 }
 
 
-/**
- * An abstract interface applications can program against.
- *
- * Can be interpreted with the `filesystem` handler, or virtualized etc.
- *
- * See example below.
- */
+/// An abstract interface applications can program against.
+///
+/// Can be interpreted with the `filesystem` handler, or virtualized etc.
+///
+/// See example below.
 interface Files {
   def readFile(path: String): String
   def writeFile(path: String, contents: String): Unit
 }
 
-/**
- * Using the file system via node.js
- */
+/// Using the file system via node.js
 def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO move Exception to be bidirectional
   try { program() }
   with Files {

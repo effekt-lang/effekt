@@ -9,34 +9,22 @@ import array
 
 record BufferOverflow()
 
-/**
- * Fixed-size ring buffers (queues) where one can write
- * elements to the head and read from the tail.
- */
+/// Fixed-size ring buffers (queues) where one can write
+/// elements to the head and read from the tail.
 interface Buffer[T] {
-  /**
-   * The remaining capacity
-   */
+  /// The remaining capacity
   def capacity(): Int
 
-  /**
-   * Is this buffer full?
-   */
+  /// Is this buffer full?
   def full?(): Bool
 
-  /**
-   * Is this buffer empty?
-   */
+  /// Is this buffer empty?
   def empty?(): Bool
 
-  /**
-   * Read an element from the tail of the buffer
-   */
+  /// Read an element from the tail of the buffer
   def read(): Option[T]
 
-  /**
-   * Write an element to the head of the buffer
-   */
+  /// Write an element to the head of the buffer
   def write(el: T): Unit / Exception[BufferOverflow]
 }
 
