@@ -12,7 +12,7 @@ def unique(words: List[String]): Set[String] = {
 
 def main() = {
   // John F. Kennedy's Inaugural Address Jan 20 1961; modified for Effekt
-  val words: List[String] = [
+  val speech: List[String] = [
     "and", "so", "my", "fellow", "Effekt", "programmers",
     "ask", "not", "what", "your", "language", "can", "do", "for", "you",
     "ask", "what", "you", "can", "do", "for", "your", "language",
@@ -21,10 +21,10 @@ def main() = {
     "but", "what", "together", "we", "can", "do", "for", "the", "programs", "of", "man"
   ]
 
-  val uniqueWords: Set[String] = unique(words)
+  val uniqueSpeech: Set[String] = unique(speech)
 
   def test(word: String) = {
-    val present = uniqueWords.contains(word)
+    val present = uniqueSpeech.contains(word)
     println(word ++ ": " ++ present.show)
   }
 
