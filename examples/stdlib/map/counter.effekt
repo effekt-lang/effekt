@@ -12,7 +12,7 @@ def counter(words: List[String]): Map[String, Int] = {
 
 def main() = {
   // John F. Kennedy's Inaugural Address, Jan 20, 1961; modified for Effekt
-  val words: List[String] = [
+  val speech: List[String] = [
     "and", "so", "my", "fellow", "Effekt", "programmers",
     "ask", "not", "what", "your", "language", "can", "do", "for", "you",
     "ask", "what", "you", "can", "do", "for", "your", "language",
@@ -21,7 +21,7 @@ def main() = {
     "but", "what", "together", "we", "can", "do", "for", "the", "programs", "of", "man"
   ]
 
-  val ctr: Map[String, Int] = counter(words)
+  val ctr: Map[String, Int] = counter(speech)
 
   def test(word: String) = {
     val count = ctr.getOrElse(word) { 0 }
