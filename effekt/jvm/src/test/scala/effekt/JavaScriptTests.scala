@@ -24,17 +24,9 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "neg"
   )
 
-  // global missing
-  // examples/pos/capture/selfregion.effekt
-  // examples/benchmarks/are_we_fast_yet/storage.effekt
   override def ignored: List[File] = List(
     // unsafe cont
-    examplesDir / "pos" / "propagators.effekt",
-
-    // bidirectional
-    examplesDir / "pos" / "object" / "higher_order_compose_op.effekt",
-    examplesDir / "pos" / "bidirectional",
-    examplesDir / "pos" / "type_omission_op.effekt"
+    examplesDir / "pos" / "propagators.effekt"
   )
 }
 
