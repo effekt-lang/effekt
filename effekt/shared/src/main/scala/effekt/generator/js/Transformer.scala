@@ -22,8 +22,6 @@ trait Transformer {
 
   val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
 
-  def run(body: js.Expr): js.Stmt
-
   def shouldExport(id: Id)(using D: DeclarationContext): Boolean = true
 
   // Representation of Data / Codata
@@ -66,15 +64,6 @@ trait Transformer {
     val jsEquals: js.Function = js.Function(`equals`, List(other), otherExists :: compareTags :: compareFields ::: List(succeed))
 
     js.Class(nameDef(constructor.id), List(jsConstructor, jsReflect, jsEquals))
-  }
-
-  // const $getOp = "get$1234"
-  // const $putOp = "put$7554"
-  def generateStateAccessors: List[js.Stmt] = {
-    val getter = Const(JSName("$getOp"), JsString(nameDef(symbols.builtins.TState.get).name))
-    val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
-
-    List(getter, setter)
   }
 
   // Names

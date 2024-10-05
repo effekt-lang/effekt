@@ -6,7 +6,25 @@ import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 
 
-sealed trait Tree
+sealed trait Tree extends Product {
+  /**
+   * The number of nodes of this tree (used by inlining heuristics)
+   */
+  lazy val size: Int = {
+    var nodeCount = 1
+
+    def all(t: IterableOnce[_]): Unit = t.iterator.foreach(one)
+    def one(obj: Any): Unit = obj match {
+      case t: Tree => nodeCount += t.size
+      case s: effekt.symbols.Symbol => ()
+      case p: Product => all(p.productIterator)
+      case t: Iterable[t] => all(t)
+      case leaf           => ()
+    }
+    this.productIterator.foreach(one)
+    nodeCount
+  }
+}
 
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
@@ -42,7 +60,7 @@ object ExternBody {
   }
 }
 
-case class Def(id: Id, block: Block)
+case class Def(id: Id, block: Block) extends Tree
 
 sealed trait Expr extends Tree
 
@@ -128,18 +146,18 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
-case class Clause(vparams: List[Id], body: Stmt)
+case class Clause(vparams: List[Id], body: Stmt) extends Tree
 
-enum Cont {
+enum Cont extends Tree {
   case ContVar(id: Id)
   case ContLam(result: Id, ks: Id, body: Stmt)
 }
 
-case class MetaCont(id: Id)
+case class MetaCont(id: Id) extends Tree
 
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree
 
-case class Operation(name: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt)
+case class Operation(name: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt) extends Tree
 
 
 // unless we need some more information, we keep it simple for now:

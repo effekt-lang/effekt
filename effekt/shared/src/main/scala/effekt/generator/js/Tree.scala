@@ -191,6 +191,10 @@ enum Stmt {
 }
 export Stmt.*
 
+
+// Smart constructors
+// ------------------
+
 def Const(name: JSName, binding: Expr): Stmt = binding match {
   case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts)
   case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt))
@@ -199,7 +203,6 @@ def Const(name: JSName, binding: Expr): Stmt = binding match {
 
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
-// Some smart constructors
 def Call(receiver: Expr, args: Expr*): Expr = Call(receiver, args.toList)
 
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
@@ -211,7 +214,7 @@ def JsString(scalaString: String): Expr = RawLiteral(s"\"${scalaString}\"")
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
 def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
-  case Nil => ???
+  case Nil => sys error "Block should have at least one statement as body"
   case head :: Nil => head
   case head :: next => js.Block(stmts)
 }
@@ -219,14 +222,14 @@ def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
 val Undefined = RawLiteral("undefined")
 
 def Lambda(params: List[JSName], stmts: List[Stmt]): Expr = stmts match {
-  case Nil => ???
+  case Nil => sys error "Lambda should have at least one statement as body"
   case js.Return(e) :: Nil => Lambda(params, e)
   case stmt :: Nil => Lambda(params, stmt)
   case stmts => Lambda(params, Block(stmts))
 }
 
-// TODO inline
-def Lambda(params: List[JSName], body: Binding[Stmt]): Expr = Lambda(params, body.stmts)
+// Code generation monad
+// ---------------------
 
 case class Binding[A](run: (A => List[js.Stmt]) => List[js.Stmt]) {
   def flatMap[B](rest: A => Binding[B]): Binding[B] = {
@@ -251,34 +254,3 @@ def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
   }
 
 def pure[A](a: A): Binding[A] = Binding(k => k(a))
-
-object monadic {
-
-  opaque type Control = Expr
-
-  private val `then` = JSName("then")
-  private val `run` = JSName("run")
-
-  def Pure(expr: Expr): Control = Builtin("pure", expr)
-  def Run(m: Control): Expr = MethodCall(m, `run`)
-
-  def State(id: JSName, init: Expr, stmts: List[Stmt], ret: Control): Control =
-    Builtin("state", init, Lambda(List(id), stmts, ret))
-
-  def Bind(m: Control, body: Control): Control = MethodCall(m, `then`, js.Lambda(Nil, body))
-  def Bind(m: Control, param: JSName, body: Control): Control = MethodCall(m, `then`, js.Lambda(List(param), body))
-
-  def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
-  def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)
-  def Handle(body: Expr): Control = Builtin("handleMonadic", body)
-
-  def Builtin(name: String, args: Expr*): Control = $effekt.call(name, args: _*)
-
-  def Lambda(params: List[JSName], stmts: List[Stmt], ret: Control): Expr =
-    js.Lambda(params, js.Block(stmts :+ js.Return(ret)))
-
-  def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: Control): Stmt =
-    js.Function(name, params, stmts :+ js.Return(ret))
-
-  def asExpr(c: Control): Expr = c
-}

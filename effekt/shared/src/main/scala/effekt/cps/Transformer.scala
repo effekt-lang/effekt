@@ -145,6 +145,7 @@ object Transformer {
           Continuation.Static(Id("tmp")) { (x, ks) =>
             Dealloc(region.id, k(x, ks))
           }))
+
     case core.Stmt.Region(_) => sys error "Shouldn't happen"
 
     case core.Stmt.Alloc(id, init, region, body) =>
@@ -216,6 +217,8 @@ object Transformer {
               App(BlockVar(resumeComp), Nil, List(BlockLit(Nil, Nil, ks4, k4,
                 App(BlockVar(c), Nil, ps.map(BlockVar.apply), MetaCont(ks4), Cont.ContVar(k4)))),
                   MetaCont(ks3), Cont.ContVar(k3))))
+
+          // uni-directional
           case _ =>
             (Nil, BlockVar(resumeValue))
         }
@@ -260,12 +263,17 @@ object Transformer {
   }
 }
 
-def withJoinpoint(k: Continuation)(body: Continuation.Dynamic => Stmt): Stmt = k match {
+def withJoinpoint(k: Continuation)(body: Continuation => Stmt): Stmt = k match {
   case k : Continuation.Dynamic => body(k)
   case k : Continuation.Static =>
     val name = core.Id("k")
-    // TODO look at size and do not create a joinpoint for continuations of the size of a return cont...
-    LetCont(name, k.reify.asInstanceOf, body(Continuation.Dynamic(name)))
+    val reified = k.reify.asInstanceOf[Cont.ContLam]
+
+    // do not create a joinpoint for continuations roughly of the size of a return cont...
+    if reified.body.size <= 5 then
+      body(k)
+    else
+      LetCont(name, reified.asInstanceOf, body(Continuation.Dynamic(name)))
 }
 
 enum Continuation {
