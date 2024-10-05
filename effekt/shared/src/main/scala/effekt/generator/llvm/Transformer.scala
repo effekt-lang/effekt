@@ -473,10 +473,6 @@ object Transformer {
         emit(Call(name, Ccc(), stackType, freshPrompt, Nil))
         transform(rest)
 
-      case machine.CurrentPrompt(machine.Variable(name, _), rest) =>
-        emit(Call(name, Ccc(), stackType, currentPrompt, List(getStack())))
-        transform(rest)
-
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
         emit(Comment(s"literalInt $name, n=$n"))
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
@@ -837,7 +833,6 @@ object Transformer {
   val pushStack = ConstantGlobal(PointerType(), "pushStack");
   val popStacks = ConstantGlobal(PointerType(), "popStacks");
   val freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
-  val currentPrompt = ConstantGlobal(PointerType(), "currentPrompt");
   val underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   val uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
   val withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");

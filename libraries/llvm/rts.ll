@@ -114,10 +114,6 @@ declare void @exit(i64)
 
 ; Prompts
 
-define private %MetaStackPointer @currentPrompt(%MetaStackPointer %stack) alwaysinline {
-    ret %MetaStackPointer %stack
-}
-
 define private %MetaStackPointer @freshPrompt() alwaysinline {
     %prompt = call ptr @malloc(i64 112)
     %memory = call %Memory @newMemory()
