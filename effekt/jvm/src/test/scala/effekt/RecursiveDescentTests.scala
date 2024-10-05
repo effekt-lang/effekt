@@ -158,6 +158,14 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseExpr(
+          """x match {
+            |  case 0 => { 42 }
+            |  case 1 => { 1; 2 }
+            |  case _ => 42
+            |}
+            |""".stripMargin)
+
+    parseExpr(
       """x match {
         |  case Some(b) => acc = Cons(b, acc)
         |}
@@ -629,7 +637,6 @@ class RecursiveDescentTests extends munit.FunSuite {
       "extern def println(value: String): Unit =" +
       "js \"$effekt.println(${value})\"" +
       "chez \"(println_impl ${value})\"" +
-      "ml { print(value); print(\"\\n\") }" +
       "llvm \"\"\"call void @c_io_println_String(%Pos %value); ret %Pos zeroinitializer ; Unit\"\"\"" + "\n" +
       "extern js \"\"\" function \"\"\""
     )

@@ -3,7 +3,6 @@ module args
 extern io def commandLineArgs(): List[String] =
   js { js::commandLineArgs() }
   chez { chez::commandLineArgs() }
-  ml { ml::commandLineArgs() }
   llvm { llvm::commandLineArgs() }
 
 namespace js {
@@ -44,32 +43,6 @@ namespace chez {
     if (l.isEmpty) Nil() else Cons(l.head, l.tail.toList)
 
   def commandLineArgs(): List[String] = nativeArgs().toList
-}
-
-namespace ml {
-
-  // MLList[String]
-  // we inline these from mllist to not have a dependency
-  extern type Args
-
-  extern io def nativeArgs(): Args =
-    ml "CommandLine.arguments ()"
-
-  extern pure def isEmpty(args: Args): Bool =
-    ml "null ${args}"
-
-  extern io def first(a: Args): String =
-    ml "hd ${a}"
-
-  extern io def rest(a: Args): Args =
-    ml "tl ${a}"
-
-
-  def commandLineArgs(): List[String] = {
-    def toList(args: Args): List[String] =
-      if (args.isEmpty) Nil() else Cons(args.first, args.rest.toList)
-    nativeArgs().toList
-  }
 }
 
 namespace llvm {

@@ -1,0 +1,66 @@
+module string/tty
+
+// ANSI escape codes
+namespace ANSI {
+  val CSI = "\u001b["
+
+  def escape(s: String) = CSI ++ s ++ "m"
+
+  val BLACK = escape("30")
+  val RED = escape("31")
+  val GREEN = escape("32")
+  val YELLOW = escape("33")
+  val BLUE = escape("34")
+  val MAGENTA = escape("35")
+  val CYAN = escape("36")
+  val WHITE = escape("37")
+
+  val BG_BLACK = escape("40")
+  val BG_RED = escape("41")
+  val BG_GREEN = escape("42")
+  val BG_YELLOW = escape("43")
+  val BG_BLUE = escape("44")
+  val BG_MAGENTA = escape("45")
+  val BG_CYAN = escape("46")
+  val BG_WHITE = escape("47")
+
+  val RESET = escape("0")
+
+  val BOLD = escape("1")
+  val FAINT = escape("2")
+  val ITALIC = escape("3")
+  val UNDERLINE = escape("4")
+  val BLINK = escape("5")
+  val REVERSE = escape("7")
+  val CROSSOUT = escape("9")
+  val OVERLINE = escape("53")
+}
+
+def red(text: String) = Formatted::colored(text, ANSI::RED)
+def green(text: String) = Formatted::colored(text, ANSI::GREEN)
+def dim(text: String) = Formatted::colored(text, ANSI::FAINT)
+def bold(text: String) = Formatted::colored(text, ANSI::BOLD)
+
+interface Formatted {
+  def supportsEscape(escape: String): Bool
+}
+
+namespace Formatted {
+  /// Run given block of code, allowing all formatting
+  def formatting[R] { prog : => R / Formatted }: R =
+    try { prog() } with Formatted {
+      def supportsEscape(escape: String) = resume(true)
+    }
+
+  /// Run given block of code, ignoring all formatting
+  def noFormatting[R] { prog : => R / Formatted }: R =
+    try { prog() } with Formatted {
+      def supportsEscape(escape: String) = resume(false)
+    }
+
+  def tryEmit(escape: String): String / Formatted =
+    if (do supportsEscape(escape)) escape else ""
+
+  def colored(text: String, colorEscape: String): String / Formatted =
+    tryEmit(colorEscape) ++ text ++ tryEmit(ANSI::RESET)
+}

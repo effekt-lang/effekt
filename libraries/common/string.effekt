@@ -181,11 +181,9 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
 }
 
 // Native versions of toInt (unused right now)
-//   ML: also accepts sml style `~2` for unary minus along with `+2` and `-2`
 extern pure def unsafeToInt(str: String): Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
   chez "(string->number ${str})"
-  ml "Int.fromString ${str}"
 
 
 /**
@@ -243,36 +241,11 @@ def string[T] { prog: => T / Stream }: (T, String) = <>
 def printing[T] { prog: => T / Stream }: T = <>
 
 
-// ANSI escape codes
-namespace ANSI {
-  val BLACK = "\u001b[30m"
-  val RED = "\u001b[31m"
-  val GREEN = "\u001b[32m"
-  val YELLOW = "\u001b[33m"
-  val BLUE = "\u001b[34m"
-  val MAGENTA = "\u001b[35m"
-  val CYAN = "\u001b[36m"
-  val WHITE = "\u001b[37m"
-
-  val BG_BLACK = "\u001b[40m"
-  val BG_RED = "\u001b[41m"
-  val BG_GREEN = "\u001b[42m"
-  val BG_YELLOW = "\u001b[43m"
-  val BG_BLUE = "\u001b[44m"
-  val BG_MAGENTA = "\u001b[45m"
-  val BG_CYAN = "\u001b[46m"
-  val BG_WHITE = "\u001b[47m"
-
-  val RESET = "\u001b[0m"
-}
-
-
 // Characters
 // ----------
 //
 //   JS: Int (Unicode codepoints)
 //   CS: ?
-//   ML: 8-bit https://smlfamily.github.io/Basis/char.html
 //   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
 
 extern pure def toString(ch: Char): String =
@@ -287,20 +260,17 @@ extern pure def toString(ch: Char): String =
 extern pure def toInt(ch: Char): Int =
   js "${ch}"
   chez "${ch}"
-  ml "${ch}"
   llvm "ret %Int ${ch}"
 
 extern pure def toChar(codepoint: Int): Char =
   js "${codepoint}"
   chez "${codepoint}"
-  ml "${codepoint}"
   llvm "ret %Int ${codepoint}"
 
 
 extern pure def infixLt(x: Char, y: Char): Bool =
   js "(${x} < ${y})"
   chez "(< ${x} ${y})"
-  ml "(${x}: int) < ${y}"
   llvm """
     %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -311,7 +281,6 @@ extern pure def infixLt(x: Char, y: Char): Bool =
 extern pure def infixLte(x: Char, y: Char): Bool =
   js "(${x} <= ${y})"
   chez "(<= ${x} ${y})"
-  ml "(${x}: int) <= ${y}"
   llvm """
     %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -322,7 +291,6 @@ extern pure def infixLte(x: Char, y: Char): Bool =
 extern pure def infixGt(x: Char, y: Char): Bool =
   js "(${x} > ${y})"
   chez "(> ${x} ${y})"
-  ml "(${x}: int) > ${y}"
   llvm """
     %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -333,7 +301,6 @@ extern pure def infixGt(x: Char, y: Char): Bool =
 extern pure def infixGte(x: Char, y: Char): Bool =
   js "(${x} >= ${y})"
   chez "(>= ${x} ${y})"
-  ml "(${x}: int) >= ${y}"
   llvm """
     %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -388,7 +355,6 @@ def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
 extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
-  ml "(Char.ord (String.sub (${str}, ${n})))"
   llvm """
     %x = call %Int @c_buffer_character_at(%Pos ${str}, i64 ${n})
     ret %Int %x

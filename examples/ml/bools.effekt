@@ -1,5 +1,0 @@
-def main() = {
-    println(true && false)
-    println(true || false)
-    println(not(true))
-}

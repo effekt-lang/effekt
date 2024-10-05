@@ -12,6 +12,7 @@ import util.messages.{ INTERNAL_ERROR, NOT_SUPPORTED }
 
 import scala.language.implicitConversions
 import scala.util.matching.Regex
+import scala.collection.mutable
 
 object TransformerMonadic extends Transformer {
 
@@ -218,7 +219,7 @@ trait Transformer {
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("#f")
 
-    case Literal(s: String, _)  => ChezString(adaptEscapes(escape(s)))
+    case Literal(s: String, _)  => escape(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
@@ -257,11 +258,26 @@ trait Transformer {
     List(getter, setter)
   }
 
-  def escape(scalaString: String): String =
-    scalaString.foldLeft(StringBuilder()) { (acc, c) =>
-      escapeSeqs.get(c) match {
-        case Some(s) => acc ++= s
-        case None => acc += c
-      }
-    }.toString()
+  def escape(scalaString: String): chez.Expr = {
+    val parts = mutable.ListBuffer[chez.Expr]()
+    val strPart = StringBuilder()
+    scalaString.codePoints().forEach {
+      case c if escapeSeqs.contains(c.toChar) => strPart.append(escapeSeqs(c.toChar))
+      case c if c >= 32 && c <= 126 => strPart.append(String.valueOf(Character.toChars(c)))
+      case c if c < 8 * 8 * 8 =>
+        strPart.append("\\" + Integer.toString(c, 8).reverse.padTo(3, '0').reverse)
+      case c =>
+        parts.addOne(chez.RawValue("\"" ++ strPart.mkString ++ "\""))
+        strPart.clear()
+        parts.addOne(chez.Call(chez.RawExpr("string"), chez.Call(chez.RawExpr("integer->char"),
+          chez.RawExpr("#x" ++ c.toHexString))))
+    }
+    parts.addOne(chez.RawValue("\"" ++ strPart.mkString ++ "\""))
+
+    if (parts.size == 1) {
+      parts(0)
+    } else {
+      chez.Call(chez.RawExpr("string-append"), parts.toList)
+    }
+  }
 }

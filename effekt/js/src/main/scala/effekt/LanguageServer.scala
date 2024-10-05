@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.lifted.LiftInference
+
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*

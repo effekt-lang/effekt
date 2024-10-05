@@ -6,7 +6,6 @@ import effekt.symbols.{ TmpBlock, TmpValue }
 import effekt.Phase
 import effekt.PhaseResult.CoreTransformed
 import effekt.core.Block.BlockLit
-import effekt.lifted.Expr.ValueVar
 
 /**
  * [[Phase]] on [[CoreTransformed]] to make programs stack safe on platforms

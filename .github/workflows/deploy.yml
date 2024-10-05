@@ -80,6 +80,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-jar]
     steps:
+      # Login as a GitHub App in order to bypass GitHub's rules about automatic releases
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.EFFEKT_UPDATER_GH_APP_ID }}
+          private-key: ${{ secrets.EFFEKT_UPDATER_GH_CREDENTIALS_TOKEN }}
+
+      - name: Checkout code with token
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          token: ${{ steps.app-token.outputs.token }}
+
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
@@ -92,53 +106,17 @@ jobs:
           name: effekt-npm-package
           path: distribution/
 
-        # Generates nice release notes according to https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
-        # We can also configure these down the road: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes#configuring-automatically-generated-release-notes
-      - name: Generate Release Notes
-        id: generate_release_notes
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { data } = await github.rest.repos.generateReleaseNotes({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: 'v${{ needs.build-jar.outputs.version }}',
-            });
-            core.setOutput('name', data.name);
-            core.setOutput('body', data.body);
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create Release and Upload Assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          release_name: Release v${{ needs.build-jar.outputs.version }}
-          tag_name: v${{ needs.build-jar.outputs.version }}
-          body: ${{ steps.generate_release_notes.outputs.body }}
-          draft: false
-          prerelease: false
-
-      - name: Upload jar file
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./distribution/effekt
-          asset_name: effekt.jar
-          asset_content_type: application/java-archive
-
-      - name: Upload npm package
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./distribution/effekt.tgz
-          asset_name: effekt.tgz
-          asset_content_type: application/gzip
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: v${{ needs.build-jar.outputs.version }}
+        run: |
+          gh release create "$TAG" \
+            -t "Release $TAG" \
+            --verify-tag \
+            --generate-notes \
+            "./distribution/effekt#effekt.jar" \
+            "./distribution/effekt.tgz#effekt.tgz"
 
   publish-npm:
     name: Publish NPM Package

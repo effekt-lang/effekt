@@ -2,7 +2,6 @@ extern interface Cap[U, V]
 
 extern pure def cap[U, V](): Cap[U, V] at {} =
   js   "42"
-  ml   "42"
   chez "42"
 
 interface Foo[S] {

@@ -32,17 +32,6 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    - name: Install MLton
-      run: |
-        curl -L https://github.com/MLton/mlton/releases/download/on-20210117-release/mlton-20210117-1.amd64-linux-glibc2.31.tgz --output mlton.tgz
-        tar -xzf mlton.tgz
-        mv mlton-20210117-1.amd64-linux-glibc2.31 $GITHUB_WORKSPACE/mlton
-        chmod +x $GITHUB_WORKSPACE/mlton/bin/mlton
-        echo "Trying to call directly"
-        $GITHUB_WORKSPACE/mlton/bin/mlton
-        echo "Adding mlton to path"
-        echo "$GITHUB_WORKSPACE/mlton/bin" >> $GITHUB_PATH
-
     - name: Install Chez Scheme, LLVM & libuv
       run: sudo apt-get install -y chezscheme llvm-15 libuv1-dev
 
@@ -55,50 +44,75 @@ jobs:
         command: sbt clean test
         new_command_on_retry: sbt testQuick # should only rerun failed tests
 
-  bump-version-and-tag:
-    name: Bump Version and Create Tag
-    runs-on: ubuntu-latest
+  set-version:
+    name: Bump Version
     needs: [run-tests]
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.set-version.outputs.VERSION }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: 'true'
 
-      # No need to setup environment again
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'zulu'
+          cache: 'sbt'
 
       - name: Bump Effekt version using sbt
         id: set-version
         run: |
-          # Capture the output of 'sbt bumpMinorVersion'
           full_output=$(sbt 'bumpMinorVersion' -error)
-
-          # Extract the actual version number using grep
           new_version=$(echo "$full_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)
-
-          # Trim any potential whitespace
           new_version=$(echo "$new_version" | xargs)
-
-          # Check that the new_version is actually non-empty and looks like a version number
           if [[ ! $new_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Error: Version bump failed. Invalid version number: '${new_version}'"
             echo "Full output was:"
             echo "$full_output"
             exit 1
           fi
-
           echo "VERSION=${new_version}" >> $GITHUB_OUTPUT
           echo "Successfully set new version: ${new_version}"
 
       - name: Update Effekt version in NPM and MVN via sbt
         run: sbt updateVersions
 
+      - name: Upload updated files
+        uses: actions/upload-artifact@v3
+        with:
+          name: updated-files
+          path: |
+            project/EffektVersion.scala
+            package.json
+            pom.xml
+
+  commit-and-push:
+    name: Commit and Push Changes
+    needs: [set-version]
+    runs-on: ubuntu-latest
+    steps:
       # Login as a GitHub App in order to bypass rules about committing to `master` directly
-      - uses: actions/create-github-app-token@v1
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v1
         id: app-token
         with:
           app-id: ${{ secrets.EFFEKT_UPDATER_GH_APP_ID }}
           private-key: ${{ secrets.EFFEKT_UPDATER_GH_CREDENTIALS_TOKEN }}
+
+      - name: Checkout code with token
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Download updated files
+        uses: actions/download-artifact@v3
+        with:
+          name: updated-files
 
       - name: Get GitHub App User ID
         id: get-user-id
@@ -116,14 +130,14 @@ jobs:
           git add project/EffektVersion.scala
           git add package.json
           git add pom.xml
-          git commit -m "Bump version to ${{ steps.set-version.outputs.VERSION }}"
+          git commit -m "Bump version to ${{ needs.set-version.outputs.new_version }}"
           git push
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Create and push tag
         run: |
-          git tag v${{ steps.set-version.outputs.VERSION }}
-          git push origin v${{ steps.set-version.outputs.VERSION }}
+          git tag v${{ needs.set-version.outputs.new_version }}
+          git push origin v${{ needs.set-version.outputs.new_version }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
