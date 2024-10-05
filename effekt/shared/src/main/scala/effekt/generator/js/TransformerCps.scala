@@ -52,18 +52,12 @@ object TransformerCps extends Transformer {
   /**
    * Entrypoint used by the compiler to compile whole programs
    */
-  def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
+  def compile(input: cps.ModuleDecl, coreModule: core.ModuleDecl, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), js.Lambda(Nil, run(nameRef(mainSymbol)))))
+    given DeclarationContext = new DeclarationContext(coreModule.declarations, coreModule.externs)
+    toJS(input, exports)
 
-    val moduleDecl = input.core
-
-    val cpsTransformed = cps.Transformer.transform(moduleDecl)
-
-    given DeclarationContext = new DeclarationContext(moduleDecl.declarations, moduleDecl.externs)
-
-    toJS(cpsTransformed, Nil, exports)
-
-  def toJS(module: cps.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
+  def toJS(module: cps.ModuleDecl, exports: List[js.Export])(using D: DeclarationContext, C: Context): js.Module =
     module match {
       case cps.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
         given TransformerContext(
@@ -82,8 +76,19 @@ object TransformerCps extends Transformer {
           js.Variable(JSName("global"))
         ) :: Nil
 
-        js.Module(name, imports, exports, jsDecls ++ jsExterns ++ state ++ stmts)
+        js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ state ++ stmts)
     }
+
+  def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
+    val D = new DeclarationContext(coreModule.declarations, coreModule.externs)
+    given TransformerContext(
+          false,
+          Map.empty,
+          input.externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
+          D, C)
+
+    input.definitions.map(toJS)
+
 
   def toJS(d: cps.ToplevelDefinition)(using TransformerContext): js.Stmt = d match {
     case cps.ToplevelDefinition.Def(id, block) => js.Const(nameDef(id), requiringThunk { toJS(block) })
