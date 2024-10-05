@@ -334,7 +334,7 @@ object Transformer {
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineLabel(returnAddressName, parameters) {
-          emit(Comment(s"pushFrame / return address, ${frameEnvironment.length} free variables"))
+          emit(Comment(s"pushFrame ${frame.parameters.map(_.name).mkString(", ")} / return address, ${frameEnvironment.length} free variables"))
           popEnvironmentFrom(getStack(), frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body))
@@ -387,7 +387,6 @@ object Transformer {
 
       case machine.NewStack(variable, prompt, frame, rest) =>
         emit(Comment(s"newStack ${variable.name}"))
-        emit(Call(variable.name, Ccc(), transform(variable.tpe), newStack, List(transform(prompt))));
 
         val frameEnvironment = freeVariables(frame).toList;
 
@@ -437,39 +436,45 @@ object Transformer {
 
         shareValues(frameEnvironment, freeVariables(rest));
 
-        val stack = LocalReference(stackType, variable.name);
+        val stack = transform(prompt);
         pushEnvironmentOnto(stack, frameEnvironment);
         pushReturnAddressOnto(stack, returnAddressName, sharerName, eraserName);
 
+        emit(Call(variable.name, Ccc(), transform(variable.tpe), newStack, List(transform(prompt))));
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.PushStack(value, rest) =>
         emit(Comment(s"pushStack ${value.name}"))
         shareValues(List(value), freeVariables(rest));
+        val uniqueStackName = freshName("stack");
         val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
-        emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), getStack())));
+        emit(Call(uniqueStackName, Ccc(), resumptionType, uniqueStack, List(transform(value))));
+        emit(Call(newStackName, Ccc(), stackType, pushStack, List(LocalReference(resumptionType, uniqueStackName), getStack())));
         setStack(LocalReference(stackType, newStackName));
         transform(rest)
 
       case machine.PopStacks(variable, prompt, rest) =>
         emit(Comment(s"popStacks ${variable.name}, prompt=${prompt.name}"))
-        val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(prompt))));
 
-        emit(BitCast(variable.name, getStack(), stackType));
-        setStack(LocalReference(stackType, newStackName));
+        val newStackPointer = LocalReference(PointerType(), freshName("stack_pointer"))
+        emit(GetElementPtr(newStackPointer.name, NamedType("MetaStack"), transform(prompt), List(0, 3)))
+        val newStack = LocalReference(stackType, freshName("stack"))
+        emit(Load(newStack.name, stackType, newStackPointer))
+
+        emit(Call(variable.name, Ccc(), resumptionType, popStacks, List(getStack(), transform(prompt))));
+
+        setStack(newStack);
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.FreshPrompt(machine.Variable(name, _), rest) =>
-        emit(Call(name, Ccc(), promptType, freshPrompt, Nil))
+        emit(Call(name, Ccc(), stackType, freshPrompt, Nil))
         transform(rest)
 
       case machine.CurrentPrompt(machine.Variable(name, _), rest) =>
-        emit(Call(name, Ccc(), promptType, currentPrompt, List(getStack())))
+        emit(Call(name, Ccc(), stackType, currentPrompt, List(getStack())))
         transform(rest)
 
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
@@ -528,15 +533,15 @@ object Transformer {
   val environmentType = NamedType("Environment");
   val objectType = NamedType("Object");
   val stackPointerType = NamedType("StackPointer");
-  val stackType = NamedType("Stack");
-  val promptType = NamedType("Prompt");
+  val stackType = NamedType("MetaStackPointer");
+  val resumptionType = NamedType("ResumptionPointer");
   val referenceType = NamedType("Reference");
 
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive()          => positiveType
     case machine.Negative()          => negativeType
-    case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => stackType
+    case machine.Type.Prompt()       => stackType
+    case machine.Type.Stack()        => resumptionType
     case machine.Type.Int()          => IntegerType64()
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
@@ -557,7 +562,7 @@ object Transformer {
       case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
-      case machine.Type.Reference(_) => 8
+      case machine.Type.Reference(_) => 16
     }
 
   def regionIndex(tpe: machine.Type): Int =
