@@ -1,0 +1,34 @@
+module stream
+
+interface Emit[A] {
+  def emit(value: A): Unit
+}
+
+interface Done {
+  def done(): Nothing
+}
+
+/// Combine the emitted Strings into one String.
+/// TODO This is NOT efficient like this
+def buildString(){ body: => Unit / Emit[String] }: String = {
+  var result = ""
+  try body() with Emit[String] {
+    def emit(a) = {
+      result = result ++ a
+      resume(())
+    }
+  }
+  result
+}
+
+/// Gather the emitted values into a list
+def gatherList[A,R](){ body: => R / Emit[A] }: (R, List[A]) = {
+  var r = Nil()
+  val x = try body() with Emit[A] {
+    def emit(e) = {
+      r = Cons(e, r)
+      resume(())
+    }
+  }
+  (x, r.reverse)
+}

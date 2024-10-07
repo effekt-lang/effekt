@@ -1,0 +1,317 @@
+module json
+import char
+import scanner
+import stream
+
+/// for constructing a json value
+interface JsonBuilder {
+  def null(): Unit
+  def bool(b: Bool): Unit
+  def number(n: Double): Unit
+  def string(s: String): Unit
+  def list[R](){ elements: => R / JsonBuilder }: R
+  def dict[R](){ elements: => R / JsonObjectBuilder }: R
+}
+/// for constructing a json object
+interface JsonObjectBuilder {
+  def field[R](k: String){ contents: => R / JsonBuilder }: R
+}
+
+def escape(s: String): String = "\"" ++ s ++ "\"" // TODO handle escapes
+
+/// Make explicitly bound JsonBuilder instance implicit
+def handleJsonBuilder[R]{b: JsonBuilder}{ body: => R / JsonBuilder }: R = try body() with JsonBuilder {
+  def null() = resume(b.null())
+  def bool(v) = resume(b.bool(v))
+  def number(n) = resume(b.number(n))
+  def string(s) = resume(b.string(s))
+  def list() = resume { {c} => b.list{c} }
+  def dict() = resume { {c} => b.dict{c} }
+}
+/// Make explicitly bound JsonObjectBuilder instance implicit
+def handleJsonObjectBuilder[R]{b: JsonObjectBuilder}{ body: => R / JsonObjectBuilder }: R = try body() with JsonObjectBuilder {
+  def field(k) = resume { {c} => b.field(k){c} }
+}
+
+// --------------------------------------------------------------------------------
+// Encoding
+// --------------------------------------------------------------------------------
+def encodeJsonList[R]{ body: => R / JsonBuilder }: R / Emit[String] = {
+  var first = true
+  do emit("[")
+  def c() = {
+    if (not(first)) { do emit(",") }
+    first = false
+  }
+  val r = encodeJson {
+    try { body() } with JsonBuilder {
+      def null() = { c(); resume(do null()) }
+      def bool(v) = { c(); resume(do bool(v)) }
+      def number(n) = { c(); resume(do number(n)) }
+      def string(s) = { c(); resume(do string(s)) }
+      def list() = resume { { b } => c(); do list{b} }
+      def dict() = resume { { b } => c(); do dict{b} }
+    }
+  }
+  do emit("]")
+  r
+}
+def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / Emit[String] = {
+  var first = true
+  do emit("{")
+  def c(k: String) = {
+    if (not(first)) { do emit(",") }
+    do emit(escape(k)); do emit(":") 
+    first = false
+  }
+  val r = encodeJson {
+    try body() with JsonObjectBuilder {
+      def field(k) = resume { {b} => c(k); b() }
+    }
+  }
+  do emit("}")
+  r
+}
+/// Main entry point for encoding json.
+/// Emits individual tokens of the resulting json.
+def encodeJson[R]{ body: => R / JsonBuilder }: R / Emit[String] = {
+  try body() with JsonBuilder { 
+      def null() = { resume(do emit("null")) }
+      def bool(v) = { resume(do emit( if(v){ "true" } else { "false" } )) }
+      def number(n) = { resume(do emit(show(n))) }
+      def string(s) = { resume(do emit(escape(s))) }
+      def list() = resume { {b} => encodeJsonList { b() } }
+      def dict() = resume { {b} => encodeJsonObject { b() } }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// Decoding
+// --------------------------------------------------------------------------------
+/// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
+def decodeJson(): Unit / {Scanner, JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
+  skipWhitespace()
+  try {
+    if(peek() is c) {
+      c match {
+        case 'n' => expect("null"); do null()
+        case 't' => expect("true"); do bool(true)
+        case 'f' => expect("false"); do bool(false)
+        case '-' => do number(readDouble())
+        case d and d.isDigit => do number(readDouble())
+        case '"' => do string(readQuotedString())
+        case '{' => do dict{ decodeJsonObject() }
+        case '[' => do list{ decodeJsonList() }
+        case _ => println("Unexpected " ++ c.toString); <>
+      }
+    }
+  } with Done {
+    def done() = ()
+  }
+}
+def decodeJsonObject(): Unit / {Scanner, JsonObjectBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
+  var first = true
+  expect('{')
+  skipWhitespace()
+  try {
+    while(peek() is c and (c != '}')) {
+      if (not(first)) { expect(',') }
+      val k = readQuotedString()
+      skipWhitespace()
+      expect(':')
+      do field(k){
+        decodeJson()
+      }
+      skipWhitespace()
+      first = false
+    }
+  } with Done {
+    def done() = ()
+  }
+  do skip()
+}
+def decodeJsonList(): Unit / {Scanner, JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = { 
+  var first = true
+  expect('[')
+  skipWhitespace()
+  try {
+    while(peek() is c and (c != ']')) {
+      if (not(first)) { expect(',') }
+      decodeJson()
+      skipWhitespace()
+      first = false
+    }
+    do skip()
+  } with Done {
+    def done() = ()
+  }
+}
+
+// --------------------------------------------------------------------------------
+// Ignoring
+// --------------------------------------------------------------------------------
+/// Ignore the generated calls to JsonObjectBuilder
+def ignoreDict[R](){ body: => R / JsonObjectBuilder }: R = try body() with JsonObjectBuilder {
+  def field(k) = resume { {v} => ignore{v} }
+}
+
+/// Ignore the generated calls to JsonBuilder
+def ignore[R](){ body: => R / JsonBuilder }: R = try body() with JsonBuilder {
+  def number(n) = resume(())
+  def bool(b) = resume(())
+  def null() = resume(())
+  def string(s) = resume(())
+  def list() = resume { {e} => ignore{e} }
+  def dict() = resume { {e} => ignoreDict{e} }
+}
+
+// --------------------------------------------------------------------------------
+// Residualized
+// --------------------------------------------------------------------------------
+/// Residualized Json value
+type JsonValue {
+  Number(n: Double);
+  Bool(b: Bool);
+  Null();
+  String(s: String);
+  List(l: List[JsonValue]);
+  Dict(els: List[(String, JsonValue)])
+}
+
+// --------------------------------------------------------------------------------
+// Residualized --> Effect
+// --------------------------------------------------------------------------------
+/// Emit the appropriate calls to JsonBuilder to recreate the given JsonValue
+def unbuild(v: JsonValue): Unit / JsonBuilder = v match {
+  case Number(n) => do number(n)
+  case Bool(b) => do bool(b)
+  case Null() => do null()
+  case String(s) => do string(s)
+  case List(l) => do list {
+    l.foreach { e => unbuild(e) }
+  }
+  case Dict(els) => do dict {
+    els.foreach {
+      case (k, v) => do field(k){ unbuild(v) }
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// Effect --> Residualized
+// --------------------------------------------------------------------------------
+def build[R](){ body: => R / JsonBuilder }: (R, JsonValue) = {
+  var r = Null()
+  val x = try body() with JsonBuilder {
+    def number(n) = { r = Number(n); resume(()) }
+    def bool(b) = { r = Bool(b); resume(()) }
+    def null() = { r = Null(); resume(()) }
+    def string(s) = { r = String(s); resume(()) }
+    def list() = resume { {els} =>
+      val x = buildList {els}
+      r = List(x.second)
+      x.first
+    }
+    def dict() = resume { {fs} =>
+      val x = buildDict {fs}
+      r = Dict(x.second)
+      x.first
+    }
+  }
+  (x, r)
+}
+def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = gatherList[JsonValue, R] {
+  try body() with JsonBuilder {
+    def number(n) = { do emit(Number(n)); resume(()) }
+    def bool(b) = { do emit(Bool(b)); resume(()) }
+    def null() = { do emit(Null()); resume(()) }
+    def string(s) = { do emit(String(s)); resume(()) }
+    def list() = resume { {els} =>
+      val x = buildList {els}
+      do emit(List(x.second))
+      x.first
+    }
+    def dict() = resume { {fs} =>
+      val x = buildDict {fs}
+      do emit(Dict(x.second))
+      x.first
+    }
+  }
+}
+def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = gatherList[(String, JsonValue), R] {
+  try body() with JsonObjectBuilder {
+    def field(k) = resume { {v} =>
+      val x = build{v}
+      do emit((k, x.second))
+      x.first
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// Examples
+// --------------------------------------------------------------------------------
+namespace test {
+  def main() = {
+    with on[UnexpectedChar].panic
+    with on[WrongFormat].panic
+  
+    // Parse example
+  //   feed("""{ "a": null, "b": [true,false,false,true], "f": 12.532   }"""){
+  //    
+  //     def k = new JsonObjectBuilder {
+  //       def field(k){v} = { println(k); ignore{v} }
+  //     }
+  //     def d = new JsonBuilder {
+  //       def number(n) = println(n)
+  //       def bool(b) = ()
+  //       def null() = println("NULL")
+  //       def string(s) = ()
+  //       def list(){e} = handleJsonBuilder{d}{e}
+  //       def dict(){e} = handleJsonObjectBuilder{k}{e}
+  //     }
+  //     handleJsonBuilder{d}{ decodeJson() }
+  //   }
+    try{
+  
+      // Encode example
+      encodeJson{
+        do dict{
+          do field("x"){
+            do string("Hallo")
+          }
+          do field("y"){
+            do null()
+          }
+          do field("z"){
+            do number(12.3783)
+          }
+        }
+      }
+  
+      // format with intermediate value
+      val j = feed("""{ 
+                  "a": null, 
+                  "b": [true, false, false, true], "f": 12.532   
+                } """){
+        build {
+          decodeJson()
+        }.second
+      }
+      encodeJson{
+        unbuild(j)
+      }
+      
+      // format (minify) example
+      encodeJson{
+        feed("""{ 
+                  "a": null, 
+                  "b": [true, false, false, true], "f": 12.532   
+                } """){ decodeJson() }
+      }
+  
+    } with Emit[String] {
+      def emit(e) = resume(println(e))
+    }
+  }
+}
