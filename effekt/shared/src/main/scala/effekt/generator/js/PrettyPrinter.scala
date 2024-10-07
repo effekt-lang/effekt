@@ -28,9 +28,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case RawLiteral(content)          => string(content)
     case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els)
+    case Lambda(params, Return(obj: js.Object)) => parens(params map toDoc) <+> "=>" <> nested(parens(toDoc(expr)))
     case Lambda(params, Return(expr)) => parens(params map toDoc) <+> "=>" <> nested(toDoc(expr))
     case Lambda(params, Block(stmts)) => parens(params map toDoc) <+> "=>" <+> jsBlock(stmts.map(toDoc))
-    case Lambda(params, body)         => parens(params map toDoc) <+> "=>" <> jsBlock(toDoc(body))
+    case Lambda(params, body)         => parens(params map toDoc) <+> "=>" <+> jsBlock(toDoc(body))
     case Object(properties)           => group(jsBlock(vsep(properties.map { case (n, d) => toDoc(n) <> ":" <+> toDoc(d) }, comma)))
     case ArrayLiteral(elements)       => brackets(elements map toDoc)
     case Variable(name)               => toDoc(name)
@@ -40,6 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDocParens(e: Expr): Doc = e match {
     case e: IfExpr => parens(toDoc(e))
     case e: Lambda => parens(toDoc(e))
+    case o: js.Object => parens(toDoc(e))
     case e => toDoc(e)
   }
 
@@ -53,7 +55,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(stmt: Stmt): Doc = stmt match {
-    case RawStmt(raw)                  => string(raw) //  vsep(raw.split('\n').toList.map(c => text(c)))
+    case RawStmt(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDocAsAtom)))
     case Block(stmts)                  => jsBlock(stmts map toDoc)
     case Return(expr)                  => "return" <+> toDoc(expr) <> ";"
     case ExprStmt(expr)                => toDoc(expr) <> ";"
@@ -63,8 +65,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Assign(target, expr)          => toDoc(target) <+> "=" <+> toDoc(expr) <> ";"
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)
     case Class(name, methods)          => "class" <+> toDoc(name) <+> jsBlock(methods.map(jsMethod))
-    case If(cond, thn, Block(Nil))     => "if" <+> parens(toDoc(cond)) <+> toDoc(thn)
-    case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDoc(thn) <+> "else" <+> toDoc(els)
+    case If(cond, thn, Block(Nil))     => "if" <+> parens(toDoc(cond)) <+> toDocBlock(thn)
+    case If(cond, thn, els)            => "if" <+> parens(toDoc(cond)) <+> toDocBlock(thn) <+> "else" <+> toDocBlock(els)
     case Try(prog, id, handler, Nil)   => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc))
     case Try(prog, id, handler, fin)    => "try" <+> jsBlock(prog.map(toDoc)) <+> "catch" <+> parens(toDoc(id)) <+> jsBlock(handler.map(toDoc)) <+> "finally" <+> jsBlock(fin.map(toDoc))
     case Throw(expr)                   => "throw" <+> toDoc(expr) <> ";"
@@ -77,6 +79,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
       case (tag, stmts) => "case" <+> toDoc(tag) <> ":" <+> nested(stmts map toDoc)
     } ++ default.toList.map { stmts => "default:" <+> nested(stmts map toDoc) })
+  }
+
+  def toDocBlock(stmt: Stmt): Doc = stmt match {
+    case Block(stmts) => toDoc(stmt)
+    case If(cond, thn, els) => toDoc(stmt)
+    case _ => jsBlock(toDoc(stmt))
   }
 
   def jsMethod(c: js.Function): Doc = c match {

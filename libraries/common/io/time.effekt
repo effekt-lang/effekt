@@ -5,7 +5,10 @@ extern llvm """
 """
 
 extern async def wait(millis: Int): Unit =
-  js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
+  js """
+    setTimeout(() => RESUME($effekt.unit), ${millis});
+    return ABORT(undefined); // abort current trampoline
+  """
   llvm """
     call void @c_timer_start(%Int ${millis}, %Stack %stack)
     ret void

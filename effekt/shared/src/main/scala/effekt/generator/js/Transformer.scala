@@ -12,7 +12,7 @@ import effekt.symbols.{ Module, Symbol, Wildcard, Bindings }
 import scala.collection.mutable
 
 /**
- * Parent of the monadic and direct-style transformer.
+ * Parent all JS transformers.
  *
  * Shares generic JS specific definitions
  */
@@ -21,8 +21,6 @@ trait Transformer {
   val jsFeatureFlags: List[String] = List("js")
 
   val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
-
-  def run(body: js.Expr): js.Stmt
 
   def shouldExport(id: Id)(using D: DeclarationContext): Boolean = true
 
@@ -68,15 +66,6 @@ trait Transformer {
     js.Class(nameDef(constructor.id), List(jsConstructor, jsReflect, jsEquals))
   }
 
-  // const $getOp = "get$1234"
-  // const $putOp = "put$7554"
-  def generateStateAccessors: List[js.Stmt] = {
-    val getter = Const(JSName("$getOp"), JsString(nameDef(symbols.builtins.TState.get).name))
-    val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
-
-    List(getter, setter)
-  }
-
   // Names
   // -----
 
@@ -114,14 +103,32 @@ trait Transformer {
   val `reflect`  = JSName("__reflect")
   val `equals`  = JSName("__equals")
 
-  def nameDef(id: Symbol): JSName = uniqueName(id)
+  def nameDef(id: Id): JSName = uniqueName(id)
 
-  def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
+  // attempt to have better / shorter names
+  val usedNames: mutable.Map[String, Int] = mutable.Map.empty
+  val names: mutable.Map[Id, String] = mutable.Map.empty
+  val baseNameRx = """([A-Za-z$]*(?:_[A-Za-z]+)*)""".r // extracts the base number up until the first number
 
-  def nameRef(id: Symbol): js.Expr = js.Variable(uniqueName(id))
+  def uniqueName(sym: Id): JSName = {
+    def uniqueNameFor(base: String): String =
+      val nextId = usedNames.getOrElse(base, 0)
+      usedNames.update(base, nextId + 1)
+      s"${base}_${nextId}"
+
+    val name = names.getOrElseUpdate(sym, baseNameRx.findFirstIn(sym.name.name) match {
+      case Some(base) => uniqueNameFor(base)
+      case None =>
+        println(sym.name)
+        uniqueNameFor("tmp")
+    })
+    JSName(jsEscape(name))
+  }
+
+  def nameRef(id: Id): js.Expr = js.Variable(uniqueName(id))
 
   // name references for fields and methods
-  def memberNameRef(id: Symbol): JSName = uniqueName(id)
+  def memberNameRef(id: Id): JSName = uniqueName(id)
 
   def freshName(s: String): JSName =
     JSName(s + Symbol.fresh.next())

@@ -1,11 +1,11 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.generator.js.TransformerMonadicSeparate
+
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
-
+import effekt.generator.js.JavaScriptWeb
 import kiama.util.{ Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
@@ -99,12 +99,10 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def compileFile(path: String): String = {
-    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
+    val mainOutputPath = compileCached(VirtualFileSource(path)).getOrElseAborting {
       throw js.JavaScriptException(s"Cannot compile ${path}")
     }
     try {
-      context.checkMain(mainCore.mod)
-      mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
       mainOutputPath
     } catch {
       case FatalPhaseError(msg) =>
@@ -115,10 +113,10 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def showCore(path: String): String = {
-    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
+    val doc = context.compiler.prettyIR(VirtualFileSource(path), Stage.Core).getOrElseAborting {
       return null
     }
-    core.PrettyPrinter.format(mainCore.core.definitions)
+    doc.layout
   }
 
   @JSExport
@@ -130,25 +128,21 @@ class LanguageServer extends Intelligence {
   }
 
   /**
-   * Has the side effect of saving to generated output to a file
+   * Has the side effect of saving the generated output to a file
    */
-   object compileSingle extends Phase[Source, (String, CoreTransformed)] {
+   object compileWhole extends Phase[Source, String] {
      val phaseName = "compile"
      def run(src: Source)(using Context) =
-      context.compiler.compileSeparate(src).map {
-        case (core, doc) =>
-          val filepath = path(core.mod)
-          writeFile(filepath, doc)
-          (filepath, core)
+      context.compiler.compileWeb(src).map {
+        case (files, mainPath) =>
+          files.foreach { case (path, content) => writeFile(path, content) }
+          mainPath
       }
   }
 
   // Here we cache the full pipeline for a single file, including writing the result
-  // to an output file. This is important since we only want to write the file, when it
-  // really changed. Writing will change the timestamp and lazy reloading of modules
-  // on the JS side uses the timestamp to determine whether we need to re-eval a
-  // module or not.
-  private val compileCached = Phase.cached("compile-cached") { compileSingle }
+  // to an output file.
+  private val compileCached = Phase.cached("compile-cached") { compileWhole }
 
   private def messageToDiagnostic(m: EffektError) = {
     val from = m.startPosition.map(toLSPPosition).orNull
@@ -174,9 +168,6 @@ class LanguageServer extends Intelligence {
     case Severities.Information => lsp.DiagnosticSeverity.Information
     case Severities.Hint        => lsp.DiagnosticSeverity.Hint
   }
-
-  private def path(m: symbols.Module)(using C: Context): String =
-    (C.config.outputPath() / TransformerMonadicSeparate.jsModuleFile(m.path)).unixPath
 }
 
 @JSExportTopLevel("effekt")

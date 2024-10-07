@@ -25,6 +25,8 @@ class JavaScriptTests extends EffektTests {
   )
 
   override def ignored: List[File] = List(
+    // unsafe cont
+    examplesDir / "pos" / "propagators.effekt"
   )
 }
 

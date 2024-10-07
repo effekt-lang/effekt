@@ -45,4 +45,3 @@ def run(n: Int) =
   }
 
 def main() = benchmark(10){run}
-
