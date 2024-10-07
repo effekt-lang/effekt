@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.{ Annotations, Context }
 import effekt.source.{ FunDef, ModuleDecl, Tree }
-import kiama.util.{ Position, Source }
+import kiama.util.{ Position, Positions, Source }
 
 trait Intelligence {
 
@@ -79,6 +79,39 @@ trait Intelligence {
     case a: Anon         => Some(a.decl)
     case u => C.definitionTreeOption(u)
   }
+
+  type CompletionSuggestion = Either[Symbol, (String, String)]
+
+  def getCompletableItems(position: Position, prefix: String)(implicit C: Context): Option[Vector[CompletionSuggestion]] = {
+    def isPrefix(s: String) = s.startsWith(prefix) // TODO: add more filters (e.g. Levenshtein distance?)
+    def filter(it: Iterable[String]) = it.filter(isPrefix)
+
+    val keywords = filter(EffektLexers(new Positions).keywordStrings).map { keyword => Right(keyword, "Keyword") }
+    val builtinTypes = filter(builtins.rootTypes.keys).map { key => Left(builtins.rootTypes.get(key).get) }
+    val builtinTerms = filter(builtins.rootTerms.keys).map { key => Left(builtins.rootTerms.get(key).get) }
+    val builtinCaptures = filter(builtins.rootCaptures.keys).map { key => Left(builtins.rootCaptures.get(key).get) }
+
+    // TODO: only return symbols within scope of current position and include library symbols
+    // "dumb" function for now to just get all symbols in AST recursively
+    def getAllSymbols(product: Product): Iterator[String] = product.productIterator.flatMap { 
+      case p: Product => getAllSymbols(p)
+      case s: String => List(s)
+      case _ => List()
+    }.distinct
+
+    val allSymbols = C.compiler.getAST(position.source) match
+      case Some(ast) => getAllSymbols(ast).map { s => Right(s, "Symbol in scope") }
+      case None => List()
+
+    Some((keywords ++ builtinTypes ++ builtinTerms ++ builtinCaptures ++ allSymbols).toVector)
+  }
+
+  def getCompletionsAt(position: Position)(implicit C: Context): Option[Vector[CompletionSuggestion]] = for {
+    line <- position.source.optLineContents(position.line)
+    beforeCaret = line.take(position.column - 1)
+    word = beforeCaret.drop(beforeCaret.lastIndexOf(" ") + 1)
+    syms <- getCompletableItems(position, word)
+  } yield syms
 
   // For now, only show the first call target
   def resolveCallTarget(sym: Symbol): Symbol = sym match {
