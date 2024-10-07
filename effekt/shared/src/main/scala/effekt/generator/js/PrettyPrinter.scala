@@ -46,7 +46,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   // to be used in really low precedence positions
   def toDocAsAtom(e: Expr): Doc = e match {
     case e: Variable => toDoc(e)
-    case e: Object => toDoc(e)
     case e: ArrayLiteral => toDoc(e)
     case e: RawLiteral => toDoc(e)
     case e => parens(toDoc(e))
