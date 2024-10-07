@@ -35,7 +35,7 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(ref) ++ freeVariables(rest) -- Set(name)
     case Store(ref, value, rest) =>
       Set(ref, value) ++ freeVariables(rest)
-    case Var(name, init, tpe, rest) => 
+    case Var(name, init, tpe, rest) =>
       freeVariables(rest) ++ Set(init) -- Set(name)
     case LoadVar(name, ref, rest) =>
       Set(ref) ++ freeVariables(rest) -- Set(name)
@@ -52,8 +52,6 @@ def freeVariables(statement: Statement): Set[Variable] =
     case PopStacks(name, prompt, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(prompt)
     case FreshPrompt(name, rest) =>
-      freeVariables(rest) -- Set(name)
-    case CurrentPrompt(name, rest) =>
       freeVariables(rest) -- Set(name)
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
