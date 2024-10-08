@@ -5,10 +5,6 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.Rewrite
-import effekt.source.ExternBody.EffektExternBody
-import effekt.source.ExternBody.StringExternBody
-import effekt.source.ExternBody.Unsupported
-
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
