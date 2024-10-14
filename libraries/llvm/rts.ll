@@ -591,6 +591,10 @@ define private %Stack @underflowStack(%Stack %stack) {
     ret %Stack %rest
 }
 
+define private void @nop(%Stack %stack) {
+    ret void
+}
+
 define private %Memory @copyMemory(%Memory %memory) alwaysinline {
     %stackPointer = extractvalue %Memory %memory, 0
     %base = extractvalue %Memory %memory, 1

@@ -247,18 +247,31 @@ object Transformer {
       case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
-        val returnValue = freshName("returnValue")
-        val returnType = transform(retType)
-        val parameters = List(Parameter(returnType, returnValue))
+        retType match {
+          case Some(retType) =>
+            val returnType = transform(retType)
+            val returnValue = freshName("returnValue")
+            val parameters = List(Parameter(returnType, returnValue))
+            defineLabel(returnAddressName, parameters) {
+              emit(Comment(s"var $name / return address"))
+              popEnvironmentFrom(getStack(), environment)
+              eraseValue(init)
+              val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
+              popReturnAddressFrom(getStack(), nextReturn.name)
+              emit(callLabel(nextReturn, List(LocalReference(returnType, returnValue))))
+              RetVoid()
+            }
 
-        defineLabel(returnAddressName, parameters) {
-          emit(Comment(s"var $name / return address"))
-          popEnvironmentFrom(getStack(), environment)
-          eraseValue(init)
-          val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
-          popReturnAddressFrom(getStack(), nextReturn.name)
-          emit(callLabel(nextReturn, List(LocalReference(returnType, returnValue))))
-          RetVoid()
+          case None =>
+            defineFunction(returnAddressName, List(Parameter(stackType, "stack"))) {
+              emit(Comment(s"region var $name / return address"))
+              popEnvironmentFrom(getStack(), environment)
+              eraseValue(init)
+              val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
+              popReturnAddressFrom(getStack(), nextReturn.name)
+              emit(Call("", Ccc(), VoidType(), nextReturn, List(getStack())))
+              RetVoid()
+            }
         }
 
         val sharerName = freshName("sharer");
@@ -385,7 +398,7 @@ object Transformer {
         emit(callLabel(returnAddress, values.map(transform)))
         RetVoid()
 
-      case machine.Reset(prompt, frame, rest) =>
+      case machine.Reset(prompt, frame, isRegion, rest) =>
         emit(Comment(s"Reset ${prompt.name}"))
 
         val newStack = LocalReference(stackType, freshName("stack"))
@@ -407,6 +420,11 @@ object Transformer {
           val nextStack = LocalReference(stackType, freshName("stack"));
           emit(Call(nextStack.name, Ccc(), nextStack.tpe, underflowStack, List(getStack())));
           setStack(nextStack);
+          if (isRegion) {
+            val clearRegion = freshName("clearRegion")
+            popReturnAddressFrom(getStack(), clearRegion)
+            emit(Call("", Ccc(), VoidType(), LocalReference(PointerType(), clearRegion), List(getStack())))
+          }
 
           transform(frame.body);
         }
@@ -445,6 +463,9 @@ object Transformer {
         pushEnvironmentOnto(getStack(), frameEnvironment);
         pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
 
+        if (isRegion) {
+          pushReturnAddressOnto(getStack(), "nop", shareFrames.name, eraseFrames.name)
+        }
         transform(rest)
 
       case machine.Resume(value, rest) =>
