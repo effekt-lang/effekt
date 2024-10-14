@@ -84,7 +84,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(arguments) =>
       "return" <+> hsep(arguments map toDoc, ",")
 
-    case NewStack(name, prompt, frame, rest) =>
+    case NewStack(name, prompt, frame, isRegion, rest) =>
       "let" <+> name <+> "=" <+> "stack" <> parens(toDoc(prompt)) <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
     case PushStack(stack, rest) =>
