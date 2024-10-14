@@ -84,7 +84,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(arguments) =>
       "return" <+> hsep(arguments map toDoc, ",")
 
-    case Reset(prompt, frame, rest) =>
+    case Reset(prompt, frame, isRegion, rest) =>
       "let" <+> prompt <+> "=" <+> "reset" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
     case Resume(stack, rest) =>

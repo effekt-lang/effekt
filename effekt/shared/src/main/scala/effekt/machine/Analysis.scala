@@ -45,7 +45,7 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>
       Set.from(values)
-    case Reset(prompt, frame, rest) =>
+    case Reset(prompt, frame, isRegion, rest) =>
       freeVariables(frame) ++ (freeVariables(rest) -- Set(prompt))
     case Resume(value, rest) =>
       Set(value) ++ freeVariables(rest)
