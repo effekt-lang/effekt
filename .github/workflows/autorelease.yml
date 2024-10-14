@@ -66,6 +66,9 @@ jobs:
           distribution: 'zulu'
           cache: 'sbt'
 
+      - name: Setup SBT
+        uses: sbt/setup-sbt@v1
+
       - name: Bump Effekt version using sbt
         id: set-version
         run: |
