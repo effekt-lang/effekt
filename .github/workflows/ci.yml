@@ -60,6 +60,9 @@ jobs:
         distribution: 'zulu'
         cache: 'sbt'
 
+    - name: Setup SBT
+      uses: sbt/setup-sbt@v1
+
     - name: Update apt database
       if: matrix.os != 'windows-latest'
       run: sudo apt-get update
