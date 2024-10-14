@@ -1,0 +1,7 @@
+effect IOException(msg: String): Nothing
+extern io def three: Nothing =
+  js "${box { (msg: String) => do IOException(msg) }}('oops')}"
+
+def main() = {
+  println("typechecks")
+}
