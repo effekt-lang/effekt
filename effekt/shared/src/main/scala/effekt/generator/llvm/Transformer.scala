@@ -532,16 +532,6 @@ object Transformer {
       case machine.Type.Reference(_) => 16
     }
 
-  def regionIndex(tpe: machine.Type): Int =
-    tpe match {
-      case machine.Type.Reference(machine.Type.Int()) => 0
-      case machine.Type.Reference(machine.Type.Double()) => 0
-      case machine.Type.Reference(machine.Type.Positive()) => 1
-      case machine.Type.Reference(machine.Type.Negative()) => 1
-      case machine.Type.Reference(machine.Type.String()) => 2
-      case _ => ???
-    }
-
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
     implicit val FC = FunctionContext();
     implicit val BC = BlockContext();
