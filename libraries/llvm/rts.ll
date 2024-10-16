@@ -436,7 +436,6 @@ define private %Stack @newStack(%Prompt %prompt) {
     ; TODO find actual size of stack
     %stack = call ptr @malloc(i64 120)
 
-    ; TODO initialize to zero?
     %stackMemory = call %Memory @newMemory()
 
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
