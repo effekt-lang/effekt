@@ -73,6 +73,19 @@ function THUNK(f) {
   return f
 }
 
+function FORK(body) {
+  return (ks, k) => {
+    return () => body(x => TRAMPOLINE(() => k(x, ks)))
+  }
+}
+
+function CAPTURE(body) {
+  return (ks, k) => {
+    body(x => TRAMPOLINE(() => k(x, ks)))
+    throw { computationIsDone: true, result: null }
+  }
+}
+
 const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
 // const r = ks.arena.newRegion(); body

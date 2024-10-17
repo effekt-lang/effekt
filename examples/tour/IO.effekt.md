@@ -46,10 +46,10 @@ namespace internal {
   extern def existsFile(path: String): Bool = js "!!filesystem[${path}]"
 
   extern async def readFile(path: String): String =
-    js "$effekt.callcc(k => delayed(() => k(filesystem[${path}])))"
+    js "CAPTURE(k => delayed(() => k(filesystem[${path}])))"
 
   extern async def writeFile(path: String, contents: String): Unit =
-    js "$effekt.callcc(k => delayed(() => k(filesystem[${path}] = ${contents})))"
+    js "CAPTURE(k => delayed(() => k(filesystem[${path}] = ${contents})))"
 }
 
 ```

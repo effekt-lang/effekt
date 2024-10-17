@@ -21,22 +21,13 @@ namespace js {
     jsNode "listen(${server}, ${port}, ${host}, (socket) => RUN_TOPLEVEL((ks, k) => (${listener})(socket, ks, k)))"
 
   extern async def send(socket: JSSocket, data: Bytes): Unit =
-    jsNode """
-      ${socket}.write(${data}, RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => ${socket}.write(${data}, k))"
 
   extern async def receive(socket: JSSocket): Bytes =
-    jsNode """
-      ${socket}.once('data', RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => ${socket}.once('data', k))"
 
   extern async def end(socket: JSSocket): Unit =
-    jsNode """
-      ${socket}.end(RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => ${socket}.end(k))"
 }
 
 interface Socket {

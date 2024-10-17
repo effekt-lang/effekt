@@ -89,26 +89,16 @@ object TransformerCps extends Transformer {
   def toJS(e: cps.Extern)(using C: TransformerContext): js.Stmt = e match {
     case cps.Extern.Def(id, vps, bps, true, body) =>
       body match {
-        case ExternBody.StringExternBody(_, template) =>
-          val ks = JSName("ks")
-          val k = JSName("k")
-
-          // function foo_0(ARGS, ks_0, k_0) {
-          //   function RESUME(a) {
-          //     return trampoline(() => k_0(a, ks_0));
-          //   }
-          //   return BODY
-          // }
-          js.Function(nameDef(id), (vps ++ bps).map(toJSParam) ++ List(ks, k), List(
-            js.Function(JSName("RESUME"), List(JSName("a")), List(
-              js.Return(js.Call(TRAMPOLINE, js.Lambda(Nil,
-                js.Call(js.Variable(k), js.Variable(JSName("a")), js.Variable(ks))))))),
-            js.RawStmt(template.strings, template.args.map(toJS))))
-
+        case ExternBody.StringExternBody(_, contents) =>
+          val ks = freshName("ks_")
+          val k = freshName("k_")
+          js.Function(nameDef(id), (vps ++ bps).map(toJSParam) ++ List(ks, k),
+            List(js.Return(js.Call(toJS(contents), List(js.Variable(ks), js.Variable(k))))))
         case ExternBody.Unsupported(err) =>
           C.errors.report(err)
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("hole"))))
       }
+
 
     case cps.Extern.Def(id, vps, bps, false, body) =>
       body match {

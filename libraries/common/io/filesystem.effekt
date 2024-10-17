@@ -220,40 +220,28 @@ namespace internal {
   """
 
   extern async def open(path: String, mode: Mode): Int =
-    jsNode """
-      open(${path}, ${mode}, RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => open(${path}, ${mode}, k))"
     llvm """
       call void @c_fs_open(%Pos ${path}, %Pos ${mode}, %Stack %stack)
       ret void
     """
 
   extern async def read(fd: Int, buffer: Bytes, offset: Int): Int =
-    jsNode """
-      read(${fd}, ${buffer}, ${offset}, RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => read(${fd}, ${buffer}, ${offset}, k))"
     llvm """
       call void @c_fs_read(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
       ret void
     """
 
   extern async def write(fd: Int, buffer: Bytes, offset: Int): Int =
-    jsNode """
-      write(${fd}, ${buffer}, ${offset}, RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => write(${fd}, ${buffer}, ${offset}, k))"
     llvm """
       call void @c_fs_write(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
       ret void
     """
 
   extern async def close(fd: Int): Int =
-    jsNode """
-      close(${fd}, RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => close(${fd}, k))"
     llvm """
       call void @c_fs_close(%Int ${fd}, %Stack %stack)
       ret void

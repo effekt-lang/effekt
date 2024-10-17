@@ -40,10 +40,7 @@ namespace js {
     jsNode "${console}.close()"
 
   extern async def readLine(console: JSConsole): String =
-    jsNode """
-      ${console}.once('line', RESUME);
-      return ABORT(undefined);
-    """
+    jsNode "CAPTURE(k => ${console}.once('line', k))"
   extern io def writeLine(console: JSConsole, message: String): Unit =
     jsNode "${console}.output.write(${message} + '\\n')"
 }
