@@ -9,7 +9,10 @@ import effekt.util.messages.EffektError
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, SymbolTag, ExecuteCommandParams }
+
+import scala.jdk.CollectionConverters._
+import effekt.context.Annotations
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -130,18 +133,41 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
+    context.compiler.runFrontend(source)(using context).map { module =>
+      for {
+        scope <- context.annotationOption(Annotations.ScopesForFile, source).getOrElse(Nil)
+      } yield {
+        val BindingInfo(importedTerms, importedTypes, terms, types) = allBindings(scope)(using context)
+      }
 
-    context.compiler.runFrontend(source)(using context)
+      val fileStart = convertRange(kiama.util.Range(kiama.util.Position(1, 1, source), kiama.util.Position(1, 1, source)))
+      val root = DocumentSymbol(module.namespace.head, SymbolKind.Namespace, fileStart, fileStart)
 
-    val documentSymbols = for {
-      sym <- context.sourceSymbolsFor(source).toVector
-      if !sym.isSynthetic
-      id <- context.definitionTreeOption(sym)
-      decl <- getSourceTreeFor(sym)
-      kind <- getSymbolKind(sym)
-      detail <- getInfoOf(sym)(context)
-    } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header)
-    Some(documentSymbols)
+      val documentIncludes = for {
+        include <- module.includes
+        children <- getSymbols(include.source)
+      } yield new DocumentSymbol("Import", SymbolKind.File, fileStart, fileStart, include.path, children.asJava)
+
+      val documentSymbols = for {
+        sym  <- context.sourceSymbolsFor(module.source).toList
+        if !sym.isSynthetic
+        id   <- context.definitionTreeOption(sym)
+        decl <- getSourceTreeFor(sym)
+        kind <- getSymbolKind(sym)
+        tpe  = context.typeOption(sym) match {
+          case Some(tpe) => showSymbol(sym, tpe)
+          case None => ""
+        }
+      } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), tpe)
+
+      root.setChildren((documentIncludes ++ documentSymbols).asJava)
+      Vector(root)
+    }
+
+  private def showSymbol(s: Symbol, tpe: Type): String = (s, tpe) match {
+    case (s: Callable, tpe: BlockType.FunctionType) => DeclPrinter.format(tpe)
+    case (_, tpe) => TypePrinter.show(tpe)
+  }
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
