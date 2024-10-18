@@ -243,9 +243,10 @@ object Transformer {
               // TODO currently we use prompt 1 as a quick fix...
               //    However, this will not work when reinstalling a fresh stack
               //    We need to truly special case global memory!
-              LiteralInt(prompt, 1L,
-                Allocate(reference, value, prompt,
-                  transform(body)))
+              // LiteralInt(prompt, 1L,
+              //   Allocate(reference, value, prompt,
+              //     transform(body)))
+              ???
             case _ =>
               Allocate(reference, value, prompt,
                   transform(body))

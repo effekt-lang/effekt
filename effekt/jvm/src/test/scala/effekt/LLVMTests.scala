@@ -96,6 +96,10 @@ class LLVMTests extends EffektTests {
 
     // Generic equality
     examplesDir / "pos" / "issue429.effekt",
+
+    // Global region
+    examplesDir / "pos" / "capture" / "selfregion.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
   )
 
   override lazy val ignored: List[File] = bugs ++ missingFeatures
