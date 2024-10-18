@@ -144,24 +144,9 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-   * e.g. let x = allocate(42, region); s
-   */
-  case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
-
-  /**
-   * e.g. let y = load(x); s
-   */
-  case Load(name: Variable, reference: Variable, rest: Statement)
-
-  /**
-   * e.g. store(x, 42); s
-   */
-  case Store(reference: Variable, value: Variable, rest: Statement)
-
-  /**
    * e.g. var x = 42; s
    */
-  case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
+  case Var(name: Variable, init: Variable, returnType: Option[Type], rest: Statement)
 
   /**
    * e.g. let y = loadVar(x); s
@@ -198,7 +183,7 @@ enum Statement {
   /**
    * e.g. let k = stack(p) { (x, ...) => s }; s
    */
-  case NewStack(name: Variable, prompt: Variable, frame: Clause, rest: Statement)
+  case NewStack(name: Variable, prompt: Variable, frame: Clause, isRegion: Boolean, rest: Statement)
 
   /**
    * e.g. push k; s
