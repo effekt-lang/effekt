@@ -206,3 +206,13 @@ $effekt.capture = CAPTURE
  * Requires an active Effekt runtime (trampoline).
  */
 $effekt.run = RUN
+
+/**
+ * Used to call Effekt function arguments in the JS FFI, like in `network::listen`.
+ *
+ * This function should be used when _no_ Effekt runtime is available. For instance,
+ * in callbacks passed to the NodeJS eventloop.
+ *
+ * If a runtime is available, use `$effekt.run`, instead.
+ */
+$effekt.runToplevel = RUN_TOPLEVEL
