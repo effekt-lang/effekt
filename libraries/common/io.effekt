@@ -13,7 +13,7 @@ extern llvm """
 """
 
 extern async def spawn(task: Task[Unit]): Unit =
-  js "FORK(k => { setTimeout(() => k($effekt.unit), 0); return RUN(${task}) })"
+  js "$effekt.capture(k => { setTimeout(() => k($effekt.unit), 0); return $effekt.run(${task}) })"
   llvm """
     call void @c_yield(%Stack %stack)
     call void @run(%Neg ${task})
@@ -21,14 +21,14 @@ extern async def spawn(task: Task[Unit]): Unit =
   """
 
 extern async def yield(): Unit =
-  js "CAPTURE(k => setTimeout(() => k($effekt.unit), 0))"
+  js "$effekt.capture(k => setTimeout(() => k($effekt.unit), 0))"
   llvm """
     call void @c_yield(%Stack %stack)
     ret void
   """
 
 extern async def abort(): Nothing =
-  js "CAPTURE(k => undefined)"
+  js "$effekt.capture(k => undefined)"
   llvm """
     call void @eraseStack(%Stack %stack)
     ret void
@@ -55,14 +55,14 @@ extern llvm """
 """
 
 extern async def await[T](promise: Promise[T]): T =
-  js "CAPTURE(k => ${promise}.promise.then(k))"
+  js "$effekt.capture(k => ${promise}.promise.then(k))"
   llvm """
     call void @c_promise_await(%Pos ${promise}, %Stack %stack)
     ret void
   """
 
 extern async def resolve[T](promise: Promise[T], value: T): Unit =
-  js "CAPTURE(k => { ${promise}.resolve(${value}); return k($effekt.unit) })"
+  js "$effekt.capture(k => { ${promise}.resolve(${value}); return k($effekt.unit) })"
   llvm """
     call void @c_promise_resolve(%Pos ${promise}, %Pos ${value}, %Stack %stack)
     ret void

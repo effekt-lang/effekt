@@ -1,8 +1,6 @@
 
 // Common Runtime
 // --------------
-
-
 function Cell(init, region) {
   const cell = {
     value: init,
@@ -73,16 +71,11 @@ function THUNK(f) {
   return f
 }
 
-function FORK(body) {
-  return (ks, k) => {
-    return () => body(x => TRAMPOLINE(() => k(x, ks)))
-  }
-}
-
 function CAPTURE(body) {
   return (ks, k) => {
-    body(x => TRAMPOLINE(() => k(x, ks)))
-    throw { computationIsDone: true, result: null }
+    const res = body(x => TRAMPOLINE(() => k(x, ks)))
+    if (res instanceof Function) return res
+    else throw { computationIsDone: true, result: $effekt.unit }
   }
 }
 
@@ -106,8 +99,6 @@ function DEALLOC(ks) {
 }
 
 function SHIFT(p, body, ks, k) {
-
-  // console.log("Shifting", p, ks)
 
   // TODO avoid constructing this object
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
@@ -177,3 +168,41 @@ function RUN(task) {
 function ABORT(value) {
   throw { computationIsDone: true, result: value }
 }
+
+
+// "Public API" used in FFI
+// ------------------------
+
+/**
+ * Captures the current continuation as a WHOLE and makes it available
+ * as argument to the passed body. For example:
+ *
+ *   $effekt.capture(k => ... k(42) ...)
+ *
+ * The body
+ *
+ *   $effekt.capture(k => >>> ... <<<)
+ *
+ * conceptually runs on the _native_ JS call stack. You can call JS functions,
+ * like `setTimeout` etc., but you are not expected or required to return an
+ * Effekt value like `$effekt.unit`. If you want to run an Effekt computation
+ * like in `io::spawn`, you can use `$effekt.run`.
+ *
+ * Advanced usage details:
+ *
+ * The value returned by the function passed to `capture` returns
+ * - a function: the returned function will be passed to the
+ *   Effekt runtime, which performs trampolining.
+ *   In this case, the Effekt runtime will keep running, though the
+ *   continuation has been removed.
+ *
+ * - another value (like `undefined`): the Effekt runtime will terminate.
+ */
+$effekt.capture = CAPTURE
+
+/**
+ * Used to call Effekt function arguments in the JS FFI, like in `io::spawn`.
+ *
+ * Requires an active Effekt runtime (trampoline).
+ */
+$effekt.run = RUN

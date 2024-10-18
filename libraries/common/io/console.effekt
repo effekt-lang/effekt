@@ -40,7 +40,7 @@ namespace js {
     jsNode "${console}.close()"
 
   extern async def readLine(console: JSConsole): String =
-    jsNode "CAPTURE(k => ${console}.once('line', k))"
+    jsNode "$effekt.capture(k => ${console}.once('line', k))"
   extern io def writeLine(console: JSConsole, message: String): Unit =
     jsNode "${console}.output.write(${message} + '\\n')"
 }
