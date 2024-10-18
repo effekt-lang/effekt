@@ -200,7 +200,7 @@ object Transformer {
         val idx = regionIndex(reference.tpe)
 
         val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), freshName("cell"))
-        emit(Call(temporaryRef.name, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region), getStack())));
+        emit(Call(temporaryRef.name, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region))));
 
         val ptrRef = LocalReference(PointerType(), freshName("pointer"))
         emit(ExtractValue(ptrRef.name, temporaryRef, 0))
@@ -450,6 +450,7 @@ object Transformer {
       case machine.Resume(value, rest) =>
         emit(Comment(s"Resume ${value.name}"))
         shareValues(List(value), freeVariables(rest));
+        val uniqueStackName = freshName("stack");
         val newStackName = freshName("stack");
         emit(Call(newStackName, Ccc(), stackType, resume, List(transform(value), getStack())));
         setStack(LocalReference(stackType, newStackName));
@@ -457,11 +458,14 @@ object Transformer {
 
       case machine.Shift(variable, prompt, rest) =>
         emit(Comment(s"Shift ${variable.name}, prompt=${prompt.name}"))
-        val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, shift, List(getStack(), transform(prompt))));
+        val pair = LocalReference(StructureType(List(resumptionType, stackType)), freshName("pair"));
+        emit(Call(pair.name, Ccc(), pair.tpe, shift, List(getStack(), transform(prompt))));
 
-        emit(BitCast(variable.name, getStack(), stackType));
-        setStack(LocalReference(stackType, newStackName));
+        emit(ExtractValue(variable.name, pair, 0))
+
+        val newStack = LocalReference(stackType, freshName("stack"));
+        emit(ExtractValue(newStack.name, pair, 1))
+        setStack(newStack);
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -523,6 +527,7 @@ object Transformer {
   val objectType = NamedType("Object");
   val stackPointerType = NamedType("StackPointer");
   val stackType = NamedType("Stack");
+  val resumptionType = NamedType("Resumption");
   val promptType = NamedType("Prompt");
   val referenceType = NamedType("Reference");
 
@@ -530,7 +535,7 @@ object Transformer {
     case machine.Positive()          => positiveType
     case machine.Negative()          => negativeType
     case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => stackType
+    case machine.Type.Stack()        => resumptionType
     case machine.Type.Int()          => IntegerType64()
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
@@ -551,7 +556,7 @@ object Transformer {
       case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
-      case machine.Type.Reference(_) => 8
+      case machine.Type.Reference(_) => 16
     }
 
   def regionIndex(tpe: machine.Type): Int =
@@ -741,7 +746,7 @@ object Transformer {
       case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), sharePositive, List(transform(value))))
       case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), shareNegative, List(transform(value))))
       case machine.Type.Prompt()     => ()
-      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), shareStack, List(transform(value))))
+      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), shareResumption, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Byte()       => ()
       case machine.Type.Double()     => ()
@@ -755,7 +760,7 @@ object Transformer {
       case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), erasePositive, List(transform(value))))
       case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value))))
       case machine.Type.Prompt()     => ()
-      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), eraseStack, List(transform(value))))
+      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Byte()       => ()
       case machine.Type.Double()     => ()
@@ -805,14 +810,14 @@ object Transformer {
   val shareObject = ConstantGlobal("shareObject");
   val sharePositive = ConstantGlobal("sharePositive");
   val shareNegative = ConstantGlobal("shareNegative");
-  val shareStack = ConstantGlobal("shareStack");
+  val shareResumption = ConstantGlobal("shareResumption");
   val shareFrames = ConstantGlobal("shareFrames");
   val shareString = ConstantGlobal("sharePositive");
 
   val eraseObject = ConstantGlobal("eraseObject");
   val erasePositive = ConstantGlobal("erasePositive");
   val eraseNegative = ConstantGlobal("eraseNegative");
-  val eraseStack = ConstantGlobal("eraseStack");
+  val eraseResumption = ConstantGlobal("eraseResumption");
   val eraseFrames = ConstantGlobal("eraseFrames");
   val eraseString = ConstantGlobal("erasePositive");
 
