@@ -48,7 +48,6 @@ enum ToplevelDefinition {
  * FFI external definitions
  */
 enum Extern extends Tree {
-  // TODO async defs!
   case Def(id: Id, vparams: List[Id], bparams: List[Id], async: Boolean, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
@@ -137,7 +136,6 @@ enum Stmt extends Tree {
   // reset( { (p, ks, k) => STMT }, ks, k)
   case Reset(prog: BlockLit, ks: MetaCont, k: Cont)
 
-  // TODO bidirectional
   // shift(p, { (resume, ks, k) => STMT }, ks, k)
   case Shift(prompt: Id, body: BlockLit, ks: MetaCont, k: Cont)
 

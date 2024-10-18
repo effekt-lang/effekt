@@ -152,7 +152,6 @@ object Transformer {
       cps.Alloc(id, transform(init), region, transform(body, ks, k))
 
     case core.Stmt.Var(id, init, capture, body) =>
-      // Var(id: Id, init: Pure, ks: MetaCont, body: Stmt)
       cps.Var(id, transform(init), MetaCont(ks),
         transform(body, ks,
           Continuation.Static(Id("tmp")) { (x, ks) =>
