@@ -200,7 +200,7 @@ object Transformer {
         val idx = regionIndex(reference.tpe)
 
         val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), freshName("cell"))
-        emit(Call(temporaryRef.name, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region), getStack())));
+        emit(Call(temporaryRef.name, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region))));
 
         val ptrRef = LocalReference(PointerType(), freshName("pointer"))
         emit(ExtractValue(ptrRef.name, temporaryRef, 0))
@@ -437,7 +437,12 @@ object Transformer {
 
         shareValues(frameEnvironment, freeVariables(rest));
 
-        val stack = LocalReference(stackType, variable.name);
+        val stackPointer = LocalReference(PointerType(), freshName("stack_pointer"));
+        emit(GetElementPtr(stackPointer.name, NamedType("ResumptionValue"), transform(variable), List(0, 1)))
+
+        val stack = LocalReference(stackType, freshName("stack"));
+        emit(Load(stack.name, stackType, stackPointer))
+
         pushEnvironmentOnto(stack, frameEnvironment);
         pushReturnAddressOnto(stack, returnAddressName, sharerName, eraserName);
 
@@ -447,19 +452,23 @@ object Transformer {
       case machine.PushStack(value, rest) =>
         emit(Comment(s"pushStack ${value.name}"))
         shareValues(List(value), freeVariables(rest));
+        val uniqueStackName = freshName("stack");
         val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
-        emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), getStack())));
+        emit(Call(uniqueStackName, Ccc(), resumptionType, uniqueStack, List(transform(value))));
+        emit(Call(newStackName, Ccc(), stackType, pushStack, List(LocalReference(resumptionType, uniqueStackName), getStack())));
         setStack(LocalReference(stackType, newStackName));
         transform(rest)
 
       case machine.PopStacks(variable, prompt, rest) =>
         emit(Comment(s"popStacks ${variable.name}, prompt=${prompt.name}"))
-        val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(prompt))));
+        val pair = LocalReference(StructureType(List(resumptionType, stackType)), freshName("pair"));
+        emit(Call(pair.name, Ccc(), pair.tpe, popStacks, List(getStack(), transform(prompt))));
 
-        emit(BitCast(variable.name, getStack(), stackType));
-        setStack(LocalReference(stackType, newStackName));
+        emit(ExtractValue(variable.name, pair, 0))
+
+        val newStack = LocalReference(stackType, freshName("stack"));
+        emit(ExtractValue(newStack.name, pair, 1))
+        setStack(newStack);
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -529,6 +538,7 @@ object Transformer {
   val objectType = NamedType("Object");
   val stackPointerType = NamedType("StackPointer");
   val stackType = NamedType("Stack");
+  val resumptionType = NamedType("Resumption");
   val promptType = NamedType("Prompt");
   val referenceType = NamedType("Reference");
 
@@ -536,7 +546,7 @@ object Transformer {
     case machine.Positive()          => positiveType
     case machine.Negative()          => negativeType
     case machine.Type.Prompt()       => promptType
-    case machine.Type.Stack()        => stackType
+    case machine.Type.Stack()        => resumptionType
     case machine.Type.Int()          => IntegerType64()
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
@@ -557,7 +567,7 @@ object Transformer {
       case machine.Type.Byte()       => 1
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
-      case machine.Type.Reference(_) => 8
+      case machine.Type.Reference(_) => 16
     }
 
   def regionIndex(tpe: machine.Type): Int =
@@ -747,7 +757,7 @@ object Transformer {
       case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), sharePositive, List(transform(value))))
       case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), shareNegative, List(transform(value))))
       case machine.Type.Prompt()     => ()
-      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), shareStack, List(transform(value))))
+      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), shareResumption, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Byte()       => ()
       case machine.Type.Double()     => ()
@@ -761,7 +771,7 @@ object Transformer {
       case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), erasePositive, List(transform(value))))
       case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value))))
       case machine.Type.Prompt()     => ()
-      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), eraseStack, List(transform(value))))
+      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value))))
       case machine.Type.Int()        => ()
       case machine.Type.Byte()       => ()
       case machine.Type.Double()     => ()
@@ -811,14 +821,14 @@ object Transformer {
   val shareObject = ConstantGlobal(PointerType(), "shareObject");
   val sharePositive = ConstantGlobal(PointerType(), "sharePositive");
   val shareNegative = ConstantGlobal(PointerType(), "shareNegative");
-  val shareStack = ConstantGlobal(PointerType(), "shareStack");
+  val shareResumption = ConstantGlobal(PointerType(), "shareResumption");
   val shareFrames = ConstantGlobal(PointerType(), "shareFrames");
   val shareString = ConstantGlobal(PointerType(), "sharePositive");
 
   val eraseObject = ConstantGlobal(PointerType(), "eraseObject");
   val erasePositive = ConstantGlobal(PointerType(), "erasePositive");
   val eraseNegative = ConstantGlobal(PointerType(), "eraseNegative");
-  val eraseStack = ConstantGlobal(PointerType(), "eraseStack");
+  val eraseResumption = ConstantGlobal(PointerType(), "eraseResumption");
   val eraseFrames = ConstantGlobal(PointerType(), "eraseFrames");
   val eraseString = ConstantGlobal(PointerType(), "erasePositive");
 
