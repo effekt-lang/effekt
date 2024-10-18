@@ -66,20 +66,24 @@
 ;
 %Region = type [ 3 x %Memory ]
 
+; Unique address for each handler.
+%Prompt = type ptr
+
+; A Continuation capturing a list of stacks
+%Resumption = type ptr
+
 ; The "meta" stack (a stack of stacks) -- a pointer to a %StackValue
 %Stack = type ptr
 
-; Unique tags to index into the stack.
-%Prompt = type i64
+; Lives in a stable address
+%PromptValue = type { %ReferenceCount, %Stack }
 
-; fresh prompt generation
-@lastPrompt = private global %Prompt 0
+; This points to a linked-list of stacks,
+; and also holds a direct pointer to the last stack
+%ResumptionValue = type { %ReferenceCount, %Stack, %Stack }
 
-; This is used for two purposes:
-;   - a refied first-class list of stacks (cyclic linked-list)
-;   - as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %ReferenceCount, %Memory, %Region, %Prompt, %Stack }
-
+; This is used as part of an intrusive linked-list of stacks (meta stack)
+%StackValue = type { %Memory, %Region, %Prompt, %Stack }
 
 
 
@@ -90,7 +94,7 @@
 %Neg = type {ptr, %Object}
 
 ; Reference into an arena (prompt -- cast to 32bit, offset 32bit)
-%Reference = type {i32, i32}
+%Reference = type { %Prompt, i64 }
 
 ; Builtin Types
 
