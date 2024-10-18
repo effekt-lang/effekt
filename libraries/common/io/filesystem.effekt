@@ -208,28 +208,28 @@ namespace internal {
   """
 
   extern async def open(path: String, mode: Mode): Int =
-    jsNode "$effekt.callcc(callback => open(${path}, ${mode}, callback))"
+    jsNode "$effekt.capture(k => open(${path}, ${mode}, k))"
     llvm """
       call void @c_fs_open(%Pos ${path}, %Pos ${mode}, %Stack %stack)
       ret void
     """
 
   extern async def read(fd: Int, buffer: Bytes, offset: Int): Int =
-    jsNode "$effekt.callcc(callback => read(${fd}, ${buffer}, ${offset}, callback))"
+    jsNode "$effekt.capture(k => read(${fd}, ${buffer}, ${offset}, k))"
     llvm """
       call void @c_fs_read(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
       ret void
     """
 
   extern async def write(fd: Int, buffer: Bytes, offset: Int): Int =
-    jsNode "$effekt.callcc(callback => write(${fd}, ${buffer}, ${offset}, callback))"
+    jsNode "$effekt.capture(k => write(${fd}, ${buffer}, ${offset}, k))"
     llvm """
       call void @c_fs_write(%Int ${fd}, %Pos ${buffer}, %Int ${offset}, %Stack %stack)
       ret void
     """
 
   extern async def close(fd: Int): Int =
-    jsNode "$effekt.callcc(callback => close(${fd}, callback))"
+    jsNode "$effekt.capture(k => close(${fd}, k))"
     llvm """
       call void @c_fs_close(%Int ${fd}, %Stack %stack)
       ret void
