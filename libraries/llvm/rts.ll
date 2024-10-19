@@ -136,8 +136,8 @@ define private %Prompt @freshPrompt() {
 ; Garbage collection
 
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    ; This magical 16 is the size of the object header
-    %size = add i64 %environmentSize, 16
+    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
+    %size = add i64 %environmentSize, %headerSize
     %object = call ptr @malloc(i64 %size)
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
@@ -388,8 +388,9 @@ define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
 ; Meta-stack management
 
 define private %Memory @newMemory() {
-    %stackPointer = call %StackPointer @malloc(i64 268435456)
-    %limit = getelementptr i8, ptr %stackPointer, i64 268435456
+    %size = shl i64 1, 28
+    %stackPointer = call %StackPointer @malloc(i64 %size)
+    %limit = getelementptr i8, ptr %stackPointer, i64 %size
 
     %memory.0 = insertvalue %Memory undef, %StackPointer %stackPointer, 0
     %memory.1 = insertvalue %Memory %memory.0, %Base %stackPointer, 1
@@ -402,8 +403,8 @@ define private %Stack @pushNewStack(%Stack %oldStack) {
 
     %prompt = call %Prompt @freshPrompt()
 
-    ; TODO find actual size of stack
-    %stack = call ptr @malloc(i64 120)
+    %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
+    %stack = call ptr @malloc(i64 %size)
 
     ; TODO initialize to zero and grow later
     %stackMemory = call %Memory @newMemory()
@@ -580,7 +581,8 @@ copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newOldReferenceCount, ptr %stackReferenceCount
 
-    %newHead = call ptr @malloc(i64 120)
+    %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
+    %newHead = call ptr @malloc(i64 %size)
     br label %loop
 
 loop:
@@ -619,7 +621,7 @@ loop:
     br i1 %isNull, label %stop, label %next
 
 next:
-    %nextNew = call ptr @malloc(i64 120)
+    %nextNew = call ptr @malloc(i64 %size)
     store %Stack %nextNew, ptr %newStackRest
     br label %loop
 
