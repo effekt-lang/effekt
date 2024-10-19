@@ -451,8 +451,7 @@ object Transformer {
         emit(Comment(s"pushStack ${value.name}"))
         shareValues(List(value), freeVariables(rest));
         val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, uniqueStack, List(transform(value))));
-        emit(Call("_", Ccc(), VoidType(), pushStack, List(LocalReference(stackType, newStackName), getStack())));
+        emit(Call(newStackName, Ccc(), stackType, pushStack, List(transform(value), getStack())));
         setStack(LocalReference(stackType, newStackName));
         transform(rest)
 

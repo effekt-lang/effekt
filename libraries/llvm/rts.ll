@@ -419,7 +419,13 @@ define private %Stack @pushNewStack(%Stack %oldStack) {
     ret %Stack %stack
 }
 
-define private void @pushStack(%Stack %stack, %Stack %oldStack) {
+define private %Stack @pushStack(%Stack %stack, %Stack %oldStack) alwaysinline {
+    %uniqueStack = call %Stack @uniqueStack(%Stack %stack)
+    tail call void @pushUniqueStack(%Stack %uniqueStack, %Stack %oldStack)
+    ret %Stack %uniqueStack
+}
+
+define private void @pushUniqueStack(%Stack %stack, %Stack %oldStack) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
@@ -430,7 +436,7 @@ done:
     ret void
 
 next:
-    tail call void @pushStack(%Stack %rest, %Stack %oldStack)
+    tail call void @pushUniqueStack(%Stack %rest, %Stack %oldStack)
     ret void
 }
 
