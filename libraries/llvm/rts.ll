@@ -677,7 +677,7 @@ next:
 stop:
     store %Stack null, ptr %newStackRest
     store %Stack %newStack, ptr %newEnd_pointer
-    ret %Stack %newHead
+    ret %Stack %newResumption
 }
 
 define void @shareResumption(%Resumption %resumption) alwaysinline {
