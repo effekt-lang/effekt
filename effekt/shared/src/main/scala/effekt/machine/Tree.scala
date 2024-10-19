@@ -184,12 +184,6 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * Creates a fresh prompt
-   * let p = freshPrompt; s
-   */
-  case FreshPrompt(name: Variable, rest: Statement)
-
-  /**
    * Retrieves the prompt of the currently mounted stack
    * let n = currentPrompt; s
    */
@@ -198,7 +192,7 @@ enum Statement {
   /**
    * e.g. let k = stack(p) { (x, ...) => s }; s
    */
-  case NewStack(name: Variable, prompt: Variable, frame: Clause, rest: Statement)
+  case PushNewStack(name: Variable, frame: Clause, rest: Statement)
 
   /**
    * e.g. push k; s

@@ -209,26 +209,20 @@ object Transformer {
 
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
-        val delimiter = Variable(freshName("delimiter"), Type.Stack())
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
-        FreshPrompt(prompt,
-          NewStack(delimiter, prompt, returnClause,
-            PushStack(delimiter,
-              (bparams zip handlers).foldRight(transform(body)){
-                case ((id, handler), body) =>
-                  New(transform(id), transform(handler, Some(prompt)), body)
-              })))
+        PushNewStack(prompt, returnClause,
+          (bparams zip handlers).foldRight(transform(body)){
+            case ((id, handler), body) =>
+              New(transform(id), transform(handler, Some(prompt)), body)
+          })
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
-        val delimiter = Variable(freshName("delimiter"), Type.Stack())
         val prompt = transform(region)
 
-        FreshPrompt(prompt,
-          NewStack(delimiter, prompt, returnClause,
-            PushStack(delimiter, transform(body))))
+        PushNewStack(prompt, returnClause, transform(body))
 
       case core.Alloc(id, init, region, body) =>
         transform(init).run { value =>
