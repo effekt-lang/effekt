@@ -3,6 +3,7 @@ package effekt
 import effekt.context.{ Annotations, Context }
 import effekt.source.{ FunDef, ModuleDecl, Tree }
 import kiama.util.{ Position, Source }
+import effekt.symbols.scopes.Scope
 
 trait Intelligence {
 
@@ -96,6 +97,58 @@ trait Intelligence {
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
+
+  case class TermBinding(qualifier: Array[String], name: String, tpe: String) // TODO add qualifier
+
+  case class TypeBinding(qualifier: Array[String], name: String, definition: String)
+
+  case class BindingInfo(
+    importedTerms: Iterable[TermBinding],
+    importedTypes: Iterable[TypeBinding],
+    terms: Iterable[TermBinding],
+    types: Iterable[TypeBinding]) {
+
+    def ++(other: BindingInfo): BindingInfo =
+      BindingInfo(
+        importedTerms ++ other.importedTerms,
+        importedTypes ++ other.importedTypes,
+        terms ++ other.terms,
+        types ++ other.types)
+  }
+  
+  def allBindings(scope: Scope)(using C: Context): BindingInfo =
+    scope match {
+      case Scope.Global(imports, bindings) =>
+        val (te1, ty1) = allBindings(imports)
+        val (te2, ty2) = allBindings(bindings)
+        BindingInfo(te1, ty1, te2, ty2)
+      case Scope.Named(name, bindings, outer) =>
+        val (te, ty) = allBindings(bindings)
+        BindingInfo(Seq.empty, Seq.empty, te, ty) ++ allBindings(outer)
+      case Scope.Local(imports, bindings, outer) =>
+        val outerBindings = allBindings(outer)
+        val (te1, ty1) = allBindings(imports)
+        val (te2, ty2) = allBindings(bindings)
+        BindingInfo(te1, ty1, te2, ty2) ++ allBindings(outer)
+    }
+
+  def allBindings(bindings: Namespace, path: List[String] = Nil)(using C: Context): (Iterable[TermBinding], Iterable[TypeBinding]) =
+    val types = bindings.types.flatMap {
+      case (name, sym) =>
+        // TODO this is extremely hacky, printing is not defined for all types at the moment
+        try { Some(TypeBinding(path.toArray, name, DeclPrinter(sym))) } catch { case e => None }
+    }
+    val terms = bindings.terms.flatMap { case (name, syms) =>
+      syms.collect {
+        case sym: ValueSymbol => TermBinding(path.toArray, name, C.valueTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
+        case sym: BlockSymbol => TermBinding(path.toArray, name, C.blockTypeOption(sym).map(t => pp"${t}").getOrElse("Type unknown"))
+      }
+    }
+    val (nestedTerms, nestedTypes) = bindings.namespaces.map {
+      case (name, namespace) => allBindings(namespace, path :+ name)
+    }.unzip
+
+    (terms ++ nestedTerms.flatten, types ++ nestedTypes.flatten)
 
   // For now we only show captures of function definitions and calls to box
   def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =
