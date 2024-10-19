@@ -398,7 +398,9 @@ define private %Memory @newMemory() {
     ret %Memory %memory.2
 }
 
-define private %Stack @newStack(%Prompt %prompt) {
+define private %Stack @pushNewStack(%Stack %oldStack) {
+
+    %prompt = call %Prompt @freshPrompt()
 
     ; TODO find actual size of stack
     %stack = call ptr @malloc(i64 120)
@@ -410,7 +412,7 @@ define private %Stack @newStack(%Prompt %prompt) {
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
     %stack.3 = insertvalue %StackValue %stack.2, %Prompt %prompt, 3
-    %stack.4 = insertvalue %StackValue %stack.3, %Stack zeroinitializer, 4
+    %stack.4 = insertvalue %StackValue %stack.3, %Stack %oldStack, 4
 
     store %StackValue %stack.4, %Stack %stack
 
@@ -698,8 +700,7 @@ define private void @topLevelEraser(%Environment %environment) {
 
 define private %Stack @withEmptyStack() {
     ; TODO all stacks share the same source of fresh prompts
-    %prompt = call %Prompt @freshPrompt()
-    %stack = call %Stack @newStack(%Prompt %prompt)
+    %stack = call %Stack @pushNewStack(%Stack null)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer

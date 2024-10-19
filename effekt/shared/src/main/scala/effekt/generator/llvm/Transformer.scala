@@ -385,9 +385,14 @@ object Transformer {
         emit(callLabel(returnAddress, values.map(transform)))
         RetVoid()
 
-      case machine.NewStack(variable, prompt, frame, rest) =>
-        emit(Comment(s"newStack ${variable.name}"))
-        emit(Call(variable.name, Ccc(), transform(variable.tpe), newStack, List(transform(prompt))));
+      case machine.PushNewStack(prompt, frame, rest) =>
+        emit(Comment(s"pushNewStack ${prompt.name}"))
+
+        val newStack = LocalReference(stackType, freshName("stack"))
+        emit(Call(newStack.name, Ccc(), stackType, pushNewStack, List(getStack())));
+        setStack(newStack)
+
+        emit(Call(prompt.name, Ccc(), promptType, currentPrompt, List(getStack())))
 
         val frameEnvironment = freeVariables(frame).toList;
 
@@ -437,11 +442,9 @@ object Transformer {
 
         shareValues(frameEnvironment, freeVariables(rest));
 
-        val stack = LocalReference(stackType, variable.name);
-        pushEnvironmentOnto(stack, frameEnvironment);
-        pushReturnAddressOnto(stack, returnAddressName, sharerName, eraserName);
+        pushEnvironmentOnto(getStack(), frameEnvironment);
+        pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
 
-        eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.PushStack(value, rest) =>
@@ -462,10 +465,6 @@ object Transformer {
         setStack(LocalReference(stackType, newStackName));
 
         eraseValues(List(variable), freeVariables(rest));
-        transform(rest)
-
-      case machine.FreshPrompt(machine.Variable(name, _), rest) =>
-        emit(Call(name, Ccc(), promptType, freshPrompt, Nil))
         transform(rest)
 
       case machine.CurrentPrompt(machine.Variable(name, _), rest) =>
@@ -828,10 +827,9 @@ object Transformer {
   val newReference = ConstantGlobal(PointerType(), "newReference")
   val getVarPointer = ConstantGlobal(PointerType(), "getVarPointer")
 
-  val newStack = ConstantGlobal(PointerType(), "newStack");
+  val pushNewStack = ConstantGlobal(PointerType(), "pushNewStack");
   val pushStack = ConstantGlobal(PointerType(), "pushStack");
   val popStacks = ConstantGlobal(PointerType(), "popStacks");
-  val freshPrompt = ConstantGlobal(PointerType(), "freshPrompt");
   val currentPrompt = ConstantGlobal(PointerType(), "currentPrompt");
   val underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   val uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
