@@ -9,7 +9,8 @@ import effekt.util.messages.EffektError
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import scala.collection.mutable.HashMap
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, CompletionItem, CompletionItemKind, InsertTextFormat, SymbolKind, ExecuteCommandParams }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -130,7 +131,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
-
     context.compiler.runFrontend(source)(using context)
 
     val documentSymbols = for {
@@ -149,6 +149,25 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       refs = context.distinctReferencesTo(sym)
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
+
+  override def getCompletion(position: Position): Option[Vector[CompletionItem]] = for {
+    suggestions <- getCompletionsAt(position)(context)
+    items = suggestions.map {
+      case Left(sym) =>
+        val item = CompletionItem(sym.name.name)
+        item.setKind(getCompletionKind(sym))
+        getInfoOf(sym)(context).map { detail =>
+          item.setDetail(detail.header)
+          item.setDocumentation(detail.description.getOrElse(""))
+        }
+        item
+      case Right(name, detail) =>
+        val item = CompletionItem(name)
+        item.setKind(CompletionItemKind.Keyword)
+        item.setDetail(detail)
+        item
+    }
+  } yield items
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
@@ -173,6 +192,25 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         Some(SymbolKind.Variable)
       case _ =>
         None
+    }
+
+  // for custom icons and intelligence of autocomplete
+  def getCompletionKind(sym: Symbol): CompletionItemKind =
+    sym match {
+      case _: Module =>
+        CompletionItemKind.Module
+      case _: Interface | _: ExternInterface =>
+        CompletionItemKind.Interface
+      case _: DataType | _: ExternType | _: TypeAlias =>
+        CompletionItemKind.Enum
+      case _: Callable =>
+        CompletionItemKind.Method
+      case _: Param | _: ValBinder | _: VarBinder =>
+        CompletionItemKind.Variable
+      case _: TypeSymbol =>
+        CompletionItemKind.TypeParameter
+      case _ =>
+        CompletionItemKind.Text
     }
 
   override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
