@@ -93,9 +93,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case PopStacks(name, prompt, rest) =>
       "let" <+> name <+> "=" <+> "shift0p" <+> prompt <> ";" <> line <> toDoc(rest)
 
-    case CurrentPrompt(name, rest) =>
-      "let" <+> name <+> "=" <+> "currentPrompt" <> ";" <> line <> toDoc(rest)
-
     case ForeignCall(name, builtin, arguments, rest) =>
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 

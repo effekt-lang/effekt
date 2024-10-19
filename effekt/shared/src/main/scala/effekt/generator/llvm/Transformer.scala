@@ -466,10 +466,6 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
-      case machine.CurrentPrompt(machine.Variable(name, _), rest) =>
-        emit(Call(name, Ccc(), promptType, currentPrompt, List(getStack())))
-        transform(rest)
-
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
         emit(Comment(s"literalInt $name, n=$n"))
         emit(Add(name, ConstantInt(n), ConstantInt(0)));

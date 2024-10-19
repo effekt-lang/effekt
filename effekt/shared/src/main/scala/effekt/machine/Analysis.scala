@@ -51,8 +51,6 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(value) ++ freeVariables(rest)
     case PopStacks(name, prompt, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(prompt)
-    case CurrentPrompt(name, rest) =>
-      freeVariables(rest) -- Set(name)
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>

@@ -184,12 +184,6 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * Retrieves the prompt of the currently mounted stack
-   * let n = currentPrompt; s
-   */
-  case CurrentPrompt(name: Variable, rest: Statement)
-
-  /**
    * e.g. let k = stack(p) { (x, ...) => s }; s
    */
   case PushNewStack(name: Variable, frame: Clause, rest: Statement)
