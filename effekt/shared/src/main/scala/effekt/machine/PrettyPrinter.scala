@@ -84,13 +84,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(arguments) =>
       "return" <+> hsep(arguments map toDoc, ",")
 
-    case PushNewStack(prompt, frame, rest) =>
-      "let" <+> prompt <+> "=" <+> "stack" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
+    case Reset(prompt, frame, rest) =>
+      "let" <+> prompt <+> "=" <+> "reset" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
-    case PushStack(stack, rest) =>
-      "push stack" <+> stack <> ";" <> line <> toDoc(rest)
+    case Resume(stack, rest) =>
+      "resume" <+> stack <> ";" <> line <> toDoc(rest)
 
-    case PopStacks(name, prompt, rest) =>
+    case Shift(name, prompt, rest) =>
       "let" <+> name <+> "=" <+> "shift0p" <+> prompt <> ";" <> line <> toDoc(rest)
 
     case ForeignCall(name, builtin, arguments, rest) =>

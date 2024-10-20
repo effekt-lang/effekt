@@ -178,7 +178,7 @@ object Transformer {
                 Invoke(receiver, tag, values ++ blocks)
 
               case Callee.Continuation(variable) =>
-                PushStack(variable, Return(values))
+                Resume(variable, Return(values))
 
               case Callee.UnknownObject(variable, tpe) =>
                 E.panic("Cannot call an object.")
@@ -211,7 +211,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
-        PushNewStack(prompt, returnClause,
+        Reset(prompt, returnClause,
           (bparams zip handlers).foldRight(transform(body)){
             case ((id, handler), body) =>
               New(transform(id), transform(handler, Some(prompt)), body)
@@ -222,7 +222,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
 
-        PushNewStack(prompt, returnClause, transform(body))
+        Reset(prompt, returnClause, transform(body))
 
       case core.Alloc(id, init, region, body) =>
         transform(init).run { value =>
@@ -492,7 +492,7 @@ object Transformer {
         noteResumption(kparam.id)
         // TODO deal with bidirectional effects
         Clause(vparams.map(transform),
-          PopStacks(Variable(transform(kparam).name, Type.Stack()), prompt,
+          Shift(Variable(transform(kparam).name, Type.Stack()), prompt,
             transform(body)))
 
       // No continuation, implementation of an object

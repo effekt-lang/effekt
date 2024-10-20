@@ -45,11 +45,11 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>
       Set.from(values)
-    case PushNewStack(prompt, frame, rest) =>
+    case Reset(prompt, frame, rest) =>
       freeVariables(frame) ++ (freeVariables(rest) -- Set(prompt))
-    case PushStack(value, rest) =>
+    case Resume(value, rest) =>
       Set(value) ++ freeVariables(rest)
-    case PopStacks(name, prompt, rest) =>
+    case Shift(name, prompt, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(prompt)
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
