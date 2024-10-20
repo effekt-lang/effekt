@@ -83,7 +83,7 @@
 %ResumptionValue = type { %ReferenceCount, %Stack, %Stack }
 
 ; This is used as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %Memory, %Region, %Prompt, %Stack }
+%StackValue = type { %Memory, %Region, %Prompt, %Stack, i1 }
 
 
 
@@ -419,12 +419,16 @@ define private %Resumption @reset(%Stack %oldStack) {
 
     store %StackValue %stack.2, %Stack %stack
 
+    %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    store %Stack %stack, ptr %stack_pointer
+
     ret %Stack %stack
 }
 
 define private void @updatePrompts(%Stack %stack) alwaysinline {
-    %isNull = icmp eq %Stack %stack, null
-    br i1 %isNull, label %done, label %continue
+    %dirtyBit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %dirtyBit = load i1, ptr %dirtyBit_pointer
+    br i1 %dirtyBit, label %continue, label %done
 
 done:
     ret void
@@ -433,11 +437,42 @@ continue:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %prompt = load %Prompt, ptr %prompt_pointer
     %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    %promptStack = load %Stack, ptr %stack_pointer
+    %isOccupied = icmp ne %Stack %promptStack, null
+    br i1 %isOccupied, label %displace, label %update
+
+displace:
+    call void @displace(%Stack %promptStack)
+    br label %update
+
+update:
     store %Stack %stack, ptr %stack_pointer
+    store i1 0, ptr %dirtyBit_pointer
 
     %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %next = load %Stack, ptr %next_pointer
-    call void @updatePrompts(%Stack %next)
+    tail call void @updatePrompts(%Stack %next)
+    ret void
+}
+
+define void @displace(%Stack %stack) {
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %dirtyBit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
+    %dirtyBit = load i1, ptr %dirtyBit_pointer
+    br i1 %dirtyBit, label %done, label %continue
+
+done:
+    ret void
+
+continue:
+    %prompt = load %Prompt, ptr %prompt_pointer
+    %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    store %Stack null, ptr %stack_pointer
+    store i1 1, ptr %dirtyBit_pointer
+
+    %next = load %Stack, ptr %next_pointer
+    tail call void @displace(%Stack %next)
     ret void
 }
 
@@ -445,7 +480,7 @@ define %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
     %uniqueResumption = call %Resumption @uniqueStack(%Resumption %resumption)
     %start_pointer = getelementptr %ResumptionValue, %Resumption %uniqueResumption, i64 0, i32 1
     %start = load %Stack, ptr %start_pointer
-    call void @updatePrompts(%Stack %start); TODO find out if prompts are still valid
+    call void @updatePrompts(%Stack %start)
 
     %end_pointer = getelementptr %ResumptionValue, %Resumption %uniqueResumption, i64 0, i32 2
     %end = load %Stack, ptr %end_pointer
@@ -466,7 +501,7 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
     %resumption.1 = insertvalue %ResumptionValue %resumption.0, %Stack %promptStack, 2
     store %ResumptionValue %resumption.1, %Resumption %resumption
 
-    store %Stack null, ptr %next_pointer
+    store %Stack %stack, ptr %next_pointer
 
     %result.0 = insertvalue {%Resumption, %Stack} undef, %Resumption %resumption, 0
     %result = insertvalue {%Resumption, %Stack} %result.0, %Stack %next, 1
@@ -512,7 +547,15 @@ define private void @eraseRegion(%Region %region) alwaysinline {
     ret void
 }
 
-define void @erasePrompt(%Prompt %prompt) alwaysinline {
+define void @erasePrompt(%Prompt %prompt, i1 %dirtyBit) alwaysinline {
+    br i1 %dirtyBit, label %continue, label %clearPrompt
+
+clearPrompt:
+    %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    store %Stack null, ptr %stack_pointer
+    br label %continue
+
+continue:
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
     switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
@@ -540,15 +583,17 @@ define private %Stack @underflowStack(%Stack %stack) {
     %stackRegion = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackDirtyBit = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
     %prompt = load %Prompt, ptr %stackPrompt
     %rest = load %Stack, ptr %stackRest
+    %dirtyBit = load i1, ptr %stackDirtyBit
 
     call void @eraseMemory(%Memory %memory)
     call void @eraseRegion(%Region %region)
-    call void @erasePrompt(%Prompt %prompt)
+    call void @erasePrompt(%Prompt %prompt, i1 false)
     call void @free(%Stack %stack)
 
     ret %Stack %rest
@@ -620,6 +665,8 @@ copy:
     store %ReferenceCount %newOldReferenceCount, ptr %referenceCount_pointer
     %stack_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 1
     %stack = load %Stack, ptr %stack_pointer
+    %end_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 2
+    %end = load %Stack, ptr %end_pointer
 
     %newResumption = call ptr @malloc(i64 24)
     %newReferenceCount_pointer = getelementptr %ResumptionValue, %Resumption %newResumption, i64 0, i32 0
@@ -642,6 +689,7 @@ loop:
     %stackRegion = getelementptr %StackValue, %Stack %old, i64 0, i32 1
     %stackPrompt = getelementptr %StackValue, %Stack %old, i64 0, i32 2
     %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 3
+    %stackDirtyBit = getelementptr %StackValue, %Stack %old, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
@@ -652,6 +700,7 @@ loop:
     %newStackRegion = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newStackPrompt = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
     %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %newStackDirtyBit = getelementptr %StackValue, %Stack %newStack, i64 0, i32 4
 
     %newMemory = call %Memory @copyMemory(%Memory %memory)
 
@@ -665,9 +714,10 @@ loop:
     store %Memory %newMemory, ptr %newStackMemory
     store %Region %newRegion, ptr %newStackRegion
     store %Prompt %prompt, ptr %newStackPrompt
+    store i1 1, ptr %newStackDirtyBit
 
-    %isNull = icmp eq %Stack %rest, null
-    br i1 %isNull, label %stop, label %next
+    %isEnd = icmp eq %Stack %old, %end
+    br i1 %isEnd, label %stop, label %next
 
 next:
     %nextNew = call ptr @malloc(i64 %size)
@@ -675,7 +725,7 @@ next:
     br label %loop
 
 stop:
-    store %Stack null, ptr %newStackRest
+    store %Stack %newHead, ptr %newStackRest
     store %Stack %newStack, ptr %newEnd_pointer
     ret %Stack %newResumption
 }
@@ -701,6 +751,10 @@ define void @eraseResumption(%Resumption %resumption) alwaysinline {
     free:
     %stack_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 1
     %stack = load %Stack, ptr %stack_pointer
+    %end_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 2
+    %end = load %Stack, ptr %end_pointer
+    %rest_pointer = getelementptr %StackValue, %Stack %end, i64 0, i32 3
+    store %Stack null, ptr %rest_pointer
     call void @eraseStack(%Stack %stack)
     ret void
 }
@@ -710,16 +764,18 @@ define void @eraseStack(%Stack %stack) alwaysinline {
     %region_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %rest_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %dirtyBit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer
     %region = load %Region, ptr %region_pointer
     %prompt = load %Stack, ptr %prompt_pointer
     %rest = load %Stack, ptr %rest_pointer
+    %dirtyBit = load i1, ptr %dirtyBit_pointer
 
     call void @free(%Stack %stack)
     call void @eraseFrames(%StackPointer %stackPointer)
     call void @eraseRegion(%Region %region)
-    call void @erasePrompt(%Prompt %prompt)
+    call void @erasePrompt(%Prompt %prompt, i1 %dirtyBit)
 
     %isNull = icmp eq %Stack %rest, null
     br i1 %isNull, label %done, label %next
