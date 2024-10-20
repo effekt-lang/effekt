@@ -29,7 +29,7 @@ object Transformer {
       val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
       val instructions = BC.instructions; BC.instructions = null;
 
-      val transitionJump = Call("_", Tailcc(false), VoidType(), ConstantGlobal(FunctionType(VoidType(), Nil), "effektMainTailcc"), List())
+      val transitionJump = Call("_", Tailcc(false), VoidType(), ConstantGlobal("effektMainTailcc"), List())
       val transitionBlock = BasicBlock("transition", List(transitionJump), RetVoid())
       val transitionFunction = Function(Ccc(), VoidType(), "effektMain", List(), List(transitionBlock))
 
@@ -164,7 +164,7 @@ object Transformer {
             eraseValues(clause.parameters, freeVariables(clause.body));
             transform(clause.body);
           }
-          ConstantGlobal(methodType, clauseName)
+          ConstantGlobal(clauseName)
         }
 
         val vtableName = freshName("vtable")
@@ -172,7 +172,7 @@ object Transformer {
 
         val vtable = produceObject("closure", closureEnvironment, freeVariables(rest));
         val temporaryName = freshName("vtable_temporary");
-        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(PointerType(), vtableName), 0));
+        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(vtableName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), vtable, 1));
 
         eraseValues(List(variable), freeVariables(rest));
@@ -481,9 +481,9 @@ object Transformer {
         emit(GlobalConstant(s"$bind.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
 
         val res = positiveType
-        val args = List(ConstantInt(utf8.size), ConstantGlobal(PointerType(), s"$bind.lit"))
+        val args = List(ConstantInt(utf8.size), ConstantGlobal(s"$bind.lit"))
         val argsT = List(IntegerType64(), PointerType())
-        emit(Call(bind, Ccc(), res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
+        emit(Call(bind, Ccc(), res, ConstantGlobal("c_buffer_construct"), args))
 
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
@@ -492,18 +492,18 @@ object Transformer {
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         val functionType = PointerType();
         shareValues(values, freeVariables(rest));
-        emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(functionType, foreign), values.map(transform)));
+        emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(foreign), values.map(transform)));
         transform(rest)
 
       case machine.Statement.Hole =>
         emit(Comment("Hole"))
-        emit(Call("_", Ccc(), VoidType(), ConstantGlobal(FunctionType(VoidType(), Nil), "hole"), List.empty))
+        emit(Call("_", Ccc(), VoidType(), ConstantGlobal("hole"), List.empty))
         RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =
     label match {
-      case machine.Label(name, _) => ConstantGlobal(PointerType(), name)
+      case machine.Label(name, _) => ConstantGlobal(name)
     }
 
   def transform(value: machine.Variable)(using FunctionContext): Operand =
@@ -623,7 +623,7 @@ object Transformer {
     val freshEnvironment = environment.map{
       case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
     };
-    val eraser = ConstantGlobal(eraserType, freshName("eraser"));
+    val eraser = ConstantGlobal(freshName("eraser"));
 
     C.erasers.getOrElseUpdate(types, {
       defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
@@ -778,9 +778,9 @@ object Transformer {
     val eraserPointer = LocalReference(PointerType(), freshName("eraser_pointer"));
     emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
 
-    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName)));
-    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName)));
-    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName)));
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
+    emit(Store(sharerPointer, ConstantGlobal(sharerName)));
+    emit(Store(eraserPointer, ConstantGlobal(eraserName)));
   }
 
   def popReturnAddressFrom(stack: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -796,41 +796,41 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer));
   }
 
-  val malloc = ConstantGlobal(PointerType(), "malloc");
-  val free = ConstantGlobal(PointerType(), "free");
+  val malloc = ConstantGlobal("malloc");
+  val free = ConstantGlobal("free");
 
-  val newObject = ConstantGlobal(PointerType(), "newObject");
-  val objectEnvironment = ConstantGlobal(PointerType(), "objectEnvironment");
+  val newObject = ConstantGlobal("newObject");
+  val objectEnvironment = ConstantGlobal("objectEnvironment");
 
-  val shareObject = ConstantGlobal(PointerType(), "shareObject");
-  val sharePositive = ConstantGlobal(PointerType(), "sharePositive");
-  val shareNegative = ConstantGlobal(PointerType(), "shareNegative");
-  val shareStack = ConstantGlobal(PointerType(), "shareStack");
-  val shareFrames = ConstantGlobal(PointerType(), "shareFrames");
-  val shareString = ConstantGlobal(PointerType(), "sharePositive");
+  val shareObject = ConstantGlobal("shareObject");
+  val sharePositive = ConstantGlobal("sharePositive");
+  val shareNegative = ConstantGlobal("shareNegative");
+  val shareStack = ConstantGlobal("shareStack");
+  val shareFrames = ConstantGlobal("shareFrames");
+  val shareString = ConstantGlobal("sharePositive");
 
-  val eraseObject = ConstantGlobal(PointerType(), "eraseObject");
-  val erasePositive = ConstantGlobal(PointerType(), "erasePositive");
-  val eraseNegative = ConstantGlobal(PointerType(), "eraseNegative");
-  val eraseStack = ConstantGlobal(PointerType(), "eraseStack");
-  val eraseFrames = ConstantGlobal(PointerType(), "eraseFrames");
-  val eraseString = ConstantGlobal(PointerType(), "erasePositive");
+  val eraseObject = ConstantGlobal("eraseObject");
+  val erasePositive = ConstantGlobal("erasePositive");
+  val eraseNegative = ConstantGlobal("eraseNegative");
+  val eraseStack = ConstantGlobal("eraseStack");
+  val eraseFrames = ConstantGlobal("eraseFrames");
+  val eraseString = ConstantGlobal("erasePositive");
 
-  val alloc = ConstantGlobal(PointerType(), "alloc")
-  val getPointer = ConstantGlobal(PointerType(), "getPointer")
+  val alloc = ConstantGlobal("alloc")
+  val getPointer = ConstantGlobal("getPointer")
 
-  val newReference = ConstantGlobal(PointerType(), "newReference")
-  val getVarPointer = ConstantGlobal(PointerType(), "getVarPointer")
+  val newReference = ConstantGlobal("newReference")
+  val getVarPointer = ConstantGlobal("getVarPointer")
 
-  val pushNewStack = ConstantGlobal(PointerType(), "pushNewStack");
-  val pushStack = ConstantGlobal(PointerType(), "pushStack");
-  val popStacks = ConstantGlobal(PointerType(), "popStacks");
-  val currentPrompt = ConstantGlobal(PointerType(), "currentPrompt");
-  val underflowStack = ConstantGlobal(PointerType(), "underflowStack");
-  val uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
-  val withEmptyStack = ConstantGlobal(PointerType(), "withEmptyStack");
-  val stackAllocate = ConstantGlobal(PointerType(), "stackAllocate");
-  val stackDeallocate = ConstantGlobal(PointerType(), "stackDeallocate");
+  val pushNewStack = ConstantGlobal("pushNewStack");
+  val pushStack = ConstantGlobal("pushStack");
+  val popStacks = ConstantGlobal("popStacks");
+  val currentPrompt = ConstantGlobal("currentPrompt");
+  val underflowStack = ConstantGlobal("underflowStack");
+  val uniqueStack = ConstantGlobal("uniqueStack");
+  val withEmptyStack = ConstantGlobal("withEmptyStack");
+  val stackAllocate = ConstantGlobal("stackAllocate");
+  val stackDeallocate = ConstantGlobal("stackDeallocate");
 
   /**
    * Extra info in context

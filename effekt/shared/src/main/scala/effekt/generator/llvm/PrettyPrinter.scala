@@ -54,13 +54,13 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
-    case Call(_, Ccc(), VoidType(), ConstantGlobal(_, name), arguments) =>
+    case Call(_, Ccc(), VoidType(), ConstantGlobal(name), arguments) =>
       s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(result, Ccc(), tpe, ConstantGlobal(_, name), arguments) =>
+    case Call(result, Ccc(), tpe, ConstantGlobal(name), arguments) =>
       s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Ccc(), _, nonglobal, _) =>
       C.abort(s"cannot call non-global operand: $nonglobal")
-    case Call(_, Tailcc(false), VoidType(), ConstantGlobal(_, name), arguments) =>
+    case Call(_, Tailcc(false), VoidType(), ConstantGlobal(name), arguments) =>
       s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>
       s"call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
@@ -122,7 +122,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(operand: Operand): LLVMString = operand match {
     case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
-    case ConstantGlobal(tpe, name)          => s"${show(tpe)} ${globalName(name)}"
+    case ConstantGlobal(name)               => s"ptr ${globalName(name)}"
     case ConstantInt(n)                     => s"i64 $n"
     case ConstantDouble(n)                  => s"double $n"
     case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
