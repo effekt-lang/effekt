@@ -1,6 +1,6 @@
 ---
 layout: docs
-title: Inference
+title: Scheduler
 permalink: docs/casestudies/scheduler
 ---
 
