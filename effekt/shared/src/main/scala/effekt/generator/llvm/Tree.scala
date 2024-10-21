@@ -56,7 +56,7 @@ object Operand {
   case class ConstantInt(n: Long) extends Operand
   case class ConstantDouble(x: Double) extends Operand
   case class ConstantAggregateZero(typ: Type) extends Operand
-  case class ConstantGlobal(tpe: Type, name: String) extends Operand
+  case class ConstantGlobal(name: String) extends Operand
   case class ConstantNull(tpe: Type) extends Operand
   case class ConstantArray(memberType: Type, members: List[Operand]) extends Operand // members should be homogeneous
   case class ConstantInteger8(b: Byte) extends Operand
