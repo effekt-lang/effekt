@@ -1,0 +1,14 @@
+/// This is a doc comment for the List type
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+
+
+/// This is a doc comment for main
+def main() = {
+  // this is a comment
+  val x = 1
+  val z = x
+  println(z)
+}
