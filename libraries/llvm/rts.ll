@@ -547,8 +547,14 @@ define private void @topLevelEraser(%Environment %environment) {
 
 define private %Stack @withEmptyStack() {
     ; TODO all stacks share the same source of fresh prompts
+    %globals = call %Prompt @freshPrompt()
+    %globalsStack = call %Stack @newStack(%Prompt %globals)
+
     %prompt = call %Prompt @freshPrompt()
     %stack = call %Stack @newStack(%Prompt %prompt)
+
+    %rest_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    store %Stack %globalsStack, ptr %rest_pointer
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
