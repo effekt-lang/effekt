@@ -367,11 +367,9 @@ define private %Reference @newReference(%Stack %stack) alwaysinline {
 
 define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
 
     %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer
-    %base = load %Base, ptr %base_pointer
     %limit = load %Limit, ptr %limit_pointer
 
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
@@ -383,6 +381,9 @@ continue:
     ret %StackPointer %currentStackPointer
 
 realloc:
+    %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
+    %base = load %Base, ptr %base_pointer
+
     %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
     %intBase = ptrtoint %Base %base to i64
 
