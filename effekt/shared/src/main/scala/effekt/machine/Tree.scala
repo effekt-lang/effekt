@@ -146,7 +146,7 @@ enum Statement {
   /**
    * e.g. var x = 42; s
    */
-  case Var(name: Variable, init: Variable, returnType: Option[Type], rest: Statement)
+  case Var(name: Variable, init: Variable, returnType: Type, rest: Statement)
 
   /**
    * e.g. let y = loadVar(x); s
@@ -171,7 +171,7 @@ enum Statement {
   /**
    * e.g. let prompt = reset { (x, ...) => s }; s
    */
-  case Reset(name: Variable, frame: Clause, isRegion: Boolean, rest: Statement)
+  case Reset(name: Variable, frame: Clause, rest: Statement)
 
   /**
    * e.g. resume k; s

@@ -211,7 +211,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
-        Reset(prompt, returnClause, false,
+        Reset(prompt, returnClause,
           (bparams zip handlers).foldRight(transform(body)){
             case ((id, handler), body) =>
               New(transform(id), transform(handler, Some(prompt)), body)
@@ -222,7 +222,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
 
-        Reset(prompt, returnClause, true, transform(body))
+        Reset(prompt, returnClause, transform(body))
 
       case core.Alloc(id, init, region, body) =>
         transform(init).run { value =>
@@ -241,11 +241,11 @@ object Transformer {
               val globalPrompt = Variable(freshName("global"), Type.Prompt())
               LiteralInt(globalPrompt, 2L,
                 Shift(temporary, globalPrompt,
-                  Var(reference, value, None,
+                  Var(reference, value, Type.Positive(),
                     Resume(temporary, transform(body)))))
             case _ =>
               Shift(temporary, prompt,
-                Var(reference, value, None,
+                Var(reference, value, Type.Positive(),
                   Resume(temporary, transform(body))))
           }
         }
@@ -256,7 +256,7 @@ object Transformer {
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
         transform(init).run { value =>
-          Var(reference, value, Some(transform(body.tpe)),
+          Var(reference, value, transform(body.tpe),
             transform(body))
         }
 
