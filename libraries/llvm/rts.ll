@@ -423,7 +423,7 @@ define i64 @nextPowerOfTwo(i64 %x) {
 ; Meta-stack management
 
 define private %Memory @newMemory() {
-    %size = shl i64 1, 10
+    %size = shl i64 1, 6
     %stackPointer = call %StackPointer @malloc(i64 %size)
     %limit = getelementptr i8, ptr %stackPointer, i64 %size
 
