@@ -184,31 +184,19 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * Creates a fresh prompt
-   * let p = freshPrompt; s
+   * e.g. let prompt = reset { (x, ...) => s }; s
    */
-  case FreshPrompt(name: Variable, rest: Statement)
+  case Reset(name: Variable, frame: Clause, rest: Statement)
 
   /**
-   * Retrieves the prompt of the currently mounted stack
-   * let n = currentPrompt; s
+   * e.g. resume k; s
    */
-  case CurrentPrompt(name: Variable, rest: Statement)
+  case Resume(stack: Variable, rest: Statement)
 
   /**
-   * e.g. let k = stack(p) { (x, ...) => s }; s
+   * e.g. let k = shift prompt; s
    */
-  case NewStack(name: Variable, prompt: Variable, frame: Clause, rest: Statement)
-
-  /**
-   * e.g. push k; s
-   */
-  case PushStack(stack: Variable, rest: Statement)
-
-  /**
-   * Pops stacks until it finds one labeled with `prompt`
-   */
-  case PopStacks(name: Variable, prompt: Variable, rest: Statement)
+  case Shift(name: Variable, prompt: Variable, rest: Statement)
 
   /**
    * let x = #infix_add(v1, ...); s

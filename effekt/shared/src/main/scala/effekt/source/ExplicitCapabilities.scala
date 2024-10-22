@@ -6,7 +6,6 @@ import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.Rewrite
 
-
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
  *
@@ -34,6 +33,9 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
+    case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      val rewrittenBodies = bodies.map { rewrite }
+      extDef.copy(bodies = rewrittenBodies)
   }
 
   override def expr(using Context) = {
@@ -126,6 +128,20 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val capParams = capabilities.map(definitionFor)
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body))
   }
+
+  override def rewrite(body: ExternBody)(using context.Context): ExternBody = 
+    body match {
+      case b @ source.ExternBody.StringExternBody(ff, body) =>
+        val rewrittenTemplate =
+          body.copy(
+            args = body.args.map { rewrite }
+          )
+        b.copy(template = rewrittenTemplate)
+      case b @ source.ExternBody.EffektExternBody(ff, body) =>
+        val rewrittenBody = rewrite(body) 
+        b.copy(body = rewrittenBody)
+      case u: source.ExternBody.Unsupported => u
+    }
 
   def referenceToCapability(capability: BlockParam)(using C: Context): Var =
     val id = IdRef(Nil, capability.name.name)

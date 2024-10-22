@@ -1,18 +1,16 @@
 module io/error
 
-/**
- * Errors defined by libuv that can occur in IO operations.
- *
- * In addition to the named error codes, we also assign each error a
- * (positive) integer value that is stable across the different platforms.
- *
- * For the mapping of IOError and code values, see function fromCode.
- *
- * While stable, this integer value is supposed to only be used internally.
- * All user-facing operations should use values of type IOError, instead.
- *
- * see: https://docs.libuv.org/en/v1.x/errors.html
- */
+/// Errors defined by libuv that can occur in IO operations.
+///
+/// In addition to the named error codes, we also assign each error a
+/// (positive) integer value that is stable across the different platforms.
+///
+/// For the mapping of IOError and code values, see function fromCode.
+///
+/// While stable, this integer value is supposed to only be used internally.
+/// All user-facing operations should use values of type IOError, instead.
+///
+/// see: https://docs.libuv.org/en/v1.x/errors.html
 type IOError {
   E2BIG();
   EACCES();
@@ -97,11 +95,9 @@ type IOError {
   EUNATCH()
 }
 
-/**
- * Corresponding error message for a libuv error
- *
- * see: https://docs.libuv.org/en/v1.x/errors.html
- */
+/// Corresponding error message for a libuv error
+///
+/// see: https://docs.libuv.org/en/v1.x/errors.html
 def message(error: IOError): String = error match {
   case E2BIG() => "argument list too long"
   case EACCES() => "permission denied"
@@ -186,11 +182,9 @@ def message(error: IOError): String = error match {
   case EUNATCH() => "protocol driver not attached"
 }
 
-/**
- * Corresponding name of a libuv error
- *
- * see: https://docs.libuv.org/en/v1.x/errors.html
- */
+/// Corresponding name of a libuv error
+///
+/// see: https://docs.libuv.org/en/v1.x/errors.html
 def name(error: IOError): String = error match {
   case E2BIG() => "E2BIG"
   case EACCES() => "EACCES"
@@ -275,11 +269,9 @@ def name(error: IOError): String = error match {
   case EUNATCH() => "EUNATCH"
 }
 
-/**
- * Translates a integer code value to an IOError.
- *
- * See documentation of type IOError for further information.
- */
+/// Translates a integer code value to an IOError.
+///
+/// See documentation of type IOError for further information.
 def fromNumber(number: Int): IOError = number match {
   case 1 => EPERM()
   case 2 => ENOENT()

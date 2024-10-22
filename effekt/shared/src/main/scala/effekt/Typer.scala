@@ -1525,8 +1525,7 @@ trait TyperOps extends ContextOps { self: Context =>
     cap
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val capName = tpe.name.rename(_ + "$capability")
-    val param: BlockParam = BlockParam(capName, Some(tpe))
+    val param: BlockParam = BlockParam(tpe.name, Some(tpe))
     // TODO FIXME -- generated capabilities need to be ignored in LSP!
 //     {
 //      override def synthetic = true

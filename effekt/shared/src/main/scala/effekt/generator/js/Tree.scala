@@ -54,14 +54,16 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
    * Generates the Javascript module skeleton for virtual modules that are compiled separately
    *
    * {{{
-   *   const MYMODULE = {}
+   *   const $effekt = {}
    *   // ... contents of the module
-   *   module.exports = Object.assign(MYMODULE, {
+   *   module.exports = {
    *     // EXPORTS...
-   *   })
+   *   }
    * }}}
    */
   def virtual : List[Stmt] = {
+    val effekt = js.Const(JSName("$effekt"), js.Object())
+
     val importStmts = imports.map {
       // const MOD = load(PATH)
       case Import.All(name, file) =>
@@ -74,13 +76,9 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
 
     val declaration = js.Const(name, js.Object())
 
-    // module.exports = Object.assign(MODULE, { EXPORTS })
-    val exportStatement = js.ExprStmt(js.Call(RawExpr("module.exports = Object.assign"), List(
-      js.Variable(name),
-      js.Object(exports.map { e => e.name -> e.expr })
-    )))
-
-    importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
+    // module.exports = { EXPORTS }
+    val exportStatement = js.Assign(RawExpr("module.exports"), js.Object(exports.map { e => e.name -> e.expr }))
+    List(effekt) ++ importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
   }
 }
 
@@ -125,6 +123,7 @@ enum Expr {
 export Expr.*
 
 def RawExpr(str: String): js.Expr = Expr.RawExpr(List(str), Nil)
+def RawStmt(str: String): js.Stmt = Stmt.RawStmt(List(str), Nil)
 
 implicit class JavaScriptInterpolator(private val sc: StringContext) extends AnyVal {
   def js(args: Expr*): Expr = RawExpr(sc.parts.toList, args.toList)
@@ -144,7 +143,7 @@ enum Stmt {
   case Return(expr: Expr)
 
   // A raw JS String
-  case RawStmt(raw: String)
+  case RawStmt(raw: List[String], args: List[Expr])
 
   // e.g. const x = <EXPR>
   case Const(pattern: Pattern, binding: Expr)
@@ -192,10 +191,20 @@ enum Stmt {
 }
 export Stmt.*
 
-def Const(name: JSName, binding: Expr): Stmt = js.Const(Pattern.Variable(name), binding)
+
+// Smart constructors
+// ------------------
+
+def Const(name: JSName, binding: Expr): Stmt = binding match {
+  case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts)
+  case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt))
+  case _ => js.Const(Pattern.Variable(name), binding)
+}
+
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
-// Some smart constructors
+def Call(receiver: Expr, args: Expr*): Expr = Call(receiver, args.toList)
+
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
 
 def Lambda(params: List[JSName], body: Expr): Expr = Lambda(params, Return(body))
@@ -205,40 +214,43 @@ def JsString(scalaString: String): Expr = RawLiteral(s"\"${scalaString}\"")
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
 def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
-  case Nil => ???
+  case Nil => sys error "Block should have at least one statement as body"
   case head :: Nil => head
   case head :: next => js.Block(stmts)
 }
 
 val Undefined = RawLiteral("undefined")
 
-object monadic {
-
-  opaque type Control = Expr
-
-  private val `then` = JSName("then")
-  private val `run` = JSName("run")
-
-  def Pure(expr: Expr): Control = Builtin("pure", expr)
-  def Run(m: Control): Expr = MethodCall(m, `run`)
-
-  def State(id: JSName, init: Expr, stmts: List[Stmt], ret: Control): Control =
-    Builtin("state", init, Lambda(List(id), stmts, ret))
-
-  def Bind(m: Control, body: Control): Control = MethodCall(m, `then`, js.Lambda(Nil, body))
-  def Bind(m: Control, param: JSName, body: Control): Control = MethodCall(m, `then`, js.Lambda(List(param), body))
-
-  def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
-  def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)
-  def Handle(body: Expr): Control = Builtin("handleMonadic", body)
-
-  def Builtin(name: String, args: Expr*): Control = $effekt.call(name, args: _*)
-
-  def Lambda(params: List[JSName], stmts: List[Stmt], ret: Control): Expr =
-    js.Lambda(params, js.Block(stmts :+ js.Return(ret)))
-
-  def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: Control): Stmt =
-    js.Function(name, params, stmts :+ js.Return(ret))
-
-  def asExpr(c: Control): Expr = c
+def Lambda(params: List[JSName], stmts: List[Stmt]): Expr = stmts match {
+  case Nil => sys error "Lambda should have at least one statement as body"
+  case js.Return(e) :: Nil => Lambda(params, e)
+  case stmt :: Nil => Lambda(params, stmt)
+  case stmts => Lambda(params, Block(stmts))
 }
+
+// Code generation monad
+// ---------------------
+
+case class Binding[A](run: (A => List[js.Stmt]) => List[js.Stmt]) {
+  def flatMap[B](rest: A => Binding[B]): Binding[B] = {
+    Binding(k => run(a => rest(a).run(k)))
+  }
+  def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
+}
+extension (b: Binding[js.Stmt]) {
+  def block: js.Stmt = js.MaybeBlock(b.stmts)
+  def toExpr: js.Expr = b.stmts match {
+    case Nil => ???
+    case js.Return(e) :: Nil => e
+    case stmts => js.Call(js.Lambda(Nil, Block(stmts)), Nil)
+  }
+  def stmts: List[js.Stmt] = b.run(x => List(x))
+}
+
+def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
+  l match {
+    case Nil => pure(Nil)
+    case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
+  }
+
+def pure[A](a: A): Binding[A] = Binding(k => k(a))

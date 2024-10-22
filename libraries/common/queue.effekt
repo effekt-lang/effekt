@@ -2,9 +2,7 @@ module queue
 
 import array
 
-/**
- * Mutable, automatically resizing queue.
- */
+/// Mutable, automatically resizing queue.
 interface Queue[T] {
   def empty?(): Bool
 

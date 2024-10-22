@@ -305,7 +305,7 @@ class Lexer(source: Source) {
               }
             // Last `}` is not be considered as part of string interpolation. Let the parser fail if braces don't match
             // and just continue lexing
-            case `{{` | `"` | `"""` => nextToken()
+            case `{{` | `"` | `"""` | `'` => nextToken()
           }
         } else nextToken()
       kind match {
@@ -366,26 +366,36 @@ class Lexer(source: Source) {
       this match {
         case `"` => 1
         case `"""` => 3
+        case `'` => 1
+      }
+
+    def first: Char =
+      this match {
+        case `"` | `"""` => '"'
+        case `'` => '\''
       }
 
     override def toString: String =
       this match {
         case `"` => "\""
         case `"""` => "\"\"\""
+        case `'` => "'"
       }
 
     def isMultiline: Boolean =
       this match {
         case `"` => false
         case `"""` => true
+        case `'` => false
       }
   }
   case object `"` extends StrDelim
   case object `"""` extends StrDelim
+  /** Delimiter for characters */
+  case object `'` extends StrDelim
 
   /** Matches a string literal -- both single- and multi-line strings.
-   * Strings may contain space characters (e.g. \n, \t, \r), which are stored unescaped for single-line strings and
-   * escaped for multi-line strings.
+   * Strings may contain space characters (e.g. \n, \t, \r), which are stored unescaped.
    * Strings may also contain unquotes, i.e., "f = ${x + 1}" that include arbitrary expressions.
    */
   def matchString(delim: StrDelim, continued: Boolean = false): TokenKind = {
@@ -393,76 +403,97 @@ class Lexer(source: Source) {
     val offset = delim.offset
     val st = if (continued) start else start + offset
     var endString = false
+    val stringContent = StringBuilder()
+
     delimiters.push(delim)
     while (!endString) {
       peek() match {
-        case Some('\"') => {
+        case Some(c) if c == delim.first => {
           consume()
           delim match {
-            case `"""` => {
-              if (peekN(1).contains('\"') && peekN(2).contains('\"')) {
-                consume(); consume()
-                delimiters.pop()
-                endString = true
-              }
+            case `"""`  if (peekN(1).contains('\"') && peekN(2).contains('\"')) => {
+              consume(); consume()
+              delimiters.pop()
+              endString = true
             }
             case `"` => {
               delimiters.pop()
               endString = true
             }
+            case `'` => {
+              delimiters.pop()
+              endString = true
+            }
+            case _ => stringContent.addOne(c)
           }
         }
-        case Some('\n') if delim == `"` =>
+        case Some('\n') if !delim.isMultiline =>
           return err("Linebreaks are not allowed in single-line strings.")
         // handle escape sequences
-        case Some('\\') => {
+        case Some('\\') if !delim.isMultiline => {
           expect('\\')
           peek() match {
-            case Some('\"') | Some('\\') | Some('n') | Some('t') | Some('r') => consume()
+            case Some('"') => consume(); stringContent.addOne('"')
+            case Some('n') => consume(); stringContent.addOne('\n')
+            case Some('t') => consume(); stringContent.addOne('\t')
+            case Some('r') => consume(); stringContent.addOne('\r')
+            case Some('\\') => consume(); stringContent.addOne('\\')
+            case Some('$') => consume(); stringContent.addOne('$')
             case Some('u') => {
               consume()
-              consumeWhile(c => !c.isWhitespace && c != '"')
+
+              def isHexDigit(c: Char) = c.isDigit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+
+              val hexCodePoint = peek() match {
+                case Some(c) if isHexDigit(c) =>
+                  val escapeStart = current
+                  consumeWhile(isHexDigit)
+                  slice(escapeStart, current)
+                case Some('{') =>
+                  consume()
+                  val escapeStart = current
+                  consumeWhile(c => c != '}')
+                  expect('}')
+                  slice(escapeStart, current - 1)
+                case _ => err("Invalid escape sequence.", current - 1, current)
+              }
+
+              try {
+                val codePoint = Integer.parseInt(hexCodePoint, 16)
+                stringContent.append(String.valueOf(Character.toChars(codePoint)))
+              } catch {
+                case e: NumberFormatException => err(e.toString)
+              }
             }
             case _ => err("Invalid escape sequence.", current - 1, current)
           }
         }
         case Some('$') if peekN(2).contains('{') => {
-          val s = slice(st, current)
-          return TokenKind.Str(s, delim.isMultiline)
+          return TokenKind.Str(stringContent.mkString, delim.isMultiline)
         }
         case None =>
           return err("Unterminated string.", start, start + offset)
-        case _ =>
+        case Some(c) =>
           consume()
+          stringContent.addOne(c)
       }
     }
-    val s = slice(st, current - offset)
 
-    val stringContent =
-      if (delim.isMultiline) {
-        // Do not unescape multiline strings at all for multiline strings (see comments in PR #495)
-        s
-      } else {
-        // Unescape the following sequences: control: `\b`, `\t`, `\n`, `\f`, `\r`; escape:  `\\`, `\"`, `\'`
-        // For now, we only support a subset determined by `StringContext.processEscapes`
-        try {
-          StringContext.processEscapes(s)
-        } catch {
-          case e: StringContext.InvalidEscapeException => err("Contains invalid escape sequence.", e.index, e.index)
-        }
-      }
-
-    TokenKind.Str(stringContent, delim.isMultiline)
+    TokenKind.Str(stringContent.mkString, delim.isMultiline)
   }
 
   /** Matches a character: '.+' */
   def matchChar(): TokenKind = {
-    if (peekMatches(_ == '\'')) err("Empty character literal.")
-    consumeWhile(_ != '\'')
-    expect('\'')
-    // exclude opening and closing '
-    val cs = slice(start + 1, current - 1)
-    TokenKind.Chr(cs.codePointAt(0))
+    matchString(`'`) match {
+      case TokenKind.Str("", _) =>
+        TokenKind.Error(LexerError("Empty character literal", start, current))
+      case TokenKind.Str(cs, _) if (cs.codePointCount(0, cs.length) > 1) =>
+        TokenKind.Error(LexerError("Character literal consists " +
+            "of multiple code points.", start, current))
+      case TokenKind.Str(cs, _) =>
+        TokenKind.Chr(cs.codePointAt(0))
+      case err => err
+    }
   }
 
   lazy val hexadecimal = ('a' to 'f') ++ ('A' to 'F') ++ ('0' to '9')

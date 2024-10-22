@@ -9,15 +9,11 @@ extern js """
   }
 """
 
-/**
- * Global, mutable references
- */
+/// Global, mutable references
 extern type Ref[T]
 
-/**
- * Allocates a new reference of size `size`, keeping its value _undefined_.
- * Prefer using `ref` constructor instead to ensure that the value is defined.
- */
+/// Allocates a new reference of size `size`, keeping its value _undefined_.
+/// Prefer using `ref` constructor instead to ensure that the value is defined.
 extern global def allocate[T](): Ref[T] =
   js "{ value: undefined }"
   chez "(box #f)"
@@ -26,9 +22,7 @@ extern global def allocate[T](): Ref[T] =
     ret %Pos %z
   """
 
-/**
- * Creates a new reference with the initial value `init`.
- */
+/// Creates a new reference with the initial value `init`.
 extern global def ref[T](init: T): Ref[T] =
   js "{ value: ${init} }"
   chez "(box ${init})"
@@ -37,9 +31,7 @@ extern global def ref[T](init: T): Ref[T] =
     ret %Pos %z
   """
 
-/**
- * Gets the referenced element of the `ref` in constant time.
- */
+/// Gets the referenced element of the `ref` in constant time.
 extern global def get[T](ref: Ref[T]): T =
   js "${ref}.value"
   chez "(unbox ${ref})"
@@ -48,9 +40,7 @@ extern global def get[T](ref: Ref[T]): T =
     ret %Pos %z
   """
 
-/**
- * Sets the referenced element of the `ref` to `value` in constant time.
- */
+/// Sets the referenced element of the `ref` to `value` in constant time.
 extern global def set[T](ref: Ref[T], value: T): Unit =
   js "set$impl(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"

@@ -5,7 +5,7 @@ extern llvm """
 """
 
 extern async def wait(millis: Int): Unit =
-  js "$effekt.callcc(callback => setTimeout(() => callback($effekt.unit), ${millis}))"
+  js "$effekt.capture(k => setTimeout(() => k($effekt.unit), ${millis}))"
   llvm """
     call void @c_timer_start(%Int ${millis}, %Stack %stack)
     ret void

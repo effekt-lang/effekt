@@ -34,9 +34,7 @@ def substring(str: String, from: Int): String =
   str.substring(from, str.length)
 
 
-/**
- * Checks whether str starts with the given prefix at `from`
- */
+/// Checks whether str starts with the given prefix at `from`
 def isSubstringAt(str: String, prefix: String, from: Int): Bool = {
   with default[OutOfBounds, Bool] { false };
 
@@ -59,11 +57,9 @@ def startsWith(str: String, prefix: String): Bool =
 def endsWith(str: String, suffix: String): Bool =
   isSubstringAt(str, suffix, str.length - suffix.length)
 
-/**
- * Repeats the given string n-times.
- *
- * TODO use a more efficient way of appending strings like a buffer
- */
+/// Repeats the given string n-times.
+///
+/// TODO use a more efficient way of appending strings like a buffer
 def repeat(str: String, n: Int): String = {
   def go(n: Int, result: String): String = {
     if (n == 0) result
@@ -180,15 +176,13 @@ def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
   }
 }
 
-// Native versions of toInt (unused right now)
+/// Native versions of toInt (unused right now)
 extern pure def unsafeToInt(str: String): Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
   chez "(string->number ${str})"
 
 
-/**
- * Returns the index of the first occurrence of `sub` in `str`
- */
+/// Returns the index of the first occurrence of `sub` in `str`
 def indexOf(str: String, sub: String): Option[Int] =
   indexOf(str, sub, 0)
 
@@ -202,9 +196,7 @@ def indexOf(str: String, sub: String, from: Int): Option[Int] = {
   go(from)
 }
 
-/**
- * Returns the index of the last occurence of `sub` in `str`
- */
+/// Returns the index of the last occurence of `sub` in `str`
 def lastIndexOf(str: String, sub: String): Option[Int] =
   lastIndexOf(str, sub, str.length)
 

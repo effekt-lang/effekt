@@ -16,6 +16,8 @@ abstract class StdlibTests extends EffektTests {
 
 class StdlibJavaScriptTests extends StdlibTests {
   def backendName: String = "js"
+
+  override def ignored: List[File] = List()
 }
 abstract class StdlibChezTests extends StdlibTests {
   override def ignored: List[File] = List(

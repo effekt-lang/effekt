@@ -21,7 +21,7 @@ class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite
     def blockParams: List[core.BlockParam] = blocks.map { case Variable.Block(id, tpe, capt) => core.BlockParam(id, tpe, capt) }
     def captureParams: List[core.Capture] = blocks.map {
       case Variable.Block(id, tpe, cs) if cs.size == 1 => cs.head
-      case Variable.Block(id, tpe, cs) => Context.panic(s"Since we only close over block parameters, the capture set should be a single variable (but got ${cs})")
+      case Variable.Block(id, tpe, cs) => Context.panic(s"Since we only close over block parameters, the capture set should be a single variable (but got ${cs} for ${id})")
     }
 
     def valueArgs   = values.map { case Variable.Value(id, tpe) => core.ValueVar(id, tpe) }
@@ -133,8 +133,6 @@ object LambdaLifting extends Phase[CoreTransformed, CoreTransformed] {
  */
 class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, Variables] {
 
-
-
   // DB
   // --
   import effekt.context.{Annotations, Annotation}
@@ -209,7 +207,7 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
       val bound = Variables.block(id, Type.TState(init.tpe), Set(capture))
       query(init) ++ binding(bound) { query(body) }
     case core.Get(id, annotatedCapt, annotatedTpe) => freeBlock(id)
-    case core.Put(id, annotatedCapt, value) => freeBlock(id)
+    case core.Put(id, annotatedCapt, value) => freeBlock(id) ++ free(value)
   }
 
   // Initialize

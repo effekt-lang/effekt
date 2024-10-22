@@ -30,6 +30,9 @@ jobs:
         distribution: 'zulu'
         cache: 'sbt'
 
+    - name: Setup SBT
+      uses: sbt/setup-sbt@v1
+
     - name: Set up NodeJS ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v4
       with:
@@ -56,6 +59,9 @@ jobs:
         java-version: ${{ env.JAVA_VERSION }}
         distribution: 'zulu'
         cache: 'sbt'
+
+    - name: Setup SBT
+      uses: sbt/setup-sbt@v1
 
     - name: Update apt database
       if: matrix.os != 'windows-latest'
