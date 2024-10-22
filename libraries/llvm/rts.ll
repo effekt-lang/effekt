@@ -660,7 +660,8 @@ define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
 
 define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
     %rest = call %Stack @underflowStack(%Stack %stack)
-    ; assert %rest == null
+    ; rest holds global variables
+    call void @eraseStack(%Stack %rest)
     ret void
 }
 
@@ -678,6 +679,20 @@ define private void @topLevelEraser(%Environment %environment) {
 
 define private %Stack @withEmptyStack() {
     %globals = call %Stack @reset(%Stack null)
+
+    %globalsStackPointer_pointer = getelementptr %StackValue, %Stack %globalsStack, i64 0, i32 1, i32 0
+    %globalsStackPointer = load %StackPointer, ptr %globalsStackPointer_pointer
+
+    %returnAddressPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 0
+    %sharerPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 1
+    %eraserPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 2
+
+    store ptr @nop, ptr %returnAddressPointer.0
+    store ptr @nop, ptr %sharerPointer.0
+    store ptr @free, ptr %eraserPointer.0
+
+    %globalsStackPointer_2 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 1
+    store %StackPointer %globalsStackPointer_2, ptr %globalsStackPointer_pointer
 
     %stack = call %Stack @reset(%Stack %globals)
 
