@@ -399,7 +399,7 @@ define private %Memory @newMemory() {
     ret %Memory %memory.2
 }
 
-define private %Stack @pushNewStack(%Stack %oldStack) {
+define private %Stack @reset(%Stack %oldStack) {
 
     %prompt = call %Prompt @freshPrompt()
 
@@ -420,13 +420,13 @@ define private %Stack @pushNewStack(%Stack %oldStack) {
     ret %Stack %stack
 }
 
-define private %Stack @pushStack(%Stack %stack, %Stack %oldStack) alwaysinline {
+define private %Stack @resume(%Stack %stack, %Stack %oldStack) alwaysinline {
     %uniqueStack = call %Stack @uniqueStack(%Stack %stack)
-    tail call void @pushUniqueStack(%Stack %uniqueStack, %Stack %oldStack)
+    tail call void @resumeUnique(%Stack %uniqueStack, %Stack %oldStack)
     ret %Stack %uniqueStack
 }
 
-define private void @pushUniqueStack(%Stack %stack, %Stack %oldStack) {
+define private void @resumeUnique(%Stack %stack, %Stack %oldStack) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
@@ -437,11 +437,11 @@ done:
     ret void
 
 next:
-    tail call void @pushUniqueStack(%Stack %rest, %Stack %oldStack)
+    tail call void @resumeUnique(%Stack %rest, %Stack %oldStack)
     ret void
 }
 
-define private %Stack @popStacks(%Stack %stack, %Prompt %prompt) {
+define private %Stack @shift(%Stack %stack, %Prompt %prompt) {
 entry:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %currentPrompt = load %Prompt, ptr %prompt_pointer
@@ -451,7 +451,7 @@ entry:
 continue:
     %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %nextStack = load %Stack, ptr %nextStack_pointer
-    %result = tail call %Stack @popStacks(%Stack %nextStack, %Prompt %prompt)
+    %result = tail call %Stack @shift(%Stack %nextStack, %Prompt %prompt)
     ret %Stack %result
 
 found:
@@ -708,7 +708,7 @@ define private void @topLevelEraser(%Environment %environment) {
 
 define private %Stack @withEmptyStack() {
     ; TODO all stacks share the same source of fresh prompts
-    %stack = call %Stack @pushNewStack(%Stack null)
+    %stack = call %Stack @reset(%Stack null)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer

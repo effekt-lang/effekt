@@ -389,7 +389,7 @@ object Transformer {
         emit(Comment(s"Reset ${prompt.name}"))
 
         val newStack = LocalReference(stackType, freshName("stack"))
-        emit(Call(newStack.name, Ccc(), stackType, pushNewStack, List(getStack())));
+        emit(Call(newStack.name, Ccc(), stackType, reset, List(getStack())));
         setStack(newStack)
 
         emit(Call(prompt.name, Ccc(), promptType, currentPrompt, List(getStack())))
@@ -451,14 +451,14 @@ object Transformer {
         emit(Comment(s"Resume ${value.name}"))
         shareValues(List(value), freeVariables(rest));
         val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, pushStack, List(transform(value), getStack())));
+        emit(Call(newStackName, Ccc(), stackType, resume, List(transform(value), getStack())));
         setStack(LocalReference(stackType, newStackName));
         transform(rest)
 
       case machine.Shift(variable, prompt, rest) =>
         emit(Comment(s"Shift ${variable.name}, prompt=${prompt.name}"))
         val newStackName = freshName("stack");
-        emit(Call(newStackName, Ccc(), stackType, popStacks, List(getStack(), transform(prompt))));
+        emit(Call(newStackName, Ccc(), stackType, shift, List(getStack(), transform(prompt))));
 
         emit(BitCast(variable.name, getStack(), stackType));
         setStack(LocalReference(stackType, newStackName));
@@ -822,9 +822,9 @@ object Transformer {
   val newReference = ConstantGlobal("newReference")
   val getVarPointer = ConstantGlobal("getVarPointer")
 
-  val pushNewStack = ConstantGlobal("pushNewStack");
-  val pushStack = ConstantGlobal("pushStack");
-  val popStacks = ConstantGlobal("popStacks");
+  val reset = ConstantGlobal("reset");
+  val resume = ConstantGlobal("resume");
+  val shift = ConstantGlobal("shift");
   val currentPrompt = ConstantGlobal("currentPrompt");
   val underflowStack = ConstantGlobal("underflowStack");
   val uniqueStack = ConstantGlobal("uniqueStack");
