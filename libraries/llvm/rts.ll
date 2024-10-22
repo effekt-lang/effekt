@@ -136,8 +136,8 @@ define private %Prompt @freshPrompt() {
 ; Garbage collection
 
 define private %Object @newObject(%Eraser %eraser, i64 %environmentSize) alwaysinline {
-    ; This magical 16 is the size of the object header
-    %size = add i64 %environmentSize, 16
+    %headerSize = ptrtoint ptr getelementptr (%Header, ptr null, i64 1) to i64
+    %size = add i64 %environmentSize, %headerSize
     %object = call ptr @malloc(i64 %size)
     %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
@@ -388,8 +388,9 @@ define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
 ; Meta-stack management
 
 define private %Memory @newMemory() {
-    %stackPointer = call %StackPointer @malloc(i64 268435456)
-    %limit = getelementptr i8, ptr %stackPointer, i64 268435456
+    %size = shl i64 1, 28
+    %stackPointer = call %StackPointer @malloc(i64 %size)
+    %limit = getelementptr i8, ptr %stackPointer, i64 %size
 
     %memory.0 = insertvalue %Memory undef, %StackPointer %stackPointer, 0
     %memory.1 = insertvalue %Memory %memory.0, %Base %stackPointer, 1
@@ -398,10 +399,12 @@ define private %Memory @newMemory() {
     ret %Memory %memory.2
 }
 
-define private %Stack @newStack(%Prompt %prompt) {
+define private %Stack @reset(%Stack %oldStack) {
 
-    ; TODO find actual size of stack
-    %stack = call ptr @malloc(i64 120)
+    %prompt = call %Prompt @freshPrompt()
+
+    %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
+    %stack = call ptr @malloc(i64 %size)
 
     ; TODO initialize to zero and grow later
     %stackMemory = call %Memory @newMemory()
@@ -410,14 +413,20 @@ define private %Stack @newStack(%Prompt %prompt) {
     %stack.1 = insertvalue %StackValue %stack.0, %Memory %stackMemory, 1
     %stack.2 = insertvalue %StackValue %stack.1, %Region zeroinitializer, 2
     %stack.3 = insertvalue %StackValue %stack.2, %Prompt %prompt, 3
-    %stack.4 = insertvalue %StackValue %stack.3, %Stack zeroinitializer, 4
+    %stack.4 = insertvalue %StackValue %stack.3, %Stack %oldStack, 4
 
     store %StackValue %stack.4, %Stack %stack
 
     ret %Stack %stack
 }
 
-define private void @pushStack(%Stack %stack, %Stack %oldStack) {
+define private %Stack @resume(%Stack %stack, %Stack %oldStack) alwaysinline {
+    %uniqueStack = call %Stack @uniqueStack(%Stack %stack)
+    tail call void @resumeUnique(%Stack %uniqueStack, %Stack %oldStack)
+    ret %Stack %uniqueStack
+}
+
+define private void @resumeUnique(%Stack %stack, %Stack %oldStack) {
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %rest = load %Stack, ptr %stackRest
     %isNull = icmp eq %Stack %rest, null
@@ -428,11 +437,11 @@ done:
     ret void
 
 next:
-    tail call void @pushStack(%Stack %rest, %Stack %oldStack)
+    tail call void @resumeUnique(%Stack %rest, %Stack %oldStack)
     ret void
 }
 
-define private %Stack @popStacks(%Stack %stack, %Prompt %prompt) {
+define private %Stack @shift(%Stack %stack, %Prompt %prompt) {
 entry:
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %currentPrompt = load %Prompt, ptr %prompt_pointer
@@ -442,7 +451,7 @@ entry:
 continue:
     %nextStack_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %nextStack = load %Stack, ptr %nextStack_pointer
-    %result = tail call %Stack @popStacks(%Stack %nextStack, %Prompt %prompt)
+    %result = tail call %Stack @shift(%Stack %nextStack, %Prompt %prompt)
     ret %Stack %result
 
 found:
@@ -572,7 +581,8 @@ copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newOldReferenceCount, ptr %stackReferenceCount
 
-    %newHead = call ptr @malloc(i64 120)
+    %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
+    %newHead = call ptr @malloc(i64 %size)
     br label %loop
 
 loop:
@@ -611,7 +621,7 @@ loop:
     br i1 %isNull, label %stop, label %next
 
 next:
-    %nextNew = call ptr @malloc(i64 120)
+    %nextNew = call ptr @malloc(i64 %size)
     store %Stack %nextNew, ptr %newStackRest
     br label %loop
 
@@ -698,8 +708,7 @@ define private void @topLevelEraser(%Environment %environment) {
 
 define private %Stack @withEmptyStack() {
     ; TODO all stacks share the same source of fresh prompts
-    %prompt = call %Prompt @freshPrompt()
-    %stack = call %Stack @newStack(%Prompt %prompt)
+    %stack = call %Stack @reset(%Stack null)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackStackPointer
