@@ -352,6 +352,10 @@ object Transformer {
       case machine.Reset(prompt, frame, isRegion, rest) =>
         emit(Comment(s"Reset ${prompt.name}"))
 
+        if (isRegion) {
+          pushReturnAddressOnto(getStack(), "nop", shareFrames.name, eraseFrames.name)
+        }
+
         val newStack = LocalReference(stackType, freshName("stack"))
         emit(Call(newStack.name, Ccc(), stackType, reset, List(getStack())));
         setStack(newStack)
@@ -414,9 +418,6 @@ object Transformer {
         pushEnvironmentOnto(getStack(), frameEnvironment);
         pushReturnAddressOnto(getStack(), returnAddressName, sharerName, eraserName);
 
-        if (isRegion) {
-          pushReturnAddressOnto(getStack(), "nop", shareFrames.name, eraseFrames.name)
-        }
         transform(rest)
 
       case machine.Resume(value, rest) =>

@@ -240,9 +240,9 @@ object Transformer {
               //    We need to truly special case global memory!
               val globalPrompt = Variable(freshName("global"), Type.Prompt())
               LiteralInt(globalPrompt, 2L,
-                PopStacks(temporary, globalPrompt,
+                Shift(temporary, globalPrompt,
                   Var(reference, value, None,
-                    PushStack(temporary, transform(body)))))
+                    Resume(temporary, transform(body)))))
             case _ =>
               Shift(temporary, prompt,
                 Var(reference, value, None,

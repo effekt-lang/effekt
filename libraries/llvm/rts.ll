@@ -680,7 +680,7 @@ define private void @topLevelEraser(%Environment %environment) {
 define private %Stack @withEmptyStack() {
     %globals = call %Stack @reset(%Stack null)
 
-    %globalsStackPointer_pointer = getelementptr %StackValue, %Stack %globalsStack, i64 0, i32 1, i32 0
+    %globalsStackPointer_pointer = getelementptr %StackValue, %Stack %globals, i64 0, i32 1, i32 0
     %globalsStackPointer = load %StackPointer, ptr %globalsStackPointer_pointer
 
     %returnAddressPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 0
