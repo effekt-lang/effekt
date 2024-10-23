@@ -366,29 +366,65 @@ define private %Reference @newReference(%Stack %stack) alwaysinline {
 ; Stack management
 
 define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
-    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackStackPointer
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
 
-    %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %n
-    store %StackPointer %stackPointer_2, ptr %stackStackPointer
-    ret %StackPointer %stackPointer
+    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer
+    %limit = load %Limit, ptr %limit_pointer
+
+    %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
+    %isInside = icmp ule %StackPointer %nextStackPointer, %limit
+    br i1 %isInside, label %continue, label %realloc
+
+continue:
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer
+    ret %StackPointer %currentStackPointer
+
+realloc:
+    %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
+    %base = load %Base, ptr %base_pointer
+
+    %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
+    %intBase = ptrtoint %Base %base to i64
+
+    %size = sub i64 %intStackPointer, %intBase
+    %nextSize = add i64 %size, %n
+    %newSize = call i64 @nextPowerOfTwo(i64 %nextSize)
+
+    %newBase = call ptr @realloc(ptr %base, i64 %newSize)
+    %newLimit = getelementptr i8, %Base %newBase, i64 %newSize
+    %newStackPointer = getelementptr i8, %Base %newBase, i64 %size
+    %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %n
+
+    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer
+    store %Base %newBase, ptr %base_pointer
+    store %Limit %newLimit, ptr %limit_pointer
+
+    ret %StackPointer %newStackPointer
 }
 
 define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
-    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackStackPointer
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer
 
     %o = sub i64 0, %n
-    %stackPointer_2 = getelementptr i8, %StackPointer %stackPointer, i64 %o
-    store %StackPointer %stackPointer_2, ptr %stackStackPointer
+    %newStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %o
+    store %StackPointer %newStackPointer, ptr %stackPointer_pointer
 
-    ret %StackPointer %stackPointer_2
+    ret %StackPointer %newStackPointer
+}
+
+define i64 @nextPowerOfTwo(i64 %x) {
+    %leadingZeros = call i64 @llvm.ctlz.i64(i64 %x, i1 false)
+    %numBits = sub i64 64, %leadingZeros
+    %result = shl i64 1, %numBits
+    ret i64 %result
 }
 
 ; Meta-stack management
 
 define private %Memory @newMemory() {
-    %size = shl i64 1, 28
+    %size = shl i64 1, 6
     %stackPointer = call %StackPointer @malloc(i64 %size)
     %limit = getelementptr i8, ptr %stackPointer, i64 %size
 
@@ -406,7 +442,6 @@ define private %Stack @reset(%Stack %oldStack) {
     %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
     %stack = call ptr @malloc(i64 %size)
 
-    ; TODO initialize to zero and grow later
     %stackMemory = call %Memory @newMemory()
 
     %stack.0 = insertvalue %StackValue undef, %ReferenceCount 0, 0
