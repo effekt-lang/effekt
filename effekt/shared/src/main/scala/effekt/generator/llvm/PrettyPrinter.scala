@@ -58,8 +58,10 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(result, Ccc(), tpe, ConstantGlobal(name), arguments) =>
       s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+    case Call(_, Ccc(), VoidType(), LocalReference(_, name), arguments) =>
+      s"call ccc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Ccc(), _, nonglobal, _) =>
-      C.abort(s"cannot call non-global operand: $nonglobal")
+      C.abort(s"cannot call non-global operand: $nonglobal") // why not?
     case Call(_, Tailcc(false), VoidType(), ConstantGlobal(name), arguments) =>
       s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
     case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>

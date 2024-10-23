@@ -60,15 +60,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
-    case Allocate(name, init, region, rest) =>
-      "let" <+> name <+> "=" <+> "allocate" <> parens(List(toDoc(init), toDoc(region))) <> ";" <> line <> toDoc(rest)
-
-    case Load(name, reference, rest) =>
-      "let" <+> name <+> "=" <+> "load" <> parens(toDoc(reference)) <> ";" <> line <> toDoc(rest)
-
-    case Store(reference, value, rest) =>
-      "store" <> parens(List(reference, value) map toDoc) <> ";" <> line <> toDoc(rest)
-
     case Var(name, init, _, rest) =>
       "var" <+> name <+> "=" <+> toDoc(init) <> ";" <> line <> toDoc(rest)
 

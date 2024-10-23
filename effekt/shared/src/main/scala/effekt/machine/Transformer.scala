@@ -147,7 +147,7 @@ object Transformer {
         val tpe = transform(stateType)
         val variable = Variable(freshName(x.name.name + "_value"), tpe)
         val reference = Variable(transform(x), Type.Reference(tpe))
-        Load(variable, reference, Return(List(variable)))
+        LoadVar(variable, reference, Return(List(variable)))
 
       case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.put, _), targs, List(arg), Nil) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -156,7 +156,7 @@ object Transformer {
         val variable = Variable(freshName("ignored"), Positive());
         val reference = Variable(transform(x), Type.Reference(tpe))
         transform(arg).run { value =>
-          Store(reference, value,
+          StoreVar(reference, value,
             Construct(variable, builtins.Unit, List(),
               Return(List(variable))))
         }
@@ -231,18 +231,22 @@ object Transformer {
           val variable = Variable(name, tpe)
           val reference = Variable(transform(id), Type.Reference(tpe))
           val prompt = Variable(transform(region), Type.Prompt())
+          val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
           region match {
             case symbols.builtins.globalRegion =>
-              // TODO currently we use prompt 1 as a quick fix...
+              // TODO currently we use prompt 2 as a quick fix...
               //    However, this will not work when reinstalling a fresh stack
               //    We need to truly special case global memory!
-              LiteralInt(prompt, 1L,
-                Allocate(reference, value, prompt,
-                  transform(body)))
+              val globalPrompt = Variable(freshName("global"), Type.Prompt())
+              LiteralInt(globalPrompt, 2L,
+                Shift(temporary, globalPrompt,
+                  Var(reference, value, Type.Positive(),
+                    Resume(temporary, transform(body)))))
             case _ =>
-              Allocate(reference, value, prompt,
-                  transform(body))
+              Shift(temporary, prompt,
+                Var(reference, value, Type.Positive(),
+                  Resume(temporary, transform(body))))
           }
         }
 
