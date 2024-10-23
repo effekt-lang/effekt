@@ -240,7 +240,8 @@ object Transformer {
               // LiteralInt(prompt, 1L,
               //   Allocate(reference, value, prompt,
               //     transform(body)))
-              ???
+              Allocate(reference, value, Variable("global", Type.Prompt()),
+                transform(body))
 
             case _ =>
               Allocate(reference, value, prompt,
