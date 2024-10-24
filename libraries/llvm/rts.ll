@@ -486,6 +486,8 @@ define %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
     %end = load %Stack, ptr %end_pointer
     %rest_pointer = getelementptr %StackValue, %Stack %end, i64 0, i32 3
     store %Stack %oldStack, ptr %rest_pointer
+
+    call void @free(%Resumption %uniqueResumption)
     ret %Stack %start
 }
 
@@ -562,7 +564,7 @@ continue:
 
 decrement:
     %newReferenceCount = sub %ReferenceCount %referenceCount, 1
-    store %ReferenceCount %referenceCount, ptr %referenceCount_pointer
+    store %ReferenceCount %newReferenceCount, ptr %referenceCount_pointer
     ret void
 
 free:
@@ -756,6 +758,7 @@ define void @eraseResumption(%Resumption %resumption) alwaysinline {
     %rest_pointer = getelementptr %StackValue, %Stack %end, i64 0, i32 3
     store %Stack null, ptr %rest_pointer
     call void @eraseStack(%Stack %stack)
+    call void @free(%Resumption %resumption)
     ret void
 }
 
