@@ -22,7 +22,7 @@ class StdlibJavaScriptTests extends StdlibTests {
 abstract class StdlibChezTests extends StdlibTests {
   override def ignored: List[File] = List(
     // Not implemented yet
-    examplesDir / "stdlib" / "bytes",
+    examplesDir / "stdlib" / "bytearray",
     examplesDir / "stdlib" / "io"
   )
 }
@@ -42,7 +42,7 @@ class StdlibLLVMTests extends StdlibTests {
     examplesDir / "stdlib" / "test" / "test.effekt",
 
     // Valgrind leak/failure
-    examplesDir / "stdlib" / "bytes" / "bytes.effekt",
+    examplesDir / "stdlib" / "bytearray" / "bytearray.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "wordcount.effekt",

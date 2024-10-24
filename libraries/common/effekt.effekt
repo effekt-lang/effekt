@@ -56,7 +56,7 @@ extern pure def show(value: Int): String =
   js "'' + ${value}"
   chez "(show-number ${value})"
   llvm """
-    %z = call %Pos @c_buffer_show_Int(%Int ${value})
+    %z = call %Pos @c_bytearray_show_Int(%Int ${value})
     ret %Pos %z
   """
 
@@ -66,7 +66,7 @@ extern pure def show(value: Double): String =
   js "'' + ${value}"
   chez "(show-number ${value})"
   llvm """
-    %z = call %Pos @c_buffer_show_Double(%Double ${value})
+    %z = call %Pos @c_bytearray_show_Double(%Double ${value})
     ret %Pos %z
   """
 
@@ -80,13 +80,13 @@ extern pure def show(value: Char): String =
   js "String.fromCodePoint(${value})"
   chez "(string (integer->char ${value}))"
   llvm """
-    %z = call %Pos @c_buffer_show_Char(%Int ${value})
+    %z = call %Pos @c_bytearray_show_Char(%Int ${value})
     ret %Pos %z
   """
 
 extern pure def show(value: Byte): String =
   llvm """
-    %z = call %Pos @c_buffer_show_Byte(i8 ${value})
+    %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
     ret %Pos %z
   """
 
@@ -105,7 +105,7 @@ extern pure def infixConcat(s1: String, s2: String): String =
   js "((${s1}) + (${s2}))"
   chez "(string-append ${s1} ${s2})"
   llvm """
-    %spz = call %Pos @c_buffer_concatenate(%Pos ${s1}, %Pos ${s2})
+    %spz = call %Pos @c_bytearray_concatenate(%Pos ${s1}, %Pos ${s2})
     ret %Pos %spz
   """
 
@@ -113,7 +113,7 @@ extern pure def length(str: String): Int =
   js "${str}.length"
   chez "(string-length ${str})"
   llvm """
-    %x = call %Int @c_buffer_length(%Pos ${str})
+    %x = call %Int @c_bytearray_size(%Pos ${str})
     call void @erasePositive(%Pos ${str})
     ret %Int %x
   """
@@ -122,7 +122,7 @@ extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   js "${str}.substring(${from}, ${to})"
   chez "(substring ${str} ${from} ${to})" // potentially raises: "Exception in substring: ..."
   llvm """
-    %x = call %Pos @c_buffer_substring(%Pos ${str}, i64 ${from}, i64 ${to})
+    %x = call %Pos @c_bytearray_substring(%Pos ${str}, i64 ${from}, i64 ${to})
     ret %Pos %x
   """
 
@@ -239,7 +239,7 @@ extern pure def infixEq(x: String, y: String): Bool =
   js "${x} === ${y}"
   chez "(equal? ${x} ${y})"
   llvm """
-    %res = call %Pos @c_buffer_eq(%Pos ${x}, %Pos ${y})
+    %res = call %Pos @c_bytearray_equal(%Pos ${x}, %Pos ${y})
     ret %Pos %res
   """
 

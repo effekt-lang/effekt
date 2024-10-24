@@ -1,0 +1,15 @@
+import bytearray
+
+def main() = {
+
+  val b = bytearray::allocate(16);
+  b.unsafeSet(0, 104.toByte)
+  b.unsafeSet(1, 101.toByte)
+  b.unsafeSet(2, 108.toByte)
+  b.unsafeSet(3, 108.toByte)
+  b.unsafeSet(4, 111.toByte)
+
+  b.unsafeSet(1, 102.toByte)
+
+  println(b.toUTF8) // hfllo
+}

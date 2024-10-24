@@ -14,7 +14,6 @@ import result
 /**
  * Strings
  * - JS: Strings are represented as UTF-16 code units where some characters take 2 slots (surrogate pairs)
- * - ML: Strings are sequences of 8-bit characters (https://smlfamily.github.io/Basis/string.html)
  * - Chez: Strings are sequences of unicode characters (?)
  * - LLVM: UTF-8 (characters can take from 1-4 bytes).
  */
@@ -237,14 +236,14 @@ def printing[T] { prog: => T / Stream }: T = <>
 // ----------
 //
 //   JS: Int (Unicode codepoints)
-//   CS: ?
+//   Chez: ?
 //   LLVM: i64 representing utf-8 (varying length 1-4 bytes)
 
 extern pure def toString(ch: Char): String =
   js "String.fromCodePoint(${ch})"
   chez "(string (integer->char ${ch}))"
   llvm """
-    %z = call %Pos @c_buffer_show_Char(%Int ${ch})
+    %z = call %Pos @c_bytearray_show_Char(%Int ${ch})
     ret %Pos %z
   """
 
@@ -324,16 +323,6 @@ def utf16UnitCount(codepoint: Char): Int = codepoint match {
   case c => panic("Not a valid code point")
 }
 
-// TODO this is copied from the LLVM-backend stdlib. Do we need this?
-// def showQuoted(s: String): String =
-//  "\x22" ++ s.map { c =>
-//    if(c == "\x22") {
-//     "\\\x22"
-//    } else if (c == "\\") {
-//     "\\\\"
-//    } else c
-//  } ++ "\x22"
-
 extern pure def charWidth(c: Char): Int =
   // JavaScript strings are UTF-16 where every unicode character after 0xffff takes two units
   js "(${c} > 0xffff) ? 2 : 1"
@@ -348,6 +337,6 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
   llvm """
-    %x = call %Int @c_buffer_character_at(%Pos ${str}, i64 ${n})
+    %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
   """

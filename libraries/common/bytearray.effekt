@@ -1,0 +1,71 @@
+module bytearray
+
+/**
+ * A memory managed, mutable, fixed-length array of bytes.
+ */
+extern type ByteArray
+  // = llvm "%Pos"
+  // = js "Uint8Array"
+
+
+/// Allocates a new bytearray with the given `size`, its values are undefined.
+extern global def allocate(size: Int): ByteArray =
+  js "(new Uint8Array(${size}))"
+  llvm """
+    %arr = call %Pos @c_bytearray_new(%Int ${size})
+    ret %Pos %arr
+  """
+
+extern pure def size(arr: ByteArray): Int =
+  js "${arr}.length"
+  llvm """
+    %size = call %Int @c_bytearray_size(%Pos ${arr})
+    ret %Int %size
+  """
+
+extern global def unsafeGet(arr: ByteArray, index: Int): Byte =
+  js "(${arr})[${index}]"
+  llvm """
+    %byte = call %Byte @c_bytearray_get(%Pos ${arr}, %Int ${index})
+    ret %Byte %byte
+  """
+
+extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
+  js "bytearray$set(${arr}, ${index}, ${value})"
+  llvm """
+    %z = call %Pos @c_bytearray_set(%Pos ${arr}, %Int ${index}, %Byte ${value})
+    ret %Pos %z
+  """
+
+def resize(source: ByteArray, size: Int): ByteArray = {
+  val target = allocate(size)
+  val n = min(source.size, target.size)
+  def go(i: Int): ByteArray =
+    if (i < n) {
+      target.unsafeSet(i, source.unsafeGet(i))
+      go(i + 1)
+    } else {
+      target
+    }
+  go(0)
+}
+
+extern pure def fromUTF8(str: String): ByteArray =
+  js "(new TextEncoder().encode(${str}))"
+  llvm """
+    ret %Pos ${str}
+  """
+
+extern pure def toUTF8(arr: ByteArray): String =
+  js "(new TextDecoder('utf-8').decode(${arr}))"
+  // assuming the buffer is already in UTF-8
+  llvm """
+    ret %Pos ${arr}
+  """
+
+extern js """
+  function bytearray$set(bytes, index, value) {
+    bytes[index] = value;
+    return $effekt.unit;
+  }
+"""
