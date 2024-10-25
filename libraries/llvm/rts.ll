@@ -92,7 +92,7 @@
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {ptr, %Object}
 
-; Reference into an arena (prompt -- cast to 32bit, offset 32bit)
+; Reference to a mutable variable (prompt, offset)
 %Reference = type { %Prompt, i64 }
 
 ; Builtin Types
@@ -425,7 +425,7 @@ define private %Stack @reset(%Stack %oldStack) {
     ret %Stack %stack
 }
 
-define private void @updatePrompts(%Stack %stack) alwaysinline {
+define private void @updatePrompts(%Stack %stack) {
     %dirtyBit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %dirtyBit = load i1, ptr %dirtyBit_pointer
     br i1 %dirtyBit, label %continue, label %done
