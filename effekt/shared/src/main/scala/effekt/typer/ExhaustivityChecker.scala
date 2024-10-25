@@ -259,7 +259,10 @@ object ExhaustivityChecker {
           cases.foreach { v =>
             matches.get(v) match {
               case Some(head :: tail) => matchClauses(head, tail)
-              case _ => E.missingLiteral(v, tpe, scrutinee)
+              case _ => defaults.toList match {
+                case Nil => E.missingLiteral(v, tpe, scrutinee)
+                case head :: tail => matchClauses(head, tail)
+              }
             }
           }
 
