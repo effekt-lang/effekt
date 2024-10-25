@@ -1,0 +1,6 @@
+def foo(opt: Option[Bool]) = opt match {
+  case Some(false) => Some(false)
+  case opt => Some(true)
+}
+
+def main() = ()

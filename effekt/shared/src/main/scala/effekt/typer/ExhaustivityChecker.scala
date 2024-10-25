@@ -253,13 +253,19 @@ object ExhaustivityChecker {
         }
       }
 
+      def requireDefault(): Unit =
+        defaults.toList match {
+          case Nil => E.missingDefault(tpe, scrutinee)
+          case head :: tail => matchClauses(head, tail)
+        }
+
       finite match {
         // we have a finite domain
         case Some(cases) =>
           cases.foreach { v =>
             matches.get(v) match {
               case Some(head :: tail) => matchClauses(head, tail)
-              case _ => E.missingLiteral(v, tpe, scrutinee)
+              case _ => requireDefault()
             }
           }
 
@@ -268,10 +274,7 @@ object ExhaustivityChecker {
           matches.collect {
             case (_, head :: tail) => matchClauses(head, tail)
           }
-          defaults.toList match {
-            case Nil => E.missingDefault(tpe, scrutinee)
-            case head :: tail => matchClauses(head, tail)
-          }
+          requireDefault()
       }
     }
 
