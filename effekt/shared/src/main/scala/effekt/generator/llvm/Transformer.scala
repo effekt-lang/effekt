@@ -450,7 +450,6 @@ object Transformer {
       case machine.Resume(value, rest) =>
         emit(Comment(s"Resume ${value.name}"))
         shareValues(List(value), freeVariables(rest));
-        val uniqueStackName = freshName("stack");
         val newStackName = freshName("stack");
         emit(Call(newStackName, Ccc(), stackType, resume, List(transform(value), getStack())));
         setStack(LocalReference(stackType, newStackName));

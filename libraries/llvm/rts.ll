@@ -69,7 +69,8 @@
 ; Unique address for each handler.
 %Prompt = type ptr
 
-; A Continuation capturing a list of stacks
+; A Continuation capturing a list of stacks.
+; This points to the last element in a cyclic linked list of StackValues
 %Resumption = type ptr
 
 ; The "meta" stack (a stack of stacks) -- a pointer to a %StackValue
@@ -78,12 +79,10 @@
 ; Lives in a stable address
 %PromptValue = type { %ReferenceCount, %Stack }
 
-; This points to a linked-list of stacks,
-; and also holds a direct pointer to the last stack
-%ResumptionValue = type { %ReferenceCount, %Stack, %Stack }
-
-; This is used as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %Memory, %Region, %Prompt, %Stack, i1 }
+; This is used for two purposes:
+;   - a refied first-class list of stacks (cyclic linked-list)
+;   - as part of an intrusive linked-list of stacks (meta stack)
+%StackValue = type { %Memory, %Region, %Prompt, %Stack, i1, %ReferenceCount }
 
 
 
@@ -131,7 +130,8 @@ define private %Prompt @currentPrompt(%Stack %stack) {
 }
 
 define private %Prompt @freshPrompt() {
-    %prompt = call %Prompt @malloc(i64 16)
+    %promptSize = ptrtoint ptr getelementptr (%PromptValue, ptr null, i64 1) to i64
+    %prompt = call %Prompt @malloc(i64 %promptSize)
     store %PromptValue zeroinitializer, %Prompt %prompt
     ret %Prompt %prompt
 }
@@ -478,30 +478,20 @@ continue:
 
 define %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
     %uniqueResumption = call %Resumption @uniqueStack(%Resumption %resumption)
-    %start_pointer = getelementptr %ResumptionValue, %Resumption %uniqueResumption, i64 0, i32 1
-    %start = load %Stack, ptr %start_pointer
+    %rest_pointer = getelementptr %StackValue, %Resumption %uniqueResumption, i64 0, i32 3
+    %start = load %Stack, ptr %rest_pointer
     call void @updatePrompts(%Stack %start)
 
-    %end_pointer = getelementptr %ResumptionValue, %Resumption %uniqueResumption, i64 0, i32 2
-    %end = load %Stack, ptr %end_pointer
-    %rest_pointer = getelementptr %StackValue, %Stack %end, i64 0, i32 3
     store %Stack %oldStack, ptr %rest_pointer
 
-    call void @free(%Resumption %uniqueResumption)
     ret %Stack %start
 }
 
 define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
-    %resumptionSize = ptrtoint ptr getelementptr (%ResumptionValue, ptr null, i64 1) to i64
-    %resumption = call %Resumption @malloc(i64 %resumptionSize)
-    %promptStack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
-    %promptStack = load %Stack, ptr %promptStack_pointer
-    %next_pointer = getelementptr %StackValue, %Stack %promptStack, i64 0, i32 3
+    %resumpion_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    %resumption = load %Stack, ptr %resumpion_pointer
+    %next_pointer = getelementptr %StackValue, %Stack %resumption, i64 0, i32 3
     %next = load %Stack, ptr %next_pointer
-
-    %resumption.0 = insertvalue %ResumptionValue zeroinitializer, %Stack %stack, 1
-    %resumption.1 = insertvalue %ResumptionValue %resumption.0, %Stack %promptStack, 2
-    store %ResumptionValue %resumption.1, %Resumption %resumption
 
     store %Stack %stack, ptr %next_pointer
 
@@ -655,7 +645,7 @@ define private %Region @copyRegion(%Region %region) alwaysinline {
 define private %Resumption @uniqueStack(%Resumption %resumption) alwaysinline {
 
 entry:
-    %referenceCount_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 0
+    %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 5
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
     switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
 
@@ -665,21 +655,11 @@ done:
 copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newOldReferenceCount, ptr %referenceCount_pointer
-    %stack_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 1
+    %stack_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 3
     %stack = load %Stack, ptr %stack_pointer
-    %end_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 2
-    %end = load %Stack, ptr %end_pointer
-
-    %newResumption = call ptr @malloc(i64 24)
-    %newReferenceCount_pointer = getelementptr %ResumptionValue, %Resumption %newResumption, i64 0, i32 0
-    %newStart_pointer = getelementptr %ResumptionValue, %Resumption %newResumption, i64 0, i32 1
-    %newEnd_pointer = getelementptr %ResumptionValue, %Resumption %newResumption, i64 0, i32 2
-
-    store %ReferenceCount 0, ptr %newReferenceCount_pointer
 
     %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
     %newHead = call ptr @malloc(i64 %size)
-    store %Stack %newHead, ptr %newStart_pointer
 
     br label %loop
 
@@ -691,7 +671,6 @@ loop:
     %stackRegion = getelementptr %StackValue, %Stack %old, i64 0, i32 1
     %stackPrompt = getelementptr %StackValue, %Stack %old, i64 0, i32 2
     %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 3
-    %stackDirtyBit = getelementptr %StackValue, %Stack %old, i64 0, i32 4
 
     %memory = load %Memory, ptr %stackMemory
     %region = load %Region, ptr %stackRegion
@@ -703,6 +682,7 @@ loop:
     %newStackPrompt = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
     %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
     %newStackDirtyBit = getelementptr %StackValue, %Stack %newStack, i64 0, i32 4
+    %newStackReferenceCounter = getelementptr %StackValue, %Stack %newStack, i64 0, i32 5
 
     %newMemory = call %Memory @copyMemory(%Memory %memory)
 
@@ -717,8 +697,9 @@ loop:
     store %Region %newRegion, ptr %newStackRegion
     store %Prompt %prompt, ptr %newStackPrompt
     store i1 1, ptr %newStackDirtyBit
+    store i64 0, ptr %newStackReferenceCounter
 
-    %isEnd = icmp eq %Stack %old, %end
+    %isEnd = icmp eq %Stack %old, %resumption
     br i1 %isEnd, label %stop, label %next
 
 next:
@@ -728,12 +709,11 @@ next:
 
 stop:
     store %Stack %newHead, ptr %newStackRest
-    store %Stack %newStack, ptr %newEnd_pointer
-    ret %Stack %newResumption
+    ret %Stack %newStack
 }
 
 define void @shareResumption(%Resumption %resumption) alwaysinline {
-    %referenceCount_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 0
+    %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 5
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
     %referenceCount.1 = add %ReferenceCount %referenceCount, 1
     store %ReferenceCount %referenceCount.1, ptr %referenceCount_pointer
@@ -741,7 +721,7 @@ define void @shareResumption(%Resumption %resumption) alwaysinline {
 }
 
 define void @eraseResumption(%Resumption %resumption) alwaysinline {
-    %referenceCount_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 0
+    %referenceCount_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 5
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
     switch %ReferenceCount %referenceCount, label %decr [%ReferenceCount 0, label %free]
 
@@ -751,14 +731,10 @@ define void @eraseResumption(%Resumption %resumption) alwaysinline {
     ret void
 
     free:
-    %stack_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 1
+    %stack_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 3
     %stack = load %Stack, ptr %stack_pointer
-    %end_pointer = getelementptr %ResumptionValue, %Resumption %resumption, i64 0, i32 2
-    %end = load %Stack, ptr %end_pointer
-    %rest_pointer = getelementptr %StackValue, %Stack %end, i64 0, i32 3
-    store %Stack null, ptr %rest_pointer
+    store %Stack null, ptr %stack_pointer
     call void @eraseStack(%Stack %stack)
-    call void @free(%Resumption %resumption)
     ret void
 }
 
