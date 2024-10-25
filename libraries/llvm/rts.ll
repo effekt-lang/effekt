@@ -804,7 +804,6 @@ define private void @topLevelEraser(%Environment %environment) {
 @global = private global { i64, %Stack } { i64 0, %Stack null }
 
 define private %Stack @withEmptyStack() {
-    ; TODO all stacks share the same source of fresh prompts
     %stack = call %Stack @reset(%Stack null)
 
     %globalStack = getelementptr %PromptValue, %Prompt @global, i64 0, i32 1
