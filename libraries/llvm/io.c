@@ -20,7 +20,7 @@ void c_io_println_Double(const Double x) {
 }
 
 void c_io_println_String(String text) {
-    for (uint64_t j = 0; j < c_bytearray_size(text); ++j)
+    for (int64_t j = 0; j < c_bytearray_size(text); ++j)
         putchar(c_bytearray_data(text)[j]);
     erasePositive(text);
     putchar('\n');
@@ -34,7 +34,7 @@ void c_io_println_String(String text) {
 // Share memory between Effekt-buffers and libuv buffers
 // -----------------------------------------------------
 // A libuv buffer is a {ptr, i64} where i64 is the capacity
-// while our buffer (from buffer.c, which is ref-counted) is a %Pos with a
+// while our buffer (from bytearray.c, which is ref-counted) is a %Pos with a
 // pointer and a length. The data ptr is shared between the two such that
 // libuv (and underlying mechanisms) can directly write into our buffer without
 // copying. Since our buffer is ref-counted, this has the advantage that we
@@ -125,7 +125,7 @@ void c_fs_open(String path, struct Pos mode, Stack stack) {
 
 void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
-    uv_buf_t buf = uv_buf_init(c_bytearray_data(buffer) + offset, size);
+    uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
     // erasePositive(buffer);
     // TODO we should erase the buffer but abort if this was the last reference
 
@@ -143,7 +143,7 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
 
 void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
-    uv_buf_t buf = uv_buf_init(c_bytearray_data(buffer) + offset, size);
+    uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
     // erasePositive(buffer);
     // TODO we should erase the buffer but abort if this was the last reference
 
