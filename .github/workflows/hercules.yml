@@ -13,13 +13,12 @@ jobs:
       
       - name: Run Hercules Analysis
         run: |
-          # Install Hercules and Labours
           docker run --rm -v $(pwd):/repo --workdir=/repo \
             srcd/hercules:latest \
             /bin/bash -c \
-            'hercules --burndown . | labours -m burndown-project -f pb -o hercules_charts \
+            'hercules --burndown --pb . | labours -m burndown-project -f pb --disable-projector -o hercules_charts \
             && cd hercules_charts \
-            && tar -cf ../hercules_charts.tar * \
+            && tar -cf ../hercules_charts.tar * ../hercules_charts_* \
             && cd .. \
             && rm -r hercules_charts'
       
