@@ -1,4 +1,4 @@
-name: Hercules Analysis
+ame: Hercules Analysis
 
 on: [push]
 
@@ -18,7 +18,7 @@ jobs:
             /bin/bash -c \
             'hercules --burndown --pb . | labours -m burndown-project -f pb --disable-projector -o hercules_charts \
             && cd hercules_charts \
-            && tar -cf ../hercules_charts.tar * ../hercules_charts_* \
+            && tar -cf ../hercules_charts.tar * \
             && cd .. \
             && rm -r hercules_charts'
       
