@@ -32,7 +32,7 @@ Int c_bytearray_size(const struct Pos arr) {
   return arr.tag;
 }
 
-char* c_bytearray_data(const struct Pos arr) {
+uint8_t* c_bytearray_data(const struct Pos arr) {
   return arr.obj + sizeof(struct Header);
 }
 
@@ -62,7 +62,7 @@ struct Pos c_bytearray_from_nullterminated_string(const char *data) {
     uint64_t n = 0;
     while (data[++n]);
 
-    c_bytearray_construct(n, data);
+    return c_bytearray_construct(n, (uint8_t*)data);
 }
 
 char* c_bytearray_into_nullterminated_string(const struct Pos arr) {
@@ -110,7 +110,7 @@ struct Pos c_bytearray_show_Char(const uint64_t n) {
 }
 
 // TODO do this in Effekt
-struct Pos c_bytearray_show_Byte(const uint8_t n) {
+struct Pos c_bytearray_show_Byte(const Byte n) {
     char str[4];  // Byte values range from 0 to 255, 3 characters + null terminator
     sprintf(str, "%" PRIu8, n);
     return c_bytearray_from_nullterminated_string(str);
@@ -126,7 +126,7 @@ struct Pos c_bytearray_show_Double(const Double x) {
 // TODO do this in Effekt
 struct Pos c_bytearray_concatenate(const struct Pos left, const struct Pos right) {
     const struct Pos concatenated = c_bytearray_new(c_bytearray_size(left) + c_bytearray_size(right));
-    for (uint64_t j = 0; j < c_bytearray_size(concatenated); ++j)
+    for (int64_t j = 0; j < c_bytearray_size(concatenated); ++j)
         c_bytearray_data(concatenated)[j]
             = j < c_bytearray_size(left)
             ? c_bytearray_data(left)[j]
@@ -161,7 +161,7 @@ struct Pos c_bytearray_equal(const struct Pos left, const struct Pos right) {
 // TODO deprecate
 struct Pos c_bytearray_substring(const struct Pos str, uint64_t start, uint64_t end) {
     const struct Pos substr = c_bytearray_new(end - start);
-    for (uint64_t j = 0; j < c_bytearray_size(substr); ++j) {
+    for (int64_t j = 0; j < c_bytearray_size(substr); ++j) {
         c_bytearray_data(substr)[j] = c_bytearray_data(str)[start+j];
     }
     erasePositive(str);
