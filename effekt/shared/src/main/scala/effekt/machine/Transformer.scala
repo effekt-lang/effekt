@@ -235,14 +235,10 @@ object Transformer {
 
           region match {
             case symbols.builtins.globalRegion =>
-              // TODO currently we use prompt 2 as a quick fix...
-              //    However, this will not work when reinstalling a fresh stack
-              //    We need to truly special case global memory!
-              val globalPrompt = Variable(freshName("global"), Type.Prompt())
-              LiteralInt(globalPrompt, 2L,
-                Shift(temporary, globalPrompt,
-                  Var(reference, value, Type.Positive(),
-                    Resume(temporary, transform(body)))))
+              val globalPrompt = Variable("global", Type.Prompt())
+              Shift(temporary, globalPrompt,
+                Var(reference, value, Type.Positive(),
+                  Resume(temporary, transform(body))))
             case _ =>
               Shift(temporary, prompt,
                 Var(reference, value, Type.Positive(),
