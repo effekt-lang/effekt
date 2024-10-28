@@ -183,7 +183,7 @@ function regex$exec(reg, str) {
 namespace internal {
   extern io def unsafeExec(reg: Regex, str: String): RegexMatch = js "regex$exec(${reg}, ${str})"
 
-  extern pure def unsafeRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
+  extern io def unsafeRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
 }
 
 
