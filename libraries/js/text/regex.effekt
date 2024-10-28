@@ -9,7 +9,7 @@ extern type Regex
 
 // matches and groups
 record Range(start: Int, end: Int)
-record Group(matched: String, index: Option[Range])
+record Group(matched: String, index: Range)
 record Match(matched: String, start: Int, end: Int, groups: List[Group])
 
 /**
@@ -19,21 +19,17 @@ record Match(matched: String, start: Int, end: Int, groups: List[Group])
  * - Global: Matches all occurrences in the input string.
  * - IgnoreCase: Performs case-insensitive matching.
  * - Multiline: Treats ^ and $ as start/end of each line.
- * - GenerateIndices: Enables capture group index retrieval.
  *
  * Usage:
  * ```effekt
- * val regex = regex("pattern", [Global(), IgnoreCase(), GenerateIndices()])
+ * val regex = regex("pattern", [Global(), IgnoreCase()])
  * ```
  *
- * Note: GenerateIndices is required for capture group indexing.
- * Without it, capture group indices will be None.
  */
 type RegexFlags {
   Global();
   IgnoreCase();
   Multiline();
-  GenerateIndices();
 }
 
 /**
@@ -44,9 +40,6 @@ type RegexFlags {
  * @param pattern The regular expression pattern as a string.
  * @return A Regex object that can be used with the `exec` function.
  *
- * Note: To extract substring indices for capturing groups, the `GenerateIndices` flag
- * must be explicitly set using the overloaded `regex(pattern: String, flags: List[RegexFlags])` function.
- * Without this flag, indices of capture groups will always be `None`.
  *
  * Example usage:
  * ```effekt
@@ -56,7 +49,7 @@ type RegexFlags {
  *
  * For more control over flags, use the overloaded version:
  * ```effekt
- * val regexWithIndices = regex("(\\w+)", [Global(), GenerateIndices()])
+ * val regexWithIndices = regex("(\\w+)", [Global()])
  * ```
  */
 def regex(pattern: String): Regex = regex(pattern, [])
@@ -71,21 +64,19 @@ def regex(pattern: String): Regex = regex(pattern, [])
 *       This flags makes the regex object stateful and `exec` will return the next match on each call.
  *   - `IgnoreCase` Case-insensitive search
  *   - `Multiline Multi-line search (^ and $ match start/end of each line)
- *   - `GenerateIndices Generate indices for substring matches
  *
  * @return A Regex object that can be used with the `exec` function.
  *
  * Example usage:
  * ```effekt
  * val simpleRegex = regex("\\w+")
- * val complexRegex = regex("(\\w+)\\s(\\d+)", [Global(), GenerateIndices()]))
+ * val complexRegex = regex("(\\w+)\\s(\\d+)", [Global()]))
  * ```
  *
- * Note: The `GenerateIndices` flag is required for extracting substring indices of groups.
- * If not present, the indices of capture groups will always be `None`.
  */
 def regex(pattern: String, flags: List[RegexFlags]): Regex = {
-  val flags = flags.map{it => it.show()}.join("")
+  // always set "d" (GenerateIndices) flag for capturing group indices
+  val flags = flags.map{it => it.show()}.join("") ++ "d"
   internal::unsafeRegex(pattern, flags)
 }
 
@@ -96,15 +87,7 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  * @param str The string to match against.
  * @return Option[Match] A Some(Match) if a match is found, None otherwise.
  *
- * The returned Match object contains:
- * - matched: The full matched string.
- * - start: The starting index of the match.
- * - end: The ending index of the match if `Global` flag is set, otherwise 0
- * - groups: A list of Group objects for each capturing group.
- *
- * Each Group object contains:
- * - matched: The matched substring for this group.
- * - index: An Option[Range] with start and end indices if the 'd' flag is set, None otherwise.
+ * Please refer to the `Match` record for details on the structure of the returned match.
  *
  * Note: This function is stateful when the global flag 'g' is set on the Regex object.
  * Subsequent calls with the same Regex and string will return the next match in the string.
@@ -124,7 +107,7 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
 def exec(reg: Regex, str: String): Option[Match] = {
   def toGroup(g: GroupMatch): Group = Group(
     matched(g),
-    zip(undefinedToOption(start(g)), undefinedToOption(end(g))) { (s, e) => Range(s, e)}
+    Range(start(g), end(g))
   )
 
   val regexMatch = internal::unsafeExec(reg, str).undefinedToOption()
@@ -158,16 +141,10 @@ function regex$exec(reg, str) {
   var groups = [];
   for (var i = 1; i < match.length; i++) {
     if (match[i] !== undefined) {
-      if (match.indices !== undefined && match.indices[i] !== undefined) {
         groups.push({
           matched: match[i],
           start: match.indices[i][0],
           end: match.indices[i][1]
-        });
-      } else {
-        groups.push({
-          matched: match[i],
-        });
       }
     } else {
       // Push an empty string if an intermediate group is undefined
@@ -216,6 +193,5 @@ def show(f: RegexFlags): String = {
     case Global() => "g"
     case IgnoreCase() => "i"
     case Multiline() => "m"
-    case GenerateIndices() => "d"
   }
 }
