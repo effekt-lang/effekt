@@ -62,6 +62,7 @@ trait EffektTests extends munit.FunSuite {
       "--Koutput", "string",
       "--backend", backendName,
       "--out", output.getPath,
+      "--debug",
     )
     if (valgrind) options = options :+ "--valgrind"
     val configs = compiler.createConfig(options)
