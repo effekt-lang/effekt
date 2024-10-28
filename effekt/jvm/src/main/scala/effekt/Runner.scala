@@ -332,8 +332,9 @@ object LLVMRunner extends Runner[String] {
     val executableFile = basePath
     var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
 
-    if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all", "-Og", "-g", "-Wall", "-Wextra")
+    if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra")
     if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
+    else if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
 
     exec(gccArgs: _*)
 
