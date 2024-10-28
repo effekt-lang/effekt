@@ -49,9 +49,11 @@ def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
   try { Some(p()) }
   with Exception[E] { def raise(_, _) = None() }
 
-/// Applies a function `f` to two `Option` values:
-/// returning `None` if either of the arguments is `None`,
-/// otherwise returning `Some` of the result.
+/**
+ * Applies a function `f` to two `Option` values:
+ * returning `None` if either of the arguments is `None`,
+ * otherwise returning `Some` of the result.
+ **/
 def zip[A, B, C](a: Option[A], b: Option[B]) { f: (A,B) => C }: Option[C] =
   (a, b) match {
     case (Some(x), Some(y)) => Some(f(x, y))

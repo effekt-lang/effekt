@@ -10,7 +10,7 @@ extern type Regex
 // matches and groups
 record Range(start: Int, end: Int)
 record Group(matched: String, index: Option[Range])
-record Match(matched: String, start: Int, end: Int,  groups: List[Group])
+record Match(matched: String, start: Int, end: Int, groups: List[Group])
 
 /**
  * Specifies flags that modify regular expression behavior.
@@ -169,7 +169,7 @@ function regex$exec(reg, str) {
           matched: match[i],
         });
       }
-    }else {
+    } else {
       // Push an empty string if an intermediate group is undefined
       groups.push({matched: ""});}
   }
@@ -202,7 +202,7 @@ def show(m: Match): String = {
 }
 
 def show(g: Group): String = {
-  val range = g.index.show{it => show(it)}
+  val range = g.index.show{ it => show(it) }
 
   g.matched ++  "\nfrom: " ++ range
 }
