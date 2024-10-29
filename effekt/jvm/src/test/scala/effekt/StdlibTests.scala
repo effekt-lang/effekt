@@ -36,6 +36,7 @@ class StdlibLLVMTests extends StdlibTests {
   def backendName: String = "llvm"
 
   override def valgrind = sys.env.get("EFFEKT_VALGRIND").nonEmpty
+  override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
 
   override def ignored: List[File] = List(
     // Toplevel let-bindings (for ANSI-color-codes in output) not supported
