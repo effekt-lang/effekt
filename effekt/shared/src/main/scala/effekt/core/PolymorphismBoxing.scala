@@ -322,7 +322,22 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Var(id, transform(init), cap, transform(body))
     case Stmt.Try(body, handlers) =>
       Stmt.Try(transform(body), handlers map transform)
-    case Stmt.Region(body) => Stmt.Region(transform(body))
+    case Stmt.Region(body) =>
+      val tBody = transform(body)
+      // make sure the result type is a boxed one
+      val (expectedBodyTpe, actualReturnType, expectedReturnType) = tBody.tpe match {
+        case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+          val boxedResult = transformArg(result)
+          (BlockType.Function(tparams, cparams, vparams, bparams, boxedResult), boxedResult, result)
+        case _ => Context.abort("Body of a region cannot have interface type")
+      }
+      val doBoxResult = coercer[Block](tBody.tpe, expectedBodyTpe)
+      // Create coercer for eagerly unboxing the result again
+      val doUnboxResult = coercer(actualReturnType, expectedReturnType)
+      val resName = TmpValue("boxedResult")
+      
+      Stmt.Val(resName, actualReturnType, Stmt.Region(doBoxResult(tBody)), 
+        Stmt.Return(doUnboxResult(Pure.ValueVar(resName, actualReturnType))))
     case Stmt.Hole() => Stmt.Hole()
   }
 
