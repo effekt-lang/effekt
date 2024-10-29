@@ -335,9 +335,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       // Create coercer for eagerly unboxing the result again
       val doUnboxResult = coercer(actualReturnType, expectedReturnType)
       val resName = TmpValue("boxedResult")
-      
-      Stmt.Val(resName, actualReturnType, Stmt.Region(doBoxResult(tBody)), 
-        Stmt.Return(doUnboxResult(Pure.ValueVar(resName, actualReturnType))))
+
+      if (doUnboxResult.isIdentity && doBoxResult.isIdentity) {
+        Stmt.Region(tBody)
+      } else {
+        Stmt.Val(resName, actualReturnType, Stmt.Region(doBoxResult(tBody)),
+          Stmt.Return(doUnboxResult(Pure.ValueVar(resName, actualReturnType))))
+      }
     case Stmt.Hole() => Stmt.Hole()
   }
 
