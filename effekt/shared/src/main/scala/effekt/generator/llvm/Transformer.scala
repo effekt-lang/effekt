@@ -714,31 +714,21 @@ object Transformer {
     }
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
-    value.tpe match {
-      case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), sharePositive, List(transform(value))))
-      case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), shareNegative, List(transform(value))))
-      case machine.Type.Prompt()     => ()
-      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), shareResumption, List(transform(value))))
-      case machine.Type.Int()        => ()
-      case machine.Type.Byte()       => ()
-      case machine.Type.Double()     => ()
-      case machine.Type.String()     => emit(Call("_", Ccc(), VoidType(), shareString, List(transform(value))))
-      case machine.Type.Reference(_) => ()
-    }
+    Option(value.tpe).collect {
+      case machine.Positive()    => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
+      case machine.Negative()    => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
+      case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
+      case machine.Type.String() => Call("_", Ccc(), VoidType(), shareString, List(transform(value)))
+    }.map(emit)
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
-    value.tpe match {
-      case machine.Positive()        => emit(Call("_", Ccc(), VoidType(), erasePositive, List(transform(value))))
-      case machine.Negative()        => emit(Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value))))
-      case machine.Type.Prompt()     => ()
-      case machine.Type.Stack()      => emit(Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value))))
-      case machine.Type.Int()        => ()
-      case machine.Type.Byte()       => ()
-      case machine.Type.Double()     => ()
-      case machine.Type.String()     => emit(Call("_", Ccc(), VoidType(), eraseString, List(transform(value))))
-      case machine.Type.Reference(_) => ()
-    }
+    Option(value.tpe).collect {
+      case machine.Positive()    => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
+      case machine.Negative()    => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
+      case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
+      case machine.Type.String() => Call("_", Ccc(), VoidType(), eraseString, List(transform(value)))
+    }.map(emit)
   }
 
   def pushReturnAddressOnto(stack: Operand, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext): Unit = {
