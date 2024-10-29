@@ -1,6 +1,7 @@
 module stream
 
-import bytes
+import array
+import bytearray
 
 interface Emit[A] {
   def emit(value: A): Unit
@@ -44,11 +45,11 @@ def each[A](array: Array[A]): Unit / Emit[A] = {
   go(0)
 }
 
-def each(bytes: Bytes): Unit / Emit[Byte] = {
+def each(bytes: ByteArray): Unit / Emit[Byte] = {
   val n = bytes.size
   def go(i: Int): Unit = {
     if (i < n) {
-      do emit(bytes.read(i))
+      do emit(bytes.unsafeGet(i))
       go(i + 1)
     }
   }
@@ -167,7 +168,7 @@ def gatherList[A] { stream: () => Unit / Emit[A] }: List[A] =
 
 def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
   var i = 0
-  var a = allocate(1)
+  var a = array::allocate(1)
   try {
     (stream(), a.resize(i))
   } with Emit[A] {
@@ -186,7 +187,7 @@ def gatherArray[A] { stream: () => Unit / Emit[A] }: Array[A] =
 
 def gatherArraySize[A, R](number: Int) { stream: () => R / Emit[A] }: (Option[R], Array[A]) = {
   var i = 0;
-  val a = allocate(number);
+  val a = array::allocate(number);
   val r = try {
     Some(stream())
   } with Emit[A] {
@@ -225,25 +226,25 @@ interface Read[A] {
   def read(): A / Done
 }
 
-def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }: R / Done = {
-  var next = box { () => val x: A = do done(); return x }
+def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }: R = {
+  // TODO avoid Option and use Done
+  var next = box { () => None() }
   next = box { () =>
     try {
       stream()
-      val x: A = do done()
-      return x
+      None()
     } with Emit[A] {
       def emit(v) = {
         next = box { () => resume(()) }
-        return v
+        Some(v)
       }
     }
   }
   try {
     reader()
   } with Read[A] {
-    def read() = {
-      resume { next() }
+    def read() = resume {
+      next().getOrElse { do done() }
     }
   }
 }
