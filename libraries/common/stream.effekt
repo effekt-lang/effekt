@@ -62,10 +62,6 @@ def each(bytes: ByteArray): Unit / Emit[Byte] = {
 // not result
 // not seq
 
-// def decodeUtf8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = <>
-// def encodeUtf8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] = <>
-// def each(string: String): Unit / Emit[Char] = decodeUtf8 { string.asBytes.each }
-
 
 interface Done {
   def done(): Nothing
@@ -173,10 +169,9 @@ def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
     (stream(), a.resize(i))
   } with Emit[A] {
     def emit(v) = {
-      val c = i;
-      if (c >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(c, v)
-      i = c + 1
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
       resume(())
     }
   }
@@ -185,41 +180,24 @@ def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
 def gatherArray[A] { stream: () => Unit / Emit[A] }: Array[A] =
   gatherArray[A, Unit]{stream}.second
 
-def gatherArraySize[A, R](number: Int) { stream: () => R / Emit[A] }: (Option[R], Array[A]) = {
-  var i = 0;
-  val a = array::allocate(number);
-  val r = try {
-    Some(stream())
-  } with Emit[A] {
+def gatherBytes[A, R] { stream: () => R / Emit[Byte] }: (R, ByteArray) = {
+  var i = 0
+  var a = bytearray::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with Emit[Byte] {
     def emit(v) = {
-      val c = i;
-      if (c < number) {
-        a.unsafeSet(c, v)
-        i = c + 1
-        resume(())
-      } else {
-        None()
-      }
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
+      resume(())
     }
-  }
-  if (i < a.size) {
-    (r, a.resize(i))
-  } else {
-    (r, a)
   }
 }
 
-def gatherArraySize[A](number: Int) { stream: () => Unit / Emit[A] }: Array[A] =
-  gatherArraySize[A, Unit](number){stream}.second
+def gatherBytes[A] { stream: () => Unit / Emit[Byte] }: ByteArray =
+  gatherBytes[A, Unit]{stream}.second
 
-// def gatherBytes[A, R] { stream: () => R / Emit[Byte] }: (Bytes, R) = <>
-
-// def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
-
-// TODO input from file
-// TODO input from stdin
-// TODO output to file
-// TODO output to stdout
 
 
 interface Read[A] {
@@ -227,7 +205,6 @@ interface Read[A] {
 }
 
 def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }: R = {
-  // TODO avoid Option and use Done
   var next = box { () => None() }
   next = box { () =>
     try {
@@ -248,3 +225,17 @@ def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }:
     }
   }
 }
+
+// def decodeCharUtf8(): Char / Read[Byte] = <>
+// def encodeCharUtf8(char: Char): Unit / Emit[Byte] = <>
+// def decodeUtf8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = <>
+// def encodeUtf8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] = <>
+
+// def each(string: String): Unit / Emit[Char] = decodeUtf8 { string.asBytes.each }
+// def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
+
+// TODO input from file
+// TODO input from stdin
+// TODO output to file
+// TODO output to stdout
+
