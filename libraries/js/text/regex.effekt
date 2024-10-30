@@ -94,13 +94,14 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  *
  * Example usage:
  * ```effekt
- * val rx = regex("(\\w+)\\s(\\d+)", "g")
+ * val rx = regex("(\\w+)\\s(\\d+)", [Global()])
  * val text = "Hello 123 World 456"
- * while (true) {
- *  exec(rx, text) match = {
- *    Some(m) =>
- *      println("matched: " ++ m.matched ++ "range: " ++ m.start.show() ++ ", " ++ m.end.show()))
- *    None() => break
+ * loop  { {l} =>
+ *   exec(rx, text)  match  {
+ *     case Some(m) =>
+ *       println("matched: " ++ m.matched ++ " range: (" ++ m.start.show() ++ ", " ++ m.end.show() ++ ")")
+ *     case None() => l.break()
+ *   }
  * }
  * ```
  */
@@ -145,7 +146,7 @@ function regex$exec(reg, str) {
           matched: match[i],
           start: match.indices[i][0],
           end: match.indices[i][1]
-      }
+        })
     } else {
       // Push an empty string if an intermediate group is undefined
       groups.push({matched: ""});}
@@ -179,7 +180,7 @@ def show(m: Match): String = {
 }
 
 def show(g: Group): String = {
-  val range = g.index.show{ it => show(it) }
+  val range = g.index.show()
 
   g.matched ++  "\nfrom: " ++ range
 }

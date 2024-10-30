@@ -16,16 +16,10 @@ def printIndices(m: Option[Match]) = printSome(m) { it =>
   }
 
 def printGroups(m: Option[Match]) = printSome(m) { it =>
-    it.groups.map { g => g.matched() }.join("\n")
+    it.groups.map { g => g.matched }.join("\n")
   }
 
 def printGroupIndices(m: Option[Match]) = {
-  def show(it: Option[Range]): String = {
-    it match {
-      case Some(r) => r.show()
-      case None() => "None"
-    }
-  }
   printSome(m) { it =>
     it.groups.map { g => g.index().show() }.join("\n")
   }
@@ -52,16 +46,21 @@ def main() = {
   rgx3.exec(src).printIndices()
 
   // capture groups
-  val rgx4 = regex("(\\w+) (\\w+)", [GenerateIndices()])
+  val rgx4 = regex("(\\w+) (\\w+)")
   val m1 = rgx4.exec(src)
   m1.printMatched()
   m1.printGroups()
   m1.printGroupIndices()
 
 
-
-
-
-
-
+  // example ussage
+  val rx = regex("(\\w+)\\s(\\d+)", [Global()])
+  val text = "Hello 123 World 456"
+  loop  { {l} =>
+    exec(rx, text)  match  {
+      case Some(m) =>
+        println("matched: " ++ m.matched ++ " range: (" ++ m.start.show() ++ ", " ++ m.end.show() ++ ")")
+      case None() => l.break()
+    }
+  }
 }

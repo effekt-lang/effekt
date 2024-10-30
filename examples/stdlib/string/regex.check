@@ -11,3 +11,5 @@ ab
 cd
 (0, 2)
 (3, 5)
+matched: Hello 123 range: (0, 9)
+matched: World 456 range: (10, 19)
