@@ -44,7 +44,7 @@ def readFile(path: String): String / Exception[IOError] = {
   def go(): String = {
     read(file, buffer, offset, chunkSize, -1) match {
       case 0 =>
-        buffer.resize(offset).toUTF8
+        buffer.resize(offset).intoString
       case n =>
         offset = offset + n
         if (offset + chunkSize > buffer.size) {
@@ -63,7 +63,7 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
-  val buffer = contents.fromUTF8
+  val buffer = contents.fromString
   var offset = 0;
 
   def go(): Unit = {

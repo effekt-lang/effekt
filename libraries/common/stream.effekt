@@ -210,7 +210,7 @@ def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
 def gatherArray[A] { stream: () => Unit / Emit[A] }: Array[A] =
   gatherArray[A, Unit]{stream}.second
 
-def gatherBytes[A, R] { stream: () => R / Emit[Byte] }: (R, ByteArray) = {
+def gatherBytes[R] { stream: () => R / Emit[Byte] }: (R, ByteArray) = {
   var i = 0
   var a = bytearray::allocate(1)
   try {
@@ -225,8 +225,8 @@ def gatherBytes[A, R] { stream: () => R / Emit[Byte] }: (R, ByteArray) = {
   }
 }
 
-def gatherBytes[A] { stream: () => Unit / Emit[Byte] }: ByteArray =
-  gatherBytes[A, Unit]{stream}.second
+def gatherBytes { stream: () => Unit / Emit[Byte] }: ByteArray =
+  gatherBytes[Unit]{stream}.second
 
 
 
@@ -285,14 +285,83 @@ def readFile[R](file: File) { reader: () => R / Read[Byte] }: R / Exception[IOEr
   }
 }
 
+type DecoderState {
+  Initial()
+  Expect1(acc: Int)
+  Expect2(acc: Int)
+  Expect3(acc: Int)
+}
 
-// def decodeUtf8(): Char / Read[Byte] = <>
-// def encodeUtf8(char: Char): Unit / Emit[Byte] = <>
-// def decodeUtf8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = <>
-// def encodeUtf8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] = <>
+def decodeChar(state: DecoderState, byte: Byte): DecoderState / Emit[Char] = {
+  val b = byte.toInt
+  state match {
+    case Initial() =>
+      if (b < 128) {
+        do emit(b.toChar)
+        Initial()
+      } else if (b < 224) {
+        Expect1(bitwiseAnd(b, 31))
+      } else if (b < 240) {
+        Expect2(bitwiseAnd(b, 15))
+      } else {
+        Expect3(bitwiseAnd(b, 7))
+      }
+    case Expect1(acc) =>
+      do emit(bitwiseOr(bitwiseShl(acc, 6), bitwiseAnd(b, 63)).toChar)
+      Initial()
+    case Expect2(acc) =>
+      Expect1(bitwiseOr(bitwiseShl(acc, 6), bitwiseAnd(b, 63)))
+    case Expect3(acc) =>
+      Expect2(bitwiseOr(bitwiseShl(acc, 6), bitwiseAnd(b, 63)))
+  }
+}
 
-// def each(string: String): Unit / Emit[Char] = decodeUtf8 { string.asBytes.each }
-// def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
+def encodeChar(char: Char): Unit / Emit[Byte] = {
+  val code = char.toInt
+  if (code < 128) {
+    do emit(code.toByte)
+  } else if (code < 2048) {
+    do emit(bitwiseOr(192, bitwiseShr(code, 6)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else if (code < 65536) {
+    do emit(bitwiseOr(224, bitwiseShr(code, 12)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else {
+    do emit(bitwiseOr(240, bitwiseShr(code, 18)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  }
+}
+
+def decodeUTF8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = {
+  var state = Initial()
+  try {
+    stream()
+  } with Emit[Byte] {
+    def emit(byte) = resume(state = decodeChar(state, byte))
+  }
+}
+
+def encodeUTF8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] =
+  try {
+    stream()
+  } with Emit[Char] {
+    def emit(char) = resume(encodeChar(char))
+  }
+
+def each(string: String): Unit / Emit[Char] =
+  decodeUTF8 { string.fromString.each }
+
+def gatherString[R] { stream: () => R / Emit[Char] }: (R, String) = {
+  val (result, bytes) = gatherBytes { encodeUTF8 { stream } }
+  (result, bytes.intoString)
+}
+
+def gatherString { stream: () => Unit / Emit[Char] }: String =
+  gatherString[Unit]{stream}.second
+
 
 
 

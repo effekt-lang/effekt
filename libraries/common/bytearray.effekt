@@ -70,13 +70,13 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit 
     action(i, arr.unsafeGet(i)) {label}
   }
 
-extern pure def fromUTF8(str: String): ByteArray =
+extern pure def fromString(str: String): ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """
     ret %Pos ${str}
   """
 
-extern pure def toUTF8(arr: ByteArray): String =
+extern pure def intoString(arr: ByteArray): String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """
