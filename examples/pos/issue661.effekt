@@ -1,0 +1,21 @@
+interface Iter[T] {
+  def yield(value: T): Unit
+}
+
+def iter[T](self: List[T]): Unit / {Iter[T]} =
+  self match {
+    case Cons(head, tail) => do yield(head); iter(tail)
+    case Nil() => ()
+  }
+
+def my_map[T, U] {action: () => Unit / {Iter[T]}} {f: T => U}: Unit / {Iter[U]} =
+  try action()
+  with Iter[T] {
+    def yield(value) = { do yield(f(value)); resume(()) }
+  }
+
+def main() =
+  try my_map { iter([1, 2, 3]) } { x => x+1 }
+  with Iter[Int] {
+    def yield(x) = { println(x); resume(()) }
+  }

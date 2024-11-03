@@ -1198,10 +1198,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.abort(s"Wrong number of type arguments, given ${targs.size}, but ${name} expects ${funTpe.tparams.size}.")
 
     if (vargs.size != funTpe.vparams.size)
-      Context.error(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
+      Context.abort(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${funTpe.vparams.size}.")
 
     if (bargs.size != funTpe.bparams.size)
-      Context.error(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
+      Context.abort(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
 
     val callsite = currentCapture
 
@@ -1222,7 +1222,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
       effs = effs ++ eff
     }
 
-    (bps zip bargs zip captArgs) foreach { case ((tpe, expr), capt) =>
+    // To improve inference, we first type check block arguments that DO NOT subtract effects,
+    // since those need to be fully known.
+
+    val (withoutEffects, withEffects) = (bps zip (bargs zip captArgs)).partitionMap {
+      // TODO refine and check that eff.args refers to (inferred) type arguments of this application (`typeArgs`)
+      case (tpe : FunctionType, rest) if tpe.effects.exists { eff => eff.args.nonEmpty } => Right((tpe, rest))
+      case (tpe, rest) => Left((tpe, rest))
+    }
+
+    (withoutEffects ++ withEffects) foreach { case (tpe, (expr, capt)) =>
       flowsInto(capt, callsite)
       // capture of block <: ?C
       flowingInto(capt) {
