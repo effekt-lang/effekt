@@ -50,6 +50,26 @@ def resize(source: ByteArray, size: Int): ByteArray = {
   go(0)
 }
 
+def foreach(arr: ByteArray){ action: Byte => Unit }: Unit =
+  each(0, arr.size) { i =>
+    action(arr.unsafeGet(i))
+  }
+
+def foreach(arr: ByteArray){ action: (Byte) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    action(arr.unsafeGet(i)) {label}
+  }
+
+def foreachIndex(arr: ByteArray){ action: (Int, Byte) => Unit }: Unit =
+  each(0, arr.size) { i =>
+    action(i, arr.unsafeGet(i))
+  }
+
+def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Control} => Unit }: Unit =
+  each(0, arr.size) { (i) {label} =>
+    action(i, arr.unsafeGet(i)) {label}
+  }
+
 extern pure def fromUTF8(str: String): ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """

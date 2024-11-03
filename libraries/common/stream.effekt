@@ -226,16 +226,15 @@ def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }:
   }
 }
 
-// def decodeCharUtf8(): Char / Read[Byte] = <>
-// def encodeCharUtf8(char: Char): Unit / Emit[Byte] = <>
+// def decodeUtf8(): Char / Read[Byte] = <>
+// def encodeUtf8(char: Char): Unit / Emit[Byte] = <>
 // def decodeUtf8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = <>
 // def encodeUtf8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] = <>
 
 // def each(string: String): Unit / Emit[Char] = decodeUtf8 { string.asBytes.each }
 // def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
 
-// TODO input from file
-// TODO input from stdin
-// TODO output to file
-// TODO output to stdout
+// def readFile(file: File) { () => R / Read[Byte] }: R / Exception[IOError] = <>
+// def writeFile(file: File) { () => R / Emit[Byte] }: R / Exception[IOError] = <>
+
 

@@ -155,26 +155,22 @@ def toList[T](arr: Array[T]): List[T] = {
 
 def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
   each(0, arr.size) { i =>
-    val x: T = arr.unsafeGet(i)
-    action(x)
+    action(arr.unsafeGet(i))
   }
 
 def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    val x: T = arr.unsafeGet(i)
-    action(x) {label}
+    action(arr.unsafeGet(i)) {label}
   }
 
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
-    val x: T = arr.unsafeGet(i)
-    action(i, x)
+    action(i, arr.unsafeGet(i))
   }
 
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    val x: T = arr.unsafeGet(i)
-    action(i, x) {label}
+    action(i, arr.unsafeGet(i)) {label}
   }
 
 def sum(list: Array[Int]): Int = {
