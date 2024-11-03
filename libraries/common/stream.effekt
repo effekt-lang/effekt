@@ -11,8 +11,8 @@ effect emit[A](value: A): Unit
 def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
   try {
     stream()
-  } with emit[A] {
-    def emit(value) = resume(action(value))
+  } with emit[A] { value =>
+    resume(action(value))
   }
 
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
@@ -109,12 +109,10 @@ def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
   var i = 0;
   try {
     stream()
-  } with emit[A] {
-    def emit(v) = {
-      val c = i;
-      i = c + 1;
-      resume(do emit(Indexed(c, v)))
-    }
+  } with emit[A] { v =>
+    val c = i;
+    i = c + 1;
+    resume(do emit(Indexed(c, v)))
   }
 }
 
@@ -123,25 +121,23 @@ def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop }
   var i = 0;
   try {
     stream()
-  } with emit[A] {
-    def emit(v) = {
-      val c = i;
-      if (c < number) {
-        i = c + 1;
-        resume(do emit(v))
-      } else {
-        do stop()
-      }
+  } with emit[A] { v =>
+    val c = i;
+    if (c < number) {
+      i = c + 1;
+      resume(do emit(v))
+    } else {
+      do stop()
     }
   }
 }
 
 
 // If `number` is zero or negative it does nothing (like `stream::take`)
-def repeat[A](number: Int) { action: () => A }: Unit / emit[A] =
+def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
   if (number > 0) {
     do emit(action())
-    repeat(number - 1) {action}
+    replicate(number - 1) {action}
   }
 
 
@@ -149,11 +145,9 @@ def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
   var s = 0;
   try {
     (stream(), s)
-  } with emit[Int] {
-    def emit(v) = {
-      s = s + v;
-      resume(())
-    }
+  } with emit[Int] { v =>
+    s = s + v;
+    resume(())
   }
 }
 
@@ -229,8 +223,8 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
   }
   try {
     reader()
-  } with read[A] {
-    def read() = resume {
+  } with read[A] { () =>
+    resume {
       next().getOrElse { do stop() }
     }
   }
@@ -283,8 +277,8 @@ def readFile[R](file: File) { reader: () => R / read[Byte] }: R / Exception[IOEr
 
   try {
     reader()
-  } with read[Byte] {
-    def read() = resume {
+  } with read[Byte] { () =>
+    resume {
       if (offset >= length) { pull() }
       val byte = buffer.unsafeGet(offset)
       offset = offset + 1
@@ -293,6 +287,27 @@ def readFile[R](file: File) { reader: () => R / read[Byte] }: R / Exception[IOEr
   }
 }
 
+// TODO merge this with break
+effect done[R](result: R): Nothing
+
+def untilDone[R] { program: () => Unit / done[R] }: R =
+  try {
+    def go(): R = {
+      program()
+      go()
+    }
+    go()
+  } with done[R] { result =>
+    result
+  }
+
+def whenDone[R] { action: R => Unit } { program: () => Unit / done[R] }: Unit =
+  try {
+    program()
+  } with done[R] { result =>
+    action(result)
+  }
+
 type DecoderState {
   Initial()
   Expect1(acc: Int)
@@ -300,13 +315,12 @@ type DecoderState {
   Expect3(acc: Int)
 }
 
-def decodeChar(state: DecoderState, byte: Byte): DecoderState / emit[Char] = {
+def decodeChar(state: DecoderState, byte: Byte): DecoderState / done[Char] = {
   val b = byte.toInt
   state match {
     case Initial() =>
       if (b < 128) {
-        do emit(b.toChar)
-        Initial()
+        do done(b.toChar)
       } else if (b < 224) {
         Expect1(bitwiseAnd(b, 31))
       } else if (b < 240) {
@@ -315,8 +329,7 @@ def decodeChar(state: DecoderState, byte: Byte): DecoderState / emit[Char] = {
         Expect3(bitwiseAnd(b, 7))
       }
     case Expect1(acc) =>
-      do emit(bitwiseOr(bitwiseShl(acc, 6), bitwiseAnd(b, 63)).toChar)
-      Initial()
+      do done(bitwiseOr(bitwiseShl(acc, 6), bitwiseAnd(b, 63)).toChar)
     case Expect2(acc) =>
       Expect1(bitwiseOr(bitwiseShl(acc, 6), bitwiseAnd(b, 63)))
     case Expect3(acc) =>
@@ -324,46 +337,84 @@ def decodeChar(state: DecoderState, byte: Byte): DecoderState / emit[Char] = {
   }
 }
 
-def encodeChar(char: Char): Unit / emit[Byte] = {
+def encodeChar(char: Char): (Byte, List[Byte]) = {
   val code = char.toInt
   if (code < 128) {
-    do emit(code.toByte)
+    (code.toByte, [])
   } else if (code < 2048) {
-    do emit(bitwiseOr(192, bitwiseShr(code, 6)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+    (bitwiseOr(192, bitwiseShr(code, 6)).toByte,
+    [bitwiseOr(128, bitwiseAnd(code, 63)).toByte])
   } else if (code < 65536) {
-    do emit(bitwiseOr(224, bitwiseShr(code, 12)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+    (bitwiseOr(224, bitwiseShr(code, 12)).toByte,
+    [bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte,
+    bitwiseOr(128, bitwiseAnd(code, 63)).toByte])
   } else {
-    do emit(bitwiseOr(240, bitwiseShr(code, 18)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
-    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+    (bitwiseOr(240, bitwiseShr(code, 18)).toByte,
+    [bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte,
+    bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte,
+    bitwiseOr(128, bitwiseAnd(code, 63)).toByte])
   }
 }
 
-def decodeUTF8[R] { stream: () => R / emit[Byte] }: R / emit[Char] = {
+def decodeUTF8Reader[R] { reader: () => R / read[Char] }: R / read[Byte] = {
+  try {
+    reader()
+  } with read[Char] { () =>
+    resume {
+      var state = Initial()
+      untilDone {
+        state = decodeChar(state, do read())
+      }
+    }
+  }
+}
+
+def decodeUTF8Stream[R] { stream: () => R / emit[Byte] }: R / emit[Char] = {
   var state = Initial()
   try {
     stream()
-  } with emit[Byte] {
-    def emit(byte) = resume(state = decodeChar(state, byte))
+  } with emit[Byte] { byte =>
+    whenDone[Char] { char => do emit(char) } {
+      state = decodeChar(state, byte)
+    }
+    resume(())
   }
 }
 
-def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
+def encodeUTF8Stream[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
   try {
     stream()
-  } with emit[Char] {
-    def emit(char) = resume(encodeChar(char))
+  } with emit[Char] { char =>
+    val (byte, rest) = encodeChar(char)
+    do emit(byte)
+    rest.each
+    resume(())
   }
 
+def encodeUTF8Reader[R] { reader: () => R / read[Byte] }: R / read[Char] = {
+  var state = Nil()
+  try {
+    reader()
+  } with read[Byte] { () =>
+    resume {
+      state match {
+        case Nil() =>
+          val (byte, rest) = encodeChar(do read())
+          state = rest
+          return byte
+        case Cons(byte, rest) =>
+          state = rest
+          return byte
+      }
+    }
+  }
+}
+
 def each(string: String): Unit / emit[Char] =
-  decodeUTF8 { string.fromString.each }
+  decodeUTF8Stream { string.fromString.each }
 
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
-  val (result, bytes) = collectBytes { encodeUTF8 { stream } }
+  val (result, bytes) = collectBytes { encodeUTF8Stream { stream } }
   (result, bytes.intoString)
 }
 
