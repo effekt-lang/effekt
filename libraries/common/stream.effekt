@@ -2,6 +2,9 @@ module stream
 
 import array
 import bytearray
+import io/filesystem
+import io/error
+
 
 interface Emit[A] {
   def emit(value: A): Unit
@@ -54,6 +57,33 @@ def each(bytes: ByteArray): Unit / Emit[Byte] = {
     }
   }
   go(0)
+}
+
+def writeFile[R](file: File) { stream: () => R / Emit[Byte] }: R / Exception[IOError] = {
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = bytearray::allocate(chunkSize)
+  var offset = 0
+
+  def push(i: Int, n: Int): Unit = {
+    val r = write(file, buffer, i, n, -1)
+    if (r < n) {
+      push(i + r, n - r)
+    }
+  }
+
+  try {
+    val r = stream()
+    push(0, offset)
+    return r
+  } with Emit[Byte] {
+    def emit(byte) = {
+      if (offset >= buffer.size) { push(0, buffer.size) }
+      buffer.unsafeSet(offset, byte)
+      offset = offset + 1
+      resume(())
+    }
+  }
 }
 
 // not option
@@ -226,6 +256,36 @@ def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }:
   }
 }
 
+def readFile[R](file: File) { reader: () => R / Read[Byte] }: R / Exception[IOError] = {
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = bytearray::allocate(chunkSize)
+  var offset = 0
+  var length = 0
+
+  def pull(): Unit / Done = {
+    read(file, buffer, 0, chunkSize, -1) match {
+      case 0 =>
+        do done()
+      case n =>
+        offset = 0
+        length = n
+    }
+  }
+
+  try {
+    reader()
+  } with Read[Byte] {
+    def read() = resume {
+      if (offset >= length) { pull() }
+      val byte = buffer.unsafeGet(offset)
+      offset = offset + 1
+      return byte
+    }
+  }
+}
+
+
 // def decodeUtf8(): Char / Read[Byte] = <>
 // def encodeUtf8(char: Char): Unit / Emit[Byte] = <>
 // def decodeUtf8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = <>
@@ -234,7 +294,5 @@ def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }:
 // def each(string: String): Unit / Emit[Char] = decodeUtf8 { string.asBytes.each }
 // def gatherString[A, R] { stream: () => R / Emit[Char] }: (String, R) = <>
 
-// def readFile(file: File) { () => R / Read[Byte] }: R / Exception[IOError] = <>
-// def writeFile(file: File) { () => R / Emit[Byte] }: R / Exception[IOError] = <>
 
 
