@@ -290,10 +290,6 @@ extern pure def infixGte(x: Char, y: Char): Bool =
     ret %Pos %adt_boolean
   """
 
-// TODO iterator over codepoints (maybe use the JS primitive feature???)
-
-extern type StringIterator
-
 
 /**
  * Determines the number of bytes needed by a codepoint

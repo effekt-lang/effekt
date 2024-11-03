@@ -6,21 +6,19 @@ import io/filesystem
 import io/error
 
 
-interface Emit[A] {
-  def emit(value: A): Unit
-}
+effect emit[A](value: A): Unit
 
-def for[A, R] { stream: () => R / Emit[A] } { action: A => Unit }: R =
+def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
   try {
     stream()
-  } with Emit[A] {
+  } with emit[A] {
     def emit(value) = resume(action(value))
   }
 
-def for[A] { stream: () => Unit / Emit[A] } { action: A => Unit }: Unit =
+def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
   for[A, Unit]{stream}{action}
 
-def forever[A] { action: () => A }: Nothing / Emit[A] = {
+def continually[A] { action: () => A }: Nothing / emit[A] = {
   def go(): Nothing = {
     do emit(action())
     go()
@@ -29,7 +27,7 @@ def forever[A] { action: () => A }: Nothing / Emit[A] = {
 }
 
 
-def each[A](list: List[A]): Unit / Emit[A] =
+def each[A](list: List[A]): Unit / emit[A] =
   list match {
     case Nil() => ()
     case Cons(head, tail) =>
@@ -37,7 +35,7 @@ def each[A](list: List[A]): Unit / Emit[A] =
       each(tail)
   }
 
-def each[A](array: Array[A]): Unit / Emit[A] = {
+def each[A](array: Array[A]): Unit / emit[A] = {
   val n = array.size
   def go(i: Int): Unit = {
     if (i < n) {
@@ -48,7 +46,7 @@ def each[A](array: Array[A]): Unit / Emit[A] = {
   go(0)
 }
 
-def each(bytes: ByteArray): Unit / Emit[Byte] = {
+def each(bytes: ByteArray): Unit / emit[Byte] = {
   val n = bytes.size
   def go(i: Int): Unit = {
     if (i < n) {
@@ -59,7 +57,187 @@ def each(bytes: ByteArray): Unit / Emit[Byte] = {
   go(0)
 }
 
-def writeFile[R](file: File) { stream: () => R / Emit[Byte] }: R / Exception[IOError] = {
+
+// not option
+// not dequeue
+// not queue
+// not result
+// not seq
+
+
+effect stop(): Nothing
+
+
+def boundary[R] { program: () => R / stop }: Option[R] =
+  try {
+    Some(program())
+  } with stop {
+    def stop() = None()
+  }
+
+def exhaustively[A] { program: () => A / stop } { action: A => Unit }: Unit =
+  try {
+    def go(): Unit = {
+      action(program())
+      go()
+    }
+    go()
+  } with stop {
+    def stop() = ()
+  }
+
+record Indexed[A](index: Int, value: A)
+
+// In Effekt lower bounds are inclusive and upper bounds are exclusive
+
+def range(lower: Int, upper: Int): Unit / emit[Int] =
+  if (lower < upper) {
+    do emit(lower)
+    range(lower + 1, upper)
+  }
+
+def rangeTo(upper: Int): Unit / emit[Int] =
+  range(0, upper)
+
+def rangeFrom(lower: Int): Unit / emit[Int] = {
+  do emit(lower)
+  rangeFrom(lower + 1)
+}
+
+
+def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
+  var i = 0;
+  try {
+    stream()
+  } with emit[A] {
+    def emit(v) = {
+      val c = i;
+      i = c + 1;
+      resume(do emit(Indexed(c, v)))
+    }
+  }
+}
+
+
+def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
+  var i = 0;
+  try {
+    stream()
+  } with emit[A] {
+    def emit(v) = {
+      val c = i;
+      if (c < number) {
+        i = c + 1;
+        resume(do emit(v))
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+
+// If `number` is zero or negative it does nothing (like `stream::take`)
+def repeat[A](number: Int) { action: () => A }: Unit / emit[A] =
+  if (number > 0) {
+    do emit(action())
+    repeat(number - 1) {action}
+  }
+
+
+def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
+  var s = 0;
+  try {
+    (stream(), s)
+  } with emit[Int] {
+    def emit(v) = {
+      s = s + v;
+      resume(())
+    }
+  }
+}
+
+def sum { stream : () => Unit / emit[Int] }: Int =
+  sum[Unit]{stream}.second
+
+def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+  try {
+    (stream(), Nil())
+  } with emit[A] {
+    def emit(v) = {
+      val (r, vs) = resume(());
+      (r, Cons(v, vs))
+    }
+  }
+
+def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
+  collectList[A, Unit]{stream}.second
+
+def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
+  var i = 0
+  var a = array::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with emit[A] {
+    def emit(v) = {
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
+      resume(())
+    }
+  }
+}
+
+def collectArray[A] { stream: () => Unit / emit[A] }: Array[A] =
+  collectArray[A, Unit]{stream}.second
+
+def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+  var i = 0
+  var a = bytearray::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with emit[Byte] {
+    def emit(v) = {
+      if (i >= a.size) { a = a.resize(2 * a.size) }
+      a.unsafeSet(i, v)
+      i = i + 1
+      resume(())
+    }
+  }
+}
+
+def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
+  collectBytes[Unit]{stream}.second
+
+
+
+effect read[A](): A / stop
+
+
+def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+  var next = box { () => None() }
+  next = box { () =>
+    try {
+      stream()
+      None()
+    } with emit[A] {
+      def emit(v) = {
+        next = box { () => resume(()) }
+        Some(v)
+      }
+    }
+  }
+  try {
+    reader()
+  } with read[A] {
+    def read() = resume {
+      next().getOrElse { do stop() }
+    }
+  }
+}
+
+
+def writeFile[R](file: File) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
 
   val chunkSize = 1048576 // 1MB
   val buffer = bytearray::allocate(chunkSize)
@@ -76,7 +254,7 @@ def writeFile[R](file: File) { stream: () => R / Emit[Byte] }: R / Exception[IOE
     val r = stream()
     push(0, offset)
     return r
-  } with Emit[Byte] {
+  } with emit[Byte] {
     def emit(byte) = {
       if (offset >= buffer.size) { push(0, buffer.size) }
       buffer.unsafeSet(offset, byte)
@@ -86,187 +264,17 @@ def writeFile[R](file: File) { stream: () => R / Emit[Byte] }: R / Exception[IOE
   }
 }
 
-// not option
-// not dequeue
-// not queue
-// not result
-// not seq
-
-
-interface Done {
-  def done(): Nothing
-}
-
-def boundary[R] { program: () => R / Done }: Option[R] =
-  try {
-    Some(program())
-  } with Done {
-    def done() = None()
-  }
-
-
-record Indexed[A](index: Int, value: A)
-
-// In Effekt lower bounds are inclusive and upper bounds are exclusive
-
-def range(lower: Int, upper: Int): Unit / Emit[Int] =
-  if (lower < upper) {
-    do emit(lower)
-    range(lower + 1, upper)
-  }
-
-def rangeTo(upper: Int): Unit / Emit[Int] =
-  range(0, upper)
-
-def rangeFrom(lower: Int): Unit / Emit[Int] = {
-  do emit(lower)
-  rangeFrom(lower + 1)
-}
-
-
-def index[A, R] { stream: () => R / Emit[A] }: R / Emit[Indexed[A]] = {
-  var i = 0;
-  try {
-    stream()
-  } with Emit[A] {
-    def emit(v) = {
-      val c = i;
-      i = c + 1;
-      resume(do emit(Indexed(c, v)))
-    }
-  }
-}
-
-
-def take[A, R](number: Int) { stream: () => R / Emit[A] }: R / { Emit[A], Done } = {
-  var i = 0;
-  try {
-    stream()
-  } with Emit[A] {
-    def emit(v) = {
-      val c = i;
-      if (c < number) {
-        i = c + 1;
-        resume(do emit(v))
-      } else {
-        do done()
-      }
-    }
-  }
-}
-
-
-// If `number` is zero or negative it does nothing (like `stream::take`)
-def repeat[A](number: Int) { action: () => A }: Unit / Emit[A] =
-  if (number > 0) {
-    do emit(action())
-    repeat(number - 1) {action}
-  }
-
-
-def sum[R] { stream : () => R / Emit[Int] }: (R, Int) = {
-  var s = 0;
-  try {
-    (stream(), s)
-  } with Emit[Int] {
-    def emit(v) = {
-      s = s + v;
-      resume(())
-    }
-  }
-}
-
-def sum { stream : () => Unit / Emit[Int] }: Int =
-  sum[Unit]{stream}.second
-
-def gatherList[A, R] { stream: () => R / Emit[A] }: (R, List[A]) =
-  try {
-    (stream(), Nil())
-  } with Emit[A] {
-    def emit(v) = {
-      val (r, vs) = resume(());
-      (r, Cons(v, vs))
-    }
-  }
-
-def gatherList[A] { stream: () => Unit / Emit[A] }: List[A] =
-  gatherList[A, Unit]{stream}.second
-
-def gatherArray[A, R] { stream: () => R / Emit[A] }: (R, Array[A]) = {
-  var i = 0
-  var a = array::allocate(1)
-  try {
-    (stream(), a.resize(i))
-  } with Emit[A] {
-    def emit(v) = {
-      if (i >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(i, v)
-      i = i + 1
-      resume(())
-    }
-  }
-}
-
-def gatherArray[A] { stream: () => Unit / Emit[A] }: Array[A] =
-  gatherArray[A, Unit]{stream}.second
-
-def gatherBytes[R] { stream: () => R / Emit[Byte] }: (R, ByteArray) = {
-  var i = 0
-  var a = bytearray::allocate(1)
-  try {
-    (stream(), a.resize(i))
-  } with Emit[Byte] {
-    def emit(v) = {
-      if (i >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(i, v)
-      i = i + 1
-      resume(())
-    }
-  }
-}
-
-def gatherBytes { stream: () => Unit / Emit[Byte] }: ByteArray =
-  gatherBytes[Unit]{stream}.second
-
-
-
-interface Read[A] {
-  def read(): A / Done
-}
-
-def source[A, R] { stream: () => Unit / Emit[A] } { reader: () => R / Read[A] }: R = {
-  var next = box { () => None() }
-  next = box { () =>
-    try {
-      stream()
-      None()
-    } with Emit[A] {
-      def emit(v) = {
-        next = box { () => resume(()) }
-        Some(v)
-      }
-    }
-  }
-  try {
-    reader()
-  } with Read[A] {
-    def read() = resume {
-      next().getOrElse { do done() }
-    }
-  }
-}
-
-def readFile[R](file: File) { reader: () => R / Read[Byte] }: R / Exception[IOError] = {
+def readFile[R](file: File) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
 
   val chunkSize = 1048576 // 1MB
   val buffer = bytearray::allocate(chunkSize)
   var offset = 0
   var length = 0
 
-  def pull(): Unit / Done = {
+  def pull(): Unit / stop = {
     read(file, buffer, 0, chunkSize, -1) match {
       case 0 =>
-        do done()
+        do stop()
       case n =>
         offset = 0
         length = n
@@ -275,7 +283,7 @@ def readFile[R](file: File) { reader: () => R / Read[Byte] }: R / Exception[IOEr
 
   try {
     reader()
-  } with Read[Byte] {
+  } with read[Byte] {
     def read() = resume {
       if (offset >= length) { pull() }
       val byte = buffer.unsafeGet(offset)
@@ -292,7 +300,7 @@ type DecoderState {
   Expect3(acc: Int)
 }
 
-def decodeChar(state: DecoderState, byte: Byte): DecoderState / Emit[Char] = {
+def decodeChar(state: DecoderState, byte: Byte): DecoderState / emit[Char] = {
   val b = byte.toInt
   state match {
     case Initial() =>
@@ -316,7 +324,7 @@ def decodeChar(state: DecoderState, byte: Byte): DecoderState / Emit[Char] = {
   }
 }
 
-def encodeChar(char: Char): Unit / Emit[Byte] = {
+def encodeChar(char: Char): Unit / emit[Byte] = {
   val code = char.toInt
   if (code < 128) {
     do emit(code.toByte)
@@ -335,32 +343,32 @@ def encodeChar(char: Char): Unit / Emit[Byte] = {
   }
 }
 
-def decodeUTF8[R] { stream: () => R / Emit[Byte] }: R / Emit[Char] = {
+def decodeUTF8[R] { stream: () => R / emit[Byte] }: R / emit[Char] = {
   var state = Initial()
   try {
     stream()
-  } with Emit[Byte] {
+  } with emit[Byte] {
     def emit(byte) = resume(state = decodeChar(state, byte))
   }
 }
 
-def encodeUTF8[R] { stream: () => R / Emit[Char] }: R / Emit[Byte] =
+def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
   try {
     stream()
-  } with Emit[Char] {
+  } with emit[Char] {
     def emit(char) = resume(encodeChar(char))
   }
 
-def each(string: String): Unit / Emit[Char] =
+def each(string: String): Unit / emit[Char] =
   decodeUTF8 { string.fromString.each }
 
-def gatherString[R] { stream: () => R / Emit[Char] }: (R, String) = {
-  val (result, bytes) = gatherBytes { encodeUTF8 { stream } }
+def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
+  val (result, bytes) = collectBytes { encodeUTF8 { stream } }
   (result, bytes.intoString)
 }
 
-def gatherString { stream: () => Unit / Emit[Char] }: String =
-  gatherString[Unit]{stream}.second
+def collectString { stream: () => Unit / emit[Char] }: String =
+  collectString[Unit]{stream}.second
 
 
 

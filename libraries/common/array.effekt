@@ -131,7 +131,7 @@ def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int):
   val offsetValid = offset >= 0 && offset + length <= to.size
 
   def go(i: Int, j: Int, length: Int): Unit =
-    if (length >= 0) {
+    if (length > 0) {
       to.unsafeSet(j, from.unsafeGet(i))
       go(i + 1, j + 1, length - 1)
     }
