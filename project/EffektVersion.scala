@@ -1,4 +1,4 @@
 // Don't change this file without changing the CI too!
 import sbt.*
 import sbt.Keys.*
-object EffektVersion { lazy val effektVersion = "0.7.0" }
+object EffektVersion { lazy val effektVersion = "0.8.0" }
