@@ -1,0 +1,16 @@
+import char
+
+def main() = {
+    println(isUpper('A'))
+    println(isUpper('Z'))
+
+    println("")
+
+    println(isUpper('a'))
+    println(isUpper('z'))
+    println(isUpper('0'))
+    println(isUpper('!'))
+    println(isUpper('\u80'))
+    println(isUpper('\uFF'))
+    println(isUpper('\u039E'))
+}
