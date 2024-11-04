@@ -20,7 +20,7 @@ def countWords(input: String): Output = {
 
   each(0, len) { i =>
     val c = input.unsafeCharAt(i)
-    val currentIsSpace = char::isSpace(c)
+    val currentIsSpace = char::isWhitespace(c)
 
     chars = chars + 1
 
