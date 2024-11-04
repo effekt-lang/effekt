@@ -1,5 +1,6 @@
 module wordcount
 
+import char
 import io
 import io/error
 import io/filesystem
@@ -8,12 +9,6 @@ record Output(chars: Int, words: Int, lines: Int)
 
 def formatWith(output: Output, filename: String): String =
   output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
-
-def isSpace(c: Char) =
-  c == ' ' || c.toInt == 9 || c.toInt == 10 || c.toInt == 11 || c.toInt == 12 || c.toInt == 13
-  // \n \r \t \v \f
-
-def isNewline(c: Char) = c.toInt == 10 // \n
 
 def countWords(input: String): Output = {
   val len = input.length
@@ -25,7 +20,7 @@ def countWords(input: String): Output = {
 
   each(0, len) { i =>
     val c = input.unsafeCharAt(i)
-    val currentIsSpace = isSpace(c)
+    val currentIsSpace = char::isSpace(c)
 
     chars = chars + 1
 
@@ -33,7 +28,7 @@ def countWords(input: String): Output = {
       words = words + 1
     }
 
-    if (isNewline(c)) {
+    if (c == '\n') {
       lines = lines + 1
     }
 
