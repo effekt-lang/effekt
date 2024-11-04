@@ -6,10 +6,10 @@ def main() = {
     println(isASCII('Z'))
     println(isASCII('\n'))
     println(isASCII('!'))
-    println(isASCII('\u80'))
 
     println("")
 
+    println(isASCII('\u80'))
     println(isASCII('\uFF'))
     println(isASCII('\u039E'))
 }

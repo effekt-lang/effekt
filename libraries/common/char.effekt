@@ -39,7 +39,7 @@ def digitValue(c: Char, base: Int): Int / Exception[WrongFormat] = {
     case c and c >= 'A' && c <= 'Z' => (c.toInt - 'A'.toInt) + 10
     case _ => wrongFormat("'" ++ c.toString ++ "' is not a digit")
   }
-  if (v > base) { wrongFormat(c.toString ++ " is not a valid digit in base " ++ base.show) } else { v }
+  if (v >= base) { wrongFormat(c.toString ++ " is not a valid digit in base " ++ base.show) } else { v }
 }
 
 /// Checks if a given character is a 7-bit ASCII character
@@ -52,7 +52,7 @@ def isLower(c: Char): Bool = { c >= 'a' && c <= 'z' }
 def isUpper(c: Char): Bool = { c >= 'A' && c <= 'Z' }
 
 /// Checks if a given character is an ASCII alphabetic or numeric character
-def isAlphabetic(c: Char): Bool = isDigit(c) || isLower(c) || isUpper(c)
+def isAlphanumeric(c: Char): Bool = isDigit(c) || isLower(c) || isUpper(c)
 
 /// Checks if a given character is an ASCII alphabetic character
-def isAlphanumeric(c: Char): Bool = isLower(c) || isUpper(c)
+def isAlphabetic(c: Char): Bool = isLower(c) || isUpper(c)
