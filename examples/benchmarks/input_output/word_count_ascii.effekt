@@ -1,4 +1,4 @@
-
+import examples/benchmarks/runner
 
 import io/error
 import io/filesystem
@@ -9,20 +9,20 @@ record Output(chars: Int, words: Int, lines: Int)
 def formatWith(output: Output, filename: String): String =
   output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
 
-def isSpace(c: Char) =
-  c == ' ' || c.toInt == 9 || c.toInt == 10 || c.toInt == 11 || c.toInt == 12 || c.toInt == 13
+def isSpace(b: Byte) =
+  b.toInt == 32 || b.toInt == 9 || b.toInt == 10 || b.toInt == 11 || b.toInt == 12 || b.toInt == 13
   // \n \r \t \v \f
 
-def isNewline(c: Char) = c.toInt == 10 // \n
+def isNewline(b: Byte) = b.toInt == 10 // \n
 
-def countWords(): Output / read[Char] = {
+def countWords(): Output / read[Byte] = {
 
   var chars = 0
   var words = 0
   var lines = 0
   var wasSpace = true
 
-  exhaustively[Char] { do read() } { c =>
+  exhaustively[Byte] { do read() } { c =>
 
     chars = chars + 1
 
@@ -41,31 +41,29 @@ def countWords(): Output / read[Char] = {
   Output(chars, words, lines)
 }
 
-def main() = {
+def run(n: Int) = {
   with on[IOError].panic;
 
-  val filename = "/tmp/word_count.txt"
+  val filename = "/tmp/word_count_ascii.txt"
 
   val _ = {
-    val file = open(filename, WriteOnly())
-    with writeFile(file)
-    with encodeUTF8
+    with writeFile(filename)
+    with repeat(n)
     for[Int] { range(32, 127) } { c =>
       repeat(10) {
-        do emit(c.toChar)
+        do emit(c.toByte)
       }
-      do emit(10.toChar)
+      do emit(10.toByte)
     }
-    close(file)
   }
 
   val output = {
-    val file = open(filename, ReadOnly())
-    with readFile(file)
-    with decodeUTF8
-    val output = countWords()
-    close(file)
-    output
+    with readFile(filename)
+    countWords()
   }
-  println(output.formatWith(filename))
+
+  return output.chars + output.words + output.lines
 }
+
+def main() = benchmark(5){run}
+

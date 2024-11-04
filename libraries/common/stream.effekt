@@ -275,7 +275,10 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
 }
 
 
-def writeFile[R](file: File) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
+def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
+
+  val file = open(path, WriteOnly());
+  with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
   val buffer = bytearray::allocate(chunkSize)
@@ -302,7 +305,10 @@ def writeFile[R](file: File) { stream: () => R / emit[Byte] }: R / Exception[IOE
   }
 }
 
-def readFile[R](file: File) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
+def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
+
+  val file = open(path, ReadOnly());
+  with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
   val buffer = bytearray::allocate(chunkSize)
