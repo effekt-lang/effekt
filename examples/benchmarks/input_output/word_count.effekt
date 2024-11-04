@@ -1,4 +1,4 @@
-import examples/benchmarks/runner
+
 
 import io/error
 import io/filesystem
@@ -49,7 +49,7 @@ def main() = {
   val _ = {
     val file = open(filename, WriteOnly())
     with writeFile(file)
-    with encodeUTF8Stream
+    with encodeUTF8
     for[Int] { range(32, 127) } { c =>
       repeat(10) {
         do emit(c.toChar)
@@ -62,7 +62,7 @@ def main() = {
   val output = {
     val file = open(filename, ReadOnly())
     with readFile(file)
-    with decodeUTF8Reader
+    with decodeUTF8
     val output = countWords()
     close(file)
     output
