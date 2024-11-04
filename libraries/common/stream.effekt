@@ -35,7 +35,7 @@ def each[A](list: List[A]): Unit / emit[A] =
       each(tail)
   }
 
-def each[A](array: Array[A]): Unit / emit[A] = {
+def each[T](array: Array[T]): Unit / emit[T] = {
   val n = array.size
   def go(i: Int): Unit = {
     if (i < n) {
@@ -56,7 +56,6 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
   }
   go(0)
 }
-
 
 // not option
 // not dequeue
@@ -204,9 +203,54 @@ def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
   collectBytes[Unit]{stream}.second
 
 
-
 effect read[A](): A / stop
 
+
+def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
+  var l = list
+  try {
+    reader()
+  } with read[T] { () =>
+    resume {
+      l match {
+        case Nil() => do stop()
+        case Cons(value, rest) =>
+          l = rest
+          return value
+      }
+    }
+  }
+}
+
+def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
+  var i = 0
+  try {
+    reader()
+  } with read[T] { () =>
+    resume {
+      if (i < array.size) {
+        array.unsafeGet(i)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
+  var i = 0
+  try {
+    reader()
+  } with read[Byte] { () =>
+    resume {
+      if (i < bytes.size) {
+        bytes.unsafeGet(i)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
 
 def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
   var next = box { () => None() }
@@ -328,13 +372,12 @@ def encodeChar(char: Char): Unit / emit[Byte] = {
   }
 }
 
-def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] = {
+def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
   try {
     reader()
   } with read[Char] { () =>
     resume { decodeChar() }
   }
-}
 
 def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
   try {
@@ -343,27 +386,16 @@ def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
     resume(encodeChar(char))
   }
 
-def feed(string: String) { reader: () => Unit / read[Byte] } = {
-  val buffer = string.fromString
-  var i = 0
-  try {
-    reader()
-  } with read[Byte] { () =>
-    resume {
-      if (i < buffer.size) {
-        buffer.unsafeGet(i)
-      } else {
-        do stop()
-      }
+def feed(string: String) { reader: () => Unit / read[Char] } =
+  feed(string.fromString) {
+    decodeUTF8 {
+      reader()
     }
   }
-}
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {
-    decodeUTF8 {
-      exhaustively[Char] { () => do read() } { char => do emit(char) }
-    }
+    exhaustively[Char] { () => do read() } { char => do emit(char) }
   }
 
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
