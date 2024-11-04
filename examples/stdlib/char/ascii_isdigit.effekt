@@ -1,0 +1,22 @@
+import char
+
+def main() = {
+    println(isDigit('0'))
+    println(isDigit('9'))
+    println(isDigit('A', 16))
+    println(isDigit('0', 16))
+    println(isDigit('0', 2))
+    println(isDigit('1', 2))
+
+    println("")
+
+    println(isDigit('A'))
+    println(isDigit('A', 2))
+    println(isDigit('A', 8))
+    println(isDigit('A', 10))
+    println(isDigit('3', 2))
+    println(isDigit('~'))
+    println(isDigit('\u80'))
+    println(isDigit('\uFF'))
+    println(isDigit('\u039E'))
+}

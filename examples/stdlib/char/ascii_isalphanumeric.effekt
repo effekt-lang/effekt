@@ -1,0 +1,15 @@
+import char
+
+def main() = {
+    println(isAlphanumeric('5'))
+    println(isAlphanumeric('Z'))
+    println(isAlphanumeric('a'))
+    println(isAlphanumeric('z'))
+
+    println("")
+
+    println(isAlphanumeric('?'))
+    println(isAlphanumeric('\u80'))
+    println(isAlphanumeric('\uFF'))
+    println(isAlphanumeric('\u039E'))
+}

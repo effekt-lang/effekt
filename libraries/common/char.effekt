@@ -1,0 +1,58 @@
+/// Warning: This library currently only works with ASCII characters, **not** unicode!
+module char
+
+import exception
+
+
+/// Checks if the given character is an ASCII whitespace
+def isWhitespace(c: Char): Bool = c match {
+  case ' '    => true
+  case '\n'   => true
+  case '\r'   => true
+  case '\t'   => true
+  case '\u0B' => true // vertical tab
+  case '\u0C' => true // form feed
+  case _      => false
+}
+
+/// Checks if the given character is an ASCII digit in base 10
+/// Use `digitValue(c: Char)` to get the numeric value out.
+def isDigit(c: Char): Bool = { c >= '0' && c <= '9' }
+
+/// Checks if the given character is an ASCII digit in the given base
+/// Use `digitValue(c: Char, base: Int)` to get the numeric value out.
+def isDigit(c: Char, base: Int): Bool = {
+  with on[WrongFormat].default { false }
+  val _ = digitValue(c, base)
+  true
+}
+
+/// Gets the value of a given ASCII digit in base 10
+def digitValue(c: Char): Int / Exception[WrongFormat] =
+  digitValue(c, 10)
+
+/// Gets the value of a given ASCII digit in the given base
+def digitValue(c: Char, base: Int): Int / Exception[WrongFormat] = {
+  val v = c match {
+    case c and c >= '0' && c <= '9' => (c.toInt - '0'.toInt)
+    case c and c >= 'a' && c <= 'z' => (c.toInt - 'a'.toInt) + 10
+    case c and c >= 'A' && c <= 'Z' => (c.toInt - 'A'.toInt) + 10
+    case _ => wrongFormat("'" ++ c.toString ++ "' is not a digit")
+  }
+  if (v >= base) { wrongFormat(c.toString ++ " is not a valid digit in base " ++ base.show) } else { v }
+}
+
+/// Checks if a given character is a 7-bit ASCII character
+def isASCII(c: Char): Bool = { c.toInt < 128 }
+
+/// Checks if a given character is an ASCII lower alphabetic character
+def isLower(c: Char): Bool = { c >= 'a' && c <= 'z' }
+
+/// Checks if a given character is an ASCII upper alphabetic character
+def isUpper(c: Char): Bool = { c >= 'A' && c <= 'Z' }
+
+/// Checks if a given character is an ASCII alphabetic or numeric character
+def isAlphanumeric(c: Char): Bool = isDigit(c) || isLower(c) || isUpper(c)
+
+/// Checks if a given character is an ASCII alphabetic character
+def isAlphabetic(c: Char): Bool = isLower(c) || isUpper(c)

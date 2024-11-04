@@ -1,0 +1,20 @@
+import char
+
+def main() = {
+    println(isWhitespace(' '))
+    println(isWhitespace('\t'))
+    println(isWhitespace('\r'))
+    println(isWhitespace('\n'))
+    println(isWhitespace('\u0C'))
+
+    println("")
+
+    println(isWhitespace('Z'))
+    println(isWhitespace('A'))
+    println(isWhitespace('!'))
+    println(isWhitespace('.'))
+    println(isWhitespace('\u1F'))
+    println(isWhitespace('\u80'))
+    println(isWhitespace('\uFF'))
+    println(isWhitespace('\u039E'))
+}
