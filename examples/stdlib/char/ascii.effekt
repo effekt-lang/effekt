@@ -97,10 +97,10 @@ def main() = {
 
     println("")
 
-    println(isAlphanumeric('?')))
-    println(isAlphanumeric('\u80')))
-    println(isAlphanumeric('\uFF')))
-    println(isAlphanumeric('\u039E')))
+    println(isAlphanumeric('?'))
+    println(isAlphanumeric('\u80'))
+    println(isAlphanumeric('\uFF'))
+    println(isAlphanumeric('\u039E'))
 
     println("")
     println("")
@@ -112,7 +112,7 @@ def main() = {
 
     println(isAlphabetic('5'))
     println(isAlphabetic('@'))
-    println(isAlphabetic('\u80')))
-    println(isAlphabetic('\uFF')))
-    println(isAlphabetic('\u039E')))
+    println(isAlphabetic('\u80'))
+    println(isAlphabetic('\uFF'))
+    println(isAlphabetic('\u039E'))
 }
