@@ -2,8 +2,8 @@ module union_find
 import resizable_array
 import test
 
-// Classic mutable union-find datastructur on integer indices,
-// with union-by-rank and path compression.
+/// Classic mutable union-find data structure on integer indices,
+/// with union-by-rank and path compression.
 record UnionFind(rawElements: ResizableArray[Int])
 
 namespace internal {
@@ -47,16 +47,16 @@ def unionFind(): UnionFind =
 def unionFind(capacity: Int): UnionFind =
   UnionFind(resizableArray(capacity))
 
-// Make a new set in the union-find datastructure and return its index
-//
-// O(1) amortized, worst-case O(n) if the capacity does not suffice
+/// Make a new set in the union-find datastructure and return its index
+///
+/// O(1) amortized, worst-case O(n) if the capacity does not suffice
 def makeSet(u: UnionFind): Int = {
   u.rawElements.add(-1)
 }
 
-// Find the representative of the given element.
-//
-// O(inverse-ackermann(n)) amortized
+/// Find the representative of the given element.
+///
+/// O(inverse-ackermann(n)) amortized
 def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
   def goFind(s: Int): Int = {
     if (u.internal::isRoot(s)) {
@@ -79,9 +79,9 @@ def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
   root
 }
 
-// Make it such that the sets *represented by* x and y are merged
-//
-// O(1)
+/// Make it such that the sets *represented by* x and y are merged
+///
+/// O(1)
 def unionRoots(u: UnionFind, x: Int, y: Int): Int / Exception[MissingValue] = {
   if(not(u.internal::isRoot(x) && u.internal::isRoot(y))) { 
     panic("unionRoots should only be called on representatives")
@@ -104,9 +104,9 @@ def unionRoots(u: UnionFind, x: Int, y: Int): Int / Exception[MissingValue] = {
   }
 }
 
-// Make it so a and b are in the same set
-//
-// O(inverse-ackermann(n)) amortized
+/// Make it so a and b are in the same set
+///
+/// O(inverse-ackermann(n)) amortized
 def union(u: UnionFind, a: Int, b: Int): Int / Exception[MissingValue] = {
   val x = u.find(a)
   val y = u.find(b)

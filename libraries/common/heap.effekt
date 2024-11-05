@@ -1,15 +1,15 @@
 module heap
 import resizable_array
 
-// Resizable 2-ary min-heap, backed by a resizable array
-// `cmp` defines the ordering of elements
+/// Resizable 2-ary min-heap, backed by a resizable array
+/// `cmp` defines the ordering of elements
 record Heap[T](rawContents: ResizableArray[T], cmp: (T, T) => Ordering at {})
 
-// Make a new Heap with the given comparison operation
+/// Make a new Heap with the given comparison operation
 def heap[T](cmp: (T,T) => Ordering at {}) = 
   Heap[T](resizableArray(), cmp)
 
-// Make a new Heap with the given comparison operation and initial capacity
+/// Make a new Heap with the given comparison operation and initial capacity
 def heap[T](cmp: (T,T) => Ordering at {}, capacity: Int) = 
   Heap[T](resizableArray(capacity), cmp)
 
@@ -69,25 +69,25 @@ namespace internal {
   }
 }
 
-// Insert value into heap
-//
-// O(log n) worst case if capacity suffices, O(1) average
+/// Insert value into heap
+///
+/// O(log n) worst case if capacity suffices, O(1) average
 def insert[T](heap: Heap[T], value: T): Unit = {
   with on[OutOfBounds].panic();
   val idx = heap.rawContents.add(value)
   internal::bubbleUp(heap, idx)
 }
 
-// find and return (but not remove) the minimal element in this heap
-//
-// O(1)
+/// find and return (but not remove) the minimal element in this heap
+///
+/// O(1)
 def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
   heap.rawContents.get(0)
 }
 
-// find and remove the minimal element in this heap
-//
-// O(log n)
+/// find and remove the minimal element in this heap
+///
+/// O(log n)
 def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
   val res = heap.rawContents.get(0)
   heap.rawContents.unsafeSet(0, heap.rawContents.popRight())
@@ -95,9 +95,9 @@ def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
   res
 }
 
-// Number of elements in the heap
-//
-// O(1)
+/// Number of elements in the heap
+///
+/// O(1)
 def size[T](heap: Heap[T]): Int = {
   heap.rawContents.size
 }

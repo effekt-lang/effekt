@@ -8,71 +8,71 @@ record ResizableArray[T](rawSizePtr: Ref[Int], rawContentPtr: Ref[Array[T]])
 
 // These numbers should be optimized based on benchmarking
 // According to https://en.wikipedia.org/wiki/Dynamic_array most use 1.5 or 2
-//
-// Factor by which to grow the capacity when it becomes too small
+
+/// Factor by which to grow the capacity when it becomes too small
 val growFactor = 1.5
-// shrink array when size / capacity falls below this threshold
-// should be < 1/growFactor
+/// shrink array when size / capacity falls below this threshold
+/// should be < 1/growFactor
 val shrinkThreshold = 0.4
 
-// Number of elements in the dynamic array
-//
-// O(1)
+/// Number of elements in the dynamic array
+///
+/// O(1)
 def size[T](arr: ResizableArray[T]) = arr.rawSizePtr.get
 
-// Allocate a new, empty dynamic array with given initial capacity
+/// Allocate a new, empty dynamic array with given initial capacity
 def resizableArray[T](capacity: Int): ResizableArray[T] = {
   ResizableArray(ref(0), ref(allocate(capacity)))
 }
 
-// Allocate a new, empty dynamic array
+/// Allocate a new, empty dynamic array
 def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
-// Throw an OutOfBounds exception if index is not a valid index into arr
+/// Throw an OutOfBounds exception if index is not a valid index into arr
 def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / Exception[OutOfBounds] = {
   if (index < 0 && index >= arr.size) {
     do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
   }
 }
 
-// get the element at position index in the array
-//
-// precondition: index is a valid index into the array
-//
-// O(1)
+/// get the element at position index in the array
+///
+/// precondition: index is a valid index into the array
+///
+/// O(1)
 def unsafeGet[T](arr: ResizableArray[T], index: Int): T = {
   arr.rawContentPtr.get.unsafeGet(index)
 }
-// get the element at position index in the array
-//
-// O(1)
+/// get the element at position index in the array
+///
+/// O(1)
 def get[T](arr: ResizableArray[T], index: Int): T / Exception[OutOfBounds] = {
   arr.boundsCheck(index);
   arr.unsafeGet(index)
 }
 
-// set the element at position index in the array
-//
-// precondition: index is a valid index into the array
-//
-// O(1)
+/// set the element at position index in the array
+///
+/// precondition: index is a valid index into the array
+///
+/// O(1)
 def unsafeSet[T](arr: ResizableArray[T], index: Int, value: T): Unit = {
   arr.rawContentPtr.get.unsafeSet(index, value)
 }
 
-// set the element at position index in the array
-//
-// O(1)
+/// set the element at position index in the array
+///
+/// O(1)
 def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOfBounds] = {
   arr.boundsCheck(index);
   arr.unsafeSet(index, value)
 }
 
-// swap the elements at the given positions in the array
-//
-// precondition: both are valid indices into the array
-//
-// O(1)
+/// swap the elements at the given positions in the array
+///
+/// precondition: both are valid indices into the array
+///
+/// O(1)
 def unsafeSwap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit = {
   val raw = arr.rawContentPtr.get
   val tmp = raw.unsafeGet(index1)
@@ -80,19 +80,19 @@ def unsafeSwap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit = {
   raw.unsafeSet(index2, tmp)
 }
 
-// swap the elements at the given positions in the array
-//
-// O(1)
+/// swap the elements at the given positions in the array
+///
+/// O(1)
 def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / Exception[OutOfBounds] = {
   arr.boundsCheck(max(index1, index2))
   arr.unsafeSwap(index1, index2)
 }
 
-// Change the dynamic to have exactly the given capacity
-//
-// precondition: given capacity is at least the size of the array
-//
-// O(n)
+/// Change the dynamic to have exactly the given capacity
+///
+/// precondition: given capacity is at least the size of the array
+///
+/// O(n)
 def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
   with on[OutOfBounds].panic
   val oldRaw = arr.rawContentPtr.get
@@ -103,9 +103,9 @@ def unsafeSetCapacity[T](arr: ResizableArray[T], capacity: Int): Unit = {
   }
 }
 
-// Change the dynamic to have exactly the given capacity
-//
-// O(n)
+/// Change the dynamic to have exactly the given capacity
+///
+/// O(n)
 def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
   if (arr.size > capacity) {
     do raise(OutOfBounds(), "Cannot change capacity of ResizableArray to " ++ capacity.show ++ " below size " ++ arr.size.show)
@@ -113,9 +113,9 @@ def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutO
   arr.unsafeSetCapacity(capacity)
 }
 
-// If the shrinkThreshold is reached, shrink by growFactor, otherwise do nothing
-//
-// O(n)
+/// If the shrinkThreshold is reached, shrink by growFactor, otherwise do nothing
+///
+/// O(n)
 def maybeShrink[T](arr: ResizableArray[T]): Unit = {
   if(arr.size.toDouble < arr.rawContentPtr.get.size.toDouble * shrinkThreshold) {
     val newCap = max(arr.size, (arr.rawContentPtr.get.size.toDouble / growFactor).ceil)
@@ -123,9 +123,9 @@ def maybeShrink[T](arr: ResizableArray[T]): Unit = {
   }
 }
 
-// makes sure capacity is at least the given one
-//
-// O(given capacity - current capacity) amortized, O(n) worst case // TODO ?
+/// makes sure capacity is at least the given one
+///
+/// O(given capacity - current capacity) amortized, O(n) worst case // TODO ?
 def ensureCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
   if (arr.rawContentPtr.get.size < capacity) {
     val curCapd: Double = arr.rawContentPtr.get.size.toDouble
@@ -135,10 +135,10 @@ def ensureCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[O
   }
 }
 
-// Set the value at given position, resizing if necessary
-// Note: New elements might be uninitialized!!!
-//
-// O(max(1,index - n)) amortized, O(n) worst case if index > capacity
+/// Set the value at given position, resizing if necessary
+/// Note: New elements might be uninitialized!!!
+///
+/// O(max(1,index - n)) amortized, O(n) worst case if index > capacity
 def setResizing[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOfBounds] = {
   if (index < 0) {
     do raise(OutOfBounds(), "Negative index " ++ index.show)
@@ -151,10 +151,10 @@ def setResizing[T](arr: ResizableArray[T], index: Int, value: T): Unit / Excepti
   arr.rawSizePtr.set(index + 1)
 }
 
-// Add a new element at the end of the resizable array.
-// Return the index of the new element
-//
-// O(1) amortized, O(n) worst case
+/// Add a new element at the end of the resizable array.
+/// Return the index of the new element
+///
+/// O(1) amortized, O(n) worst case
 def add[T](arr: ResizableArray[T], value: T): Int = {
   with on[OutOfBounds].panic();
   val idx = arr.size
@@ -162,9 +162,9 @@ def add[T](arr: ResizableArray[T], value: T): Int = {
   idx
 }
 
-// Remove and return the rightmost element in the resizable array.
-//
-// O(1) amortized, O(n) worst case
+/// Remove and return the rightmost element in the resizable array.
+///
+/// O(1) amortized, O(n) worst case
 def popRight[T](arr: ResizableArray[T]): T / Exception[OutOfBounds] = {
   arr.boundsCheck(arr.size - 1)
   arr.rawSizePtr.set(arr.size - 1)
