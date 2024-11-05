@@ -307,6 +307,18 @@ enum Stmt extends Tree {
 
   case Try(body: Block, handlers: List[Implementation])
 
+  // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
+  //  Reset({ [cap]{p: Prompt[answer] at cap} => stmt: answer}): answer
+  case Reset(body: BlockLit)
+
+  // captures the continuation up to the given prompt
+  // Invariant, it always has the shape:
+  //   Shift(p: Prompt[answer], { [cap]{resume: Resume[result, answer] at cap} => stmt: answer }): result
+  case Shift(prompt: BlockVar, body: BlockLit)
+
+  // bidirectional resume: runs the given statement in the original context
+  //  Resume(k: Resume[result, answer], stmt: result): answer
+  case Resume(k: BlockVar, body: Stmt)
 
   // Others
   case Hole()
@@ -558,6 +570,12 @@ object Tree {
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
     def rewrite(b: ExternBody): ExternBody= rewrite(b)
 
+    def rewrite(b: BlockLit): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        BlockLit(tparams, cparams, vparams, bparams, rewrite(body))
+    }
+    def rewrite(b: BlockVar): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b
+
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
     def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
 
@@ -682,6 +700,9 @@ object Variables {
       Variables.block(id, core.Type.TState(value.tpe), annotatedCapt) ++ free(value)
 
     case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
+    case Stmt.Reset(body) => free(body)
+    case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
+    case Stmt.Resume(k, body) => free(k) ++ free(body)
     case Stmt.Hole() => Variables.empty
   }
 
@@ -789,6 +810,15 @@ object substitutions {
 
       case Try(body, handlers) =>
         Try(substitute(body), handlers.map(substitute))
+
+      case Reset(body) =>
+        Reset(substitute(body).asInstanceOf[BlockLit])
+
+      case Shift(prompt, body) =>
+        Shift(substitute(prompt).asInstanceOf[BlockVar], substitute(body).asInstanceOf[BlockLit])
+
+      case Resume(k, body) =>
+        Resume(substitute(k).asInstanceOf[BlockVar], substitute(body))
 
       case Region(body) =>
         Region(substitute(body))

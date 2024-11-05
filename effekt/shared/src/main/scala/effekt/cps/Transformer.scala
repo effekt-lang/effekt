@@ -137,6 +137,18 @@ object Transformer {
 
     case core.Stmt.Try(_, handlers) => sys error "Shouldn't happen"
 
+    case core.Stmt.Reset(core.Block.BlockLit(_, _, _, prompt :: Nil, body)) =>
+      val ks2 = Id("ks")
+      val k2 = Id("k")
+      Reset(Block.BlockLit(Nil, List(prompt.id), ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
+        MetaCont(ks), k.reify)
+
+    case core.Stmt.Reset(body) => sys error "Shouldn't happen"
+
+    case core.Stmt.Shift(prompt, body) => ???
+
+    case core.Stmt.Resume(k, body) => ???
+
     case core.Stmt.Hole() => Hole()
 
     case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>

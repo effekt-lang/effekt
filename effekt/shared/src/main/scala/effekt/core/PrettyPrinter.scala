@@ -188,6 +188,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
+    case Reset(body) =>
+      "reset" <+> toDoc(body)
+
+    case Shift(prompt, body) =>
+      "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
+
+    case Resume(k, body) =>
+      "resume" <> parens(toDoc(k)) <+> block(toDoc(body))
+
     case Alloc(id, init, region, body) =>
       "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 

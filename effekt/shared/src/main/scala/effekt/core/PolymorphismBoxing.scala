@@ -243,7 +243,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Operation(name, tparams, cparams, vparams, bparams, None, body) =>
       val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
       val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
-      
+
       val blockTpe = BlockType.Function(tparams, propTpe.cparams, propTpe.vparams.map(transform), propTpe.bparams.map(transform), transform(propTpe.result))
       val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, transform(body))
       val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
@@ -322,6 +322,14 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Var(id, transform(init), cap, transform(body))
     case Stmt.Try(body, handlers) =>
       Stmt.Try(transform(body), handlers map transform)
+    case Stmt.Reset(body) =>
+      Stmt.Reset(transform(body))
+    case Stmt.Shift(prompt, body) =>
+      // TODO does this violate invariants of core?
+      Stmt.Shift(prompt, transform(body))
+    case Stmt.Resume(k, body) =>
+      // TODO do we need to do something here? This is an application
+      Stmt.Resume(k, transform(body))
     case Stmt.Region(body) =>
       val tBody = transform(body)
       // make sure the result type is a boxed one
