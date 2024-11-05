@@ -147,7 +147,7 @@ object Transformer {
         val tpe = transform(stateType)
         val variable = Variable(freshName(x.name.name + "_value"), tpe)
         val reference = Variable(transform(x), Type.Reference(tpe))
-        Load(variable, reference, Return(List(variable)))
+        LoadVar(variable, reference, Return(List(variable)))
 
       case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.put, _), targs, List(arg), Nil) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -156,7 +156,7 @@ object Transformer {
         val variable = Variable(freshName("ignored"), Positive());
         val reference = Variable(transform(x), Type.Reference(tpe))
         transform(arg).run { value =>
-          Store(reference, value,
+          StoreVar(reference, value,
             Construct(variable, builtins.Unit, List(),
               Return(List(variable))))
         }
@@ -231,15 +231,18 @@ object Transformer {
           val variable = Variable(name, tpe)
           val reference = Variable(transform(id), Type.Reference(tpe))
           val prompt = Variable(transform(region), Type.Prompt())
+          val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
           region match {
             case symbols.builtins.globalRegion =>
-              Allocate(reference, value, Variable("global", Type.Prompt()),
-                transform(body))
-
+              val globalPrompt = Variable("global", Type.Prompt())
+              Shift(temporary, globalPrompt,
+                Var(reference, value, Type.Positive(),
+                  Resume(temporary, transform(body))))
             case _ =>
-              Allocate(reference, value, prompt,
-                  transform(body))
+              Shift(temporary, prompt,
+                Var(reference, value, Type.Positive(),
+                  Resume(temporary, transform(body))))
           }
         }
 

@@ -195,62 +195,12 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Allocate(reference, init, region, rest) =>
-        emit(Comment(s"allocate ${reference.name}, type ${reference.tpe}, init ${init.name}, region ${region.name}"))
-        val idx = regionIndex(reference.tpe)
-
-        val temporaryRef = LocalReference(StructureType(List(PointerType(), referenceType)), freshName("cell"))
-        emit(Call(temporaryRef.name, Ccc(), temporaryRef.tpe, alloc, List(ConstantInt(idx), transform(region))));
-
-        val ptrRef = LocalReference(PointerType(), freshName("pointer"))
-        emit(ExtractValue(ptrRef.name, temporaryRef, 0))
-
-        emit(ExtractValue(reference.name, temporaryRef, 1))
-
-        emit(Store(ptrRef, transform(init)))
-
-        shareValues(List(init), freeVariables(rest))
-        transform(rest)
-
-      case machine.Load(name, reference, rest) =>
-        emit(Comment(s"load ${name.name}, reference ${reference.name}"))
-
-        val idx = regionIndex(reference.tpe)
-
-        val ptrRef = LocalReference(PointerType(), freshName(name.name + "_pointer"))
-        emit(Call(ptrRef.name, Ccc(), PointerType(), getPointer, List(transform(reference), ConstantInt(idx), getStack())))
-
-        // We have to share the old value since now there exists a new reference to it
-        val oldVal = machine.Variable(freshName(reference.name + "_old"), name.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
-        shareValue(oldVal)
-
-        emit(Load(name.name, transform(name.tpe), ptrRef))
-        eraseValues(List(name), freeVariables(rest))
-        transform(rest)
-
-      case machine.Store(reference, value, rest) =>
-        emit(Comment(s"store ${reference.name}, value ${value.name}"))
-        val idx = regionIndex(reference.tpe)
-
-        val ptrRef = LocalReference(PointerType(), freshName(reference.name + "pointer"))
-        emit(Call(ptrRef.name, Ccc(), PointerType(), getPointer, List(transform(reference), ConstantInt(idx), getStack())))
-
-        val oldVal = machine.Variable(freshName(reference.name + "_old"), value.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
-        eraseValue(oldVal)
-
-        emit(Store(ptrRef, transform(value)))
-        shareValues(List(value), freeVariables(rest))
-        transform(rest)
-
       case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
-        val returnValue = freshName("returnValue")
         val returnType = transform(retType)
+        val returnValue = freshName("returnValue")
         val parameters = List(Parameter(returnType, returnValue))
-
         defineLabel(returnAddressName, parameters) {
           emit(Comment(s"var $name / return address"))
           popEnvironmentFrom(getStack(), environment)
@@ -484,16 +434,6 @@ object Transformer {
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
       case machine.Type.Reference(_) => 16
-    }
-
-  def regionIndex(tpe: machine.Type): Int =
-    tpe match {
-      case machine.Type.Reference(machine.Type.Int()) => 0
-      case machine.Type.Reference(machine.Type.Double()) => 0
-      case machine.Type.Reference(machine.Type.Positive()) => 1
-      case machine.Type.Reference(machine.Type.Negative()) => 1
-      case machine.Type.Reference(machine.Type.String()) => 2
-      case _ => ???
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
