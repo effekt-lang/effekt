@@ -1,6 +1,5 @@
 module heap
 import resizable_array
-import test
 
 /// Resizable 2-ary min-heap, backed by a resizable array
 /// `cmp` defines the ordering of elements
@@ -101,31 +100,4 @@ def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
 /// O(1)
 def size[T](heap: Heap[T]): Int = {
   heap.rawContents.size
-}
-
-namespace examples {
-  def main() = {
-    val r = suite("HeapTests") {
-      test("simple heap sort on integers") {
-        with on[OutOfBounds].default { assertTrue(false); <> };
-        val h = heap[Int](box { (x: Int, y: Int) =>
-          if (x < y) {
-            Less()
-          } else Greater()  // hacky, should sometimes be Equal()
-        })
-        h.insert(12)
-        h.insert(10)
-        h.insert(7)
-        h.insert(11)
-        h.insert(14)
-        assert(h.deleteMin(), 7)
-        assert(h.deleteMin(), 10)
-        assert(h.deleteMin(), 11)
-        assert(h.deleteMin(), 12)
-        assert(h.deleteMin(), 14)
-        assert(h.size, 0)
-      }
-    }
-    ()
-  }
 }

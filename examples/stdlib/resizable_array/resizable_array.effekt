@@ -1,0 +1,33 @@
+import resizable_array
+import test
+
+def main() = {
+  suite("ResizableArrayTests", false) {
+    test("usage as stack") {
+      with on[OutOfBounds].default { assertTrue(false, "out of bounds") }
+      val a = resizableArray()
+      a.add(1)
+      a.add(1)
+      a.add(2)
+      a.add(3)
+      a.add(13)
+      a.add(21)
+      a.add(34)
+      a.add(55)
+      assert(a.popRight(), 55)
+      assert(a.popRight(), 34)
+      assert(a.popRight(), 21)
+      assert(a.popRight(), 13)
+      a.add(5)
+      a.add(8)
+      assert(a.popRight(), 8)
+      assert(a.popRight(), 5)
+      assert(a.popRight(), 3)
+      assert(a.popRight(), 2)
+      assert(a.popRight(), 1)
+      assert(a.popRight(), 1)
+    }
+    // TODO
+  };
+  ()
+}
