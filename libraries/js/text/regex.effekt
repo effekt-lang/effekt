@@ -24,6 +24,9 @@ def copyWithCapture(reg: Regex,  capture: Option[Match]) = {
   }
 }
 
+// Shortcut for map over capture
+def map[B](self: Regex) {f: Match => B}: Option[B] = self.capture.map{f}
+
 def start(m: Match) = m.index.start
 def end(m: Match) = m.index.end
 
@@ -104,7 +107,7 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
     }
   }
   // always set "d" (GenerateIndices) flag for capturing group indices
-  val flagsRepr = flags.map{it => it.show()}.join("") ++ "d"
+  val flagsRepr: String = flags.map[RegexFlags, String]{it => it.show()}.join("") ++ "d"
   val repr = internal::unsafeRegex(pattern, flagsRepr)
   Regex(repr, flags, globalFlag, None())
 }
