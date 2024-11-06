@@ -185,6 +185,9 @@ object scopes {
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
       all(path, scope) { _.operations.getOrElse(name, Set.empty) }
 
+    def lookupFunction(path: List[String], name: String)(using ErrorReporter): List[Set[Callable]] =
+      all(path, scope) { _.terms.getOrElse(name, Set.empty).collect { case c: Callable if !c.isInstanceOf[Operation] => c } }
+
     // can be a term OR a type symbol
     def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =
       lookupFirstOption(path, name) getOrElse { E.abort(s"Could not resolve ${name}") }

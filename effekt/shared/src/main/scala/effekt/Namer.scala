@@ -491,25 +491,23 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.MethodCall(receiver, target, targs, vargs, bargs) =>
       resolveGeneric(receiver)
 
-      Context.resolveMethodCalltarget(target)
-
       // We are a bit context sensitive in resolving the method
       Context.focusing(target) { _ =>
         receiver match {
           case source.Var(id) => Context.resolveTerm(id) match {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
-            case symbol: ValueSymbol => Context.resolveFunctionCalltarget(target)
+            case symbol: ValueSymbol => Context.resolveOverloadedFunction(target)
 
-            case symbol: RefBinder => Context.resolveFunctionCalltarget(target)
+            case symbol: RefBinder => Context.resolveOverloadedFunction(target)
 
             // (foo: BlockType).bar(args)  = Invoke(foo, bar, args)
-            case symbol: BlockSymbol => Context.resolveMethodCalltarget(target)
+            case symbol: BlockSymbol => Context.resolveOverloadedOperation(target)
           }
           // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
-          case source.Unbox(term) => Context.resolveMethodCalltarget(target)
+          case source.Unbox(term) => Context.resolveOverloadedOperation(target)
 
           // expr.bar(args) = Call(bar, expr :: args)
-          case term => Context.resolveFunctionCalltarget(target)
+          case term => Context.resolveOverloadedFunction(target)
         }
       }
       targs foreach resolve
@@ -857,9 +855,19 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded method target
    */
-  private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
+  private[namer] def resolveOverloadedOperation(id: IdRef): Unit = at(id) {
 
-    val syms = scope.lookupOverloadedMethod(id, term => term.isInstanceOf[BlockSymbol])
+    val syms = scope.lookupOperation(id.path, id.name)
+
+    if (syms.isEmpty) {
+      abort(pretty"Cannot resolve function ${id.name}")
+    }
+    assignSymbol(id, CallTarget(syms.asInstanceOf))
+  }
+
+  private[namer] def resolveOverloadedFunction(id: IdRef): Unit = at(id) {
+
+    val syms = scope.lookupFunction(id.path, id.name)
 
     if (syms.isEmpty) {
       abort(pretty"Cannot resolve function ${id.name}")
@@ -868,7 +876,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   /**
-   * Resolves a potentially overloaded field access
+   * Resolves a potentially overloaded function call
    */
   private[namer] def resolveFunctionCalltarget(id: IdRef): Unit = at(id) {
     val candidates = scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])
