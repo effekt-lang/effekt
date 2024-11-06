@@ -203,19 +203,21 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case core.Try(core.BlockLit(tparams, cparams, vparams, bparams, body), handlers) =>
-
-        noteParameters(bparams)
+      case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
+        noteParameters(List(prompt))
 
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
-        val prompt = Variable(freshName("prompt"), Type.Prompt())
 
-        Reset(prompt, returnClause,
-          (bparams zip handlers).foldRight(transform(body)){
-            case ((id, handler), body) =>
-              New(transform(id), transform(handler, Some(prompt)), body)
-          })
+        Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
+
+      case core.Shift(prompt, core.BlockLit(Nil, cparams, Nil, List(k), body)) =>
+        noteResumption(k.id)
+        Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()),
+          transform(body))
+
+      case core.Resume(k, body) =>
+        Resume(Variable(transform(k.id), Type.Stack()), transform(body))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
         val variable = Variable(freshName("returned"), transform(body.tpe))
@@ -308,8 +310,8 @@ object Transformer {
             pure(Callee.UnknownObject(Variable(transform(id), transform(tpe)), tpe))
 
           // Continuation Call
-          case BlockInfo.Resumption =>
-            pure(Callee.Continuation(Variable(transform(id), Type.Stack())))
+          case BlockInfo.Resumption => ???
+            // pure(Callee.Continuation(Variable(transform(id), Type.Stack())))
 
           // Known Jump
           case BlockInfo.Definition(freeParams, blockParams) =>
@@ -528,6 +530,7 @@ object Transformer {
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
     case core.Type.TRegion => Type.Prompt()
+    case core.Type.TPrompt(answer) => Type.Prompt()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
