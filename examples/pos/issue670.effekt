@@ -1,0 +1,24 @@
+interface Foo {
+  def foo(): Unit
+  def age(s: String): Int
+}
+
+record Person(name: String, age: Int)
+
+def foo(person: Person) { prog: () => Unit / Foo }: Unit = {
+  try { prog() } with Foo {
+    def foo() = {
+      val age: Int = person.age
+      //             ~~~~~~
+      // Unbox requires a boxed type, but got Person.
+
+      if (age < 100) {
+        println(person.name)
+      }
+      resume(())
+    }
+    def age(s) = resume(42)
+  }
+}
+
+def main() = ()
