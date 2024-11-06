@@ -178,9 +178,6 @@ object Transformer {
               case Callee.Method(receiver, tpe, tag) =>
                 Invoke(receiver, tag, values ++ blocks)
 
-              case Callee.Continuation(variable) =>
-                Resume(variable, Return(values))
-
               case Callee.UnknownObject(variable, tpe) =>
                 E.panic("Cannot call an object.")
             }
@@ -298,7 +295,6 @@ object Transformer {
     case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
     case UnknownObject(variable: machine.Variable, tpe: core.BlockType.Interface)
     case Method(receiver: machine.Variable, tpe: core.BlockType.Interface, tag: Int)
-    case Continuation(variable: machine.Variable)
   }
 
   def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
