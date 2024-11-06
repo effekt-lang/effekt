@@ -108,21 +108,14 @@ trait Transformer {
     case Alloc(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", chez.Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Try(body, handler) =>
-      val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.interface.name)
-        chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, tps, cps, vps, bps, Some(resume), body) =>
-            resume.tpe match {
-              case BlockType.Function(tparams, cparams, Nil, bparams, result) =>
-                NOT_SUPPORTED(s"Bidirectional handlers are not support by the Chez backends (encountered when translating the handler for ${names.name})")
-              case _ => ()
-            }
-            chez.Operation(nameDef(op), vps.map(p => nameDef(p.id)), nameDef(resume.id), toChezExpr(body))
-          case _ => INTERNAL_ERROR("Handler operations should have a continuation argument")
-        })
-      }
-      chez.Handle(handlers, toChez(body))
+    case Try(body, handler) => ???
+
+    case Reset(body) => chez.Reset(toChez(body))
+
+    case Shift(p, body) => chez.Shift(nameRef(p.id), toChez(body))
+
+    // currently bidirectional handlers are not supported
+    case Resume(k, Return(expr)) => chez.Call(toChez(k), List(toChez(expr)))
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 

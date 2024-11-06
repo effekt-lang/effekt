@@ -115,7 +115,6 @@ function SHIFT(p, body, ks, k) {
   meta = meta.rest
 
   function resumeComp(c, ks, k) {
-    //console.log("Resuming", ks.arena)
     let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
     let toRewind = cont
     while (!!toRewind) {

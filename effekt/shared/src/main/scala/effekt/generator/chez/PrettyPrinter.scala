@@ -36,12 +36,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       parens("cond" <+> nest(line <> align(vcat(clauses.map {
         case (pattern, branch) => brackets(group(toDoc(pattern) <+> toDoc(branch)))
       } ++ els))))
-    case Handle(handlers, body) => parens("handle" <+> parens(align(vcat(handlers map toDoc))) <+> nest(line <> toDoc(body)))
-    case Handler(constructorName, operations) =>
-      brackets(toDoc(constructorName) <+> align(vcat(operations.map {
-        case Operation(name, params, k, impl) =>
-          parens(toDoc(name) <+> parens(hsep(params map toDoc, space)) <+> toDoc(k) <+> nest(line <> toDoc(impl)))
-      })))
+    case Reset(body) => parens("reset" <+> nest(line <> toDoc(body)))
+    case Shift(p, body) => parens("shift" <+> toDoc(p) <+> nest(line <> toDoc(body)))
   }
 
   def toDoc(definition: Def): Doc = definition match {

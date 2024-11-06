@@ -46,11 +46,10 @@ enum Expr {
   // e.g x
   case Variable(name: ChezName)
 
-  // handle is a macro, stable across Chez variants, so we add it to the language.
-  case Handle(handlers: List[Expr], body: Expr)
+  // reset is a macro, stable across Chez variants
+  case Reset(body: Expr)
 
-  // handler is part of a macro used by chez-callcc and chez-monadic
-  case Handler(constructorName: ChezName, operations: List[Operation])
+  case Shift(prompt: ChezName, body: Expr)
 }
 export Expr.*
 
