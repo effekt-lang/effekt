@@ -94,10 +94,6 @@ object Transformer {
                   case Some(BlockInfo.Parameter(tpe)) =>
                     Set(Variable(transform(pid), transform(tpe)))
 
-                  // The resumption is free
-                  case Some(BlockInfo.Resumption) =>
-                    Set(Variable(transform(pid), Type.Stack()))
-
                   // Everything else is considered bound or global
                   case None =>
                     // TODO should not happen, abort with error
@@ -129,7 +125,7 @@ object Transformer {
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
           case (core.Definition.Def(id, core.New(impl)), rest) =>
-            New(Variable(transform(id), transform(impl.interface)), transform(impl, None), rest)
+            New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
 
           case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Member | _: core.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
@@ -217,7 +213,9 @@ object Transformer {
         Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
 
       case core.Shift(prompt, core.BlockLit(Nil, cparams, Nil, List(k), body)) =>
-        noteResumption(k.id)
+
+        noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
+
         Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()),
           transform(body))
 
@@ -314,10 +312,6 @@ object Transformer {
           case BlockInfo.Parameter(tpe: core.BlockType.Interface) =>
             pure(Callee.UnknownObject(Variable(transform(id), transform(tpe)), tpe))
 
-          // Continuation Call
-          case BlockInfo.Resumption => ???
-            // pure(Callee.Continuation(Variable(transform(id), Type.Stack())))
-
           // Known Jump
           case BlockInfo.Definition(freeParams, blockParams) =>
             pure(Callee.Known(machine.Label(transform(id), blockParams ++ freeParams)))
@@ -371,7 +365,7 @@ object Transformer {
     case core.New(impl) =>
       val variable = Variable(freshName("new"), Negative())
       Binding { k =>
-        New(variable, transform(impl, None), k(variable))
+        New(variable, transform(impl), k(variable))
       }
 
     case core.Member(b, field, annotatedTpe) =>
@@ -486,24 +480,16 @@ object Transformer {
       ErrorReporter.abort(s"Unsupported expression: $expr")
   }
 
-  def transform(impl: core.Implementation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
+  def transform(impl: core.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
     impl.operations.sortBy {
       case core.Operation(operationName, _, _, _, _, _, _) =>
         DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
-    }.map(op => transform(op, prompt))
+    }.map(op => transform(op))
 
-  def transform(op: core.Operation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
-    (prompt, op) match {
-      // Effectful operation, capture the continuation
-      case (Some(prompt), core.Operation(name, tparams, cparams, vparams, bparams, Some(kparam), body)) =>
-        noteResumption(kparam.id)
-        // TODO deal with bidirectional effects
-        Clause(vparams.map(transform),
-          Shift(Variable(transform(kparam).name, Type.Stack()), prompt,
-            transform(body)))
-
+  def transform(op: core.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
+    op match {
       // No continuation, implementation of an object
-      case (_, core.Operation(name, tparams, cparams, vparams, bparams, k, body)) =>
+      case core.Operation(name, tparams, cparams, vparams, bparams, k, body) =>
         // TODO note block parameters
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
     }
@@ -577,7 +563,6 @@ object Transformer {
     def definition(id: Id): BlockInfo.Definition = info(id) match {
       case d : BlockInfo.Definition => d
       case BlockInfo.Parameter(tpe) => sys error s"Expected a function definition, but got a block parameter: ${id}"
-      case BlockInfo.Resumption => sys error s"Expected a function definition, but got a continuation: ${id}"
     }
     def params(id: Id): Environment = definition(id).params
     def free(id: Id): Environment = definition(id).free
@@ -585,7 +570,6 @@ object Transformer {
   enum BlockInfo {
     case Definition(free: Environment, params: Environment)
     case Parameter(tpe: core.BlockType)
-    case Resumption
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
@@ -593,11 +577,6 @@ object Transformer {
   def noteDefinition(id: Id, params: Environment, free: Environment)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: BlockInfo)")
     BC.info += (id -> BlockInfo.Definition(free, params))
-
-  def noteResumption(id: Id)(using BC: BlocksParamsContext): Unit =
-    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Resumption)")
-    BC.info += (id -> BlockInfo.Resumption)
-
 
   def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
@@ -614,12 +593,6 @@ object Transformer {
   def getBlocksParams(id: Id)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
     case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
   }
-
-  def isResumption(id: Id)(using BC: BlocksParamsContext): Boolean =
-    BC.info(id) match {
-      case BlockInfo.Resumption => true
-      case _ => false
-    }
 
   def isDefinition(id: Id)(using BC: BlocksParamsContext): Boolean =
     BC.info(id) match {
