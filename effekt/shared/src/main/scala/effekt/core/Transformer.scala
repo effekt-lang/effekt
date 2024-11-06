@@ -108,23 +108,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case d @ source.InterfaceDef(id, tparamsInterface, ops) =>
       val interface = d.symbol
-      List(core.Interface(interface, interface.tparams, interface.operations.map {
-        case op @ symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>
-          // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
-          val capabilities = effects.canonical
-          val tparams = tps.drop(tparamsInterface.size)
-          val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
-            INTERNAL_ERROR("Interface declarations should have annotated types.")
-          }))
-          val bparamsCapabilities = capabilities.map(transform)
-          val bparams = bparamsBlocks ++ bparamsCapabilities
-          val vparams = vps.map(p => transform(p.tpe.get))
-          val cparams = bps.map(_.capture) ++ capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
-
-          // here we reconstruct the block type
-          val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
-          core.Property(op, btpe)
-      }))
+      List(core.Interface(interface, interface.tparams,
+        interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
     case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
@@ -367,7 +352,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.bind(Get(sym, Set(sym.capture), transform(tpe)))
       case sym: RegBinder =>
         val stateType = Context.blockTypeOf(sym)
-        val getType = operationType(stateType, TState.get)
+        val getType = operationAtCallsite(stateType, TState.get)
         Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
@@ -488,7 +473,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val e = transformAsPure(expr)
         val sym = a.definition
         val stateType = Context.blockTypeOf(sym)
-        val putType = operationType(stateType, TState.put)
+        val putType = operationAtCallsite(stateType, TState.put)
         Context.bind(App(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil))
     }
 
@@ -504,7 +489,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val receiverType = Context.inferredBlockTypeOf(receiver)
       val operation = c.definition.asOperation
-      val opType = transform(operationType(receiverType, operation))
+      val opType = transform(operationAtCallsite(receiverType, operation))
 
       // Do not pass type arguments for the type constructor of the receiver.
       val remainingTypeArgs = typeArgs.drop(operation.interface.tparams.size)
@@ -581,13 +566,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           case Some(prompt) =>
             val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
             Context.blockTypeOf(resumeSymbol) match {
+
               // uni-directional
+              // ---------------
+              // [[ def op(x) = ... resume123(...) ... ]]
+              //   =
+              // def op(x) = shift(p) { k =>
+              //   def resume123(y) = resume(k) { return y };
+              //   ... resume123(...) ...
+              // }
+              //
+              // Function resume123 will hopefully be inlined by the inliner / optimizer
               case BlockType.FunctionType(_, _, List(result), _, answer, _) =>
 
                 val resultTpe = transform(result)
                 val answerTpe = transform(answer)
 
-                // (1) bind the continuation itself
+                // (1) bind the continuation (k)itself
 
                 // THIS IS NOT CORRECT: in the source language the capture of resume is transparent
                 // This suggests we need to change the representation of Shift and its typing...
@@ -598,21 +593,58 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, Set(resumeCapture))
 
                 // (2) eta-expand and bind continuation as a function
-                //val resumeVar: core.BlockVar = core.BlockVar(resumeSymbol, resumeTpe, Set(resumeCapture))
                 val resumeArgId = Id("a")
                 val resumeArgParam: core.ValueParam = core.ValueParam(resumeArgId, resultTpe)
                 val resumeFun: core.BlockLit = core.BlockLit(Nil, Nil, List(resumeArgParam), Nil,
                   core.Stmt.Resume(resumeVar, core.Stmt.Return(core.ValueVar(resumeArgId, resultTpe))))
 
-                // For now we ONLY support uni-directional effects...
                 core.Operation(op.definition, tps, Nil, vps, Nil, None,
                   core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
                     core.Scope(List(core.Definition.Def(resumeSymbol, resumeFun)),
                       transform(body)))))
 
-              case BlockType.FunctionType(_, _, _, List(BlockType.FunctionType(_, _, _, result, _, _)), answer, _) =>
-                ???
-                //core.Type.TResume(transform(result), transform(answer))
+              // bi-directional
+              // --------------
+              // [[ def op(x) = ... resume123 { {f} => ... } ... ]]
+              //   =
+              // def op(x) {g} = shift(p) { k =>
+              //   def resume123 {h} = resume(k) { h {g} }
+              //   ... resume123 { {f} => ... } ...
+              // }
+              //
+              // Again the typing is wrong in core now. `g` will be tracked, but resume should subtract it.
+              case BlockType.FunctionType(_, _, _, List(argTpe @ BlockType.FunctionType(_, _, _, _, result, _)), answer, _) =>
+                val resultTpe = transform(result)
+                val answerTpe = transform(answer)
+
+                val resumeArgTpe @ core.BlockType.Function(_, cps, _, bps, _) = transform(argTpe) : @unchecked
+
+                // (0) compute the block parameters from the type of the continuation (since this is what typer annotates)
+                val bparams: List[core.BlockParam] = (cps zip bps) map { case (capt, tpe) =>
+                  core.BlockParam(Id("g"), tpe, Set(capt))
+                }
+                val bvars = bparams.map { b => core.BlockVar(b.id, b.tpe, b.capt) }
+
+                // (1) bind the continuation (k) itself
+                val resumeCapture = Id("resume")
+                val resumeId = Id("k")
+                val resumeTpe = core.Type.TResume(resultTpe, answerTpe)
+                val resumeParam: core.BlockParam = core.BlockParam(resumeId, resumeTpe, Set(resumeCapture))
+                val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, Set(resumeCapture))
+
+                // (2) eta-expand and bind continuation as a function
+                val resumeArgId = Id("h")
+                val resumeArgCapture = Id("h")
+                val resumeArgParam: core.BlockParam = core.BlockParam(resumeArgId, resumeArgTpe, Set(resumeArgCapture))
+                val resumeArgVar: core.BlockVar = core.BlockVar(resumeArgId, resumeArgTpe, Set(resumeArgCapture))
+                val resumeFun: core.BlockLit = core.BlockLit(Nil, List(resumeArgCapture), Nil, List(resumeArgParam),
+                  core.Stmt.Resume(resumeVar, core.Stmt.App(resumeArgVar, Nil, Nil, bvars)))
+
+                core.Operation(op.definition, tps, Nil, vps, bparams, None,
+                  core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
+                    core.Scope(List(core.Definition.Def(resumeSymbol, resumeFun)),
+                      transform(body)))))
+
               case _ => ???
             }
 
@@ -700,7 +732,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    * If `member` is an operation, the type arguments of the receiver are substituted for the leading type parameters,
    * while the remaining type parameters are kept.
    */
-  def operationType(receiver: symbols.BlockType, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
+  def operationAtCallsite(receiver: symbols.BlockType, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
     case InterfaceType(i: Interface, targs) => member match {
       // For operations, we substitute the first type parameters by concrete type args.
       case Operation(name, tparams, vparams, bparams, resultType, effects, _) =>
@@ -723,6 +755,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case InterfaceType(i: ExternInterface, targs) =>
       Context.panic("Cannot select from an extern interface")
   }
+
+  def operationAtDeclaration(tparamsInterface: List[Id], op: symbols.Operation)(using Context): core.BlockType = op match {
+    case symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>
+      // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
+      val capabilities = effects.canonical
+      val tparams = tps.drop(tparamsInterface.size)
+      val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
+        INTERNAL_ERROR("Interface declarations should have annotated types.")
+      }))
+      val bparamsCapabilities = capabilities.map(transform)
+      val bparams = bparamsBlocks ++ bparamsCapabilities
+      val vparams = vps.map(p => transform(p.tpe.get))
+      val cparams = bps.map(_.capture) ++ capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
+
+      // here we reconstruct the block type
+      core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
+    }
 
   def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
