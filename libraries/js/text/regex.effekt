@@ -117,19 +117,20 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  *
  * @param reg The Regex object to execute.
  * @param str The string to match against.
- * @return Option[Match] A Some(Match) if a match is found, None otherwise.
+ * @return Regex object with the next Match (if found) stored in the `capture` field.
  *
  * Please refer to the `Match` record for details on the structure of the returned match.
  *
- * Note: This function is stateful when the global flag 'g' is set on the Regex object.
- * Subsequent calls with the same Regex and string will return the next match in the string.
+ * For regex queries with the `Global` flag set, this function can be called subsequent
+ * on the returned object to find all matches.
  *
  * Example usage:
  * ```effekt
- * val rx = regex("(\\w+)\\s(\\d+)", [Global()])
+ * var rx = regex("(\\w+)\\s(\\d+)", [Global()])
  * val text = "Hello 123 World 456"
  * loop  { {l} =>
- *   exec(rx, text)  match  {
+ *   rx = rx.exec(text)
+ *   rx.capture match  {
  *     case Some(m) =>
  *       println("matched: " ++ m.matched ++ " range: (" ++ m.start.show() ++ ", " ++ m.end.show() ++ ")")
  *     case None() => l.break()
