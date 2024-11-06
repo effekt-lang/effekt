@@ -2,15 +2,15 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{Annotations, Context, ContextOps}
+import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{MatchGuard, MatchPattern, ResolveExternDefs}
-import effekt.symbols.Binder.{RegBinder, VarBinder}
+import effekt.source.{ MatchGuard, MatchPattern, ResolveExternDefs }
+import effekt.symbols.Binder.{ RegBinder, VarBinder }
 import effekt.typer.Substitutions
-import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
+import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -280,7 +280,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.panic(s"Using block literal ${tree} but an object was expected.")
 
     case source.New(impl) =>
-      New(transform(impl, false))
+      New(transform(impl, None))
 
     case _ => transformUnboxOrSelect(tree)
   }
@@ -450,17 +450,28 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(compiledMatch)
 
     case source.TryHandle(prog, handlers) =>
-      val (bps, cps) = handlers.map { h =>
-        val cap = h.capability.get.symbol
-        (BlockParam(cap), cap.capture)
-      }.unzip
 
-      val body = BlockLit(Nil, cps, Nil, bps, transform(prog))
+      val transformedProg = transform(prog)
+
+      val answerType = transformedProg.tpe
+
+      // create a fresh prompt, a variable referring to it, and a parameter binding it
+      val promptId   = Id("p")
+      val promptCapt = Id("pCapt")
+      val promptTpe = Type.TPrompt(answerType)
+      val promptVar: core.BlockVar = core.BlockVar(promptId, Type.TPrompt(answerType), Set(promptCapt))
+      val promptParam: core.BlockParam = core.BlockParam(promptId, promptTpe, Set(promptCapt))
 
       val transformedHandlers = handlers.map {
-        case h @ source.Handler(cap, impl) => transform(impl, true)
+        case h @ source.Handler(cap, impl) =>
+          val id = h.capability.get.symbol
+          Definition.Def(id, New(transform(impl, Some(promptVar))))
       }
-      Context.bind(Try(body, transformedHandlers))
+
+      val body: BlockLit = BlockLit(Nil, List(promptCapt), Nil, List(promptParam),
+        Scope(transformedHandlers, transform(prog)))
+
+      Context.bind(Reset(body))
 
     case r @ source.Region(name, body) =>
       val region = r.symbol
@@ -551,7 +562,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    * Establishes a canonical ordering of methods by using
    * the order in which they are declared in the signature (like with handlers)
    */
-  def transform(impl: source.Implementation, isHandler: Boolean)(using Context): core.Implementation = {
+  def transform(impl: source.Implementation, prompt: Option[core.BlockVar])(using Context): core.Implementation = {
     val members = impl.clauses
     val clauses = members.map { cl => (cl.definition, cl) }.toMap
     val sig = impl.definition
@@ -566,16 +577,50 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val vps = vparams.map(transform)
         val tps = tparams.map { p => p.symbol }
 
-        // We cannot annotate the transparent capture of resume here somewhere since all
-        // block parameters are automatically tracked by our current encoding of core.Tree.
-        // So resume is a separate parameter.
-        val (resumeParam, bps, cps) = if (isHandler) {
-          val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
-          (Some(BlockParam(resumeSymbol)), Nil, Nil)
-        } else {
-          (None, bparams map transform, bparams map { b => b.symbol.capture })
+        prompt match {
+          case Some(prompt) =>
+            val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
+            Context.blockTypeOf(resumeSymbol) match {
+              // uni-directional
+              case BlockType.FunctionType(_, _, List(result), _, answer, _) =>
+
+                val resultTpe = transform(result)
+                val answerTpe = transform(answer)
+
+                // (1) bind the continuation itself
+
+                // THIS IS NOT CORRECT: in the source language the capture of resume is transparent
+                // This suggests we need to change the representation of Shift and its typing...
+                val resumeCapture = Id("resume")
+                val resumeId = Id("k")
+                val resumeTpe = core.Type.TResume(resultTpe, answerTpe)
+                val resumeParam: core.BlockParam = core.BlockParam(resumeId, resumeTpe, Set(resumeCapture))
+                val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, Set(resumeCapture))
+
+                // (2) eta-expand and bind continuation as a function
+                //val resumeVar: core.BlockVar = core.BlockVar(resumeSymbol, resumeTpe, Set(resumeCapture))
+                val resumeArgId = Id("a")
+                val resumeArgParam: core.ValueParam = core.ValueParam(resumeArgId, resultTpe)
+                val resumeFun: core.BlockLit = core.BlockLit(Nil, Nil, List(resumeArgParam), Nil,
+                  core.Stmt.Resume(resumeVar, core.Stmt.Return(core.ValueVar(resumeArgId, resultTpe))))
+
+                // For now we ONLY support uni-directional effects...
+                core.Operation(op.definition, tps, Nil, vps, Nil, None,
+                  core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
+                    core.Scope(List(core.Definition.Def(resumeSymbol, resumeFun)),
+                      transform(body)))))
+
+              case BlockType.FunctionType(_, _, _, List(BlockType.FunctionType(_, _, _, result, _, _)), answer, _) =>
+                ???
+                //core.Type.TResume(transform(result), transform(answer))
+              case _ => ???
+            }
+
+          case None =>
+            val bps = bparams map transform
+            val cps = bparams map { b => b.symbol.capture }
+            core.Operation(op.definition, tps, cps, vps, bps, None, transform(body))
         }
-        core.Operation(op.definition, tps, cps, vps, bps, resumeParam, transform(body))
     })
   }
 
@@ -792,6 +837,7 @@ private[core] enum Binding {
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
+
   /**
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */

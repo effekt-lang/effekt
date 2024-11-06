@@ -389,6 +389,12 @@ object normal {
       case other => Stmt.App(callee, targs, vargs, bargs)
     }
 
+  def reset(body: BlockLit): Stmt = body match {
+    //    case BlockLit(tparams, cparams, vparams, List(prompt),
+    //      Stmt.Shift(prompt2, body) if prompt.id == prompt2.id => ???
+    case other => Stmt.Reset(body)
+  }
+
   def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
     Pure.Make(tpe, tag, vargs)
 
@@ -480,11 +486,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
 /**
  * Implementation of a method / effect operation.
  *
- * TODO generalize from BlockLit to also allow block definitions
- *
- * TODO For handler implementations we cannot simply reuse BlockLit here...
- *   maybe we need to add PlainOperation | ControlOperation, where for now
- *   handlers always have control operations and New always has plain operations.
+ * TODO drop resume here since it is not needed anymore...
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
@@ -572,9 +574,11 @@ object Tree {
 
     def rewrite(b: BlockLit): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        BlockLit(tparams, cparams, vparams, bparams, rewrite(body))
+        BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
     }
-    def rewrite(b: BlockVar): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b
+    def rewrite(b: BlockVar): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+    }
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
     def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
@@ -815,7 +819,8 @@ object substitutions {
         Reset(substitute(body).asInstanceOf[BlockLit])
 
       case Shift(prompt, body) =>
-        Shift(substitute(prompt).asInstanceOf[BlockVar], substitute(body).asInstanceOf[BlockLit])
+        val after = substitute(body).asInstanceOf[BlockLit]
+        Shift(substitute(prompt).asInstanceOf[BlockVar], after)
 
       case Resume(k, body) =>
         Resume(substitute(k).asInstanceOf[BlockVar], substitute(body))

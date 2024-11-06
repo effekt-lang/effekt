@@ -130,7 +130,7 @@ object Transformer {
       val k2 = Id("k")
       Reset(Block.BlockLit(Nil, List(prompt), ks2, k2, {
         val capabilities = (capabilityParams zip handlers).map { case (p, h) =>
-          Def(p.id, New(transform(h, Some(prompt))))
+          Def(p.id, New(transform(h)))
         }
         Scope(capabilities, transform(body, ks2, Continuation.Dynamic(k2)))
       }), MetaCont(ks), k.reify)
@@ -145,9 +145,73 @@ object Transformer {
 
     case core.Stmt.Reset(body) => sys error "Shouldn't happen"
 
-    case core.Stmt.Shift(prompt, body) => ???
+    // Only unidirectional, yet
+    // core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)
+    case core.Stmt.Shift(prompt, core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)) =>
+      val ks2 = Id("ks")
+      val k2 = Id("k")
 
-    case core.Stmt.Resume(k, body) => ???
+      val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
+        transform(body, ks2, Continuation.Dynamic(k2)))
+
+      Shift(prompt.id, translatedBody, MetaCont(ks), k.reify)
+
+    case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
+
+    //
+    //
+    //      // Effectful method
+    //      case (core.Operation(name, tparams, cparams, vparams, bparams, Some(resume), body), Some(prompt)) =>
+    //        val ks = Id("ks")
+    //        val k = Id("k")
+    //
+    //        val ks2 = Id("ks")
+    //        val k2 = Id("k")
+    //
+    //        val resumeValue = Id("resumeValue")
+    //        val resumeComp = Id("resumeComp")
+    //
+    //        val (ps, cont) = resume.tpe match {
+    //          // bi-directional
+    //          // TODO this deep eta-expansion is really ugly but should go away, once we change how block parameters are
+    //          //   handled in source and core
+    //          case core.BlockType.Function(tparams, cparams, vparams, List(tpe: core.BlockType.Function), result) =>
+    //            val ps = tpe.bparams.map {
+    //              case tpe : core.BlockType.Interface => Id(tpe.name.toString)
+    //              case tpe : core.BlockType.Function => Id(s"f")
+    //            }
+    //
+    //            val ks3 = Id("ks")
+    //            val k3 = Id("k")
+    //
+    //            val ks4 = Id("ks")
+    //            val k4 = Id("k")
+    //            val c = Id("c")
+    //
+    //            (ps, BlockLit(Nil, List(c), ks3, k3,
+    //              App(BlockVar(resumeComp), Nil, List(BlockLit(Nil, Nil, ks4, k4,
+    //                App(BlockVar(c), Nil, ps.map(BlockVar.apply), MetaCont(ks4), Cont.ContVar(k4)))),
+    //                  MetaCont(ks3), Cont.ContVar(k3))))
+    //
+    //          // uni-directional
+    //          case _ =>
+    //            (Nil, BlockVar(resumeValue))
+    //        }
+    //
+    //        Operation(name, vparams.map(_.id), ps, ks, k,
+    //          Shift(prompt,
+    //            Block.BlockLit(Nil, List(resumeValue, resumeComp), ks2, k2,
+    //              binding(resume.id, cont) {
+    //                transform(body, ks2, Continuation.Dynamic(k2))
+    //              }),
+    //            MetaCont(ks),
+    //            Cont.ContVar(k)))
+
+    case core.Stmt.Resume(cont, body) =>
+      val ks2 = Id("ks")
+      val k2 = Id("k")
+      val thunk: BlockLit = Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2)))
+      App(Block.BlockVar(cont.id), Nil, List(thunk), MetaCont(ks), k.reify)
 
     case core.Stmt.Hole() => Hole()
 
@@ -184,66 +248,16 @@ object Transformer {
         Clause(vparams.map(_.id), transform(body, ks, k))
     }
 
-  def transform(impl: core.Implementation, prompt: Option[Id])(using C: TransformationContext): Implementation =
-    Implementation(impl.interface, impl.operations.map(transform(_, prompt)))
+  def transform(impl: core.Implementation)(using C: TransformationContext): Implementation =
+    Implementation(impl.interface, impl.operations.map(transform))
 
-  def transform(op: core.Operation, prompt: Option[Id])(using C: TransformationContext): Operation =
-    (op, prompt) match {
-      // Normal method
-      case (core.Operation(name, tparams, cparams, vparams, bparams, None, body), None) =>
+  def transform(op: core.Operation)(using C: TransformationContext): Operation =
+    op match {
+      case core.Operation(name, tparams, cparams, vparams, bparams, _, body) =>
         val ks = Id("ks")
         val k = Id("k")
         Operation(name, vparams.map(_.id), bparams.map(_.id), ks, k,
           transform(body, ks, Continuation.Dynamic(k)))
-
-      // Effectful method
-      case (core.Operation(name, tparams, cparams, vparams, bparams, Some(resume), body), Some(prompt)) =>
-        val ks = Id("ks")
-        val k = Id("k")
-
-        val ks2 = Id("ks")
-        val k2 = Id("k")
-
-        val resumeValue = Id("resumeValue")
-        val resumeComp = Id("resumeComp")
-
-        val (ps, cont) = resume.tpe match {
-          // bi-directional
-          // TODO this deep eta-expansion is really ugly but should go away, once we change how block parameters are
-          //   handled in source and core
-          case core.BlockType.Function(tparams, cparams, vparams, List(tpe: core.BlockType.Function), result) =>
-            val ps = tpe.bparams.map {
-              case tpe : core.BlockType.Interface => Id(tpe.name.toString)
-              case tpe : core.BlockType.Function => Id(s"f")
-            }
-
-            val ks3 = Id("ks")
-            val k3 = Id("k")
-
-            val ks4 = Id("ks")
-            val k4 = Id("k")
-            val c = Id("c")
-
-            (ps, BlockLit(Nil, List(c), ks3, k3,
-              App(BlockVar(resumeComp), Nil, List(BlockLit(Nil, Nil, ks4, k4,
-                App(BlockVar(c), Nil, ps.map(BlockVar.apply), MetaCont(ks4), Cont.ContVar(k4)))),
-                  MetaCont(ks3), Cont.ContVar(k3))))
-
-          // uni-directional
-          case _ =>
-            (Nil, BlockVar(resumeValue))
-        }
-
-        Operation(name, vparams.map(_.id), ps, ks, k,
-          Shift(prompt,
-            Block.BlockLit(Nil, List(resumeValue, resumeComp), ks2, k2,
-              binding(resume.id, cont) {
-                transform(body, ks2, Continuation.Dynamic(k2))
-              }),
-            MetaCont(ks),
-            Cont.ContVar(k)))
-
-      case _ => sys error "Should not happen"
     }
 
   def transform(pure: core.Pure)(using C: TransformationContext): Pure = pure match {
@@ -270,7 +284,7 @@ object Transformer {
     case b @ core.Block.BlockLit(tparams, cparams, vparams, bparams, body) => transformBlockLit(b)
     case core.Block.Member(block, field, annotatedTpe) => sys error "shouldn't happen"
     case core.Block.Unbox(pure) => Unbox(transform(pure))
-    case core.Block.New(impl) => New(transform(impl, None))
+    case core.Block.New(impl) => New(transform(impl))
   }
 }
 
