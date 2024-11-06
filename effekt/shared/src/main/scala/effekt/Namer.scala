@@ -486,12 +486,32 @@ object Namer extends Phase[Parsed, NameResolved] {
     // (2) === Bound Occurrences ===
 
     case source.Select(receiver, target) =>
-      resolveGeneric(receiver)
-      Context.resolveSelect(target)
+      Context.panic("Cannot happen since Select is introduced later")
 
     case source.MethodCall(receiver, target, targs, vargs, bargs) =>
       resolveGeneric(receiver)
+
       Context.resolveMethodCalltarget(target)
+
+      // We are a bit context sensitive in resolving the method
+      Context.focusing(target) { _ =>
+        receiver match {
+          case source.Var(id) => Context.resolveTerm(id) match {
+            // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
+            case symbol: ValueSymbol => Context.resolveFunctionCalltarget(target)
+
+            case symbol: RefBinder => Context.resolveFunctionCalltarget(target)
+
+            // (foo: BlockType).bar(args)  = Invoke(foo, bar, args)
+            case symbol: BlockSymbol => Context.resolveMethodCalltarget(target)
+          }
+          // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
+          case source.Unbox(term) => Context.resolveMethodCalltarget(target)
+
+          // expr.bar(args) = Call(bar, expr :: args)
+          case term => Context.resolveFunctionCalltarget(target)
+        }
+      }
       targs foreach resolve
       resolveAll(vargs)
       resolveAll(bargs)
@@ -835,7 +855,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   /**
-   * Resolves a potentially overloaded call target
+   * Resolves a potentially overloaded method target
    */
   private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
 

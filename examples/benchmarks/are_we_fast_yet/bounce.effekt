@@ -69,7 +69,7 @@ def run(n: Int) = {
 
     each(0, n) { i =>
       each(0, ballCount) { i =>
-        val ball = balls.unsafeGet(i);
+        def ball = balls.unsafeGet(i);
         val didBounce = ball.bounce();
         if (didBounce)
           bounces = bounces + 1;
@@ -81,4 +81,3 @@ def run(n: Int) = {
 }
 
 def main() = benchmark(50){run}
-

@@ -68,7 +68,7 @@ def testLifted() = try {
 
 def testLifted2() = try {
 
-  val o = underHandler {
+  def o = underHandler {
     def obj = new Counter {
       def get() = do Get()
       def inc() = ()

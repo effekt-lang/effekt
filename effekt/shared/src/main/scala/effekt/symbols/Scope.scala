@@ -177,11 +177,8 @@ object scopes {
     def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
       all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
 
-    def lookupOverloadedMethod(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
+    def lookupOverloadedMethod(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[Operation]] =
       all(id.path, scope) { namespace =>
-        // an overloaded method can be a term...
-        namespace.terms.getOrElse(id.name, Set.empty).filter(filter) ++
-        // or an operation
         namespace.operations.getOrElse(id.name, Set.empty).filter(filter)
       }
 
