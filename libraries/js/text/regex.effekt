@@ -4,13 +4,28 @@ import string
 import option
 import list
 
-
-extern type Regex
+extern type RegexRepr
 
 // matches and groups
 record Range(start: Int, end: Int)
 record Group(matched: String, index: Range)
-record Match(matched: String, start: Int, end: Int, groups: List[Group])
+record Match(matched: String, index: Range, groups: List[Group])
+
+record Regex(
+  inner: RegexRepr,
+  flags: List[RegexFlags],
+  globalFlag: Bool,
+  capture: Option[Match]
+)
+
+def copyWithCapture(reg: Regex,  capture: Option[Match]) = {
+  reg match {
+    case Regex(inner, flags, globalFlag,  _) => Regex(inner, flags, globalFlag, capture)
+  }
+}
+
+def start(m: Match) = m.index.start
+def end(m: Match) = m.index.end
 
 /**
  * Specifies flags that modify regular expression behavior.
@@ -75,9 +90,23 @@ def regex(pattern: String): Regex = regex(pattern, [])
  *
  */
 def regex(pattern: String, flags: List[RegexFlags]): Regex = {
+  var globalFlag = false
+  var flags = flags
+
+  // handle global flag in effekt
+  if (flags.any{it => it.show() == "g"}) {
+    globalFlag = true
+    flags = flags.collect { it =>
+      it match {
+        case Global() => None()
+        case _ => Some(it)
+      }
+    }
+  }
   // always set "d" (GenerateIndices) flag for capturing group indices
-  val flags = flags.map{it => it.show()}.join("") ++ "d"
-  internal::unsafeRegex(pattern, flags)
+  val flagsRepr = flags.map{it => it.show()}.join("") ++ "d"
+  val repr = internal::unsafeRegex(pattern, flagsRepr)
+  Regex(repr, flags, globalFlag, None())
 }
 
 /**
@@ -105,22 +134,29 @@ def regex(pattern: String, flags: List[RegexFlags]): Regex = {
  * }
  * ```
  */
-def exec(reg: Regex, str: String): Option[Match] = {
+def exec(reg: Regex, str: String): Regex = {
+  def getIndex(reg: Regex) = reg match {
+    case Regex(_, _, true, Some(m)) => end(m)
+    case _ => 0
+  }
+
   def toGroup(g: GroupMatch): Group = Group(
     matched(g),
     Range(start(g), end(g))
   )
 
-  val regexMatch = internal::unsafeExec(reg, str).undefinedToOption()
-  regexMatch.map { it =>
-    val fullMatch = fullMatch(it)
-    Match(
-      fullMatch.matched,
-      fullMatch.start,
-      fullMatch.end,
-      subGroups(it).toList().map{toGroup}
-    )
+  def toMatch(m: RegexMatch): Match = {
+    val offset = getIndex(reg)
+    val range = Range(offset + start(fullMatch(m)),offset + end(fullMatch(m)))
+    val groups = subGroups(m).toList().map{toGroup}
+    Match(matched(fullMatch(m)), range, groups)
   }
+
+
+  val regexMatch: Option[RegexMatch]= internal::unsafeExec(reg.inner, str.substring(getIndex(reg))).undefinedToOption()
+  val capture: Option[Match] = regexMatch.map { toMatch }
+
+  reg.copyWithCapture(capture)
 }
 
 // internal representation
@@ -136,32 +172,36 @@ extern pure def subGroups(r: RegexMatch): Array[GroupMatch] = js "${r}.groups"
 extern js """
 function regex$exec(reg, str) {
   const match = reg.exec(str);
-  if (match === null)  return undefined
+  if (match === null) return undefined;
 
-  const fullMatch = { matched: match[0], start: match.index, end: reg.lastIndex };
+  const fullMatch = {
+    matched: match[0],
+    start: match.index,
+    end: match.index + match[0].length,
+  };
   var groups = [];
   for (var i = 1; i < match.length; i++) {
     if (match[i] !== undefined) {
-        groups.push({
-          matched: match[i],
-          start: match.indices[i][0],
-          end: match.indices[i][1]
-        })
+      groups.push({
+        matched: match[i],
+        start: match.indices[i][0],
+        end: match.indices[i][1],
+      });
     } else {
       // Push an empty string if an intermediate group is undefined
-      groups.push({matched: ""});}
+      groups.push({ matched: "", start: -1, end: -1 });
+    }
   }
 
   return { fullMatch: fullMatch, groups: groups };
 }
-
 """
 
 // internal calls
 namespace internal {
-  extern io def unsafeExec(reg: Regex, str: String): RegexMatch = js "regex$exec(${reg}, ${str})"
+  extern pure def unsafeExec(reg: RegexRepr, str: String): RegexMatch = js "regex$exec(${reg}, ${str})"
 
-  extern io def unsafeRegex(str: String, flags: String): Regex = js "new RegExp(${str}, ${flags})"
+  extern pure def unsafeRegex(str: String, flags: String): RegexRepr = js "new RegExp(${str}, ${flags})"
 }
 
 

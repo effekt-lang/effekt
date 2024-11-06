@@ -9,55 +9,67 @@ def printSome[T](it: Option[T]) {f: T => String}: Unit = {
   }
 }
 
-def printMatched(m: Option[Match]) = printSome(m) { it => it.matched }
+def printMatched(reg: Regex): Regex = {
+  printSome(reg.capture) { it => it.matched }
+  reg
+}
 
-def printIndices(m: Option[Match]) = printSome(m) { it =>
+def printIndices(reg: Regex): Regex ={
+  printSome(reg.capture) { it =>
     "(" ++ it.start.show() ++ ", " ++ it.end.show() ++ ")"
   }
+  reg
+}
 
-def printGroups(m: Option[Match]) = printSome(m) { it =>
+def printGroups(reg: Regex): Regex = {
+  printSome(reg.capture) { it =>
     it.groups.map { g => g.matched }.join("\n")
   }
+  reg
+}
 
-def printGroupIndices(m: Option[Match]) = {
-  printSome(m) { it =>
+
+def printGroupIndices(reg:Regex): Regex = {
+  printSome(reg.capture) { it =>
     it.groups.map { g => g.index().show() }.join("\n")
   }
+  reg
 }
 
 def main() = {
   val src = "ab cd efg hij k l m n"
 
   // stateless regex
-  val rgx1 = regex("\\w+ \\w+")
-  rgx1.exec(src).printMatched()
-  rgx1.exec(src).printMatched()
+  var rgx1 = regex("\\w+ \\w+", [])
+  rgx1 = rgx1.exec(src).printMatched()
+  rgx1 = rgx1.exec(src).printMatched()
 
   // stateful regex
-  val rgx2 = regex("\\w+ \\w+", [Global()])
-  rgx2.exec(src).printMatched()
-  rgx2.exec(src).printMatched()
-  rgx2.exec(src).printMatched()
-  rgx2.exec(src).printMatched()
-  rgx2.exec(src).printMatched()
+  var rgx2 = regex("\\w+ \\w+", [Global()])
+  rgx2 = rgx2.exec(src).printMatched()
+  rgx2 = rgx2.exec(src).printMatched()
+  rgx2 = rgx2.exec(src).printMatched()
+  rgx2 = rgx2.exec(src).printMatched()
+  rgx2 = rgx2.exec(src).printMatched()
 
   // indices
-  val rgx3 = regex("\\w+ \\w+", [Global()])
-  rgx3.exec(src).printIndices()
+  var rgx3 = regex("\\w+ \\w+", [Global()])
+  rgx3 = rgx3.exec(src).printIndices()
 
   // capture groups
-  val rgx4 = regex("(\\w+) (\\w+)")
-  val m1 = rgx4.exec(src)
-  m1.printMatched()
-  m1.printGroups()
-  m1.printGroupIndices()
+  var rgx4 = regex("(\\w+) (\\w+)")
+  rgx4 = rgx4.exec(src)
+  rgx4.printMatched()
+  rgx4.printGroups()
+  rgx4.printGroupIndices()
 
 
   // example ussage
-  val rx = regex("(\\w+)\\s(\\d+)", [Global()])
+  var rx = regex("(\\w+)\\s(\\d+)", [Global()])
   val text = "Hello 123 World 456"
   loop  { {l} =>
-    exec(rx, text)  match  {
+    rx = rx.exec(text)
+    rx.capture match  {
       case Some(m) =>
         println("matched: " ++ m.matched ++ " range: (" ++ m.start.show() ++ ", " ++ m.end.show() ++ ")")
       case None() => l.break()
