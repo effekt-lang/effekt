@@ -67,8 +67,7 @@ object Transformer {
   def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
     stmt match {
       case core.Scope(definitions, rest) =>
-
-        // (1) Collect all the information about free variabls of local definitions
+        // (1) Collect all the information about free variables of local definitions
         definitions.foreach {
           case Definition.Def(id,  block @ core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
 
@@ -108,8 +107,14 @@ object Transformer {
             }
 
             noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
+
+          case Definition.Def(id, b @ core.New(impl)) =>
+            // this is just a hack...
+            noteParameter(id, b.tpe)
           case _ => ()
         }
+
+
 
         // (2) Actually translate the definitions
         definitions.foldRight(transform(rest)) {
@@ -300,7 +305,7 @@ object Transformer {
 
   def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
     case core.BlockVar(id, tpe, capt) =>
-        BPC.info(id) match {
+        BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
           // Unknown Jump to function
           case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
             pure(Callee.UnknownFunction(Variable(transform(id), transform(tpe)), tpe))
