@@ -108,8 +108,6 @@ trait Transformer {
     case Alloc(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", chez.Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Try(body, handler) => ???
-
     case Reset(body) => chez.Reset(toChez(body))
 
     case Shift(p, body) => chez.Shift(nameRef(p.id), toChez(body))

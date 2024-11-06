@@ -123,20 +123,6 @@ object Transformer {
           default.map(transform(_, ks, k)))
       }
 
-    case core.Stmt.Try(core.Block.BlockLit(_, _, _, capabilityParams, body), handlers) =>
-      // here we pass the prompt as a block since conceptually it is tracked
-      val prompt = Id("p")
-      val ks2 = Id("ks")
-      val k2 = Id("k")
-      Reset(Block.BlockLit(Nil, List(prompt), ks2, k2, {
-        val capabilities = (capabilityParams zip handlers).map { case (p, h) =>
-          Def(p.id, New(transform(h)))
-        }
-        Scope(capabilities, transform(body, ks2, Continuation.Dynamic(k2)))
-      }), MetaCont(ks), k.reify)
-
-    case core.Stmt.Try(_, handlers) => sys error "Shouldn't happen"
-
     case core.Stmt.Reset(core.Block.BlockLit(_, _, _, prompt :: Nil, body)) =>
       val ks2 = Id("ks")
       val k2 = Id("k")

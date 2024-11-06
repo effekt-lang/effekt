@@ -185,9 +185,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
-    case Try(body, hs) =>
-      "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
-
     case Reset(body) =>
       "reset" <+> toDoc(body)
 

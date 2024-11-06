@@ -197,7 +197,6 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.tpe
     case Stmt.Get(id, capt, tpe) => tpe
     case Stmt.Put(id, capt, value) => TUnit
-    case Stmt.Try(body, handler) => body.returnType
     case Stmt.Reset(body) => body.returnType
     case Stmt.Shift(prompt, body) => body.bparams match {
       case core.BlockParam(id, BlockType.Interface(ResumeSymbol, List(result, answer)), captures) :: Nil => result
@@ -228,7 +227,6 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
     case Stmt.Get(id, capt, tpe) => capt
     case Stmt.Put(id, capt, value) => capt
-    case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
     case Stmt.Reset(body) => body.capt
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
     case Stmt.Resume(k, body) => k.capt ++ body.capt
