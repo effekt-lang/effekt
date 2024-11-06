@@ -183,10 +183,14 @@ object scopes {
       }
 
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
-      all(path, scope) { _.operations.getOrElse(name, Set.empty) }
+      all(path, scope) { namespace =>
+        namespace.operations.getOrElse(name, Set.empty)
+      }.filter { namespace => namespace.nonEmpty }
 
     def lookupFunction(path: List[String], name: String)(using ErrorReporter): List[Set[Callable]] =
-      all(path, scope) { _.terms.getOrElse(name, Set.empty).collect { case c: Callable if !c.isInstanceOf[Operation] => c } }
+      all(path, scope) { namespace =>
+        namespace.terms.getOrElse(name, Set.empty).collect { case c: Callable if !c.isInstanceOf[Operation] => c }
+      }.filter { namespace => namespace.nonEmpty }
 
     // can be a term OR a type symbol
     def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =

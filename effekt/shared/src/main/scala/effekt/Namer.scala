@@ -496,18 +496,28 @@ object Namer extends Phase[Parsed, NameResolved] {
         receiver match {
           case source.Var(id) => Context.resolveTerm(id) match {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
-            case symbol: ValueSymbol => Context.resolveOverloadedFunction(target)
+            case symbol: ValueSymbol =>
+              if !Context.resolveOverloadedFunction(target)
+              then Context.abort(pp"Cannot resolve function ${target}, called on a value receiver.")
 
-            case symbol: RefBinder => Context.resolveOverloadedFunction(target)
+            case symbol: RefBinder =>
+              if !Context.resolveOverloadedFunction(target)
+              then Context.abort(pp"Cannot resolve function ${target}, called on a receiver that is a reference.")
 
             // (foo: BlockType).bar(args)  = Invoke(foo, bar, args)
-            case symbol: BlockSymbol => Context.resolveOverloadedOperation(target)
+            case symbol: BlockSymbol =>
+              if !Context.resolveOverloadedOperation(target)
+              then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
           }
           // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
-          case source.Unbox(term) => Context.resolveOverloadedOperation(target)
+          case source.Unbox(term) =>
+            if !Context.resolveOverloadedOperation(target)
+            then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
 
           // expr.bar(args) = Call(bar, expr :: args)
-          case term => Context.resolveOverloadedFunction(target)
+          case term =>
+            if !Context.resolveOverloadedFunction(target)
+            then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
         }
       }
       targs foreach resolve
@@ -855,24 +865,20 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded method target
    */
-  private[namer] def resolveOverloadedOperation(id: IdRef): Unit = at(id) {
-
+  private[namer] def resolveOverloadedOperation(id: IdRef): Boolean = at(id) {
     val syms = scope.lookupOperation(id.path, id.name)
 
-    if (syms.isEmpty) {
-      abort(pretty"Cannot resolve function ${id.name}")
-    }
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    val syms2 = if (syms.isEmpty) scope.lookupFunction(id.path, id.name) else syms
+
+    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
   }
 
-  private[namer] def resolveOverloadedFunction(id: IdRef): Unit = at(id) {
-
+  private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
     val syms = scope.lookupFunction(id.path, id.name)
 
-    if (syms.isEmpty) {
-      abort(pretty"Cannot resolve function ${id.name}")
-    }
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    val syms2 = if (syms.isEmpty) scope.lookupOperation(id.path, id.name) else syms
+
+    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
   }
 
   /**
