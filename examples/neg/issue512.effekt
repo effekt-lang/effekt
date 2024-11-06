@@ -3,7 +3,7 @@ interface Ref[T] {
 }
 
 def main() = {
-  var myref =
+  def myref =
     region r1 { // ERROR r1
       var x in r1 = "hoho";
       new Ref[String] {

@@ -486,12 +486,40 @@ object Namer extends Phase[Parsed, NameResolved] {
     // (2) === Bound Occurrences ===
 
     case source.Select(receiver, target) =>
-      resolveGeneric(receiver)
-      Context.resolveSelect(target)
+      Context.panic("Cannot happen since Select is introduced later")
 
     case source.MethodCall(receiver, target, targs, vargs, bargs) =>
       resolveGeneric(receiver)
-      Context.resolveMethodCalltarget(target)
+
+      // We are a bit context sensitive in resolving the method
+      Context.focusing(target) { _ =>
+        receiver match {
+          case source.Var(id) => Context.resolveTerm(id) match {
+            // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
+            case symbol: ValueSymbol =>
+              if !Context.resolveOverloadedFunction(target)
+              then Context.abort(pp"Cannot resolve function ${target}, called on a value receiver.")
+
+            case symbol: RefBinder =>
+              if !Context.resolveOverloadedFunction(target)
+              then Context.abort(pp"Cannot resolve function ${target}, called on a receiver that is a reference.")
+
+            // (foo: BlockType).bar(args)  = Invoke(foo, bar, args)
+            case symbol: BlockSymbol =>
+              if !Context.resolveOverloadedOperation(target)
+              then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
+          }
+          // (unbox term).bar(args)  = Invoke(Unbox(term), bar, args)
+          case source.Unbox(term) =>
+            if !Context.resolveOverloadedOperation(target)
+            then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
+
+          // expr.bar(args) = Call(bar, expr :: args)
+          case term =>
+            if !Context.resolveOverloadedFunction(target)
+            then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
+        }
+      }
       targs foreach resolve
       resolveAll(vargs)
       resolveAll(bargs)
@@ -835,20 +863,26 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   /**
-   * Resolves a potentially overloaded call target
+   * Resolves a potentially overloaded method target
    */
-  private[namer] def resolveMethodCalltarget(id: IdRef): Unit = at(id) {
+  private[namer] def resolveOverloadedOperation(id: IdRef): Boolean = at(id) {
+    val syms = scope.lookupOperation(id.path, id.name)
 
-    val syms = scope.lookupOverloadedMethod(id, term => term.isInstanceOf[BlockSymbol])
+    val syms2 = if (syms.isEmpty) scope.lookupFunction(id.path, id.name) else syms
 
-    if (syms.isEmpty) {
-      abort(pretty"Cannot resolve function ${id.name}")
-    }
-    assignSymbol(id, CallTarget(syms.asInstanceOf))
+    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
+  }
+
+  private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
+    val syms = scope.lookupFunction(id.path, id.name)
+
+    val syms2 = if (syms.isEmpty) scope.lookupOperation(id.path, id.name) else syms
+
+    if (syms2.nonEmpty) { assignSymbol(id, CallTarget(syms2.asInstanceOf)); true } else { false }
   }
 
   /**
-   * Resolves a potentially overloaded field access
+   * Resolves a potentially overloaded function call
    */
   private[namer] def resolveFunctionCalltarget(id: IdRef): Unit = at(id) {
     val candidates = scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])
