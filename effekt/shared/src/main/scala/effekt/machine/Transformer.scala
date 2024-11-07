@@ -77,6 +77,8 @@ object Transformer {
 
             // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
             val freeVariables = core.Variables.free(block).toSet
+              .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free
+
             val freeParams = freeVariables.flatMap {
               case core.Variable.Value(id, tpe) =>
                 Set(Variable(transform(id), transform(tpe)))
