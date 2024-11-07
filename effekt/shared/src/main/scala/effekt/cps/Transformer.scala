@@ -147,8 +147,9 @@ object Transformer {
     case core.Stmt.Resume(cont, body) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
-      val thunk: BlockLit = Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2)))
-      App(Block.BlockVar(cont.id), Nil, List(thunk), MetaCont(ks), k.reify)
+
+      Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
+        MetaCont(ks), k.reify)
 
     case core.Stmt.Hole() => Hole()
 

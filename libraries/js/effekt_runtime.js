@@ -85,6 +85,12 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 // const x = r.alloc(init); body
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
+function RESETOLD(prog, ks, k) {
+  const prompt = _prompt++;
+  const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
+  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+}
+
 function RESET(ks, k) {
   const prompt = _prompt++;
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
@@ -114,22 +120,22 @@ function SHIFT(p, ks, k) {
   cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
   meta = meta.rest
 
-  function resumeComp(c, ks, k) {
-    let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-    let toRewind = cont
-    while (!!toRewind) {
-      meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
-      toRewind = toRewind.rest
-    }
-
-    const k2 = meta.stack // TODO instead copy meta here, like elsewhere?
-    meta.stack = null
-    return () => c(meta, k2)
-  }
-
   let k1 = meta.stack
   meta.stack = null
-  return [resumeComp, meta, k1]
+  return [cont, meta, k1]
+}
+
+function RESUME(cont, ks, k) {
+  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
+  let toRewind = cont
+  while (!!toRewind) {
+    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
+    toRewind = toRewind.rest
+  }
+
+  const k2 = meta.stack // TODO instead copy meta here, like elsewhere?
+  meta.stack = null
+  return [meta, k2]
 }
 
 function RUN_TOPLEVEL(comp) {
