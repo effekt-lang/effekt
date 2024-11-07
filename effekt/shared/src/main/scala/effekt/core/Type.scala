@@ -67,7 +67,15 @@ object Type {
   val PromptSymbol = Id("Prompt")
   val ResumeSymbol = Id("Resume")
 
-  def TResume(result: ValueType, answer: ValueType) = BlockType.Interface(ResumeSymbol, List(result, answer))
+
+
+  object TResume {
+    def apply(result: ValueType, answer: ValueType) = BlockType.Interface(ResumeSymbol, List(result, answer))
+    def unapply(tpe: BlockType): Option[(ValueType, ValueType)] = tpe match {
+      case BlockType.Interface(ResumeSymbol, List(result, answer)) => Some((result, answer))
+      case _ => None
+    }
+  }
 
   object TPrompt {
     def apply(answer: ValueType): BlockType.Interface = BlockType.Interface(PromptSymbol, List(answer))

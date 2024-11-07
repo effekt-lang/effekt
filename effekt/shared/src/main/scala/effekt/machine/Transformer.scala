@@ -517,6 +517,7 @@ object Transformer {
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
     case core.Type.TRegion => Type.Prompt()
+    case core.Type.TResume(result, answer) => Type.Stack()
     case core.Type.TPrompt(answer) => Type.Prompt()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()

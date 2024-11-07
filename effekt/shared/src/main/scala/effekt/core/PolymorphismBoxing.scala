@@ -236,7 +236,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Implementation(BlockType.Interface(symbol, targs), operations) =>
       val ifce = PContext.findInterface(symbol).getOrElse { Context.abort(s"No declaration for interface ${symbol}") }
       Implementation(BlockType.Interface(symbol, targs map transformArg), operations map transform(ifce, targs))
-
   }
 
   def transform(ifce: Interface, targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
@@ -303,11 +302,48 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Reset(body) =>
       Stmt.Reset(transform(body))
     case Stmt.Shift(prompt, body) =>
+      //      println(body.tpe)
+      //      println(stmt.tpe)
       // TODO does this violate invariants of core?
       Stmt.Shift(prompt, transform(body))
+
+      //      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
+      //      val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
+      //      val answerTpe = body.tpe
+      //      val propResumeParam = if (bparams.isEmpty) {
+      //        BlockType.Function(Nil, Nil, List(propTpe.result), Nil, answerTpe)
+      //      } else {
+      //        BlockType.Function(Nil, resume.capt.toList, Nil, List(
+      //          BlockType.Function(Nil, propTpe.cparams, Nil, propTpe.bparams.map(transform), transform(propTpe.result))
+      //        ), answerTpe)
+      //      }
+      //
+      //      val blockTpe = BlockType.Function(tparams, resume.capt.toList, propTpe.vparams.map(transform), List(transform(propResumeParam)), transform(answerTpe))
+      //      val implBlock: Block.BlockLit = Block.BlockLit(tparams, resume.capt.toList, vparams, List(resume), transform(body))
+      //      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
+      //      assert(transformed.bparams.length == 1)
+      //      Operation(name, transformed.tparams, Nil, transformed.vparams, Nil,
+      //        Some(transformed.bparams.head),
+      //        transformed.body)
     case Stmt.Resume(k, body) =>
       // TODO do we need to do something here? This is an application
-      Stmt.Resume(k, transform(body))
+      val expected = k.tpe match {
+        case core.Type.TResume(result, answer) => result
+        case _ => ???
+      }
+      val transformedBody = transform(body)
+      val got = transformedBody.tpe
+      val doBoxResult = coercer(got, expected)
+
+      if (doBoxResult.isIdentity) {
+        Stmt.Resume(k, transformedBody)
+      } else {
+        val orig = TmpValue("resume_result")
+        Stmt.Resume(k,
+          Stmt.Val(orig, got, transformedBody,
+            Stmt.Return(doBoxResult(Pure.ValueVar(orig, got)))))
+      }
+
     case Stmt.Region(body) =>
       val tBody = transform(body)
       // make sure the result type is a boxed one
@@ -408,7 +444,12 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(blockType: BlockType)(using PContext): BlockType = blockType match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       BlockType.Function(tparams, cparams, vparams map transform, bparams map transform, transform(result))
+
+    // Special case some types to not introduce boxing
     case i @ BlockType.Interface(TState.interface, _) => i
+    case i @ BlockType.Interface(core.Type.ResumeSymbol, _) => i
+    case i @ BlockType.Interface(core.Type.PromptSymbol, _) => i
+
     case BlockType.Interface(symbol, targs) => BlockType.Interface(symbol, targs map transformArg)
   }
 
