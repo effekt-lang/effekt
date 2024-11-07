@@ -82,9 +82,9 @@ jobs:
         id: set-version
         run: |
           if [ "${{ github.event.inputs.version_type }}" = "patch" ]; then
-            full_output=$(sbt 'bumpMinorVersion' -error)
-          else
             full_output=$(sbt 'bumpPatchVersion' -error)
+          else
+            full_output=$(sbt 'bumpMinorVersion' -error)
           fi
 
           new_version=$(echo "$full_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)
