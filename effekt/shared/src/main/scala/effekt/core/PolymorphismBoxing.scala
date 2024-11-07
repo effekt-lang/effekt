@@ -302,31 +302,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Reset(body) =>
       Stmt.Reset(transform(body))
     case Stmt.Shift(prompt, body) =>
-      //      println(body.tpe)
-      //      println(stmt.tpe)
-      // TODO does this violate invariants of core?
       Stmt.Shift(prompt, transform(body))
-
-      //      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
-      //      val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
-      //      val answerTpe = body.tpe
-      //      val propResumeParam = if (bparams.isEmpty) {
-      //        BlockType.Function(Nil, Nil, List(propTpe.result), Nil, answerTpe)
-      //      } else {
-      //        BlockType.Function(Nil, resume.capt.toList, Nil, List(
-      //          BlockType.Function(Nil, propTpe.cparams, Nil, propTpe.bparams.map(transform), transform(propTpe.result))
-      //        ), answerTpe)
-      //      }
-      //
-      //      val blockTpe = BlockType.Function(tparams, resume.capt.toList, propTpe.vparams.map(transform), List(transform(propResumeParam)), transform(answerTpe))
-      //      val implBlock: Block.BlockLit = Block.BlockLit(tparams, resume.capt.toList, vparams, List(resume), transform(body))
-      //      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
-      //      assert(transformed.bparams.length == 1)
-      //      Operation(name, transformed.tparams, Nil, transformed.vparams, Nil,
-      //        Some(transformed.bparams.head),
-      //        transformed.body)
     case Stmt.Resume(k, body) =>
-      // TODO do we need to do something here? This is an application
       val expected = k.tpe match {
         case core.Type.TResume(result, answer) => result
         case _ => ???
