@@ -184,6 +184,14 @@ object Annotations {
   )
 
   /**
+   * Used by LSP for jump-to-definition of imports
+   */
+  val IncludedSymbols = Annotation[source.Include, symbols.Module](
+    "IncludedSymbols",
+    "the symbol for an import / include"
+  )
+
+  /**
    * All symbols defined in a source file
    */
   val DefinedSymbols = Annotation[kiama.util.Source, Set[symbols.Symbol]](
