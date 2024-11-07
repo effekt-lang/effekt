@@ -80,10 +80,9 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "capture" / "resources.effekt",
     examplesDir / "pos" / "io",
 
-    // Bidirectional effects do not work in general
-    examplesDir / "pos" / "bidirectional",
-    examplesDir / "pos" / "type_omission_op.effekt",
-    examplesDir / "pos" / "object"/ "higher_order_compose_op.effekt",
+    // Bidirectional effects are still a bit buggy
+    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
+    examplesDir / "pos" / "bidirectional" / "scheduler.effekt",
 
     // first class functions closing over capabilities
     examplesDir / "pos" / "capture" / "state_eff.effekt",
