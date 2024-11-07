@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.{ Annotations, Context }
-import effekt.source.{ FunDef, ModuleDecl, Tree }
+import effekt.source.{ FunDef, ModuleDecl, Tree, Include }
 import kiama.util.{ Position, Source }
 
 trait Intelligence {
@@ -62,10 +62,25 @@ trait Intelligence {
     id <- trees.collectFirst { case id: source.Id => id }
   } yield id
 
-  def getSymbolAt(position: Position)(implicit C: Context): Option[(Tree, Symbol)] = for {
-    id <- getIdTreeAt(position)
-    sym <- C.symbolOption(id)
-  } yield (id, resolveCallTarget(sym))
+  def getSymbolAt(position: Position)(implicit C: Context): Option[(Tree, Symbol)] =
+    def identifiers = for {
+      id <- getIdTreeAt(position)
+      sym <- C.symbolOption(id)
+    } yield (id, resolveCallTarget(sym))
+
+    def others = for {
+      trees <- getTreesAt(position).toVector
+      tree <- trees
+      sym <- getSymbolOf(tree)
+    } yield (tree, sym)
+
+    identifiers.orElse(others.headOption)
+
+  def getSymbolOf(tree: Tree)(using C: Context): Option[Symbol] =
+    tree match {
+      case i @ Include(path) => C.annotationOption(Annotations.IncludedSymbols, i)
+      case _ => None
+    }
 
   def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
     (_, sym) <- getSymbolAt(position)
@@ -77,6 +92,7 @@ trait Intelligence {
     case u: Binder       => Some(u.decl)
     case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
+    case m: Module       => Some(m.decl)
     case u => C.definitionTreeOption(u)
   }
 
