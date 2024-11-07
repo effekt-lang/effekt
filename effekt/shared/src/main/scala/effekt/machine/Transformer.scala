@@ -488,7 +488,7 @@ object Transformer {
     op match {
       // No continuation, implementation of an object
       case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
-        // TODO note block parameters
+        noteParameters(bparams)
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
     }
 
