@@ -786,9 +786,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
         // we bind the function type outside of the unification scope to solve for variables.
         val substituted = Context.unification(funTpe)
-        if (!isConcreteBlockType(substituted)) {
-          Context.abort(pretty"Cannot fully infer type for ${id}: ${substituted}")
-        }
+        assertConcreteFunction(id, substituted)
         Context.bind(sym, substituted)
 
         Result((), unhandledEffects)
@@ -1510,7 +1508,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
-      assertConcrete(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
+      assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
       positions.dupPos(binder, cap)
       cap
     }
@@ -1528,7 +1526,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    assertConcrete(tpe)
+    assertConcreteEffect(tpe)
     val cap = capabilityScope.capabilityFor(tpe)
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
