@@ -5,6 +5,15 @@ on:
   schedule:
     - cron: '0 3 * * 1'  # Every Monday at 3am UTC
   workflow_dispatch: # For manual triggering
+    inputs:
+      version_type:
+        description: 'Version type: minor / patch'
+        required: true
+        default: 'minor'
+        type: choice
+        options:
+          - 'minor'
+          - 'patch'
 
 env:
   JAVA_VERSION: '11'
@@ -72,7 +81,12 @@ jobs:
       - name: Bump Effekt version using sbt
         id: set-version
         run: |
-          full_output=$(sbt 'bumpMinorVersion' -error)
+          if [ "${{ github.event.inputs.version_type }}" = "patch" ]; then
+            full_output=$(sbt 'bumpMinorVersion' -error)
+          else
+            full_output=$(sbt 'bumpPatchVersion' -error)
+          fi
+
           new_version=$(echo "$full_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1)
           new_version=$(echo "$new_version" | xargs)
           if [[ ! $new_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
