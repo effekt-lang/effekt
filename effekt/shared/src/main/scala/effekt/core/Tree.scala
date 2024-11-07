@@ -305,8 +305,18 @@ enum Stmt extends Tree {
   case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
   case Put(id: Id, annotatedCapt: Captures, value: Pure)
 
-  case Try(body: Block, handlers: List[Implementation])
+  // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
+  //  Reset({ [cap]{p: Prompt[answer] at cap} => stmt: answer}): answer
+  case Reset(body: BlockLit)
 
+  // captures the continuation up to the given prompt
+  // Invariant, it always has the shape:
+  //   Shift(p: Prompt[answer], { [cap]{resume: Resume[result, answer] at cap} => stmt: answer }): result
+  case Shift(prompt: BlockVar, body: BlockLit)
+
+  // bidirectional resume: runs the given statement in the original context
+  //  Resume(k: Resume[result, answer], stmt: result): answer
+  case Resume(k: BlockVar, body: Stmt)
 
   // Others
   case Hole()
@@ -358,11 +368,10 @@ object normal {
   // new { def f = BLOCK }.f  =  BLOCK
   def member(b: Block, field: Id, annotatedTpe: BlockType): Block = b match {
     case Block.New(impl) =>
-      val Operation(name, tps, cps, vps, bps, resume, body) =
+      val Operation(name, tps, cps, vps, bps, body) =
         impl.operations.find(op => op.name == field).getOrElse {
           INTERNAL_ERROR("Should not happen")
         }
-      assert(resume.isEmpty, "We do not inline effectful capabilities at that point")
       BlockLit(tps, cps, vps, bps, body)
     case _ => Block.Member(b, field, annotatedTpe)
   }
@@ -376,6 +385,12 @@ object normal {
       case b : Block.BlockLit => reduce(b, targs, vargs, bargs)
       case other => Stmt.App(callee, targs, vargs, bargs)
     }
+
+  def reset(body: BlockLit): Stmt = body match {
+    //    case BlockLit(tparams, cparams, vparams, List(prompt),
+    //      Stmt.Shift(prompt2, body) if prompt.id == prompt2.id => ???
+    case other => Stmt.Reset(body)
+  }
 
   def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
     Pure.Make(tpe, tag, vargs)
@@ -468,13 +483,9 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
 /**
  * Implementation of a method / effect operation.
  *
- * TODO generalize from BlockLit to also allow block definitions
- *
- * TODO For handler implementations we cannot simply reuse BlockLit here...
- *   maybe we need to add PlainOperation | ControlOperation, where for now
- *   handlers always have control operations and New always has plain operations.
+ * TODO drop resume here since it is not needed anymore...
  */
-case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
+case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
 }
 
@@ -557,6 +568,14 @@ object Tree {
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
     def rewrite(b: ExternBody): ExternBody= rewrite(b)
+
+    def rewrite(b: BlockLit): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
+    }
+    def rewrite(b: BlockVar): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+    }
 
     def rewrite(t: ValueType): ValueType = rewriteStructurally(t)
     def rewrite(t: ValueType.Data): ValueType.Data = rewriteStructurally(t)
@@ -651,8 +670,8 @@ object Variables {
   def free(impl: Implementation): Variables = all(impl.operations, free)
 
   def free(op: Operation): Variables = op match {
-    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-      free(body) -- all(vparams, bound) -- all(bparams, bound) -- all(resume, bound)
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      free(body) -- all(vparams, bound) -- all(bparams, bound)
   }
   def free(s: Stmt): Variables = s match {
     // currently local functions cannot be mutually recursive
@@ -681,7 +700,9 @@ object Variables {
     case Stmt.Put(id, annotatedCapt, value) =>
       Variables.block(id, core.Type.TState(value.tpe), annotatedCapt) ++ free(value)
 
-    case Stmt.Try(body, handlers) => free(body) ++ all(handlers, free)
+    case Stmt.Reset(body) => free(body)
+    case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
+    case Stmt.Resume(k, body) => free(k) ++ free(body)
     case Stmt.Hole() => Variables.empty
   }
 
@@ -787,8 +808,15 @@ object substitutions {
       case Put(id, capt, value) =>
         Put(substituteAsVar(id), substitute(capt), substitute(value))
 
-      case Try(body, handlers) =>
-        Try(substitute(body), handlers.map(substitute))
+      case Reset(body) =>
+        Reset(substitute(body).asInstanceOf[BlockLit])
+
+      case Shift(prompt, body) =>
+        val after = substitute(body).asInstanceOf[BlockLit]
+        Shift(substitute(prompt).asInstanceOf[BlockVar], after)
+
+      case Resume(k, body) =>
+        Resume(substitute(k).asInstanceOf[BlockVar], substitute(body))
 
       case Region(body) =>
         Region(substitute(body))
@@ -853,12 +881,11 @@ object substitutions {
 
   def substitute(op: Operation)(using subst: Substitution): Operation =
     op match {
-      case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      case Operation(name, tparams, cparams, vparams, bparams, body) =>
         val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
         Operation(name, tparams, cparams,
           vparams.map(p => substitute(p)(using shadowedTypelevel)),
           bparams.map(p => substitute(p)(using shadowedTypelevel)),
-          resume.map(p => substitute(p)(using shadowedTypelevel)),
           substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
     }
 

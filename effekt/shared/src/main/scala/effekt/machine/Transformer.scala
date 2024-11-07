@@ -67,8 +67,7 @@ object Transformer {
   def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
     stmt match {
       case core.Scope(definitions, rest) =>
-
-        // (1) Collect all the information about free variabls of local definitions
+        // (1) Collect all the information about free variables of local definitions
         definitions.foreach {
           case Definition.Def(id,  block @ core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
 
@@ -78,6 +77,8 @@ object Transformer {
 
             // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
             val freeVariables = core.Variables.free(block).toSet
+              .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free
+
             val freeParams = freeVariables.flatMap {
               case core.Variable.Value(id, tpe) =>
                 Set(Variable(transform(id), transform(tpe)))
@@ -95,10 +96,6 @@ object Transformer {
                   case Some(BlockInfo.Parameter(tpe)) =>
                     Set(Variable(transform(pid), transform(tpe)))
 
-                  // The resumption is free
-                  case Some(BlockInfo.Resumption) =>
-                    Set(Variable(transform(pid), Type.Stack()))
-
                   // Everything else is considered bound or global
                   case None =>
                     // TODO should not happen, abort with error
@@ -108,8 +105,14 @@ object Transformer {
             }
 
             noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
+
+          case Definition.Def(id, b @ core.New(impl)) =>
+            // this is just a hack...
+            noteParameter(id, b.tpe)
           case _ => ()
         }
+
+
 
         // (2) Actually translate the definitions
         definitions.foldRight(transform(rest)) {
@@ -124,7 +127,7 @@ object Transformer {
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
           case (core.Definition.Def(id, core.New(impl)), rest) =>
-            New(Variable(transform(id), transform(impl.interface)), transform(impl, None), rest)
+            New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
 
           case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Member | _: core.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
@@ -177,9 +180,6 @@ object Transformer {
               case Callee.Method(receiver, tpe, tag) =>
                 Invoke(receiver, tag, values ++ blocks)
 
-              case Callee.Continuation(variable) =>
-                Resume(variable, Return(values))
-
               case Callee.UnknownObject(variable, tpe) =>
                 E.panic("Cannot call an object.")
             }
@@ -203,19 +203,23 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case core.Try(core.BlockLit(tparams, cparams, vparams, bparams, body), handlers) =>
-
-        noteParameters(bparams)
+      case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
+        noteParameters(List(prompt))
 
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
-        val prompt = Variable(freshName("prompt"), Type.Prompt())
 
-        Reset(prompt, returnClause,
-          (bparams zip handlers).foldRight(transform(body)){
-            case ((id, handler), body) =>
-              New(transform(id), transform(handler, Some(prompt)), body)
-          })
+        Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
+
+      case core.Shift(prompt, core.BlockLit(Nil, cparams, Nil, List(k), body)) =>
+
+        noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
+
+        Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()),
+          transform(body))
+
+      case core.Resume(k, body) =>
+        Resume(Variable(transform(k.id), Type.Stack()), transform(body))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
         val variable = Variable(freshName("returned"), transform(body.tpe))
@@ -293,12 +297,11 @@ object Transformer {
     case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
     case UnknownObject(variable: machine.Variable, tpe: core.BlockType.Interface)
     case Method(receiver: machine.Variable, tpe: core.BlockType.Interface, tag: Int)
-    case Continuation(variable: machine.Variable)
   }
 
   def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
     case core.BlockVar(id, tpe, capt) =>
-        BPC.info(id) match {
+        BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
           // Unknown Jump to function
           case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
             pure(Callee.UnknownFunction(Variable(transform(id), transform(tpe)), tpe))
@@ -306,10 +309,6 @@ object Transformer {
           // Unknown object as a receiver
           case BlockInfo.Parameter(tpe: core.BlockType.Interface) =>
             pure(Callee.UnknownObject(Variable(transform(id), transform(tpe)), tpe))
-
-          // Continuation Call
-          case BlockInfo.Resumption =>
-            pure(Callee.Continuation(Variable(transform(id), Type.Stack())))
 
           // Known Jump
           case BlockInfo.Definition(freeParams, blockParams) =>
@@ -364,7 +363,7 @@ object Transformer {
     case core.New(impl) =>
       val variable = Variable(freshName("new"), Negative())
       Binding { k =>
-        New(variable, transform(impl, None), k(variable))
+        New(variable, transform(impl), k(variable))
       }
 
     case core.Member(b, field, annotatedTpe) =>
@@ -479,24 +478,16 @@ object Transformer {
       ErrorReporter.abort(s"Unsupported expression: $expr")
   }
 
-  def transform(impl: core.Implementation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
+  def transform(impl: core.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
     impl.operations.sortBy {
-      case core.Operation(operationName, _, _, _, _, _, _) =>
+      case core.Operation(operationName, _, _, _, _, _) =>
         DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
-    }.map(op => transform(op, prompt))
+    }.map(op => transform(op))
 
-  def transform(op: core.Operation, prompt: Option[Variable])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
-    (prompt, op) match {
-      // Effectful operation, capture the continuation
-      case (Some(prompt), core.Operation(name, tparams, cparams, vparams, bparams, Some(kparam), body)) =>
-        noteResumption(kparam.id)
-        // TODO deal with bidirectional effects
-        Clause(vparams.map(transform),
-          Shift(Variable(transform(kparam).name, Type.Stack()), prompt,
-            transform(body)))
-
+  def transform(op: core.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
+    op match {
       // No continuation, implementation of an object
-      case (_, core.Operation(name, tparams, cparams, vparams, bparams, k, body)) =>
+      case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
         // TODO note block parameters
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
     }
@@ -528,6 +519,8 @@ object Transformer {
 
   def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
     case core.Type.TRegion => Type.Prompt()
+    case core.Type.TResume(result, answer) => Type.Stack()
+    case core.Type.TPrompt(answer) => Type.Prompt()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
@@ -569,7 +562,6 @@ object Transformer {
     def definition(id: Id): BlockInfo.Definition = info(id) match {
       case d : BlockInfo.Definition => d
       case BlockInfo.Parameter(tpe) => sys error s"Expected a function definition, but got a block parameter: ${id}"
-      case BlockInfo.Resumption => sys error s"Expected a function definition, but got a continuation: ${id}"
     }
     def params(id: Id): Environment = definition(id).params
     def free(id: Id): Environment = definition(id).free
@@ -577,7 +569,6 @@ object Transformer {
   enum BlockInfo {
     case Definition(free: Environment, params: Environment)
     case Parameter(tpe: core.BlockType)
-    case Resumption
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
@@ -585,11 +576,6 @@ object Transformer {
   def noteDefinition(id: Id, params: Environment, free: Environment)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: BlockInfo)")
     BC.info += (id -> BlockInfo.Definition(free, params))
-
-  def noteResumption(id: Id)(using BC: BlocksParamsContext): Unit =
-    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Resumption)")
-    BC.info += (id -> BlockInfo.Resumption)
-
 
   def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
     assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Parameter)")
@@ -606,12 +592,6 @@ object Transformer {
   def getBlocksParams(id: Id)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
     case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
   }
-
-  def isResumption(id: Id)(using BC: BlocksParamsContext): Boolean =
-    BC.info(id) match {
-      case BlockInfo.Resumption => true
-      case _ => false
-    }
 
   def isDefinition(id: Id)(using BC: BlocksParamsContext): Boolean =
     BC.info(id) match {

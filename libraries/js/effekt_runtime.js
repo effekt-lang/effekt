@@ -114,11 +114,7 @@ function SHIFT(p, body, ks, k) {
   cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
   meta = meta.rest
 
-  function resumeValue(a, ks, k) {
-    return resumeComp((ks, k) => k(a, ks), ks, k)
-  }
   function resumeComp(c, ks, k) {
-    //console.log("Resuming", ks.arena)
     let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
     let toRewind = cont
     while (!!toRewind) {
@@ -133,7 +129,7 @@ function SHIFT(p, body, ks, k) {
 
   let k1 = meta.stack
   meta.stack = null
-  return body(resumeValue, resumeComp, meta, k1)
+  return body(resumeComp, meta, k1)
 }
 
 function RUN_TOPLEVEL(comp) {

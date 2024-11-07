@@ -134,7 +134,9 @@ object Inline {
     case Stmt.Match(scrutinee, clauses, default) =>
       patternMatch(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
-    case Stmt.Try(body, handlers) => Try(rewrite(body), handlers.map(rewrite))
+    case Stmt.Reset(body) => Reset(rewrite(body))
+    case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
+    case Stmt.Resume(k, body) => Resume(k, rewrite(body))
     case Stmt.Region(body) => Region(rewrite(body))
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, rewrite(init), capture, rewrite(body))
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)

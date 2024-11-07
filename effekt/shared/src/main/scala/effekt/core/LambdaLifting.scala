@@ -169,8 +169,8 @@ class Locals(mod: ModuleDecl)(using Context) extends core.Tree.Query[Variables, 
   }
 
   override def operation(using Variables) = {
-    case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-      binding(all(vparams, bound) ++ all(bparams, bound) ++ all(resume, bound)) { query(body) }
+    case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
+      binding(all(vparams, bound) ++ all(bparams, bound)) { query(body) }
   }
 
   override def defn(using Variables) = {

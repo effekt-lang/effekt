@@ -29,10 +29,11 @@
       (if (null? frames) (underflow v rest)
           (values ((car frames) v) (cons (make-Stack (cdr frames) arena prompt) rest))))))
 
-; Control, Prompt -> Control
-(define (reset p c)
-  (lambda (mk)
-    (c (cons (make-Stack '() (make-arena) p) mk))))
+; Control -> Control
+(define (reset c)
+  (let ([p (newPrompt)])
+    (lambda (mk)
+      ((c p) (cons (make-Stack '() (make-arena) p) mk)))))
 
 ; Prompt, Body -> Control
 (define (shift p f)
@@ -63,15 +64,6 @@
   (trampoline c (cons (make-Stack '() (make-arena) toplevel) '())))
 
 (define newPrompt (lambda () (string #\p)))
-
-(define-syntax handle
-  (syntax-rules ()
-    [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
-     (let ([p (newPrompt)])
-       (reset p (body
-        (cap1 (define-effect-op p (arg1 ...) kid exp) ...)
-        ...)))]))
-
 
 (define-syntax define-effect-op
   (syntax-rules ()

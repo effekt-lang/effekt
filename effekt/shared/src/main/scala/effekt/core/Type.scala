@@ -64,6 +64,28 @@ object Type {
 
   val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
 
+  val PromptSymbol = Id("Prompt")
+  val ResumeSymbol = Id("Resume")
+
+
+
+  object TResume {
+    def apply(result: ValueType, answer: ValueType) = BlockType.Interface(ResumeSymbol, List(result, answer))
+    def unapply(tpe: BlockType): Option[(ValueType, ValueType)] = tpe match {
+      case BlockType.Interface(ResumeSymbol, List(result, answer)) => Some((result, answer))
+      case _ => None
+    }
+  }
+
+  object TPrompt {
+    def apply(answer: ValueType): BlockType.Interface = BlockType.Interface(PromptSymbol, List(answer))
+    def unapply(tpe: BlockType): Option[ValueType] =
+      tpe match {
+        case BlockType.Interface(PromptSymbol, List(answer)) => Some(answer)
+        case _ => None
+      }
+  }
+
   object TState {
     def apply(tpe: ValueType) = BlockType.Interface(builtins.TState.interface, List(tpe))
     def unapply(tpe: BlockType): Option[ValueType] =
@@ -183,7 +205,15 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.tpe
     case Stmt.Get(id, capt, tpe) => tpe
     case Stmt.Put(id, capt, value) => TUnit
-    case Stmt.Try(body, handler) => body.returnType
+    case Stmt.Reset(body) => body.returnType
+    case Stmt.Shift(prompt, body) => body.bparams match {
+      case core.BlockParam(id, BlockType.Interface(ResumeSymbol, List(result, answer)), captures) :: Nil => result
+      case _ => ???
+    }
+    case Stmt.Resume(k, body) => k.tpe match {
+      case BlockType.Interface(ResumeSymbol, List(result, answer)) => answer
+      case _ => ???
+    }
     case Stmt.Region(body) => body.returnType
 
     case Stmt.Hole() => TBottom
@@ -205,7 +235,9 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
     case Stmt.Get(id, capt, tpe) => capt
     case Stmt.Put(id, capt, value) => capt
-    case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
+    case Stmt.Reset(body) => body.capt
+    case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
+    case Stmt.Resume(k, body) => k.capt ++ body.capt
     case Stmt.Region(body) => body.capt
     case Stmt.Hole() => Set.empty
   }
@@ -235,5 +267,13 @@ object Type {
   extension (block: Block) {
     def returnType: ValueType = block.functionType.result
     def functionType: BlockType.Function = block.tpe.asInstanceOf
+    def answerType: ValueType = block.tpe match {
+      case BlockType.Interface(name, List(result, answer)) => answer
+      case _ => ???
+    }
+    def resultType: ValueType = block.tpe match {
+      case BlockType.Interface(name, List(result, answer)) => result
+      case _ => ???
+    }
   }
 }

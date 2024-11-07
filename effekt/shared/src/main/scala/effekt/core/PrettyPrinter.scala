@@ -125,9 +125,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(instance: Implementation): Doc = {
     val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
-      case Operation(id, tps, cps, vps, bps, resume, body) =>
-        val k = resume.map(toDoc).getOrElse(emptyDoc)
-        "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <> k <+> "=" <+> nested(toDoc(body))
+      case Operation(id, tps, cps, vps, bps, body) =>
+        "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
@@ -185,8 +184,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
-    case Try(body, hs) =>
-      "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
+    case Reset(body) =>
+      "reset" <+> toDoc(body)
+
+    case Shift(prompt, body) =>
+      "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
+
+    case Resume(k, body) =>
+      "resume" <> parens(toDoc(k)) <+> block(toDoc(body))
 
     case Alloc(id, init, region, body) =>
       "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)

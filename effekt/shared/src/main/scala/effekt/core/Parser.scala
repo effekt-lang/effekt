@@ -127,7 +127,6 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `try` ~> blockLit ~ many(`with` ~> implementation) ^^ Stmt.Try.apply
     | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
     | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
     | `<>` ^^^ Hole()
@@ -148,9 +147,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     interfaceType ~ (`{` ~/> many(operation) <~ `}`) ^^ Implementation.apply
 
   lazy val operation: P[Operation] =
-    `def` ~/> id ~ parameters ~ (`with` ~> blockParam).? ~ (`=` ~/> stmt) ^^ {
-      case name ~ (tparams, cparams, vparams, bparams) ~ k ~ body =>
-        Operation(name, tparams, cparams, vparams, bparams, k, body)
+    `def` ~/> id ~ parameters ~ (`=` ~/> stmt) ^^ {
+      case name ~ (tparams, cparams, vparams, bparams) ~ body =>
+        Operation(name, tparams, cparams, vparams, bparams, body)
     }
 
 

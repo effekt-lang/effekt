@@ -124,7 +124,9 @@ class Reachable(
       process(body)
     case Stmt.Get(id, capt, tpe) => process(id)
     case Stmt.Put(id, tpe, value) => process(id); process(value)
-    case Stmt.Try(body, handlers) => process(body); handlers.foreach(process)
+    case Stmt.Reset(body) => process(body)
+    case Stmt.Shift(prompt, body) => process(prompt); process(body)
+    case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
     case Stmt.Hole() => ()
   }
