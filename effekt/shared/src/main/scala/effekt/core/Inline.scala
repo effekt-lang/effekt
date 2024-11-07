@@ -84,6 +84,9 @@ object Inline {
       case Some(Usage.Many) => true
     }
 
+  def used(id: Id)(using ctx: InlineContext): Boolean =
+    ctx.usage.isDefinedAt(id)
+
   def rewrite(definitions: List[Definition])(using ctx: InlineContext): (List[Definition], InlineContext) =
     given allDefs: InlineContext = ctx ++ definitions.map(d => d.id -> d).toMap
 
@@ -127,6 +130,10 @@ object Inline {
     case Stmt.App(b, targs, vargs, bargs) =>
       app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
 
+    case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt), body)) if !used(prompt.id) => rewrite(body)
+
+    case Stmt.Reset(body) => Stmt.Reset(rewrite(body))
+
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))
     case Stmt.Val(id, tpe, binding, body) => valDef(id, tpe, rewrite(binding), rewrite(body))
@@ -134,7 +141,6 @@ object Inline {
     case Stmt.Match(scrutinee, clauses, default) =>
       patternMatch(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
-    case Stmt.Reset(body) => Reset(rewrite(body))
     case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
     case Stmt.Resume(k, body) => Resume(k, rewrite(body))
     case Stmt.Region(body) => Region(rewrite(body))
