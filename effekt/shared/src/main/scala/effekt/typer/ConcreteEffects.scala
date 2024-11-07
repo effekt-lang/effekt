@@ -44,7 +44,7 @@ object ConcreteEffects {
    * [[Typer.asConcrete]] should be used instead, since it performs substitution and dealiasing.
    */
   def apply(eff: List[InterfaceType])(using Context): ConcreteEffects =
-    eff foreach assertConcrete
+    eff foreach assertConcreteEffect
     fromList(eff)
 
   def apply(effs: Effects)(using Context): ConcreteEffects = apply(effs.toList)
@@ -73,33 +73,45 @@ implicit def asConcrete(effs: Effects)(using C: Context): ConcreteEffects =
  *
  * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
  */
-private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
-  if (!isConcreteEffects(effs)) C.abort(pretty"Effects need to be fully known: ${effs}")
+private[typer] def assertConcreteEffects(effs: Effects)(using C: Context): Unit =
+  effs.effects.foreach(assertConcreteEffect)
 
-private[typer] def assertConcrete(eff: InterfaceType)(using C: Context): Unit =
-  if (!isConcreteInterfaceType(eff)) {
-    C.abort(pretty"Effects need to be fully known: ${eff}")
+private[typer] def assertConcreteEffect(eff: InterfaceType)(using C: Context): Unit =
+  unknowns(eff) match {
+    case us if us.nonEmpty =>
+      C.abort(pretty"Effects need to be fully known, but effect ${eff}'s type parameter(s) ${us.mkString(", ")} could not be inferred.\n\nMaybe try annotating them?")
+    case _ => ()
   }
 
-private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
-  case ValueTypeRef(x) => isConcreteValueType(x)
-  case ValueTypeApp(tpe, args) => args.forall(isConcreteValueType)
-  case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
+private[typer] def assertConcreteFunction(id: source.Id, tpe: BlockType)(using C: Context): Unit =
+  unknowns(tpe) match {
+    case us if us.nonEmpty =>
+      C.abort(pretty"Cannot fully infer type for ${id}: ${tpe}")
+    case _ => ()
+  }
+
+private type Unknown = CaptUnificationVar | UnificationVar
+
+private def unknowns(tpe: ValueType): Set[Unknown] = tpe match {
+  case ValueTypeRef(x) => unknowns(x)
+  case ValueTypeApp(tpe, args) => args.flatMap(unknowns).toSet
+  case BoxedType(tpe, capture) => unknowns(tpe) ++ unknowns(capture)
 }
 
-private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
-  case x: UnificationVar => false
-  case x: TypeVar => true
+private def unknowns(tpe: TypeVar): Set[Unknown] = tpe match {
+  case x: UnificationVar => Set(x)
+  case x: TypeVar => Set.empty
 }
 
-private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
+private def unknowns(tpe: BlockType): Set[Unknown] = tpe match {
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-    vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
-  case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
+    vparams.flatMap(unknowns).toSet ++ bparams.flatMap(unknowns).toSet ++ unknowns(result) ++ unknowns(effects)
+  case InterfaceType(tpe, args) => args.flatMap(unknowns).toSet
 }
-private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 
-private def isConcreteInterfaceType(eff: InterfaceType): Boolean = eff match {
-  case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
+private def unknowns(capt: Captures): Set[Unknown] = capt match {
+  case x @ CaptUnificationVar(role) => Set(x)
+  case CaptureSet(captures) => Set.empty
 }
-private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteInterfaceType)
+
+private def unknowns(effs: Effects): Set[Unknown] = effs.toList.flatMap(unknowns).toSet
