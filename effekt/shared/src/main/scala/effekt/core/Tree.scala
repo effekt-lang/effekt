@@ -628,6 +628,9 @@ case class Variables(vars: Set[Variable]) {
   def flatMap(f: Variable => Variables): Variables = Variables(vars.flatMap(x => f(x).vars))
   def map(f: Variable => Variable): Variables = Variables(vars.map(f))
   def toList: List[Variable] = vars.toList
+
+  def containsValue(id: Id): Boolean = vars.collect { case v @ Variable.Value(other, tpe) if other == id => v }.nonEmpty
+  def containsBlock(id: Id): Boolean = vars.collect { case v @ Variable.Block(other, tpe, capt) if other == id => v }.nonEmpty
 }
 
 object Variables {
