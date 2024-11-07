@@ -144,55 +144,6 @@ object Transformer {
 
     case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
-    //
-    //
-    //      // Effectful method
-    //      case (core.Operation(name, tparams, cparams, vparams, bparams, Some(resume), body), Some(prompt)) =>
-    //        val ks = Id("ks")
-    //        val k = Id("k")
-    //
-    //        val ks2 = Id("ks")
-    //        val k2 = Id("k")
-    //
-    //        val resumeValue = Id("resumeValue")
-    //        val resumeComp = Id("resumeComp")
-    //
-    //        val (ps, cont) = resume.tpe match {
-    //          // bi-directional
-    //          // TODO this deep eta-expansion is really ugly but should go away, once we change how block parameters are
-    //          //   handled in source and core
-    //          case core.BlockType.Function(tparams, cparams, vparams, List(tpe: core.BlockType.Function), result) =>
-    //            val ps = tpe.bparams.map {
-    //              case tpe : core.BlockType.Interface => Id(tpe.name.toString)
-    //              case tpe : core.BlockType.Function => Id(s"f")
-    //            }
-    //
-    //            val ks3 = Id("ks")
-    //            val k3 = Id("k")
-    //
-    //            val ks4 = Id("ks")
-    //            val k4 = Id("k")
-    //            val c = Id("c")
-    //
-    //            (ps, BlockLit(Nil, List(c), ks3, k3,
-    //              App(BlockVar(resumeComp), Nil, List(BlockLit(Nil, Nil, ks4, k4,
-    //                App(BlockVar(c), Nil, ps.map(BlockVar.apply), MetaCont(ks4), Cont.ContVar(k4)))),
-    //                  MetaCont(ks3), Cont.ContVar(k3))))
-    //
-    //          // uni-directional
-    //          case _ =>
-    //            (Nil, BlockVar(resumeValue))
-    //        }
-    //
-    //        Operation(name, vparams.map(_.id), ps, ks, k,
-    //          Shift(prompt,
-    //            Block.BlockLit(Nil, List(resumeValue, resumeComp), ks2, k2,
-    //              binding(resume.id, cont) {
-    //                transform(body, ks2, Continuation.Dynamic(k2))
-    //              }),
-    //            MetaCont(ks),
-    //            Cont.ContVar(k)))
-
     case core.Stmt.Resume(cont, body) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
