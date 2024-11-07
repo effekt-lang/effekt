@@ -251,11 +251,21 @@ object TransformerCps extends Transformer {
         toJS(body).run(k)
     }
 
-    case cps.Stmt.Reset(prog, ks, k) =>
-      pure(js.Return(Call(RESET, toJS(prog), toJS(ks), toJS(k))))
+    case cps.Stmt.Reset(BlockLit(vparams, List(prompt), ks3, k3, body), ks2, k2) =>
+      Binding { k =>
+        js.Const(js.Pattern.Array(List(js.Pattern.Variable(nameDef(prompt)), js.Pattern.Variable(nameDef(ks3)), js.Pattern.Variable(nameDef(k3)))),
+          Call(RESET, toJS(ks2), toJS(k2))) ::
+          toJS(body).run(k)
+      }
+    case cps.Stmt.Reset(body, ks, k) => ???
 
-    case cps.Stmt.Shift(prompt, body, ks, k) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k))))
+    case cps.Stmt.Shift(prompt, BlockLit(vparams, List(resume), ks3, k3, body), ks2, k2) =>
+      Binding { k =>
+        js.Const(js.Pattern.Array(List(js.Pattern.Variable(nameDef(resume)), js.Pattern.Variable(nameDef(ks3)), js.Pattern.Variable(nameDef(k3)))),
+          Call(SHIFT, nameRef(prompt), toJS(ks2), toJS(k2))) ::
+          toJS(body).run(k)
+      }
+    case cps.Stmt.Shift(prompt, body, ks, k) => ???
 
     case cps.Stmt.Hole() =>
       pure(js.Return($effekt.call("hole")))

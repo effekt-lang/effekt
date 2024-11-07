@@ -85,10 +85,10 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 // const x = r.alloc(init); body
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+function RESET(ks, k) {
   const prompt = _prompt++;
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+  return [prompt, { prompt, arena: Arena([]), rest }, RETURN]
 }
 
 function DEALLOC(ks) {
@@ -98,7 +98,7 @@ function DEALLOC(ks) {
   }
 }
 
-function SHIFT(p, body, ks, k) {
+function SHIFT(p, ks, k) {
 
   // TODO avoid constructing this object
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
@@ -129,7 +129,7 @@ function SHIFT(p, body, ks, k) {
 
   let k1 = meta.stack
   meta.stack = null
-  return body(resumeComp, meta, k1)
+  return [resumeComp, meta, k1]
 }
 
 function RUN_TOPLEVEL(comp) {

@@ -129,7 +129,6 @@ implicit class JavaScriptInterpolator(private val sc: StringContext) extends Any
   def js(args: Expr*): Expr = RawExpr(sc.parts.toList, args.toList)
 }
 
-
 enum Pattern {
   case Variable(name: JSName)
   case Array(ps: List[Pattern])
