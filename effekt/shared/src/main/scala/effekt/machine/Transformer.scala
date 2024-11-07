@@ -478,14 +478,14 @@ object Transformer {
 
   def transform(impl: core.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
     impl.operations.sortBy {
-      case core.Operation(operationName, _, _, _, _, _, _) =>
+      case core.Operation(operationName, _, _, _, _, _) =>
         DeclarationContext.getInterface(impl.interface.name).properties.indexWhere(_.id == operationName)
     }.map(op => transform(op))
 
   def transform(op: core.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause =
     op match {
       // No continuation, implementation of an object
-      case core.Operation(name, tparams, cparams, vparams, bparams, k, body) =>
+      case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
         // TODO note block parameters
         Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
     }

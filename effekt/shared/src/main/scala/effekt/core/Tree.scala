@@ -368,11 +368,10 @@ object normal {
   // new { def f = BLOCK }.f  =  BLOCK
   def member(b: Block, field: Id, annotatedTpe: BlockType): Block = b match {
     case Block.New(impl) =>
-      val Operation(name, tps, cps, vps, bps, resume, body) =
+      val Operation(name, tps, cps, vps, bps, body) =
         impl.operations.find(op => op.name == field).getOrElse {
           INTERNAL_ERROR("Should not happen")
         }
-      assert(resume.isEmpty, "We do not inline effectful capabilities at that point")
       BlockLit(tps, cps, vps, bps, body)
     case _ => Block.Member(b, field, annotatedTpe)
   }
@@ -486,7 +485,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  *
  * TODO drop resume here since it is not needed anymore...
  */
-case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
+case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
 }
 
@@ -671,8 +670,8 @@ object Variables {
   def free(impl: Implementation): Variables = all(impl.operations, free)
 
   def free(op: Operation): Variables = op match {
-    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-      free(body) -- all(vparams, bound) -- all(bparams, bound) -- all(resume, bound)
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      free(body) -- all(vparams, bound) -- all(bparams, bound)
   }
   def free(s: Stmt): Variables = s match {
     // currently local functions cannot be mutually recursive
@@ -882,12 +881,11 @@ object substitutions {
 
   def substitute(op: Operation)(using subst: Substitution): Operation =
     op match {
-      case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      case Operation(name, tparams, cparams, vparams, bparams, body) =>
         val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
         Operation(name, tparams, cparams,
           vparams.map(p => substitute(p)(using shadowedTypelevel)),
           bparams.map(p => substitute(p)(using shadowedTypelevel)),
-          resume.map(p => substitute(p)(using shadowedTypelevel)),
           substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
     }
 

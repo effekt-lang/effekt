@@ -240,7 +240,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(ifce: Interface, targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
-    case Operation(name, tparams, cparams, vparams, bparams, None, body) =>
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
       val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
       val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
 
@@ -248,26 +248,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, transform(body))
       val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
       Operation(name, transformed.tparams, transformed.cparams, transformed.vparams, transformed.bparams,
-        None,
-        transformed.body)
-    case Operation(name, tparams, cparams, vparams, bparams, Some(resume), body) =>
-      val prop = ifce.properties.find { p => p.id == name }.getOrElse { Context.abort(s"Interface ${ifce} declares no operation ${name}.") }
-      val propTpe = prop.tpe.asInstanceOf[BlockType.Function]
-      val answerTpe = body.tpe
-      val propResumeParam = if (bparams.isEmpty) {
-        BlockType.Function(Nil, Nil, List(propTpe.result), Nil, answerTpe)
-      } else {
-        BlockType.Function(Nil, resume.capt.toList, Nil, List(
-          BlockType.Function(Nil, propTpe.cparams, Nil, propTpe.bparams.map(transform), transform(propTpe.result))
-        ), answerTpe)
-      }
-
-      val blockTpe = BlockType.Function(tparams, resume.capt.toList, propTpe.vparams.map(transform), List(transform(propResumeParam)), transform(answerTpe))
-      val implBlock: Block.BlockLit = Block.BlockLit(tparams, resume.capt.toList, vparams, List(resume), transform(body))
-      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
-      assert(transformed.bparams.length == 1)
-      Operation(name, transformed.tparams, Nil, transformed.vparams, Nil,
-        Some(transformed.bparams.head),
         transformed.body)
   }
 

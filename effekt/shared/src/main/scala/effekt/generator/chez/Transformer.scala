@@ -203,7 +203,7 @@ trait Transformer {
     chez.Call(chez.Variable(ChezName(name)), impl.operations.map(toChez))
 
   def toChez(op: Operation): chez.Expr = op match {
-    case Operation(name, tps, cps, vps, bps, resume, body) =>
+    case Operation(name, tps, cps, vps, bps, body) =>
       chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 

@@ -147,9 +147,9 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     interfaceType ~ (`{` ~/> many(operation) <~ `}`) ^^ Implementation.apply
 
   lazy val operation: P[Operation] =
-    `def` ~/> id ~ parameters ~ (`with` ~> blockParam).? ~ (`=` ~/> stmt) ^^ {
-      case name ~ (tparams, cparams, vparams, bparams) ~ k ~ body =>
-        Operation(name, tparams, cparams, vparams, bparams, k, body)
+    `def` ~/> id ~ parameters ~ (`=` ~/> stmt) ^^ {
+      case name ~ (tparams, cparams, vparams, bparams) ~ body =>
+        Operation(name, tparams, cparams, vparams, bparams, body)
     }
 
 

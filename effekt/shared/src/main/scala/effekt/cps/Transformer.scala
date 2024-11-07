@@ -239,7 +239,7 @@ object Transformer {
 
   def transform(op: core.Operation)(using C: TransformationContext): Operation =
     op match {
-      case core.Operation(name, tparams, cparams, vparams, bparams, _, body) =>
+      case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
         val ks = Id("ks")
         val k = Id("k")
         Operation(name, vparams.map(_.id), bparams.map(_.id), ks, k,

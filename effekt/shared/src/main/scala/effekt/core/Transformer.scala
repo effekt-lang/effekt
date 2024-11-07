@@ -598,7 +598,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 val resumeFun: core.BlockLit = core.BlockLit(Nil, Nil, List(resumeArgParam), Nil,
                   core.Stmt.Resume(resumeVar, core.Stmt.Return(core.ValueVar(resumeArgId, resultTpe))))
 
-                core.Operation(op.definition, tps, Nil, vps, Nil, None,
+                core.Operation(op.definition, tps, Nil, vps, Nil,
                   core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
                     core.Scope(List(core.Definition.Def(resumeSymbol, resumeFun)),
                       transform(body)))))
@@ -640,7 +640,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 val resumeFun: core.BlockLit = core.BlockLit(Nil, List(resumeArgCapture), Nil, List(resumeArgParam),
                   core.Stmt.Resume(resumeVar, core.Stmt.App(resumeArgVar, Nil, Nil, bvars)))
 
-                core.Operation(op.definition, tps, Nil, vps, bparams, None,
+                core.Operation(op.definition, tps, Nil, vps, bparams,
                   core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
                     core.Scope(List(core.Definition.Def(resumeSymbol, resumeFun)),
                       transform(body)))))
@@ -651,7 +651,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           case None =>
             val bps = bparams map transform
             val cps = bparams map { b => b.symbol.capture }
-            core.Operation(op.definition, tps, cps, vps, bps, None, transform(body))
+            core.Operation(op.definition, tps, cps, vps, bps, transform(body))
         }
     })
   }
