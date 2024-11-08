@@ -1,7 +1,7 @@
 are_we_fast_yet/bounce.effekt 50
 are_we_fast_yet/list_tail.effekt 15
-are_we_fast_yet/mandelbrot.effekt inner_iterations (1?)
-are_we_fast_yet/nbody.effekt inner_iterations (1?)
+are_we_fast_yet/mandelbrot.effekt 1
+are_we_fast_yet/nbody.effekt 1
 are_we_fast_yet/permute.effekt 6
 are_we_fast_yet/queens.effekt 8
 are_we_fast_yet/sieve.effekt 5000
@@ -14,13 +14,13 @@ duality_of_compilation/iterate_increment.effekt 5
 duality_of_compilation/lookup_tree.effekt 5
 duality_of_compilation/match_options.effekt 5
 duality_of_compilation/sum_range.effekt 5
-effect_handlers_bench/countdown.effekt small=5 large=200000000
-effect_handlers_bench/fibonacci_recursive.effekt small=5 large=42
-effect_handlers_bench/generator.effekt small=5 large=25
-effect_handlers_bench/iterator.effekt small=5 large=40000000
-effect_handlers_bench/nqueens.effekt small=5 large=12
-effect_handlers_bench/parsing_dollars.effekt small=10 large=20000
-effect_handlers_bench/product_early.effekt small=5 large=100000
-effect_handlers_bench/resume_nontail.effekt small=5 large=10000
-effect_handlers_bench/tree_explore.effekt small=5 large=16
-effect_handlers_bench/triples.effekt small=10 large=300
+effect_handlers_bench/countdown.effekt 200000000
+effect_handlers_bench/fibonacci_recursive.effekt 42
+effect_handlers_bench/generator.effekt 25
+effect_handlers_bench/iterator.effekt 40000000
+effect_handlers_bench/nqueens.effekt 12
+effect_handlers_bench/parsing_dollars.effekt 20000
+effect_handlers_bench/product_early.effekt 100000
+effect_handlers_bench/resume_nontail.effekt 10000
+effect_handlers_bench/tree_explore.effekt 16
+effect_handlers_bench/triples.effekt 300
