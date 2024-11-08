@@ -471,8 +471,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       `effect` ~> operation() match {
         case op @ Operation(id, tps, vps, bps, ret) =>
-          // TODO is the `true` flag used at all anymore???
-          InterfaceDef(IdDef(id.name), tps, List(Operation(id, Nil, vps, bps, ret) withPositionOf op))
+          InterfaceDef(IdDef(id.name) withPositionOf op, tps, List(Operation(id, Nil, vps, bps, ret) withPositionOf op))
       }
 
   def operation(): Operation =
