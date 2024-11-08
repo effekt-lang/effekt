@@ -5,9 +5,22 @@ import bytearray
 import io/filesystem
 import io/error
 
+// Effects
+// -------
 
+/// Describes push streams by emitting values of type `A`.
 effect emit[A](value: A): Unit
 
+/// Describes pull streams by requiring values of type `A`.
+///
+/// The producer can decide to `stop` emitting values.
+effect read[A](): A / stop
+
+/// Signal from a producer to a consumer that there are no further values.
+effect stop(): Nothing
+
+/// Canonical handler of push streams that performs `action` for every
+/// value emitted by `stream`.
 def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
   try {
     stream()
@@ -15,6 +28,11 @@ def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
     resume(action(value))
   }
 
+/// Like `for[A, R]`, but fixes the result of producing computation to the
+/// common type `Unit`. This simplifies annotating the type of stream
+/// elements `A` without having to also annotate `R`.
+///
+/// e.g. for[Int] { prog() } { el => println(el) }
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
   for[A, Unit]{stream}{action}
 
@@ -26,7 +44,8 @@ def continually[A] { action: () => A }: Nothing / emit[A] = {
   go()
 }
 
-
+/// Turns a `list` into a producer of a push stream
+/// by emitting each contained value left-to-right.
 def each[A](list: List[A]): Unit / emit[A] =
   list match {
     case Nil() => ()
@@ -35,6 +54,8 @@ def each[A](list: List[A]): Unit / emit[A] =
       each(tail)
   }
 
+/// Turns an `array` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
 def each[T](array: Array[T]): Unit / emit[T] = {
   val n = array.size
   def go(i: Int): Unit = {
@@ -46,6 +67,8 @@ def each[T](array: Array[T]): Unit / emit[T] = {
   go(0)
 }
 
+/// Turns `bytes` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
 def each(bytes: ByteArray): Unit / emit[Byte] = {
   val n = bytes.size
   def go(i: Int): Unit = {
@@ -62,9 +85,6 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
 // not queue
 // not result
 // not seq
-
-
-effect stop(): Nothing
 
 
 def boundary[R] { program: () => R / stop }: Option[R] =
@@ -195,10 +215,6 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
 
 def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
   collectBytes[Unit]{stream}.second
-
-
-effect read[A](): A / stop
-
 
 def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
   var l = list
@@ -401,7 +417,3 @@ def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
 
 def collectString { stream: () => Unit / emit[Char] }: String =
   collectString[Unit]{stream}.second
-
-
-
-
