@@ -9,9 +9,15 @@ record Output(chars: Int, words: Int, lines: Int)
 def formatWith(output: Output, filename: String): String =
   output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
 
-def isSpace(b: Byte) =
-  b.toInt == 32 || b.toInt == 9 || b.toInt == 10 || b.toInt == 11 || b.toInt == 12 || b.toInt == 13
-  // \n \r \t \v \f
+def isSpace(b: Byte) = b.toInt match {
+  case 32 => true // ' '
+  case 9  => true // '\t'
+  case 10 => true // '\n'
+  case 11 => true // '\v'
+  case 12 => true // '\f'
+  case 13 => true // '\r'
+  case _ => false
+}
 
 def isNewline(b: Byte) = b.toInt == 10 // \n
 
@@ -22,7 +28,7 @@ def countWords(): Output / read[Byte] = {
   var lines = 0
   var wasSpace = true
 
-  exhaustively[Byte] { do read() } { c =>
+  exhaustively { do read[Byte]() } { c =>
 
     chars = chars + 1
 

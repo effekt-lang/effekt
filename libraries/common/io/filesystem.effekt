@@ -44,7 +44,7 @@ def readFile(path: String): String / Exception[IOError] = {
   def go(): String = {
     read(file, buffer, offset, chunkSize, -1) match {
       case 0 =>
-        buffer.resize(offset).intoString
+        buffer.resize(offset).toString
       case n =>
         offset = offset + n
         if (offset + chunkSize > buffer.size) {

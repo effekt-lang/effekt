@@ -76,7 +76,7 @@ extern pure def fromString(str: String): ByteArray =
     ret %Pos ${str}
   """
 
-extern pure def intoString(arr: ByteArray): String =
+extern pure def toString(arr: ByteArray): String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """

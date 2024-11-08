@@ -2,18 +2,13 @@ import examples/benchmarks/runner
 
 import io/error
 import io/filesystem
+import char
 import stream
 
 record Output(chars: Int, words: Int, lines: Int)
 
 def formatWith(output: Output, filename: String): String =
   output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
-
-def isSpace(c: Char) =
-  c == ' ' || c.toInt == 9 || c.toInt == 10 || c.toInt == 11 || c.toInt == 12 || c.toInt == 13
-  // \n \r \t \v \f
-
-def isNewline(c: Char) = c.toInt == 10 // \n
 
 def countWords(): Output / read[Char] = {
 
@@ -26,14 +21,14 @@ def countWords(): Output / read[Char] = {
 
     chars = chars + 1
 
-    val currentIsSpace = isSpace(c)
+    val currentIsSpace = isWhitespace(c)
 
     if (wasSpace && not(currentIsSpace)) {
       words = words + 1
     }
     wasSpace = currentIsSpace
 
-    if (isNewline(c)) {
+    if (c == '\n') {
       lines = lines + 1
     }
   }

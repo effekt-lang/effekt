@@ -85,9 +85,10 @@ def exhaustively[A] { program: () => A / stop } { action: A => Unit }: Unit =
     def stop() = ()
   }
 
-record Indexed[A](index: Int, value: A)
 
 // In Effekt lower bounds are inclusive and upper bounds are exclusive
+
+record Indexed[A](index: Int, value: A)
 
 def range(lower: Int, upper: Int): Unit / emit[Int] =
   if (lower < upper) {
@@ -115,15 +116,15 @@ def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
   }
 }
 
-
+/// If `number` is zero or negative it does nothing
 def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
-  var i = 0;
+  if (number <= 0) do stop();
+  var i = 1;
   try {
     stream()
   } with emit[A] { v =>
-    val c = i;
-    if (c < number) {
-      i = c + 1;
+    if (i < number) {
+      i = i + 1;
       resume(do emit(v))
     } else {
       do stop()
@@ -131,8 +132,7 @@ def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop }
   }
 }
 
-
-// If `number` is zero or negative it does nothing (like `stream::take`)
+/// If `number` is zero or negative it does nothing
 def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
   if (number > 0) {
     do emit(action())
@@ -156,11 +156,9 @@ def sum { stream : () => Unit / emit[Int] }: Int =
 def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
   try {
     (stream(), Nil())
-  } with emit[A] {
-    def emit(v) = {
-      val (r, vs) = resume(());
-      (r, Cons(v, vs))
-    }
+  } with emit[A] { (v) =>
+    val (r, vs) = resume(());
+    (r, Cons(v, vs))
   }
 
 def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
@@ -171,13 +169,11 @@ def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
   var a = array::allocate(1)
   try {
     (stream(), a.resize(i))
-  } with emit[A] {
-    def emit(v) = {
-      if (i >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(i, v)
-      i = i + 1
-      resume(())
-    }
+  } with emit[A] { (v) =>
+    if (i >= a.size) { a = a.resize(2 * a.size) }
+    a.unsafeSet(i, v)
+    i = i + 1
+    resume(())
   }
 }
 
@@ -189,13 +185,11 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
   var a = bytearray::allocate(1)
   try {
     (stream(), a.resize(i))
-  } with emit[Byte] {
-    def emit(v) = {
-      if (i >= a.size) { a = a.resize(2 * a.size) }
-      a.unsafeSet(i, v)
-      i = i + 1
-      resume(())
-    }
+  } with emit[Byte] { (v) =>
+    if (i >= a.size) { a = a.resize(2 * a.size) }
+    a.unsafeSet(i, v)
+    i = i + 1
+    resume(())
   }
 }
 
@@ -210,7 +204,7 @@ def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
   var l = list
   try {
     reader()
-  } with read[T] { () =>
+  } with read[T] {
     resume {
       l match {
         case Nil() => do stop()
@@ -226,7 +220,7 @@ def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
   var i = 0
   try {
     reader()
-  } with read[T] { () =>
+  } with read[T] {
     resume {
       if (i < array.size) {
         array.unsafeGet(i)
@@ -241,7 +235,7 @@ def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
   var i = 0
   try {
     reader()
-  } with read[Byte] { () =>
+  } with read[Byte] {
     resume {
       if (i < bytes.size) {
         bytes.unsafeGet(i)
@@ -253,21 +247,19 @@ def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
 }
 
 def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
-  var next = box { () => None() }
-  next = box { () =>
+  var next = box { None() }
+  next = box {
     try {
       stream()
       None()
-    } with emit[A] {
-      def emit(v) = {
-        next = box { () => resume(()) }
-        Some(v)
-      }
+    } with emit[A] { (v) =>
+      next = box { resume(()) }
+      Some(v)
     }
   }
   try {
     reader()
-  } with read[A] { () =>
+  } with read[A] {
     resume {
       next().getOrElse { do stop() }
     }
@@ -295,13 +287,11 @@ def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[I
     val r = stream()
     push(0, offset)
     return r
-  } with emit[Byte] {
-    def emit(byte) = {
-      if (offset >= buffer.size) { push(0, buffer.size) }
-      buffer.unsafeSet(offset, byte)
-      offset = offset + 1
-      resume(())
-    }
+  } with emit[Byte] { (byte) =>
+    if (offset >= buffer.size) { push(0, buffer.size) }
+    buffer.unsafeSet(offset, byte)
+    offset = offset + 1
+    resume(())
   }
 }
 
@@ -327,7 +317,7 @@ def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IO
 
   try {
     reader()
-  } with read[Byte] { () =>
+  } with read[Byte] {
     resume {
       if (offset >= length) { pull() }
       val byte = buffer.unsafeGet(offset)
@@ -381,7 +371,7 @@ def encodeChar(char: Char): Unit / emit[Byte] = {
 def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
   try {
     reader()
-  } with read[Char] { () =>
+  } with read[Char] {
     resume { decodeChar() }
   }
 
@@ -401,12 +391,12 @@ def feed(string: String) { reader: () => Unit / read[Char] } =
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {
-    exhaustively[Char] { () => do read() } { char => do emit(char) }
+    exhaustively[Char] { do read() } { char => do emit(char) }
   }
 
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   val (result, bytes) = collectBytes { encodeUTF8 { stream } }
-  (result, bytes.intoString)
+  (result, bytes.toString)
 }
 
 def collectString { stream: () => Unit / emit[Char] }: String =

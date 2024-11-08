@@ -11,5 +11,5 @@ def main() = {
 
   b.unsafeSet(1, 102.toByte)
 
-  println(b.intoString) // hfllo
+  println(b.toString) // hfllo
 }
