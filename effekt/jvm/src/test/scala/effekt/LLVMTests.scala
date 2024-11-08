@@ -29,10 +29,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "llvm" / "polymorphism_map.effekt",
     examplesDir / "pos" / "type_parameters_blocks.effekt",
 
-    // Type inference during polymorphism boxing
-    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
-    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
-
     // Valgrind leak in array_new
     examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",

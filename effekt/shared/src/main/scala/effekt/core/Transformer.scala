@@ -640,7 +640,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 val resumeFun: core.BlockLit = core.BlockLit(Nil, List(resumeArgCapture), Nil, List(resumeArgParam),
                   core.Stmt.Resume(resumeVar, core.Stmt.App(resumeArgVar, Nil, Nil, bvars)))
 
-                core.Operation(op.definition, tps, Nil, vps, bparams,
+                core.Operation(op.definition, tps, cps, vps, bparams,
                   core.Shift(prompt, core.BlockLit(Nil, List(resumeCapture), Nil, resumeParam :: Nil,
                     core.Scope(List(core.Definition.Def(resumeSymbol, resumeFun)),
                       transform(body)))))
