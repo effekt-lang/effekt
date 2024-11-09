@@ -81,7 +81,7 @@ char* c_bytearray_into_nullterminated_string(const struct Pos arr) {
 // TODO do this in Effekt
 struct Pos c_bytearray_show_Int(const Int n) {
     char str[24];
-    sprintf(str, "%" PRId64, n);
+    snprintf(str, sizeof(str), "%" PRId64, n);
     return c_bytearray_from_nullterminated_string(str);
 }
 
@@ -112,14 +112,14 @@ struct Pos c_bytearray_show_Char(const uint64_t n) {
 // TODO do this in Effekt
 struct Pos c_bytearray_show_Byte(const Byte n) {
     char str[4];  // Byte values range from 0 to 255, 3 characters + null terminator
-    sprintf(str, "%" PRIu8, n);
+    snprintf(str, sizeof(str), "%" PRIu8, n);
     return c_bytearray_from_nullterminated_string(str);
 }
 
 // TODO do this in Effekt
 struct Pos c_bytearray_show_Double(const Double x) {
-    char str[64]; // TODO is this large enough? Possibly use snprintf first
-    sprintf(str, "%g", x);
+    char str[64]; // TODO is this large enough?
+    snprintf(str, sizeof(str), "%g", x);
     return c_bytearray_from_nullterminated_string(str);
 }
 
