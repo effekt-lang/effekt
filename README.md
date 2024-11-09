@@ -17,7 +17,7 @@ If you are looking for examples of the Effekt language, we invite you to look at
 
 ## Installation
 
-Please navigate to the [getting-started guide](https://effekt-lang.org/contributing.html) on our [website](https://effekt-lang.org) for detailed instructions of how to install Effekt.
+Please navigate to the [getting-started guide](https://effekt-lang.org/docs) on our [website](https://effekt-lang.org) for detailed instructions of how to install Effekt.
 
 ## Contributing
 
