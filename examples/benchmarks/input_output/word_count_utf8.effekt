@@ -1,0 +1,66 @@
+import examples/benchmarks/runner
+
+import io/error
+import io/filesystem
+import char
+import stream
+
+record Output(chars: Int, words: Int, lines: Int)
+
+def formatWith(output: Output, filename: String): String =
+  output.lines.show ++ " " ++ output.words.show ++ " " ++ output.chars.show ++ " " ++ filename
+
+def countWords(): Output / read[Char] = {
+
+  var chars = 0
+  var words = 0
+  var lines = 0
+  var wasSpace = true
+
+  exhaustively[Char] { do read() } { c =>
+
+    chars = chars + 1
+
+    val currentIsSpace = isWhitespace(c)
+
+    if (wasSpace && not(currentIsSpace)) {
+      words = words + 1
+    }
+    wasSpace = currentIsSpace
+
+    if (c == '\n') {
+      lines = lines + 1
+    }
+  }
+
+  Output(chars, words, lines)
+}
+
+def run(n: Int) = {
+  with on[IOError].panic;
+
+  val filename = "/tmp/word_count_utf8.txt"
+
+  val _ = {
+    with writeFile(filename)
+    with encodeUTF8
+    with repeat(n)
+    for[Int] { range(128512, 128522) } { c =>
+      repeat(10) {
+        do emit(c.toChar)
+      }
+      do emit(10.toChar)
+    }
+  }
+
+  val output = {
+    with readFile(filename)
+    with decodeUTF8
+    countWords()
+  }
+
+  return output.chars + output.words + output.lines
+}
+
+def main() = benchmark(5){run}
+

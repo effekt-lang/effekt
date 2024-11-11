@@ -1,0 +1,419 @@
+module stream
+
+import array
+import bytearray
+import io/filesystem
+import io/error
+
+// Effects
+// -------
+
+/// Describes push streams by emitting values of type `A`.
+effect emit[A](value: A): Unit
+
+/// Describes pull streams by requiring values of type `A`.
+///
+/// The producer can decide to `stop` emitting values.
+effect read[A](): A / stop
+
+/// Signal from a producer to a consumer that there are no further values.
+effect stop(): Nothing
+
+/// Canonical handler of push streams that performs `action` for every
+/// value emitted by `stream`.
+def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
+  try {
+    stream()
+  } with emit[A] { value =>
+    resume(action(value))
+  }
+
+/// Like `for[A, R]`, but fixes the result of producing computation to the
+/// common type `Unit`. This simplifies annotating the type of stream
+/// elements `A` without having to also annotate `R`.
+///
+/// e.g. for[Int] { prog() } { el => println(el) }
+def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
+  for[A, Unit]{stream}{action}
+
+def continually[A] { action: () => A }: Nothing / emit[A] = {
+  def go(): Nothing = {
+    do emit(action())
+    go()
+  }
+  go()
+}
+
+/// Turns a `list` into a producer of a push stream
+/// by emitting each contained value left-to-right.
+def each[A](list: List[A]): Unit / emit[A] =
+  list match {
+    case Nil() => ()
+    case Cons(head, tail) =>
+      do emit(head)
+      each(tail)
+  }
+
+/// Turns an `array` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each[T](array: Array[T]): Unit / emit[T] = {
+  val n = array.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(array.unsafeGet(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+/// Turns `bytes` into a producer of a push stream
+/// by emitting each contained value from 0 to length - 1.
+def each(bytes: ByteArray): Unit / emit[Byte] = {
+  val n = bytes.size
+  def go(i: Int): Unit = {
+    if (i < n) {
+      do emit(bytes.unsafeGet(i))
+      go(i + 1)
+    }
+  }
+  go(0)
+}
+
+// not option
+// not dequeue
+// not queue
+// not result
+// not seq
+
+
+def boundary[R] { program: () => R / stop }: Option[R] =
+  try {
+    Some(program())
+  } with stop {
+    def stop() = None()
+  }
+
+def exhaustively[A] { program: () => A / stop } { action: A => Unit }: Unit =
+  try {
+    def go(): Unit = {
+      action(program())
+      go()
+    }
+    go()
+  } with stop {
+    def stop() = ()
+  }
+
+
+// In Effekt lower bounds are inclusive and upper bounds are exclusive
+
+record Indexed[A](index: Int, value: A)
+
+def range(lower: Int, upper: Int): Unit / emit[Int] =
+  if (lower < upper) {
+    do emit(lower)
+    range(lower + 1, upper)
+  }
+
+def rangeTo(upper: Int): Unit / emit[Int] =
+  range(0, upper)
+
+def rangeFrom(lower: Int): Unit / emit[Int] = {
+  do emit(lower)
+  rangeFrom(lower + 1)
+}
+
+
+def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
+  var i = 0;
+  try {
+    stream()
+  } with emit[A] { v =>
+    val c = i;
+    i = c + 1;
+    resume(do emit(Indexed(c, v)))
+  }
+}
+
+/// If `number` is zero or negative it does nothing
+def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
+  if (number <= 0) do stop();
+  var i = 1;
+  try {
+    stream()
+  } with emit[A] { v =>
+    if (i < number) {
+      i = i + 1;
+      resume(do emit(v))
+    } else {
+      do stop()
+    }
+  }
+}
+
+/// If `number` is zero or negative it does nothing
+def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
+  if (number > 0) {
+    do emit(action())
+    replicate(number - 1) {action}
+  }
+
+
+def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
+  var s = 0;
+  try {
+    (stream(), s)
+  } with emit[Int] { v =>
+    s = s + v;
+    resume(())
+  }
+}
+
+def sum { stream : () => Unit / emit[Int] }: Int =
+  sum[Unit]{stream}.second
+
+def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+  try {
+    (stream(), Nil())
+  } with emit[A] { (v) =>
+    val (r, vs) = resume(());
+    (r, Cons(v, vs))
+  }
+
+def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
+  collectList[A, Unit]{stream}.second
+
+def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
+  var i = 0
+  var a = array::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with emit[A] { (v) =>
+    if (i >= a.size) { a = a.resize(2 * a.size) }
+    a.unsafeSet(i, v)
+    i = i + 1
+    resume(())
+  }
+}
+
+def collectArray[A] { stream: () => Unit / emit[A] }: Array[A] =
+  collectArray[A, Unit]{stream}.second
+
+def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+  var i = 0
+  var a = bytearray::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with emit[Byte] { (v) =>
+    if (i >= a.size) { a = a.resize(2 * a.size) }
+    a.unsafeSet(i, v)
+    i = i + 1
+    resume(())
+  }
+}
+
+def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
+  collectBytes[Unit]{stream}.second
+
+def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
+  var l = list
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      l match {
+        case Nil() => do stop()
+        case Cons(value, rest) =>
+          l = rest
+          return value
+      }
+    }
+  }
+}
+
+def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
+  var i = 0
+  try {
+    reader()
+  } with read[T] {
+    resume {
+      if (i < array.size) {
+        array.unsafeGet(i)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
+  var i = 0
+  try {
+    reader()
+  } with read[Byte] {
+    resume {
+      if (i < bytes.size) {
+        bytes.unsafeGet(i)
+      } else {
+        do stop()
+      }
+    }
+  }
+}
+
+def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+  var next = box { None() }
+  next = box {
+    try {
+      stream()
+      None()
+    } with emit[A] { (v) =>
+      next = box { resume(()) }
+      Some(v)
+    }
+  }
+  try {
+    reader()
+  } with read[A] {
+    resume {
+      next().getOrElse { do stop() }
+    }
+  }
+}
+
+
+def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
+
+  val file = open(path, WriteOnly());
+  with on[IOError].finalize { close(file) }
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = bytearray::allocate(chunkSize)
+  var offset = 0
+
+  def push(i: Int, n: Int): Unit = {
+    val r = write(file, buffer, i, n, -1)
+    if (r < n) {
+      push(i + r, n - r)
+    }
+  }
+
+  try {
+    val r = stream()
+    push(0, offset)
+    return r
+  } with emit[Byte] { (byte) =>
+    if (offset >= buffer.size) { push(0, buffer.size) }
+    buffer.unsafeSet(offset, byte)
+    offset = offset + 1
+    resume(())
+  }
+}
+
+def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
+
+  val file = open(path, ReadOnly());
+  with on[IOError].finalize { close(file) }
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = bytearray::allocate(chunkSize)
+  var offset = 0
+  var length = 0
+
+  def pull(): Unit / stop = {
+    read(file, buffer, 0, chunkSize, -1) match {
+      case 0 =>
+        do stop()
+      case n =>
+        offset = 0
+        length = n
+    }
+  }
+
+  try {
+    reader()
+  } with read[Byte] {
+    resume {
+      if (offset >= length) { pull() }
+      val byte = buffer.unsafeGet(offset)
+      offset = offset + 1
+      return byte
+    }
+  }
+}
+
+def decodeChar(): Char / {read[Byte], stop} = {
+  val b = do read().toInt
+  if (b < 128) {
+    b.toChar
+  } else if (b < 224) {
+    val part1 = bitwiseShl(bitwiseAnd(b, 31), 6)
+    val part2 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(part1, part2).toChar
+  } else if (b < 240) {
+    val part1 = bitwiseShl(bitwiseAnd(b, 15), 12)
+    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
+    val part3 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(bitwiseOr(part1, part2), part3).toChar
+  } else {
+    val part1 = bitwiseShl(bitwiseAnd(b, 7), 18)
+    val part2 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 12)
+    val part3 = bitwiseShl(bitwiseAnd(do read().toInt, 63), 6)
+    val part4 = bitwiseAnd(do read().toInt, 63)
+    bitwiseOr(bitwiseOr(bitwiseOr(part1, part2), part3), part4).toChar
+  }
+}
+
+def encodeChar(char: Char): Unit / emit[Byte] = {
+  val code = char.toInt
+  if (code < 128) {
+    do emit(code.toByte)
+  } else if (code < 2048) {
+    do emit(bitwiseOr(192, bitwiseShr(code, 6)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else if (code < 65536) {
+    do emit(bitwiseOr(224, bitwiseShr(code, 12)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  } else {
+    do emit(bitwiseOr(240, bitwiseShr(code, 18)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 12), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(bitwiseShr(code, 6), 63)).toByte)
+    do emit(bitwiseOr(128, bitwiseAnd(code, 63)).toByte)
+  }
+}
+
+def decodeUTF8[R] { reader: () => R / read[Char] }: R / read[Byte] =
+  try {
+    reader()
+  } with read[Char] {
+    resume { decodeChar() }
+  }
+
+def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
+  try {
+    stream()
+  } with emit[Char] { char =>
+    resume(encodeChar(char))
+  }
+
+def feed(string: String) { reader: () => Unit / read[Char] } =
+  feed(string.fromString) {
+    decodeUTF8 {
+      reader()
+    }
+  }
+
+def each(string: String): Unit / emit[Char] =
+  feed(string) {
+    exhaustively[Char] { do read() } { char => do emit(char) }
+  }
+
+def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
+  val (result, bytes) = collectBytes { encodeUTF8 { stream } }
+  (result, bytes.toString)
+}
+
+def collectString { stream: () => Unit / emit[Char] }: String =
+  collectString[Unit]{stream}.second

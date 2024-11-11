@@ -77,30 +77,7 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
     ret %Pos %z
   """
 
-/// Creates a copy of `arr`
-def copy[T](arr: Array[T]): Array[T] = {
-  with on[OutOfBounds].default { <> }; // should not happen
-  val len = arr.size;
-  val newArray = allocate[T](len);
-  copy[T](arr, 0, newArray, 0, len);
-  newArray
-}
 
-/// Copies `length`-many elements from `from` to `to`
-/// starting at `start` (in `from`) and `offset` (in `to`)
-def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
-  val startValid  = start >= 0 && start + length <= from.size
-  val offsetValid = offset >= 0 && offset + length <= to.size
-
-  def go(i: Int, j: Int, length: Int): Unit =
-    if (length > 0) {
-      to.unsafeSet(j, from.unsafeGet(i))
-      go(i + 1, j + 1, length - 1)
-    }
-
-  if (startValid && offsetValid) go(start, offset, length)
-  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
-}
 
 // Derived operations:
 
@@ -126,6 +103,44 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
   arr
 }
 
+def resize[T](source: Array[T], size: Int): Array[T] = {
+  val target = allocate(size)
+  val n = min(source.size, target.size)
+  def go(i: Int): Array[T] =
+    if (i < n) {
+      target.unsafeSet(i, source.unsafeGet(i))
+      go(i + 1)
+    } else {
+      target
+    }
+  go(0)
+}
+
+/**
+ * Creates a copy of `arr`
+ */
+def copy[T](array: Array[T]): Array[T] =
+  array.resize(array.size)
+
+/**
+ * Copies `length`-many elements from `from` to `to`
+ * starting at `start` (in `from`) and `offset` (in `to`)
+ */
+def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int): Unit / Exception[OutOfBounds] = {
+  val startValid  = start >= 0 && start + length <= from.size
+  val offsetValid = offset >= 0 && offset + length <= to.size
+
+  def go(i: Int, j: Int, length: Int): Unit =
+    if (length > 0) {
+      to.unsafeSet(j, from.unsafeGet(i))
+      go(i + 1, j + 1, length - 1)
+    }
+
+  if (startValid && offsetValid) go(start, offset, length)
+  else do raise(OutOfBounds(), "Array index out of bounds, when copying")
+}
+
+
 // Utility functions:
 
 def toList[T](arr: Array[T]): List[T] = {
@@ -140,26 +155,22 @@ def toList[T](arr: Array[T]): List[T] = {
 
 def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
   each(0, arr.size) { i =>
-    val x: T = arr.unsafeGet(i)
-    action(x)
+    action(arr.unsafeGet(i))
   }
 
 def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    val x: T = arr.unsafeGet(i)
-    action(x) {label}
+    action(arr.unsafeGet(i)) {label}
   }
 
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
-    val x: T = arr.unsafeGet(i)
-    action(i, x)
+    action(i, arr.unsafeGet(i))
   }
 
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
-    val x: T = arr.unsafeGet(i)
-    action(i, x) {label}
+    action(i, arr.unsafeGet(i)) {label}
   }
 
 def sum(list: Array[Int]): Int = {

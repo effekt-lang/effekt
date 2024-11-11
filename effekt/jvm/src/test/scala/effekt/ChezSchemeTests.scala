@@ -21,13 +21,13 @@ abstract class ChezSchemeTests extends EffektTests {
 
     examplesDir / "llvm",
 
-    // bidirectional handlers
-    examplesDir / "pos" / "maps.effekt",
-
     // bidirectional effects are not yet supported in our Chez backend
+    examplesDir / "pos" / "maps.effekt",
     examplesDir / "pos" / "bidirectional",
     examplesDir / "pos" / "object",
     examplesDir / "pos" / "type_omission_op.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",

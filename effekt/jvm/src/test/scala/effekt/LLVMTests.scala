@@ -36,6 +36,8 @@ class LLVMTests extends EffektTests {
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
   )
 
   /**
