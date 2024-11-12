@@ -23,7 +23,7 @@ function Arena(_region) {
     fresh: function(init) {
       const cell = Cell(init);
       // region keeps track what to backup, but we do not need to backup unreachable cells
-      region.push(new WeakRef(cell))
+      region.push(cell) // new WeakRef(cell))
       return cell;
     },
     region: _region,
@@ -31,15 +31,14 @@ function Arena(_region) {
       // a region aggregates weak references
       const nested = Arena([])
       // this doesn't work yet, since Arena.backup doesn't return a thunk
-      region.push(new WeakRef(nested))
+      region.push(nested) //new WeakRef(nested))
       return nested;
     },
     backup: function() {
       const _backup = []
       let nextIndex = 0;
       for (const ref of region) {
-        // console.log(ref)
-        const cell = ref.deref()
+        const cell = ref //.deref()
         // only backup live cells
         if (cell) {
           _backup[nextIndex] = cell.backup()
@@ -50,7 +49,7 @@ function Arena(_region) {
         const region = []
         let nextIndex = 0;
         for (const restoreCell of _backup) {
-          region[nextIndex] = new WeakRef(restoreCell())
+          region[nextIndex] = restoreCell() // new WeakRef(restoreCell())
           nextIndex++
         }
         return Arena(region)
