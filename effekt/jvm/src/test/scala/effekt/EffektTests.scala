@@ -20,6 +20,9 @@ trait EffektTests extends munit.FunSuite {
   // Whether to execute using valgrind
   def valgrind = false
 
+  // Whether to execute using debug mode
+  def debug = false
+
   def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
 
   // The sources of all testfiles are stored here:
@@ -64,6 +67,7 @@ trait EffektTests extends munit.FunSuite {
       "--out", output.getPath,
     )
     if (valgrind) options = options :+ "--valgrind"
+    if (debug) options = options :+ "--debug"
     val configs = compiler.createConfig(options)
     configs.verify()
 
