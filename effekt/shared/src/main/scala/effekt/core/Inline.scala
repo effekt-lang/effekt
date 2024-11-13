@@ -251,8 +251,8 @@ object Inline {
     case Stmt.Region(body : BlockLit) =>
       Stmt.Region(removeTailResumption(k, body))
     case Stmt.Region(_) => ???
-    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, body)
-    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, body)
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
+    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
     case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))
     case Stmt.Resume(k2, body) if k2.id == k => body
 
