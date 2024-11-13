@@ -5,7 +5,7 @@ effect tagging(tag: String): Unit
 def handle { prog: () => Unit / tagging }: Unit = {
   try {
     prog()
-  } with remove { tag =>
+  } with tagging { tag =>
     var total = 0
     total = total + 1
     println(total)
