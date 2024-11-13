@@ -1,0 +1,12 @@
+effect wrap() { program: () => Unit }: Unit
+
+def main() = try {
+  with do wrap();
+  println("hi")
+} with wrap {
+  resume { {p} =>
+    println("before")
+    p()
+    println("after")
+  }
+}
