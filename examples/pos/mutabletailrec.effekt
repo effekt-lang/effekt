@@ -1,0 +1,19 @@
+module examples/pos/mutabletailrec
+
+effect tagging(tag: String): Unit
+
+def handle { prog: () => Unit / tagging }: Unit = {
+  try {
+    prog()
+  } with remove { tag =>
+    var total = 0
+    total = total + 1
+    println(total)
+
+    resume(())
+  }
+}
+
+def main() = handle {
+  do tagging("foo")
+}
