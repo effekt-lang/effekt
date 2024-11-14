@@ -268,7 +268,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       fcoercer.call(calleeT, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
 
     //                               [S](S) => (Int, S)
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+    case Stmt.Invoke(callee, method, methodTpe: BlockType.Function, targs, vargs, bargs) =>
       //                                        Double
 
       val calleeT = transform(callee)
@@ -292,14 +292,14 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       }
 
       // [S](S) => (BoxedInt, S)
-      val boxedTpe = Type.substitute(tpe, (interfaceParams zip interfaceArgs.map(transformArg)).toMap, Map.empty)
+      val boxedTpe = Type.substitute(tpe, (interfaceParams zip interfaceArgs.map(transformArg)).toMap, Map.empty).asInstanceOf[BlockType.Function]
 
       // duplicated from App
-      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val itpe = Type.instantiate(methodTpe, targs, methodTpe.cparams.map(Set(_)))
       val tVargs = vargs map transform
       val tBargs = bargs map transform
-      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
-      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val vcoercers = (tVargs zip boxedTpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val bcoercers = (tBargs zip boxedTpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
       //                     (T, S)      (Int, Double)
       val rcoercer = coercer(tpe.result, itpe.result)
 
@@ -314,6 +314,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         Stmt.Val(orig, out, result,
           Stmt.Return(rcoercer(Pure.ValueVar(orig, out))))
       }
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
 
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, transform(tpe))
     case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, transform(value))
@@ -381,6 +382,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       }
     case Stmt.Hole() => Stmt.Hole()
   }
+
+
 
   def transform(expr: Expr)(using PContext): Expr = expr match {
     case DirectApp(b, targs, vargs, bargs) =>
