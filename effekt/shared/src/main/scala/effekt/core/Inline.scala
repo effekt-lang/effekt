@@ -233,7 +233,6 @@ object Inline {
         case (_, BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
       } && default.forall { stmt => tailResumptive(k, stmt) }
       case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
-      case Stmt.Region(_) => ???
       case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
       case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
       case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
@@ -253,7 +252,6 @@ object Inline {
     }, default.map(removeTailResumption(k, _)))
     case Stmt.Region(body : BlockLit) =>
       Stmt.Region(removeTailResumption(k, body))
-    case Stmt.Region(_) => ???
     case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
     case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))

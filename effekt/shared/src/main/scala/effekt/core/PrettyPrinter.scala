@@ -105,7 +105,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field, tpe) => toDoc(b) <> "." <> toDoc(field)
 
     case Box(b, capt) => parens("box" <+> toDoc(b))
-    case Run(s) => "run" <+> braces(toDoc(s))
+    case Run(s) => "run" <+> block(toDoc(s))
   }
 
   def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =

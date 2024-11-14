@@ -22,7 +22,19 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
     val tree = Context.timed("deadcode-elimination", source.name) { Deadcode.remove(mainSymbol, core) }
 
+    val (normalized, _) = Inline.once(Set(mainSymbol), tree, 10)
+
     if !Context.config.optimize() then return tree;
+
+    println(util.show(normalized))
+
+    val anfed = BindSubexpressions.transform(normalized)
+    val (normalizedAgain, _) = Inline.once(Set(mainSymbol), anfed, 10)
+
+
+    val gced = Deadcode.remove(mainSymbol, normalizedAgain)
+    println(util.show(gced))
+
 
     // (2) inline unique block definitions
     Context.timed("inliner", source.name) {
