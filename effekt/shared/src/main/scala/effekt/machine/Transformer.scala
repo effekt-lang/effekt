@@ -2,7 +2,7 @@ package effekt
 package machine
 
 import effekt.context.Context
-import effekt.core.{ DeclarationContext, Definition, Id, given }
+import effekt.core.{ Block, DeclarationContext, Definition, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
@@ -143,37 +143,51 @@ object Transformer {
         )
 
       case core.App(callee, targs, vargs, bargs) =>
-        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+        if (targs.exists(requiresBoxing)) { ErrorReporter.panic(s"Types ${targs} are used as type parameters but would require boxing.") }
+        transform(vargs, bargs).run { (values, blocks) =>
+          callee match {
+            case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+              BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
+                // Unknown Jump to function
+                case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
+                  Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
 
-        transformCallee(callee).run { callee =>
-          transform(vargs, bargs).run { (values, blocks) =>
-            callee match {
-              // Here we actually need a substitution to prepare the environment for the jump
-              case Callee.Known(label) =>
-                Substitute(label.environment.zip(values ++ blocks), Jump(label))
+                // Known Jump
+                case BlockInfo.Definition(freeParams, blockParams) =>
+                  val label = machine.Label(transform(id), blockParams ++ freeParams)
+                  Substitute(label.environment.zip(values ++ blocks), Jump(label))
 
-              case Callee.UnknownFunction(variable, tpe) =>
-                Invoke(variable, builtins.Apply, values ++ blocks)
+                case _ => ErrorReporter.panic("Applying an object")
+              }
 
-              case Callee.UnknownObject(variable, tpe) =>
-                E.panic("Cannot call an object.")
-            }
+            case Block.Unbox(pure) =>
+              transform(pure).run { callee => Invoke(callee, builtins.Apply, values ++ blocks) }
+
+            case Block.New(impl) =>
+              ErrorReporter.panic("Applying an object")
+
+            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+              ErrorReporter.panic("Call to block literal should have been reduced")
           }
         }
 
       case core.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-        transformCallee(callee).run { callee =>
-          transform(vargs, bargs).run { (values, blocks) =>
-            callee match {
-              case Callee.UnknownObject(variable, tpe) =>
-                val opTag = DeclarationContext.getPropertyTag(method)
-                Invoke(variable, opTag, values ++ blocks)
+        val opTag = DeclarationContext.getPropertyTag(method)
+        transform(vargs, bargs).run { (values, blocks) =>
+          callee match {
+            case Block.BlockVar(id, tpe, capt) =>
+              Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
 
-              case _ =>
-                E.panic("Receiver of a method call needs to be an object")
-            }
+            case Block.Unbox(pure) =>
+              transform(pure).run { callee => Invoke(callee, opTag, values ++ blocks) }
+
+            case Block.New(impl) =>
+              ErrorReporter.panic("Method call to known object should have been reduced")
+
+            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+              ErrorReporter.panic("Invoking a method on a function")
           }
         }
 
@@ -282,41 +296,6 @@ object Transformer {
       values <- traverse(vargs)(transform)
       blocks <- traverse(bargs)(transformBlockArg)
     } yield (values, blocks)
-
-  enum Callee {
-    case Known(label: machine.Label)
-    case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
-    case UnknownObject(variable: machine.Variable, tpe: core.BlockType.Interface)
-  }
-
-  def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
-    case core.BlockVar(id, tpe, capt) =>
-        BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
-          // Unknown Jump to function
-          case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
-            pure(Callee.UnknownFunction(Variable(transform(id), transform(tpe)), tpe))
-
-          // Unknown object as a receiver
-          case BlockInfo.Parameter(tpe: core.BlockType.Interface) =>
-            pure(Callee.UnknownObject(Variable(transform(id), transform(tpe)), tpe))
-
-          // Known Jump
-          case BlockInfo.Definition(freeParams, blockParams) =>
-            pure(Callee.Known(machine.Label(transform(id), blockParams ++ freeParams)))
-        }
-    case core.Unbox(pure) =>
-      transform(pure).map { f =>
-        pure.tpe match {
-          case core.ValueType.Boxed(tpe: core.BlockType.Function, capt) => Callee.UnknownFunction(f, tpe)
-          case core.ValueType.Boxed(tpe: core.BlockType.Interface, capt) => Callee.UnknownObject(f, tpe)
-          case _ => E.panic("Can only unbox boxed types")
-        }
-      }
-    case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
-    case core.New(impl) =>
-      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
-  }
 
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, capt) if isDefinition(id) =>
