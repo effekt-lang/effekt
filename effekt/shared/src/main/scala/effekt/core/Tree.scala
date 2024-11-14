@@ -27,6 +27,10 @@ import effekt.util.messages.ErrorReporter
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
  *     │
+ *     │─ [[ ExternBody ]]
+ *     │  │─ [[ StringExternBody ]]
+ *     │  │─ [[ Unsupported ]]
+ *     │
  *     │─ [[ Definition ]]
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Let ]]
@@ -59,7 +63,9 @@ import effekt.util.messages.ErrorReporter
  *     │  │─ [[ Var ]]
  *     │  │─ [[ Get ]]
  *     │  │─ [[ Put ]]
- *     │  │─ [[ Try ]]
+ *     │  │─ [[ Reset ]]
+ *     │  │─ [[ Shift ]]
+ *     │  │─ [[ Resume ]]
  *     │  │─ [[ Hole ]]
  *     │
  *     │─ [[ Implementation ]]
@@ -267,6 +273,7 @@ export Param.*
  *     │─ [[ Return ]]
  *     │─ [[ Val ]]
  *     │─ [[ App ]]
+ *     │─ [[ Invoke ]]
  *     │─ [[ If ]]
  *     │─ [[ Match ]]
  *     │─ [[ Region ]]
@@ -274,7 +281,9 @@ export Param.*
  *     │─ [[ Var ]]
  *     │─ [[ Get ]]
  *     │─ [[ Put ]]
- *     │─ [[ Try ]]
+ *     │─ [[ Reset ]]
+ *     │─ [[ Shift ]]
+ *     │─ [[ Resume ]]
  *     │─ [[ Hole ]]
  *
  * -------------------------------------------
