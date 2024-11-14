@@ -13,7 +13,6 @@ class Reachable(
   def process(d: Definition)(using defs: Map[Id, Definition]): Unit =
     if stack.contains(d.id) then
       reachable = reachable.updated(d.id, Usage.Recursive)
-      reachable.size
     else d match {
       case Definition.Def(id, block) =>
         seen = seen + id
@@ -48,7 +47,6 @@ class Reachable(
     b match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
-      case Block.Member(block, method, annotatedTpe) => process(method); process(block)
       case Block.Unbox(pure) => process(pure)
       case Block.New(impl) => process(impl)
     }
@@ -69,6 +67,11 @@ class Reachable(
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
+      vargs.foreach(process)
+      bargs.foreach(process)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      process(callee)
+      process(method)
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)

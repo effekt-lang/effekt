@@ -4,7 +4,6 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
-import effekt.core.DirectStyleMutableState
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 

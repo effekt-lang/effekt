@@ -215,17 +215,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
       Block.BlockVar(id, transform(annotatedTpe), annotatedCapt)
     case b: Block.BlockLit => transform(b)
-    case Block.Member(block, field, annotatedTpe) => // TODO properly box/unbox arguments and result
-      val tpe = block.tpe.asInstanceOf[core.BlockType.Interface]
-      PContext.findInterface(tpe.name) match {
-        case None => // assume it's an external interface and will be handled elsewhere
-          Block.Member(transform(block), field, transform(annotatedTpe))
-        case Some(ifce) =>
-          val prop = ifce.properties.find { p => p.id == field }.getOrElse { Context.abort(s"Cannot find field ${field} in declaration ${ifce}") }
-          val propTpe = Type.substitute(prop.tpe.asInstanceOf[BlockType.Function], (ifce.tparams zip (tpe.targs.map(transformArg))).toMap, Map.empty)
-          val coerce = coercer[Block](transform(propTpe), transform(annotatedTpe))
-          coerce(Block.Member(transform(block), field, transform(propTpe)))
-      }
     case Block.Unbox(pure) =>
       Block.Unbox(transform(pure))
     case Block.New(impl) =>
@@ -277,6 +266,55 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
       fcoercer.call(calleeT, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
+
+    //                               [S](S) => (Int, S)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      //                                        Double
+
+      val calleeT = transform(callee)
+
+      // [S](S) => (T, S)
+      val (tpe: BlockType.Function, interfaceParams, interfaceArgs) = calleeT.tpe match {
+        //                             [Int]
+        case BlockType.Interface(name, targs) =>
+          PContext.findInterface(name) match {
+            //                      [T]
+            case Some(Interface(id, tparams, properties)) =>
+              // op: [S](S) => (T, S)
+              val prop = properties.find { p => p.id == method }.getOrElse { Context.panic(pp"Cannot find field ${method} in declaration of ${id}") }
+
+              (prop.tpe.asInstanceOf[BlockType.Function], tparams, targs)
+            case _ =>
+              Context.panic(pp"Should not happen. Method call on extern interface: ${stmt}")
+          }
+        case _ =>
+          Context.panic("Should not happen. Method call on non-interface")
+      }
+
+      // [S](S) => (BoxedInt, S)
+      val boxedTpe = Type.substitute(tpe, (interfaceParams zip interfaceArgs.map(transformArg)).toMap, Map.empty)
+
+      // duplicated from App
+      val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
+      val tVargs = vargs map transform
+      val tBargs = bargs map transform
+      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      //                     (T, S)      (Int, Double)
+      val rcoercer = coercer(tpe.result, itpe.result)
+
+      val result = Invoke(calleeT, method, boxedTpe, targs.map(transformArg), (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
+
+      // (BoxedInt, BoxedDouble)
+      val out = result.tpe
+      if (rcoercer.isIdentity) {
+        result
+      } else {
+        val orig = TmpValue("result")
+        Stmt.Val(orig, out, result,
+          Stmt.Return(rcoercer(Pure.ValueVar(orig, out))))
+      }
+
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, transform(tpe))
     case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, transform(value))
     case Stmt.If(cond, thn, els) =>

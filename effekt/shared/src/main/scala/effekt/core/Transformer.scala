@@ -224,11 +224,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
   }
 
-  def transformUnbox(tree: source.Term)(implicit C: Context): Block =
-    Unbox(transformAsPure(tree))
+  def transformUnbox(tree: source.Term)(implicit C: Context): Block = tree match {
+    case source.Unbox(b) => Unbox(transformAsPure(b))
+    case _ => Unbox(transformAsPure(tree))
+  }
 
-  def transformBox(tree: source.Term)(implicit C: Context): Pure =
-    Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
+  def transformBox(tree: source.Term)(implicit C: Context): Pure = tree match {
+    case source.Box(capt, block) => Box(transformAsBlock(tree), transform(Context.inferredCapture(block)))
+    case _ => Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
+  }
 
   /**
    * Transforms the source to a function (expecting to be called using [[core.Stmt.App]] or an interface.
@@ -242,18 +246,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     case _: source.BlockLiteral => transformAsControlBlock(tree)
     case _: source.New => transformAsObject(tree)
-    case _ => transformUnboxOrSelect(tree)
+    case _ => transformUnbox(tree)
   }
-  private def transformUnboxOrSelect(tree: source.Term)(using Context): Block = tree match {
-    case s @ source.Select(receiver, id) =>
-      Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
 
-    case source.Unbox(b) =>
-      Unbox(transformAsPure(b))
-
-    case _ =>
-      transformUnbox(tree)
-  }
   /**
    * Transforms the source to an interface block
    */
@@ -267,7 +262,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.New(impl) =>
       New(transform(impl, None))
 
-    case _ => transformUnboxOrSelect(tree)
+    case _ => transformUnbox(tree)
   }
   /**
    * Transforms the source to a function block that expects to be called using [[core.Stmt.App]].
@@ -336,7 +331,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case s @ source.New(impl) =>
       Context.abort(s"Expected a function but got an object instantiation: ${s}")
 
-    case _ => transformUnboxOrSelect(tree)
+    case _ => transformUnbox(tree)
   }
 
   def transformAsPure(tree: source.Term)(using Context): Pure = transformAsExpr(tree) match {
@@ -346,14 +341,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
     case v: source.Var => v.definition match {
-      case sym: VarBinder =>
+      case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)
         val tpe = TState.extractType(stateType)
-        Context.bind(Get(sym, Set(sym.capture), transform(tpe)))
-      case sym: RegBinder =>
-        val stateType = Context.blockTypeOf(sym)
-        val getType = operationAtCallsite(stateType, TState.get)
-        Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
+        Context.bind(Get(sym, transform(Context.captureOf(sym)), transform(tpe)))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -467,15 +458,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(stmts) =>
       Context.bind(Hole())
 
-    case a @ source.Assign(id, expr) => a.definition match {
-      case sym: VarBinder => Context.bind(Put(sym, Set(sym.capture), transformAsPure(expr)))
-      case sym: RegBinder =>
-        val e = transformAsPure(expr)
-        val sym = a.definition
-        val stateType = Context.blockTypeOf(sym)
-        val putType = operationAtCallsite(stateType, TState.put)
-        Context.bind(App(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil))
-    }
+    case a @ source.Assign(id, expr) =>
+      val sym = a.definition
+      Context.bind(Put(sym, transform(Context.captureOf(sym)), transformAsPure(expr)))
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
@@ -494,7 +479,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // Do not pass type arguments for the type constructor of the receiver.
       val remainingTypeArgs = typeArgs.drop(operation.interface.tparams.size)
 
-      Context.bind(App(Member(rec, operation, opType), remainingTypeArgs, valueArgs, blockArgs))
+      Context.bind(Invoke(rec, operation, opType, remainingTypeArgs, valueArgs, blockArgs))
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
 

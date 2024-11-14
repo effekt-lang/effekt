@@ -81,8 +81,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(id, _, _) => toDoc(id)
     case BlockLit(tps, cps, vps, bps, body) =>
       braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
-    case Member(b, id, _) =>
-      toDoc(b) <> "." <> id.name.toString
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
@@ -180,6 +178,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case App(b, targs, vargs, bargs) =>
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
+
+    case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
+      toDoc(b) <> "." <> method.name.toString <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))

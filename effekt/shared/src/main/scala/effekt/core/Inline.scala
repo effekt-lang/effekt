@@ -128,6 +128,9 @@ object Inline {
     case Stmt.App(b, targs, vargs, bargs) =>
       app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
 
+    case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
+      invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
+
     case Stmt.Reset(body) =>
       rewrite(body) match {
         case BlockLit(tparams, cparams, vparams, List(prompt), body) if !used(prompt.id) => body
@@ -173,7 +176,6 @@ object Inline {
 
     // congruences
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => rewrite(b)
-    case Block.Member(block, field, annotatedTpe) => member(rewrite(block), field, annotatedTpe)
     case Block.Unbox(pure) => unbox(rewrite(pure))
     case Block.New(impl) => New(rewrite(impl))
   }
@@ -224,6 +226,7 @@ object Inline {
       case Stmt.Return(expr) => false
       case Stmt.Val(id, annotatedTpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
+      case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
       case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
       // Interestingly, we introduce a join point making this more difficult to implement properly
       case Stmt.Match(scrutinee, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
@@ -261,6 +264,7 @@ object Inline {
     case Stmt.Hole() => stmt
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
     case Stmt.Get(id, annotatedCapt, annotatedTpe) => stmt
     case Stmt.Put(id, annotatedCapt, value) => stmt
   }

@@ -129,7 +129,7 @@ object Transformer {
           case (core.Definition.Def(id, core.New(impl)), rest) =>
             New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
 
-          case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Member | _: core.Unbox), rest) =>
+          case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
         }
 
@@ -141,28 +141,6 @@ object Transformer {
           Clause(List(Variable(transform(id), transform(binding.tpe))), transform(rest)),
             transform(binding)
         )
-
-      // hardcoded translation for get and put.
-      // TODO remove this when interfaces are correctly translated
-      case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.get, _), targs, Nil, Nil) =>
-        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-        val tpe = transform(stateType)
-        val variable = Variable(freshName(x.name.name + "_value"), tpe)
-        val reference = Variable(transform(x), Type.Reference(tpe))
-        LoadVar(variable, reference, Return(List(variable)))
-
-      case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.put, _), targs, List(arg), Nil) =>
-        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-        val tpe = transform(stateType)
-        val variable = Variable(freshName("ignored"), Positive());
-        val reference = Variable(transform(x), Type.Reference(tpe))
-        transform(arg).run { value =>
-          StoreVar(reference, value,
-            Construct(variable, builtins.Unit, List(),
-              Return(List(variable))))
-        }
 
       case core.App(callee, targs, vargs, bargs) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -177,11 +155,24 @@ object Transformer {
               case Callee.UnknownFunction(variable, tpe) =>
                 Invoke(variable, builtins.Apply, values ++ blocks)
 
-              case Callee.Method(receiver, tpe, tag) =>
-                Invoke(receiver, tag, values ++ blocks)
-
               case Callee.UnknownObject(variable, tpe) =>
                 E.panic("Cannot call an object.")
+            }
+          }
+        }
+
+      case core.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+
+        transformCallee(callee).run { callee =>
+          transform(vargs, bargs).run { (values, blocks) =>
+            callee match {
+              case Callee.UnknownObject(variable, tpe) =>
+                val opTag = DeclarationContext.getPropertyTag(method)
+                Invoke(variable, opTag, values ++ blocks)
+
+              case _ =>
+                E.panic("Receiver of a method call needs to be an object")
             }
           }
         }
@@ -296,7 +287,6 @@ object Transformer {
     case Known(label: machine.Label)
     case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
     case UnknownObject(variable: machine.Variable, tpe: core.BlockType.Interface)
-    case Method(receiver: machine.Variable, tpe: core.BlockType.Interface, tag: Int)
   }
 
   def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
@@ -314,15 +304,6 @@ object Transformer {
           case BlockInfo.Definition(freeParams, blockParams) =>
             pure(Callee.Known(machine.Label(transform(id), blockParams ++ freeParams)))
         }
-    case core.Member(block, op, annotatedTpe) => transformCallee(block).flatMap {
-      case Callee.UnknownObject(id, tpe) =>
-        val opTag = DeclarationContext.getPropertyTag(op)
-        pure(Callee.Method(id, tpe, opTag))
-      case _ =>
-        E.panic("Receiver of a method call needs to be an object")
-    }
-    case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
     case core.Unbox(pure) =>
       transform(pure).map { f =>
         pure.tpe match {
@@ -331,6 +312,8 @@ object Transformer {
           case _ => E.panic("Can only unbox boxed types")
         }
       }
+    case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
+      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
     case core.New(impl) =>
       E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
   }
@@ -365,9 +348,6 @@ object Transformer {
       Binding { k =>
         New(variable, transform(impl), k(variable))
       }
-
-    case core.Member(b, field, annotatedTpe) =>
-      E.panic("Cannot pass member selection as argument")
 
     case core.Unbox(pure) =>
       transform(pure)

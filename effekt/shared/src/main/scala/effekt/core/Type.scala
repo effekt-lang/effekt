@@ -176,7 +176,6 @@ object Type {
       val bparams = bps.map { p => p.tpe }
 
       BlockType.Function(tparams, cparams, vparams, bparams, body.tpe)
-    case Block.Member(b, field, tpe) => tpe
     case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].tpe
     case Block.New(impl) => impl.tpe
   }
@@ -184,7 +183,6 @@ object Type {
     case Block.BlockVar(id, tpe, capt) => capt
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       body.capt -- cparams
-    case Block.Member(block, field, tpe) => block.capt
     case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].capt
     case Block.New(impl) => impl.capt
   }
@@ -195,7 +193,8 @@ object Type {
     case Stmt.Val(id, tpe, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
-
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      instantiate(methodTpe.asInstanceOf, targs, bargs.map(_.capt)).result
     case Stmt.If(cond, thn, els) => merge(thn.tpe, els.tpe, covariant = true)
     case Stmt.Match(scrutinee, clauses, default) =>
       val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
@@ -229,6 +228,7 @@ object Type {
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, tpe, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.Alloc(id, init, region, body) => Set(region) ++ body.capt

@@ -124,7 +124,6 @@ object TrackedParam {
   case class BlockParam(name: Name, tpe: Option[BlockType]) extends TrackedParam
   case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
   case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam
-
 }
 export TrackedParam.*
 
