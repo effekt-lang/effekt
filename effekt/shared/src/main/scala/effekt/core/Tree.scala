@@ -27,6 +27,10 @@ import effekt.util.messages.ErrorReporter
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
  *     │
+ *     │─ [[ ExternBody ]]
+ *     │  │─ [[ StringExternBody ]]
+ *     │  │─ [[ Unsupported ]]
+ *     │
  *     │─ [[ Definition ]]
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Let ]]
@@ -39,7 +43,6 @@ import effekt.util.messages.ErrorReporter
  *     │─ [[ Block ]]
  *     │  │─ [[ BlockVar ]]
  *     │  │─ [[ BlockLit ]]
- *     │  │─ [[ Member ]]
  *     │  │─ [[ Unbox ]]
  *     │  │─ [[ New ]]
  *     │
@@ -52,6 +55,7 @@ import effekt.util.messages.ErrorReporter
  *     │  │─ [[ Return ]]
  *     │  │─ [[ Val ]]
  *     │  │─ [[ App ]]
+ *     │  │─ [[ Invoke ]]
  *     │  │─ [[ If ]]
  *     │  │─ [[ Match ]]
  *     │  │─ [[ Region ]]
@@ -59,7 +63,9 @@ import effekt.util.messages.ErrorReporter
  *     │  │─ [[ Var ]]
  *     │  │─ [[ Get ]]
  *     │  │─ [[ Put ]]
- *     │  │─ [[ Try ]]
+ *     │  │─ [[ Reset ]]
+ *     │  │─ [[ Shift ]]
+ *     │  │─ [[ Resume ]]
  *     │  │─ [[ Hole ]]
  *     │
  *     │─ [[ Implementation ]]
@@ -233,7 +239,6 @@ export Pure.*
  *   ─ [[ Block ]]
  *     │─ [[ BlockVar ]]
  *     │─ [[ BlockLit ]]
- *     │─ [[ Member ]]
  *     │─ [[ Unbox ]]
  *     │─ [[ New ]]
  *
@@ -242,7 +247,6 @@ export Pure.*
 enum Block extends Tree {
   case BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures)
   case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
-  case Member(block: Block, field: Id, annotatedTpe: BlockType)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
@@ -269,6 +273,7 @@ export Param.*
  *     │─ [[ Return ]]
  *     │─ [[ Val ]]
  *     │─ [[ App ]]
+ *     │─ [[ Invoke ]]
  *     │─ [[ If ]]
  *     │─ [[ Match ]]
  *     │─ [[ Region ]]
@@ -276,7 +281,9 @@ export Param.*
  *     │─ [[ Var ]]
  *     │─ [[ Get ]]
  *     │─ [[ Put ]]
- *     │─ [[ Try ]]
+ *     │─ [[ Reset ]]
+ *     │─ [[ Shift ]]
+ *     │─ [[ Resume ]]
  *     │─ [[ Hole ]]
  *
  * -------------------------------------------
@@ -289,6 +296,7 @@ enum Stmt extends Tree {
   case Return(expr: Pure)
   case Val(id: Id, annotatedTpe: ValueType, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+  case Invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
@@ -365,17 +373,6 @@ object normal {
     case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
   }
 
-  // new { def f = BLOCK }.f  =  BLOCK
-  def member(b: Block, field: Id, annotatedTpe: BlockType): Block = b match {
-    case Block.New(impl) =>
-      val Operation(name, tps, cps, vps, bps, body) =
-        impl.operations.find(op => op.name == field).getOrElse {
-          INTERNAL_ERROR("Should not happen")
-        }
-      BlockLit(tps, cps, vps, bps, body)
-    case _ => Block.Member(b, field, annotatedTpe)
-  }
-
   // TODO perform record selection here, if known
   def select(target: Pure, field: Id, annotatedType: ValueType): Pure =
     Select(target, field, annotatedType)
@@ -384,6 +381,17 @@ object normal {
     callee match {
       case b : Block.BlockLit => reduce(b, targs, vargs, bargs)
       case other => Stmt.App(callee, targs, vargs, bargs)
+    }
+
+  def invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
+    callee match {
+      case Block.New(impl) =>
+        val Operation(name, tps, cps, vps, bps, body) =
+           impl.operations.find(op => op.name == method).getOrElse {
+             INTERNAL_ERROR("Should not happen")
+           }
+        reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
+      case other => Invoke(callee, method, methodTpe, targs, vargs, bargs)
     }
 
   def reset(body: BlockLit): Stmt = body match {
@@ -591,7 +599,7 @@ object Tree {
       }
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
-      case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
+      case (p, b) => (p, rewrite(b))
     }
   }
 }
@@ -656,8 +664,6 @@ object Variables {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) => Variables.block(id, annotatedTpe, annotatedCapt)
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       free(body) -- all(vparams, bound) -- all(bparams, bound)
-
-    case Block.Member(block, field, annotatedTpe) => free(block)
     case Block.Unbox(pure) => free(pure)
     case Block.New(impl) => free(impl)
   }
@@ -690,6 +696,7 @@ object Variables {
     case Stmt.Return(expr) => free(expr)
     case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(default, free) ++ all(clauses, {
       case (id, lit) => free(lit)
@@ -790,6 +797,9 @@ object substitutions {
       case App(callee, targs, vargs, bargs) =>
         App(substitute(callee), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
 
+      case Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+        Invoke(substitute(callee), method, substitute(methodTpe), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+
       case If(cond, thn, els) =>
         If(substitute(cond), substitute(thn), substitute(els))
 
@@ -844,9 +854,6 @@ object substitutions {
           vparams.map(p => substitute(p)(using shadowedTypelevel)),
           bparams.map(p => substitute(p)(using shadowedTypelevel)),
           substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
-
-      case Member(block, field, annotatedTpe) =>
-        Member(substitute(block), field, substitute(annotatedTpe))
 
       case Unbox(pure) =>
         Unbox(substitute(pure))

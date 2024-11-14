@@ -2,7 +2,7 @@ package effekt
 package machine
 
 import effekt.context.Context
-import effekt.core.{ DeclarationContext, Definition, Id, given }
+import effekt.core.{ Block, DeclarationContext, Definition, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
@@ -129,7 +129,7 @@ object Transformer {
           case (core.Definition.Def(id, core.New(impl)), rest) =>
             New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
 
-          case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Member | _: core.Unbox), rest) =>
+          case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
         }
 
@@ -142,47 +142,52 @@ object Transformer {
             transform(binding)
         )
 
-      // hardcoded translation for get and put.
-      // TODO remove this when interfaces are correctly translated
-      case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.get, _), targs, Nil, Nil) =>
-        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+      case core.App(callee, targs, vargs, bargs) =>
+        if (targs.exists(requiresBoxing)) { ErrorReporter.panic(s"Types ${targs} are used as type parameters but would require boxing.") }
+        transform(vargs, bargs).run { (values, blocks) =>
+          callee match {
+            case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+              BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
+                // Unknown Jump to function
+                case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
+                  Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
 
-        val tpe = transform(stateType)
-        val variable = Variable(freshName(x.name.name + "_value"), tpe)
-        val reference = Variable(transform(x), Type.Reference(tpe))
-        LoadVar(variable, reference, Return(List(variable)))
+                // Known Jump
+                case BlockInfo.Definition(freeParams, blockParams) =>
+                  val label = machine.Label(transform(id), blockParams ++ freeParams)
+                  Substitute(label.environment.zip(values ++ blocks), Jump(label))
 
-      case core.App(core.Member(core.BlockVar(x, core.Type.TState(stateType), _), TState.put, _), targs, List(arg), Nil) =>
-        if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+                case _ => ErrorReporter.panic("Applying an object")
+              }
 
-        val tpe = transform(stateType)
-        val variable = Variable(freshName("ignored"), Positive());
-        val reference = Variable(transform(x), Type.Reference(tpe))
-        transform(arg).run { value =>
-          StoreVar(reference, value,
-            Construct(variable, builtins.Unit, List(),
-              Return(List(variable))))
+            case Block.Unbox(pure) =>
+              transform(pure).run { callee => Invoke(callee, builtins.Apply, values ++ blocks) }
+
+            case Block.New(impl) =>
+              ErrorReporter.panic("Applying an object")
+
+            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+              ErrorReporter.panic("Call to block literal should have been reduced")
+          }
         }
 
-      case core.App(callee, targs, vargs, bargs) =>
+      case core.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
-        transformCallee(callee).run { callee =>
-          transform(vargs, bargs).run { (values, blocks) =>
-            callee match {
-              // Here we actually need a substitution to prepare the environment for the jump
-              case Callee.Known(label) =>
-                Substitute(label.environment.zip(values ++ blocks), Jump(label))
+        val opTag = DeclarationContext.getPropertyTag(method)
+        transform(vargs, bargs).run { (values, blocks) =>
+          callee match {
+            case Block.BlockVar(id, tpe, capt) =>
+              Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
 
-              case Callee.UnknownFunction(variable, tpe) =>
-                Invoke(variable, builtins.Apply, values ++ blocks)
+            case Block.Unbox(pure) =>
+              transform(pure).run { callee => Invoke(callee, opTag, values ++ blocks) }
 
-              case Callee.Method(receiver, tpe, tag) =>
-                Invoke(receiver, tag, values ++ blocks)
+            case Block.New(impl) =>
+              ErrorReporter.panic("Method call to known object should have been reduced")
 
-              case Callee.UnknownObject(variable, tpe) =>
-                E.panic("Cannot call an object.")
-            }
+            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+              ErrorReporter.panic("Invoking a method on a function")
           }
         }
 
@@ -292,49 +297,6 @@ object Transformer {
       blocks <- traverse(bargs)(transformBlockArg)
     } yield (values, blocks)
 
-  enum Callee {
-    case Known(label: machine.Label)
-    case UnknownFunction(variable: machine.Variable, tpe: core.BlockType.Function)
-    case UnknownObject(variable: machine.Variable, tpe: core.BlockType.Interface)
-    case Method(receiver: machine.Variable, tpe: core.BlockType.Interface, tag: Int)
-  }
-
-  def transformCallee(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Callee] = block match {
-    case core.BlockVar(id, tpe, capt) =>
-        BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
-          // Unknown Jump to function
-          case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
-            pure(Callee.UnknownFunction(Variable(transform(id), transform(tpe)), tpe))
-
-          // Unknown object as a receiver
-          case BlockInfo.Parameter(tpe: core.BlockType.Interface) =>
-            pure(Callee.UnknownObject(Variable(transform(id), transform(tpe)), tpe))
-
-          // Known Jump
-          case BlockInfo.Definition(freeParams, blockParams) =>
-            pure(Callee.Known(machine.Label(transform(id), blockParams ++ freeParams)))
-        }
-    case core.Member(block, op, annotatedTpe) => transformCallee(block).flatMap {
-      case Callee.UnknownObject(id, tpe) =>
-        val opTag = DeclarationContext.getPropertyTag(op)
-        pure(Callee.Method(id, tpe, opTag))
-      case _ =>
-        E.panic("Receiver of a method call needs to be an object")
-    }
-    case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
-      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
-    case core.Unbox(pure) =>
-      transform(pure).map { f =>
-        pure.tpe match {
-          case core.ValueType.Boxed(tpe: core.BlockType.Function, capt) => Callee.UnknownFunction(f, tpe)
-          case core.ValueType.Boxed(tpe: core.BlockType.Interface, capt) => Callee.UnknownObject(f, tpe)
-          case _ => E.panic("Can only unbox boxed types")
-        }
-      }
-    case core.New(impl) =>
-      E.panic("Optimizer / normalizer should have removed the beta reduction ({() => ...}())!")
-  }
-
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, capt) if isDefinition(id) =>
       // Passing a top-level function directly, so we need to eta-expand turning it into a closure
@@ -365,9 +327,6 @@ object Transformer {
       Binding { k =>
         New(variable, transform(impl), k(variable))
       }
-
-    case core.Member(b, field, annotatedTpe) =>
-      E.panic("Cannot pass member selection as argument")
 
     case core.Unbox(pure) =>
       transform(pure)

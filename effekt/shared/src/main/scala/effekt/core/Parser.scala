@@ -124,7 +124,10 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ {
       case id ~ tpe ~ binding ~ body => Stmt.Val(id, tpe.getOrElse(binding.tpe), binding, body)
     }
-    | block ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Stmt.App.apply
+    | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
+      case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
+      case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
+    }
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
     | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
@@ -195,15 +198,6 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Blocks
   // ------
   lazy val block: P[Block] =
-    ( blockNonMember ~ many((`.` ~> id) ~ (`:` ~> blockType)) ^^ {
-          case firstReceiver ~ fields => fields.foldLeft(firstReceiver) {
-          case (receiver, field ~ tpe) => Block.Member(receiver, field, tpe)
-        }
-      }
-    | blockNonMember
-    )
-
-  lazy val blockNonMember: P[Block] =
     ( id ~ (`:` ~> blockType) ~ (`@` ~> captures) ^^ Block.BlockVar.apply
     | `unbox` ~> pure ^^ Block.Unbox.apply
     | `new` ~> implementation ^^ Block.New.apply

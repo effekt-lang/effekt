@@ -95,20 +95,11 @@ object Transformer {
         binding(id, value) { transform(body, ks, k) }
       })
 
-    case core.Stmt.App(core.Block.Member(ref: core.Block.BlockVar, TState.get, tpe), Nil, Nil, Nil) =>
-      val x = Id("x")
-      cps.Get(ref.id, x, k(ValueVar(x), ks))
+    case core.Stmt.App(callee, targs, vargs, bargs) =>
+      App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
 
-    case core.Stmt.App(core.Block.Member(ref: core.Block.BlockVar, TState.put, tpe), Nil, List(value), Nil) =>
-      cps.Put(ref.id, transform(value), k(cps.Pure.Literal(()), ks))
-
-    case core.Stmt.App(callee, targs, vargs, bargs) => callee match {
-      case core.Block.Member(block, field, tpe) =>
-        Invoke(transform(block), field, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
-
-      case _ =>
-        App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
-    }
+    case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) =>
+      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
 
     case core.Stmt.If(cond, thn, els) =>
       withJoinpoint(k) { k2 =>
@@ -219,7 +210,6 @@ object Transformer {
   def transform(block: core.Block)(using C: TransformationContext): Block = block match {
     case core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => C.lookupBlock(id)
     case b @ core.Block.BlockLit(tparams, cparams, vparams, bparams, body) => transformBlockLit(b)
-    case core.Block.Member(block, field, annotatedTpe) => sys error "shouldn't happen"
     case core.Block.Unbox(pure) => Unbox(transform(pure))
     case core.Block.New(impl) => New(transform(impl))
   }

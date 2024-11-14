@@ -77,6 +77,8 @@ trait Transformer {
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
     case Return(e) => pure(toChez(e))
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
+    case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
+      chez.Call(chez.Call(chez.Variable(nameRef(method)), List(toChez(b))), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     // empty matches are translated to a hole in chez scheme
@@ -189,9 +191,6 @@ trait Transformer {
       chez.Variable(nameRef(id))
 
     case b @ BlockLit(tps, cps, vps, bps, body) => toChez(b)
-
-    case Member(b, field, tpe) =>
-      chez.Call(chez.Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) => toChez(e)
 

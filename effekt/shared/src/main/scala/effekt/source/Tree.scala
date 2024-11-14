@@ -12,6 +12,15 @@ import effekt.symbols.Symbol
  *   ─ [[ Tree ]]
  *     │─ [[ NoSource ]]
  *     │─ [[ Comment ]]
+ *     │─ [[ FeatureFlag ]]
+ *     │  │─ [[ NamedFeatureFlag ]]
+ *     │  │─ [[ Default ]]
+ *     │
+ *     │─ [[ ExternBody ]]
+ *     │  │─ [[ StringExternBody ]]
+ *     │  │─ [[ EffektExternBody ]]
+ *     │  │─ [[ Unsupported ]]
+ *     │
  *     │─ [[ Id ]]
  *     │  │─ [[ IdDef ]]
  *     │  │─ [[ IdRef ]]
@@ -52,6 +61,10 @@ import effekt.symbols.Symbol
  *     │  │─ [[ ExprTarget ]]
  *     │
  *     │─ [[ MatchClause ]]
+ *     │─ [[ MatchGuard ]]
+ *     │  │─ [[ BooleanGuard ]]
+ *     │  │─ [[ PatternGuard ]]
+ *     │
  *     │─ [[ MatchPattern ]]
  *     │  │─ [[ AnyPattern ]]
  *     │  │─ [[ TagPattern ]]
@@ -205,6 +218,7 @@ export Param.*
  *     │─ [[ RegDef ]]
  *     │─ [[ VarDef ]]
  *     │─ [[ DefDef ]]
+ *     │─ [[ NamespaceDef ]]
  *     │─ [[ InterfaceDef ]]
  *     │─ [[ DataDef ]]
  *     │─ [[ RecordDef ]]
