@@ -385,12 +385,7 @@ object normal {
 
   def invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
     callee match {
-      case Block.New(impl) =>
-        val Operation(name, tps, cps, vps, bps, body) =
-           impl.operations.find(op => op.name == method).getOrElse {
-             INTERNAL_ERROR("Should not happen")
-           }
-        reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
+      case Block.New(impl) => reduce(impl, method, targs, vargs, bargs)
       case other => Invoke(callee, method, methodTpe, targs, vargs, bargs)
     }
 
@@ -461,6 +456,13 @@ object normal {
 
     scope(bindings, body)
   }
+
+  def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
+    val Operation(name, tps, cps, vps, bps, body) =
+      impl.operations.find(op => op.name == method).getOrElse {
+        INTERNAL_ERROR("Should not happen")
+      }
+    reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
 
   def run(s: Stmt): Expr = s match {
     case Stmt.Return(expr) => expr
