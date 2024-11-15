@@ -222,7 +222,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
        val tgt = IdTarget(id)
        Return(Call(tgt, Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
      case Do(effect, id, targs, vargs, bargs) =>
-      Return(Do(effect, id, targs, vargs, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
+      Return(Do(effect, id, targs, vargs, bargs :+ (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
      case term =>
        Return(Call(ExprTarget(term), Nil, Nil, (BlockLiteral(Nil, vparams, bparams, body)) :: Nil))
   }
