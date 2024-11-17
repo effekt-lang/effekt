@@ -26,7 +26,7 @@ import kiama.util.Counter
 object Normalizer {
 
   case class Context(
-    usage: Map[Id, Usage],
+    usage: mutable.Map[Id, Usage],
     blocks: Map[Id, Block],
     exprs: Map[Id, Expr],
     decls: DeclarationContext
@@ -55,7 +55,7 @@ object Normalizer {
     val defs = m.definitions.collect {
       case Definition.Def(id, block) => id -> block
     }.toMap
-    val context = Context(usage, defs, Map.empty, DeclarationContext(m.declarations, m.externs))
+    val context = Context(mutable.Map.from(usage), defs, Map.empty, DeclarationContext(m.declarations, m.externs))
 
     val (normalizedDefs, _) = normalize(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -239,7 +239,8 @@ object Normalizer {
   // Helpers for beta-reduction
   // --------------------------
 
-  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt = {
+  // TODO we should rename when inlining to maintain barendregdt, but need to copy usage information...
+  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
 
     // Only bind if not already a variable!!!
     var ids: Set[Id] = Set.empty
@@ -257,13 +258,19 @@ object Normalizer {
         ids += id
     }
 
+    val (renamedLit: BlockLit, renamedIds) = Renamer.rename(b)
+    val before = C.usage
+    C.usage.addAll(renamedIds.toList.collect {
+      case (from, to) if before.isDefinedAt(from) => to -> before(from)
+    })
+
     // (2) substitute
-    val body = substitutions.substitute(b, targs, vargs, bvars)
+    val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
     scope(bindings, body)
   }
 
-  def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
+  def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =
     val Operation(name, tps, cps, vps, bps, body) =
       impl.operations.find(op => op.name == method).getOrElse {
         INTERNAL_ERROR("Should not happen")

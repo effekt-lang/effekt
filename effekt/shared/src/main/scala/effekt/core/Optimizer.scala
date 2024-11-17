@@ -29,13 +29,13 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     val anfed = BindSubexpressions.transform(tree)
 
 
-    println(s"BEFORE\n\n ${util.show(anfed)}")
+    //    println(s"BEFORE\n\n ${util.show(anfed)}")
 
     val eliminated = Normalizer.normalize(Set(mainSymbol), anfed)
 
     val gced = Deadcode.remove(mainSymbol, eliminated)
 
-    println(s"AFTER\n\n ${util.show(gced)}")
+    // println(s"AFTER\n\n ${util.show(gced)}")
 
     gced
     // (2) inline unique block definitions
