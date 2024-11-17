@@ -26,19 +26,20 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     if !Context.config.optimize() then return tree;
 
-    println(util.show(tree))
-
     val anfed = BindSubexpressions.transform(tree)
 
-    val eliminated = CutElimination.normalize(Set(mainSymbol), anfed)
+
+    println(s"BEFORE\n\n ${util.show(anfed)}")
+
+    val eliminated = Normalizer.normalize(Set(mainSymbol), anfed)
 
     val gced = Deadcode.remove(mainSymbol, eliminated)
-    println("AFTER NORMALIZATION\n-------------")
-    println(util.show(gced))
 
+    println(s"AFTER\n\n ${util.show(gced)}")
 
+    gced
     // (2) inline unique block definitions
-    Context.timed("inliner", source.name) {
-      Inline.full(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
-    }
+    //    Context.timed("inliner", source.name) {
+    //      Inline.full(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
+    //    }
 }

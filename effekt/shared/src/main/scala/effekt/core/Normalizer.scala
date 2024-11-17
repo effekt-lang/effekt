@@ -23,7 +23,7 @@ import kiama.util.Counter
  *
  * removing the overhead of the function call.
  */
-object CutElimination {
+object Normalizer {
 
   case class Context(
     usage: Map[Id, Usage],
@@ -36,7 +36,7 @@ object CutElimination {
   }
 
   def isRecursive(id: Id)(using ctx: Context): Boolean =
-    ctx.usage.get(id).forall { _ == Usage.Recursive }
+    ctx.usage.get(id).exists { _ == Usage.Recursive }
 
   def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
@@ -114,15 +114,19 @@ object CutElimination {
     // Redexes
     // -------
 
+    // TODO we cannot simply normalize after reduce, since the usage info might be off now!
+
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
-        case lit : Block.BlockLit => normalize(reduce(lit, targs, vargs.map(normalize), bargs.map(normalize)))
+        case lit : Block.BlockLit =>
+          normalize(reduce(lit, targs, vargs.map(normalize), bargs.map(normalize)))
         case _ => Stmt.App(normalize(b), targs, vargs.map(normalize), bargs.map(normalize))
       }
 
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       active(b) match {
-        case Block.New(impl) => normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
+        case Block.New(impl) =>
+          normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
         case _ => Stmt.Invoke(normalize(b), method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
