@@ -13,13 +13,16 @@ import scala.collection.mutable
 object StaticArguments {
 
   case class StaticArgumentsContext(
-    staticArguments: Map[Id, List[Boolean]],
-    workers: mutable.Map[Id, Id],
+    staticC: Map[Id, List[Boolean]],
+    staticV: Map[Id, List[Boolean]],
+    staticB: Map[Id, List[Boolean]],
+    workers: mutable.Map[Id, Block],
     var stack: List[Id]
   )
 
-  def dropStatic[A](staticArguments: List[Boolean], list: List[A]) =
-    list.zip(staticArguments).filter((_, bool) => !bool).map(_._1)
+  def dropStatic[A](staticArgumentsOpt: Option[List[Boolean]], list: List[A]) = staticArgumentsOpt match
+    case Some(staticArguments) => list.zip(staticArguments).filter((_, bool) => !bool).map(_._1)
+    case None => list
   
   /**
    * Wraps the definition in another function, abstracting arguments along the way.
@@ -43,20 +46,23 @@ object StaticArguments {
     // This is guaranteed by Recursive()!
     val blockLit = definition.block.asInstanceOf[BlockLit]
 
-    val staticArguments = ctx.staticArguments(definition.id)
-
-    val worker = Id(definition.id.name.name + "_worker")
-    ctx.workers(definition.id) = worker
+    val staticC = ctx.staticC.get(definition.id)
+    val staticV = ctx.staticV.get(definition.id)
+    val staticB = ctx.staticB.get(definition.id)
 
     val calleeType = BlockType.Function(
       blockLit.tparams,
-      blockLit.cparams,
-      dropStatic(staticArguments, blockLit.vparams.map(_.tpe)),
-      blockLit.bparams.map(_.tpe),
+      dropStatic(staticC, blockLit.cparams),
+      dropStatic(staticV, blockLit.vparams).map(_.tpe),
+      dropStatic(staticB, blockLit.bparams).map(_.tpe),
       blockLit.tpe match
         case BlockType.Function(_, _, _, _, result) => result
         case _ => ??? // impossible!
     )
+
+    // TODO: Where do we get the capture set?
+    val worker: Block.BlockVar = BlockVar(Id(definition.id.name.name + "_worker"), calleeType, Set())
+    ctx.workers(definition.id) = worker
 
     // push to the stack to detect recursion, since recursive calls will need to call the worker
     def rewriteBody(body: Stmt) =
@@ -67,39 +73,44 @@ object StaticArguments {
       newBody
     
     // fresh params for the wrapper function and its invocation
-    val freshCparams = blockLit.cparams.map(c => Id(c.name.name))
-    val freshBparams: List[Param.BlockParam] = blockLit.bparams.map(b => BlockParam(Id(b.id.name.name), b.tpe, b.capt))
-    val freshVparams: List[Param.ValueParam] = // here: only freshen params if not static to prevent duplicates
-      blockLit.vparams.zip(staticArguments).map((v, bool) => ValueParam(if (bool) v.id else Id(v.id.name.name), v.tpe))
+    // note: only freshen params if not static to prevent duplicates
+    val freshCparams = staticC.map { static =>
+      blockLit.cparams.zip(static).map((c, bool) => if (bool) c else Id(c.name.name))
+    }.getOrElse(blockLit.cparams)
+    val freshVparams = staticV.map { static =>
+      blockLit.vparams.zip(static).map((v, bool) => ValueParam(if (bool) v.id else Id(v.id.name.name), v.tpe)).asInstanceOf[List[Param.ValueParam]]
+    }.getOrElse(blockLit.vparams)
+    val freshBparams = staticB.map { static =>
+      blockLit.bparams.zip(static).map((b, bool) => BlockParam(if (bool) b.id else Id(b.id.name.name), b.tpe, b.capt)).asInstanceOf[List[Param.BlockParam]]
+    }.getOrElse(blockLit.bparams)
 
     Definition.Def(definition.id, BlockLit(
       blockLit.tparams, // TODO: Do we need to freshen these as well?
-      blockLit.cparams, // TODO: Do we need to freshen these as well?
+      freshCparams,
       freshVparams,
       freshBparams,
-      Scope(List(Definition.Def(worker, BlockLit(
+      Scope(List(Definition.Def(worker.id, BlockLit(
         blockLit.tparams,
-        blockLit.cparams,
-        dropStatic(staticArguments, blockLit.vparams),
-        blockLit.bparams,
+        dropStatic(staticC, blockLit.cparams),
+        dropStatic(staticV, blockLit.vparams),
+        dropStatic(staticB, blockLit.bparams),
         rewriteBody(blockLit.body)
       ))), App(
-        // TODO: Where do we get the capture set?
-        BlockVar(worker, calleeType, Set()),
+        worker,
         // TODO: These conversions to types are a bit hacky, are there better ways?
         blockLit.tparams.map(t => ValueType.Var(t)),
-        dropStatic(staticArguments, freshVparams.map(v => ValueVar(v.id, v.tpe))),
-        freshBparams.map(b => BlockVar(b.id, b.tpe, b.capt))
+        dropStatic(staticV, freshVparams.map(v => ValueVar(v.id, v.tpe))),
+        dropStatic(staticB, freshBparams.map(b => BlockVar(b.id, b.tpe, b.capt)))
       ))
     ))
   
   def rewrite(definitions: List[Definition])(using ctx: StaticArgumentsContext): List[Definition] =
-    val lifted = definitions.collect {
-      case d @ Definition.Def(id, block) if ctx.staticArguments.contains(id) => wrapDefinition(d)
+    definitions.collect {
+      case d @ Definition.Def(id, block) if ctx.staticC.contains(id) || ctx.staticV.contains(id) || ctx.staticB.contains(id)
+        => wrapDefinition(d)
       case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
       case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, rewrite(binding))
     }
-    lifted
 
   def rewrite(d: Definition)(using StaticArgumentsContext): Definition = d match {
     case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
@@ -113,9 +124,8 @@ object StaticArguments {
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
         // if arguments are static && recursive call: call worker with reduced arguments
-        case BlockVar(id, annotatedTpe, annotatedCapt) if C.staticArguments.contains(id) && C.stack.contains(id) => 
-          app(BlockVar(C.workers(id), annotatedTpe, annotatedCapt),
-            targs, dropStatic(C.staticArguments(id), vargs.map(rewrite)), bargs.map(rewrite))
+        case BlockVar(id, annotatedTpe, annotatedCapt) if (C.staticC.contains(id) || C.staticV.contains(id) || C.staticB.contains(id)) && C.stack.contains(id) => 
+          app(C.workers(id), targs, dropStatic(C.staticV.get(id), vargs).map(rewrite), dropStatic(C.staticB.get(id), bargs).map(rewrite))
         case _ => app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
       }
 
@@ -183,27 +193,41 @@ object StaticArguments {
     case pure: Pure => rewrite(pure)
   }
 
-  def analyzeParameters(vargs: List[Pure]) =
-    vargs.map(p => p match {
+  def analyzeBargs(bargs: List[Block]) =
+    bargs.map {
+      case BlockVar(id, annotatedType, annotatedCapt) => ArgumentType.Static(id.name.name)
+      case _ => ArgumentType.NonStatic
+    }
+
+  def analyzeVargs(vargs: List[Pure]) =
+    vargs.map {
       case ValueVar(id, annotatedType) => ArgumentType.Static(id.name.name)
       case _ => ArgumentType.NonStatic
-    })
+    }
   
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     val recursiveFunctions = Recursive(m)
 
-    // a map of function names to a list of booleans, indicating whether
+    // returns a map of function names to a list of booleans, indicating whether
     //   the respective argument can be statically transformed
-    val staticArguments = recursiveFunctions.view.mapValues { (callee, set) =>
-      val calleeParams = callee.map(arg => ArgumentType.Static(arg.name.name))
-      set.map(analyzeParameters).map(_.zip(calleeParams).map((a, b) => a == b))
+    def fullyStatic[A](params: List[Id], set: mutable.Set[List[A]], f: List[A] => List[ArgumentType]) =
+      val static = params.map(arg => ArgumentType.Static(arg.name.name))
+      set.map(f).map(_.zip(static).map((a, b) => a == b))
         .toList.transpose.map(_.forall(identity)) // the column-wise AND of all lists
-    }.toMap
 
-    val staticArgumentsFiltered = staticArguments.filter(_._2.contains(true))
+    val staticC = recursiveFunctions.view.mapValues { case (cparams, _, _, (cset, _, _)) => fullyStatic(cparams, cset, analyzeBargs) }
+      .toMap.filter(_._2.contains(true))
+
+    val staticV = recursiveFunctions.view.mapValues { case (_, vparams, _, (_, vset, _)) => fullyStatic(vparams, vset, analyzeVargs) }
+      .toMap.filter(_._2.contains(true))
+
+    val staticB = recursiveFunctions.view.mapValues { case (_, _, bparams, (_, _, bset)) => fullyStatic(bparams, bset, analyzeBargs) }
+      .toMap.filter(_._2.contains(true))
 
     given ctx: StaticArgumentsContext = StaticArgumentsContext(
-      staticArgumentsFiltered,
+      staticC,
+      staticV,
+      staticB,
       mutable.Map(),
       List()
     )

@@ -10,16 +10,20 @@ import scala.collection.mutable
  * Gather all functions, their arguments, and arguments of their recursive calls
  */
 class Recursive(
-  var defs: mutable.Map[Id, (List[Id], mutable.Set[List[Pure]])],
+  var defs: mutable.Map[Id, (
+    List[Id], // cparams
+    List[Id], // vparams
+    List[Id], // bparams
+    (mutable.Set[List[Block]], mutable.Set[List[Pure]], mutable.Set[List[Block]])
+  )],
   var stack: List[Id]
 ) {
   def process(d: Definition): Unit =
     d match {
       case Definition.Def(id, block) =>
         block match {
-          // TODO: also track block params
           case BlockLit(tparams, cparams, vparams, bparams, body) =>
-            defs(id) = (vparams.map(_.id), mutable.Set())
+            defs(id) = (cparams, vparams.map(_.id), bparams.map(_.id), (mutable.Set(), mutable.Set(), mutable.Set()))
             val before = stack
             stack = id :: stack
             process(block)
@@ -61,7 +65,9 @@ class Recursive(
       callee match {
         case BlockVar(id, annotatedTpe, annotatedCapt) => 
           if (stack.contains(id)) // is recursive
-            defs(id)._2 += vargs
+            defs(id)._4._1 += bargs // TOOD: can we always handle cargs as bargs?
+            defs(id)._4._2 += vargs
+            defs(id)._4._3 += bargs
         case _ => ()
       }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
