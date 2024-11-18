@@ -659,8 +659,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   */
   def tryExpr(): Term =
     nonterminal:
-      `try` ~> stmt() ~ someWhile(handler(), `with`) match {
-        case s ~ hs => TryHandle(s, hs)
+      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ maybeOnSuspend() ~ maybeOnResume() ~ maybeOnReturn() ~ maybeFinally() match {
+        case _ ~ _ ~ None ~ Some(_) ~ _ ~ _ =>
+          fail("Got `on resume` clause but no `on suspend` clause.")
+        case _ ~ _ ~ _ ~ Some(_) ~ _ ~ Some(_) =>
+          fail("Got both an `on return` and `finally` clause.")
+        case _ ~ _ ~ _ ~ _ ~ Some(_) ~ Some(_) =>
+          fail("got both an `on resume` and `finally` clause.")
+        case s ~ hs ~ susp ~ None ~ None ~ Some(Finally(vparam, body)) =>
+          TryHandle(s, hs, susp, Some(OnResume(vparam, body)), Some(OnReturn(vparam, body)))
+        case s ~ hs ~ susp ~ res ~ retrn ~ fin => 
+          TryHandle(s, hs, susp, res, retrn)
       }
 
   def regionExpr(): Term =
@@ -697,6 +706,42 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
           Handler(capability, impl)
       }
+
+  def maybeOnSuspend(): Option[OnSuspend] =
+    nonterminal:
+      backtrack(consume(`suspend`))
+      .map { _ => OnSuspend(braces { stmts() }) }
+
+  def maybeOnResume(): Option[OnResume] =
+    nonterminal:
+      backtrack(consume(`resume`))
+      .map { _ =>
+        braces { (singleValueParamOpt() <~ `=>`) ~ stmts() } match {
+          case vparam ~ body => OnResume(vparam, body)
+        }
+      }
+
+  def maybeOnReturn(): Option[OnReturn] =
+    nonterminal:
+      backtrack(consume(`return`))
+      .map { _ =>
+        braces { (singleValueParamOpt() <~ `=>`) ~ stmts() } match {
+          case vparam ~ body => OnReturn(vparam, body)
+        }
+      }
+
+  def maybeFinally(): Option[Finally] =
+    nonterminal:
+      if (!peek(`finally`)) None
+      else {
+        `finally` ~> braces { (singleValueParamOpt() <~ `=>`) ~ stmts() } match {
+          case vparam ~ body => Some(Finally(vparam, body))
+        }
+      }
+
+  def singleValueParamOpt(): ValueParam =
+    nonterminal:
+      if (isVariable) { ValueParam(idDef(), None) } else { parens { valueParam() } }
 
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.
   def implementation(): Implementation =

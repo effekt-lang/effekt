@@ -448,6 +448,37 @@ class RecursiveDescentTests extends munit.FunSuite {
       with Eff3 { def op(x, y) = { x } def op2() = { () }}
       """
     )
+    parseTry(
+      """try { 42 }
+      with Empty {}
+      suspend { println("hello") }
+      resume { x => println("resuming...")}
+      return { x => x}
+      """
+    )
+    parseTry(
+      """try 42 with Empty {}
+      return { (x: Int) => x }
+      """
+    )
+    parseTry(
+      """try 42
+      return { (x: Int) => x }
+      """
+    )
+    parseTry(
+      """try "a"
+      with Empty {}
+      finally { _ => println("done") }
+      """
+    )
+    intercept[Throwable] {
+      parseTry(
+        """try { 42 }
+        resume { println("resuming") }
+        """
+      )
+    }
   }
 
   test("Type definition") {

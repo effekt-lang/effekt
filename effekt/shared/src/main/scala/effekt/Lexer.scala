@@ -108,6 +108,9 @@ enum TokenKind {
   case `is`
   case `namespace`
   case `pure`
+  // case `on`
+  case `suspend`
+  case `finally`
 }
 object TokenKind {
   // "Soft" keywords
@@ -135,7 +138,8 @@ object TokenKind {
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
     `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
     `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
-    `namespace`, `pure`)
+    `namespace`, `pure`, `suspend`, `resume`, `finally`
+  )
 
 }
 
