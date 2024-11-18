@@ -36,7 +36,7 @@ object Normalizer {
   }
 
   def isRecursive(id: Id)(using ctx: Context): Boolean =
-    ctx.usage.get(id).exists { _ == Usage.Recursive }
+    ctx.usage.get(id).contains(Usage.Recursive)
 
   def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
@@ -93,8 +93,9 @@ object Normalizer {
 
   def active(e: Expr)(using Context): Expr = normalize(e) match {
     case e @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
-      case Some(value) => active(value)
-      case None => e
+      // We cannot inline side-effecting expressions
+      case Some(value) if value.capt.isEmpty => active(value)
+      case _ => e
     }
     case e => e
   }
