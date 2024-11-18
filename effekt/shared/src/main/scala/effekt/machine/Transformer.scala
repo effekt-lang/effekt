@@ -87,6 +87,12 @@ object Transformer {
               case core.Variable.Block(id, core.Type.TState(stTpe), capt) =>
                 Set(Variable(transform(id), Type.Reference(transform(stTpe))))
 
+              // Regions are blocks and can be free, but do not have info.
+              case core.Variable.Block(id, core.Type.TRegion, capt) =>
+                if id == symbols.builtins.globalRegion
+                then Set.empty
+                else Set(Variable(transform(id), Type.Prompt()))
+
               case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
                   // For each known free block we have to add its free variables to this one (flat closure)
                   case Some(BlockInfo.Definition(freeParams, blockParams)) =>
