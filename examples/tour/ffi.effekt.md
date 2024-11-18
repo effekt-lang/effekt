@@ -130,7 +130,7 @@ def primNot(b: Bool) = if (b) false else true
 extern pure def not(b: Bool): Bool =
   js "!${b}"
   llvm """
-    %p = extractvalue %Pos %b, 0
+    %p = extractvalue %Pos ${b}, 0
     %q = xor i64 1, %p
     %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0
     ret %Pos %adt_q
