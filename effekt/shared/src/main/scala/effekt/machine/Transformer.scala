@@ -104,8 +104,7 @@ object Transformer {
 
                   // Everything else is considered bound or global
                   case None =>
-                    // TODO should not happen, abort with error
-                    Set.empty
+                    ErrorReporter.panic(s"Could not find info for free variable $pid")
                 }
               case _ => Set.empty
             }
