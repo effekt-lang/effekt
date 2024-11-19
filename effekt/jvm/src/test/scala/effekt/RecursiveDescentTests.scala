@@ -452,7 +452,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       """try { 42 }
       with Empty {}
       suspend { println("hello") }
-      resume { x => println("resuming...")}
+      resume { x => println("resuming...") }
       return { x => x}
       """
     )

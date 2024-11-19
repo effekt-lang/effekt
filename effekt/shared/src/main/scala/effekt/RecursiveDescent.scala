@@ -659,15 +659,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   */
   def tryExpr(): Term =
     nonterminal:
-      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ maybeOnSuspend() ~ maybeOnResume() ~ maybeOnReturn() ~ maybeFinally() match {
+      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ finalizerClause(`suspend`, false) ~ finalizerClause(`resume`, true) ~ finalizerClause(`return`, true) ~ finalizerClause(`finally`, true) match {
         case _ ~ _ ~ None ~ Some(_) ~ _ ~ _ =>
-          fail("Got `on resume` clause but no `on suspend` clause.")
+          fail("Got `resume` clause but no `suspend` clause.")
         case _ ~ _ ~ _ ~ Some(_) ~ _ ~ Some(_) =>
-          fail("Got both an `on return` and `finally` clause.")
+          fail("Got both an `resume` and `finally` clause.")
         case _ ~ _ ~ _ ~ _ ~ Some(_) ~ Some(_) =>
-          fail("got both an `on resume` and `finally` clause.")
-        case s ~ hs ~ susp ~ None ~ None ~ Some(Finally(vparam, body)) =>
-          TryHandle(s, hs, susp, Some(OnResume(vparam, body)), Some(OnReturn(vparam, body)))
+          fail("got both an `return` and `finally` clause.")
+        case s ~ hs ~ susp ~ None ~ None ~ Some(prog) =>
+          TryHandle(s, hs, susp, Some(prog), Some(prog))
         case s ~ hs ~ susp ~ res ~ retrn ~ fin => 
           TryHandle(s, hs, susp, res, retrn)
       }
@@ -707,41 +707,24 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Handler(capability, impl)
       }
 
-  def maybeOnSuspend(): Option[OnSuspend] =
+  def finalizerClause(clause: TokenKind, vparam: Boolean): Option[FinalizerClause] =
     nonterminal:
-      backtrack(consume(`suspend`))
-      .map { _ => OnSuspend(braces { stmts() }) }
-
-  def maybeOnResume(): Option[OnResume] =
-    nonterminal:
-      backtrack(consume(`resume`))
+      backtrack { consume(clause) }
       .map { _ =>
-        braces { (singleValueParamOpt() <~ `=>`) ~ stmts() } match {
-          case vparam ~ body => OnResume(vparam, body)
+        braces {
+          backtrack { lambdaParams() <~ `=>` } ~ stmts() match {
+            // TODO better erros
+            case Some(Nil, vps, Nil) ~ body =>
+              if (!vps.isEmpty != vparam) fail(s"$clause value parameter mismatch")
+              else FinalizerClause(vps.headOption, body)
+            case Some(_, _, _) ~ _ =>
+              fail(s"$clause only expects value parameters")
+            case None ~ body =>
+              if (vparam) fail(s"$clause expects one value parameter but none were found")
+              else FinalizerClause(None, body)
+          }
         }
       }
-
-  def maybeOnReturn(): Option[OnReturn] =
-    nonterminal:
-      backtrack(consume(`return`))
-      .map { _ =>
-        braces { (singleValueParamOpt() <~ `=>`) ~ stmts() } match {
-          case vparam ~ body => OnReturn(vparam, body)
-        }
-      }
-
-  def maybeFinally(): Option[Finally] =
-    nonterminal:
-      if (!peek(`finally`)) None
-      else {
-        `finally` ~> braces { (singleValueParamOpt() <~ `=>`) ~ stmts() } match {
-          case vparam ~ body => Some(Finally(vparam, body))
-        }
-      }
-
-  def singleValueParamOpt(): ValueParam =
-    nonterminal:
-      if (isVariable) { ValueParam(idDef(), None) } else { parens { valueParam() } }
 
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.
   def implementation(): Implementation =
