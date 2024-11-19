@@ -9,13 +9,18 @@ import scala.collection.mutable
 /**
  * Gather all functions, their arguments, and arguments of their recursive calls
  */
+
+ case class FunctionGathering(
+    cparams: List[Id],
+    vparams: List[Id],
+    bparams: List[Id],
+    cargs: mutable.Set[List[Block]],
+    vargs: mutable.Set[List[Pure]],
+    bargs: mutable.Set[List[Block]]
+)
+
 class Recursive(
-  var defs: mutable.Map[Id, (
-    List[Id], // cparams
-    List[Id], // vparams
-    List[Id], // bparams
-    (mutable.Set[List[Block]], mutable.Set[List[Pure]], mutable.Set[List[Block]])
-  )],
+  val defs: mutable.Map[Id, FunctionGathering],
   var stack: List[Id]
 ) {
   def process(d: Definition): Unit =
@@ -23,7 +28,14 @@ class Recursive(
       case Definition.Def(id, block) =>
         block match {
           case BlockLit(tparams, cparams, vparams, bparams, body) =>
-            defs(id) = (cparams, vparams.map(_.id), bparams.map(_.id), (mutable.Set(), mutable.Set(), mutable.Set()))
+            defs(id) = FunctionGathering(
+                cparams,
+                vparams.map(_.id),
+                bparams.map(_.id),
+                mutable.Set(),
+                mutable.Set(),
+                mutable.Set()
+            )
             val before = stack
             stack = id :: stack
             process(block)
@@ -34,13 +46,9 @@ class Recursive(
         process(binding)
     }
 
-  // TODO: Necessary?
-  def process(id: Id): Unit =
-    ()
-
   def process(b: Block): Unit =
     b match {
-      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => () // TODO?
+      case Block.BlockVar(id, annotatedTpe, annotatedCapt) => ()
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
       case Block.Unbox(pure) => process(pure)
       case Block.New(impl) => process(impl)
@@ -65,14 +73,13 @@ class Recursive(
       callee match {
         case BlockVar(id, annotatedTpe, annotatedCapt) => 
           if (stack.contains(id)) // is recursive
-            defs(id)._4._1 += bargs // TOOD: can we always handle cargs as bargs?
-            defs(id)._4._2 += vargs
-            defs(id)._4._3 += bargs
+            defs(id).cargs += bargs // TOOD: can we always handle cargs as bargs?
+            defs(id).vargs += vargs
+            defs(id).bargs += bargs
         case _ => ()
       }
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
       process(callee)
-      process(method)
       vargs.foreach(process)
       bargs.foreach(process)
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)
@@ -82,13 +89,12 @@ class Recursive(
       default.foreach(process)
     case Stmt.Alloc(id, init, region, body) =>
       process(init)
-      process(region)
       process(body)
     case Stmt.Var(id, init, capture, body) =>
       process(init)
       process(body)
-    case Stmt.Get(id, capt, tpe) => process(id)
-    case Stmt.Put(id, tpe, value) => process(id); process(value)
+    case Stmt.Get(id, capt, tpe) => ()
+    case Stmt.Put(id, tpe, value) => process(value)
     case Stmt.Reset(body) => process(body)
     case Stmt.Shift(prompt, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
@@ -102,11 +108,11 @@ class Recursive(
       vargs.foreach(process)
       bargs.foreach(process)
     case Run(s) => process(s)
-    case Pure.ValueVar(id, annotatedType) => process(id)
+    case Pure.ValueVar(id, annotatedType) => ()
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, vargs) => process(tag); vargs.foreach(process)
-    case Pure.Select(target, field, annotatedType) => process(field); process(target)
+    case Pure.Make(data, tag, vargs) => vargs.foreach(process)
+    case Pure.Select(target, field, annotatedType) => process(target)
     case Pure.Box(b, annotatedCapture) => process(b)
   }
 

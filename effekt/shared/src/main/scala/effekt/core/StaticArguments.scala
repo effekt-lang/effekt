@@ -215,13 +215,13 @@ object StaticArguments {
       set.map(f).map(_.zip(static).map((a, b) => a == b))
         .toList.transpose.map(_.forall(identity)) // the column-wise AND of all lists
 
-    val staticC = recursiveFunctions.view.mapValues { case (cparams, _, _, (cset, _, _)) => fullyStatic(cparams, cset, analyzeBargs) }
+    val staticC = recursiveFunctions.view.mapValues { gathering => fullyStatic(gathering.cparams, gathering.cargs, analyzeBargs) }
       .toMap.filter(_._2.contains(true))
 
-    val staticV = recursiveFunctions.view.mapValues { case (_, vparams, _, (_, vset, _)) => fullyStatic(vparams, vset, analyzeVargs) }
+    val staticV = recursiveFunctions.view.mapValues { gathering => fullyStatic(gathering.vparams, gathering.vargs, analyzeVargs) }
       .toMap.filter(_._2.contains(true))
 
-    val staticB = recursiveFunctions.view.mapValues { case (_, _, bparams, (_, _, bset)) => fullyStatic(bparams, bset, analyzeBargs) }
+    val staticB = recursiveFunctions.view.mapValues { gathering => fullyStatic(gathering.bparams, gathering.bargs, analyzeBargs) }
       .toMap.filter(_._2.contains(true))
 
     given ctx: StaticArgumentsContext = StaticArgumentsContext(
