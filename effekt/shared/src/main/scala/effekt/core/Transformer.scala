@@ -425,9 +425,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause)
       Context.bind(compiledMatch)
 
-    case source.TryHandle(prog, handlers) =>
+    case source.TryHandle(prog, handlers, suspend, resume, retrn) =>
 
       val transformedProg = transform(prog)
+      // TODO
+      val transformedSuspend = suspend map { transform }
+      val transformedResume = resume map { transform }
+      val transformedReturn = retrn map { transform }
 
       val answerType = transformedProg.tpe
 
@@ -445,7 +449,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
       val body: BlockLit = BlockLit(Nil, List(promptCapt), Nil, List(promptParam),
-        Scope(transformedHandlers, transform(prog)))
+        Scope(transformedHandlers, transformedProg))
 
       Context.bind(Reset(body))
 
@@ -639,6 +643,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             core.Operation(op.definition, tps, cps, vps, bps, transform(body))
         }
     })
+  }
+
+  def transform(clause: source.FinalizerClause)(using Context): FinalizerClause = {
+    val source.FinalizerClause(vp, prog) = clause
+    FinalizerClause(vp map transform, transform(prog))
   }
 
   def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause =
