@@ -71,7 +71,7 @@ class Recursive(
       bargs.foreach(process)
 
       callee match {
-        case BlockVar(id, annotatedTpe, annotatedCapt) => 
+        case BlockVar(id, annotatedTpe, annotatedCapt) =>
           if (stack.contains(id)) // is recursive
             defs(id).cargs += bargs // TOOD: can we always handle cargs as bargs?
             defs(id).vargs += vargs
