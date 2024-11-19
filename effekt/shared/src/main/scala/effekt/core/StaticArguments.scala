@@ -202,18 +202,6 @@ object StaticArguments {
     case pure: Pure => rewrite(pure)
   }
 
-  def analyzeBargs(bargs: List[Block]) =
-    bargs.map {
-      case BlockVar(id, annotatedType, annotatedCapt) => ArgumentType.Static(id.name.name)
-      case _ => ArgumentType.NonStatic
-    }
-
-  def analyzeVargs(vargs: List[Pure]) =
-    vargs.map {
-      case ValueVar(id, annotatedType) => ArgumentType.Static(id.name.name)
-      case _ => ArgumentType.NonStatic
-    }
-
   def transform(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     val recursiveFunctions = Recursive(m)
 
