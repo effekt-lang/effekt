@@ -105,7 +105,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field, tpe) => toDoc(b) <> "." <> toDoc(field)
 
     case Box(b, capt) => parens("box" <+> toDoc(b))
-    case Run(s) => "run" <+> braces(toDoc(s))
+    case Run(s) => "run" <+> block(toDoc(s))
   }
 
   def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
@@ -154,7 +154,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(d: Definition): Doc = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
+      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
     case Definition.Let(id, _, binding) =>
@@ -166,14 +166,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(definitions) <> emptyline <> toDoc(rest)
 
     case Return(e) =>
-      toDoc(e)
+      "return" <+> toDoc(e)
 
     case Val(Wildcard(), _, binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case Val(id, tpe, binding, body) =>
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDoc(binding)) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, vargs, bargs) =>
