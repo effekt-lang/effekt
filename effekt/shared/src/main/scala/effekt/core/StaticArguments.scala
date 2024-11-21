@@ -13,7 +13,6 @@ import scala.collection.mutable
 object StaticArguments {
 
   case class IsStatic(
-    captures: List[Boolean], // TODO delete
     values: List[Boolean],
     blocks: List[Boolean])
 
@@ -24,7 +23,7 @@ object StaticArguments {
   )
 
   def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).forall {
-    case IsStatic(captures, values, blocks) => captures.exists(x => x) || values.exists(x => x) || blocks.exists(x => x)
+    case IsStatic(values, blocks) => values.exists(x => x) || blocks.exists(x => x)
   }
 
   def dropStatic[A](isStatic: List[Boolean], arguments: List[A]) =
@@ -52,11 +51,12 @@ object StaticArguments {
     // This is guaranteed by Recursive()!
     val blockLit = definition.block.asInstanceOf[BlockLit]
 
-    val IsStatic(staticC, staticV, staticB) = ctx.statics(definition.id)
+    val IsStatic(staticV, staticB) = ctx.statics(definition.id)
 
     val calleeType = BlockType.Function(
       blockLit.tparams,
-      dropStatic(staticC, blockLit.cparams),
+      // here we drop those capture params where the block param is static
+      dropStatic(staticB, blockLit.cparams),
       dropStatic(staticV, blockLit.vparams).map(_.tpe),
       dropStatic(staticB, blockLit.bparams).map(_.tpe),
       blockLit.tpe match
@@ -78,7 +78,7 @@ object StaticArguments {
 
     // fresh params for the wrapper function and its invocation
     // note: only freshen params if not static to prevent duplicates
-    val freshCparams: List[Id] = (staticC zip blockLit.cparams).map {
+    val freshCparams: List[Id] = (staticB zip blockLit.cparams).map {
       case (true, param) => param
       case (false, param) => Id(param)
     }
@@ -98,7 +98,7 @@ object StaticArguments {
       freshBparams,
       Scope(List(Definition.Def(worker.id, BlockLit(
         blockLit.tparams,
-        dropStatic(staticC, blockLit.cparams),
+        dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
         rewriteBody(blockLit.body)
@@ -131,7 +131,7 @@ object StaticArguments {
       b match {
         // if arguments are static && recursive call: call worker with reduced arguments
         case BlockVar(id, annotatedTpe, annotatedCapt) if hasStatics(id) && C.stack.contains(id) =>
-          val IsStatic(staticC, staticV, staticB) = C.statics(id)
+          val IsStatic(staticV, staticB) = C.statics(id)
           app(C.workers(id), targs,
             dropStatic(staticV, vargs).map(rewrite),
             dropStatic(staticB, bargs).map(rewrite))
@@ -219,7 +219,7 @@ object StaticArguments {
             case _ => false
           }
         }
-        id -> IsStatic(isBlockStatic, isValueStatic, isBlockStatic)
+        id -> IsStatic(isValueStatic, isBlockStatic)
     }.toMap
 
     given ctx: StaticArgumentsContext = StaticArgumentsContext(
