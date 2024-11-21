@@ -197,7 +197,7 @@ object StaticArguments {
     val recursiveFunctions = Recursive(m)
 
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
-      case (id, FunctionGathering(vparams, bparams, vargs, bargs)) =>
+      case (id, RecursiveFunction(BlockLit(tparams, cparams, vparams, bparams, body), vargs, bargs)) =>
         val isValueStatic = vparams.zipWithIndex.collect {
           case (param, index) => vargs.map(args => args(index)).forall {
             case ValueVar(other, _) => param == other

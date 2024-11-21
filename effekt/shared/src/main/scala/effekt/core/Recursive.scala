@@ -10,28 +10,22 @@ import scala.collection.mutable
  * Gather all functions, their arguments, and arguments of their recursive calls
  */
 
-case class FunctionGathering(
-    vparams: List[Id],
-    bparams: List[Id],
-    vargs: mutable.Set[List[Pure]],
-    bargs: mutable.Set[List[Block]]
+case class RecursiveFunction(
+  definition: BlockLit,
+  vargs: mutable.Set[List[Pure]],
+  bargs: mutable.Set[List[Block]]
 )
 
 class Recursive(
-  val defs: mutable.Map[Id, FunctionGathering],
+  val defs: mutable.Map[Id, RecursiveFunction],
   var stack: List[Id]
 ) {
   def process(d: Definition): Unit =
     d match {
       case Definition.Def(id, block) =>
         block match {
-          case BlockLit(tparams, cparams, vparams, bparams, body) =>
-            defs(id) = FunctionGathering(
-                vparams.map(_.id),
-                bparams.map(_.id),
-                mutable.Set(),
-                mutable.Set()
-            )
+          case b @ BlockLit(tparams, cparams, vparams, bparams, body) =>
+            defs(id) = RecursiveFunction(b, mutable.Set.empty, mutable.Set.empty)
             val before = stack
             stack = id :: stack
             process(block)
