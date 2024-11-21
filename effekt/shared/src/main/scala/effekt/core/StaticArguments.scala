@@ -19,14 +19,16 @@ object StaticArguments {
   case class StaticArgumentsContext(
     statics: Map[Id, IsStatic],
     workers: mutable.Map[Id, Block],
-    var stack: List[Id] // Why is this mutable?
+    stack: List[Id]
   )
+
+  def enterFunction(id: Id)(using ctx: StaticArgumentsContext): StaticArgumentsContext = ctx.copy(stack = id :: ctx.stack)
 
   def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).exists {
     case IsStatic(values, blocks) => values.exists(x => x) || blocks.exists(x => x)
   }
 
-  def dropStatic[A](isStatic: List[Boolean], arguments: List[A]) =
+  def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
     (isStatic zip arguments).collect { case (false, arg) => arg }
 
   /**
@@ -65,14 +67,6 @@ object StaticArguments {
     val worker: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), calleeType, Set())
     ctx.workers(id) = worker
 
-    // push to the stack to detect recursion, since recursive calls will need to call the worker
-    def rewriteBody(body: Stmt) =
-      val before = ctx.stack
-      ctx.stack = id :: ctx.stack
-      val newBody = rewrite(body)
-      ctx.stack = before
-      newBody
-
     // fresh params for the wrapper function and its invocation
     // note: only freshen params if not static to prevent duplicates
     val freshCparams: List[Id] = (staticB zip blockLit.cparams).map {
@@ -98,7 +92,7 @@ object StaticArguments {
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
-        rewriteBody(blockLit.body)
+        rewrite(blockLit.body)(using enterFunction(id))
       ))), App(
         worker,
         // TODO: These conversions to types are a bit hacky, are there better ways?
@@ -204,7 +198,7 @@ object StaticArguments {
     val recursiveFunctions = Recursive(m)
 
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
-      case (id, FunctionGathering(cparams, vparams, bparams, cargs, vargs, bargs)) =>
+      case (id, FunctionGathering(vparams, bparams, vargs, bargs)) =>
         val isValueStatic = vparams.zipWithIndex.collect {
           case (param, index) => vargs.map(args => args(index)).forall {
             case ValueVar(other, _) => param == other

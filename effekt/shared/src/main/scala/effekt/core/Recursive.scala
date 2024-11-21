@@ -11,10 +11,8 @@ import scala.collection.mutable
  */
 
  case class FunctionGathering(
-    cparams: List[Id],
     vparams: List[Id],
     bparams: List[Id],
-    cargs: mutable.Set[List[Block]],
     vargs: mutable.Set[List[Pure]],
     bargs: mutable.Set[List[Block]]
 )
@@ -29,10 +27,8 @@ class Recursive(
         block match {
           case BlockLit(tparams, cparams, vparams, bparams, body) =>
             defs(id) = FunctionGathering(
-                cparams,
                 vparams.map(_.id),
                 bparams.map(_.id),
-                mutable.Set(),
                 mutable.Set(),
                 mutable.Set()
             )
@@ -73,7 +69,6 @@ class Recursive(
       callee match {
         case BlockVar(id, annotatedTpe, annotatedCapt) =>
           if (stack.contains(id)) // is recursive
-            defs(id).cargs += bargs // TOOD: can we always handle cargs as bargs?
             defs(id).vargs += vargs
             defs(id).bargs += bargs
         case _ => ()
