@@ -258,20 +258,19 @@ define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
 
-    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer
-    %limit = load %Limit, ptr %limit_pointer
-
+    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !3
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
     %isInside = icmp ule %StackPointer %nextStackPointer, %limit
     br i1 %isInside, label %continue, label %realloc
 
 continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !3
     ret %StackPointer %currentStackPointer
 
 realloc:
     %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
-    %base = load %Base, ptr %base_pointer
+    %base = load %Base, ptr %base_pointer, !alias.scope !3
 
     %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
     %intBase = ptrtoint %Base %base to i64
@@ -285,20 +284,20 @@ realloc:
     %newStackPointer = getelementptr i8, %Base %newBase, i64 %size
     %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %n
 
-    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer
-    store %Base %newBase, ptr %base_pointer
-    store %Limit %newLimit, ptr %limit_pointer
+    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    store %Base %newBase, ptr %base_pointer, !alias.scope !3
+    store %Limit %newLimit, ptr %limit_pointer, !alias.scope !3
 
     ret %StackPointer %newStackPointer
 }
 
 define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
 
     %o = sub i64 0, %n
     %newStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %o
-    store %StackPointer %newStackPointer, ptr %stackPointer_pointer
+    store %StackPointer %newStackPointer, ptr %stackPointer_pointer, !alias.scope !3
 
     ret %StackPointer %newStackPointer
 }
@@ -755,3 +754,14 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
     ret void
 }
+
+
+; Scope domains
+!0 = !{!"types"}
+!1 = !{!1}
+
+; Scopes
+!2 = !{!"stackValues", !0}
+
+; Scope lists
+!3 = !{!2}
