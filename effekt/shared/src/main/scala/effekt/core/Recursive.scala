@@ -2,40 +2,25 @@ package effekt.core
 
 import scala.collection.mutable
 
-// TODO: Is there a simpler way of iterating the functions and calls (like a fold)?
-//       Reachable etc. use similar recursions
-//       We could probably remove a lot of recursion here!
-
 /**
- * Gather all functions, their arguments, and arguments of their recursive calls
+ * Gather all functions and arguments of their recursive calls
  */
-
- case class FunctionGathering(
-    cparams: List[Id],
-    vparams: List[Id],
-    bparams: List[Id],
-    cargs: mutable.Set[List[Block]],
-    vargs: mutable.Set[List[Pure]],
-    bargs: mutable.Set[List[Block]]
+case class RecursiveFunction(
+  definition: BlockLit,
+  vargs: mutable.Set[List[Pure]],
+  bargs: mutable.Set[List[Block]]
 )
 
 class Recursive(
-  val defs: mutable.Map[Id, FunctionGathering],
+  val defs: mutable.Map[Id, RecursiveFunction],
   var stack: List[Id]
 ) {
   def process(d: Definition): Unit =
     d match {
       case Definition.Def(id, block) =>
         block match {
-          case BlockLit(tparams, cparams, vparams, bparams, body) =>
-            defs(id) = FunctionGathering(
-                cparams,
-                vparams.map(_.id),
-                bparams.map(_.id),
-                mutable.Set(),
-                mutable.Set(),
-                mutable.Set()
-            )
+          case b @ BlockLit(tparams, cparams, vparams, bparams, body) =>
+            defs(id) = RecursiveFunction(b, mutable.Set.empty, mutable.Set.empty)
             val before = stack
             stack = id :: stack
             process(block)
@@ -71,9 +56,8 @@ class Recursive(
       bargs.foreach(process)
 
       callee match {
-        case BlockVar(id, annotatedTpe, annotatedCapt) => 
+        case BlockVar(id, annotatedTpe, annotatedCapt) =>
           if (stack.contains(id)) // is recursive
-            defs(id).cargs += bargs // TOOD: can we always handle cargs as bargs?
             defs(id).vargs += vargs
             defs(id).bargs += bargs
         case _ => ()
