@@ -3,6 +3,7 @@ package core
 
 import effekt.core.normal.*
 import scala.collection.mutable
+import effekt.core.Type.returnType
 
 /**
  * Static argument transformation
@@ -23,6 +24,8 @@ object StaticArguments {
   )
 
   def enterFunction(id: Id)(using ctx: StaticArgumentsContext): StaticArgumentsContext = ctx.copy(stack = id :: ctx.stack)
+
+  def within(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.stack.contains(id)
 
   def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).exists {
     case IsStatic(values, blocks) => values.exists(x => x) || blocks.exists(x => x)
@@ -52,19 +55,17 @@ object StaticArguments {
   def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): Definition.Def =
     val IsStatic(staticV, staticB) = ctx.statics(id)
 
-    val calleeType = BlockType.Function(
+    val workerType = BlockType.Function(
       blockLit.tparams,
       // here we drop those capture params where the block param is static
       dropStatic(staticB, blockLit.cparams),
       dropStatic(staticV, blockLit.vparams).map(_.tpe),
       dropStatic(staticB, blockLit.bparams).map(_.tpe),
-      blockLit.tpe match
-        case BlockType.Function(_, _, _, _, result) => result
-        case _ => ??? // impossible!
+      blockLit.returnType
     )
 
-    val worker: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), calleeType, blockLit.capt)
-    ctx.workers(id) = worker
+    val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, blockLit.capt)
+    ctx.workers(id) = workerVar
 
     // fresh params for the wrapper function and its invocation
     // note: only freshen params if not static to prevent duplicates
@@ -86,15 +87,14 @@ object StaticArguments {
       freshCparams,
       freshVparams,
       freshBparams,
-      Scope(List(Definition.Def(worker.id, BlockLit(
+      Scope(List(Definition.Def(workerVar.id, BlockLit(
         blockLit.tparams,
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
         rewrite(blockLit.body)
       ))), App(
-        worker,
-        // TODO: These conversions to types are a bit hacky, are there better ways?
+        workerVar,
         blockLit.tparams.map(t => ValueType.Var(t)),
         dropStatic(staticV, freshVparams.map(v => ValueVar(v.id, v.tpe))),
         dropStatic(staticB, freshBparams.map(b => BlockVar(b.id, b.tpe, b.capt)))
@@ -121,7 +121,7 @@ object StaticArguments {
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
         // if arguments are static && recursive call: call worker with reduced arguments
-        case BlockVar(id, annotatedTpe, annotatedCapt) if hasStatics(id) && C.stack.contains(id) =>
+        case BlockVar(id, annotatedTpe, annotatedCapt) if hasStatics(id) && within(id) =>
           val IsStatic(staticV, staticB) = C.statics(id)
           app(C.workers(id), targs,
             dropStatic(staticV, vargs).map(rewrite),

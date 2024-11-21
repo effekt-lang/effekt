@@ -1,9 +1,7 @@
 package effekt
 package core
 
-import effekt.symbols.TrackedParam.BlockParam
-import symbols.{ Symbol, TypeSymbol, builtins }
-import symbols.Name
+import symbols.{ Symbol, builtins }
 
 /**
  * In core, all names, including those in capture sets are just symbols.

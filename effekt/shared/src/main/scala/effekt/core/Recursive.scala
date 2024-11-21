@@ -10,7 +10,7 @@ import scala.collection.mutable
  * Gather all functions, their arguments, and arguments of their recursive calls
  */
 
- case class FunctionGathering(
+case class FunctionGathering(
     vparams: List[Id],
     bparams: List[Id],
     vargs: mutable.Set[List[Pure]],
