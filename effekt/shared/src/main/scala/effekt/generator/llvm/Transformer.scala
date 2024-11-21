@@ -262,6 +262,7 @@ object Transformer {
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineLabel(returnAddressName, parameters) {
           emit(Comment(s"pushFrame / return address, ${frameEnvironment.length} free variables"))
+          emit(Call("", Ccc(), VoidType(), ConstantGlobal("assumeFrameHeaderWasPopped"), List(getStack())))
           popEnvironmentFrom(getStack(), frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           eraseValues(frame.parameters, freeVariables(frame.body))

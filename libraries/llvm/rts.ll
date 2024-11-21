@@ -111,6 +111,7 @@ declare double @llvm.ceil.f64(double)
 declare double @llvm.floor.f64(double)
 declare void @print(i64)
 declare void @exit(i64)
+declare void @llvm.assume(i1)
 
 
 ; Prompts
@@ -295,6 +296,11 @@ define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
 
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !3
+    %isInside = icmp ule %StackPointer %stackPointer, %limit
+    call void @llvm.assume(i1 %isInside)
+
     %o = sub i64 0, %n
     %newStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %o
     store %StackPointer %newStackPointer, ptr %stackPointer_pointer, !alias.scope !3
@@ -307,6 +313,18 @@ define i64 @nextPowerOfTwo(i64 %x) {
     %numBits = sub i64 64, %leadingZeros
     %result = shl i64 1, %numBits
     ret i64 %result
+}
+
+define void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    %oldStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
+
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !3
+    %isInside = icmp ule %StackPointer %oldStackPointer, %limit
+    call void @llvm.assume(i1 %isInside)
+    ret void
 }
 
 ; Meta-stack management
