@@ -127,11 +127,7 @@ object Type {
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       assert(targs.size == tparams.size, "Wrong number of type arguments")
-      // assert(cargs.size == cparams.size, "Wrong number of capture arguments")
-      if (cargs.size != cparams.size) {
-        println(cargs)
-        println(cparams)
-      }
+      assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
       val vsubst = (tparams zip targs).toMap
       val csubst = (cparams zip cargs).toMap
