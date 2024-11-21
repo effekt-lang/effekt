@@ -83,7 +83,7 @@ object StaticArguments {
     }
 
     Definition.Def(id, BlockLit(
-      blockLit.tparams, // TODO: Do we need to freshen these as well?
+      blockLit.tparams, // TODO: Do we need to freshen these as well? If we do, then we also need to substitute into types of parameters
       freshCparams,
       freshVparams,
       freshBparams,
