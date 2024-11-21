@@ -22,7 +22,7 @@ object StaticArguments {
     var stack: List[Id] // Why is this mutable?
   )
 
-  def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).forall {
+  def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).exists {
     case IsStatic(values, blocks) => values.exists(x => x) || blocks.exists(x => x)
   }
 
@@ -47,11 +47,8 @@ object StaticArguments {
    *     foo_worker(a_fresh, b_fresh)
    *   foo(4, 2, 0)
    */
-  def wrapDefinition(definition: Definition.Def)(using ctx: StaticArgumentsContext): Definition.Def =
-    // This is guaranteed by Recursive()!
-    val blockLit = definition.block.asInstanceOf[BlockLit]
-
-    val IsStatic(staticV, staticB) = ctx.statics(definition.id)
+  def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): Definition.Def =
+    val IsStatic(staticV, staticB) = ctx.statics(id)
 
     val calleeType = BlockType.Function(
       blockLit.tparams,
@@ -65,13 +62,13 @@ object StaticArguments {
     )
 
     // TODO: Where do we get the capture set?
-    val worker: Block.BlockVar = BlockVar(Id(definition.id.name.name + "_worker"), calleeType, Set())
-    ctx.workers(definition.id) = worker
+    val worker: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), calleeType, Set())
+    ctx.workers(id) = worker
 
     // push to the stack to detect recursion, since recursive calls will need to call the worker
     def rewriteBody(body: Stmt) =
       val before = ctx.stack
-      ctx.stack = definition.id :: ctx.stack
+      ctx.stack = id :: ctx.stack
       val newBody = rewrite(body)
       ctx.stack = before
       newBody
@@ -91,7 +88,7 @@ object StaticArguments {
       case (false, BlockParam(id, tpe, capt)) => BlockParam(Id(id), tpe, capt)
     }
 
-    Definition.Def(definition.id, BlockLit(
+    Definition.Def(id, BlockLit(
       blockLit.tparams, // TODO: Do we need to freshen these as well?
       freshCparams,
       freshVparams,
@@ -111,9 +108,10 @@ object StaticArguments {
       ))
     ))
 
+
   def rewrite(definitions: List[Definition])(using ctx: StaticArgumentsContext): List[Definition] =
     definitions.collect {
-      case d @ Definition.Def(id, block) if hasStatics(id) => wrapDefinition(d)
+      case Definition.Def(id, block: BlockLit) if hasStatics(id) => wrapDefinition(id, block)
       case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
       case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, rewrite(binding))
     }
