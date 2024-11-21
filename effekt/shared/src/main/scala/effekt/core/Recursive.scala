@@ -2,14 +2,9 @@ package effekt.core
 
 import scala.collection.mutable
 
-// TODO: Is there a simpler way of iterating the functions and calls (like a fold)?
-//       Reachable etc. use similar recursions
-//       We could probably remove a lot of recursion here!
-
 /**
- * Gather all functions, their arguments, and arguments of their recursive calls
+ * Gather all functions and arguments of their recursive calls
  */
-
 case class RecursiveFunction(
   definition: BlockLit,
   vargs: mutable.Set[List[Pure]],
