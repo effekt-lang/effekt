@@ -63,8 +63,7 @@ object StaticArguments {
         case _ => ??? // impossible!
     )
 
-    // TODO: Where do we get the capture set?
-    val worker: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), calleeType, Set())
+    val worker: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), calleeType, blockLit.capt)
     ctx.workers(id) = worker
 
     // fresh params for the wrapper function and its invocation
@@ -92,7 +91,7 @@ object StaticArguments {
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
-        rewrite(blockLit.body)(using enterFunction(id))
+        rewrite(blockLit.body)
       ))), App(
         worker,
         // TODO: These conversions to types are a bit hacky, are there better ways?
