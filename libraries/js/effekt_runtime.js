@@ -126,9 +126,24 @@ function SHIFT(p, body, ks, k) {
     return () => c(meta, k2)
   }
 
-  let k1 = meta.stack
+  const k1 = meta.stack
   meta.stack = null
-  return body(resumeComp, meta, k1)
+  const resume = (c, ks, k) => RESUME(c, cont, ks, k)
+  return body(resume, meta, k1)
+}
+
+// Rewind stack `cont` back onto `k` :: `ks` and resume with c
+function RESUME(c, cont, ks, k) {
+  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
+  let toRewind = cont
+  while (!!toRewind) {
+    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
+    toRewind = toRewind.rest
+  }
+
+  const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
+  meta.stack = null
+  return () => c(meta, k1)
 }
 
 function RUN_TOPLEVEL(comp) {
