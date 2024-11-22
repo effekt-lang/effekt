@@ -128,7 +128,7 @@ object Reachable {
     analysis.reachable
   }
 
-  def apply(s: Stmt.Scope): Map[Id, Usage] = {
+  def apply(s: Stmt): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
     analysis.process(s)(using Map.empty)
     analysis.reachable

@@ -1,18 +1,12 @@
 package effekt
 package core
 
-import effekt.core.Block.BlockLit
-import effekt.core.Pure.ValueVar
-import effekt.core.normal.*
-
-class Deadcode(entrypoints: Set[Id], definitions: Map[Id, Definition]) extends core.Tree.Rewrite {
-
-  val reachable = Reachable(entrypoints, definitions)
+class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
 
   override def stmt = {
     // Remove local unused definitions
     case Scope(defs, stmt) =>
-      scope(defs.collect {
+      normal.scope(defs.collect {
         case d: Definition.Def if reachable.isDefinedAt(d.id) => rewrite(d)
         // we only keep non-pure OR reachable let bindings
         case d: Definition.Let if d.capt.nonEmpty || reachable.isDefinedAt(d.id) => rewrite(d)
@@ -31,8 +25,13 @@ class Deadcode(entrypoints: Set[Id], definitions: Map[Id, Definition]) extends c
 
 object Deadcode {
   def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
-    Deadcode(entrypoints, m.definitions.map(d => d.id -> d).toMap).rewrite(m)
+    val reachable = Reachable(entrypoints, m.definitions.map(d => d.id -> d).toMap)
+    Deadcode(reachable).rewrite(m)
   def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     remove(Set(entrypoint), m)
+
+  def remove(stmt: Stmt): Stmt =
+    val reachable = Reachable(stmt)
+    Deadcode(reachable).rewrite(stmt)
 }
 

@@ -6,6 +6,8 @@ import effekt.core.{ Block, DeclarationContext, Definition, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
+import effekt.symbols.ErrorMessageInterpolator
+
 
 object Transformer {
 
@@ -147,7 +149,7 @@ object Transformer {
         transform(vargs, bargs).run { (values, blocks) =>
           callee match {
             case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
-              BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
+              BPC.info.getOrElse(id, sys.error(pp"In ${stmt}. Cannot find block info for ${id}: ${annotatedTpe}.\n${BPC.info}")) match {
                 // Unknown Jump to function
                 case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
                   Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
