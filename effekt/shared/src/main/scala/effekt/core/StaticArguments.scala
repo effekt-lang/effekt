@@ -96,7 +96,7 @@ object StaticArguments {
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
-        rewrite(blockLit.body)
+        rewrite(blockLit.body)(using enterFunction(id))
       ))), App(
         workerVar,
         dropStatic(staticT, blockLit.tparams.map(t => ValueType.Var(t))),
