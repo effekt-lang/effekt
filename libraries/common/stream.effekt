@@ -105,6 +105,17 @@ def exhaustively[A] { program: () => A / stop } { action: A => Unit }: Unit =
     def stop() = ()
   }
 
+/// Run `program` forever until `stop` is thrown. 
+def exhaustively[A] { program: () => A / stop }: Unit =
+  try {
+    def go(): Unit = {
+      program()
+      go()
+    }
+    go()
+  } with stop {
+    def stop() = ()
+  }
 
 // In Effekt lower bounds are inclusive and upper bounds are exclusive
 
@@ -216,7 +227,7 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
 def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
   collectBytes[Unit]{stream}.second
 
-def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
+def feed[T](list: List[T]) { reader: () => Unit / read[T] }: Unit = {
   var l = list
   try {
     reader()
@@ -232,7 +243,7 @@ def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
   }
 }
 
-def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
+def feed[T](array: Array[T]) { reader: () => Unit / read[T] }: Unit = {
   var i = 0
   try {
     reader()
@@ -247,7 +258,7 @@ def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
   }
 }
 
-def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
+def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] }: Unit = {
   var i = 0
   try {
     reader()
@@ -282,6 +293,18 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
   }
 }
 
+/// Combines two streams together producing a stream of pairs in lockstep.
+/// Given two streams of length `n` and `m`, it produces a stream of length `min(n, m)`.
+def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] }: Unit / emit[(A, B)] = {
+  with source[A, Unit] { stream1 }
+  with source[B, Unit] { stream2 }
+
+  exhaustively {
+    val a = do read[A]()
+    val b = do read[B]()
+    do emit((a, b))
+  }
+}
 
 def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
 

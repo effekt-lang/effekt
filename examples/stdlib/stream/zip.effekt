@@ -1,0 +1,12 @@
+import stream
+
+def main() = {
+  def stream1() = [1, 2, 3].each
+  def stream2() = array::fromList(["a", "b", "c", "d"]).each
+
+  with val tup = for[(Int, String)] {
+    zip[Int, String] { stream1 } { stream2 }
+  }
+  val (a, b) = tup
+  println(show(a) ++ ", " ++ show(b))
+}
