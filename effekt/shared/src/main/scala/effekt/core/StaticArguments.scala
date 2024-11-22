@@ -210,13 +210,13 @@ object StaticArguments {
         }
         val isValueStatic = vparams.zipWithIndex.collect {
           case (param, index) => vargs.map(args => args(index)).forall {
-            case ValueVar(other, _) => param == other
+            case ValueVar(other, _) => param.id == other
             case _ => false
           }
         }
         val isBlockStatic = bparams.zipWithIndex.collect {
           case (param, index) => bargs.map(args => args(index)).forall {
-            case BlockVar(other, _, _) => param == other
+            case BlockVar(other, _, _) => param.id == other
             case _ => false
           }
         }
