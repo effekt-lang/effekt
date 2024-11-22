@@ -1,0 +1,12 @@
+import stream
+
+def squares(max: Int): Unit / emit[Int] = {
+  with val n = for[Int] { range(1, max) }
+  do emit(n * n)
+}
+
+def main() = {
+  val max = 10
+  println("The sum of squares from 1 to " ++ show(max) ++ " is:")
+  println(sum { squares(max + 1) })
+}
