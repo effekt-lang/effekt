@@ -204,19 +204,19 @@ object StaticArguments {
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
       case (id, RecursiveFunction(BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs)) =>
         val isTypeStatic = tparams.zipWithIndex.collect {
-          case (param, index) => targs.map(args => args(index)).exists {
+          case (param, index) => targs.nonEmpty && targs.map(args => args(index)).forall {
             case ValueType.Var(other) => param == other
             case _ => false
           }
         }
         val isValueStatic = vparams.zipWithIndex.collect {
-          case (param, index) => vargs.map(args => args(index)).exists {
+          case (param, index) => vargs.nonEmpty && vargs.map(args => args(index)).forall {
             case ValueVar(other, _) => param.id == other
             case _ => false
           }
         }
         val isBlockStatic = bparams.zipWithIndex.collect {
-          case (param, index) => bargs.map(args => args(index)).exists {
+          case (param, index) => bargs.nonEmpty && bargs.map(args => args(index)).forall {
             case BlockVar(other, _, _) => param.id == other
             case _ => false
           }
