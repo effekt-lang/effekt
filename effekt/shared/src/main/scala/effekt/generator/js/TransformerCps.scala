@@ -14,6 +14,7 @@ object TransformerCps extends Transformer {
   val RUN_TOPLEVEL = Variable(JSName("RUN_TOPLEVEL"))
   val RESET = Variable(JSName("RESET"))
   val SHIFT = Variable(JSName("SHIFT"))
+  val RESUME = Variable(JSName("RESUME"))
   val THUNK = Variable(JSName("THUNK"))
   val DEALLOC = Variable(JSName("DEALLOC"))
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
@@ -256,6 +257,9 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
       pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k))))
+
+    case cps.Stmt.Resume(r, b, ks2, k2) =>
+      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b), toJS(ks2), toJS(k2))))
 
     case cps.Stmt.Hole() =>
       pure(js.Return($effekt.call("hole")))

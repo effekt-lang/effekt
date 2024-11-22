@@ -139,6 +139,9 @@ enum Stmt extends Tree {
   // shift(p, { (resume, ks, k) => STMT }, ks, k)
   case Shift(prompt: Id, body: BlockLit, ks: MetaCont, k: Cont)
 
+  // resume(r, (ks, k) => STMT, ks, k)
+  case Resume(resumption: Id, body: BlockLit, ks: MetaCont, k: Cont)
+
   // Others
   case Hole()
 }
@@ -219,6 +222,7 @@ object Variables {
 
     case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
     case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
+    case Stmt.Resume(r, body, ks, k) => block(r) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Hole() => empty
   }
 
