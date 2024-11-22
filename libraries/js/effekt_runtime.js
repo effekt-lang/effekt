@@ -113,27 +113,13 @@ function SHIFT(p, body, ks, k) {
   cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
   meta = meta.rest
 
-  function resumeComp(c, ks, k) {
-    let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-    let toRewind = cont
-    while (!!toRewind) {
-      meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
-      toRewind = toRewind.rest
-    }
-
-    const k2 = meta.stack // TODO instead copy meta here, like elsewhere?
-    meta.stack = null
-    return () => c(meta, k2)
-  }
-
   const k1 = meta.stack
   meta.stack = null
-  const resume = (c, ks, k) => RESUME(c, cont, ks, k)
-  return body(resume, meta, k1)
+  return body(cont, meta, k1)
 }
 
 // Rewind stack `cont` back onto `k` :: `ks` and resume with c
-function RESUME(c, cont, ks, k) {
+function RESUME(cont, c, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
