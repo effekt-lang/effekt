@@ -65,7 +65,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
     case core.Val(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), tpe, resolvedBinding, rewrite(body)) }
+      withBinding(id) { core.Val(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)

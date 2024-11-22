@@ -26,8 +26,12 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     if !Context.config.optimize() then return tree;
 
-    val anfed = BindSubexpressions.transform(tree)
+    // (2) lift static arguments (worker/wrapper)
+    val lifted = Context.timed("static-argument-transformation", source.name) {
+      StaticArguments.transform(mainSymbol, tree)
+    }
 
+    val anfed = BindSubexpressions.transform(lifted)
 
     // println(s"BEFORE\n\n ${util.show(anfed)}")
 
@@ -37,8 +41,4 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     //println(s"AFTER\n\n ${util.show(gced)}")
     gced
-    // (2) inline unique block definitions
-    //    Context.timed("inliner", source.name) {
-    //      Inline.full(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
-    //    }
 }
