@@ -30,7 +30,8 @@ object StaticArguments {
 
   def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).exists {
     // types ALL need to be static
-    case IsStatic(types, values, blocks) => types.forall(x => x) && (values.exists(x => x) || blocks.exists(x => x))
+    case s  @ IsStatic(types, values, blocks) =>
+      types.forall(x => x) && (values.exists(x => x) || blocks.exists(x => x))
   }
 
   def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
@@ -96,7 +97,7 @@ object StaticArguments {
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
-        rewrite(blockLit.body)
+        rewrite(blockLit.body)(using enterFunction(id))
       ))), App(
         workerVar,
         dropStatic(staticT, blockLit.tparams.map(t => ValueType.Var(t))),
@@ -203,20 +204,20 @@ object StaticArguments {
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
       case (id, RecursiveFunction(BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs)) =>
         val isTypeStatic = tparams.zipWithIndex.collect {
-          case (param, index) => targs.map(args => args(index)).forall {
+          case (param, index) => targs.nonEmpty && targs.map(args => args(index)).forall {
             case ValueType.Var(other) => param == other
             case _ => false
           }
         }
         val isValueStatic = vparams.zipWithIndex.collect {
-          case (param, index) => vargs.map(args => args(index)).forall {
-            case ValueVar(other, _) => param == other
+          case (param, index) => vargs.nonEmpty && vargs.map(args => args(index)).forall {
+            case ValueVar(other, _) => param.id == other
             case _ => false
           }
         }
         val isBlockStatic = bparams.zipWithIndex.collect {
-          case (param, index) => bargs.map(args => args(index)).forall {
-            case BlockVar(other, _, _) => param == other
+          case (param, index) => bargs.nonEmpty && bargs.map(args => args(index)).forall {
+            case BlockVar(other, _, _) => param.id == other
             case _ => false
           }
         }
