@@ -1,33 +1,242 @@
 module text/regex
 
 import string
+import option
+import list
 
-extern type Regex
+extern type RegexRepr
 
-record Match(matched: String, index: Int)
+// matches and groups
+record Range(start: Int, end: Int)
+record Group(matched: String, index: Range)
+record Match(matched: String, index: Range, groups: List[Group])
 
-extern pure def regex(str: String): Regex =
-  js "new RegExp(${str})"
+record Regex(
+  inner: RegexRepr,
+  flags: List[RegexFlags],
+  globalFlag: Bool,
+  capture: Option[Match]
+)
 
-def exec(reg: Regex, str: String): Option[Match] =
-   undefinedToOption(reg.unsafeExec(str)) match {
-    case None() => None()
-    case Some(v) => Some(Match(v.matched, v.index))
+def copyWithCapture(reg: Regex,  capture: Option[Match]) = {
+  reg match {
+    case Regex(inner, flags, globalFlag,  _) => Regex(inner, flags, globalFlag, capture)
+  }
+}
+
+// Shortcut for map over capture
+def map[B](self: Regex) {f: Match => B}: Option[B] = self.capture.map{f}
+
+def start(m: Match) = m.index.start
+def end(m: Match) = m.index.end
+
+/**
+ * Specifies flags that modify regular expression behavior.
+ *
+ * Flags:
+ * - Global: Matches all occurrences in the input string.
+ * - IgnoreCase: Performs case-insensitive matching.
+ * - Multiline: Treats ^ and $ as start/end of each line.
+ *
+ * Usage:
+ * ```effekt
+ * val regex = regex("pattern", [Global(), IgnoreCase()])
+ * ```
+ *
+ */
+type RegexFlags {
+  Global();
+  IgnoreCase();
+  Multiline();
+}
+
+/**
+ * Constructs a Regex object from a pattern string.
+ *
+ * This function creates a Regex object with no flags set.
+ *
+ * @param pattern The regular expression pattern as a string.
+ * @return A Regex object that can be used with the `exec` function.
+ *
+ *
+ * Example usage:
+ * ```effekt
+ * val simpleRegex = regex("\\w+")
+ * val math = exec(simpleRegex, "Hello World")
+ * ```
+ *
+ * For more control over flags, use the overloaded version:
+ * ```effekt
+ * val regexWithIndices = regex("(\\w+)", [Global()])
+ * ```
+ */
+def regex(pattern: String): Regex = regex(pattern, [])
+
+
+/**
+ * Constructs a Regex object from a pattern string and optional flags.
+ *
+ * @param pattern The regular expression pattern as a string.
+ * @param flags A List of RegexFlags containing any combination of the following flags:
+ *   - `Global` Global search (find all matches rather than stopping after the first match).
+*       This flags makes the regex object stateful and `exec` will return the next match on each call.
+ *   - `IgnoreCase` Case-insensitive search
+ *   - `Multiline Multi-line search (^ and $ match start/end of each line)
+ *
+ * @return A Regex object that can be used with the `exec` function.
+ *
+ * Example usage:
+ * ```effekt
+ * val simpleRegex = regex("\\w+")
+ * val complexRegex = regex("(\\w+)\\s(\\d+)", [Global()]))
+ * ```
+ *
+ */
+def regex(pattern: String, flags: List[RegexFlags]): Regex = {
+  var globalFlag = false
+  var flags = flags
+
+  // handle global flag in effekt
+  if (flags.any{it => it.show() == "g"}) {
+    globalFlag = true
+    flags = flags.collect { it =>
+      it match {
+        case Global() => None()
+        case _ => Some(it)
+      }
+    }
+  }
+  // always set "d" (GenerateIndices) flag for capturing group indices
+  val flagsRepr: String = flags.map[RegexFlags, String]{it => it.show()}.join("") ++ "d"
+  val repr = internal::unsafeRegex(pattern, flagsRepr)
+  Regex(repr, flags, globalFlag, None())
+}
+
+/**
+ * Executes the regex against the given string.
+ *
+ * @param reg The Regex object to execute.
+ * @param str The string to match against.
+ * @return Regex object with the next Match (if found) stored in the `capture` field.
+ *
+ * Please refer to the `Match` record for details on the structure of the returned match.
+ *
+ * For regex queries with the `Global` flag set, this function can be called subsequent
+ * on the returned object to find all matches.
+ *
+ * Example usage:
+ * ```effekt
+ * var rx = regex("(\\w+)\\s(\\d+)", [Global()])
+ * val text = "Hello 123 World 456"
+ * loop  { {l} =>
+ *   rx = rx.exec(text)
+ *   rx.capture match  {
+ *     case Some(m) =>
+ *       println("matched: " ++ m.matched ++ " range: (" ++ m.start.show() ++ ", " ++ m.end.show() ++ ")")
+ *     case None() => l.break()
+ *   }
+ * }
+ * ```
+ */
+def exec(reg: Regex, str: String): Regex = {
+  def getIndex(reg: Regex) = reg match {
+    case Regex(_, _, true, Some(m)) => end(m)
+    case _ => 0
   }
 
-// internal representation { matched: String, index: Int }
+  def toGroup(g: GroupMatch): Group = Group(
+    matched(g),
+    Range(start(g), end(g))
+  )
+
+  def toMatch(m: RegexMatch): Match = {
+    val offset = getIndex(reg)
+    val range = Range(offset + start(fullMatch(m)),offset + end(fullMatch(m)))
+    val groups = subGroups(m).toList().map{toGroup}
+    Match(matched(fullMatch(m)), range, groups)
+  }
+
+
+  val regexMatch: Option[RegexMatch]= internal::unsafeExec(reg.inner, str.substring(getIndex(reg))).undefinedToOption()
+  val capture: Option[Match] = regexMatch.map { toMatch }
+
+  reg.copyWithCapture(capture)
+}
+
+// internal representation
+extern type GroupMatch
+extern pure def matched(g: GroupMatch): String = js "${g}.matched"
+extern pure def start(g: GroupMatch): Int = js "${g}.start"
+extern pure def end(g: GroupMatch): Int = js "${g}.end"
+
 extern type RegexMatch
-extern pure def matched(r: RegexMatch): String = js "${r}.matched"
-extern pure def index(r: RegexMatch): Int = js "${r}.index"
+extern pure def fullMatch(r: RegexMatch): GroupMatch = js "${r}.fullMatch"
+extern pure def subGroups(r: RegexMatch): Array[GroupMatch] = js "${r}.groups"
 
 extern js """
 function regex$exec(reg, str) {
-  var res = reg.exec(str);
-  if (res === null) { return undefined }
-  else { return { matched: res[0], index: res.index } }
+  const match = reg.exec(str);
+  if (match === null) return undefined;
+
+  const fullMatch = {
+    matched: match[0],
+    start: match.index,
+    end: match.index + match[0].length,
+  };
+  var groups = [];
+  for (var i = 1; i < match.length; i++) {
+    if (match[i] !== undefined) {
+      groups.push({
+        matched: match[i],
+        start: match.indices[i][0],
+        end: match.indices[i][1],
+      });
+    } else {
+      // Push an empty string if an intermediate group is undefined
+      groups.push({ matched: "", start: -1, end: -1 });
+    }
+  }
+
+  return { fullMatch: fullMatch, groups: groups };
 }
 """
 
-// internals
-extern io def unsafeExec(reg: Regex, str: String): RegexMatch =
-  js "regex$exec(${reg}, ${str})"
+// internal calls
+namespace internal {
+  extern pure def unsafeExec(reg: RegexRepr, str: String): RegexMatch = js "regex$exec(${reg}, ${str})"
+
+  extern pure def unsafeRegex(str: String, flags: String): RegexRepr = js "new RegExp(${str}, ${flags})"
+}
+
+
+// Show
+def show(m: Match): String = {
+  val start = m.start.show()
+  val end = m.end.show()
+  val groups = m.groups.map{it => it.show()}.join("\n")
+
+  [
+    "matched: " ++ m.matched,
+    "from: (" ++ start ++ ", " ++ end ++ ")",
+    "Groups:",
+    groups
+  ].join("\n")
+}
+
+def show(g: Group): String = {
+  val range = g.index.show()
+
+  g.matched ++  "\nfrom: " ++ range
+}
+
+def show(r: Range): String = {
+  "(" ++ r.start.show() ++ ", " ++ r.end.show() ++ ")"
+}
+
+def show(f: RegexFlags): String = {
+  f match {
+    case Global() => "g"
+    case IgnoreCase() => "i"
+    case Multiline() => "m"
+  }
+}
