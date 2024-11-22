@@ -14,6 +14,7 @@ import effekt.core.Type.returnType
 object StaticArguments {
 
   case class IsStatic(
+    types: List[Boolean],
     values: List[Boolean],
     blocks: List[Boolean])
 
@@ -28,7 +29,8 @@ object StaticArguments {
   def within(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.stack.contains(id)
 
   def hasStatics(id: Id)(using ctx: StaticArgumentsContext): Boolean = ctx.statics.get(id).exists {
-    case IsStatic(values, blocks) => values.exists(x => x) || blocks.exists(x => x)
+    // types ALL need to be static
+    case IsStatic(types, values, blocks) => types.forall(x => x) && (values.exists(x => x) || blocks.exists(x => x))
   }
 
   def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
@@ -53,10 +55,12 @@ object StaticArguments {
    *   foo(4, 2, 0)
    */
   def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): Definition.Def =
-    val IsStatic(staticV, staticB) = ctx.statics(id)
+    val IsStatic(staticT, staticV, staticB) = ctx.statics(id)
+
+    assert(staticT.forall(x => x), "Can only apply the worker-wrapper translation, if all type arguments are static.")
 
     val workerType = BlockType.Function(
-      blockLit.tparams,
+      dropStatic(staticT, blockLit.tparams), // should always be empty!
       // here we drop those capture params where the block param is static
       dropStatic(staticB, blockLit.cparams),
       dropStatic(staticV, blockLit.vparams).map(_.tpe),
@@ -83,24 +87,23 @@ object StaticArguments {
     }
 
     Definition.Def(id, BlockLit(
-      blockLit.tparams, // TODO: Do we need to freshen these as well? If we do, then we also need to substitute into types of parameters
+      blockLit.tparams,
       freshCparams,
       freshVparams,
       freshBparams,
       Scope(List(Definition.Def(workerVar.id, BlockLit(
-        blockLit.tparams,
+        dropStatic(staticT, blockLit.tparams),
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
         rewrite(blockLit.body)
       ))), App(
         workerVar,
-        blockLit.tparams.map(t => ValueType.Var(t)),
+        dropStatic(staticT, blockLit.tparams.map(t => ValueType.Var(t))),
         dropStatic(staticV, freshVparams.map(v => ValueVar(v.id, v.tpe))),
         dropStatic(staticB, freshBparams.map(b => BlockVar(b.id, b.tpe, b.capt)))
       ))
     ))
-
 
   def rewrite(definitions: List[Definition])(using ctx: StaticArgumentsContext): List[Definition] =
     definitions.collect {
@@ -122,8 +125,9 @@ object StaticArguments {
       b match {
         // if arguments are static && recursive call: call worker with reduced arguments
         case BlockVar(id, annotatedTpe, annotatedCapt) if hasStatics(id) && within(id) =>
-          val IsStatic(staticV, staticB) = C.statics(id)
-          app(C.workers(id), targs,
+          val IsStatic(staticT, staticV, staticB) = C.statics(id)
+          app(C.workers(id),
+            dropStatic(staticT, targs),
             dropStatic(staticV, vargs).map(rewrite),
             dropStatic(staticB, bargs).map(rewrite))
         case _ => app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
@@ -197,7 +201,13 @@ object StaticArguments {
     val recursiveFunctions = Recursive(m)
 
     val statics: Map[Id, IsStatic] = recursiveFunctions.map {
-      case (id, RecursiveFunction(BlockLit(tparams, cparams, vparams, bparams, body), vargs, bargs)) =>
+      case (id, RecursiveFunction(BlockLit(tparams, cparams, vparams, bparams, body), targs, vargs, bargs)) =>
+        val isTypeStatic = tparams.zipWithIndex.collect {
+          case (param, index) => targs.map(args => args(index)).forall {
+            case ValueType.Var(other) => param == other
+            case _ => false
+          }
+        }
         val isValueStatic = vparams.zipWithIndex.collect {
           case (param, index) => vargs.map(args => args(index)).forall {
             case ValueVar(other, _) => param == other
@@ -210,7 +220,7 @@ object StaticArguments {
             case _ => false
           }
         }
-        id -> IsStatic(isValueStatic, isBlockStatic)
+        id -> IsStatic(isTypeStatic, isValueStatic, isBlockStatic)
     }.toMap
 
     given ctx: StaticArgumentsContext = StaticArgumentsContext(

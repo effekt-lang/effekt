@@ -7,8 +7,9 @@ import scala.collection.mutable
  */
 case class RecursiveFunction(
   definition: BlockLit,
-  vargs: mutable.Set[List[Pure]],
-  bargs: mutable.Set[List[Block]]
+  targs: mutable.Set[List[ValueType]] = mutable.Set.empty,
+  vargs: mutable.Set[List[Pure]] = mutable.Set.empty,
+  bargs: mutable.Set[List[Block]] = mutable.Set.empty
 )
 
 class Recursive(
@@ -20,7 +21,7 @@ class Recursive(
       case Definition.Def(id, block) =>
         block match {
           case b @ BlockLit(tparams, cparams, vparams, bparams, body) =>
-            defs(id) = RecursiveFunction(b, mutable.Set.empty, mutable.Set.empty)
+            defs(id) = RecursiveFunction(b)
             val before = stack
             stack = id :: stack
             process(block)
@@ -58,6 +59,7 @@ class Recursive(
       callee match {
         case BlockVar(id, annotatedTpe, annotatedCapt) =>
           if (stack.contains(id)) // is recursive
+            defs(id).targs += targs
             defs(id).vargs += vargs
             defs(id).bargs += bargs
         case _ => ()
