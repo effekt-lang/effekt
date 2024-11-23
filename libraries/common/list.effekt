@@ -685,7 +685,7 @@ namespace sort {
     case _ => [list]
   }
 
-    /// When in an ascending sequence, try to add `current` to `run` (if possible)
+  /// When in an ascending sequence, try to add `current` to `run` (if possible)
   def ascending[A](current: A, rest: List[A]) { runDiff: List[A] => List[A] } { compare: (A, A) => Bool }: List[List[A]] = rest match {
     case Cons(next, tail) and compare(current, next) =>
       ascending(next, tail) { diffRest => runDiff(Cons(current, diffRest)) }  {compare}
@@ -696,7 +696,7 @@ namespace sort {
   def descending[A](current: A, run: List[A], rest: List[A]) { compare: (A, A) => Bool }: List[List[A]] = rest match {
     case Cons(next, tail) and not(compare(current, next)) =>
       descending(next, Cons(current, run), tail) {compare}
-    case _ => Cons(Cons(current, run.reverse), sequences(rest) {compare})
+    case _ => Cons(Cons(current, run), sequences(rest) {compare})
   }
 
   def mergeAll[A](runs: List[List[A]]) { compare: (A, A) => Bool }: List[A] = runs match {
@@ -751,7 +751,7 @@ namespace sort {
 /// O(N log N) worstcase
 def sortBy[A](list: List[A]) { compare: (A, A) => Bool }: List[A] = {
   val monotonicRuns = sort::sequences(list) {compare}
-    sort::mergeAll(monotonicRuns) {compare}
+  sort::mergeAll(monotonicRuns) {compare}
 }
 
 /// Sort a list of integers in an ascending order.
