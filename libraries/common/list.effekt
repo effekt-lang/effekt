@@ -745,8 +745,8 @@ namespace sort {
 /// []
 /// ```
 ///
-/// Note: this implementation is probably not stacksafe!
-/// (but works for ~10M elements just fine)
+/// Note: this implementation is not stacksafe!
+/// (works for ~5M random elements just fine, but OOMs on ~10M random elements)
 ///
 /// O(N log N) worstcase
 def sortBy[A](list: List[A]) { compare: (A, A) => Bool }: List[A] = {
