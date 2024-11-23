@@ -1,4 +1,5 @@
 import stream
+import array
 
 def main() = {
   def stream1() = [1, 2, 3].each
