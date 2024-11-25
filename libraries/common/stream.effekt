@@ -2,6 +2,9 @@ module stream
 
 import array
 import bytearray
+import map
+import set
+
 import io/filesystem
 import io/error
 
@@ -73,6 +76,26 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
   }
   go(0)
 }
+
+/// Turns a `map` into a producer of a push stream
+/// of `(key, value)` pairs by emitting each contained *in order*.
+def each[K, V](map: Map[K, V]): Unit / emit[(K, V)] =
+  map.foreach { (k, v) => do emit((k, v)) }
+
+/// Turns a `map` into a producer of a push stream
+/// of its keys by emitting each contained *in order*.
+def eachKey[K, V](map: Map[K, V]): Unit / emit[K] =
+  map.foreach { (k, _v) => do emit(k) }
+
+/// Turns a `map` into a producer of a push stream
+/// of its values by emitting each contained.
+def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
+  map.foreach { (_k, v) => do emit(v) }
+
+/// Turns a `set` into a producer of a push stream
+/// by emitting each contained *in order*.
+def each[A](set: Set[A]): Unit / emit[A] =
+  set.foreach { x => do emit(x) }
 
 // not option
 // not dequeue
@@ -237,6 +260,28 @@ def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
     }
   }
 }
+
+def collectMap[K, V, R] { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) =
+  try {
+    (stream(), map::empty())
+  } with emit[(K, V)] { case (k, v) =>
+    val (r, map) = resume(());
+    (r, map.put(k, v))
+  }
+
+def collectMap[K, V] { stream: () => Any / emit[(K, V)] }: Map[K, V] =
+  collectMap[K, V, Any]{stream}.second
+
+def collectSet[A, R] { stream: () => R / emit[A] }: (R, Set[A]) =
+  try {
+    (stream(), set::empty())
+  } with emit[A] { (v) =>
+    val (r, set) = resume(());
+    (r, set.insert(v))
+  }
+
+def collectSet[A] { stream: () => Any / emit[A] }: Set[A] =
+  collectSet[A, Any]{stream}.second
 
 def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
   var i = 0
