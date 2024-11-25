@@ -40,75 +40,27 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
 }
 
 
-record UnexpectedChar(got: Option[Char], expected: Option[Char])
 
-def prettyUnexpectedChar(got: Option[Char], expected: Option[Char]): String = (got, expected) match {
-  case (Some(gotChar), Some(expectedChar)) =>
-    "Unexpected character, got '" ++ gotChar.toString ++ "', but expected '" ++ expectedChar.toString ++ "'"
-  case (None(), Some(expectedChar)) =>
-    "Unexpected end of input, expected '" ++ expectedChar.toString ++ "'"
-  case (Some(gotChar), None()) =>
-    "Unexpected character, got '" ++ gotChar.toString ++ "', but expected end of input"
-  case (None(), None()) =>
-    "Unexpected character"
-}
-
-def unexpectedChar(got: Option[Char], expected: Option[Char]): Nothing / Exception[UnexpectedChar] =
-  do raise(UnexpectedChar(got, expected), prettyUnexpectedChar(got, expected))
-
-def unexpectedChar(got: Option[Char], expected: Char): Nothing / Exception[UnexpectedChar] =
-  unexpectedChar(got, Some(expected))
-
-/// Check that the next character is the given one, raising an exception otherwise.
-def expect(c: Char): Unit / { Scan[Char], Exception[UnexpectedChar] } =
-  try {
-    val t = do peek[Char]()
-    if(t == c) {
-      do skip[Char]()
-    } else {
-      unexpectedChar(Some(t), c)
-    }
-  } with stop {
-    unexpectedChar(None(), c)
-  }
-
-/// Check that there is no further input, raising an exception otherwise.
-def expectEof(): Unit / { Scan[Char], Exception[UnexpectedChar] } =
-  boundary {
-    unexpectedChar(Some(do peek[Char]()), None())
-  }
-
-
-/// Check that the next characters are the given String, raising an exception otherwise.
-/// Advances over the longest common prefix with this String.
-def expect(s: String): Unit / { Scan[Char], Exception[UnexpectedChar] } =
-  for[Char] { s.each } { c => expect(c) }
-
-
-/// If the next character is c, advance over it and return true.
-/// Else return false.
-def skip(c: Char): Bool / Scan[Char] = {
-  try {
-    if (do peek() == c) { do skip[Char](); true } else { false }
-  } with stop {
-    false
+/// Check that the next token satisfies the predicate and skip and return it when it does.
+def readIf[A] { predicate: A => Bool }: Option[A] / { Scan[A], stop } = {
+  val t = do peek[A]()
+  if (predicate(t)) {
+    do skip[A]()
+    Some(t)
+  } else {
+    None()
   }
 }
 
-/// Skip until the next character is not a whitespace character
-def skipWhitespace(): Unit / Scan[Char] =
-  exhaustively {
-    val c = do peek[Char]()
-    if (c.isWhitespace) {
-      do skip[Char]()
-    } else {
-      do stop()
-    }
-  }
+/// Check that the next token satisfies the predicate and skip it when it does.
+def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], stop } = {
+  readIf{predicate}
+  ()
+}
 
 /// Reads until the predicate does not hold for the next token.
-/// Emits the tokens skipped.
-def consume[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
+/// Emits the tokens read.
+def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
   exhaustively {
     val c = do peek[A]()
     if (predicate(c)) {
@@ -119,10 +71,44 @@ def consume[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
     }
   }
 
-/// Read a positive decimal integer.
-def readPositive(): Int / { Scan[Char], Exception[WrongFormat] } = {
-  readPositive(10)
+/// Skips until the predicate does not hold for the next token.
+def skipWhile[A] { predicate: A => Bool }: Unit / Scan[A] =
+  try {
+    readWhile{predicate}
+  } with emit[A] { _ =>
+    resume(())
+  }
+
+
+record UnexpectedChar(got: Char, expected: Char)
+
+def prettyUnexpectedChar(got: Char, expected: Char): String =
+  "Unexpected character, got '" ++ got.toString ++ "', but expected '" ++ expected.toString ++ "'"
+
+def unexpectedChar(got: Char, expected: Char): Nothing / Exception[UnexpectedChar] =
+  do raise(UnexpectedChar(got, expected), prettyUnexpectedChar(got, expected))
+
+
+/// Require that the next character is the given one, raising an exception otherwise.
+def expect(c: Char): Unit / { Scan[Char], Exception[UnexpectedChar], stop } = {
+  val t = next[Char]()
+  if (t != c) {
+    unexpectedChar(t, c)
+  }
 }
+
+/// Check that the next characters are the given String, raising an exception otherwise.
+/// Advances over the longest common prefix with this String.
+def expect(s: String): Unit / { Scan[Char], Exception[UnexpectedChar], stop } =
+  for[Char] { s.each } { c => expect(c) }
+
+/// Skip until the next character is not a whitespace character
+def skipWhitespace(): Unit / Scan[Char] =
+  skipWhile { c => c.isWhitespace }
+
+/// Read a positive decimal integer.
+def readPositive(): Int / { Scan[Char], Exception[WrongFormat] } =
+  readPositive(10)
 
 /// Read a positive integer in the given base <= 35.
 def readPositive(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
@@ -145,8 +131,8 @@ def readPositive(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
 }
 
 /// Read an integer in the given base <= 35.
-def readInt(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
-  if(skip('-')) {
+def readInt(base: Int): Int / { Scan[Char], Exception[WrongFormat], stop } = {
+  if (readIf { c => c == '-'} is Some(_)) {
     0 - readPositive(base)
   } else {
     readPositive(base)
@@ -154,11 +140,11 @@ def readInt(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
 }
 
 /// Read a decimal integer.
-def readInt(): Int / { Scan[Char], Exception[WrongFormat] } =
+def readInt(): Int / { Scan[Char], Exception[WrongFormat], stop } =
   readInt(10)
 
 /// Read a double value, in the common format (TODO document)
-def readDouble(): Double / { Scan[Char], Exception[WrongFormat] } = {
+def readDouble(): Double / { Scan[Char], Exception[WrongFormat], stop } = {
   def exponent(pre: Double) = {
     try {
       if(do peek() == 'e' || do peek() == 'E') {
@@ -177,7 +163,7 @@ def readDouble(): Double / { Scan[Char], Exception[WrongFormat] } = {
   def fraction(pre: Int) = {
     try {
       if (do peek[Char]() is '.') {
-        skip('.')
+        do skip[Char]()
         var b = 0.1
         var r = pre.toDouble
         try {
@@ -204,7 +190,7 @@ def readDouble(): Double / { Scan[Char], Exception[WrongFormat] } = {
 def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] } = {
   try {
     skipWhitespace()
-    expect('"')
+    expect('\"')
     while(next[Char]() is c and c != '"') {
       c match {
         case '\\' => next[Char]() match {
@@ -221,8 +207,7 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
         case o => do emit(o)
       }
     }
-    skip('\"')
-    ()
+    expect('\"')
   } with stop {
     wrongFormat("Unexpected end of file while reading a string")
   } with Exception[UnexpectedChar] {
