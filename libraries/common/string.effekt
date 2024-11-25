@@ -326,12 +326,3 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
     %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
   """
-
-/// TODO this does not do the correct thing for characters that aren't 1 byte
-def foreach(str: String){ body: Char => Unit }: Unit = {
-  var i = 0
-  while (i < str.length) {
-    body(str.unsafeCharAt(i))
-    i = i + 1
-  }
-}
