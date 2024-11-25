@@ -20,14 +20,15 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
       }
   }
 
-  override def rewrite(m: ModuleDecl): ModuleDecl = m.copy(
-    // Remove top-level unused definitions
-    definitions = m.definitions.collect { case d if reachable.isDefinedAt(d.id) => rewrite(d) },
-    externs = m.externs.collect {
-      case e: Extern.Def if reachable.isDefinedAt(e.id) => e
-      case e: Extern.Include => e
-    }
-  )
+  override def rewrite(m: ModuleDecl): ModuleDecl =
+    m.copy(
+      // Remove top-level unused definitions
+      definitions = m.definitions.collect { case d if reachable.isDefinedAt(d.id) => rewrite(d) },
+      externs = m.externs.collect {
+        case e: Extern.Def if reachable.isDefinedAt(e.id) => e
+        case e: Extern.Include => e
+      }
+    )
 }
 
 object Deadcode {

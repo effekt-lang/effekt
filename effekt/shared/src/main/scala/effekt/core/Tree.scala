@@ -186,7 +186,7 @@ sealed trait Expr extends Tree {
 }
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
+case class DirectApp(b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
@@ -216,7 +216,7 @@ enum Pure extends Expr {
   /**
    * Pure FFI calls. Invariant, block b is pure.
    */
-  case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+  case PureApp(b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure])
 
   /**
    * Constructor calls
@@ -693,8 +693,10 @@ object substitutions {
 
   def substitute(expression: Expr)(using Substitution): Expr =
     expression match {
-      case DirectApp(b, targs, vargs, bargs) =>
-        DirectApp(substitute(b), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+      case DirectApp(b, targs, vargs, bargs) => substitute(b) match {
+        case x : Block.BlockVar => DirectApp(x, targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+        case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
+      }
 
       case Run(s) =>
         Run(substitute(s))
@@ -794,8 +796,10 @@ object substitutions {
       case Make(tpe, tag, vargs) =>
         Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))
 
-      case PureApp(b, targs, vargs) =>
-        PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))
+      case PureApp(b, targs, vargs) => substitute(b) match {
+        case x : Block.BlockVar => PureApp(x, targs.map(substitute), vargs.map(substitute))
+        case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
+      }
 
       case Select(target, field, annotatedType) =>
         Select(substitute(target), field, substitute(annotatedType))

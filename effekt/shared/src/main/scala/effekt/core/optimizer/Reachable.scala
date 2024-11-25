@@ -4,6 +4,8 @@ package optimizer
 
 /**
  * A simple reachability analysis.
+ *
+ * TODO reachability should also process externs since they now contain splices.
  */
 class Reachable(
   var reachable: Map[Id, Usage],
