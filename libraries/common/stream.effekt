@@ -93,6 +93,7 @@ def boundary { program: () => Any / stop }: Unit = {
   ()
 }
 
+/// Run `program` forever until `stop` is thrown.
 def exhaustively { program: () => Any / stop }: Unit =
   try {
     def go(): Unit = {

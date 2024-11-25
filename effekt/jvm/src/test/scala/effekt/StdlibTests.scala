@@ -24,7 +24,8 @@ abstract class StdlibChezTests extends StdlibTests {
     // Not implemented yet
     examplesDir / "stdlib" / "bytearray",
     examplesDir / "stdlib" / "io",
-    examplesDir / "stdlib" / "stream" / "characters.effekt"
+    examplesDir / "stdlib" / "stream" / "characters.effekt",
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
   )
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
@@ -46,6 +47,7 @@ class StdlibLLVMTests extends StdlibTests {
     // Valgrind leak/failure
     examplesDir / "stdlib" / "bytearray" / "bytearray.effekt",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "wordcount.effekt",

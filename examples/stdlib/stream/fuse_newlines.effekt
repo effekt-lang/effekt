@@ -1,0 +1,32 @@
+import stream
+
+def fuseNewlines(): Nothing / {read[Char], emit[Char], stop} = {
+  val c = do read[Char]()
+  if (c == '\n') {
+    do emit(c)
+    skipNewlines()
+  } else {
+    do emit(c)
+    fuseNewlines()
+  }
+}
+
+def skipNewlines(): Nothing / {read[Char], emit[Char], stop} = {
+  val c = do read[Char]()
+  if (c == '\n') {
+    skipNewlines()
+  } else {
+    do emit(c)
+    fuseNewlines()
+  }
+}
+
+def main() = {
+  with feed("ab\n\nc\nde")
+  println(collectString {
+    with exhaustively
+    fuseNewlines()
+  })
+}
+
+
