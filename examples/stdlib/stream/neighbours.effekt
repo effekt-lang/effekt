@@ -1,0 +1,38 @@
+import stream
+
+record Pos(x: Int, y: Int)
+
+def equals(left: Pos, right: Pos) = (left, right) match {
+  case (Pos(lx, ly), Pos(rx, ry)) => lx == rx && ly == ry
+}
+
+def show(p: Pos) = "[" ++ show(p.x) ++ ", " ++ show(p.y) ++ "]"
+
+/// Gets the neighbours of a given position.
+/// with radius=1, those are immediate neighbours (including the diagonal)
+/// with radius=2, these are neighbours&their neighbours
+/// ...
+def neighboursOf(pos: Pos, radius: Int) = {
+  with val dx = for[Int] { range(neg(radius), radius + 1) }
+  with val dy = for[Int] { range(neg(radius), radius + 1) }
+  val newPosition = Pos(pos.x + dx, pos.y + dy)
+  do emit(newPosition)
+}
+
+def main() = {
+  val start = Pos(4, 3)
+
+  println("The immediate neighbours of " ++ show(start) ++ " are:")
+  for[Pos] { start.neighboursOf(1) } { 
+    case p and not(p.equals(start)) => println(show(p))
+    case _ => ()
+  }
+
+  println("")
+
+  println("The neighbours and their neighbours of " ++ show(start) ++ " are:")
+  for[Pos] { start.neighboursOf(2) } { 
+    case p and not(p.equals(start)) => println(show(p))
+    case _ => ()
+  }
+}
