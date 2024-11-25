@@ -11,7 +11,7 @@ import io/error
 /// Describes push streams by emitting values of type `A`.
 effect emit[A](value: A): Unit
 
-/// Describes pull streams by requiring values of type `A`.
+/// Describes pull streams by reading values of type `A`.
 ///
 /// The producer can decide to `stop` emitting values.
 effect read[A](): A / stop
@@ -28,20 +28,14 @@ def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
     resume(action(value))
   }
 
-/// Like `for[A, R]`, but fixes the result of producing computation to the
-/// common type `Unit`. This simplifies annotating the type of stream
-/// elements `A` without having to also annotate `R`.
+/// Like `for[A, R]`, but ignores the result of the stream, and consequently
+/// works for any type. Use this to annotate the type of stream elements
+/// `A` without having to also annotate `R`.
 ///
 /// e.g. for[Int] { prog() } { el => println(el) }
-def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
-  for[A, Unit]{stream}{action}
-
-def continually[A] { action: () => A }: Nothing / emit[A] = {
-  def go(): Nothing = {
-    do emit(action())
-    go()
-  }
-  go()
+def for[A] { stream: () => Any / emit[A] } { action: A => Unit }: Unit = {
+  for[A, Any]{stream}{action}
+  ()
 }
 
 /// Turns a `list` into a producer of a push stream
@@ -91,23 +85,28 @@ def boundary[R] { program: () => R / stop }: Option[R] =
   try {
     Some(program())
   } with stop {
-    def stop() = None()
+    None()
   }
 
-def exhaustively[A] { program: () => A / stop } { action: A => Unit }: Unit =
+def boundary { program: () => Any / stop }: Unit = {
+  boundary[Any]{program}
+  ()
+}
+
+/// Run `program` forever until `stop` is thrown.
+def exhaustively { program: () => Any / stop }: Unit =
   try {
     def go(): Unit = {
-      action(program())
+      program()
       go()
     }
     go()
   } with stop {
-    def stop() = ()
+    ()
   }
 
 
-// In Effekt lower bounds are inclusive and upper bounds are exclusive
-
+/// In Effekt lower bounds are inclusive and upper bounds are exclusive
 record Indexed[A](index: Int, value: A)
 
 def range(lower: Int, upper: Int): Unit / emit[Int] =
@@ -137,7 +136,7 @@ def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
 }
 
 /// If `number` is zero or negative it does nothing
-def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
+def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
   if (number <= 0) do stop();
   var i = 1;
   try {
@@ -151,6 +150,13 @@ def take[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop }
     }
   }
 }
+
+/// If `number` is zero or negative it does nothing
+def limit[A](number: Int) { stream: () => Any / emit[A] }: Unit / emit[A] =
+  boundary {
+    limit[A, Any](number){stream}
+  }
+
 
 /// If `number` is zero or negative it does nothing
 def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
@@ -170,8 +176,8 @@ def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
   }
 }
 
-def sum { stream : () => Unit / emit[Int] }: Int =
-  sum[Unit]{stream}.second
+def sum { stream : () => Any / emit[Int] }: Int =
+  sum[Any]{stream}.second
 
 def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
   try {
@@ -181,8 +187,8 @@ def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
     (r, Cons(v, vs))
   }
 
-def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
-  collectList[A, Unit]{stream}.second
+def collectList[A] { stream: () => Any / emit[A] }: List[A] =
+  collectList[A, Any]{stream}.second
 
 def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
   var i = 0
@@ -197,8 +203,8 @@ def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
   }
 }
 
-def collectArray[A] { stream: () => Unit / emit[A] }: Array[A] =
-  collectArray[A, Unit]{stream}.second
+def collectArray[A] { stream: () => Any / emit[A] }: Array[A] =
+  collectArray[A, Any]{stream}.second
 
 def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
   var i = 0
@@ -213,10 +219,10 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
   }
 }
 
-def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
-  collectBytes[Unit]{stream}.second
+def collectBytes { stream: () => Any / emit[Byte] }: ByteArray =
+  collectBytes[Any]{stream}.second
 
-def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
+def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   var l = list
   try {
     reader()
@@ -232,14 +238,16 @@ def feed[T](list: List[T]) { reader: () => Unit / read[T] } = {
   }
 }
 
-def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
+def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
   var i = 0
   try {
     reader()
   } with read[T] {
     resume {
       if (i < array.size) {
-        array.unsafeGet(i)
+        val c = i
+        i = c + 1
+        array.unsafeGet(c)
       } else {
         do stop()
       }
@@ -247,14 +255,16 @@ def feed[T](array: Array[T]) { reader: () => Unit / read[T] } = {
   }
 }
 
-def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
+def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   var i = 0
   try {
     reader()
   } with read[Byte] {
     resume {
       if (i < bytes.size) {
-        bytes.unsafeGet(i)
+        val c = i
+        i = c + 1
+        bytes.unsafeGet(c)
       } else {
         do stop()
       }
@@ -262,7 +272,7 @@ def feed(bytes: ByteArray) { reader: () => Unit / read[Byte] } = {
   }
 }
 
-def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+def source[A, R] { stream: () => Any / emit[A] } { reader: () => R / read[A] }: R = {
   var next = box { None() }
   next = box {
     try {
@@ -282,6 +292,21 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
   }
 }
 
+def source[A] { stream: () => Any / emit[A] } { reader: () => Any / read[A] }: Unit = {
+  source[A, Any]{stream}{reader}
+  ()
+}
+
+/// Combines two streams together producing a stream of pairs in lockstep.
+/// Given two streams of length `n` and `m`, it produces a stream of length `min(n, m)`.
+def zip[A, B] { stream1: () => Any / emit[A] } { stream2: () => Any / emit[B] } { action: (A, B) => Any }: Unit = {
+  with source[A] { stream1 }
+  with source[B] { stream2 }
+
+  exhaustively {
+    action(do read[A](), do read[B]())
+  }
+}
 
 def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
 
@@ -407,13 +432,15 @@ def feed(string: String) { reader: () => Unit / read[Char] } =
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {
-    exhaustively[Char] { do read() } { char => do emit(char) }
+    exhaustively {
+      do emit[Char](do read[Char]())
+    }
   }
 
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
-  val (result, bytes) = collectBytes { encodeUTF8 { stream } }
+  val (result, bytes) = collectBytes[R] { encodeUTF8 { stream } }
   (result, bytes.toString)
 }
 
-def collectString { stream: () => Unit / emit[Char] }: String =
-  collectString[Unit]{stream}.second
+def collectString { stream: () => Any / emit[Char] }: String =
+  collectString[Any]{stream}.second

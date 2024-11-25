@@ -1,0 +1,20 @@
+import stream
+
+def main() = {
+  val max = 10
+
+  val fibs = collectList[Int] {
+    var a = 0
+    var b = 1
+
+    replicate(max) {
+      val current = a
+      val next = a + b
+      a = b
+      b = next
+      current
+    }
+  }
+  println("The first " ++ show(max) ++ " Fibonacci numbers:")
+  println(fibs)
+}

@@ -1,0 +1,6 @@
+H (72)
+e (101)
+l (108)
+l (108)
+o (111)
+Cons(H, Cons(e, Cons(l, Cons(l, Cons(o, Nil())))))
