@@ -199,7 +199,7 @@ Using the combinators we can express examples from the paper by Swierstra and Ch
 ```
 def example1(l: List[Int]) = {
   text("[");
-  l.foreach { (n: Int) =>
+  l.foreach { n =>
     text(show(n));
     text(",");
     line()
