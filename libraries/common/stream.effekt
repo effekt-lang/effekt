@@ -423,7 +423,7 @@ def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
     resume(encodeChar(char))
   }
 
-def feed(string: String) { reader: () => Unit / read[Char] } =
+def feed[R](string: String) { reader: () => R / read[Char] } =
   feed(string.fromString) {
     decodeUTF8 {
       reader()

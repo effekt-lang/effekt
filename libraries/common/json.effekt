@@ -1,4 +1,5 @@
 module json
+
 import char
 import scanner
 import stream
@@ -36,7 +37,7 @@ def handleJsonObjectBuilder[R]{b: JsonObjectBuilder}{ body: => R / JsonObjectBui
 // --------------------------------------------------------------------------------
 // Encoding
 // --------------------------------------------------------------------------------
-def encodeJsonList[R]{ body: => R / JsonBuilder }: R / Emit[String] = {
+def encodeJsonList[R]{ body: => R / JsonBuilder }: R / emit[String] = {
   var first = true
   do emit("[")
   def c() = {
@@ -56,7 +57,7 @@ def encodeJsonList[R]{ body: => R / JsonBuilder }: R / Emit[String] = {
   do emit("]")
   r
 }
-def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / Emit[String] = {
+def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / emit[String] = {
   var first = true
   do emit("{")
   def c(k: String) = {
@@ -74,7 +75,7 @@ def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / Emit[String] = {
 }
 /// Main entry point for encoding json.
 /// Emits individual tokens of the resulting json.
-def encodeJson[R]{ body: => R / JsonBuilder }: R / Emit[String] = {
+def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
   try body() with JsonBuilder { 
       def null() = { resume(do emit("null")) }
       def bool(v) = { resume(do emit( if(v){ "true" } else { "false" } )) }
@@ -89,34 +90,34 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / Emit[String] = {
 // Decoding
 // --------------------------------------------------------------------------------
 /// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
-def decodeJson(): Unit / {Scanner, JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
+def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
   skipWhitespace()
   try {
-    if(peek() is c) {
+    if(do peek[Char]() is c) {
       c match {
         case 'n' => expect("null"); do null()
         case 't' => expect("true"); do bool(true)
         case 'f' => expect("false"); do bool(false)
         case '-' => do number(readDouble())
         case d and d.isDigit => do number(readDouble())
-        case '"' => do string(readQuotedString())
+        case '"' => do string(collectString { readQuotedString() })
         case '{' => do dict{ decodeJsonObject() }
         case '[' => do list{ decodeJsonList() }
         case _ => println("Unexpected " ++ c.toString); <>
       }
     }
-  } with Done {
-    def done() = ()
+  } with stop {
+    ()
   }
 }
-def decodeJsonObject(): Unit / {Scanner, JsonObjectBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
+def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[UnexpectedChar], Exception[WrongFormat], stop} = {
   var first = true
   expect('{')
   skipWhitespace()
   try {
-    while(peek() is c and (c != '}')) {
+    while(do peek[Char]() is c and (c != '}')) {
       if (not(first)) { expect(',') }
-      val k = readQuotedString()
+      val k: String = collectString { readQuotedString() }
       skipWhitespace()
       expect(':')
       do field(k){
@@ -125,25 +126,25 @@ def decodeJsonObject(): Unit / {Scanner, JsonObjectBuilder, Exception[Unexpected
       skipWhitespace()
       first = false
     }
-  } with Done {
-    def done() = ()
+  } with stop {
+    ()
   }
-  do skip()
+  do skip[Char]()
 }
-def decodeJsonList(): Unit / {Scanner, JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = { 
+def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat], stop} = { 
   var first = true
   expect('[')
   skipWhitespace()
   try {
-    while(peek() is c and (c != ']')) {
+    while(do peek[Char]() is c and (c != ']')) {
       if (not(first)) { expect(',') }
       decodeJson()
       skipWhitespace()
       first = false
     }
-    do skip()
-  } with Done {
-    def done() = ()
+    do skip[Char]()
+  } with stop {
+     ()
   }
 }
 
@@ -220,7 +221,7 @@ def build[R](){ body: => R / JsonBuilder }: (R, JsonValue) = {
   }
   (x, r)
 }
-def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = gatherList[JsonValue, R] {
+def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = collectList[JsonValue, R] {
   try body() with JsonBuilder {
     def number(n) = { do emit(Number(n)); resume(()) }
     def bool(b) = { do emit(Bool(b)); resume(()) }
@@ -238,7 +239,7 @@ def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = gatherLis
     }
   }
 }
-def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = gatherList[(String, JsonValue), R] {
+def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = collectList[(String, JsonValue), R] {
   try body() with JsonObjectBuilder {
     def field(k) = resume { {v} =>
       val x = build{v}
@@ -275,7 +276,7 @@ namespace test {
     try{
   
       // Encode example
-      encodeJson{
+      encodeJson {
         do dict{
           do field("x"){
             do string("Hallo")
@@ -294,6 +295,7 @@ namespace test {
                   "a": null, 
                   "b": [true, false, false, true], "f": 12.532   
                 } """){
+        with scanner[Char, JsonValue]
         build {
           decodeJson()
         }.second
@@ -307,11 +309,14 @@ namespace test {
         feed("""{ 
                   "a": null, 
                   "b": [true, false, false, true], "f": 12.532   
-                } """){ decodeJson() }
+                } """){
+          with scanner[Char, Unit]
+          decodeJson()
+        }
       }
   
-    } with Emit[String] {
-      def emit(e) = resume(println(e))
+    } with emit[String] { e =>
+      resume(println(e))
     }
   }
 }
