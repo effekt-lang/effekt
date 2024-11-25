@@ -244,7 +244,9 @@ def feed[T, R](array: Array[T]) { reader: () => R / read[T] }: R = {
   } with read[T] {
     resume {
       if (i < array.size) {
-        array.unsafeGet(i)
+        val c = i
+        i = c + 1
+        array.unsafeGet(c)
       } else {
         do stop()
       }
@@ -259,7 +261,9 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   } with read[Byte] {
     resume {
       if (i < bytes.size) {
-        bytes.unsafeGet(i)
+        val c = i
+        i = c + 1
+        bytes.unsafeGet(c)
       } else {
         do stop()
       }
