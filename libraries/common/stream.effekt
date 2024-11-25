@@ -93,19 +93,7 @@ def boundary { program: () => Any / stop }: Unit = {
   ()
 }
 
-def exhaustively[A] { program: () => A / stop } { action: A => Unit }: Unit =
-  try {
-    def go(): Unit = {
-      action(program())
-      go()
-    }
-    go()
-  } with stop {
-    ()
-  }
-
-/// Run `program` forever until `stop` is thrown. 
-def exhaustively[A] { program: () => A / stop }: Unit =
+def exhaustively { program: () => Any / stop }: Unit =
   try {
     def go(): Unit = {
       program()
@@ -116,8 +104,8 @@ def exhaustively[A] { program: () => A / stop }: Unit =
     ()
   }
 
-// In Effekt lower bounds are inclusive and upper bounds are exclusive
 
+/// In Effekt lower bounds are inclusive and upper bounds are exclusive
 record Indexed[A](index: Int, value: A)
 
 def range(lower: Int, upper: Int): Unit / emit[Int] =
@@ -279,7 +267,7 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   }
 }
 
-def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+def source[A, R] { stream: () => Any / emit[A] } { reader: () => R / read[A] }: R = {
   var next = box { None() }
   next = box {
     try {
@@ -299,21 +287,19 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
   }
 }
 
-def source[A] { stream: () => Unit / emit[A] } { reader: () => Any / read[A] }: Unit = {
+def source[A] { stream: () => Any / emit[A] } { reader: () => Any / read[A] }: Unit = {
   source[A, Any]{stream}{reader}
   ()
 }
 
 /// Combines two streams together producing a stream of pairs in lockstep.
 /// Given two streams of length `n` and `m`, it produces a stream of length `min(n, m)`.
-def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] }: Unit / emit[(A, B)] = {
-  with source[A, Unit] { stream1 }
-  with source[B, Unit] { stream2 }
+def zip[A, B] { stream1: () => Any / emit[A] } { stream2: () => Any / emit[B] } { action: (A, B) => Any }: Unit = {
+  with source[A] { stream1 }
+  with source[B] { stream2 }
 
   exhaustively {
-    val a = do read[A]()
-    val b = do read[B]()
-    do emit((a, b))
+    action(do read[A](), do read[B]())
   }
 }
 
@@ -441,7 +427,9 @@ def feed(string: String) { reader: () => Unit / read[Char] } =
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {
-    exhaustively[Char] { do read() } { char => do emit(char) }
+    exhaustively {
+      do emit[Char](do read[Char]())
+    }
   }
 
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {

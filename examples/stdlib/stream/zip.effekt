@@ -1,14 +1,11 @@
 import stream
-import array
 
 def main() = {
   def stream1() = rangeFrom(1)
   // Ideally this would be an array to demonstrate the capabilities. 
   def stream2() = ['H', 'e', 'l', 'l', 'o'].each
 
-  with val tup = for[(Int, Char)] {
-    zip[Int, Char] { stream1 } { stream2 }
+  zip[Int, Char]{stream1}{stream2} { (a, b) =>
+    println(show(a) ++ ", " ++ show(b))
   }
-  val (a, b) = tup
-  println(show(a) ++ ", " ++ show(b))
 }

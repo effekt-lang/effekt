@@ -28,7 +28,9 @@ def countWords(): Output / read[Byte] = {
   var lines = 0
   var wasSpace = true
 
-  exhaustively { do read[Byte]() } { c =>
+  exhaustively {
+
+    val c = do read[Byte]()
 
     chars = chars + 1
 
