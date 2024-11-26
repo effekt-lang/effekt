@@ -91,24 +91,60 @@ def readIf(e: Char): Bool / Scan[Char] =
 def skipIf(e: Char): Unit / Scan[Char] =
   skipIf { c => c == e }
 
+/// Skip until the next character is not a whitespace character
+def skipWhitespace(): Unit / Scan[Char] =
+  skipWhile { c => c.isWhitespace }
+
+
+def prettyUnexpectedChar(got: Char, expected: Char): String =
+  "Unexpected character, got '" ++ got.toString ++ "', but expected '" ++ expected.toString ++ "'"
+
+def unexpectedChar(got: Char, expected: Char): Nothing / Exception[WrongFormat] =
+  wrongFormat(prettyUnexpectedChar(got, expected))
+
+/// Require that the next character is the given one, raising an exception otherwise.
+def expect(c: Char): Unit / { Scan[Char], Exception[WrongFormat] } = {
+  try {
+    val t = read[Char]()
+    if (t != c) {
+      unexpectedChar(t, c)
+    }
+  } with stop {
+    wrongFormat("Unexpected end of input")
+  }
+}
+
+/// Check that the next characters are the given String, raising an exception otherwise.
+/// Advances over the longest common prefix with this String.
+def expect(s: String): Unit / { Scan[Char], Exception[WrongFormat] } =
+  for[Char] { s.each } { c => expect(c) }
+
+
+/// Check that the next character is a digit, and if so read and return it.
+def readDigit(base: Int): Option[Int] / Scan[Char] =
+  try {
+    val d = digitValue(do peek(), base)
+    do skip[Char]()
+    Some(d)
+  } with stop {
+    None()
+  } with Exception[WrongFormat] {
+    def raise(_, _) = None()
+  }
+
+
 /// Read a positive integer in the given base <= 35.
 def readPositive(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
 
-  var result = try digitValue(read(), base) with stop {
+  var result = readDigit(base).getOrElse {
     wrongFormat("Positive number should start with a digit")
   }
-  
-  try {
-    while(digitValue(do peek(), base) is digit) {
-      do skip[Char]()
-      result = result * base + digit
-    }
-    result
-  } with stop {
-    result
-  } with Exception[WrongFormat] {
-    def raise(_, _) = result
+
+  while(readDigit(base) is Some(digit)) {
+    result = result * base + digit
   }
+
+  result
 }
 
 /// Read a positive decimal integer.
@@ -146,25 +182,15 @@ def readDouble(): Double / { Scan[Char], Exception[WrongFormat] } = {
     }
   }
   def fraction(pre: Int) = {
-    try {
-      if (do peek[Char]() is '.') {
-        do skip[Char]()
-        var b = 0.1
-        var r = pre.toDouble
-        try {
-          while (digitValue(do peek()) is d) {
-            do skip[Char]()
-            r = r + b * d.toDouble
-            b = b * 0.1
-          }
-        } with stop {
-          ()
-        } with Exception[WrongFormat] {
-          def raise(e, m) = () 
-        }
-        exponent(r)
-      } else { pre.toDouble }
-    } with stop {
+    if (readIf('.')) {
+      var b = 0.1
+      var r = pre.toDouble
+      while (readDigit(10)is Some(d)) {
+        r = r + b * d.toDouble
+        b = b * 0.1
+      }
+      exponent(r)
+    } else {
       pre.toDouble
     }
   }
@@ -193,42 +219,14 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
       }
     }
   } with stop {
-    wrongFormat("Unexpected end of file while reading a string")
-  } with Exception[UnexpectedChar] {
-    def raise(r, m) = wrongFormat(m)
+    wrongFormat("Unexpected end of input while reading a string")
   }
 }
 
-record UnexpectedChar(got: Char, expected: Char)
-
-def prettyUnexpectedChar(got: Char, expected: Char): String =
-  "Unexpected character, got '" ++ got.toString ++ "', but expected '" ++ expected.toString ++ "'"
-
-def unexpectedChar(got: Char, expected: Char): Nothing / Exception[UnexpectedChar] =
-  do raise(UnexpectedChar(got, expected), prettyUnexpectedChar(got, expected))
-
-
-/// Require that the next character is the given one, raising an exception otherwise.
-def expect(c: Char): Unit / { Scan[Char], Exception[UnexpectedChar], stop } = {
-  val t = read[Char]()
-  if (t != c) {
-    unexpectedChar(t, c)
-  }
-}
-
-/// Check that the next characters are the given String, raising an exception otherwise.
-/// Advances over the longest common prefix with this String.
-def expect(s: String): Unit / { Scan[Char], Exception[UnexpectedChar], stop } =
-  for[Char] { s.each } { c => expect(c) }
-
-/// Skip until the next character is not a whitespace character
-def skipWhitespace(): Unit / Scan[Char] =
-  skipWhile { c => c.isWhitespace }
 
 
 namespace test {
   def main() = {
-    with on[UnexpectedChar].panic
     with on[WrongFormat].panic
   
     val input =

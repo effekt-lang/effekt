@@ -90,7 +90,7 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 // Decoding
 // --------------------------------------------------------------------------------
 /// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
-def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
+def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   skipWhitespace()
   try {
     if(do peek[Char]() is c) {
@@ -110,7 +110,7 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Ex
     ()
   }
 }
-def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
+def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFormat]} = {
   var first = true
   expect('{')
   skipWhitespace()
@@ -131,7 +131,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[Unexpec
   }
   do skip[Char]()
 }
-def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = { 
+def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = { 
   var first = true
   expect('[')
   skipWhitespace()
@@ -254,7 +254,6 @@ def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValu
 // --------------------------------------------------------------------------------
 namespace test {
   def main() = {
-    with on[UnexpectedChar].panic
     with on[WrongFormat].panic
   
     // Parse example
