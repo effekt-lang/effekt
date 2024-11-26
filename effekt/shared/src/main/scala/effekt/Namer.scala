@@ -1001,6 +1001,9 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def scoped[R](block: => R): R = Context in {
+    val src = module.source
+    val scopesSoFar = annotationOption(Annotations.ScopesForFile, src).getOrElse(Nil)
+    annotate(Annotations.ScopesForFile, src, scopesSoFar :+ (scope.scope))
     scope.scoped { block }
   }
 

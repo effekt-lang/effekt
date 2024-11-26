@@ -90,4 +90,24 @@ object DeclPrinter extends ParenPrettyPrinter {
 
     s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
   }
+
+  def format(tpe: BlockType.FunctionType): String = {
+
+    val BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) = tpe
+
+    def group(open: String, sep: String, close: String, els: List[Any]): String =
+      val rendered = els.map(el => pp"$el").mkString(sep)
+      if els.isEmpty then "" else pp"${open}${rendered}${close}"
+
+    val tps = group("[", ",", "]", tparams)
+    val vps = group("(", ",", ")", vparams)
+
+    val bps = (cparams zip bparams).map { case (cap, tpe) => pp"{ ${cap}: ${tpe} }" }.mkString("")
+
+    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
+
+    val returnType = if (effects.isEmpty) pp"$result" else pp"$result / $effects"
+
+    s"$tps$ps: $returnType"
+  }
 }
