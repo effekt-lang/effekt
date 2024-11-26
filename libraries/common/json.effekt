@@ -110,7 +110,7 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Ex
     ()
   }
 }
-def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[UnexpectedChar], Exception[WrongFormat], stop} = {
+def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = {
   var first = true
   expect('{')
   skipWhitespace()
@@ -131,7 +131,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[Unexpec
   }
   do skip[Char]()
 }
-def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat], stop} = { 
+def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[UnexpectedChar], Exception[WrongFormat]} = { 
   var first = true
   expect('[')
   skipWhitespace()
