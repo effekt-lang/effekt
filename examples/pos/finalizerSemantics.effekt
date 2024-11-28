@@ -1,0 +1,27 @@
+effect Eff(): Unit
+
+def main() = {
+  val x = 
+    try {
+      try {
+        do Eff(); 42
+      } suspend {
+        println("suspending inner")
+      } resume {
+        _ => println("resuming inner")
+    } return { x =>
+        println("returning inner")
+        x * 2
+      }
+    } with Eff { () => resume(()) }
+    suspend {
+      println("suspending outer")
+    } resume {
+      _ => println("resuming outer")
+    } return { x =>
+      println("returning outer")
+      x + 3
+    }
+  println(x)
+  ()
+}
