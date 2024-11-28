@@ -315,7 +315,7 @@ enum Stmt extends Tree {
 
   // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
   //  Reset({ [cap]{p: Prompt[answer] at cap} => stmt: answer}): answer
-  case Reset(body: BlockLit)
+  case Reset(body: BlockLit, onSuspend: Option[BlockLit], onResume: Option[BlockLit], onReturn: Option[BlockLit])
 
   // captures the continuation up to the given prompt
   // Invariant, it always has the shape:
@@ -394,10 +394,10 @@ object normal {
       case other => Invoke(callee, method, methodTpe, targs, vargs, bargs)
     }
 
-  def reset(body: BlockLit): Stmt = body match {
+  def reset(body: BlockLit, onSuspend: Option[BlockLit], onResume: Option[BlockLit], onReturn: Option[BlockLit]): Stmt = body match {
     //    case BlockLit(tparams, cparams, vparams, List(prompt),
     //      Stmt.Shift(prompt2, body) if prompt.id == prompt2.id => ???
-    case other => Stmt.Reset(body)
+    case other => Stmt.Reset(body, onSuspend, onResume, onSuspend)
   }
 
   def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
@@ -712,7 +712,7 @@ object Variables {
     case Stmt.Put(id, annotatedCapt, value) =>
       Variables.block(id, core.Type.TState(value.tpe), annotatedCapt) ++ free(value)
 
-    case Stmt.Reset(body) => free(body)
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) => free(body) ++ all(onSuspend, free) ++ all(onResume, free) ++ all(onReturn, free)
     case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
     case Stmt.Resume(k, body) => free(k) ++ free(body)
     case Stmt.Hole() => Variables.empty
@@ -823,8 +823,13 @@ object substitutions {
       case Put(id, capt, value) =>
         Put(substituteAsVar(id), substitute(capt), substitute(value))
 
-      case Reset(body) =>
-        Reset(substitute(body).asInstanceOf[BlockLit])
+      case Reset(body, onSuspend, onResume, onReturn) =>
+        Reset(
+          substitute(body).asInstanceOf[BlockLit], 
+          onSuspend.map { substitute(_).asInstanceOf[BlockLit] },
+          onResume.map { substitute(_).asInstanceOf[BlockLit] },
+          onReturn.map { substitute(_).asInstanceOf[BlockLit] },
+        )
 
       case Shift(prompt, body) =>
         val after = substitute(body).asInstanceOf[BlockLit]

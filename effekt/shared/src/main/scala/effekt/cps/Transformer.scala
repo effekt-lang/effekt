@@ -114,13 +114,18 @@ object Transformer {
           default.map(transform(_, ks, k)))
       }
 
-    case core.Stmt.Reset(core.Block.BlockLit(_, _, _, prompt :: Nil, body)) =>
+    case core.Stmt.Reset(core.Block.BlockLit(_, _, _, prompt :: Nil, body), onSuspend, onResume, onReturn) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
-      Reset(Block.BlockLit(Nil, List(prompt.id), ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
-        MetaCont(ks), k.reify)
+      Reset(
+        Block.BlockLit(Nil, List(prompt.id), ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
+        onSuspend.map { transformBlockLit },
+        onResume.map { transformBlockLit },
+        onReturn.map { transformBlockLit },
+        MetaCont(ks), k.reify
+      )
 
-    case core.Stmt.Reset(body) => sys error "Shouldn't happen"
+    case core.Stmt.Reset(body, _, _, _) => sys error "Shouldn't happen"
 
     // Only unidirectional, yet
     // core.Block.BlockLit(tparams, cparams, vparams, List(resume), body)

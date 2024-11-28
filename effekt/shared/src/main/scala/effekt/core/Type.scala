@@ -204,7 +204,7 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.tpe
     case Stmt.Get(id, capt, tpe) => tpe
     case Stmt.Put(id, capt, value) => TUnit
-    case Stmt.Reset(body) => body.returnType
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) => onReturn.map { _.returnType }.getOrElse(body.returnType)
     case Stmt.Shift(prompt, body) => body.bparams match {
       case core.BlockParam(id, BlockType.Interface(ResumeSymbol, List(result, answer)), captures) :: Nil => result
       case _ => ???
@@ -235,7 +235,7 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
     case Stmt.Get(id, capt, tpe) => capt
     case Stmt.Put(id, capt, value) => capt
-    case Stmt.Reset(body) => body.capt
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) => body.capt
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
     case Stmt.Resume(k, body) => k.capt ++ body.capt
     case Stmt.Region(body) => body.capt

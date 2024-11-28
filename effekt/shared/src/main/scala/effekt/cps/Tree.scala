@@ -134,7 +134,7 @@ enum Stmt extends Tree {
   case Put(ref: Id, value: Pure, body: Stmt)
 
   // reset( { (p, ks, k) => STMT }, ks, k)
-  case Reset(prog: BlockLit, ks: MetaCont, k: Cont)
+  case Reset(prog: BlockLit, onSuspend: Option[BlockLit], onResume: Option[BlockLit], onReturn: Option[BlockLit], ks: MetaCont, k: Cont)
 
   // shift(p, { (resume, ks, k) => STMT }, ks, k)
   case Shift(prompt: Id, body: BlockLit, ks: MetaCont, k: Cont)
@@ -220,7 +220,7 @@ object Variables {
     case Stmt.Get(ref, id, body) => block(ref) ++ (free(body) -- value(id))
     case Stmt.Put(ref, value, body) => block(ref) ++ free(value) ++ free(body)
 
-    case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
+    case Stmt.Reset(prog, onSuspend, onResume, onReturn, ks, k) => free(prog) ++ all(onSuspend, free) ++ all(onResume, free) ++ all(onReturn, free)
     case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Resume(r, body, ks, k) => block(r) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Hole() => empty

@@ -338,8 +338,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Alloc(id, transform(init), region, transform(body))
     case Stmt.Var(id, init, cap, body) =>
       Stmt.Var(id, transform(init), cap, transform(body))
-    case Stmt.Reset(body) =>
-      Stmt.Reset(transform(body))
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) =>
+      Stmt.Reset(transform(body), onSuspend.map { transform }, onResume.map { transform }, onReturn.map { transform })
     case Stmt.Shift(prompt, body) =>
       Stmt.Shift(prompt, transform(body))
     case Stmt.Resume(k, body) =>

@@ -429,9 +429,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val transformedProg = transform(prog)
       // TODO
-      val transformedSuspend = suspend map { transform }
-      val transformedResume = resume map { transform }
-      val transformedReturn = retrn map { transform }
+      val transformedSuspend = suspend.map { transform }
+      val transformedResume = resume.map { transform }
+      val transformedReturn = retrn.map { transform }
 
       val answerType = transformedProg.tpe
 
@@ -450,8 +450,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val body: BlockLit = BlockLit(Nil, List(promptCapt), Nil, List(promptParam),
         Scope(transformedHandlers, transformedProg))
-
-      Context.bind(Reset(body))
+      Context.bind(Reset(body, transformedSuspend, transformedResume, transformedReturn))
 
     case r @ source.Region(name, body) =>
       val region = r.symbol
@@ -645,9 +644,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     })
   }
 
-  def transform(clause: source.FinalizerClause)(using Context): FinalizerClause = {
+  def transform(clause: source.FinalizerClause)(using Context): BlockLit = {
     val source.FinalizerClause(vp, prog) = clause
-    FinalizerClause(vp map transform, transform(prog))
+    BlockLit(Nil, Nil, vp.map { transform(_) }.toList, Nil, transform(prog))
   }
 
   def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause =

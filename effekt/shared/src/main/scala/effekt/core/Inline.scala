@@ -131,11 +131,11 @@ object Inline {
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
 
-    case Stmt.Reset(body) =>
-      rewrite(body) match {
-        case BlockLit(tparams, cparams, vparams, List(prompt), body) if !used(prompt.id) => body
-        case b => Stmt.Reset(b)
-      }
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) => s
+      // rewrite(body) match {
+      //   case BlockLit(tparams, cparams, vparams, List(prompt), body) if !used(prompt.id) => body
+      //   case b => Stmt.Reset(b)
+      // }
 
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))
@@ -238,7 +238,8 @@ object Inline {
       case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
       case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
       case Stmt.Put(id, annotatedCapt, value) => false
-      case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
+      // case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
+      case Stmt.Reset(body, onSuspend, onResume, onReturn) => onReturn.map { blocklit => tailResumptive(k, blocklit.body) }.getOrElse(tailResumptive(k, body.body))
       case Stmt.Shift(prompt, body) => false
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
       case Stmt.Hole() => true
@@ -256,7 +257,8 @@ object Inline {
     case Stmt.Region(_) => ???
     case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
-    case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))
+    // case Stmt.Reset(body, onSuspend, onResume, onReturn) => Stmt.Reset(removeTailResumption(k, body))
+    case Stmt.Reset(_, _, _, _) => ???
     case Stmt.Resume(k2, body) if k2.id == k => body
 
     case Stmt.Resume(k, body) => stmt
