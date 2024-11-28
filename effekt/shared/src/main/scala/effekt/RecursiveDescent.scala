@@ -659,15 +659,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   */
   def tryExpr(): Term =
     nonterminal:
-      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ finalizerClause(`suspend`, false) ~ finalizerClause(`resume`, true) ~ finalizerClause(`return`, true) ~ finalizerClause(`finally`, true) match {
-        case _ ~ _ ~ None ~ Some(_) ~ _ ~ _ =>
+      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ finalizerClause(`suspend`, false) ~ finalizerClause(`resume`, true) ~ finalizerClause(`return`, true) ~ finalizerClause(`finally`, false) match {
+        case _ ~ _ ~ None ~ Some(_) ~ _ ~ None =>
           fail("Got `resume` clause but no `suspend` clause.")
-        case _ ~ _ ~ _ ~ Some(_) ~ _ ~ Some(_) =>
-          fail("Got both an `resume` and `finally` clause.")
+        case _ ~ _ ~ Some(_) ~ _ ~ _ ~ Some(_) =>
+          fail("Got both an `suspend` and `finally` clause.")
         case _ ~ _ ~ _ ~ _ ~ Some(_) ~ Some(_) =>
           fail("got both an `return` and `finally` clause.")
-        case s ~ hs ~ susp ~ None ~ None ~ Some(prog) =>
-          TryHandle(s, hs, susp, Some(prog), Some(prog))
+        case s ~ hs ~ susp ~ None ~ None ~ Some(fin) =>
+          TryHandle(s, hs, Some(fin), None, Some(FinalizerClause(Some(ValueParam(IdDef("x"), None)), fin.body)))
         case s ~ hs ~ susp ~ res ~ retrn ~ fin => 
           TryHandle(s, hs, susp, res, retrn)
       }
