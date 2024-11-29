@@ -334,14 +334,14 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
           }
           val (cont, rest) = unwind(stack, Stack.Empty)
 
-          State.Step(body, env.bind(resume.id, Computation.Cont(cont)), rest)
+          State.Step(body, env.bind(resume.id, Computation.Resumption(cont)), rest)
         case Stmt.Shift(_, _) => ???
 
 
         case Stmt.Resume(k, body) =>
           instrumentation.resume()
           val cont = findFirst(env) {
-            case Env.Dynamic(id, Computation.Cont(k), rest) => k
+            case Env.Dynamic(id, Computation.Resumption(k), rest) => k
           }
           @tailrec
           def rewind(k: Stack, onto: Stack): Stack = k match {
@@ -477,7 +477,7 @@ object Interpreter {
     case Object(methods: Map[Id, BlockLit], env: Env)
     case Region(address: Address)
     case Prompt(address: Address)
-    case Cont(cont: Stack)
+    case Resumption(cont: Stack)
   }
 
   enum Env {
