@@ -91,61 +91,52 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 // --------------------------------------------------------------------------------
 /// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
 def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
+  with boundary
   skipWhitespace()
-  try {
-    if(do peek[Char]() is c) {
-      c match {
-        case 'n' => expect("null"); do null()
-        case 't' => expect("true"); do bool(true)
-        case 'f' => expect("false"); do bool(false)
-        case '-' => do number(readDouble())
-        case d and d.isDigit => do number(readDouble())
-        case '"' => do string(collectString { readQuotedString() })
-        case '{' => do dict{ decodeJsonObject() }
-        case '[' => do list{ decodeJsonList() }
-        case _ => println("Unexpected " ++ c.toString); <>
-      }
+  if(do peek[Char]() is c) {
+    c match {
+      case 'n' => expect("null"); do null()
+      case 't' => expect("true"); do bool(true)
+      case 'f' => expect("false"); do bool(false)
+      case '-' => do number(readDouble())
+      case d and d.isDigit => do number(readDouble())
+      case '"' => do string(collectString { readQuotedString() })
+      case '{' => do dict{ decodeJsonObject() }
+      case '[' => do list{ decodeJsonList() }
+      case _ => println("Unexpected " ++ c.toString); <>
     }
-  } with stop {
-    ()
   }
 }
 def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFormat]} = {
   var first = true
   expect('{')
+  with boundary
   skipWhitespace()
-  try {
-    while(do peek[Char]() is c and (c != '}')) {
-      if (not(first)) { expect(',') }
-      val k: String = collectString { readQuotedString() }
-      skipWhitespace()
-      expect(':')
-      do field(k){
-        decodeJson()
-      }
-      skipWhitespace()
-      first = false
+  while(do peek[Char]() is c and (c != '}')) {
+    if (not(first)) { expect(',') }
+    val k: String = collectString { readQuotedString() }
+    skipWhitespace()
+    expect(':')
+    do field(k){
+      decodeJson()
     }
-  } with stop {
-    ()
+    skipWhitespace()
+    first = false
   }
   do skip[Char]()
 }
 def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = { 
   var first = true
   expect('[')
+  with boundary
   skipWhitespace()
-  try {
-    while(do peek[Char]() is c and (c != ']')) {
-      if (not(first)) { expect(',') }
-      decodeJson()
-      skipWhitespace()
-      first = false
-    }
-    do skip[Char]()
-  } with stop {
-     ()
+  while(do peek[Char]() is c and (c != ']')) {
+    if (not(first)) { expect(',') }
+    decodeJson()
+    skipWhitespace()
+    first = false
   }
+  do skip[Char]()
 }
 
 // --------------------------------------------------------------------------------
