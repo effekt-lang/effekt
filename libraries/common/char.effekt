@@ -15,32 +15,30 @@ def isWhitespace(c: Char): Bool = c match {
   case _      => false
 }
 
+/// Gets the value of a given ASCII digit in base 10
+def digitValue(c: Char): Option[Int] =
+  if (c >= '0' && c <= '9') {
+    Some(c.toInt - '0'.toInt)
+  } else {
+    None()
+  }
+
+/// Gets the value of a given ASCII digit in base 16
+def hexDigitValue(c: Char): Option[Int] =
+  c match {
+    case c and c >= '0' && c <= '9' => Some(c.toInt - '0'.toInt)
+    case c and c >= 'A' && c <= 'F' => Some((c.toInt - 'A'.toInt) + 10)
+    case c and c >= 'a' && c <= 'f' => Some((c.toInt - 'a'.toInt) + 10)
+    case _ => None()
+  }
+
 /// Checks if the given character is an ASCII digit in base 10
 /// Use `digitValue(c: Char)` to get the numeric value out.
-def isDigit(c: Char): Bool = { c >= '0' && c <= '9' }
+def isDigit(c: Char): Bool = digitValue(c).isDefined
 
-/// Checks if the given character is an ASCII digit in the given base
-/// Use `digitValue(c: Char, base: Int)` to get the numeric value out.
-def isDigit(c: Char, base: Int): Bool = {
-  with on[WrongFormat].default { false }
-  val _ = digitValue(c, base)
-  true
-}
-
-/// Gets the value of a given ASCII digit in base 10
-def digitValue(c: Char): Int / Exception[WrongFormat] =
-  digitValue(c, 10)
-
-/// Gets the value of a given ASCII digit in the given base
-def digitValue(c: Char, base: Int): Int / Exception[WrongFormat] = {
-  val v = c match {
-    case c and c >= '0' && c <= '9' => (c.toInt - '0'.toInt)
-    case c and c >= 'a' && c <= 'z' => (c.toInt - 'a'.toInt) + 10
-    case c and c >= 'A' && c <= 'Z' => (c.toInt - 'A'.toInt) + 10
-    case _ => wrongFormat("'" ++ c.toString ++ "' is not a digit")
-  }
-  if (v >= base) { wrongFormat(c.toString ++ " is not a valid digit in base " ++ base.show) } else { v }
-}
+/// Checks if the given character is an ASCII digit in base 16
+/// Use `hexDigitValue(c: Char)` to get the numeric value out.
+def isHexDigit(c: Char): Bool = hexDigitValue(c).isDefined
 
 /// Checks if a given character is a 7-bit ASCII character
 def isASCII(c: Char): Bool = { c.toInt < 128 }

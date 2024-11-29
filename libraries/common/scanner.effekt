@@ -8,7 +8,7 @@ interface Scan[A] {
   /// That is, this does not change what any future calls on the Scanner return.
   def peek(): A / stop
   /// Advance the Scanner to the next character.
-  def skip(): Unit
+  def skip(): Unit / stop
 }
 
 /// Advance the Scanner to the next character, returning it.
@@ -34,73 +34,87 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
           return t
       }
     }
-    def skip() = {
+    def skip() = resume {
       last match {
         case None() =>
           val _ = do read[A]()
-          resume(())
+          return ()
         case Some(t) =>
           last = None()
-          resume(())
+          return ()
       }
     }
   }
 }
 
 
+effect fail(): Nothing
 
-/// Check that the next token satisfies the predicate and skip and return it when it does.
-def readIf[A] { predicate: A => Bool }: Option[A] / Scan[A] =
+def successfully { action: () => Any / fail }: Unit =
   try {
-    val t = do peek[A]()
-    if (predicate(t)) {
-      do skip[A]()
-      Some(t)
-    } else {
-      None()
+    def go(): Unit = {
+      action()
+      go()
     }
-  } with stop {
+    go()
+  } with fail {
+    ()
+  }
+
+def successfull[R] { program: () => R / fail }: Option[R] =
+  try {
+    Some(program())
+  } with fail {
     None()
   }
 
+def successfull { program: () => Any / fail }: Bool =
+  successfull[Any]{program}.isDefined
+
+def attempt[R] { program: () => R / fail } { fallback: () => R }: R =
+  try {
+    program()
+  } with fail {
+    fallback()
+  }
+
+/// Check that the next token satisfies the predicate and skip and return it when it does.
+def readIf[A] { predicate: A => Bool }: A / { Scan[A], fail, stop } = {
+  val t = do peek[A]()
+  if (predicate(t)) {
+    do skip[A]()
+    return t
+  } else {
+    do fail()
+  }
+}
+
 /// Check that the next token satisfies the predicate and skip it when it does.
-def skipIf[A] { predicate: A => Bool }: Unit / Scan[A] = {
-  readIf{predicate}
-  ()
+def skipIf[A] { predicate: A => Bool }: Unit / { Scan[A], fail, stop } = {
+  readIf{predicate}; ()
 }
 
 /// Reads until the predicate does not hold for the next token.
 /// Emits the tokens read.
-def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A] } =
-  exhaustively {
-    val c = do peek[A]()
-    if (predicate(c)) {
-      do skip[A]()
-      do emit(c)
-    } else {
-      do stop()
-    }
-  }
+def readWhile[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A], stop } =
+  successfully { do emit(readIf{predicate}) }
 
 /// Skips until the predicate does not hold for the next token.
-def skipWhile[A] { predicate: A => Bool }: Unit / Scan[A] =
-  try {
-    readWhile{predicate}
-  } with emit[A] { _ =>
-    resume(())
-  }
+def skipWhile[A] { predicate: A => Bool }: Unit / { Scan[A], stop } =
+  for[A] { readWhile{predicate} } { _ => () }
 
 
 /// Read the next character if it is the given one and return true in this case.
-def readIf(e: Char): Bool / Scan[Char] =
-  readIf { c => c == e}.isDefined
+def readIf(e: Char): Unit / { Scan[Char], fail, stop } = {
+  readIf[Char] { c => c == e}; ()
+}
 
 /// Check that the next token satisfies the predicate and skip it when it does.
-def skipIf(e: Char): Unit / Scan[Char] =
+def skipIf(e: Char): Unit / { Scan[Char], fail, stop } =
   skipIf { c => c == e }
 
 /// Skip until the next character is not a whitespace character
-def skipWhitespace(): Unit / Scan[Char] =
+def skipWhitespace(): Unit / { Scan[Char], stop } =
   skipWhile { c => c.isWhitespace }
 
 
@@ -110,78 +124,79 @@ def prettyUnexpectedChar(got: Char, expected: Char): String =
 def unexpectedChar(got: Char, expected: Char): Nothing / Exception[WrongFormat] =
   wrongFormat(prettyUnexpectedChar(got, expected))
 
-/// Require that the next character is the given one, raising an exception otherwise.
-def expect(c: Char): Unit / { Scan[Char], Exception[WrongFormat] } = {
+/// Expect a character class with a name and raise an exception if it fails or stops.
+def expect[R](name: String) { scanner: () => R / {fail, stop} }: R / { Scan[Char], Exception[WrongFormat] } =
   try {
-    val t = read[Char]()
-    if (t != c) {
-      unexpectedChar(t, c)
+    try {
+      scanner()
+    } with fail {
+      wrongFormat("Expected " ++ name ++ " but got " ++ do peek[Char]().toString)
     }
   } with stop {
     wrongFormat("Unexpected end of input")
   }
-}
+
+/// Require that the next character is the given one, raising an exception otherwise.
+def expect(c: Char): Unit / { Scan[Char], Exception[WrongFormat] } =
+  expect(c.toString) { readIf(c); () }
 
 /// Check that the next characters are the given String, raising an exception otherwise.
 /// Advances over the longest common prefix with this String.
 def expect(s: String): Unit / { Scan[Char], Exception[WrongFormat] } =
-  for[Char] { s.each } { c => expect(c) }
+  for[Char] { s.each } { c => expect(c); () }
 
-
-/// Check that the next character is a digit, and if so read and return it.
-def readDigit(base: Int): Option[Int] / Scan[Char] =
-  try {
-    val d = digitValue(do peek(), base)
+/// Check that the next character is a digit in base 10, and if so read and return it.
+def readDigit(): Int / { Scan[Char], fail, stop } =
+  if (digitValue(do peek[Char]) is Some(d)) {
     do skip[Char]()
-    Some(d)
-  } with stop {
-    None()
-  } with Exception[WrongFormat] {
-    def raise(_, _) = None()
+    return d
+  } else {
+    do fail()
   }
 
-
-/// Read a positive integer in the given base <= 35.
-def readPositive(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
-
-  var result = readDigit(base).getOrElse {
-    wrongFormat("Positive number should start with a digit")
+/// Read a positive decimal number.
+def readDecimal(): Int / { Scan[Char], stop, Exception[WrongFormat] } = {
+  var result = expect("digit") { readDigit() }
+  for[Int] { successfully { readDigit() } } { digit =>
+    result = result * 10 + digit
   }
-
-  while(readDigit(base) is Some(digit)) {
-    result = result * base + digit
-  }
-
   result
 }
 
-/// Read a positive decimal integer.
-def readPositive(): Int / { Scan[Char], Exception[WrongFormat] } =
-  readPositive(10)
-
-/// Read an integer in the given base <= 35.
-def readInteger(base: Int): Int / { Scan[Char], Exception[WrongFormat] } = {
-  if (readIf('-')) {
-    neg(readPositive(base))
+/// Check that the next character is a digit in base 16, and if so read and return it.
+def readHexDigit(): Int / { Scan[Char], fail, stop } =
+  if (hexDigitValue(do peek[Char]) is Some(d)) {
+    do skip[Char]()
+    return d
   } else {
-    readPositive(base)
+    do fail()
   }
+
+/// Read a hexadecimal number.
+def readHexadecimal(): Int / { Scan[Char], stop, Exception[WrongFormat] } = {
+  var result = expect("hexadecimal digit") { readHexDigit() }
+  for[Int] { successfully { readHexDigit() } } { digit =>
+    result = result * 16 + digit
+  }
+  result
 }
 
 /// Read a decimal integer.
-def readInteger(): Int / { Scan[Char], Exception[WrongFormat] } =
-  readInteger(10)
+def readInteger(): Int / { Scan[Char], stop, Exception[WrongFormat] } = {
+  with attempt { readIf('-'); neg(readDecimal()) }
+  readDecimal()
+}
 
 /// Read a double value, in the common format (TODO document)
-def readDouble(): Double / { Scan[Char], Exception[WrongFormat] } = {
+def readDouble(): Double / { Scan[Char], stop, Exception[WrongFormat] } = {
   def exponent(pre: Double) = {
     try {
       if(do peek() == 'e' || do peek() == 'E') {
         do skip[Char]()
         val e = do peek[Char]() match {
-          case '+' => do skip[Char](); readPositive()
-          case '-' => do skip[Char](); neg(readPositive())
-          case _ => readPositive()
+          case '+' => do skip[Char](); readDecimal()
+          case '-' => do skip[Char](); neg(readDecimal())
+          case _ => readDecimal()
         }
         pre * pow(10.0, e)
       } else { pre }
@@ -190,10 +205,10 @@ def readDouble(): Double / { Scan[Char], Exception[WrongFormat] } = {
     }
   }
   def fraction(pre: Int) = {
-    if (readIf('.')) {
+    if (successfull { readIf('.') }) {
       var b = 0.1
       var r = pre.toDouble
-      while (readDigit(10)is Some(d)) {
+      while (successfull[Int] { readDigit() } is Some(d)) {
         r = r + b * d.toDouble
         b = b * 0.1
       }
@@ -234,7 +249,7 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
 
 
 namespace test {
-  def main() = {
+  def main(): Unit = {
     with on[WrongFormat].panic
   
     val input =
@@ -244,6 +259,7 @@ namespace test {
       "\ta\n\ra"
       """
 
+    with boundary
     with feed(input)
     with scanner[Char, Unit]
 
