@@ -34,8 +34,16 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
           return t
       }
     }
-    def skip() =
-      resume(last = None())
+    def skip() = {
+      last match {
+        case None() =>
+          val _ = do read[A]()
+          resume(())
+        case Some(t) =>
+          last = None()
+          resume(())
+      }
+    }
   }
 }
 
