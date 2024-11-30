@@ -1,0 +1,161 @@
+/// HTTP Clients: send a request via HTTP, get a response.
+module io/client
+
+import bytearray
+import io
+
+// TODO: mutable (native) map of headers instead?
+// TODO: body a promise instead? (we get it as a promise anwyays, eh?)
+record Response(status: Int, headers: List[(String, String)], body: String)
+
+interface HttpClient {
+  def get(url: String, body: Option[String]): Response
+  def post(url: String, body: Option[String]): Response
+}
+
+def client[R] { program: () => R / HttpClient }: R = try {
+  program()
+} with HttpClient {
+  def get(url, body) = resume(js::get(url, body))
+  def post(url, body) = resume(js::post(url, body))
+}
+
+def get(url: String): Response / HttpClient = 
+  do get(url, None())
+
+def get(url: String, body: String): Response / HttpClient = 
+  do get(url, Some(body))
+
+def post(url: String): Response / HttpClient = 
+  do post(url, None())
+
+def post(url: String, body: String): Response / HttpClient = 
+  do post(url, Some(body))
+
+namespace js {
+  extern jsNode """
+    const http = require('node:http');
+    const https = require('node:https');
+    const url = require('node:url');
+
+    function nodeRequest(method, requestUrl, headers, body) {
+      return new Promise((resolve, reject) => {
+        const parsedUrl = url.parse(requestUrl); // TODO: Deprecated?
+        const requestOptions = {
+          method: method,
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+          path: parsedUrl.path,
+          headers: headers
+        };
+
+        const clientModule = parsedUrl.protocol === 'https:' ? https : http;
+        
+        const req = clientModule.request(requestOptions, (res) => {
+          let responseBody = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            responseBody += chunk;
+          });
+          res.on('end', () => {
+            resolve({
+              status: res.statusCode,
+              headers: res.headers,
+              body: responseBody
+            });
+          });
+        });
+
+        req.on('error', (error) => {
+          reject(error);
+        });
+
+        if (body) {
+          req.write(body);
+        }
+        req.end();
+      });
+    }
+  """
+
+  // Browser fetch API implementation
+  // TODO: Make this work properly!
+  extern jsWeb """
+    function browserRequest(method, url, headers, body) {
+      const requestOptions = {
+        method: method,
+        headers: headers
+      };
+
+      if (body) {
+        requestOptions.body = body;
+      }
+
+      return fetch(url, requestOptions).then(async (response) => {
+        const headers = {}; // TODO: do we really want to do this conversion?
+        for (let [key, value] of response.headers.entries()) {
+          headers[key] = value;
+        }
+
+        return {
+          status: response.status,
+          headers: headers,
+          body: await response.text()
+        };
+      });
+    }
+  """
+
+  extern type NativeResponse 
+    // js "{ status: Int, headers: Map[String, String], body: String }"
+
+  extern pure def status(r: NativeResponse): Int =
+    js "${r}.status"
+
+  extern type NativeHeader
+    // js "[{key: String, value: String}]"
+
+  extern pure def unsafeHeaders(r: NativeResponse): Array[NativeHeader] =
+    js "Object.entries(${r}.headers)"
+
+  extern pure def headerKey(h: NativeHeader): String = js"${h}[0]"
+  extern pure def headerValue(h: NativeHeader): String = js"${h}[1]"
+
+  def headers(r: NativeResponse): List[(String, String)] =
+    r.unsafeHeaders.toList.map { h => (h.headerKey, h.headerValue) }
+
+  extern pure def body(r: NativeResponse): String =
+    js "${r}.body"
+
+  def toResponse(r: NativeResponse): Response = 
+    Response(r.status, r.headers, r.body)
+
+
+  // Cross-platform request function with different implementations for Node.js and browser
+  extern async def request(
+    method: String, 
+    url: String, 
+    headers: List[(String, String)], 
+    unsafeBody: String // really: 'String | undefined'
+  ): NativeResponse =
+    jsNode "$effekt.capture(callback => nodeRequest(${method}, ${url}, ${headers}, ${unsafeBody}).then(callback))"
+    jsWeb "$effekt.capture(callback => browserRequest(${method}, ${url}, ${headers}, ${unsafeBody}).then(callback))"
+
+  def get(url: String, body: Option[String]): Response =
+    js::request("GET", url, [], optionToUndefined(body)).toResponse
+
+  def post(url: String, body: Option[String]): Response =
+    js::request("POST", url, [], optionToUndefined(body)).toResponse
+}
+
+namespace examples {
+
+def main() = {
+    with client;
+
+    val response = get("https://effekt-lang.org")
+    println("Status: " ++ response.status.show)
+    println("Headers: " ++ response.headers.map { case (k, v) => k ++ " -> " ++ v }.show)
+    println("Body: " ++ response.body.substring(0, 128))
+  }
+}
