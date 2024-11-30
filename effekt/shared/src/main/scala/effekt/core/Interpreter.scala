@@ -391,14 +391,24 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
 
   def eval(e: Expr, env: Env): Value = e match {
     case DirectApp(b, targs, vargs, Nil) => env.lookupBuiltin(b.id) match {
-      case impl => impl(vargs.map(a => eval(a, env)))
+      case impl =>
+        val arguments = vargs.map(a => eval(a, env))
+        try { impl(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
+          case Value.Literal(l) => s"${l}: ${l.getClass.getName}"
+          case other => other.toString
+        }.mkString(", ")}" }
     }
     case DirectApp(b, targs, vargs, bargs) => ???
     case Run(s) => run(State.Step(s, env, Stack.Toplevel))
     case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
     case Pure.Literal(value, annotatedType) => Value.Literal(value)
     case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
-      case impl => impl(vargs.map(a => eval(a, env)))
+      case impl =>
+        val arguments = vargs.map(a => eval(a, env))
+        try { impl(arguments) } catch { case e => sys error s"Cannot call ${x} with arguments ${arguments.map {
+          case Value.Literal(l) => s"${l}: ${l.getClass.getName}"
+          case other => other.toString
+        }.mkString(", ")}" }
     }
     case Pure.Make(data, tag, vargs) =>
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
@@ -458,10 +468,13 @@ object Interpreter {
 
   val GLOBAL_PROMPT = 0
 
+  class Reference(var value: Value)
+
   enum Value {
     case Literal(value: Any)
     // TODO this could also be Pointer(Array | Ref)
     case Array(array: scala.Array[Value])
+    case Ref(ref: Reference)
     case Data(data: ValueType.Data, tag: Id, fields: List[Value])
     case Boxed(block: Computation)
   }
@@ -479,6 +492,7 @@ object Interpreter {
       tag.name.name + "(" + fields.map(inspect).mkString(", ") + ")"
     case Value.Boxed(block) => block.toString
     case Value.Array(arr) => ???
+    case Value.Ref(ref) => ???
   }
 
   enum Computation {
@@ -690,6 +704,9 @@ object Interpreter {
     "effekt::inspect(Any)" -> Builtin {
       case any :: Nil => Value.String(inspect(any))
     },
+
+    // array
+    // -----
     "array::allocate(Int)" -> Builtin {
       case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
     },
@@ -701,6 +718,18 @@ object Interpreter {
     },
     "array::unsafeSet[T](Array[T], Int, T)" -> Builtin {
       case As.Array(arr) :: As.Int(index) :: value :: Nil => arr.update(index.toInt, value); Value.Unit()
+    },
+
+    // ref
+    // ---
+    "ref::ref[T](T)" -> Builtin {
+      case init :: Nil => Value.Ref(Reference(init))
+    },
+    "ref::get[T](Ref[T])" -> Builtin {
+      case As.Reference(ref) :: Nil => ref.value
+    },
+    "ref::set[T](Ref[T], T)" -> Builtin {
+      case As.Reference(ref) :: value :: Nil => ref.value = value; Value.Unit()
     },
   )
   object As {
@@ -731,6 +760,12 @@ object Interpreter {
     object Array {
       def unapply(v: Value): Option[scala.Array[Value]] = v match {
         case Value.Array(array) => Some(array)
+        case _ => None
+      }
+    }
+    object Reference {
+      def unapply(v: Value): Option[Reference] = v match {
+        case Value.Ref(ref) => Some(ref)
         case _ => None
       }
     }
