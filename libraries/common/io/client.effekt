@@ -124,6 +124,10 @@ namespace js {
   def headers(r: NativeResponse): List[(String, String)] =
     r.unsafeHeaders.toList.map { h => (h.headerKey, h.headerValue) }
 
+  // TODO: test, use
+  extern pure def makeNativeHeader(key: String, value: String): NativeHeader =
+    js"[${key}, ${value}]"
+
   extern pure def body(r: NativeResponse): String =
     js "${r}.body"
 
@@ -131,21 +135,22 @@ namespace js {
     Response(r.status, r.headers, r.body)
 
 
-  // Cross-platform request function with different implementations for Node.js and browser
+  /// Make a HTTP request
   extern async def request(
     method: String, 
     url: String, 
-    headers: List[(String, String)], 
+    // headers: Array[NativeHeader], 
     unsafeBody: String // really: 'String | undefined'
   ): NativeResponse =
-    jsNode "$effekt.capture(callback => nodeRequest(${method}, ${url}, ${headers}, ${unsafeBody}).then(callback))"
-    jsWeb "$effekt.capture(callback => browserRequest(${method}, ${url}, ${headers}, ${unsafeBody}).then(callback))"
+    jsNode "$effekt.capture(callback => nodeRequest(${method}, ${url}, {}, ${unsafeBody}).then(callback))"
+    jsWeb "$effekt.capture(callback => browserRequest(${method}, ${url}, {}, ${unsafeBody}).then(callback))"
 
+  // TODO: Allow users to specify 'headers'
   def get(url: String, body: Option[String]): Response =
-    js::request("GET", url, [], optionToUndefined(body)).toResponse
+    js::request("GET", url, optionToUndefined(body)).toResponse
 
   def post(url: String, body: Option[String]): Response =
-    js::request("POST", url, [], optionToUndefined(body)).toResponse
+    js::request("POST", url, optionToUndefined(body)).toResponse
 }
 
 namespace examples {
