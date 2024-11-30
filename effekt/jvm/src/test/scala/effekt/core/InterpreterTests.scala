@@ -234,36 +234,53 @@ class InterpreterTests extends munit.FunSuite {
 
   // doesn't work: product_early (since it SO due to run run run)
 
-  val Some(main, mod, decl) = runFile("examples/benchmarks/are_we_fast_yet/nbody.effekt"): @unchecked
+  def runTest(file: String): Unit =
 
-  val gced = Deadcode.remove(main, decl)
+    val Some(main, mod, decl) = runFile(file): @unchecked
 
-  val inlined = Inline.full(Set(main), gced, 40)
+    val gced = Deadcode.remove(main, decl)
 
-  try {
-    object data extends Counting {
-      override def step(state: Interpreter.State) = state match {
-        case State.Done(result) => ???
-        case State.Step(stmt, env, stack) =>
-          //println(Interpreter.show(stack))
+    val inlined = Inline.full(Set(main), gced, 40)
+
+    try {
+      object data extends Counting {
+        override def step(state: Interpreter.State) = state match {
+          case State.Done(result) => ???
+          case State.Step(stmt, env, stack) =>
+            //println(Interpreter.show(stack))
+        }
       }
+      Interpreter(data).run(main, inlined)
+
+      data.report()
+
+    } catch {
+      case err: InterpreterError =>
+        err match {
+          case InterpreterError.NotFound(id) => println(s"Not found: ${util.show(id)}")
+          case InterpreterError.NotAnExternFunction(id) => err.printStackTrace()
+          case InterpreterError.MissingBuiltin(name) => println(s"Missing ${name}")
+          case InterpreterError.RuntimeTypeError(msg) => err.printStackTrace()
+          case InterpreterError.NonExhaustive(missingCase) => err.printStackTrace()
+          case InterpreterError.Hole() => err.printStackTrace()
+          case InterpreterError.NoMain() => err.printStackTrace()
+        }
     }
-    Interpreter(data).run(main, inlined)
 
-    data.report()
+  // TODO allocate arrays and ref on a custom heap that could be inspected and visualized
 
-  } catch {
-    case err: InterpreterError =>
-      err match {
-        case InterpreterError.NotFound(id) => println(s"Not found: ${util.show(id)}")
-        case InterpreterError.NotAnExternFunction(id) => err.printStackTrace()
-        case InterpreterError.MissingBuiltin(name) => println(s"Missing ${name}")
-        case InterpreterError.RuntimeTypeError(msg) => err.printStackTrace()
-        case InterpreterError.NonExhaustive(missingCase) => err.printStackTrace()
-        case InterpreterError.Hole() => err.printStackTrace()
-        case InterpreterError.NoMain() => err.printStackTrace()
-      }
-  }
+  runTest("examples/benchmarks/are_we_fast_yet/bounce.effekt")
+  runTest("examples/benchmarks/are_we_fast_yet/list_tail.effekt")
+  runTest("examples/benchmarks/are_we_fast_yet/mandelbrot.effekt")
+  runTest("examples/benchmarks/are_we_fast_yet/nbody.effekt")
+
+  // global is missing
+  //runTest("examples/benchmarks/are_we_fast_yet/permute.effekt")
+  //runTest("examples/benchmarks/are_we_fast_yet/storage.effekt")
+
+  runTest("examples/benchmarks/are_we_fast_yet/queens.effekt")
+  runTest("examples/benchmarks/are_we_fast_yet/sieve.effekt")
+  runTest("examples/benchmarks/are_we_fast_yet/towers.effekt")
 }
 
 class TestFrontend extends Compiler[(Id, symbols.Module, core.ModuleDecl)] {
