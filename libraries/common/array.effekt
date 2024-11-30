@@ -16,6 +16,7 @@ extern global def allocate[T](size: Int): Array[T] =
     %z = call %Pos @c_array_new(%Int ${size})
     ret %Pos %z
   """
+  jvm "array::allocate(Int)"
 
 /// Creates a new Array of size `size` filled with the value `init`
 def array[T](size: Int, init: T): Array[T] = {
@@ -45,6 +46,7 @@ extern pure def size[T](arr: Array[T]): Int =
     %z = call %Int @c_array_size(%Pos ${arr})
     ret %Int %z
   """
+  jvm "array::size[T](Array[T])"
 
 /// Gets the element of the `arr` at given `index` in constant time.
 /// Unchecked Precondition: `index` is in bounds (0 ≤ index < arr.size)
@@ -57,6 +59,7 @@ extern global def unsafeGet[T](arr: Array[T], index: Int): T =
     %z = call %Pos @c_array_get(%Pos ${arr}, %Int ${index})
     ret %Pos %z
   """
+  jvm "array::unsafeGet[T](Array[T], Int)"
 
 extern js """
   function array$set(arr, index, value) {
@@ -76,6 +79,7 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
     %z = call %Pos @c_array_set(%Pos ${arr}, %Int ${index}, %Pos ${value})
     ret %Pos %z
   """
+  jvm "array::unsafeSet[T](Array[T], Int, T)"
 
 
 

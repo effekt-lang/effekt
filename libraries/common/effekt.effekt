@@ -352,6 +352,7 @@ extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
   chez "(sqrt ${x})"
   llvm "%z = call %Double @llvm.sqrt.f64(double ${x}) ret %Double %z"
+  jvm "effekt::sqrt(Double)"
 
 def square(x: Double): Double = x * x
 

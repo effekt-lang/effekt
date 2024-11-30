@@ -234,7 +234,7 @@ class InterpreterTests extends munit.FunSuite {
 
   // doesn't work: product_early (since it SO due to run run run)
 
-  val Some(main, mod, decl) = runFile("examples/benchmarks/effect_handlers_bench/triples.effekt"): @unchecked
+  val Some(main, mod, decl) = runFile("examples/benchmarks/are_we_fast_yet/nbody.effekt"): @unchecked
 
   val gced = Deadcode.remove(main, decl)
 

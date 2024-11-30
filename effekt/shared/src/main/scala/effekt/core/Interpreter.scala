@@ -423,8 +423,7 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
 
       eval(target, env) match {
         case Value.Data(data, tag, fields) => fields(index)
-        case Value.Literal(value) => ???
-        case Value.Boxed(block) => ???
+        case _ => ???
       }
 
     case Pure.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
@@ -461,8 +460,17 @@ object Interpreter {
 
   enum Value {
     case Literal(value: Any)
+    // TODO this could also be Pointer(Array | Ref)
+    case Array(array: scala.Array[Value])
     case Data(data: ValueType.Data, tag: Id, fields: List[Value])
     case Boxed(block: Computation)
+  }
+  object Value {
+    def Int(v: Long): Value = Value.Literal(v)
+    def Bool(b: Boolean): Value = Value.Literal(b)
+    def Unit(): Value = Value.Literal(())
+    def Double(d: scala.Double): Value = Value.Literal(d)
+    def String(s: java.lang.String): Value = Value.Literal(s)
   }
 
   def inspect(v: Value): String = v match {
@@ -470,6 +478,7 @@ object Interpreter {
     case Value.Data(data, tag, fields) =>
       tag.name.name + "(" + fields.map(inspect).mkString(", ") + ")"
     case Value.Boxed(block) => block.toString
+    case Value.Array(arr) => ???
   }
 
   enum Computation {
@@ -580,104 +589,119 @@ object Interpreter {
     "effekt::println(String)" -> Builtin {
       case As.String(msg) :: Nil =>
         println(msg);
-        Value.Literal(())
+        Value.Unit()
     },
     "effekt::show(Int)" -> Builtin {
-      case As.Int(n) :: Nil => Value.Literal(n.toString)
+      case As.Int(n) :: Nil => Value.String(n.toString)
     },
     "effekt::infixAdd(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x + y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x + y)
     },
     "effekt::infixSub(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x - y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x - y)
     },
     "effekt::infixMul(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x * y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
     },
     "effekt::infixAdd(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x + y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x + y)
     },
     "effekt::infixSub(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x - y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x - y)
     },
     "effekt::infixMul(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x * y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x * y)
     },
     "effekt::infixDiv(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x / y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x / y)
     },
     "effekt::toInt(Double)" -> Builtin {
-      case As.Double(x) :: Nil => Value.Literal(x.toInt)
+      case As.Double(x) :: Nil => Value.Int(x.toLong)
     },
     "effekt::toDouble(Int)" -> Builtin {
-      case As.Int(x) :: Nil => Value.Literal(x.toDouble)
+      case As.Int(x) :: Nil => Value.Double(x.toDouble)
     },
     "effekt::mod(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x % y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
     },
     "effekt::infixEq(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x == y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
     },
     "effekt::infixNeq(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x != y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x != y)
     },
     "effekt::infixLt(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x < y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x < y)
     },
     "effekt::infixGt(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x > y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
     },
     "effekt::infixLte(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x <= y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
     },
     "effekt::infixGte(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x >= y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x >= y)
     },
 
     "effekt::infixEq(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x == y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x == y)
     },
     "effekt::infixNeq(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x != y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x != y)
     },
     "effekt::infixLt(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x < y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x < y)
     },
     "effekt::infixGt(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x > y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x > y)
     },
     "effekt::infixLte(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x <= y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x <= y)
     },
     "effekt::infixGte(Double, Double)" -> Builtin {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Literal(x >= y)
+      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x >= y)
+    },
+    "effekt::sqrt(Double)" -> Builtin {
+      case As.Double(x) :: Nil => Value.Double(Math.sqrt(x))
     },
 
     "effekt::bitwiseShl(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x << y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x << y)
     },
     "effekt::bitwiseShr(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x >> y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x >> y)
     },
     "effekt::bitwiseAnd(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x & y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x & y)
     },
     "effekt::bitwiseOr(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x | y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x | y)
     },
     "effekt::bitwiseXor(Int, Int)" -> Builtin {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Literal(x ^ y)
+      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x ^ y)
     },
 
     "effekt::infixConcat(String, String)" -> Builtin {
-      case As.String(x) :: As.String(y) :: Nil => Value.Literal(x + y)
+      case As.String(x) :: As.String(y) :: Nil => Value.String(x + y)
     },
     "effekt::not(Bool)" -> Builtin {
-      case As.Bool(x) :: Nil => Value.Literal(!x)
+      case As.Bool(x) :: Nil => Value.Bool(!x)
     },
     "effekt::inspect(Any)" -> Builtin {
-      case any :: Nil => Value.Literal(inspect(any))
-    }
+      case any :: Nil => Value.String(inspect(any))
+    },
+    "array::allocate(Int)" -> Builtin {
+      case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
+    },
+    "array::size[T](Array[T])" -> Builtin {
+      case As.Array(arr) :: Nil => Value.Int(arr.length.toLong)
+    },
+    "array::unsafeGet[T](Array[T], Int)" -> Builtin {
+      case As.Array(arr) :: As.Int(index) :: Nil => arr(index.toInt)
+    },
+    "array::unsafeSet[T](Array[T], Int, T)" -> Builtin {
+      case As.Array(arr) :: As.Int(index) :: value :: Nil => arr.update(index.toInt, value); Value.Unit()
+    },
   )
   object As {
     object String {
@@ -701,6 +725,12 @@ object Interpreter {
     object Double {
       def unapply(v: Value): Option[scala.Double] = v match {
         case Value.Literal(value: scala.Double) => Some(value)
+        case _ => None
+      }
+    }
+    object Array {
+      def unapply(v: Value): Option[scala.Array[Value]] = v match {
+        case Value.Array(array) => Some(array)
         case _ => None
       }
     }
