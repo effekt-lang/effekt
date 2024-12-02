@@ -246,23 +246,24 @@ def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValu
 namespace test {
   def main() = {
     with on[WrongFormat].panic
-  
+
     // Parse example
-  //   feed("""{ "a": null, "b": [true,false,false,true], "f": 12.532   }"""){
-  //    
-  //     def k = new JsonObjectBuilder {
-  //       def field(k){v} = { println(k); ignore{v} }
-  //     }
-  //     def d = new JsonBuilder {
-  //       def number(n) = println(n)
-  //       def bool(b) = ()
-  //       def null() = println("NULL")
-  //       def string(s) = ()
-  //       def list(){e} = handleJsonBuilder{d}{e}
-  //       def dict(){e} = handleJsonObjectBuilder{k}{e}
-  //     }
-  //     handleJsonBuilder{d}{ decodeJson() }
-  //   }
+    feed("""{ "a": null, "b": [true,false,false,true], "f": 12.532   }"""){
+      with scanner[Char]
+
+      def k = new JsonObjectBuilder {
+        def field(k){v} = { println(k); ignore{v} }
+      }
+      def d = new JsonBuilder {
+        def number(n) = println(n)
+        def bool(b) = ()
+        def null() = println("NULL")
+        def string(s) = ()
+        def list(){e} = handleJsonBuilder{d}{e}
+        def dict(){e} = handleJsonObjectBuilder{k}{e}
+      }
+      handleJsonBuilder{d}{ decodeJson() }
+    }
     try{
   
       // Encode example

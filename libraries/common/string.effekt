@@ -136,6 +136,7 @@ def toInt(str: String): Int / Exception[WrongFormat] = {
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
 def toInt(str: String, base: Int): Int / Exception[WrongFormat] = {
+
   if( base > 36 || base < 1 ) {
     wrongFormat("Invalid base: " ++ base.show)
   }
