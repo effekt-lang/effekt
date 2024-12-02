@@ -423,22 +423,6 @@ define private void @eraseMemory(%Memory %memory) {
     ret void
 }
 
-define private void @forEachObject(ptr %elementPointer, ptr %end, ptr %f) alwaysinline {
-    %done = icmp uge ptr %elementPointer, %end
-    br i1 %done, label %return, label %erase
-
-erase:
-    %element = load %Pos, ptr %elementPointer
-    call void %f(%Pos %element)
-
-    %nextElementPointer = getelementptr %Pos, ptr %elementPointer, i64 1
-    tail call void @forEachObject(ptr %nextElementPointer, ptr %end, ptr %f)
-    ret void
-
-return:
-    ret void
-}
-
 define void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
