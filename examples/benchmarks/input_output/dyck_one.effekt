@@ -22,7 +22,7 @@ type Tree {
   Node(children: List[Tree])
 }
 
-def readTree(): Tree / { Scan[Byte], fail, stop } = {
+def readTree(): Tree / { Scan[Byte], fail } = {
   readIf[Byte] { b => b.toInt == 40 }
   val children = collectList[Tree] { many { readTree() } }
   skipIf[Byte] { b => b.toInt == 41 }
@@ -50,8 +50,7 @@ def run(n: Int): Int = {
 
   with readFile(filename)
   with scanner[Byte, Int]
-  with expect[Int]
-  readTree().size
+  attempt { readTree().size } { wrongFormat("Expected tree.") }
 }
 
 
