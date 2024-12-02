@@ -31,6 +31,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
     examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
     examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
+    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
