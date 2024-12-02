@@ -16,29 +16,55 @@ def isWhitespace(c: Char): Bool = c match {
 }
 
 /// Gets the value of a given ASCII digit in base 10
-def digitValue(c: Char): Option[Int] =
-  if (c >= '0' && c <= '9') {
-    Some(c.toInt - '0'.toInt)
+def digitValue(char: Char): Option[Int] =
+  // TODO use fail
+  if (char >= '0' && char <= '9') {
+    Some(char.toInt - '0'.toInt)
   } else {
     None()
   }
 
 /// Gets the value of a given ASCII digit in base 16
-def hexDigitValue(c: Char): Option[Int] =
-  c match {
-    case c and c >= '0' && c <= '9' => Some(c.toInt - '0'.toInt)
-    case c and c >= 'A' && c <= 'F' => Some((c.toInt - 'A'.toInt) + 10)
-    case c and c >= 'a' && c <= 'f' => Some((c.toInt - 'a'.toInt) + 10)
+def hexDigitValue(char: Char): Option[Int] =
+  // TODO use fail
+  char match {
+    case char and char >= '0' && char <= '9' => Some(char.toInt - '0'.toInt)
+    case char and char >= 'A' && char <= 'F' => Some((char.toInt - 'A'.toInt) + 10)
+    case char and char >= 'a' && char <= 'f' => Some((char.toInt - 'a'.toInt) + 10)
     case _ => None()
   }
 
+/// Gets the value of a given ASCII digit in the given base up to 36
+def digitValue(char: Char, base: Int): Option[Int] = {
+  // TODO use fail
+  val perhapsDigit = char match {
+      case char and char >= '0' && char <= '9' => Some(char.toInt - '0'.toInt)
+      case char and char >= 'A' && char <= 'Z' => Some((char.toInt - 'A'.toInt) + 10)
+      case char and char >= 'a' && char <= 'z' => Some((char.toInt - 'a'.toInt) + 10)
+      case _ => None()
+    }
+  perhapsDigit match {
+    case Some(digit) =>
+      if (digit < base) {
+        Some(digit)
+      } else {
+        None()
+      }
+    case None() => None()
+  }
+}
+
 /// Checks if the given character is an ASCII digit in base 10
 /// Use `digitValue(c: Char)` to get the numeric value out.
-def isDigit(c: Char): Bool = digitValue(c).isDefined
+def isDigit(char: Char): Bool = digitValue(char).isDefined
 
 /// Checks if the given character is an ASCII digit in base 16
 /// Use `hexDigitValue(c: Char)` to get the numeric value out.
-def isHexDigit(c: Char): Bool = hexDigitValue(c).isDefined
+def isHexDigit(char: Char): Bool = hexDigitValue(char).isDefined
+
+/// Checks if the given character is an ASCII digit in base 10
+/// Use `digitValue(c: Char)` to get the numeric value out.
+def isDigit(char: Char, base: Int): Bool = digitValue(char, base).isDefined
 
 /// Checks if a given character is a 7-bit ASCII character
 def isASCII(c: Char): Bool = { c.toInt < 128 }
