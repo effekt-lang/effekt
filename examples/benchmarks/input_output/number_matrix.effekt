@@ -46,17 +46,17 @@ def emitNumbers(n: Int) =
     }
   }
 
-def readDigit(): Int / { Scan[Byte], fail, stop } = {
+def readDigit(): Int / { Scan[Byte], stop } = {
   val byte = do peek[Byte]
   if (byte.toInt >= 48 && byte.toInt <= 57) {
     do skip[Byte]()
     return (byte.toInt - 48)
   } else {
-    do fail()
+    do stop()
   }
 }
 
-def readDecimal(): Int / { Scan[Byte], stop } = {
+def readDecimal(): Int / Scan[Byte] = {
   var result = 0
   for[Int] { many { readDigit() } } { digit =>
     result = result * 10 + digit
