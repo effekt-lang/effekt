@@ -659,7 +659,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   */
   def tryExpr(): Term =
     nonterminal:
-      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ finalizerClause(`suspend`, false) ~ finalizerClause(`resume`, true) ~ finalizerClause(`return`, true) ~ finalizerClause(`finally`, false) match {
+      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ finalizerClause(`on` ~> consume(`suspend`), "suspend", false) ~ finalizerClause(`on` ~> consume(`resume`), "resume", true) ~ finalizerClause(`on` ~> consume(`return`), "return", true) ~ finalizerClause(consume(`finally`), "finally", false) match {
         case _ ~ _ ~ None ~ Some(_) ~ _ ~ None =>
           fail("Got `resume` clause but no `suspend` clause.")
         case _ ~ _ ~ Some(_) ~ _ ~ _ ~ Some(_) =>
@@ -707,20 +707,20 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           Handler(capability, impl)
       }
 
-  def finalizerClause(clause: TokenKind, vparam: Boolean): Option[FinalizerClause] =
+  def finalizerClause[T](prefix: => T, name: String, vparam: Boolean): Option[FinalizerClause] =
     nonterminal:
-      backtrack { consume(clause) }
+      backtrack { prefix }
       .map { _ =>
         braces {
           backtrack { lambdaParams() <~ `=>` } ~ stmts() match {
             // TODO better erros
             case Some(Nil, vps, Nil) ~ body =>
-              if (!vps.isEmpty != vparam) fail(s"$clause value parameter mismatch")
+              if (!vps.isEmpty != vparam) fail(s"$name value parameter mismatch")
               else FinalizerClause(vps.headOption, body)
             case Some(_, _, _) ~ _ =>
-              fail(s"$clause only expects value parameters")
+              fail(s"$name only expects value parameters")
             case None ~ body =>
-              if (vparam) fail(s"$clause expects one value parameter but none were found")
+              if (vparam) fail(s"$name expects one value parameter but none were found")
               else FinalizerClause(None, body)
           }
         }

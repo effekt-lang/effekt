@@ -108,7 +108,6 @@ enum TokenKind {
   case `is`
   case `namespace`
   case `pure`
-  // case `on`
   case `suspend`
   case `finally`
 }
@@ -117,6 +116,7 @@ object TokenKind {
   val `resume` = TokenKind.Ident("resume")
   val `in` = TokenKind.Ident("in")
   val `at` = TokenKind.Ident("at")
+  val `on` = TokenKind.Ident("on")
   val `__` = Ident("_")
 
   def explain(kind: TokenKind): String = kind match {
@@ -138,7 +138,7 @@ object TokenKind {
     `let`, `true`, `false`, `val`, `var`, `if`, `else`, `while`, `type`, `effect`, `interface`,
     `try`, `with`, `case`, `do`, `fun`, `match`, `def`, `module`, `import`, `export`, `extern`,
     `include`, `record`, `box`, `unbox`, `return`, `region`, `resource`, `new`, `and`, `is`,
-    `namespace`, `pure`, `suspend`, `resume`, `finally`
+    `namespace`, `pure`, `suspend`, `resume`, `finally`, `on`
   )
 
 }
