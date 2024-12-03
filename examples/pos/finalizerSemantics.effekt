@@ -5,20 +5,22 @@ def main() = {
     try {
       try {
         do Eff(); 42
-      } suspend {
+      } on suspend {
         println("suspending inner")
-      } resume {
+        do Eff()
+      } on resume {
         _ => println("resuming inner")
-    } return { x =>
+    } on return { x =>
         println("returning inner")
+        do Eff()
         x * 2
       }
-    } with Eff { () => resume(()) }
-    suspend {
+    } with Eff { () => println("Eff"); resume(()) }
+    on suspend {
       println("suspending outer")
-    } resume {
+    } on resume {
       _ => println("resuming outer")
-    } return { x =>
+    } on return { x =>
       println("returning outer")
       x + 3
     }
