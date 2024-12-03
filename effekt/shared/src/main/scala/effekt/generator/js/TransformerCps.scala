@@ -259,7 +259,7 @@ object TransformerCps extends Transformer {
       pure(js.Return(Call(RESET, toJS(prog), jsSuspend, jsResume, jsReturn, toJS(ks), toJS(k))))
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k))))
+      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k), js.RawExpr("null"))))
 
     case cps.Stmt.Resume(r, b, ks2, k2) =>
       pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b), js.RawLiteral("false"), toJS(ks2), toJS(k2))))
