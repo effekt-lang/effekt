@@ -24,8 +24,13 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     if !Context.config.optimize() then return tree;
 
-    // (2) inline unique block definitions
+    // (2) lift static arguments (worker/wrapper)
+    val lifted = Context.timed("static-argument-transformation", source.name) {
+      StaticArguments.transform(mainSymbol, tree)
+    }
+
+    // (3) inline unique block definitions
     Context.timed("inliner", source.name) {
-      Inline.full(Set(mainSymbol), tree, Context.config.maxInlineSize().toInt)
+      Inline.full(Set(mainSymbol), lifted, Context.config.maxInlineSize().toInt)
     }
 }

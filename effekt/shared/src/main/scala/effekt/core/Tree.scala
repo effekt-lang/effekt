@@ -100,6 +100,7 @@ object Id {
   def apply(n: String): Id = new symbols.Symbol {
     val name = symbols.Name.local(n)
   }
+  def apply(n: Id): Id = apply(n.name.name)
 }
 
 /**

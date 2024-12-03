@@ -1,0 +1,11 @@
+import stream
+
+def main() = {
+  def stream1() = rangeFrom(1)
+  // Ideally this would be an array to demonstrate the capabilities. 
+  def stream2() = ['H', 'e', 'l', 'l', 'o'].each
+
+  zip[Int, Char]{stream1}{stream2} { (a, b) =>
+    println(show(a) ++ ", " ++ show(b))
+  }
+}

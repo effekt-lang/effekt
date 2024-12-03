@@ -1,4 +1,4 @@
-// const $effekt = {}
+const $effekt = {}
 // Common Runtime
 // --------------
 function Cell(init, region) {
@@ -237,45 +237,3 @@ $effekt.run = RUN
  */
 $effekt.runToplevel = RUN_TOPLEVEL
 
-/*
-function main_94(ks_1463, k_1130) {
-  return RESET((p_93, ks_1467, k_1134) => {
-    const Eff_3 = {
-      Eff_4: (ks_1468, k_1135) =>
-        SHIFT(p_93, (k_1136, ks_1469, k_1137) => {
-          function resume_84(a_88, ks_1470, k_1138) {
-            return RESUME(k_1136, (ks_1471, k_1139) =>
-              () => k_1139(a_88, ks_1471), false, ks_1470, k_1138);
-          }
-          const _285 = console.log("Eff");
-          return resume_84($effekt.unit, ks_1469, k_1137);
-        }, ks_1468, k_1135)
-    };
-    return RESET((p_94, ks_1475, k_1143) =>
-      Eff_3.Eff_4(ks_1475, (_289, ks_1476) => () => k_1143(42, ks_1476)), (ks_1472, k_1140) => {
-      const _286 = console.log("suspending inner");
-      return Eff_3.Eff_4(ks_1472, k_1140);
-    }, (_287, ks_1473, k_1141) => {
-      const v_r_655 = console.log("resuming inner");
-      return () => k_1141(v_r_655, ks_1473);
-    }, (x_217, ks_1474, k_1142) => {
-      const _288 = console.log("returning inner");
-      return () => k_1142((x_217 * (2)), ks_1474);
-    }, ks_1467, k_1134);
-  }, (ks_1464, k_1131) => {
-    const v_r_653 = console.log("suspending outer");
-    return () => k_1131(v_r_653, ks_1464);
-  }, (_283, ks_1465, k_1132) => {
-    const v_r_654 = console.log("resuming outer");
-    return () => k_1132(v_r_654, ks_1465);
-  }, (x_216, ks_1466, k_1133) => {
-    const _284 = console.log("returning outer");
-    return () => k_1133((x_216 + (3)), ks_1466);
-  }, ks_1463, (x_218, ks_1477) => {
-    const v_r_656 = console.log(('' + x_218));
-    return () => k_1130($effekt.unit, ks_1477);
-  });
-}
-
-RUN_TOPLEVEL(main_94)
-*/

@@ -1,9 +1,7 @@
 package effekt
 package core
 
-import effekt.symbols.TrackedParam.BlockParam
-import symbols.{ Symbol, TypeSymbol, builtins }
-import symbols.Name
+import symbols.{ Symbol, builtins }
 
 /**
  * In core, all names, including those in capture sets are just symbols.
@@ -176,7 +174,10 @@ object Type {
       val bparams = bps.map { p => p.tpe }
 
       BlockType.Function(tparams, cparams, vparams, bparams, body.tpe)
-    case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].tpe
+    case Block.Unbox(pure) => pure.tpe match {
+      case ValueType.Boxed(tpe, capt) => tpe
+      case tpe => println(util.show(block)); sys.error(s"Got ${tpe}, which is not a boxed block type.")
+    }
     case Block.New(impl) => impl.tpe
   }
   def inferCapt(block: Block): Captures = block match {
