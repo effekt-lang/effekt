@@ -55,6 +55,11 @@ def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
 def undefinedToOption[A](value: A): Option[A] =
   if (value.isUndefined) { None() } else { Some(value) }
 
+def optionToUndefined[A](value: Option[A]): A = value match {
+  case Some(value) => value
+  case None() => undefined()
+}
+
 
 // Show Instances
 // --------------
