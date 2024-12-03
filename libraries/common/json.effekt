@@ -95,9 +95,9 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   skipWhitespace()
   if(do peek[Char]() is c) {
     c match {
-      case 'n' => expect("null"); do null()
-      case 't' => expect("true"); do bool(true)
-      case 'f' => expect("false"); do bool(false)
+      case 'n' => expectString("null"); do null()
+      case 't' => expectString("true"); do bool(true)
+      case 'f' => expectString("false"); do bool(false)
       case '-' => do number(readDouble())
       case d and d.isDigit => do number(readDouble())
       case '"' => do string(collectString { readQuotedString() })
@@ -109,14 +109,14 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
 }
 def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFormat]} = {
   var first = true
-  expect("{")
+  expectString("{")
   with boundary
   skipWhitespace()
   while(do peek[Char]() is c and (c != '}')) {
-    if (not(first)) { expect(",") }
+    if (not(first)) { expectString(",") }
     val k: String = collectString { readQuotedString() }
     skipWhitespace()
-    expect(":")
+    expectString(":")
     do field(k){
       decodeJson()
     }
@@ -127,11 +127,11 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
 }
 def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = { 
   var first = true
-  expect("[")
+  expectString("[")
   with boundary
   skipWhitespace()
   while(do peek[Char]() is c and (c != ']')) {
-    if (not(first)) { expect(",") }
+    if (not(first)) { expectString(",") }
     decodeJson()
     skipWhitespace()
     first = false
