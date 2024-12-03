@@ -259,19 +259,19 @@ define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
 
-    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
-    %limit = load %Limit, ptr %limit_pointer, !alias.scope !3
+    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
     %isInside = icmp ule %StackPointer %nextStackPointer, %limit
     br i1 %isInside, label %continue, label %realloc
 
 continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
     ret %StackPointer %currentStackPointer
 
 realloc:
     %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
-    %base = load %Base, ptr %base_pointer, !alias.scope !3
+    %base = load %Base, ptr %base_pointer, !alias.scope !2
 
     %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
     %intBase = ptrtoint %Base %base to i64
@@ -285,25 +285,25 @@ realloc:
     %newStackPointer = getelementptr i8, %Base %newBase, i64 %size
     %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %n
 
-    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer, !alias.scope !3
-    store %Base %newBase, ptr %base_pointer, !alias.scope !3
-    store %Limit %newLimit, ptr %limit_pointer, !alias.scope !3
+    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    store %Base %newBase, ptr %base_pointer, !alias.scope !2
+    store %Limit %newLimit, ptr %limit_pointer, !alias.scope !2
 
     ret %StackPointer %newStackPointer
 }
 
 define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
 
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
-    %limit = load %Limit, ptr %limit_pointer, !alias.scope !3
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %isInside = icmp ule %StackPointer %stackPointer, %limit
     call void @llvm.assume(i1 %isInside)
 
     %o = sub i64 0, %n
     %newStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %o
-    store %StackPointer %newStackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    store %StackPointer %newStackPointer, ptr %stackPointer_pointer, !alias.scope !2
 
     ret %StackPointer %newStackPointer
 }
@@ -317,11 +317,11 @@ define private i64 @nextPowerOfTwo(i64 %x) {
 
 define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !3
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
     %oldStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
 
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
-    %limit = load %Limit, ptr %limit_pointer, !alias.scope !3
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %isInside = icmp ule %StackPointer %oldStackPointer, %limit
     call void @llvm.assume(i1 %isInside)
     ret void
@@ -776,10 +776,9 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
 
 ; Scope domains
 !0 = !{!"types"}
-!1 = !{!1}
 
 ; Scopes
-!2 = !{!"stackValues", !0}
+!1 = !{!"stackValues", !0}
 
 ; Scope lists
-!3 = !{!2}
+!2 = !{!1}
