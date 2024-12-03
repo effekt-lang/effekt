@@ -497,8 +497,6 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
   val capt = body.capt -- cparams.toSet
 }
 
-case class FinalizerClause(vp: Option[ValueParam], body: Stmt) extends Tree
-
 
 object Tree {
 

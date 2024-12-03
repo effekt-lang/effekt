@@ -186,7 +186,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
     case Reset(body, onSuspend, onResume, onReturn) =>
-      "reset" <+> toDoc(body) <+> "on Suspend" <+> onSuspend.map { toDoc }.getOrElse("{}") <+> "on Resume" <+> onResume.map { toDoc }.getOrElse("{}") <+> "on Return" <+> onReturn.map { toDoc }.getOrElse("{}")
+      "reset" <+> toDoc(body) <+> "on suspend" <+> onSuspend.map { toDoc }.getOrElse("{}") <+> "on resume" <+> onResume.map { toDoc }.getOrElse("{}") <+> "on return" <+> onReturn.map { toDoc }.getOrElse("{}")
 
     case Shift(prompt, body) =>
       "shift" <> parens(toDoc(prompt)) <+> toDoc(body)

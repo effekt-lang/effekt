@@ -88,7 +88,11 @@ class Reachable(
       process(body)
     case Stmt.Get(id, capt, tpe) => process(id)
     case Stmt.Put(id, tpe, value) => process(id); process(value)
-    case Stmt.Reset(body, onSuspend, onResume, onReturn) => process(body); onSuspend.foreach { process }; onResume.foreach { process }; onReturn.foreach { process }
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) =>
+      process(body)
+      onSuspend.foreach { process }
+      onResume.foreach { process }
+      onReturn.foreach { process }
     case Stmt.Shift(prompt, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
