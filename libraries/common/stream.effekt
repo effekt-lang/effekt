@@ -179,6 +179,19 @@ def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
 def sum { stream : () => Any / emit[Int] }: Int =
   sum[Any]{stream}.second
 
+def count[R] { stream : () => R / emit[Bool] }: (R, Int) = {
+  var s = 0;
+  try {
+    (stream(), s)
+  } with emit[Bool] { v =>
+    if (v) { s = s + 1 }
+    resume(())
+  }
+}
+
+def count { stream : () => Any / emit[Bool] }: Int =
+  count[Any]{stream}.second
+
 def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
   try {
     (stream(), Nil())
@@ -423,7 +436,7 @@ def encodeUTF8[R] { stream: () => R / emit[Char] }: R / emit[Byte] =
     resume(encodeChar(char))
   }
 
-def feed(string: String) { reader: () => Unit / read[Char] } =
+def feed[R](string: String) { reader: () => R / read[Char] } =
   feed(string.fromString) {
     decodeUTF8 {
       reader()
