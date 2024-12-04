@@ -111,6 +111,7 @@ declare double @llvm.ceil.f64(double)
 declare double @llvm.floor.f64(double)
 declare void @print(i64)
 declare void @exit(i64)
+declare void @llvm.assume(i1)
 
 
 ; Prompts
@@ -258,20 +259,19 @@ define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
 
-    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer
-    %limit = load %Limit, ptr %limit_pointer
-
+    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
     %isInside = icmp ule %StackPointer %nextStackPointer, %limit
     br i1 %isInside, label %continue, label %realloc
 
 continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
     ret %StackPointer %currentStackPointer
 
 realloc:
     %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
-    %base = load %Base, ptr %base_pointer
+    %base = load %Base, ptr %base_pointer, !alias.scope !2
 
     %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
     %intBase = ptrtoint %Base %base to i64
@@ -285,29 +285,46 @@ realloc:
     %newStackPointer = getelementptr i8, %Base %newBase, i64 %size
     %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %n
 
-    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer
-    store %Base %newBase, ptr %base_pointer
-    store %Limit %newLimit, ptr %limit_pointer
+    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    store %Base %newBase, ptr %base_pointer, !alias.scope !2
+    store %Limit %newLimit, ptr %limit_pointer, !alias.scope !2
 
     ret %StackPointer %newStackPointer
 }
 
 define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
+
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
+    %isInside = icmp ule %StackPointer %stackPointer, %limit
+    call void @llvm.assume(i1 %isInside)
 
     %o = sub i64 0, %n
     %newStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %o
-    store %StackPointer %newStackPointer, ptr %stackPointer_pointer
+    store %StackPointer %newStackPointer, ptr %stackPointer_pointer, !alias.scope !2
 
     ret %StackPointer %newStackPointer
 }
 
-define i64 @nextPowerOfTwo(i64 %x) {
+define private i64 @nextPowerOfTwo(i64 %x) {
     %leadingZeros = call i64 @llvm.ctlz.i64(i64 %x, i1 false)
     %numBits = sub i64 64, %leadingZeros
     %result = shl i64 1, %numBits
     ret i64 %result
+}
+
+define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    %oldStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
+
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
+    %isInside = icmp ule %StackPointer %oldStackPointer, %limit
+    call void @llvm.assume(i1 %isInside)
+    ret void
 }
 
 ; Meta-stack management
@@ -374,7 +391,7 @@ update:
     ret void
 }
 
-define void @displace(%Stack %stack, %Stack %end) {
+define private void @displace(%Stack %stack, %Stack %end) {
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer
@@ -393,7 +410,7 @@ continue:
     ret void
 }
 
-define %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
+define private %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
     %uniqueResumption = call %Resumption @uniqueStack(%Resumption %resumption)
     %rest_pointer = getelementptr %StackValue, %Resumption %uniqueResumption, i64 0, i32 3
     %start = load %Stack, ptr %rest_pointer
@@ -423,7 +440,7 @@ define private void @eraseMemory(%Memory %memory) {
     ret void
 }
 
-define void @erasePrompt(%Prompt %prompt) alwaysinline {
+define private void @erasePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
     switch %ReferenceCount %referenceCount, label %decrement [%ReferenceCount 0, label %free]
@@ -438,7 +455,7 @@ free:
     ret void
 }
 
-define void @sharePrompt(%Prompt %prompt) alwaysinline {
+define private void @sharePrompt(%Prompt %prompt) alwaysinline {
     %referenceCount_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 0
     %referenceCount = load %ReferenceCount, ptr %referenceCount_pointer
     %newReferenceCount = add %ReferenceCount %referenceCount, 1
@@ -755,3 +772,13 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
     ret void
 }
+
+
+; Scope domains
+!0 = !{!"types"}
+
+; Scopes
+!1 = !{!"stackValues", !0}
+
+; Scope lists
+!2 = !{!1}
