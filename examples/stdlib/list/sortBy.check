@@ -1,0 +1,4 @@
+Cons(-1, Cons(1, Cons(3, Cons(5, Nil()))))
+Cons(5, Cons(3, Cons(1, Cons(-1, Nil()))))
+Cons((-1, 1), Cons((0, 0), Cons((1, 0), Cons((0, 1), Nil()))))
+Nil()
