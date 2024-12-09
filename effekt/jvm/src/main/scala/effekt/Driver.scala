@@ -114,7 +114,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     import java.util.Properties
 
     // Capture general information
-    val effektVersion = "Effekt Compiler Version " + System.getProperty("effekt.version")
+    val effektVersion = "Effekt Compiler Version: " // Null:  + System.getProperty("effekt.version")
     val osInfo = "Operating System: " + System.getProperty("os.name") +
       " (" + System.getProperty("os.arch") + ") " +
       System.getProperty("os.version")
@@ -134,9 +134,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |
           |Where to report: https://github.com/effekt-lang/effekt/issues
           |
-          |effektVersion :
-          |
-          |
+          |$effektVersion
           |
           |$backendInfo
           |
