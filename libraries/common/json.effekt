@@ -89,6 +89,39 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 // --------------------------------------------------------------------------------
 // Decoding
 // --------------------------------------------------------------------------------
+
+
+def expectString(string: String): Unit / { Scan[Char], Exception[WrongFormat] } =
+  for[Char] { string.each } { char =>
+    expect[Unit]("Expected " ++ string) { readIf(char) }
+  }
+
+/// Read and unescape a string in ""
+def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] } = {
+  try {
+    skipWhitespace()
+    expect[Unit]("Expected \"") { readIf('"') }
+    while(read[Char]() is c and c != '"') {
+      c match {
+        case '\\' => read[Char]() match {
+          case '"' => do emit('\"')
+          case '\\' => do emit('\\')
+          case '/' => do emit('/')
+          case 'b' => <>
+          case 'f' => <>
+          case 'n' => do emit('\n')
+          case 'r' => do emit('\r')
+          case 't' => do emit('\t')
+          case c => wrongFormat("Invalid escape sequence '\\" ++ c.toString ++ "'")
+        }
+        case o => do emit(o)
+      }
+    }
+  } with stop {
+    wrongFormat("Unexpected end of input while reading a string")
+  }
+}
+
 /// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
 def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   with boundary
@@ -246,6 +279,12 @@ def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValu
 namespace test {
   def main() = {
     with on[WrongFormat].panic
+
+    // Read quoted string
+    feed("\"\ta\n\ra\"") {
+      with scanner[Char, Unit]
+      println(collectString { readQuotedString() })
+    }
 
     // Parse example
     feed("""{ "a": null, "b": [true,false,false,true], "f": 12.532   }"""){
