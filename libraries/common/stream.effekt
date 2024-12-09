@@ -33,10 +33,8 @@ def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
 /// `A` without having to also annotate `R`.
 ///
 /// e.g. for[Int] { prog() } { el => println(el) }
-def for[A] { stream: () => Any / emit[A] } { action: A => Unit }: Unit = {
-  for[A, Any]{stream}{action}
-  ()
-}
+def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
+  for[A, Unit]{stream}{action}
 
 /// Turns a `list` into a producer of a push stream
 /// by emitting each contained value left-to-right.
@@ -88,13 +86,13 @@ def boundary[R] { program: () => R / stop }: Option[R] =
     None()
   }
 
-def boundary { program: () => Any / stop }: Unit = {
-  boundary[Any]{program}
+def boundary { program: () => Unit / stop }: Unit = {
+  boundary[Unit]{program}
   ()
 }
 
 /// Run `program` forever until `stop` is thrown.
-def exhaustively { program: () => Any / stop }: Unit =
+def exhaustively { program: () => Unit / stop }: Unit =
   try {
     def go(): Unit = {
       program()
@@ -152,9 +150,9 @@ def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop 
 }
 
 /// If `number` is zero or negative it does nothing
-def limit[A](number: Int) { stream: () => Any / emit[A] }: Unit / emit[A] =
+def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / emit[A] =
   boundary {
-    limit[A, Any](number){stream}
+    limit[A, Unit](number){stream}
   }
 
 
@@ -176,8 +174,8 @@ def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
   }
 }
 
-def sum { stream : () => Any / emit[Int] }: Int =
-  sum[Any]{stream}.second
+def sum { stream : () => Unit / emit[Int] }: Int =
+  sum[Unit]{stream}.second
 
 def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
   try {
@@ -187,8 +185,8 @@ def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
     (r, Cons(v, vs))
   }
 
-def collectList[A] { stream: () => Any / emit[A] }: List[A] =
-  collectList[A, Any]{stream}.second
+def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
+  collectList[A, Unit]{stream}.second
 
 def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
   var i = 0
@@ -203,8 +201,8 @@ def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
   }
 }
 
-def collectArray[A] { stream: () => Any / emit[A] }: Array[A] =
-  collectArray[A, Any]{stream}.second
+def collectArray[A] { stream: () => Unit / emit[A] }: Array[A] =
+  collectArray[A, Unit]{stream}.second
 
 def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
   var i = 0
@@ -219,8 +217,8 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
   }
 }
 
-def collectBytes { stream: () => Any / emit[Byte] }: ByteArray =
-  collectBytes[Any]{stream}.second
+def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
+  collectBytes[Unit]{stream}.second
 
 def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   var l = list
@@ -272,7 +270,7 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   }
 }
 
-def source[A, R] { stream: () => Any / emit[A] } { reader: () => R / read[A] }: R = {
+def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
   var next = box { None() }
   next = box {
     try {
@@ -292,14 +290,13 @@ def source[A, R] { stream: () => Any / emit[A] } { reader: () => R / read[A] }: 
   }
 }
 
-def source[A] { stream: () => Any / emit[A] } { reader: () => Any / read[A] }: Unit = {
-  source[A, Any]{stream}{reader}
-  ()
-}
+def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
+  source[A, Unit]{stream}{reader}
+
 
 /// Combines two streams together producing a stream of pairs in lockstep.
 /// Given two streams of length `n` and `m`, it produces a stream of length `min(n, m)`.
-def zip[A, B] { stream1: () => Any / emit[A] } { stream2: () => Any / emit[B] } { action: (A, B) => Any }: Unit = {
+def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: (A, B) => Unit }: Unit = {
   with source[A] { stream1 }
   with source[B] { stream2 }
 
@@ -442,5 +439,5 @@ def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   (result, bytes.toString)
 }
 
-def collectString { stream: () => Any / emit[Char] }: String =
-  collectString[Any]{stream}.second
+def collectString { stream: () => Unit / emit[Char] }: String =
+  collectString[Unit]{stream}.second
