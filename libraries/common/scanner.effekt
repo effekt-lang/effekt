@@ -48,10 +48,8 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
 }
 
 /// Run a scanner by reading from an input stream, discarding its output.
-def scanner[A] { scanner: () => Any / Scan[A] }: Unit / read[A] = {
-  scanner[A, Any]{scanner}
-  ()
-}
+def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
+  scanner[A, Unit]{scanner}
 
 
 def many[A] { action: () => A / stop }: Unit / emit[A] =
@@ -69,8 +67,8 @@ def optionally[R] { program: () => R / stop }: Option[R] =
     None()
   }
 
-def optionally { program: () => Any / stop }: Bool =
-  optionally[Any]{program}.isDefined
+def optionally { program: () => Unit / stop }: Bool =
+  optionally[Unit]{program}.isDefined
 
 def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
   try {
@@ -82,8 +80,8 @@ def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
 def expect[R](message: String) { scanner: () => R / stop }: R / Exception[WrongFormat] =
   attempt { scanner() } { wrongFormat(message) }
 
-def expect(message: String) { scanner: () => Any / stop }: Unit / Exception[WrongFormat] = {
-  expect[Any](message){scanner}; ()
+def expect(message: String) { scanner: () => Unit / stop }: Unit / Exception[WrongFormat] = {
+  expect[Unit](message){scanner}; ()
 }
 
 /// Check that the next token satisfies the predicate and skip and return it when it does.
@@ -122,7 +120,7 @@ def skipWhile[A] { predicate: A => Bool }: Unit / { Scan[A] } =
 
 /// Read the next character if it is the given one and return true in this case.
 def readIf(e: Char): Unit / { Scan[Char], stop } = {
-  readIf[Char] { c => c == e}; ()
+  readIf[Char] { c => c == e }; ()
 }
 
 /// Check that the next token satisfies the predicate and skip it when it does.
