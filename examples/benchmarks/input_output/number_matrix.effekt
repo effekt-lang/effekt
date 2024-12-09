@@ -83,7 +83,7 @@ def run(n: Int): Int = {
   }
 
   with readFile(filename)
-  with scanner[Byte, Int]
+  with returning::scanner[Byte, Int]
   sum { readNumbers() }
 }
 

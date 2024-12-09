@@ -49,8 +49,8 @@ def run(n: Int): Int = {
   }
 
   with readFile(filename)
-  with scanner[Byte, Int]
-  with expect[Int]("Expected tree.")
+  with returning::scanner[Byte, Int]
+  with returning::expect[Int]("Expected tree.")
   readTree().size
 }
 
