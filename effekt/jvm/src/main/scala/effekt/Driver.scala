@@ -91,7 +91,8 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     case e @ CompilerPanic(msg) =>
       context.report(msg)
       e.getStackTrace.foreach { line =>
-        context.info("  at " + line)
+        //context.info("  at " + line)
+        generateCrashReport(e, context, config)
       }
     // when in server-mode, do not crash but report the error to avoid
     // restarting the server.
@@ -106,6 +107,60 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     writeIRs(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
+  }
+
+  def generateCrashReport(e: Throwable, context: Context, config: EffektConfig): Unit = {
+    import java.nio.file.{Files, Paths}
+    import java.util.Properties
+
+    // Capture general information
+    val effektVersion = "Effekt Compiler Version " + System.getProperty("effekt.version")
+    val osInfo = "Operating System: " + System.getProperty("os.name") +
+      " (" + System.getProperty("os.arch") + ") " +
+      System.getProperty("os.version")
+    val jvmInfo = "JVM Version: " + System.getProperty("java.version") +
+      " (" + System.getProperty("java.vendor") + ")"
+    val stackTrace = e.getStackTrace.map(line => "  at " + line.toString).mkString("\n")
+
+    // Collect backend details (if applicable)
+    val backendInfo = config.backend() match {
+      case Backend(name, compiler, runner) => s"Backend-specific info: Name : $name, Compiler : $compiler, Runner : $runner"
+      case null => s"Backend-specific info not retrievable"
+    }
+
+    // Construct the report
+    val report =
+      s"""|=== Effekt Compiler Crash Report ===
+          |
+          |Where to report: https://github.com/effekt-lang/effekt/issues
+          |
+          |effektVersion :
+          |
+          |
+          |
+          |$backendInfo
+          |
+          |$osInfo
+          |
+          |$jvmInfo
+          |
+          |Full Stack Trace:
+          |$stackTrace
+          |""".stripMargin
+
+    // Print the report to console
+    context.info(report)
+
+    // write to a file in ./out/
+    try {
+      val outputPath = Paths.get("./out/crash-report.log")
+      Files.createDirectories(outputPath.getParent)
+      Files.write(outputPath, report.getBytes)
+      context.info(s"Crash report saved to: $outputPath")
+    } catch {
+      case ex: Exception =>
+        context.info("Failed to save crash report to file: " + ex.getMessage)
+    }
   }
 
   /**
