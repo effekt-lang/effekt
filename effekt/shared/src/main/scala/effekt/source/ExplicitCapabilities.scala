@@ -91,8 +91,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       Call(receiver, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
 
-    case h @ TryHandle(prog, handlers) =>
+    case h @ TryHandle(prog, handlers, suspend, resume, retrn) =>
       val body = rewrite(prog)
+      val susp = suspend map { rewrite }
+      val res = resume map { rewrite }
+      val ret = retrn map { rewrite }
 
       val capabilities = Context.annotation(Annotations.BoundCapabilities, h)
 
@@ -107,7 +110,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
         }
       }
 
-      TryHandle(body, hs)
+      TryHandle(body, hs, susp, res, ret)
 
     case n @ source.New(impl @ Implementation(interface, clauses)) => {
       val cs = clauses map {
@@ -127,6 +130,11 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(definitionFor)
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body))
+  }
+
+  def rewrite(c: FinalizerClause)(using Context): FinalizerClause = {
+    val FinalizerClause(vp, body) = c
+    FinalizerClause(vp, rewrite(body))
   }
 
   override def rewrite(body: ExternBody)(using context.Context): ExternBody = 
