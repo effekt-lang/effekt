@@ -57,6 +57,11 @@ def scanner[A] { scanner: () => Any / Scan[A] }: Unit / read[A] = {
 def many[A] { action: () => A / stop }: Unit / emit[A] =
   exhaustively { do emit(action()) }
 
+def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
+  action()
+  many { action() }
+}
+
 def optionally[R] { program: () => R / stop }: Option[R] =
   try {
     Some(program())
@@ -128,6 +133,10 @@ def skipIf(e: Char): Unit / { Scan[Char], stop } =
 def skipWhitespace(): Unit / Scan[Char] =
   skipWhile { c => c.isWhitespace }
 
+/// Read as many characters corresponding to the given string as possible.
+def readString(string: String): Unit / { Scan[Char], stop } =
+  for[Char] { string.each } { char => readIf(char) }
+
 /// Check that the next character is a digit in base 10, and if so read and return it.
 def readDigit(): Int / { Scan[Char], stop } =
   readSome[Char, Int]{ char => digitValue(char) }
@@ -195,51 +204,16 @@ def readDouble(): Double / Scan[Char] = {
   fraction(readInteger())
 }
 
-def expectString(string: String): Unit / { Scan[Char], Exception[WrongFormat] } =
-  for[Char] { string.each } { char =>
-    expect[Unit]("Expected " ++ string) { readIf(char) }
-  }
-
-/// Read and unescape a string in ""
-def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] } = {
-  try {
-    skipWhitespace()
-    expect[Unit]("Expected \"") { readIf('"') }
-    while(read[Char]() is c and c != '"') {
-      c match {
-        case '\\' => read[Char]() match {
-          case '"' => do emit('\"')
-          case '\\' => do emit('\\')
-          case '/' => do emit('/')
-          case 'b' => <>
-          case 'f' => <>
-          case 'n' => do emit('\n')
-          case 'r' => do emit('\r')
-          case 't' => do emit('\t')
-          case c => wrongFormat("Invalid escape sequence '\\" ++ c.toString ++ "'")
-        }
-        case o => do emit(o)
-      }
-    }
-  } with stop {
-    wrongFormat("Unexpected end of input while reading a string")
-  }
-}
-
-
 
 namespace test {
   def main(): Unit = {
-    with on[WrongFormat].panic
   
     val input =
       """
       12
       32.3e-1
-      "\ta\n\ra"
       """
 
-    with boundary
     with feed(input)
     with scanner[Char, Unit]
 
@@ -247,7 +221,5 @@ namespace test {
     println(readInteger().show)
     skipWhitespace()
     println(readDouble().show)
-    skipWhitespace()
-    println(collectString { readQuotedString() })
   }
 }
