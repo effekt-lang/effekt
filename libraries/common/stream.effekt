@@ -19,22 +19,13 @@ effect read[A](): A / stop
 /// Signal from a producer to a consumer that there are no further values.
 effect stop(): Nothing
 
-/// Canonical handler of push streams that performs `action` for every
-/// value emitted by `stream`.
-def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
-  try {
-    stream()
-  } with emit[A] { value =>
-    resume(action(value))
-  }
-
 /// Like `for[A, R]`, but ignores the result of the stream, and consequently
 /// works for any type. Use this to annotate the type of stream elements
 /// `A` without having to also annotate `R`.
 ///
 /// e.g. for[Int] { prog() } { el => println(el) }
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
-  for[A, Unit]{stream}{action}
+  returning::for[A, Unit]{stream}{action}
 
 /// Turns a `list` into a producer of a push stream
 /// by emitting each contained value left-to-right.
@@ -79,15 +70,8 @@ def each(bytes: ByteArray): Unit / emit[Byte] = {
 // not seq
 
 
-def boundary[R] { program: () => R / stop }: Option[R] =
-  try {
-    Some(program())
-  } with stop {
-    None()
-  }
-
 def boundary { program: () => Unit / stop }: Unit = {
-  boundary[Unit]{program}
+  returning::boundary[Unit]{program}
   ()
 }
 
@@ -121,39 +105,13 @@ def rangeFrom(lower: Int): Unit / emit[Int] = {
   rangeFrom(lower + 1)
 }
 
+def index[A] { stream: () => Unit / emit[A] }: Unit / emit[Indexed[A]] =
+  returning::index[A, Unit]{stream}
 
-def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
-  var i = 0;
-  try {
-    stream()
-  } with emit[A] { v =>
-    val c = i;
-    i = c + 1;
-    resume(do emit(Indexed(c, v)))
-  }
-}
 
 /// If `number` is zero or negative it does nothing
-def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
-  if (number <= 0) do stop();
-  var i = 1;
-  try {
-    stream()
-  } with emit[A] { v =>
-    if (i < number) {
-      i = i + 1;
-      resume(do emit(v))
-    } else {
-      do stop()
-    }
-  }
-}
-
-/// If `number` is zero or negative it does nothing
-def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / emit[A] =
-  boundary {
-    limit[A, Unit](number){stream}
-  }
+def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / {emit[A], stop} =
+  returning::limit[A, Unit](number){stream}
 
 
 /// If `number` is zero or negative it does nothing
@@ -164,61 +122,17 @@ def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
   }
 
 
-def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
-  var s = 0;
-  try {
-    (stream(), s)
-  } with emit[Int] { v =>
-    s = s + v;
-    resume(())
-  }
-}
-
 def sum { stream : () => Unit / emit[Int] }: Int =
-  sum[Unit]{stream}.second
-
-def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
-  try {
-    (stream(), Nil())
-  } with emit[A] { (v) =>
-    val (r, vs) = resume(());
-    (r, Cons(v, vs))
-  }
+  returning::sum[Unit]{stream}.second
 
 def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
-  collectList[A, Unit]{stream}.second
-
-def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
-  var i = 0
-  var a = array::allocate(1)
-  try {
-    (stream(), a.resize(i))
-  } with emit[A] { (v) =>
-    if (i >= a.size) { a = a.resize(2 * a.size) }
-    a.unsafeSet(i, v)
-    i = i + 1
-    resume(())
-  }
-}
+  returning::collectList[A, Unit]{stream}.second
 
 def collectArray[A] { stream: () => Unit / emit[A] }: Array[A] =
-  collectArray[A, Unit]{stream}.second
-
-def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
-  var i = 0
-  var a = bytearray::allocate(1)
-  try {
-    (stream(), a.resize(i))
-  } with emit[Byte] { (v) =>
-    if (i >= a.size) { a = a.resize(2 * a.size) }
-    a.unsafeSet(i, v)
-    i = i + 1
-    resume(())
-  }
-}
+  returning::collectArray[A, Unit]{stream}.second
 
 def collectBytes { stream: () => Unit / emit[Byte] }: ByteArray =
-  collectBytes[Unit]{stream}.second
+  returning::collectBytes[Unit]{stream}.second
 
 def feed[T, R](list: List[T]) { reader: () => R / read[T] }: R = {
   var l = list
@@ -290,15 +204,12 @@ def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }:
   }
 }
 
-def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
-  source[A, Unit]{stream}{reader}
-
 
 /// Combines two streams together producing a stream of pairs in lockstep.
-/// Given two streams of length `n` and `m`, it produces a stream of length `min(n, m)`.
+/// Terminates when either of them terminates.
 def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: (A, B) => Unit }: Unit = {
-  with source[A] { stream1 }
-  with source[B] { stream2 }
+  with source[A, Unit] { stream1 }
+  with source[B, Unit] { stream2 }
 
   exhaustively {
     action(do read[A](), do read[B]())
@@ -434,10 +345,101 @@ def each(string: String): Unit / emit[Char] =
     }
   }
 
+def collectString { stream: () => Unit / emit[Char] }: String =
+  returning::collectString[Unit]{stream}.second
+
+namespace returning {
+
+/// Canonical handler of push streams that performs `action` for every
+/// value emitted by `stream`.
+def for[A, R] { stream: () => R / emit[A] } { action: A => Unit }: R =
+  try {
+    stream()
+  } with emit[A] { value =>
+    resume(action(value))
+  }
+
+def boundary[R] { program: () => R / stop }: Option[R] =
+  try {
+    Some(program())
+  } with stop {
+    None()
+  }
+
+def index[A, R] { stream: () => R / emit[A] }: R / emit[Indexed[A]] = {
+  var i = 0;
+  try {
+    stream()
+  } with emit[A] { v =>
+    val c = i;
+    i = c + 1;
+    resume(do emit(Indexed(c, v)))
+  }
+}
+
+/// If `number` is zero or negative it does nothing
+def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop } = {
+  if (number <= 0) do stop();
+  var i = 1;
+  try {
+    stream()
+  } with emit[A] { v =>
+    if (i < number) {
+      i = i + 1;
+      resume(do emit(v))
+    } else {
+      do stop()
+    }
+  }
+}
+
+def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
+  var s = 0;
+  try {
+    (stream(), s)
+  } with emit[Int] { v =>
+    s = s + v;
+    resume(())
+  }
+}
+
+def collectList[A, R] { stream: () => R / emit[A] }: (R, List[A]) =
+  try {
+    (stream(), Nil())
+  } with emit[A] { (v) =>
+    val (r, vs) = resume(());
+    (r, Cons(v, vs))
+  }
+
+def collectArray[A, R] { stream: () => R / emit[A] }: (R, Array[A]) = {
+  var i = 0
+  var a = array::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with emit[A] { (v) =>
+    if (i >= a.size) { a = a.resize(2 * a.size) }
+    a.unsafeSet(i, v)
+    i = i + 1
+    resume(())
+  }
+}
+
+def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
+  var i = 0
+  var a = bytearray::allocate(1)
+  try {
+    (stream(), a.resize(i))
+  } with emit[Byte] { (v) =>
+    if (i >= a.size) { a = a.resize(2 * a.size) }
+    a.unsafeSet(i, v)
+    i = i + 1
+    resume(())
+  }
+}
+
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   val (result, bytes) = collectBytes[R] { encodeUTF8 { stream } }
   (result, bytes.toString)
 }
 
-def collectString { stream: () => Unit / emit[Char] }: String =
-  collectString[Unit]{stream}.second
+}

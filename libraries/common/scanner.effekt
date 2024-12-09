@@ -18,38 +18,9 @@ def read[A](): A / { Scan[A], stop } = {
   return t
 }
 
-/// Run a scanner by reading from an input stream.
-def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
-  var last = None()
-  try {
-    scanner()
-  } with Scan[A] {
-    def peek() = resume {
-      last match {
-        case None() =>
-          val t = do read[A]()
-          last = Some(t)
-          return t
-        case Some(t) =>
-          return t
-      }
-    }
-    def skip() = resume {
-      last match {
-        case None() =>
-          val _ = do read[A]()
-          return ()
-        case Some(t) =>
-          last = None()
-          return ()
-      }
-    }
-  }
-}
-
 /// Run a scanner by reading from an input stream, discarding its output.
 def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
-  scanner[A, Unit]{scanner}
+  returning::scanner[A, Unit]{scanner}
 
 
 def many[A] { action: () => A / stop }: Unit / emit[A] =
@@ -60,15 +31,8 @@ def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
   many { action() }
 }
 
-def optionally[R] { program: () => R / stop }: Option[R] =
-  try {
-    Some(program())
-  } with stop {
-    None()
-  }
-
 def optionally { program: () => Unit / stop }: Bool =
-  optionally[Unit]{program}.isDefined
+  returning::optionally[Unit]{program}.isDefined
 
 def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
   try {
@@ -77,12 +41,8 @@ def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
     fallback()
   }
 
-def expect[R](message: String) { scanner: () => R / stop }: R / Exception[WrongFormat] =
-  attempt { scanner() } { wrongFormat(message) }
-
-def expect(message: String) { scanner: () => Unit / stop }: Unit / Exception[WrongFormat] = {
-  expect[Unit](message){scanner}; ()
-}
+def expect(message: String) { scanner: () => Unit / stop }: Unit / Exception[WrongFormat] =
+  returning::expect[Unit](message){scanner}
 
 /// Check that the next token satisfies the predicate and skip and return it when it does.
 def readIf[A] { predicate: A => Bool }: A / { Scan[A], stop } = {
@@ -170,6 +130,50 @@ def readInteger(): Int / Scan[Char] =
   }
 
 
+namespace returning {
+
+/// Run a scanner by reading from an input stream.
+def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
+  var last = None()
+  try {
+    scanner()
+  } with Scan[A] {
+    def peek() = resume {
+      last match {
+        case None() =>
+          val t = do read[A]()
+          last = Some(t)
+          return t
+        case Some(t) =>
+          return t
+      }
+    }
+    def skip() = resume {
+      last match {
+        case None() =>
+          val _ = do read[A]()
+          return ()
+        case Some(t) =>
+          last = None()
+          return ()
+      }
+    }
+  }
+}
+
+def optionally[R] { program: () => R / stop }: Option[R] =
+  try {
+    Some(program())
+  } with stop {
+    None()
+  }
+
+def expect[R](message: String) { scanner: () => R / stop }: R / Exception[WrongFormat] =
+  attempt { scanner() } { wrongFormat(message) }
+
+}
+
+
 namespace test {
   def main(): Unit = {
   
@@ -181,7 +185,7 @@ namespace test {
       """
 
     with feed(input)
-    with scanner[Char, Unit]
+    with scanner[Char]
 
     skipWhitespace()
     println(readInteger().show)
