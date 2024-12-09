@@ -1,0 +1,28 @@
+import map
+
+def main() = {
+    val l = [(0, "Hello"), (1, "World"), (2, "Woo!")]
+
+    val m = map::fromList(l)
+    println(map::internal::prettyPairs(m.toList))
+
+    val m2 = m.put(-1, "Hullo")
+    println(map::internal::prettyPairs(m2.toList))
+
+    val m3 = m2.put(-10, "EY")
+    println(map::internal::prettyPairs(m3.toList))
+
+    // ...
+
+    val m4 = m.delete(1).put(42, "Whole new world!").put(100, "Big").put(1000, "Bigger").put(10000, "Biggest!")
+    println(map::internal::prettyPairs(m4.toList))
+
+    val m5 = map::fromList(Cons((1, "Foo"), Cons((-1, "Huh?!"), m4.toList.reverse)))
+    println(map::internal::prettyPairs(m5.toList))
+
+    val m6: Map[Int, String] = m5.toList.fromList
+    println(map::internal::prettyPairs(m6.toList))
+
+    val nuMap = map::fromList(l.reverse)
+    println(map::internal::prettyPairs(nuMap.toList))
+}
