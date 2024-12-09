@@ -233,16 +233,16 @@ def any[A](list: List[A]) { predicate: A => Bool }: Bool = {
 /// 5
 /// ```
 /// O(N)
-def countIf[A](list: List[A]){predicate: (A => Bool) }: Int ={
+def countIf[A](list: List[A]) { predicate: (A => Bool) }: Int = {
  var acc: Int = 0
   list.foreach { el =>
     if (predicate(el)) {
       acc = acc + 1
     }
   }
+
   acc
 }
-
 
 /// Fold a list using `f`, starting from the left given a starting value.
 ///
