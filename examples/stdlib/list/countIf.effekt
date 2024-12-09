@@ -6,7 +6,7 @@ def main() = {
   val empty: List[String] = []
   println(empty.countIf { x => x.length == 2 }) // expects 0
 
-  val singleLetters: List[String] = ["A", "B" ,"C"]
+  val singleLetters: List[String] = ["A", "B", "C"]
   println(singleLetters.countIf { x => x.length == 2 }) // expects 0
 
   val multipleLetters: List[String] = ["AB", "BC", "A", "GG", "AAA"]
