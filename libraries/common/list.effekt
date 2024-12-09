@@ -684,6 +684,25 @@ def isSortedBy[A](list: List[A]) { compare: (A, A) => Bool }: Bool = {
 }
 
 
+
+/// Count how many Elements of a list satisfy the predicate given.
+///
+/// Examples:
+/// ```
+/// >["AB","BC","A","GG","AAA"].countIf{ x => x.length == 2}
+/// 3
+///
+/// >[1 , 2 , 3 , 4].countIf{x => (x*2 > 4)}
+/// 2
+/// ```
+/// O(N)
+def countIf[A](list: List[A]){predicate: (A => Bool) }: Int ={
+  var acc: Int = 0
+  list.foreach {el => if(predicate(el)){acc = acc + 1}}
+  acc
+}
+
+
 // Show Instances
 // --------------
 
