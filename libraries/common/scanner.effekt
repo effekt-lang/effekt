@@ -169,39 +169,6 @@ def readInteger(): Int / Scan[Char] =
     readDecimal()
   }
 
-/// Read a double value, in the common format (TODO document)
-def readDouble(): Double / Scan[Char] = {
-  def exponent(pre: Double) = {
-    try {
-      if(do peek() == 'e' || do peek() == 'E') {
-        do skip[Char]()
-        val e = do peek[Char]() match {
-          case '+' => do skip[Char](); readDecimal()
-          case '-' => do skip[Char](); neg(readDecimal())
-          case _ => readDecimal()
-        }
-        pre * pow(10.0, e)
-      } else { pre }
-    } with stop {
-      pre
-    }
-  }
-  def fraction(pre: Int) = {
-    if (optionally { readIf('.') }) {
-      var b = 0.1
-      var r = pre.toDouble
-      while (optionally[Int] { readDigit() } is Some(d)) {
-        r = r + b * d.toDouble
-        b = b * 0.1
-      }
-      exponent(r)
-    } else {
-      pre.toDouble
-    }
-  }
-  fraction(readInteger())
-}
-
 
 namespace test {
   def main(): Unit = {
@@ -209,7 +176,8 @@ namespace test {
     val input =
       """
       12
-      32.3e-1
+      -13
+      A1B2
       """
 
     with feed(input)
@@ -218,6 +186,8 @@ namespace test {
     skipWhitespace()
     println(readInteger().show)
     skipWhitespace()
-    println(readDouble().show)
+    println(readInteger().show)
+    skipWhitespace()
+    println(readHexadecimal().show)
   }
 }
