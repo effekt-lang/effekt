@@ -1,4 +1,4 @@
-import string/tty
+import tty
 import process
 import bench
 
