@@ -1,0 +1,90 @@
+import examples/benchmarks/runner
+
+import io/error
+import io/filesystem
+import stream
+import scanner
+
+
+// number_matrix.txt
+// 0 17 34 51 68
+// 13 30 47 64 81
+// 26 43 60 77 94
+// 39 56 73 90 107
+// 52 69 86 103 120
+
+def emitDigit(d: Int) =
+  do emit((d + 48).toByte)
+
+def emitSpace() = 
+  do emit(32.toByte)
+
+def emitNewline() = 
+  do emit(10.toByte)
+
+def emitDigits(n: Int): Unit / emit[Byte] = {
+  def go(n: Int): Unit = {
+    if (n < 10) {
+      emitDigit(n)
+    } else {
+      go(n / 10)
+      emitDigit(n.mod(10))
+    }
+  }
+  go(n)
+}
+
+def emitNumbers(n: Int) =
+  for[Int] { range(0, n) } { i =>
+    for[Int] { range(0, n) } { j =>
+      emitDigits((i * 13 + j * 17).mod(256))
+      if (j == n - 1) {
+        emitNewline()
+      } else {
+        emitSpace()
+      }
+    }
+  }
+
+def readDigit(): Int / { Scan[Byte], stop } = {
+  val byte = do peek[Byte]
+  if (byte.toInt >= 48 && byte.toInt <= 57) {
+    do skip[Byte]()
+    return (byte.toInt - 48)
+  } else {
+    do stop()
+  }
+}
+
+def readDecimal(): Int / Scan[Byte] = {
+  var result = 0
+  for[Int] { many { readDigit() } } { digit =>
+    result = result * 10 + digit
+  }
+  result
+}
+
+def readNumbers(): Unit / { Scan[Byte], emit[Int] } =
+  exhaustively {
+    do emit(readDecimal())
+    do skip[Byte]()
+  }
+
+
+def run(n: Int): Int = {
+  with on[IOError].panic;
+
+  val filename = "/tmp/number_matrix.txt"
+
+  val _ = {
+    with writeFile(filename)
+    emitNumbers(n)
+  }
+
+  with readFile(filename)
+  with returning::scanner[Byte, Int]
+  sum { readNumbers() }
+}
+
+
+def main() = benchmark(5){run}
