@@ -1,4 +1,4 @@
-import string/tty
+import tty
 import process
 import bench
 
@@ -52,8 +52,8 @@ def assertEqual[A](obtained: A, expected: A, msg: String) { equals: (A, A) => Bo
   do assert(equals(obtained, expected), msg)
 
 def assertEqual[A](obtained: A, expected: A) { equals: (A, A) => Bool } { show: A => String }: Unit / { Assertion, Formatted } =
-  do assert(equals(obtained, expected), Formatted::tryEmit(ANSI::RESET) ++ "Expected: ".dim ++ show(expected).green ++ "\n  Obtained: ".dim ++ show(obtained).red)
-  // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  do assert(equals(obtained, expected), Formatted::tryEmit(Escape::RESET) ++ "Expected: ".dim ++ show(expected).green ++ "\n  Obtained: ".dim ++ show(obtained).red)
+  // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
 
