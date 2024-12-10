@@ -24,6 +24,11 @@ namespace js {
 
   extern jsNode """
     const readline = require('node:readline');
+    if (process.platform === 'win32') {
+      // Set UTF-8 codepage
+      require('child_process').execSync('chcp 65001');
+      process.stdout.setDefaultEncoding('utf8');
+    }
   """
 
   extern type JSConsole
@@ -32,6 +37,7 @@ namespace js {
     jsNode """readline.createInterface({
         input: process.stdin,
         output: process.stdout,
+        encoding: 'utf8',
       })"""
 
   extern io def close(console: JSConsole): Unit =
@@ -40,7 +46,7 @@ namespace js {
   extern async def readLine(console: JSConsole): String =
     jsNode "$effekt.capture(k => ${console}.once('line', k))"
   extern io def writeLine(console: JSConsole, message: String): Unit =
-    jsNode "${console}.output.write(${message} + '\\n')"
+    jsNode """${console}.write(${message} + '\\n', 'utf8')"""
 }
 
 namespace examples {
