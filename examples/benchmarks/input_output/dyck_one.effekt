@@ -39,7 +39,6 @@ def size(tree: Tree): Int =
 
 def run(n: Int): Int = {
   with on[IOError].panic;
-  with on[WrongFormat].panic;
 
   val filename = "/tmp/dyck_one.txt"
 
