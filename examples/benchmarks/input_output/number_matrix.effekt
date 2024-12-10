@@ -73,7 +73,6 @@ def readNumbers(): Unit / { Scan[Byte], emit[Int] } =
 
 def run(n: Int): Int = {
   with on[IOError].panic;
-  with on[WrongFormat].panic;
 
   val filename = "/tmp/number_matrix.txt"
 
