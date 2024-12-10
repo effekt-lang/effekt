@@ -46,7 +46,7 @@ namespace js {
   extern async def readLine(console: JSConsole): String =
     jsNode "$effekt.capture(k => ${console}.once('line', k))"
   extern io def writeLine(console: JSConsole, message: String): Unit =
-    jsNode """${console}.write(${message} + '\\n', 'utf8')"""
+    jsNode "${console}.output.write(${message} + '\\n')"
 }
 
 namespace examples {
