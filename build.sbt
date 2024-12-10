@@ -13,6 +13,7 @@ lazy val assembleJS = taskKey[Unit]("Assemble the JS file in out/effekt.js")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 lazy val bumpMinorVersion = taskKey[Unit]("Bumps the minor version number (used in CI).")
+lazy val bumpPatchVersion = taskKey[Unit]("Bumps the patch version number (used in CI).")
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -161,11 +162,32 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       Process(s"${mvn.value} versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
     },
 
+    // TODO: reduce duplication between `bumpMinorVersion' and 'bumpPatchVersion'
     bumpMinorVersion := {
       val versionPattern = """(\d+)\.(\d+)\.(\d+)""".r
       val newVersion = effektVersion match {
         case versionPattern(major, minor, patch) =>
           s"$major.${minor.toInt + 1}.0"
+        case _ =>
+          sys.error(s"Invalid version format: $effektVersion")
+      }
+
+      val versionFile = (ThisBuild / baseDirectory).value / "project" / "EffektVersion.scala"
+      IO.write(versionFile,
+        s"""// Don't change this file without changing the CI too!
+           |import sbt.*
+           |import sbt.Keys.*
+           |object EffektVersion { lazy val effektVersion = "$newVersion" }
+           |""".stripMargin)
+
+      println(newVersion)
+    },
+
+    bumpPatchVersion := {
+      val versionPattern = """(\d+)\.(\d+)\.(\d+)""".r
+      val newVersion = effektVersion match {
+        case versionPattern(major, minor, patch) =>
+          s"$major.$minor.${patch.toInt + 1}"
         case _ =>
           sys.error(s"Invalid version format: $effektVersion")
       }
