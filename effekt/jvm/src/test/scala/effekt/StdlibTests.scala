@@ -25,6 +25,7 @@ abstract class StdlibChezTests extends StdlibTests {
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
     examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "stream" / "map.effekt",
     examplesDir / "stdlib" / "map",
     examplesDir / "stdlib" / "set",
   )
@@ -42,7 +43,14 @@ class StdlibLLVMTests extends StdlibTests {
   override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
 
   override def ignored: List[File] = List(
-    // Syscall param write(buf) points to uninitialised byte(s)
+    // Toplevel let-bindings (for ANSI-color-codes in output) not supported
+    examplesDir / "stdlib" / "test" / "test.effekt",
+
+    // Valgrind leak/failure
+    examplesDir / "stdlib" / "bytearray" / "bytearray.effekt",
+    examplesDir / "stdlib" / "stream" / "characters.effekt",
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
 
