@@ -1,11 +1,16 @@
 module tty
 
+/// Represents a TTY color.
+/// - ANSI for the standard 16 terminal colors
+/// - ANSI256 for standard 256 terminal colors
+/// - NoColor for explicit "this doesn't have a set color"
 type Color {
   ANSI(code: Int)
   ANSI256(code: Int)
   NoColor()
 }
 
+/// Common terminal colors and their constructors
 namespace Color {
   // Standard ANSI colors
   val BLACK = ANSI(0)
@@ -27,12 +32,12 @@ namespace Color {
   val BRIGHT_CYAN = ANSI(14)
   val BRIGHT_WHITE = ANSI(15)
 
+  /// Create an ANSI color from a code
   def ansi(code: Int): Color =
     if (code < 16) ANSI(code) else ANSI256(code)
-
-  def noColor(): Color = NoColor()
 }
 
+/// Converts a color to its escape code
 def toEscapeSeq(color: Color): String = color match {
   case ANSI(code) =>
     if (code < 8) (code + 30).show else (code + 82).show
@@ -40,6 +45,7 @@ def toEscapeSeq(color: Color): String = color match {
   case NoColor() => ""
 }
 
+/// Common escapes
 namespace Escape {
   val CSI = "\u001b["
   val OSC = "\u001b]"
@@ -53,7 +59,6 @@ namespace Escape {
   val REVERSE = CSI ++ "7m"
   val CROSSOUT = CSI ++ "9m"
   val OVERLINE = CSI ++ "53m"
-
 }
 
 def escape(code: String): String = Escape::CSI ++ code
@@ -127,14 +132,14 @@ def applyForegroundColor(color: Color): String =
 def applyBackgroundColor(color: Color): String =
   escape("48;" ++ color.toEscapeSeq ++ "m")
 
-// Inline images
-// See https://iterm2.com/documentation-images.html for protocol description
-// See [imgcat](https://iterm2.com/utilities/imgcat) for more usage details
+/// Inline images
+/// See https://iterm2.com/documentation-images.html for protocol description
+/// See [imgcat](https://iterm2.com/utilities/imgcat) for more usage details
 def inlineImage(size: Int, base64Image: String) =
   escape("1337;File=size=" ++ size.show ++ ";inline=1:" ++ base64Image ++ "\u0007")
 
-// Hyperlinks
-// https://iterm2.com/documentation-escape-codes.html
+/// Hyperlinks
+/// https://iterm2.com/documentation-escape-codes.html
 def hyperlink(text: String, url: String): String =
   escapeOSC("8;;") ++ url ++ "\u0007" ++ text ++ escapeOSC("8;;") ++ "\u0007"
 
