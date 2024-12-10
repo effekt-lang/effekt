@@ -184,7 +184,7 @@ sealed trait Expr extends Tree {
 }
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
+case class DirectApp(b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
@@ -214,7 +214,7 @@ enum Pure extends Expr {
   /**
    * Pure FFI calls. Invariant, block b is pure.
    */
-  case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+  case PureApp(b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure])
 
   /**
    * Constructor calls
@@ -404,18 +404,8 @@ object normal {
   def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
     Pure.Make(tpe, tag, vargs)
 
-  def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
-    callee match {
-      case b : Block.BlockLit =>
-        INTERNAL_ERROR(
-          """|This should not happen!
-             |User defined functions always have to be called with App, not PureApp.
-             |If this error does occur, this means this changed.
-             |Check `core.Transformer.makeFunctionCall` for details.
-             |""".stripMargin)
-      case other =>
-        Pure.PureApp(callee, targs, vargs)
-    }
+  def pureApp(callee: Block.BlockVar, targs: List[ValueType], vargs: List[Pure]): Pure =
+    Pure.PureApp(callee, targs, vargs)
 
   // "match" is a keyword in Scala
   def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
@@ -432,12 +422,8 @@ object normal {
       }
     }
 
-
-  def directApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
-    callee match {
-      case b : Block.BlockLit => run(reduce(b, targs, vargs, Nil))
-      case other => DirectApp(callee, targs, vargs, bargs)
-    }
+  def directApp(callee: Block.BlockVar, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
+    DirectApp(callee, targs, vargs, bargs)
 
   def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt = {
 
@@ -772,8 +758,10 @@ object substitutions {
 
   def substitute(expression: Expr)(using Substitution): Expr =
     expression match {
-      case DirectApp(b, targs, vargs, bargs) =>
-        DirectApp(substitute(b), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+      case DirectApp(b, targs, vargs, bargs) => substitute(b) match {
+        case x : Block.BlockVar => DirectApp(x, targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
+        case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
+      }
 
       case Run(s) =>
         Run(substitute(s))
@@ -874,8 +862,10 @@ object substitutions {
       case Make(tpe, tag, vargs) =>
         Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))
 
-      case PureApp(b, targs, vargs) =>
-        PureApp(substitute(b), targs.map(substitute), vargs.map(substitute))
+      case PureApp(b, targs, vargs) => substitute(b) match {
+        case x : Block.BlockVar => PureApp(x, targs.map(substitute), vargs.map(substitute))
+        case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
+      }
 
       case Select(target, field, annotatedType) =>
         Select(substitute(target), field, substitute(annotatedType))
