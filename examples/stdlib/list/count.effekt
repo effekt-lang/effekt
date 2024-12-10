@@ -1,0 +1,17 @@
+module examples/pos/list/count
+
+import list
+
+def main() = {
+  val empty: List[String] = []
+  println(empty.count { x => x.length == 2 }) // expects 0
+
+  val singleLetters: List[String] = ["A", "B", "C"]
+  println(singleLetters.count { x => x.length == 2 }) // expects 0
+
+  val multipleLetters: List[String] = ["AB", "BC", "A", "GG", "AAA"]
+  println(multipleLetters.count { x => x.length == 2 }) // expects 3
+
+  val numbers: List[Int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  println(numbers.count { x => (x * 2) > 10 }) // expects 5
+}
