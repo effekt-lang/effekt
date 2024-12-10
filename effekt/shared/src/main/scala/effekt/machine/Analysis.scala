@@ -20,7 +20,7 @@ def freeVariables(statement: Statement): Set[Variable] =
     case Jump(Label(_, environment)) =>
       environment.toSet
     case Substitute(bindings, rest) =>
-      freeVariables(rest) -- bindings.map(_._1).toSet ++ bindings.map(_._2).toSet
+      freeVariables(rest).map { variable => bindings.toMap.getOrElse(variable, variable) }
     case Construct(name, tag, values, rest) =>
       Set.from(values) ++ (freeVariables(rest) -- Set(name))
     case Switch(value, clauses, default: Option[Clause]) =>
@@ -30,9 +30,9 @@ def freeVariables(statement: Statement): Set[Variable] =
     case Invoke(value, tag, values) =>
       Set(value) ++ Set.from(values)
     case Var(name, init, tpe, rest) =>
-      freeVariables(rest) ++ Set(init) -- Set(name)
+      Set(init) ++ (freeVariables(rest) -- Set(name))
     case LoadVar(name, ref, rest) =>
-      Set(ref) ++ freeVariables(rest) -- Set(name)
+      Set(ref) ++ (freeVariables(rest) -- Set(name))
     case StoreVar(ref, value, rest) =>
       Set(ref, value) ++ freeVariables(rest)
     case PushFrame(frame, rest) =>
@@ -44,7 +44,7 @@ def freeVariables(statement: Statement): Set[Variable] =
     case Resume(value, rest) =>
       Set(value) ++ freeVariables(rest)
     case Shift(name, prompt, rest) =>
-      freeVariables(rest) -- Set(name) ++ Set(prompt)
+      Set(prompt) ++ (freeVariables(rest) -- Set(name))
     case LiteralInt(name, value, rest) =>
       freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>
@@ -52,6 +52,6 @@ def freeVariables(statement: Statement): Set[Variable] =
     case LiteralUTF8String(name, utf8, rest) =>
       freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
-      arguments.toSet ++ freeVariables(rest) - name
+      arguments.toSet ++ (freeVariables(rest) - name)
     case Hole => Set.empty
   }
