@@ -344,21 +344,25 @@ extern pure def cos(x: Double): Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
   vm "effekt::cos(Double)"
+  llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
 
 extern pure def sin(x: Double): Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
   vm "effekt::sin(Double)"
+  llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
 
 extern pure def atan(x: Double): Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
   vm "effekt::atan(Double)"
+  llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
 
 extern pure def tan(x: Double): Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
   vm "effekt::tan(Double)"
+  llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
 
 extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
@@ -381,15 +385,18 @@ extern pure def log(x: Double): Double =
   js "Math.log(${x})"
   chez "(log ${x})"
   vm "effekt::log(Double)"
+  llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
 
 extern pure def log1p(x: Double): Double =
   js "Math.log1p(${x})"
   chez "(log (+ ${x} 1))"
+  llvm "%z = call %Double @log1p(double ${x}) ret %Double %z" 
 
 extern pure def exp(x: Double): Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
   vm "effekt::exp(Double)"
+  llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
 
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {
@@ -408,12 +415,14 @@ extern pure def pow(base: Double, exponent: Double): Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
   vm "effekt::pow(Double, Double)"
+  llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
   vm "effekt::pi()"
+  llvm "ret double 3.14159265358979323846264338327950288419716939937510582097494459"
 
 val PI: Double = _pi()
 
