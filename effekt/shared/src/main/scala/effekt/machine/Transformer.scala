@@ -538,7 +538,7 @@ object Transformer {
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
   def noteDefinition(id: Id, params: Environment, free: Environment)(using BC: BlocksParamsContext): Unit =
-    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: BlockInfo)")
+    assert(!BC.info.isDefinedAt(id), s"Registering info twice for ${id} (was: ${BC.info(id)}, now: Definition)")
     BC.info += (id -> BlockInfo.Definition(free, params))
 
   def noteParameter(id: Id, tpe: core.BlockType)(using BC: BlocksParamsContext): Unit =
