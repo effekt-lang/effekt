@@ -320,18 +320,23 @@ extern pure def infixDiv(x: Double, y: Double): Double =
 extern pure def cos(x: Double): Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
+  llvm "%z = call %Double @llvm.cos.f64(double ${x}) ret %Double %z"
 
 extern pure def sin(x: Double): Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
+  llvm "%z = call %Double @llvm.sin.f64(double ${x}) ret %Double %z"
 
+// We have to use the non-intrinsic versions of 'tan' & 'atan' as they were only added in LLVM 19
 extern pure def atan(x: Double): Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
+  llvm "%z = call %Double @atan(double ${x}) ret %Double %z"
 
 extern pure def tan(x: Double): Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
+  llvm "%z = call %Double @tan(double ${x}) ret %Double %z"
 
 extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
@@ -352,14 +357,20 @@ def abs(n: Double): Double =
 extern pure def log(x: Double): Double =
   js "Math.log(${x})"
   chez "(log ${x})"
+  llvm "%z = call %Double @llvm.log.f64(double ${x}) ret %Double %z"
 
 extern pure def log1p(x: Double): Double =
   js "Math.log1p(${x})"
   chez "(log (+ ${x} 1))"
+  llvm """
+    %i = fadd %Double 1.0, ${x}
+    %z = call %Double @llvm.log.f64(double %i) ret %Double %z
+  """
 
 extern pure def exp(x: Double): Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
+  llvm "%z = call %Double @llvm.exp.f64(double ${x}) ret %Double %z"
 
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {
@@ -373,11 +384,18 @@ def pow(base: Double, exponent: Int): Double = {
 extern pure def pow(base: Double, exponent: Double): Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
+  llvm "%z = call %Double @llvm.pow.f64(double ${base}, double ${exponent}) ret %Double %z"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
+  // We have to use the non-intrinsic version of 'atan' as it was only added in LLVM 19
+  llvm """
+    %i = call %Double @atan(double 1.0)
+    %z = fmul %Double %i, 4.0
+    ret %Double %z
+  """
 
 val PI: Double = _pi()
 
