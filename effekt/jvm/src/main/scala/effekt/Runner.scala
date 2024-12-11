@@ -190,6 +190,8 @@ object JSWebRunner extends Runner[String] {
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
+  override def includes(path: File): List[File] = List(path / ".." / "js")
+
   override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
