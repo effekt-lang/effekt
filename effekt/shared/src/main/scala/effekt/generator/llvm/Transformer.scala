@@ -26,7 +26,7 @@ object Transformer {
         Call("stack", Ccc(), stackType, withEmptyStack, List()),
         Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
-      val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
+      val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), None, List(entryBlock))
 
       declarations.map(transform) ++ globals :+ entryFunction
   }
@@ -190,11 +190,14 @@ object Transformer {
 
       case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
         val environment = List(init)
+        val sharer = getSharer(environment, StackFrameSharer)
+        val eraser = getEraser(environment, StackFrameEraser)
+
         val returnAddressName = freshName("returnAddress")
         val returnType = transform(retType)
         val returnValue = freshName("returnValue")
         val parameters = List(Parameter(returnType, returnValue))
-        defineLabel(returnAddressName, parameters) {
+        defineLabel(returnAddressName, parameters, Some(ConstantArray(PointerType(), List(sharer, eraser)))) {
           emit(Comment(s"var $name / return address"))
           popEnvironmentFrom(getStack(), environment)
           eraseValue(init)
@@ -203,9 +206,6 @@ object Transformer {
           emit(callLabel(nextReturn, List(LocalReference(returnType, returnValue))))
           RetVoid()
         }
-
-        val sharer = getSharer(environment, StackFrameSharer)
-        val eraser = getEraser(environment, StackFrameEraser)
 
         emit(Call(name, Ccc(), referenceType, newReference, List(getStack())))
 
@@ -250,9 +250,12 @@ object Transformer {
       case machine.PushFrame(frame, rest) =>
         val frameEnvironment = freeVariables(frame).toList;
 
+        val sharer = getSharer(frameEnvironment, StackFrameSharer)
+        val eraser = getEraser(frameEnvironment, StackFrameEraser)
+
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineLabel(returnAddressName, parameters) {
+        defineLabel(returnAddressName, parameters, Some(ConstantArray(PointerType(), List(sharer, eraser)))) {
           emit(Comment(s"pushFrame / return address, ${frameEnvironment.length} free variables"))
           emit(Call("", Ccc(), VoidType(), ConstantGlobal("assumeFrameHeaderWasPopped"), List(getStack())))
           popEnvironmentFrom(getStack(), frameEnvironment);
@@ -261,9 +264,6 @@ object Transformer {
 
           transform(frame.body);
         }
-
-        val sharer = getSharer(frameEnvironment, StackFrameSharer)
-        val eraser = getEraser(frameEnvironment, StackFrameEraser)
 
         shareValues(frameEnvironment, freeVariables(rest));
         pushFrameOnto(getStack(), frameEnvironment, returnAddressName, sharer, eraser);
@@ -290,9 +290,12 @@ object Transformer {
 
         val frameEnvironment = freeVariables(frame).toList;
 
+        val sharer = getSharer(frameEnvironment, StackSharer)
+        val eraser = getEraser(frameEnvironment, StackEraser)
+
         val returnAddressName = freshName("returnAddress");
         val parameters = frame.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-        defineLabel(returnAddressName, parameters) {
+        defineLabel(returnAddressName, parameters, Some(ConstantArray(PointerType(), List(sharer, eraser)))) {
           emit(Comment(s"Reset / return address, ${frameEnvironment.length} free variables"))
           popEnvironmentFrom(getStack(), frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
@@ -304,9 +307,6 @@ object Transformer {
 
           transform(frame.body);
         }
-
-        val sharer = getSharer(frameEnvironment, StackSharer)
-        val eraser = getEraser(frameEnvironment, StackEraser)
 
         shareValues(frameEnvironment, freeVariables(rest));
 
@@ -449,7 +449,7 @@ object Transformer {
       case machine.Type.Reference(_) => 16
     }
 
-  def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
+  def defineFunction(name: String, parameters: List[Parameter], prefix: Option[Operand] = None)(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
     implicit val FC = FunctionContext();
     implicit val BC = BlockContext();
 
@@ -459,12 +459,12 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Private(), Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
+    val function = Function(Private(), Ccc(), VoidType(), name, parameters, prefix, entryBlock :: basicBlocks);
 
     emit(function)
   }
 
-  def defineLabel(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
+  def defineLabel(name: String, parameters: List[Parameter], prefix: Option[Operand] = None)(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
     implicit val FC = FunctionContext();
     implicit val BC = BlockContext();
 
@@ -474,7 +474,7 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Private(), Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
+    val function = Function(Private(), Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), prefix, entryBlock :: basicBlocks);
 
     emit(function)
   }
