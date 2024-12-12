@@ -583,7 +583,7 @@ object Transformer {
 
   def pushFrameOnto(stack: Operand, environment: machine.Environment, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext) = {
     val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-    val size = ConstantInt(environmentSize(environment) + 24);
+    val size = ConstantInt(environmentSize(environment) + 8);
     emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackAllocate, List(stack, size)));
 
     val frameType = StructureType(List(environmentType(environment), frameHeaderType));
@@ -591,14 +591,8 @@ object Transformer {
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameType, stackPointer, List(0, 1, 0)));
-    val sharerPointer = LocalReference(PointerType(), freshName("sharer_pointer"));
-    emit(GetElementPtr(sharerPointer.name, frameType, stackPointer, List(0, 1, 1)));
-    val eraserPointer = LocalReference(PointerType(), freshName("eraser_pointer"));
-    emit(GetElementPtr(eraserPointer.name, frameType, stackPointer, List(0, 1, 2)));
 
     emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
-    emit(Store(sharerPointer, sharer));
-    emit(Store(eraserPointer, eraser));
   }
 
   def popEnvironmentFrom(stack: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -683,7 +677,7 @@ object Transformer {
 
     val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
     // TODO properly find size
-    val size = ConstantInt(24);
+    val size = ConstantInt(8);
     emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
