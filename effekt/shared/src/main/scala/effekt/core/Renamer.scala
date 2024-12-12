@@ -25,7 +25,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
   def freshIdFor(id: Id): Id =
     suffix = suffix + 1
-    val uniqueName = if prefix.isEmpty then id.name.name + suffix.toString else prefix + suffix.toString
+    val uniqueName = if prefix.isEmpty then id.name.name + "_" + suffix.toString else prefix + suffix.toString
     names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
