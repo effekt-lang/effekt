@@ -18,7 +18,7 @@ define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${comm
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
-    case Function(callingConvention, returnType, name, parameters, None, basicBlocks) =>
+    case Function(linkage, callingConvention, returnType, name, parameters, None, basicBlocks) =>
       s"""
 define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
     ${indentedLines(basicBlocks.map(show).mkString)}

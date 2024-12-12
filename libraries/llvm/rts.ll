@@ -53,7 +53,7 @@
 %Base = type %StackPointer
 %Limit = type %StackPointer
 %ReturnAddress = type ptr
-%FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
+%FrameHeader = type { %ReturnAddress }
 
 ; Unique address for each handler.
 %Prompt = type ptr
@@ -486,10 +486,6 @@ define private %Stack @underflowStack(%Stack %stack) {
     ret %Stack %rest
 }
 
-define private void @nop(%Stack %stack) {
-    ret void
-}
-
 define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
@@ -635,16 +631,18 @@ done:
 
 define private void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
-    %stackSharer = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 1
-    %sharer = load %Sharer, ptr %stackSharer, !alias.scope !12, !noalias !22
+    %returnAdress = load %ReturnAddress, ptr %newStackPointer, !alias.scope !12, !noalias !22
+    %sharer_pointer = getelementptr ptr, ptr %returnAdress, i64 -2
+    %sharer = load %Sharer, ptr %sharer_pointer
     tail call void %sharer(%StackPointer %newStackPointer)
     ret void
 }
 
 define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
-    %stackEraser = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 2
-    %eraser = load %Eraser, ptr %stackEraser, !alias.scope !12, !noalias !22
+    %returnAdress = load %ReturnAddress, ptr %newStackPointer, !alias.scope !12, !noalias !22
+    %eraser_pointer = getelementptr ptr, ptr %returnAdress, i64 -1
+    %eraser = load %Eraser, ptr %eraser_pointer
     tail call void %eraser(%StackPointer %newStackPointer)
     ret void
 }
@@ -657,8 +655,8 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
-    call %Stack @underflowStack(%Stack %stack)
+define private tailcc void @topLevel(%Pos %val, %Stack %stack) prefix { %Sharer, %Eraser } { %Sharer @topLevelSharer, %Eraser @topLevelEraser } {
+    %rest = call %Stack @underflowStack(%Stack %stack)
     ret void
 }
 
@@ -679,12 +677,8 @@ define private %Stack @withEmptyStack() {
     %stackPointer = load %StackPointer, ptr %stackStackPointer, !alias.scope !11, !noalias !21
 
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %sharerPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
-    %eraserPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
 
     store %ReturnAddress @topLevel, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    store %Sharer @topLevelSharer, ptr %sharerPointer, !alias.scope !12, !noalias !22
-    store %Eraser @topLevelEraser, ptr %eraserPointer, !alias.scope !12, !noalias !22
 
     %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
     store %StackPointer %stackPointer_2, ptr %stackStackPointer, !alias.scope !11, !noalias !21
@@ -693,7 +687,7 @@ define private %Stack @withEmptyStack() {
 }
 
 define void @resume_Int(%Stack %stack, %Int %argument) {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 8)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
     tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
@@ -701,7 +695,7 @@ define void @resume_Int(%Stack %stack, %Int %argument) {
 }
 
 define void @resume_Pos(%Stack %stack, %Pos %argument) {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 8)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
     tail call tailcc void %returnAddress(%Pos %argument, %Stack %stack)
