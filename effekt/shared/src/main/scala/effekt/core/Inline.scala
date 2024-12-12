@@ -98,7 +98,6 @@ object Inline {
 
   def blockDefFor(id: Id)(using ctx: InlineContext): Option[Block] =
     ctx.defs.get(id) map {
-      // TODO rewriting here leads to a stack overflow in one test, why?
       case Definition.Def(id, block) => rewrite(block)
       case Definition.Let(id, _, binding) => INTERNAL_ERROR("Should not happen")
     }

@@ -264,9 +264,6 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Resume(r, b, ks2, k2) =>
       pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b), js.RawLiteral("false"), toJS(ks2), toJS(k2))))
 
-    case cps.Stmt.Resume(r, b, ks2, k2) =>
-      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b), toJS(ks2), toJS(k2))))
-
     case cps.Stmt.Hole() =>
       pure(js.Return($effekt.call("hole")))
   }
