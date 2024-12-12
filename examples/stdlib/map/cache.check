@@ -1,0 +1,7 @@
+Get key1: value1
+Get key2: value2
+Get key1: newValue1
+Get key2: value2
+After cleaning:
+Get key1: newValue1
+Get key2: Not found

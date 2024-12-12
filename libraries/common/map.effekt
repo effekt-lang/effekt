@@ -196,6 +196,40 @@ def mapMaybe[K, V1, V2](m: Map[K, V1]) { f : (K, V1) => Option[V2] }: Map[K, V2]
     }
   }
 
+/// Filters a map `m` with a `shouldKeep` function,
+/// keeping only the elements where `shouldKeep` returns `true`.
+///
+/// Law: `m.filter { f } === m.mapMaybe { (k, v) => if (f(k, v)) Some(v) else None() }`
+///
+/// O(N)
+def filter[K, V](m: Map[K, V]) { shouldKeep: (K, V) => Bool }: Map[K, V] = {
+  def go(tree: Map[K, V]): (Map[K, V], Bool) = tree match {
+    case Tip() => (Tip(), false)
+    case Bin(size, k, v, l, r) =>
+      val (l2, lchanged) = go(l)
+      val (r2, rchanged) = go(r)
+      if (shouldKeep(k, v)) {
+        val changed = lchanged || rchanged
+        val tree2 = if (changed) {
+          link(k, v, l2, r2)
+        } else {
+          tree
+        }
+        (tree2, changed)
+      } else {
+        (link2(l2, r2), true)
+      }
+  }
+
+  go(m).first
+}
+
+/// Filters a map `m` with a `shouldKeep` function,
+/// keeping only the values where `shouldKeep` returns `true`.
+///
+/// O(N)
+def filter[K, V](m: Map[K, V]) { shouldKeep: V => Bool }: Map[K, V] =
+  m.filter { (_k, v) => shouldKeep(v) }
 
 /// Traverse all keys and their associated values in map `m` in order,
 /// running the function `action` on a key and its associated value.
