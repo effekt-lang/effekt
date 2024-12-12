@@ -1024,16 +1024,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def templateString(): Term =
-    template() match {
-      case Template(s :: strs, arg :: args) =>
-        strs.zip(args)
-          .foldLeft(binaryOp(StringLit(s), `++`, arg)) {
-            case (acc, ("", arg)) => binaryOp(acc, `++`, arg)
-            case (acc, (s, arg)) => binaryOp(acc, `++`, binaryOp(StringLit(s), `++`, arg))
-          }
-      case Template(List(s), Nil) => StringLit(s)
-      case _ => fail("cannot occur")
-    }
+    nonterminal:
+      template() match {
+        case Template(List(s), Nil) => StringLit(s)
+        case Template(strs, args) => TemplateStr(strs, args)
+      }
   
   def literal(): Literal =
     nonterminal:
