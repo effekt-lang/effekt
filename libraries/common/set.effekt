@@ -47,6 +47,20 @@ def insert[A](s: Set[A], a: A): Set[A] = {
   }
 }
 
+/// Create a set from a given map by ignoring the values.
+///
+/// O(N)
+def fromMapKeys[K, V](map: Map[K, V]): Set[K] =
+  Set(map.forget)
+
+/// Create a map from a set and a function.
+///
+/// O(N)
+def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] =
+  keys.internal::via { m =>
+    m.map { (k, _v) => valueOf(k) }
+  }
+
 /// Create a set from a given list.
 ///
 /// O(N log N)

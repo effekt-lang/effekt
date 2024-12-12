@@ -152,6 +152,20 @@ def getMax[K, V](m: Map[K, V]): Option[(K, V)] = {
   }
 }
 
+/// Forgets the values of a map, setting them all to `(): Unit`.
+/// Used by `set`s internally.
+///
+/// Law: `m.forget === m.map { (_k, _v) => () }`
+///
+/// O(N)
+def forget[K, V](m: Map[K, V]): Map[K, Unit] = {
+  m match {
+    case Tip() => Tip()
+    case Bin(size, k, v, l, r) =>
+      Bin(size, k, (), l.forget, r.forget)
+  }
+}
+
 /// Map a function `f` over values in map `m`.
 ///
 /// O(N)
@@ -169,6 +183,19 @@ def map[K, V1, V2](m: Map[K, V1]) { f : (K, V1) => V2 }: Map[K, V2] = {
 def map[K, V1, V2](m: Map[K, V1]) { f : V1 => V2 }: Map[K, V2] = {
   m.map { (_k, v) => f(v) }
 }
+
+/// Map a function `f` over values in map `m`, keeping only the values where `f` returns `Some(...)`
+///
+/// O(N)
+def mapMaybe[K, V1, V2](m: Map[K, V1]) { f : (K, V1) => Option[V2] }: Map[K, V2] =
+  m match {
+    case Tip() => Tip()
+    case Bin(size, k, v, l, r) => f(k, v) match {
+      case Some(v2) => link(k, v2, l.mapMaybe {f}, r.mapMaybe {f})
+      case None() => link2(l.mapMaybe {f}, r.mapMaybe {f})
+    }
+  }
+
 
 /// Traverse all keys and their associated values in map `m` in order,
 /// running the function `action` on a key and its associated value.
