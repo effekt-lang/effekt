@@ -1,0 +1,20 @@
+import map
+
+def main() = {
+  // Create multiple maps
+  val map1 = map::fromList([(1, "apple"), (2, "banana"), (3, "cherry")])
+  val map2 = map::fromList([(2, "berry"), (3, "date"), (4, "elderberry")])
+
+  // Test union with different combine strategies
+  println("Union (keeping first value):")
+  println(map::internal::prettyPairs(map1.union(map2).toList))
+
+  println("\nUnion (combining values):")
+  val combinedMap = map1.union(map2) { (k, v1, v2) => v1 ++ "/" ++ v2 }
+  println(map::internal::prettyPairs(combinedMap.toList))
+
+  // Test intersection
+  println("\nIntersection (combining keys):")
+  val intersectedMap = map1.intersection(map2) { (k, v1, v2) => v1 ++ "-" ++ v2 }
+  println(map::internal::prettyPairs(intersectedMap.toList))
+}
