@@ -111,10 +111,22 @@ object Transformer {
 
             noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 
-          case Definition.Def(id, b @ core.New(impl)) =>
+          case Definition.Def(id, block @ core.New(impl)) =>
             // this is just a hack...
-            noteParameter(id, b.tpe)
-          case _ => ()
+            noteParameter(id, block.tpe)
+
+          case Definition.Def(id, core.BlockVar(alias, tpe, _)) =>
+            BPC.definition(alias) match {
+              case BlockInfo.Definition(free, params) =>
+                noteDefinition(id, free, params)
+            }
+
+          case Definition.Def(id, core.Unbox(_)) =>
+            // TODO deal with this case
+            ()
+
+          case Definition.Let(_, _, _) =>
+            ()
         }
 
 
@@ -129,12 +141,15 @@ object Transformer {
             }
 
           case (core.Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)), rest) =>
-            Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
+            Def(Label(transform(id), getDefinitionParams(id)), transform(body), rest)
 
           case (core.Definition.Def(id, core.New(impl)), rest) =>
             New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
 
-          case (d @ core.Definition.Def(_, _: core.BlockVar | _: core.Unbox), rest) =>
+          case (core.Definition.Def(id, core.BlockVar(alias, tpe, _)), rest) =>
+            Def(Label(transform(id), getDefinitionParams(id)), Jump(Label(transform(alias), getDefinitionParams(alias))), rest)
+
+          case (d @ core.Definition.Def(_, _: core.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
         }
 
@@ -308,7 +323,7 @@ object Transformer {
       // TODO cache the closure somehow to prevent it from being created on every call
       val parameters = BPC.params(id)
       val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
-      val environment = getBlocksParams(id)
+      val environment = getDefinitionParams(id)
       Binding { k =>
         New(variable, List(Clause(parameters,
           // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
@@ -530,6 +545,7 @@ object Transformer {
     def params(id: Id): Environment = definition(id).params
     def free(id: Id): Environment = definition(id).free
   }
+
   enum BlockInfo {
     case Definition(free: Environment, params: Environment)
     case Parameter(tpe: core.BlockType)
@@ -553,7 +569,7 @@ object Transformer {
   def noteGlobal(id: Id)(using BC: BlocksParamsContext): Unit =
     BC.globals += (id -> Label(transform(id), Nil))
 
-  def getBlocksParams(id: Id)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
+  def getDefinitionParams(id: Id)(using BC: BlocksParamsContext): Environment = BC.definition(id) match {
     case BlockInfo.Definition(freeParams, blockParams) => blockParams ++ freeParams
   }
 
