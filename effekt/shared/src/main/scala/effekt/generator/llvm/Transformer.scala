@@ -583,7 +583,7 @@ object Transformer {
     val size = environmentSize(environment);
 
     val newStack = LocalReference(stackType, freshName("stack"))
-    emit(Call(newStack.name, Ccc(), stackType, checkLimit, List(stack, ConstantInt(size + 24))));
+    emit(Call(newStack.name, Ccc(), stackType, checkLimit, List(stack, ConstantInt(size + 8))));
     setStack(newStack);
 
     val environmentPointer = LocalReference(stackPointerType, freshName("environmentPointer"));
@@ -592,18 +592,12 @@ object Transformer {
     storeEnvironmentAt(environmentPointer, environment);
 
     val headerPointer = LocalReference(stackPointerType, freshName("headerPointer"));
-    emit(Call(headerPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(24))));
+    emit(Call(headerPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(8))));
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, headerPointer, List(0, 0)));
-    val sharerPointer = LocalReference(PointerType(), freshName("sharer_pointer"));
-    emit(GetElementPtr(sharerPointer.name, frameHeaderType, headerPointer, List(0, 1)));
-    val eraserPointer = LocalReference(PointerType(), freshName("eraser_pointer"));
-    emit(GetElementPtr(eraserPointer.name, frameHeaderType, headerPointer, List(0, 2)));
 
     emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
-    emit(Store(sharerPointer, sharer));
-    emit(Store(eraserPointer, eraser));
   }
 
   def popEnvironmentFrom(stack: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -686,7 +680,7 @@ object Transformer {
 
     val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
     // TODO properly find size
-    val size = ConstantInt(24);
+    val size = ConstantInt(8);
     emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
