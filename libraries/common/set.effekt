@@ -2,73 +2,107 @@ module set
 
 import map
 
-/// Ordered finite set, backed by a `Map`.
-record Set[A](internal: Map[A, Unit])
+/// Ordered finite immutable set, backed by balanced binary trees of logarithmic depth.
+record Set[A](tree: internal::Tree[A, Unit], compare: (A, A) => Ordering at {})
 
-/// Create a new empty set.
+/// Create a new empty set using a pure, first-class comparison function.
 ///
 /// O(1)
-def empty[A](): Set[A] = {
-  Set(empty())
-}
+def empty[A](compare: (A, A) => Ordering at {}): Set[A] =
+  Set(internal::empty(), compare)
+
+/// Create a new empty set using a generic comparison function.
+/// Only available on JavaScript backends!
+///
+/// O(1)
+def emptyGeneric[A](): Set[A] =
+  Set(
+    internal::empty(),
+    box { (left: A, right: A) => genericCompare(left, right) }
+  )
 
 /// Check if set `s` is empty.
 ///
 /// O(1)
-def isEmpty[A](s: Set[A]): Bool = {
-  s.internal::via { m =>
-    m.isEmpty()
-  }
-}
+def isEmpty[A](s: Set[A]): Bool = internal::isEmpty(s.tree)
 
 /// Check if set `s` is nonempty.
 ///
 /// O(1)
-def nonEmpty[A](s: Set[A]): Bool = {
-  s.internal::via { m =>
-    m.nonEmpty()
-  }
-}
+def nonEmpty[A](s: Set[A]): Bool = internal::nonEmpty(s.tree)
 
-/// Create a new set containing only the given element `a`.
+/// Create a new set containing a single `element`.
+/// Requires a pure, first-class comparison function.
 ///
 /// O(1)
-def singleton[A](a: A): Set[A] = {
-  val s: Set[A] = empty()
-  s.insert(a)
-}
+def singleton[A](element: A, compare: (A, A) => Ordering at {}): Set[A] =
+  Set(internal::singleton(element, ()), compare)
+
+/// Create a new set containing a single `element` and a generic comparison function.
+/// Only available on the JavaScript backends!
+///
+/// O(1)
+def singletonGeneric[A](element: A): Set[A] =
+  Set(
+    internal::singleton(element, ()),
+    box { (left: A, right: A) => genericCompare(left, right) }
+  )
+
+/// Get the size of the set (the number of its elements).
+///
+/// O(1)
+def size[A](s: Set[A]): Int = internal::size(s.tree)
 
 /// Insert a new element `a` into the set `s`.
 ///
 /// O(log N)
 def insert[A](s: Set[A], a: A): Set[A] = {
-  s.internal::viaInplace { m =>
-    put(m, a, ())
-  }
+  val newTree = internal::put(s.tree, s.compare, a, ())
+  Set(newTree, s.compare)
 }
 
 /// Create a set from a given map by ignoring the values.
 ///
 /// O(N)
 def fromMapKeys[K, V](map: Map[K, V]): Set[K] =
-  Set(map.forget)
+  Set(internal::forget(map.tree), map.compare)
 
-/// Create a map from a set and a function.
+/// Create a map from a set and a function,
+/// reusing the set's comparison.
 ///
 /// O(N)
-def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] =
-  keys.internal::via { m =>
-    m.map { (k, _v) => valueOf(k) }
-  }
+def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
+  val newTree = keys.tree.map { (k, _v) => valueOf(k) }
+  Set(newTree, keys.compare)
+}
 
-/// Create a set from a given list.
+/// Create a set from a given list and a pure, first-class comparison function.
+///
+/// O(N log N)
+/// O(N) if the list is sorted
+def fromList[A](list: List[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val tree: internal::Tree[A, Unit] = list.map { k => (k, ()) }.fromList(compare)
+  Set(tree, compare)
+}
+
+/// Create a set from a given list with a generic comparison function.
+/// Works only on the JavaScript backends!
 ///
 /// O(N log N)
 /// O(N) if the list is sorted
 def fromList[A](list: List[A]): Set[A] = {
-  val m: Map[A, Unit] = list.map { k => (k, ()) }.fromList
-  Set(m)
+  val compare: (A, A) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
+  val tree: internal::Tree[A, Unit] = list.map { k => (k, ()) }.fromList(compare)
+  Set(tree, compare)
 }
+
+/// Traverse all elements in order, running the function `action` on each element.
+///
+/// Law: `s.foreach { action } === s.toList.foreach { action }`
+///
+/// O(N)
+def foreach[A](s: Set[A]) { action: A => Unit }: Unit =
+  s.tree.foreach {action}
 
 /// Create a list from a given set.
 ///
@@ -100,17 +134,18 @@ def any[A](s: Set[A]) { predicate: A => Bool }: Bool = {
   s.foreach { a =>
     if (predicate(a)) { result = true }
   }
-  result  
+  result
 }
 
 /// Check if a set contains a given element.
 ///
 /// O(log N)
-def contains[A](s: Set[A], a: A): Bool = {
-  s.internal::via { m =>
-    m.contains(a)
+def contains[A](s: Set[A], a: A): Bool =
+  internal::get(s.tree, s.compare, a) match {
+    case None() => false
+    case Some(v) => true
   }
-}
+
 
 /// Check if set `s1` is a subset of set `s2`.
 ///
@@ -133,9 +168,8 @@ def superset[A](s1: Set[A], s2: Set[A]): Bool = {
 ///
 /// O(log N)
 def delete[A](s: Set[A], a: A): Set[A] = {
-  s.internal::viaInplace { m =>
-    m.delete(a)
-  }
+  val newTree = internal::delete(s.tree, s.compare, a)
+  Set(newTree, s.compare)
 }
 
 /// Remove many elements from a set.
@@ -149,87 +183,52 @@ def deleteMany[A](s: Set[A], list: List[A]): Set[A] = {
   tmp
 }
 
-/// Traverse all elements in order, running the function `action` on each element.
+/// Construct a new set which contains all elements of `s1`
+/// except those where the element is in `s2`.
+/// Uses an explicit comparison function.
 ///
-/// Law: `s.foreach { action } === s.toList.foreach { action }`
-///
-/// O(N)
-def foreach[A](s: Set[A]) { action : A => Unit }: Unit = {
-  s.internal::via { m =>
-    m.foreach { (k, _v) =>
-      action(k)
-    }
-  }
-}
-
-/// Get the size of a set.
-///
-/// O(N)
-def size[A](s: Set[A]): Int = {
-  s.internal::via { m =>
-    m.size()
-  }
-}
-
-/// Convert a given set into a map.
-/// Uses a function `value` to give a value for each of the keys (elements of the set).
-///
-/// O(N)
-def toMap[K, V](keys: Set[K]) { value : K => V }: Map[K, V] = {
-  keys.internal::via { m =>
-    m.map { (k, _v) => value(k) }
-  }
+/// O(???)
+def difference[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val newTree = internal::difference(s1.tree, s2.tree, compare)
+  Set(newTree, compare)
 }
 
 /// Construct a new set which contains all elements of `s1`
 /// except those where the element is in `s2`.
+/// Uses a comparison function from `s1`.
 ///
 /// O(???)
-def difference[A](s1: Set[A], s2: Set[A]): Set[A] = {
-  s1.internal::viaInplace { m1 =>
-    s2.internal::via { m2 =>
-      m1.difference(m2)
-    }
-  }
+def difference[A](s1: Set[A], s2: Set[A]): Set[A] =
+  s1.difference(s2, s1.compare)
+
+/// Construct a new set which contains both elements of `s1` and `s2`.
+/// Uses an explicit comparison function.
+///
+/// O(???)
+def union[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val newTree = internal::union(s1.tree, s2.tree, compare)
+  Set(newTree, compare)
 }
 
 /// Construct a new set which contains both elements of `s1` and `s2`.
+/// Uses a comparison function from `s1`.
 ///
 /// O(???)
-def union[A](s1: Set[A], s2: Set[A]): Set[A] = {
-  s1.internal::viaInplace { m1 =>
-    s2.internal::via { m2 =>
-      m1.union(m2)
-    }
-  }
-}
+def union[A](s1: Set[A], s2: Set[A]): Set[A] =
+  s1.union(s2, s1.compare)
 
 /// Construct a new set which contains only elements which are in both of `s1` and `s2`.
+/// Uses an explicit comparison function.
 ///
 /// O(???)
 def intersection[A](s1: Set[A], s2: Set[A]): Set[A] = {
-  s1.internal::viaInplace { m1 =>
-    s2.internal::via { m2 =>
-      m1.intersection(m2)
-    }
-  }
+  val newTree = internal::intersection(s1.tree, s2.tree, compare)
+  Set(newTree, compare)
 }
 
-// -------------
-// Internal
-
-namespace internal {
-  /// Internal: inline at all costs
-  /// Function `f` is only used linearly, the set `s` is dropped.
-  def via[A, R](s: Set[A]) { f : Map[A, Unit] => R }: R = {
-    val Set(internal) = s
-    f(internal)
-  }
-
-  /// Internal: inline at all costs
-  /// Uses `via` inside and wraps the result in a `Set`.
-  /// Ideally, this would be in-place (when possible) since we don't change the type?
-  def viaInplace[A](s: Set[A]) { f : Map[A, Unit] => Map[A, Unit] }: Set[A] = {
-    s.via { m => Set(f(m)) }
-  }
-}
+/// Construct a new set which contains only elements which are in both of `s1` and `s2`.
+/// Uses a comparison function from `s1`.
+///
+/// O(???)
+def intersection[A](s1: Set[A], s2: Set[A]): Set[A] =
+  s1.intersection(s2, s1.compare)

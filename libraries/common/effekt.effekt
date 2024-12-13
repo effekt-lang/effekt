@@ -167,6 +167,11 @@ type Ordering {
   Greater()
 }
 
+def compareInt(n: Int, m: Int) =
+  if (n == m) Equal()
+  else if (n < m) Less()
+  else Greater()
+
 extern pure def genericCompareImpl[R](x: R, y: R): Int =
   js "$effekt.compare(${x}, ${y})"
 
