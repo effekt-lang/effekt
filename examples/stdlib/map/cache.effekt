@@ -7,7 +7,7 @@ effect time(): Int
 def main() = {
   var currentTime = 0
   try {
-    var cache: Map[String, CacheEntry[String]] = map::empty()
+    var cache: Map[String, CacheEntry[String]] = map::empty(compareString)
     val maxAge = 8
 
     def cachePut(key: String, value: String): Unit =
@@ -21,8 +21,8 @@ def main() = {
 
     def cleanExpiredEntries(): Unit = {
       val currentTime = do time()
-      cache = cache.filter { (_, entry) => 
-        currentTime - entry.timestamp < maxAge 
+      cache = cache.filter { (_, entry) =>
+        currentTime - entry.timestamp < maxAge
       }
     }
 

@@ -172,6 +172,11 @@ def compareInt(n: Int, m: Int) =
   else if (n < m) Less()
   else Greater()
 
+def compareString(left: String, right: String) =
+  if (left == right) Equal()
+  else if (left < right) Less()
+  else Greater()
+
 extern pure def genericCompareImpl[R](x: R, y: R): Int =
   js "$effekt.compare(${x}, ${y})"
 

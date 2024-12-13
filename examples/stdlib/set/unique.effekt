@@ -1,7 +1,7 @@
 import set
 
 def unique(words: List[String]): Set[String] = {
-  var s: Set[String] = set::empty();
+  var s: Set[String] = set::empty(compareString);
 
   list::foreach(words) { word =>
     s = s.insert(word)
@@ -50,8 +50,8 @@ def main() = {
   println(uniqueSpeech.toList)
   testSorted(uniqueSpeech)
 
-  println(set::fromList(speech).toList)
-  testSorted(set::fromList(speech))
+  println(set::fromList(speech, compareString).toList)
+  testSorted(set::fromList(speech, compareString))
 
   // ---
   println("")

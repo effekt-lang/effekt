@@ -186,7 +186,7 @@ def values[K, V](m: Map[K, V]): List[V] = {
   acc.reverse
 }
 
-/// Create a map from a list of (key, value) pairs and a pure, first-class comparison function
+/// Create a map from a list of (key, value) pairs and a pure, first-class comparison function.
 /// If the list contains more than one value for the same key,
 /// only the last value is used in the map.
 ///
@@ -195,14 +195,14 @@ def values[K, V](m: Map[K, V]): List[V] = {
 def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Map[K, V] =
   Map(internal::fromList(pairs, compare), compare)
 
-/// Create a map from a list of (key, value) pairs and a generic comparison.
+/// Create a map from a list of (key, value) pairs and a generic comparison function.
 /// If the list contains more than one value for the same key,
 /// only the last value is used in the map.
 /// Works only on JavaScript backends!
 ///
 /// O(N) if the list is sorted by key,
 /// O(N log N) otherwise
-def fromList[K, V](pairs: List[(K, V)]): Map[K, V] = {
+def fromListGeneric[K, V](pairs: List[(K, V)]): Map[K, V] = {
   val compare: (K, K) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
   Map(internal::fromList(pairs, compare), compare)
 }

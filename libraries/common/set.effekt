@@ -90,7 +90,7 @@ def fromList[A](list: List[A], compare: (A, A) => Ordering at {}): Set[A] = {
 ///
 /// O(N log N)
 /// O(N) if the list is sorted
-def fromList[A](list: List[A]): Set[A] = {
+def fromListGeneric[A](list: List[A]): Set[A] = {
   val compare: (A, A) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
   val tree: internal::Tree[A, Unit] = list.map { k => (k, ()) }.fromList(compare)
   Set(tree, compare)
