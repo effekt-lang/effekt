@@ -151,7 +151,8 @@ def filter[K, V](m: Map[K, V]) { shouldKeep: V => Bool }: Map[K, V] =
 /// O(N)
 ///
 /// TODO: Support {Control} for early exits.
-def foreach[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit = internal::foreach(m.tree) {action}
+def foreach[K, V](m: Map[K, V]) { action: (K, V) => Unit }: Unit =
+  internal::foreach(m.tree) {action}
 
 /// Convert a map `m` into a list of (key, value) pairs.
 ///

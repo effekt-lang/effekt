@@ -72,8 +72,8 @@ def fromMapKeys[K, V](map: Map[K, V]): Set[K] =
 ///
 /// O(N)
 def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
-  val newTree = keys.tree.map { (k, _v) => valueOf(k) }
-  Set(newTree, keys.compare)
+  val newTree: internal::Tree[K, V] = internal::map(keys.tree) { (k, _v) => valueOf(k) }
+  Map(newTree, keys.compare)
 }
 
 /// Create a set from a given list and a pure, first-class comparison function.
@@ -81,7 +81,7 @@ def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
 /// O(N log N)
 /// O(N) if the list is sorted
 def fromList[A](list: List[A], compare: (A, A) => Ordering at {}): Set[A] = {
-  val tree: internal::Tree[A, Unit] = list.map { k => (k, ()) }.fromList(compare)
+  val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
   Set(tree, compare)
 }
 
@@ -92,7 +92,7 @@ def fromList[A](list: List[A], compare: (A, A) => Ordering at {}): Set[A] = {
 /// O(N) if the list is sorted
 def fromListGeneric[A](list: List[A]): Set[A] = {
   val compare: (A, A) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
-  val tree: internal::Tree[A, Unit] = list.map { k => (k, ()) }.fromList(compare)
+  val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
   Set(tree, compare)
 }
 
@@ -102,7 +102,7 @@ def fromListGeneric[A](list: List[A]): Set[A] = {
 ///
 /// O(N)
 def foreach[A](s: Set[A]) { action: A => Unit }: Unit =
-  s.tree.foreach {action}
+  internal::foreach(s.tree) { (k, _v) => action(k) }
 
 /// Create a list from a given set.
 ///
@@ -206,7 +206,7 @@ def difference[A](s1: Set[A], s2: Set[A]): Set[A] =
 ///
 /// O(???)
 def union[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
-  val newTree = internal::union(s1.tree, s2.tree, compare)
+  val newTree = internal::union(s1.tree, s2.tree, compare) { (_k, _v1, _v2) => () }
   Set(newTree, compare)
 }
 
@@ -221,8 +221,8 @@ def union[A](s1: Set[A], s2: Set[A]): Set[A] =
 /// Uses an explicit comparison function.
 ///
 /// O(???)
-def intersection[A](s1: Set[A], s2: Set[A]): Set[A] = {
-  val newTree = internal::intersection(s1.tree, s2.tree, compare)
+def intersection[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val newTree = internal::intersection(s1.tree, s2.tree, compare) { (_k, _v1, _v2) => () }
   Set(newTree, compare)
 }
 

@@ -7,7 +7,7 @@ def main() = {
 
   // Test union with different combine strategies
   println("Union (keeping first value):")
-  println(map::internal::prettyPairs(map1.union(map2, compareInt).toList))
+  println(map::internal::prettyPairs(map1.union(map2).toList))
 
   println("\nUnion (combining values):")
   val combinedMap = map1.union(map2, compareInt) { (k, v1, v2) => v1 ++ "/" ++ v2 }
