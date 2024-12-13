@@ -202,7 +202,7 @@ def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Map[
 ///
 /// O(N) if the list is sorted by key,
 /// O(N log N) otherwise
-def fromList[K, V](pairs: List[(K, V)], compare: (K, K) => Ordering at {}): Map[K, V] = {
+def fromList[K, V](pairs: List[(K, V)]): Map[K, V] = {
   val compare: (K, K) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
   Map(internal::fromList(pairs, compare), compare)
 }
@@ -713,7 +713,7 @@ namespace internal {
       m match {
         case Tip() => singleton(k, v)
         case Bin(size, k2, v2, l, r) =>
-          genericCompare(k, k2) match {
+          compare(k, k2) match {
             case Less() => balance(k2, v2, l.putWithKeyR(k, v), r)
             case Greater() => balance(k2, v2, l, r.putWithKeyR(k, v))
             case Equal() => Bin(size, k, combine(k2, v2, v), l, r)
