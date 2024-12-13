@@ -7,14 +7,14 @@ def main() = {
 
   // Test union with different combine strategies
   println("Union (keeping first value):")
-  println(map::internal::prettyPairs(map1.union(map2).toList))
+  println(map::internal::prettyPairs(map1.union(map2).toList) { n => show(n) } { s => show(s) })
 
   println("\nUnion (combining values):")
   val combinedMap = map1.union(map2, compareInt) { (k, v1, v2) => v1 ++ "/" ++ v2 }
-  println(map::internal::prettyPairs(combinedMap.toList))
+  println(map::internal::prettyPairs(combinedMap.toList) { n => show(n) } { s => show(s) })
 
   // Test intersection
   println("\nIntersection (combining keys):")
   val intersectedMap = map1.intersection(map2, compareInt) { (k, v1, v2) => v1 ++ "-" ++ v2 }
-  println(map::internal::prettyPairs(intersectedMap.toList))
+  println(map::internal::prettyPairs(intersectedMap.toList) { n => show(n) } { s => show(s) })
 }

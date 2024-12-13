@@ -960,6 +960,7 @@ namespace internal {
 
   // Section: prettyprinting for trees:
 
+  /// Works only on the backends that support `genericShow` (JavaScript)!
   def prettyTree[K, V](m: Tree[K, V]): String = {
     // Helper function to recursively build the string representation of the tree
     def go(t: Tree[K, V], prefix: String, isTail: Bool): String = {
@@ -981,9 +982,9 @@ namespace internal {
     go(m, "", true)
   }
 
-  def prettyPairs[K, V](list: List[(K, V)]): String = {
+  def prettyPairs[K, V](list: List[(K, V)]) { showLeft: K => String } { showRight: V => String }: String = {
     val res: String =
-      list.map { case (k, v) => k.genericShow ++ " → " ++ v.genericShow }
+      list.map { case (k, v) => showLeft(k) ++ " → " ++ showRight(v) }
           .join(", ")
 
     "[" ++ res ++ "]"
