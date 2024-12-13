@@ -216,11 +216,16 @@ object JSWebRunner extends Runner[String] {
          |    <script type="text/javascript">
          |      window.onload=${mainName};
          |    </script>
+         |    <div id="app"></div>
          |  </body>
          |</html>
          |""".stripMargin
     IO.createFile(htmlFilePath, htmlContent, false)
-    C.abort(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
+
+    // TODO: In ErrorReporter, add a way to terminate the program with a message, but not report a exit failure.
+    // Workaround: print and then 'exit(0)'
+    println(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
+    scala.sys.exit(0)
 }
 
 trait ChezRunner extends Runner[String] {
