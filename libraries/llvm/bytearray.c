@@ -33,18 +33,22 @@ Int c_bytearray_size(const struct Pos arr) {
 }
 
 uint8_t* c_bytearray_data(const struct Pos arr) {
-  return arr.obj + sizeof(struct Header);
+  uint8_t *data = arr.obj + sizeof(struct Header);
+  erasePositive(arr);
+  return data;
 }
 
 Byte c_bytearray_get(const struct Pos arr, const Int index) {
   Byte *dataPtr = arr.obj + sizeof(struct Header);
   Byte element = dataPtr[index];
+  erasePositive(arr);
   return element;
 }
 
 struct Pos c_bytearray_set(const struct Pos arr, const Int index, const Byte value) {
   Byte *dataPtr = arr.obj + sizeof(struct Header);
   dataPtr[index] = value;
+  erasePositive(arr);
   return Unit;
 }
 

@@ -31,6 +31,7 @@ struct Pos c_ref_get(const struct Pos ref) {
   struct Pos *fieldPtr = ref.obj + sizeof(struct Header);
   struct Pos element = *fieldPtr;
   sharePositive(element);
+  erasePositive(ref);
   return element;
 }
 
@@ -39,6 +40,7 @@ struct Pos c_ref_set(const struct Pos ref, const struct Pos value) {
   struct Pos element = *fieldPtr;
   erasePositive(element);
   *fieldPtr = value;
+  erasePositive(ref);
   return Unit;
 }
 
