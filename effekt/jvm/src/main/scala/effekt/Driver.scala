@@ -143,9 +143,9 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |
           |Where to report: https://github.com/effekt-lang/effekt/issues
           |
-          |$effektVersion
           |
           |Effekt Compiler Version: $effektVersion
+          |
           |Backend-specific info:
           |  - Name: $backendInfoName
           |  - Compiler: $backendInfoCompiler
