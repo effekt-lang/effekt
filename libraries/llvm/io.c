@@ -20,7 +20,7 @@ void c_io_println_Double(const Double x) {
 }
 
 void c_io_println_String(String text) {
-    for (int64_t j = 0; j < c_bytearray_size(text); ++j)
+    for (uint64_t j = 0; j < text.tag; ++j)
         putchar(c_bytearray_data(text)[j]);
     erasePositive(text);
     putchar('\n');
