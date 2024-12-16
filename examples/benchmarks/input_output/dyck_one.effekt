@@ -38,7 +38,7 @@ def size(tree: Tree): Int =
   }
 
 def run(n: Int): Int = {
-  with on[IOError].panic;
+  with on[IOError].panic
 
   val filename = "/tmp/dyck_one.txt"
 
@@ -49,8 +49,7 @@ def run(n: Int): Int = {
 
   with readFile(filename)
   with returning::scanner[Byte, Int]
-  with returning::expect[Int]("Expected tree.")
-  readTree().size
+  attempt { readTree().size } { panic("Expected tree.")}
 }
 
 

@@ -27,7 +27,7 @@ def many[A] { action: () => A / stop }: Unit / emit[A] =
   exhaustively { do emit(action()) }
 
 def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
-  action()
+  do emit(action())
   many { action() }
 }
 

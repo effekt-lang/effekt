@@ -184,32 +184,14 @@ def feed[R](bytes: ByteArray) { reader: () => R / read[Byte] }: R = {
   }
 }
 
-def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
-  var next = box { None() }
-  next = box {
-    try {
-      stream()
-      None()
-    } with emit[A] { (v) =>
-      next = box { resume(()) }
-      Some(v)
-    }
-  }
-  try {
-    reader()
-  } with read[A] {
-    resume {
-      next().getOrElse { do stop() }
-    }
-  }
-}
-
+def source[A] { stream: () => Unit / emit[A] } { reader: () => Unit / read[A] }: Unit =
+  returning::source[A, Unit]{stream}{reader}
 
 /// Combines two streams together producing a stream of pairs in lockstep.
 /// Terminates when either of them terminates.
 def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: (A, B) => Unit }: Unit = {
-  with source[A, Unit] { stream1 }
-  with source[B, Unit] { stream2 }
+  with source[A] { stream1 }
+  with source[B] { stream2 }
 
   exhaustively {
     action(do read[A](), do read[B]())
@@ -440,6 +422,27 @@ def collectBytes[R] { stream: () => R / emit[Byte] }: (R, ByteArray) = {
 def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   val (result, bytes) = collectBytes[R] { encodeUTF8 { stream } }
   (result, bytes.toString)
+}
+
+def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
+  var next = box { None() }
+  next = box {
+    try {
+      stream()
+      next = box { None() }
+      None()
+    } with emit[A] { (v) =>
+      next = box { resume(()) }
+      Some(v)
+    }
+  }
+  try {
+    reader()
+  } with read[A] {
+    resume {
+      next().getOrElse { do stop() }
+    }
+  }
 }
 
 }
