@@ -147,13 +147,13 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |
           |Effekt Compiler Version: $effektVersion
           |Backend-specific info:
-          |  - $backendInfoName
-          |  - $backendInfoCompiler
-          |  - $backendInfoRunner
+          |  - Name: $backendInfoName
+          |  - Compiler: $backendInfoCompiler
+          |  - Runner: $backendInfoRunner
           |
-          |$osInfo
+          |Operating System: $osInfo
           |
-          |$jvmInfo
+          |JVM Version: $jvmInfo
           |
           |Full Stack Trace:
           |$stackTrace
@@ -169,15 +169,14 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |
           |- **Effekt Compiler Version**: $effektVersion
           |- **Backend-specific info**:
-          |  - $backendInfoName
-          |  - $backendInfoCompiler
-          |  - $backendInfoRunner
+          |  - **Name**: $backendInfoName
+          |  - **Compiler**: $backendInfoCompiler
+          |  - **Runner**: $backendInfoRunner
           |
           |- **Operating System**: $osInfo
           |
           |- **JVM Version**: $jvmInfo
           |
-          |$jvmInfo
           |
           |# Full Stack Trace:
           |```
