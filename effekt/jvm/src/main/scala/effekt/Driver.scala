@@ -91,7 +91,6 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     case e @ CompilerPanic(msg) =>
       context.report(msg)
       e.getStackTrace.foreach { line =>
-        //context.info("  at " + line)
         generateCrashReport(e, context, config)
       }
     // when in server-mode, do not crash but report the error to avoid
@@ -114,18 +113,28 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     import java.util.Properties
 
     // Capture general information
-    val effektVersion = "Effekt Compiler Version " + System.getProperty("effekt.version")
-    val osInfo = "Operating System: " + System.getProperty("os.name") +
+    val effektVersion = effekt.util.Version.effektVersion
+    val osInfo = System.getProperty("os.name") +
       " (" + System.getProperty("os.arch") + ") " +
       System.getProperty("os.version")
-    val jvmInfo = "JVM Version: " + System.getProperty("java.version") +
+
+    val jvmInfo = System.getProperty("java.version") +
       " (" + System.getProperty("java.vendor") + ")"
+
     val stackTrace = e.getStackTrace.map(line => "  at " + line.toString).mkString("\n")
 
     // Collect backend details (if applicable)
-    val backendInfo = config.backend() match {
-      case Backend(name, compiler, runner) => s"Backend-specific info: Name : $name, Compiler : $compiler, Runner : $runner"
-      case null => s"Backend-specific info not retrievable"
+    val backendInfoName = config.backend() match {
+      case Backend(name, compiler, runner) => name
+      case null => s"Backend-specific info Name not retrievable"
+    }
+    val backendInfoCompiler = config.backend() match {
+      case Backend(name, compiler, runner) => compiler
+      case null => s"Backend-specific info Compiler not retrievable"
+    }
+    val backendInfoRunner = config.backend() match {
+      case Backend(name, compiler, runner) => runner
+      case null => s"Backend-specific info Runner not retrievable"
     }
 
     // Construct the report
@@ -134,11 +143,13 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |
           |Where to report: https://github.com/effekt-lang/effekt/issues
           |
-          |effektVersion :
+          |$effektVersion
           |
-          |
-          |
-          |$backendInfo
+          |Effekt Compiler Version: $effektVersion
+          |Backend-specific info:
+          |  - $backendInfoName
+          |  - $backendInfoCompiler
+          |  - $backendInfoRunner
           |
           |$osInfo
           |
@@ -148,14 +159,40 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |$stackTrace
           |""".stripMargin
 
+    val mdReport =
+      s"""|# === Effekt Compiler Crash Report ===
+          |
+          |**Where to report**: [https://github.com/effekt-lang/effekt/issues](https://github.com/effekt-lang/effekt/issues)
+          |
+          |---
+          |## Compiler Details
+          |
+          |- **Effekt Compiler Version**: $effektVersion
+          |- **Backend-specific info**:
+          |  - $backendInfoName
+          |  - $backendInfoCompiler
+          |  - $backendInfoRunner
+          |
+          |- **Operating System**: $osInfo
+          |
+          |- **JVM Version**: $jvmInfo
+          |
+          |$jvmInfo
+          |
+          |# Full Stack Trace:
+          |```
+          |$stackTrace
+          |```
+          |""".stripMargin
+
     // Print the report to console
     context.info(report)
 
-    // write to a file in ./out/
+    // write to a markdown file in ./out/
     try {
-      val outputPath = Paths.get("./out/crash-report.log")
+      val outputPath = Paths.get("./out/crash-report.md")
       Files.createDirectories(outputPath.getParent)
-      Files.write(outputPath, report.getBytes)
+      Files.write(outputPath, mdReport.getBytes)
       context.info(s"Crash report saved to: $outputPath")
     } catch {
       case ex: Exception =>
