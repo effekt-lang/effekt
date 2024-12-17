@@ -88,7 +88,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
-    case e @ CompilerPanic(msg) => generateCrashReport(e, context, config,msg)
+    case e @ CompilerPanic(msg) => generateCrashReport(e, context, config, msg)
 
     // when in server-mode, do not crash but report the error to avoid
     // restarting the server.
@@ -118,7 +118,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
     val javaInfoVersion = System.getProperty("java.version")
     val javaInfoVendor = System.getProperty("java.vendor")
-    val javaInfoHome = System.getProperty("java.home")
+    val javaInfoRuntime = System.getProperty("java.runtime.name")
 
     val errorReport = "The compiler unexpectedly panicked. This is a compiler bug.\nPlease report it:"
     val issueLink = "https://github.com/effekt-lang/effekt/issues/new?labels=bug"
@@ -149,7 +149,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |### System Information
           |Operating System: $osInfoName \n Arch: $osInfoArch \n Version: $osInfoVersion
           |
-          |JVM Version: $javaInfoVersion ($javaInfoVendor, $javaInfoHome)
+          |JVM Version: $javaInfoVersion ($javaInfoVendor, $javaInfoRuntime)
           |
           |### Full Stack Trace
           |```
