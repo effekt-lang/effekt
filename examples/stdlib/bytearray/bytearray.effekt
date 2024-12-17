@@ -2,14 +2,17 @@ import bytearray
 
 def main() = {
 
-  val b = bytearray::allocate(16);
+  val b = bytearray::allocate(8);
   b.unsafeSet(0, 104.toByte)
   b.unsafeSet(1, 101.toByte)
   b.unsafeSet(2, 108.toByte)
   b.unsafeSet(3, 108.toByte)
   b.unsafeSet(4, 111.toByte)
+  b.unsafeSet(5, 33.toByte)
+  b.unsafeSet(6, 33.toByte)
+  b.unsafeSet(7, 33.toByte)
 
   b.unsafeSet(1, 102.toByte)
 
-  println(b.toString) // hfllo
+  println(b.toString) // hfllo!!!
 }
