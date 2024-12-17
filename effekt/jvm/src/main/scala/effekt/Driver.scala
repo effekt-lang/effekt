@@ -110,6 +110,11 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     import java.nio.charset.StandardCharsets
 
     // Capture general information
+    val errorMessage = msg match {
+      case PlainTextError(content, _, _) => content
+      case _ => msg
+    }
+
 
     val effektVersion = effekt.util.Version.effektVersion
     val osInfoName = System.getProperty("os.name")
@@ -137,7 +142,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     val reportContent =
       s"""|# Effekt Compiler Crash Report
           |
-          |**ERROR** : $msg
+          |**ERROR** : $errorMessage
           |
           |$errorReport
           |[Submit an issue]($issueLink)
@@ -178,6 +183,8 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     val report =
       s"""|=== Effekt Compiler Crash Report ===
           |
+          |[Error] $errorMessage
+          |
           |The compiler unexpectedly panicked. This is a compiler bug.
           |Please report it: $issueLink
           |
@@ -197,8 +204,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |Arguments passed to the compiler:
           |$argsMarkdown
           |""".stripMargin
-
-    context.report(msg)
+    
     // Print the report to console
     context.info(report)
   }
