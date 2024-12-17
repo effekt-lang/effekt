@@ -163,10 +163,11 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |""".stripMargin
 
     // Write the report to a Markdown file
-    val outputPath = Paths.get("./out/crash-report.md")
+    val outputPath = Paths.get(config.outputPath().getAbsolutePath)
+    val outputFile = outputPath.resolve("crash-report.md")
     try {
       Files.createDirectories(outputPath.getParent)
-      Files.write(outputPath, reportContent.getBytes(StandardCharsets.UTF_8))
+      Files.write(outputFile, reportContent.getBytes(StandardCharsets.UTF_8))
       //context.info(s"Crash report saved to: $outputPath")
     } catch {
       case ex: Exception =>
