@@ -88,10 +88,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
-    case e @ CompilerPanic(msg) =>
-      context.report(msg)
-      e.getStackTrace.foreach { line =>
-        generateCrashReport(e, context, config)
+    case e @ CompilerPanic(msg) => generateCrashReport(e, context, config,msg)
       }
     // when in server-mode, do not crash but report the error to avoid
     // restarting the server.
@@ -108,95 +105,101 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     afterCompilation(source, config)(context)
   }
 
-  def generateCrashReport(e: Throwable, context: Context, config: EffektConfig): Unit = {
+  def generateCrashReport(e: Throwable, context: Context, config: EffektConfig, msg:effekt. util. messages. EffektError): Unit = {
     import java.nio.file.{Files, Paths}
-    import java.util.Properties
+    import java.nio.charset.StandardCharsets
 
     // Capture general information
+
     val effektVersion = effekt.util.Version.effektVersion
-    val osInfo = System.getProperty("os.name") +
-      " (" + System.getProperty("os.arch") + ") " +
-      System.getProperty("os.version")
+    val osInfoName = System.getProperty("os.name")
+    val osInfoArch = System.getProperty("os.arch")
+    val osInfoVersion = System.getProperty("os.version")
 
-    val jvmInfo = System.getProperty("java.version") +
-      " (" + System.getProperty("java.vendor") + ")"
+    val javaInfoVersion = System.getProperty("java.version")
+    val javaInfoVendor = System.getProperty("java.vendor")
+    val javaInfoHome = System.getProperty("java.home")
 
+    val errorReport = "The compiler unexpectedly panicked. This is a compiler bug.\nPlease report it:"
+    val issueLink = "https://github.com/effekt-lang/effekt/issues/new?labels=bug"
     val stackTrace = e.getStackTrace.map(line => "  at " + line.toString).mkString("\n")
 
     // Collect backend details (if applicable)
     val backendInfoName = config.backend() match {
-      case Backend(name, compiler, runner) => name
-      case null => s"Backend-specific info Name not retrievable"
-    }
-    val backendInfoCompiler = config.backend() match {
-      case Backend(name, compiler, runner) => compiler
-      case null => s"Backend-specific info Compiler not retrievable"
-    }
-    val backendInfoRunner = config.backend() match {
-      case Backend(name, compiler, runner) => runner
-      case null => s"Backend-specific info Runner not retrievable"
+      case Backend(name, _, _) => name
+      case null => "Backend-specific info Name not retrievable"
     }
 
-    // Construct the report
-    val report =
-      s"""|=== Effekt Compiler Crash Report ===
-          |
-          |Where to report: https://github.com/effekt-lang/effekt/issues
-          |
-          |
-          |Effekt Compiler Version: $effektVersion
-          |
-          |Backend-specific info:
-          |  - Name: $backendInfoName
-          |  - Compiler: $backendInfoCompiler
-          |  - Runner: $backendInfoRunner
-          |
-          |Operating System: $osInfo
-          |
-          |JVM Version: $jvmInfo
-          |
-          |Full Stack Trace:
-          |$stackTrace
-          |""".stripMargin
+    // Arguments passed to the compiler
+    val argsMarkdown = config.args.mkString("\n", "\n", "\n")
 
-    val mdReport =
-      s"""|# === Effekt Compiler Crash Report ===
+    // Construct the report content
+    val reportContent =
+      s"""|# Effekt Compiler Crash Report
           |
-          |**Where to report**: [https://github.com/effekt-lang/effekt/issues](https://github.com/effekt-lang/effekt/issues)
+          |**ERROR** : $msg
           |
-          |---
-          |## Compiler Details
+          |$errorReport
+          |[Submit an issue]($issueLink)
           |
-          |- **Effekt Compiler Version**: $effektVersion
-          |- **Backend-specific info**:
-          |  - **Name**: $backendInfoName
-          |  - **Compiler**: $backendInfoCompiler
-          |  - **Runner**: $backendInfoRunner
+          |### Compiler Information
+          |Effekt Version: $effektVersion \n
+          |Backend: $backendInfoName
           |
-          |- **Operating System**: $osInfo
+          |### System Information
+          |Operating System: $osInfoName \n Arch: $osInfoArch \n Version: $osInfoVersion
           |
-          |- **JVM Version**: $jvmInfo
+          |JVM Version: $javaInfoVersion ($javaInfoVendor, $javaInfoHome)
           |
-          |
-          |# Full Stack Trace:
+          |### Full Stack Trace
           |```
           |$stackTrace
           |```
+          |
+          |### Arguments Passed to the Compiler
+          |```
+          |$argsMarkdown
+          |```
           |""".stripMargin
 
-    // Print the report to console
-    context.info(report)
-
-    // write to a markdown file in ./out/
+    // Write the report to a Markdown file
+    val outputPath = Paths.get("./out/crash-report.md")
     try {
-      val outputPath = Paths.get("./out/crash-report.md")
       Files.createDirectories(outputPath.getParent)
-      Files.write(outputPath, mdReport.getBytes)
-      context.info(s"Crash report saved to: $outputPath")
+      Files.write(outputPath, reportContent.getBytes(StandardCharsets.UTF_8))
+      //context.info(s"Crash report saved to: $outputPath")
     } catch {
       case ex: Exception =>
         context.info("Failed to save crash report to file: " + ex.getMessage)
     }
+
+    // Provide the report link in the user-visible output
+    val report =
+      s"""|=== Effekt Compiler Crash Report ===
+          |
+          |The compiler unexpectedly panicked. This is a compiler bug.
+          |Please report it: $issueLink
+          |
+          |Effekt Version: $effektVersion\n
+          |Backend used: $backendInfoName
+          |
+          |A detailed crash report has been written to:
+          |${outputPath.toAbsolutePath}
+          |
+          |Operating System: $osInfoName
+          |
+          |JVM Version: $javaInfoVersion
+          |
+          |Full Stack Trace:
+          |$stackTrace
+          |
+          |Arguments passed to the compiler:
+          |$argsMarkdown
+          |""".stripMargin
+
+    context.report(msg)
+    // Print the report to console
+    context.info(report)
   }
 
   /**
