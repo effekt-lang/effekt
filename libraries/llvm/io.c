@@ -126,8 +126,8 @@ void c_fs_open(String path, struct Pos mode, Stack stack) {
 void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    // erasePositive(buffer);
-    // TODO we should erase the buffer but abort if this was the last reference
+    erasePositive(buffer);
+    // TODO panic if this was the last reference
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
@@ -144,8 +144,8 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
 void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
-    // erasePositive(buffer);
-    // TODO we should erase the buffer but abort if this was the last reference
+    erasePositive(buffer);
+    // TODO panic if this was the last reference
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
