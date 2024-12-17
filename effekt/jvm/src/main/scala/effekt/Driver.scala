@@ -89,7 +89,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
     case e @ CompilerPanic(msg) => generateCrashReport(e, context, config,msg)
-      }
+
     // when in server-mode, do not crash but report the error to avoid
     // restarting the server.
     case e if config.server() =>
