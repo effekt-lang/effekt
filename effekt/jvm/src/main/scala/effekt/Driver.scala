@@ -127,7 +127,9 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
     val errorReport = "The compiler unexpectedly panicked. This is a compiler bug.\nPlease report it:"
     val issueLink = "https://github.com/effekt-lang/effekt/issues/new?labels=bug"
-    val stackTrace = e.getStackTrace.map(line => "  at " + line.toString).mkString("\n")
+    val stringWriter = new java.io.StringWriter()
+    e.printStackTrace(new java.io.PrintWriter(stringWriter))
+    val stackTrace = stringWriter.toString
 
     // Collect backend details (if applicable)
     val backendInfoName = config.backend() match {
