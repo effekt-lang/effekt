@@ -9,7 +9,7 @@ import effekt.context.{ Context, IOModuleDB }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
-import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
+import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError, PlainTextError }
 import effekt.util.paths.file
 import effekt.util.{ AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
 
@@ -204,7 +204,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |Arguments passed to the compiler:
           |$argsMarkdown
           |""".stripMargin
-    
+
     // Print the report to console
     context.info(report)
   }
