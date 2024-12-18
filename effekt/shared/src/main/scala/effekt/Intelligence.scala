@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.{ Annotations, Context }
 import effekt.source.{ FunDef, ModuleDecl, Tree }
-import kiama.util.{ Position, Source }
+import kiama.util.{ Position, Source, StringSource , Compiler}
 
 trait Intelligence {
 
@@ -115,6 +115,21 @@ trait Intelligence {
         capt <- C.inferredCaptureOption(block)
       } yield (pos, capt)
     }.flatten
+    
+  // Compile the notebook content into Effekt code
+  def compileNotebookContent(content: String)(using C: Context): Option[String] = {
+    //val configs = createAndInitConfig(content)
+    C.compiler.compile(StringSource(
+      s"""def main() = {
+         |  println($content)
+         |}
+         |""".stripMargin, "filename.effekt")
+    ) match {
+      case Some((contents, mainFile)) =>
+        contents.get("filename.effekt")
+      case None => None
+    }
+  }
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 

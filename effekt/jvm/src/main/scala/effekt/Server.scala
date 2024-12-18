@@ -1,12 +1,12 @@
 package effekt
 
+import com.google.gson.JsonObject
 import effekt.context.Context
 import effekt.core.PrettyPrinter
-import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging, getOrElseAborting }
+import effekt.source.{FunDef, Hole, ModuleDecl, Tree}
+import effekt.util.{PlainMessaging, getOrElseAborting}
 import effekt.util.messages.EffektError
-
-import kiama.util.{ Filenames, Position, Services, Source }
+import kiama.util.{Filenames, Position, Services, Source}
 import kiama.output.PrettyPrinterTypes.Document
 
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
@@ -239,14 +239,43 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   case class CaptureInfo(location: Location, captureText: String)
 
+  // changes ifelse to match case
   override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
-    if (params.getCommand == "inferredCaptures") {
-      val captures = getInferredCaptures(src)(using context).map {
-        case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
-      }
-      if (captures.isEmpty) None else Some(captures.toArray)
-    } else {
-      None
+    params.getCommand match {
+      case "inferredCaptures" =>
+        val captures = getInferredCaptures(src)(using context).map {
+          case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
+        }
+        if (captures.isEmpty) None else Some(captures.toArray)
+      case "compileCell" =>
+        val arg = params.getArguments()
+        if (arg.isEmpty) {
+          None
+        } else {
+          try {
+            val firstArg = arg.get(0)
+            firstArg match {
+              case jsonObject: JsonObject =>
+                val content = if (jsonObject.has("content")){
+                  jsonObject.get("content").getAsString
+                } else {
+                  "{}"
+                }
+                val result = compileNotebookContent(content)(using context)
+                result match {
+                  case Some(compiled) => Some(compiled)
+                  case None => Some("Compilation failed")
+                }
+              case _ =>
+                Some(s"Unexpected argument type: ${firstArg.getClass.getName}") 
+            }
+          } catch {
+            case e: Exception =>
+              Some(s"Error during command execution: ${e.getMessage}")
+          }
+        }
+        //Some(arg.get(0)) hat funktioniert, get(1) nicht
+      case _ => None
     }
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
