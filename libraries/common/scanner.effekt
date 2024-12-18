@@ -22,25 +22,6 @@ def read[A](): A / { Scan[A], stop } = {
 def scanner[A] { scanner: () => Unit / Scan[A] }: Unit / read[A] =
   returning::scanner[A, Unit]{scanner}
 
-
-def many[A] { action: () => A / stop }: Unit / emit[A] =
-  exhaustively { do emit(action()) }
-
-def some[A] { action: () => A / stop }: Unit / { emit[A], stop } = {
-  do emit(action())
-  many { action() }
-}
-
-def optionally { program: () => Unit / stop }: Bool =
-  returning::optionally[Unit]{program}.isDefined
-
-def attempt[R] { program: () => R / stop } { fallback: () => R }: R =
-  try {
-    program()
-  } with stop {
-    fallback()
-  }
-
 def expect(message: String) { scanner: () => Unit / stop }: Unit / Exception[WrongFormat] =
   returning::expect[Unit](message){scanner}
 
@@ -160,13 +141,6 @@ def scanner[A, R] { scanner: () => R / Scan[A] }: R / read[A] = {
     }
   }
 }
-
-def optionally[R] { program: () => R / stop }: Option[R] =
-  try {
-    Some(program())
-  } with stop {
-    None()
-  }
 
 def expect[R](message: String) { scanner: () => R / stop }: R / Exception[WrongFormat] =
   attempt { scanner() } { wrongFormat(message) }
