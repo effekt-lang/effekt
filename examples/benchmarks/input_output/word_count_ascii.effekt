@@ -4,6 +4,17 @@ import io/error
 import io/filesystem
 import stream
 
+
+// word_count_ascii.txt
+//           
+// !!!!!!!!!!
+// """"""""""
+// ##########
+// $$$$$$$$$$
+// %%%%%%%%%%
+// &&&&&&&&&&
+// ''''''''''
+
 record Output(chars: Int, words: Int, lines: Int)
 
 def formatWith(output: Output, filename: String): String =
