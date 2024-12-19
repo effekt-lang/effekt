@@ -210,7 +210,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
           checkStmt(body, expected)
         }
 
-      case tree @ source.TryHandle(prog, handlers) =>
+      case tree @ source.TryHandle(prog, handlers, suspend, resume, retrn) =>
+        /*
+        try { _: A }
+        with Eff { (x: B, resume: C => D) => _: D }
+        suspend { _: E }
+        resume { (x: E) => _: Unit }
+        return { (x: A) => _: D }
+        */
 
         // (1) extract all handled effects and capabilities
         val providedCapabilities: List[symbols.BlockParam] = handlers map Context.withFocus { h =>
@@ -226,13 +233,57 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // All used captures flow into the continuation capture, except the ones handled by this handler.
         val continuationCaptHandled = Context.without(continuationCapt, providedCapabilities.map(_.capture))
-
-        // (2) Check the handled program
-        val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
+        
+        val Result(res, _) = Context.bindingCapabilities(tree, providedCapabilities) {
           flowingInto(continuationCaptHandled) {
             checkStmt(prog, expected)
           }
         }
+
+        val Result(suspendType, suspendEffs) = suspend.map {
+          case source.FinalizerClause(None, body) =>
+            checkStmt(body, None)
+          case source.FinalizerClause(Some(_), _) =>
+            INTERNAL_ERROR("Parser should ensure that the suspend clause has no value parameter")
+        }.getOrElse { Result(TUnit, Pure) }
+
+        val Result(resumeType, resumeEffs) = resume.map {
+          case source.FinalizerClause(Some(vp), body) =>
+            // check potentially annotated parameter type matches type of suspend clause
+            vp.symbol.tpe.foreach { matchExpected(_, suspendType) }
+            Context.bind(vp.symbol, suspendType)
+            // ensure that the body returns a result of type Unit
+            checkStmt(body, Some(TUnit))
+          case source.FinalizerClause(None, _) =>
+            INTERNAL_ERROR("Parser should ensure that the resume clause has a value parameter")
+        }.getOrElse { Result(TUnit, Pure) }
+
+        val Result(ret, retEffs) = retrn.map {
+          case source.FinalizerClause(Some(vp), body) =>
+            // check potentially annotated parameter type matches type of try body
+            vp.symbol.tpe.foreach { matchExpected(_, res) }
+            Context.bind(vp.symbol, res)
+            checkStmt(body, expected)
+          case source.FinalizerClause(None, _) =>
+            INTERNAL_ERROR("Parser should ensure that the return clause has a value parameter")
+        }.getOrElse {
+          // (2) Check the handled program
+          val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
+            flowingInto(continuationCaptHandled) {
+              checkStmt(prog, expected)
+            }
+          }
+          Result(ret, Pure)
+        }
+
+        val finalizerEffs = suspendEffs ++ resumeEffs ++ retEffs
+
+        // (2) Check the handled program
+         val Result(_, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
+          flowingInto(continuationCaptHandled) {
+            checkStmt(prog, expected)
+          }
+        } 
 
         // (3) Check the handlers
         // Also all capabilities used by the handler flow into the capture of the continuation

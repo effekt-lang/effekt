@@ -125,7 +125,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
-    case tree @ source.TryHandle(prog, handlers) =>
+    case tree @ source.TryHandle(prog, handlers, suspend, resume, retrn) =>
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
@@ -136,6 +136,9 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       binding(captures = bound) { query(prog) }
 
       handlers foreach { query }
+      suspend foreach { query }
+      resume foreach { query }
+      retrn foreach { query }
 
       // Now check the return type ...
       wellformed(tpe, prog, " inferred as return type of the handled statement",

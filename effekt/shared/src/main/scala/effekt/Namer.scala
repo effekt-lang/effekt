@@ -397,7 +397,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    case tree @ source.TryHandle(body, handlers) =>
+    case tree @ source.TryHandle(body, handlers, suspend, resume, ret) =>
       resolveAll(handlers)
 
       Context scoped {
@@ -411,6 +411,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         resolveGeneric(body)
       }
+      Context scoped { suspend foreach { resolveGeneric } }
+      Context scoped { resume foreach { resolveGeneric } }
+      Context scoped { ret foreach { resolveGeneric } }
 
     case tree @ source.Region(name, body) =>
       val reg = BlockParam(Name.local(name.name), Some(builtins.TRegion))
@@ -584,6 +587,14 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
     case t: Iterable[t] => t.foreach { t => resolveAll(t) }
     case leaf           => ()
+  }
+
+  def resolve(c: source.FinalizerClause)(using Context): Unit = {
+    val source.FinalizerClause(vp, body) = c
+    Context.scoped {
+      vp foreach { case v => Context.bind(resolve(v)) }
+      resolveGeneric(body)
+    }
   }
 
   /**

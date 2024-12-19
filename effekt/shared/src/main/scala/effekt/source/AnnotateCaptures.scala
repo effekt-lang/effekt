@@ -55,11 +55,15 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       val cap = Context.annotation(Annotations.CapabilityReceiver, t)
       combineAll(vargs.map(query)) ++ combineAll(bargs.map(query)) ++ CaptureSet(cap.capture)
 
-    case t @ source.TryHandle(prog, handlers) =>
+    case t @ source.TryHandle(prog, handlers, suspend, resume, retrn) =>
       val progCapture = query(prog)
+      val suspCapture = suspend map { query } getOrElse CaptureSet()
+      val resCapture = resume map { query } getOrElse CaptureSet()
+      val retCapture = retrn map { query } getOrElse CaptureSet()
+
       val boundCapture = boundCapabilities(t)
       val usedCapture = combineAll(handlers.map(query))
-      (progCapture -- boundCapture) ++ usedCapture
+      (progCapture -- boundCapture) ++ usedCapture ++ suspCapture ++ resCapture ++ retCapture
 
     case t @ source.Region(id, body) =>
       query(body) -- captureOf(id.symbol.asBlockSymbol)
