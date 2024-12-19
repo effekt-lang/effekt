@@ -4,12 +4,14 @@ def main() = {
   val x = 
     try {
       try {
-        do Eff(); 42
+        do Eff()
+        42
       } on suspend {
         println("suspending inner")
         do Eff()
-      } on resume {
-        _ => println("resuming inner")
+      } on resume { _ =>
+        println("resuming inner")
+        do Eff()
     } on return { x =>
         println("returning inner")
         do Eff()
