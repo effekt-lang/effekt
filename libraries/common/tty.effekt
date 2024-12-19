@@ -1,0 +1,192 @@
+module tty
+
+/// Represents a TTY color.
+/// - ANSI for the standard 16 terminal colors
+/// - ANSI256 for standard 256 terminal colors
+/// - NoColor for explicit "this doesn't have a set color"
+type Color {
+  ANSI(code: Int)
+  ANSI256(code: Int)
+  NoColor()
+}
+
+/// Common terminal colors and their constructors
+namespace Color {
+  // Standard ANSI colors
+  val BLACK = ANSI(0)
+  val RED = ANSI(1)
+  val GREEN = ANSI(2)
+  val YELLOW = ANSI(3)
+  val BLUE = ANSI(4)
+  val MAGENTA = ANSI(5)
+  val CYAN = ANSI(6)
+  val WHITE = ANSI(7)
+
+  // Bright ANSI colors
+  val BRIGHT_BLACK = ANSI(8)
+  val BRIGHT_RED = ANSI(9)
+  val BRIGHT_GREEN = ANSI(10)
+  val BRIGHT_YELLOW = ANSI(11)
+  val BRIGHT_BLUE = ANSI(12)
+  val BRIGHT_MAGENTA = ANSI(13)
+  val BRIGHT_CYAN = ANSI(14)
+  val BRIGHT_WHITE = ANSI(15)
+
+  /// Create an ANSI color from a code
+  def ansi(code: Int): Color =
+    if (code < 16) ANSI(code) else ANSI256(code)
+}
+
+/// Converts a color to its escape code
+def toEscapeSeq(color: Color): String = color match {
+  case ANSI(code) =>
+    if (code < 8) (code + 30).show else (code + 82).show
+  case ANSI256(code) => "38;5;" ++ code.show
+  case NoColor() => ""
+}
+
+/// Common escapes
+namespace Escape {
+  val CSI = "\u001b["
+  val OSC = "\u001b]"
+
+  val RESET = CSI ++ "0m"
+  val BOLD = CSI ++ "1m"
+  val FAINT = CSI ++ "2m"
+  val ITALIC = CSI ++ "3m"
+  val UNDERLINE = CSI ++ "4m"
+  val BLINK = CSI ++ "5m"
+  val REVERSE = CSI ++ "7m"
+  val CROSSOUT = CSI ++ "9m"
+  val OVERLINE = CSI ++ "53m"
+}
+
+def escape(code: String): String = Escape::CSI ++ code
+def escapeOSC(code: String): String = Escape::OSC ++ code
+
+// Cursor positioning
+def cursorUp(x: Int): String = escape(x.show ++ "A")
+def cursorDown(x: Int): String = escape(x.show ++ "B")
+def cursorForward(x: Int): String = escape(x.show ++ "C")
+def cursorBack(x: Int): String = escape(x.show ++ "D")
+def cursorNextLine(x: Int): String = escape(x.show ++ "E")
+def cursorPreviousLine(x: Int): String = escape(x.show ++ "F")
+def cursorHorizontal(x: Int): String = escape(x.show ++ "G")
+def cursorPosition(x: Int, y: Int): String = escape(y.show ++ ";" ++ x.show ++ "H")
+
+// Screen manipulation
+def eraseDisplay(x: Int): String = escape(x.show ++ "J")
+def eraseLine(x: Int): String = escape(x.show ++ "K")
+def scrollUp(x: Int): String = escape(x.show ++ "S")
+def scrollDown(x: Int): String = escape(x.show ++ "T")
+def saveCursorPosition(): String = escape("s")
+def restoreCursorPosition(): String = escape("u")
+def changeScrollingRegion(x: Int, y: Int): String = escape(x.show ++ ";" ++ y.show ++ "r")
+def insertLine(x: Int): String = escape(x.show ++ "L")
+def deleteLine(x: Int): String = escape(x.show ++ "M")
+
+// Explicit values for eraseLine
+def eraseLineRight(): String = escape("0K")
+def eraseLineLeft(): String = escape("1K")
+def eraseEntireLine(): String = escape("2K")
+
+// Mouse
+def enableMousePress(): String = escape("?9h")
+def disableMousePress(): String = escape("?9l")
+def enableMouse(): String = escape("?1000h")
+def disableMouse(): String = escape("?1000l")
+def enableMouseHighlight(): String = escape("?1001h")
+def disableMouseHighlight(): String = escape("?1001l")
+def enableMouseCellMotion(): String = escape("?1002h")
+def disableMouseCellMotion(): String = escape("?1002l")
+def enableMouseAllMotion(): String = escape("?1003h")
+def disableMouseAllMotion(): String = escape("?1003l")
+def enableMouseExtendedMode(): String = escape("?1006h")
+def disableMouseExtendedMode(): String = escape("?1006l")
+def enableMousePixelsMode(): String = escape("?1016h")
+def disableMousePixelsMode(): String = escape("?1016l")
+
+// Screen
+def restoreScreen(): String = escape("?47l")
+def saveScreen(): String = escape("?47h")
+def altScreen(): String = escape("?1049h")
+def exitAltScreen(): String = escape("?1049l")
+
+// Bracketed paste
+def enableBracketedPaste(): String = escape("?2004h")
+def disableBracketedPaste(): String = escape("?2004l")
+def startBracketedPaste(): String = escape("200~")
+def endBracketedPaste(): String = escape("201~")
+
+// Session
+def setWindowTitle(s: String): String = escape("2;" ++ s)
+def setForegroundColor(s: String): String = escape("10;" ++ s)
+def setBackgroundColor(s: String): String = escape("11;" ++ s)
+def setCursorColor(s: String): String = escape("12;" ++ s)
+def showCursor(): String = escape("?25h")
+def hideCursor(): String = escape("?25l")
+
+def applyForegroundColor(color: Color): String =
+  escape(color.toEscapeSeq ++ "m")
+
+def applyBackgroundColor(color: Color): String =
+  escape("48;" ++ color.toEscapeSeq ++ "m")
+
+/// Inline images
+/// See https://iterm2.com/documentation-images.html for protocol description
+/// See [imgcat](https://iterm2.com/utilities/imgcat) for more usage details
+def inlineImage(size: Int, base64Image: String) =
+  escape("1337;File=size=" ++ size.show ++ ";inline=1:" ++ base64Image ++ "\u0007")
+
+/// Hyperlinks
+/// https://iterm2.com/documentation-escape-codes.html
+def hyperlink(text: String, url: String): String =
+  escapeOSC("8;;") ++ url ++ "\u0007" ++ text ++ escapeOSC("8;;") ++ "\u0007"
+
+def attention(value: String) =
+  escapeOSC("1337;") ++ "RequestAttention=" ++ value ++ "\u0007"
+
+namespace Screen {
+  def clear(): String = eraseDisplay(2) ++ cursorPosition(1, 1)
+  def clearLine(): String = eraseEntireLine()
+}
+
+def red(text: String) = Formatted::colored(text, Color::RED)
+def green(text: String) = Formatted::colored(text, Color::GREEN)
+def yellow(text: String) = Formatted::colored(text, Color::YELLOW)
+def blue(text: String) = Formatted::colored(text, Color::BLUE)
+def magenta(text: String) = Formatted::colored(text, Color::MAGENTA)
+def cyan(text: String) = Formatted::colored(text, Color::CYAN)
+def white(text: String) = Formatted::colored(text, Color::WHITE)
+
+def dim(text: String) = Formatted::colored(text, Escape::FAINT)
+def bold(text: String) = Formatted::colored(text, Escape::BOLD)
+def underline(text: String) = Formatted::colored(text, Escape::UNDERLINE)
+def italic(text: String) = Formatted::colored(text, Escape::ITALIC)
+
+interface Formatted {
+  def supportsEscape(escape: String): Bool
+}
+
+namespace Formatted {
+  /// Run given block of code, allowing all formatting
+  def formatting[R] { prog : => R / Formatted }: R =
+    try { prog() } with Formatted {
+      def supportsEscape(escape: String) = resume(true)
+    }
+
+  /// Run given block of code, ignoring all formatting
+  def noFormatting[R] { prog : => R / Formatted }: R =
+    try { prog() } with Formatted {
+      def supportsEscape(escape: String) = resume(false)
+    }
+
+  def tryEmit(escape: String): String / Formatted =
+    if (do supportsEscape(escape)) escape else ""
+
+  def colored(text: String, escape: String): String / Formatted =
+    tryEmit(escape) ++ text ++ tryEmit(Escape::RESET)
+
+  def colored(text: String, color: Color): String / Formatted =
+    tryEmit(color.applyForegroundColor) ++ text ++ tryEmit(Escape::RESET)
+}

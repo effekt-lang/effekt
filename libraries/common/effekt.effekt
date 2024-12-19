@@ -367,7 +367,11 @@ def pow(base: Double, exponent: Int): Double = {
     else if (exponent.mod(2) == 0) loop(base * base, exponent / 2, acc)  // even exponent
     else loop(base, exponent - 1, acc * base)  // odd exponent
   }
-  loop(base, exponent, 1.0)
+  if (exponent < 0) {
+    loop(1.0 / base, 0 - exponent, 1.0)
+  } else {
+    loop(base, exponent, 1.0)
+  }
 }
 
 extern pure def pow(base: Double, exponent: Double): Double =

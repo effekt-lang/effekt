@@ -438,6 +438,7 @@ class Lexer(source: Source) {
           expect('\\')
           peek() match {
             case Some('"') => consume(); stringContent.addOne('"')
+            case Some('\'') => consume(); stringContent.addOne('\'')
             case Some('n') => consume(); stringContent.addOne('\n')
             case Some('t') => consume(); stringContent.addOne('\t')
             case Some('r') => consume(); stringContent.addOne('\r')
