@@ -1,0 +1,21 @@
+import union_find
+import test
+
+def main() = {
+  suite("UnionFindTests", false) {
+    test("three elements") {
+      with on[MissingValue].default { assertTrue(false, "MissingValue exception") }
+      val u = unionFind()
+      val a = u.makeSet()
+      val b = u.makeSet()
+      val c = u.makeSet()
+      assert(u.find(a), a)
+      assert(u.find(b), b)
+      assert(u.find(c), c)
+      u.union(a,b)
+      assert(u.find(a), u.find(b))
+      assert(u.find(c), c)
+    }
+  };
+  ()
+}
