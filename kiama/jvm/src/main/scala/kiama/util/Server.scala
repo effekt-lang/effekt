@@ -22,7 +22,7 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
 
   import com.google.gson.{ JsonArray, JsonElement, JsonObject }
   import java.util.Collections
-  import java.io.{ InputStream, OutputStream }
+  import java.io.{ InputStream, OutputStream, PrintWriter }
   import scala.concurrent.ExecutionException
   import output.PrettyPrinterTypes.{ Document, emptyDocument, LinkRange, LinkValue }
 
@@ -122,6 +122,14 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
     if (config.debug()) {
       import java.net.InetSocketAddress
       import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
+      import java.util.logging.{Logger, Level, ConsoleHandler}
+
+      // Set up LSP logging
+      val log = Logger.getLogger("LSP")
+      log.setLevel(Level.ALL)
+      val handler = new ConsoleHandler()
+      handler.setLevel(Level.ALL)
+      log.addHandler(handler)
 
       val port = config.debugPort()
       println("Starting debugging lsp server on port " + port)
@@ -134,7 +142,8 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
         println(s"Connected to LSP client")
         val in = Channels.newInputStream(ch)
         val out = Channels.newOutputStream(ch)
-        launch(config, in, out)
+
+        launch(config, in, out, Some(new PrintWriter(System.err)))
       } catch {
         case e: InterruptedException =>
           e.printStackTrace()
@@ -144,11 +153,11 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
         socket.close()
       }
     } else {
-      launch(config, System.in, System.out)
+      launch(config, System.in, System.out, None)
     }
   }
 
-  def launch(config: C, in: InputStream, out: OutputStream): Unit = {
+  def launch(config: C, in: InputStream, out: OutputStream, tracing: Option[PrintWriter]): Unit = {
     val services = createServices(config)
     val launcherBase =
       new Launcher.Builder[Client]()
@@ -156,8 +165,11 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
         .setRemoteInterface(classOf[Client])
         .setInput(in)
         .setOutput(out)
-    val launcher = launcherBase.create()
-    val client = launcher.getRemoteProxy()
+    val launcher = tracing match {
+      case Some(traceOut) => launcherBase.traceMessages(traceOut).create()
+      case None => launcherBase.create()
+    }
+    val client = launcher.getRemoteProxy
     connect(client)
     launcher.startListening()
   }
