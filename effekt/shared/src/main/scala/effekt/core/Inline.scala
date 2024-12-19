@@ -131,7 +131,6 @@ object Inline {
       invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
 
     case Stmt.Reset(body, onSuspend, onResume, onReturn) =>
-      // TODO figure out inlining rules for new clauses
       // conjecture: we cannot inline the body of a reset clause, since even if the prompt is unused, we still need to
       // account for on suspend and resume clauses when a shift to another prompt occurs.
       Stmt.Reset(rewrite(body), onSuspend.map { rewrite }, onResume.map { rewrite }, onReturn.map { rewrite })
@@ -143,9 +142,9 @@ object Inline {
     case Stmt.Match(scrutinee, clauses, default) =>
       patternMatch(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
-    // case Stmt.Shift(prompt, b @ BlockLit(tparams, cparams, vparams, List(k), body)) if tailResumptive(k.id, body) =>
-    //   C.inlineCount.next()
-    //   rewrite(removeTailResumption(k.id, body))
+    case Stmt.Shift(prompt, b @ BlockLit(tparams, cparams, vparams, List(k), body)) if tailResumptive(k.id, body) =>
+      C.inlineCount.next()
+      rewrite(removeTailResumption(k.id, body))
 
     case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
 
@@ -237,9 +236,7 @@ object Inline {
       case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
       case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
       case Stmt.Put(id, annotatedCapt, value) => false
-      // case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
-      // case Stmt.Reset(body, onSuspend, onResume, onReturn) => onReturn.map { blocklit => tailResumptive(k, blocklit.body) }.getOrElse(tailResumptive(k, body.body))
-      case Stmt.Reset(body, onSuspend, onResume, onReturn) => false
+      case Stmt.Reset(body, onSuspend, onResume, onReturn) => onReturn.map { blocklit => tailResumptive(k, blocklit.body) }.getOrElse(tailResumptive(k, body.body))
       case Stmt.Shift(prompt, body) => false
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
       case Stmt.Hole() => true
@@ -257,12 +254,10 @@ object Inline {
     case Stmt.Region(_) => ???
     case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
-    // case Stmt.Reset(body, onSuspend, onResume, onReturn) => Stmt.Reset(removeTailResumption(k, body))
-    // case Stmt.Reset(body, suspend, resume, Some(ret)) =>
-    //   Stmt.Reset(body, resume, suspend, Some(removeTailResumption(k, ret)))
-    // case Stmt.Reset(body, suspend, resume, ret) =>
-    //   Stmt.Reset(removeTailResumption(k, body), suspend, resume, ret)
-    case Stmt.Reset(body, suspend, resume, ret) => stmt
+    case Stmt.Reset(body, suspend, resume, Some(ret)) =>
+      Stmt.Reset(body, resume, suspend, Some(removeTailResumption(k, ret)))
+    case Stmt.Reset(body, suspend, resume, None) =>
+      Stmt.Reset(removeTailResumption(k, body), suspend, resume, None)
     case Stmt.Resume(k2, body) if k2.id == k => body
 
     case Stmt.Resume(k, body) => stmt

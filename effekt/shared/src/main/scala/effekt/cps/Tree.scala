@@ -220,7 +220,7 @@ object Variables {
     case Stmt.Get(ref, id, body) => block(ref) ++ (free(body) -- value(id))
     case Stmt.Put(ref, value, body) => block(ref) ++ free(value) ++ free(body)
 
-    case Stmt.Reset(prog, onSuspend, onResume, onReturn, ks, k) => free(prog) ++ all(onSuspend, free) ++ all(onResume, free) ++ all(onReturn, free)
+    case Stmt.Reset(prog, onSuspend, onResume, onReturn, ks, k) => free(prog) ++ all(onSuspend, free) ++ all(onResume, free) ++ all(onReturn, free) ++ free(ks) ++ free(k)
     case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Resume(r, body, ks, k) => block(r) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Hole() => empty

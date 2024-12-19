@@ -1,4 +1,3 @@
-const $effekt = {}
 // Common Runtime
 // --------------
 function Cell(init, region) {
