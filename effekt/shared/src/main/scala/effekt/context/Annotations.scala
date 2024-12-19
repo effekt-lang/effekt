@@ -174,6 +174,14 @@ object Annotations {
   )
 
   /**
+   * Used by LSP to list all scopes
+   */
+  val ScopesForFile = Annotation[kiama.util.Source, List[symbols.scopes.Scope]](
+    "ScopesForFile",
+    "all scopes for file"
+  )
+
+  /**
    * The module a given symbol is defined in
    *
    * @deprecated
@@ -464,6 +472,13 @@ trait AnnotationsDB { self: Context =>
     case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
+
+  def typeOption(s: Symbol): Option[Type] = s match {
+    case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
+    case s: BlockSymbol => annotationOption(Annotations.BlockType, s)
+    case _ => None
+  }
+
 
 
   // Symbols
