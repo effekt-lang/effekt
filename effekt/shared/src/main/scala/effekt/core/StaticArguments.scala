@@ -138,7 +138,7 @@ object StaticArguments {
       invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
 
     case Stmt.Reset(body, suspend, resume, ret) =>
-      reset(rewrite(body), suspend.map { rewrite }, resume.map { rewrite }, ret.map { rewrite })
+      Stmt.Reset(rewrite(body), suspend.map { rewrite }, resume.map { rewrite }, ret.map { rewrite })
     
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))

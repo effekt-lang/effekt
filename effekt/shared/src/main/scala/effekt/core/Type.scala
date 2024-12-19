@@ -236,7 +236,7 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
     case Stmt.Get(id, capt, tpe) => capt
     case Stmt.Put(id, capt, value) => capt
-    case Stmt.Reset(body, onSuspend, onResume, onReturn) => body.capt
+    case Stmt.Reset(body, onSuspend, onResume, onReturn) => body.capt ++ onSuspend.toSet.flatMap(_.capt) ++ onResume.toSet.flatMap(_.capt) ++ onReturn.toSet.flatMap(_.capt)
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
     case Stmt.Resume(k, body) => k.capt ++ body.capt
     case Stmt.Region(body) => body.capt

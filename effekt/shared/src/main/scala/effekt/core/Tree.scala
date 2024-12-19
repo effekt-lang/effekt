@@ -395,12 +395,6 @@ object normal {
       case other => Invoke(callee, method, methodTpe, targs, vargs, bargs)
     }
 
-  def reset(body: BlockLit, onSuspend: Option[BlockLit], onResume: Option[BlockLit], onReturn: Option[BlockLit]): Stmt = body match {
-    //    case BlockLit(tparams, cparams, vparams, List(prompt),
-    //      Stmt.Shift(prompt2, body) if prompt.id == prompt2.id => ???
-    case other => Stmt.Reset(body, onSuspend, onResume, onSuspend)
-  }
-
   def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
     Pure.Make(tpe, tag, vargs)
 
