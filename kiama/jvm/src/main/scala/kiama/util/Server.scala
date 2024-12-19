@@ -459,14 +459,39 @@ class Services[N, C <: Config, M <: Message](
   def initialize(params: InitializeParams): CompletableFuture[InitializeResult] =
     CompletableFuture.completedFuture {
       server.setSettings(params.getInitializationOptions)
-      val serverCapabilities = new ServerCapabilities
+      val serverCapabilities = new ServerCapabilities()
       serverCapabilities.setCodeActionProvider(true)
       serverCapabilities.setDefinitionProvider(true)
       serverCapabilities.setDocumentFormattingProvider(true)
       serverCapabilities.setDocumentSymbolProvider(true)
       serverCapabilities.setHoverProvider(true)
       serverCapabilities.setReferencesProvider(true)
+
+      // This way the full file contents are transferred, instead of diffs.
       serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
+
+      // Enable syncing of notebooks
+      // @see https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#notebookDocument_synchronization
+      import scala.jdk.CollectionConverters._
+      import org.eclipse.lsp4j.jsonrpc.messages. { Either => LSPEither }
+
+      // Create notebook filters
+      val notebookFilter = new NotebookDocumentFilter()
+      notebookFilter.setNotebookType("effekt-notebook")
+      notebookFilter.setScheme("file")
+
+      // Create NotebookSelector
+      val notebookSelector = new NotebookSelector()
+      notebookSelector.setNotebook(LSPEither.forRight(notebookFilter))
+      notebookSelector.setCells(List(new NotebookSelectorCell("effekt")).asJava)
+
+      // Set notebook document sync options
+      val notebookSyncOptions = new NotebookDocumentSyncRegistrationOptions(
+        List(notebookSelector).asJava,
+        true
+      )
+      serverCapabilities.setNotebookDocumentSync(notebookSyncOptions)
+
       new InitializeResult(serverCapabilities)
     }
 
