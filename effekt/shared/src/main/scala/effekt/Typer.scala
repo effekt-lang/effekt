@@ -104,6 +104,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe)     => Result(tpe, Pure)
 
+      case source.TemplateStr(str, args) =>
+        args.foreach { checkExpr(_, Some(TString)) }
+
+        Result(TString, Pure)  
+        
       case source.If(guards, thn, els) =>
         val Result((), guardEffs) = checkGuards(guards)
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)

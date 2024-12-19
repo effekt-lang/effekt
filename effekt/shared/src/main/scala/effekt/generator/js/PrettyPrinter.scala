@@ -26,6 +26,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case New(callee, args)            => "new" <+> toDocParens(callee) <> parens(args map toDoc)
     case RawExpr(strings, args)       => hcat(intercalate(strings.map(string), args.map(toDocAsAtom)))
     case RawLiteral(content)          => string(content)
+    case TemplateStr(strs, args)      =>
+      val content = hcat(
+        strs.zip(args.map(toDoc(_)))
+        .map {
+          case (s, arg) => string(s) <> "${" <> arg <> "}" 
+        }
+      )
+      "`" <> content <> "`"
     case Member(callee, selection)    => toDocParens(callee) <> "." <> toDoc(selection)
     case IfExpr(cond, thn, els)       => parens(toDoc(cond)) <+> "?" <+> toDoc(thn) <+> ":" <+> toDoc(els)
     case Lambda(params, Return(obj: js.Object)) => parens(params map toDoc) <+> "=>" <> nested(parens(toDoc(expr)))

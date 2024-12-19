@@ -207,12 +207,13 @@ trait Transformer {
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
-    case Literal((), _)         => chez.RawValue("#f")
+    case Literal((), _)          => chez.RawValue("#f")
 
-    case Literal(s: String, _)  => escape(s)
-    case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
-    case l: Literal             => chez.RawValue(l.value.toString)
-    case ValueVar(id, _)        => chez.Variable(nameRef(id))
+    case Literal(s: String, _)   => escape(s)
+    case Literal(b: Boolean, _)  => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case l: Literal              => chez.RawValue(l.value.toString)
+    case TemplateStr(strs, args) => template(strs, args.map(toChez))
+    case ValueVar(id, _)         => chez.Variable(nameRef(id))
 
     case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
@@ -246,6 +247,10 @@ trait Transformer {
       chez.Lambda(List(value), pure(chez.Builtin("set-box!", chez.Variable(ref), chez.Variable(value)))))
 
     List(getter, setter)
+  }
+
+  def template(strs: List[String], args: List[chez.Expr]): chez.Expr = {
+    ???
   }
 
   def escape(scalaString: String): chez.Expr = {

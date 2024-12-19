@@ -352,6 +352,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Literal(value, tpe) =>
       Literal(value, transform(tpe))
 
+    case source.TemplateStr(strs, args) =>
+      TemplateStr(strs, args.map { transformAsPure })
+
     case s @ source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
 

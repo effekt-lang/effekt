@@ -96,6 +96,7 @@ class Recursive(
     case Run(s) => process(s)
     case Pure.ValueVar(id, annotatedType) => ()
     case Pure.Literal(value, annotatedType) => ()
+    case Pure.TemplateStr(strs, args) => args.foreach(process)
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
     case Pure.Make(data, tag, vargs) => vargs.foreach(process)
     case Pure.Select(target, field, annotatedType) => process(target)
