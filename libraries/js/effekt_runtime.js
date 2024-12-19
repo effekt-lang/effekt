@@ -101,18 +101,17 @@ function SHIFT(p, body, ks, k, cont) {
 
   // TODO avoid constructing this object
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
-  // let cont = null
 
   while (!!meta && meta.prompt !== p) {
     cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), onSuspend: meta.onSuspend, onSuspendData: meta.onSuspendData, onResume: meta.onResume, rest: cont }
-    if (meta.onSuspend) {
+    if (!!meta.onSuspend) {
       return meta.onSuspend(meta.rest, (x, ks) => {
         // TODO what about ks here? It is just ignored -- doesn't seem right
         // this will probably become a problem once a resumptive effect operation is called in onSuspend
 
         // just change onSuspendData to retain the value returned by onSuspend
         const contt = { ...cont, onSuspendData: x }
-        return SHIFT(p, body, meta.rest, meta.rest.stack, contt)
+        return SHIFT(p, body, ks, meta.rest.stack, contt)
       })
     }
     meta = meta.rest
@@ -137,11 +136,9 @@ function RESUME(cont, c, b, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
-    if (toRewind.onResume && b) {
+    if (!!toRewind.onResume && b) {
       return toRewind.onResume(toRewind.onSuspendData, meta, (x, ks) => {
-        // push stack back onto the meta-stack before resuming later
-        meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), onSuspend: toRewind.onSuspend, onSuspendData: toRewind.onSuspendData, onResume: toRewind.onResume, rest: ks }
-        return RESUME(toRewind.rest, c, true, meta, meta.stack)
+        return RESUME(toRewind, c, false, ks, meta.stack)
       })
     }
     b = true
