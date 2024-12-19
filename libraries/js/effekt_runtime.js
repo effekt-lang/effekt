@@ -1,4 +1,3 @@
-
 // Common Runtime
 // --------------
 function Cell(init, region) {
@@ -63,7 +62,7 @@ function Arena(_region) {
 let _prompt = 1;
 
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { prompt: 0, arena: Arena([]), rest: null }
+const TOPLEVEL_KS = { prompt: 0, arena: Arena([]), onSuspend: null, onSuspendData: null, onResume: null, rest: null }
 
 function THUNK(f) {
   f.thunk = true
@@ -84,10 +83,11 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 // const x = r.alloc(init); body
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+function RESET(prog, onSuspend, onResume, onReturn, ks, k) {
   const prompt = _prompt++;
-  const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+  const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
+  const onRet = onReturn ? (x, ks) => onReturn(x, ks.rest, ks.rest.stack) : RETURN
+  return prog(prompt, { prompt, arena: Arena([]), onSuspend: onSuspend, onSuspendData: null, onResume: onResume, rest: rest }, onRet)
 }
 
 function DEALLOC(ks) {
@@ -97,38 +97,58 @@ function DEALLOC(ks) {
   }
 }
 
-function SHIFT(p, body, ks, k) {
+function SHIFT(p, body, ks, k, cont) {
 
   // TODO avoid constructing this object
-  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  let cont = null
+  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
 
   while (!!meta && meta.prompt !== p) {
-    cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
+    cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), onSuspend: meta.onSuspend, onSuspendData: meta.onSuspendData, onResume: meta.onResume, rest: cont }
+    if (!!meta.onSuspend) {
+      return meta.onSuspend(meta.rest, (x, ks) => {
+        // TODO what about ks here? It is just ignored -- doesn't seem right
+        // this will probably become a problem once a resumptive effect operation is called in onSuspend
+
+        // just change onSuspendData to retain the value returned by onSuspend
+        const contt = { ...cont, onSuspendData: x }
+        return SHIFT(p, body, ks, meta.rest.stack, contt)
+      })
+    }
     meta = meta.rest
   }
   if (!meta) { throw `Prompt not found ${p}` }
 
   // package the prompt itself
-  cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
+  cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), onSuspend: meta.onSuspend, onSuspendData: meta.onSuspendData, onResume: meta.onResume, rest: cont }
   meta = meta.rest
 
   const k1 = meta.stack
-  meta.stack = null
+  // TODO why is this needed?
+  // meta.stack = null
   return body(cont, meta, k1)
 }
 
 // Rewind stack `cont` back onto `k` :: `ks` and resume with c
-function RESUME(cont, c, ks, k) {
-  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
+// TODO I do not like the additional argument b here.
+// It is needed because when resuming, that is, rewinding cont onto k :: ks, we would
+// execute the on resume clause of the top-most stack frame, however, these are not the desired semantics.
+function RESUME(cont, c, b, ks, k) {
+  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
-    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
+    if (!!toRewind.onResume && b) {
+      return toRewind.onResume(toRewind.onSuspendData, meta, (x, ks) => {
+        return RESUME(toRewind, c, false, ks, meta.stack)
+      })
+    }
+    b = true
+    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), onSuspend: toRewind.onSuspend, onSuspendData: toRewind.onSuspendData, onResume: toRewind.onResume, rest: meta }
     toRewind = toRewind.rest
   }
 
   const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
-  meta.stack = null
+  // TODO why is this needed?
+  // meta.stack = null
   return () => c(meta, k1)
 }
 
@@ -212,3 +232,4 @@ $effekt.run = RUN
  * If a runtime is available, use `$effekt.run`, instead.
  */
 $effekt.runToplevel = RUN_TOPLEVEL
+

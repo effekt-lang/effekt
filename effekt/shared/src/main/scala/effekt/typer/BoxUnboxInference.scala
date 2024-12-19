@@ -106,8 +106,12 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
         Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed)
       }
 
-    case TryHandle(prog, handlers) =>
-      TryHandle(rewrite(prog), handlers.map(rewrite))
+    case TryHandle(prog, handlers, suspend, resume, retrn) =>
+      val rewrittenSusp = suspend.map { rewrite }
+      val rewrittenRes = resume.map { rewrite }
+      val rewrittenRet = retrn.map { rewrite }
+
+      TryHandle(rewrite(prog), handlers.map(rewrite), rewrittenSusp, rewrittenRes, rewrittenRet)
 
     case Region(name, body) =>
       Region(name, rewrite(body))
@@ -202,6 +206,11 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   def rewrite(h: OpClause)(using Context): OpClause = visit(h) {
     case OpClause(id, tparams, vparams, bparams, ret, body, resume) =>
       OpClause(id, tparams, vparams, bparams, ret, rewrite(body), resume)
+  }
+
+  def rewrite(c: FinalizerClause)(using Context): FinalizerClause = visit(c) {
+    case FinalizerClause(vp, body) =>
+      FinalizerClause(vp, rewrite(body))
   }
 
   def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {

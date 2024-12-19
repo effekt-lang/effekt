@@ -659,8 +659,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   */
   def tryExpr(): Term =
     nonterminal:
-      `try` ~> stmt() ~ someWhile(handler(), `with`) match {
-        case s ~ hs => TryHandle(s, hs)
+      `try` ~> stmt() ~ manyWhile(handler(), `with`) ~ finalizerClause(`on` ~> consume(`suspend`), "suspend", false) ~ finalizerClause(`on` ~> consume(`resume`), "resume", true) ~ finalizerClause(`on` ~> consume(`return`), "return", true) ~ finalizerClause(consume(`finally`), "finally", false) match {
+        case _ ~ _ ~ None ~ Some(_) ~ _ ~ None =>
+          fail("Got `resume` clause but no `suspend` clause.")
+        case _ ~ _ ~ Some(_) ~ _ ~ _ ~ Some(_) =>
+          fail("Got both an `suspend` and `finally` clause.")
+        case _ ~ _ ~ _ ~ _ ~ Some(_) ~ Some(_) =>
+          fail("got both an `return` and `finally` clause.")
+        case s ~ hs ~ susp ~ None ~ None ~ Some(fin) =>
+          TryHandle(s, hs, Some(fin), None, Some(FinalizerClause(Some(ValueParam(IdDef("x"), None)), fin.body)))
+        case s ~ hs ~ susp ~ res ~ retrn ~ fin => 
+          TryHandle(s, hs, susp, res, retrn)
       }
 
   def regionExpr(): Term =
@@ -696,6 +705,25 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case capabilityName ~ impl =>
           val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
           Handler(capability, impl)
+      }
+
+  def finalizerClause[T](prefix: => T, name: String, vparam: Boolean): Option[FinalizerClause] =
+    nonterminal:
+      backtrack { prefix }
+      .map { _ =>
+        braces {
+          backtrack { lambdaParams() <~ `=>` } ~ stmts() match {
+            // TODO better erros
+            case Some(Nil, vps, Nil) ~ body =>
+              if (!vps.isEmpty != vparam) fail(s"$name value parameter mismatch")
+              else FinalizerClause(vps.headOption, body)
+            case Some(_, _, _) ~ _ =>
+              fail(s"$name only expects value parameters")
+            case None ~ body =>
+              if (vparam) fail(s"$name expects one value parameter but none were found")
+              else FinalizerClause(None, body)
+          }
+        }
       }
 
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.

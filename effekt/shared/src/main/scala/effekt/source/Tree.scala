@@ -393,7 +393,8 @@ enum Term extends Tree {
    *
    * Each with-clause is modeled as an instance of type [[Handler]].
    */
-  case TryHandle(prog: Stmt, handlers: List[Handler])
+  case TryHandle(prog: Stmt, handlers: List[Handler], suspend: Option[FinalizerClause], resume: Option[FinalizerClause], retrn: Option[FinalizerClause])
+
   case Region(id: IdDef, body: Stmt) extends Term, Definition
 
   /**
@@ -460,6 +461,8 @@ case class Handler(capability: Option[BlockParam] = None, impl: Implementation) 
 // `ret` is an optional user-provided type annotation for the return type
 // currently the annotation is rejected by [[Typer]] -- after that phase, `ret` should always be `None`
 case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt, resume: IdDef) extends Reference
+
+case class FinalizerClause(vparam: Option[ValueParam], body: Stmt) extends Tree
 
 // Pattern Matching
 // ----------------
@@ -787,6 +790,7 @@ object Tree {
     def query(h: Handler)(using Context, Ctx): Res = structuralQuery(h)
     def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
     def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
+    def query(c: FinalizerClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
     def query(c: MatchGuard)(using Context, Ctx): Res = structuralQuery(c)
     def query(b: ExternBody)(using Context, Ctx): Res = structuralQuery(b)

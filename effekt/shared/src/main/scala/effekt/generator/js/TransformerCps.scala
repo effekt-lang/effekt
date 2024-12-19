@@ -252,14 +252,17 @@ object TransformerCps extends Transformer {
         toJS(body).run(k)
     }
 
-    case cps.Stmt.Reset(prog, ks, k) =>
-      pure(js.Return(Call(RESET, toJS(prog), toJS(ks), toJS(k))))
+    case cps.Stmt.Reset(prog, onSuspend, onResume, onReturn, ks, k) =>
+      val jsSuspend = onSuspend.map { toJS }.getOrElse(js.RawExpr("null"))
+      val jsResume = onResume.map { toJS }.getOrElse(js.RawExpr("null"))
+      val jsReturn = onReturn.map { toJS }.getOrElse(js.RawExpr("null"))
+      pure(js.Return(Call(RESET, toJS(prog), jsSuspend, jsResume, jsReturn, toJS(ks), toJS(k))))
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k))))
+      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body) }, toJS(ks), toJS(k), js.RawExpr("null"))))
 
     case cps.Stmt.Resume(r, b, ks2, k2) =>
-      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b), toJS(ks2), toJS(k2))))
+      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b), js.RawLiteral("false"), toJS(ks2), toJS(k2))))
 
     case cps.Stmt.Hole() =>
       pure(js.Return($effekt.call("hole")))

@@ -229,7 +229,7 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
+      case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body), _, _, _) =>
         noteParameters(List(prompt))
 
         val variable = Variable(freshName("returned"), transform(body.tpe))
