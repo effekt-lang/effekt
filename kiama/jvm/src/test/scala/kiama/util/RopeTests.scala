@@ -1,7 +1,7 @@
-package kiama.util.test
+package kiama
+package util
 
 import utest._
-import kiama.util.Rope
 
 object RopeTests extends TestSuite {
   val tests = Tests {

@@ -1,7 +1,7 @@
-package kiama.util.test
+package kiama
+package util
 
 import utest._
-import kiama.util.GapBuffer
 
 object GapBufferTests extends TestSuite {
   val tests = Tests {
