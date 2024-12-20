@@ -157,4 +157,5 @@ object GapBuffer {
       GapBuffer(leftLines = lines)
     }
   }
+  val empty = GapBuffer("")
 }

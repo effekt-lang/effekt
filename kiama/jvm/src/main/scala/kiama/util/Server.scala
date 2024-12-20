@@ -215,7 +215,7 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
       val after = cells.drop(start + deleteCount)
 
       // create if not already exist (this can be the case if cells are re-ordered=delete+insert)
-      insertedUris.foreach { uri => sources.getOrElseUpdate(uri, RopeSource(Rope.empty, uri)) }
+      insertedUris.foreach { uri => sources.getOrElseUpdate(uri, BufferSource(GapBuffer.empty, uri)) }
       val inserted = insertedUris.map(NotebookCell.apply)
 
       val updated = (before ++ inserted ++ after).map(c => c.uri -> c).toMap
