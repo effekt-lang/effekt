@@ -96,6 +96,13 @@ trait Source {
 case class StringSource(content: String, name: String = "") extends Source
 
 /**
+ * A source that is a gap buffer (for easier incremental update).
+ */
+case class BufferSource(contents: GapBuffer, name: String = "") extends Source {
+  lazy val content: String = contents.toString
+}
+
+/**
  * A source that is a named file.
  */
 case class FileSource(name: String, encoding: String = "UTF-8") extends Source {

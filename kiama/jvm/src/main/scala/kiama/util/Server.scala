@@ -13,6 +13,9 @@ package util
 
 import kiama.util.Collections.{ mapToJavaMap, seqToJavaList }
 import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, _ }
+import org.eclipse.lsp4j.jsonrpc.messages. { Either => LSPEither }
+
+import scala.jdk.CollectionConverters._
 
 /**
  * A language server that is mixed with a compiler that provide the basis
@@ -175,6 +178,117 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
   }
 
   def createServices(config: C): Services[N, C, M] = new Services(this, config)
+
+
+  // Notebooks
+
+  private val notebooks = collection.mutable.Map[String, Notebook]()
+
+  /**
+   * Called when a notebook is opened. Creates initial notebook state and processes
+   * all cells. The cells parameter contains pairs of (uri, content) where uri is the
+   * cell's unique identifier and content is the cell's source code.
+   **/
+  def onNotebookOpen(notebookUri: String, cells: Seq[(String, String)]): Unit = {
+    val notebook = Notebook(
+      uri = notebookUri,
+      cells = cells.map { case (uri, content) =>
+        sources(uri) = BufferSource(GapBuffer(content), uri)
+        uri -> NotebookCell(uri)
+      }.toMap
+    )
+    notebooks(notebookUri) = notebook
+  }
+
+  /**
+   * Handles structural changes to a notebook's cells
+   */
+  def onNotebookStructureChange(
+    notebookUri: String,
+    start: Int,
+    deleteCount: Int,
+    insertedUris: Seq[String]
+  ): Unit = {
+    notebooks.get(notebookUri).foreach { notebook =>
+      val cells = notebook.cells.values.toVector
+      val before = cells.take(start)
+      val after = cells.drop(start + deleteCount)
+
+      // create if not already exist (this can be the case if cells are re-ordered=delete+insert)
+      insertedUris.foreach { uri => sources.getOrElseUpdate(uri, RopeSource(Rope.empty, uri)) }
+      val inserted = insertedUris.map(NotebookCell.apply)
+
+      val updated = (before ++ inserted ++ after).map(c => c.uri -> c).toMap
+      notebooks(notebookUri) = notebook.copy(cells = updated)
+    }
+  }
+
+  /**
+   * Handles content changes to a cell's text
+   */
+  def onNotebookContentChange(
+    notebookUri: String,
+    cellUri: String,
+    changes: Seq[TextDocumentContentChangeEvent]
+  ): Unit = {
+    val bs = sources.get(cellUri) match {
+      case Some(buffer: BufferSource) => buffer
+      case Some(other) =>
+        // Convert non-buffer source to GapBuffer
+        val buffer = BufferSource(GapBuffer(other.content), cellUri)
+        sources(cellUri) = buffer
+        buffer
+      case None => return
+    }
+
+    // Process each change in order
+    changes.foreach { change =>
+      val range = change.getRange
+      val startLine = range.getStart.getLine
+      val startChar = range.getStart.getCharacter
+      val endLine = range.getEnd.getLine
+      val endChar = range.getEnd.getCharacter
+
+      // Apply the change using GapBuffer's replaceRange
+      val newBuffer = bs.contents.replaceRange(
+        startLine, startChar,
+        endLine, endChar,
+        change.getText
+      )
+      sources(cellUri) = BufferSource(newBuffer, cellUri)
+    }
+
+    // Update and process notebook accordingly
+    notebooks.get(notebookUri).foreach { notebook =>
+      notebook.cells.get(cellUri).foreach { cell =>
+        processCell(cell, notebook)
+      }
+    }
+  }
+
+  /**
+   * Called when a notebook is saved.
+   **/
+  def onNotebookSave(notebookUri: String): Unit = {
+    notebooks.get(notebookUri).foreach { notebook =>
+      notebook.cells.values.foreach { cell =>
+        processCell(cell, notebook)
+        // comment this in to see state of the notebook on save (in server debug mode)
+        // println(sources.get(cell.uri))
+      }
+    }
+  }
+
+  /**
+   * Called when a notebook is closed. Cleans up notebook state and removes all cell
+   * sources and diagnostics.
+   **/
+  def onNotebookClose(notebookUri: String, cellUris: Seq[String]): Unit = {
+    notebooks.remove(notebookUri)
+    cellUris.foreach { uri =>
+      clearDiagnostics(uri)
+    }
+  }
 
   // User messages
 
@@ -429,6 +543,11 @@ trait LanguageService[N] {
    */
   def executeCommand(source: Source, executeCommandParams: ExecuteCommandParams): Option[Any] = None
 
+  /**
+   * Process a cell in the given notebook. Default is to do nothing,
+   * meaning cells won't be processed until a compiler overrides this.
+   */
+  def processCell(cell: NotebookCell, notebook: Notebook): Unit = ()
 }
 
 class Services[N, C <: Config, M <: Message](
@@ -472,8 +591,6 @@ class Services[N, C <: Config, M <: Message](
 
       // Enable syncing of notebooks
       // @see https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#notebookDocument_synchronization
-      import scala.jdk.CollectionConverters._
-      import org.eclipse.lsp4j.jsonrpc.messages. { Either => LSPEither }
 
       // Create notebook filters
       val notebookFilter = new NotebookDocumentFilter()
@@ -545,12 +662,72 @@ class Services[N, C <: Config, M <: Message](
     server.compileString(uri, text, config)
   }
 
-  // Text document services
-
   def positionOfNotification(document: TextDocumentIdentifier, position: LSPPosition): Option[Position] =
     server.sources.get(document.getUri).map(source => {
       Position(position.getLine + 1, position.getCharacter + 1, source)
     })
+
+  // Notebook services
+
+  @JsonNotification("notebookDocument/didOpen")
+  def notebookDidOpen(params: DidOpenNotebookDocumentParams): Unit = {
+    val notebookDoc = params.getNotebookDocument
+    val textDocs = params.getCellTextDocuments
+
+    val cellsWithContents = params.getCellTextDocuments.asScala.map { doc => doc.getUri -> doc.getText }
+    server.onNotebookOpen(notebookDoc.getUri, cellsWithContents.toSeq)
+  }
+
+  @JsonNotification("notebookDocument/didChange")
+  def notebookDidChange(params: DidChangeNotebookDocumentParams): Unit = {
+    val notebookUri = params.getNotebookDocument.getUri
+    val cellChanges = Option(params.getChange.getCells)
+
+    // 1. Handle structural changes
+    if (cellChanges.exists(c => c.getStructure != null)) {
+      val structure = cellChanges.get.getStructure
+      val array = structure.getArray
+      val start = array.getStart
+      val deleteCount = array.getDeleteCount
+      val newCells = Option(array.getCells).map(_.asScala).getOrElse(Seq.empty).map { c => c.getDocument }
+
+      // Update notebook structure
+      server.onNotebookStructureChange(notebookUri, start, deleteCount, newCells.toSeq)
+    }
+
+    // 2. Handle text content changes
+    val textChanges = cellChanges.flatMap(c => Option(c.getTextContent))
+    textChanges.foreach { changes =>
+      changes.asScala.foreach { change =>
+        server.onNotebookContentChange(
+          notebookUri,
+          change.getDocument.getUri,
+          change.getChanges.asScala.toSeq
+        )
+      }
+    }
+
+    //    // 3. Handle cell metadata changes
+    //    val dataChanges = cellChanges.flatMap(c => Option(c.getData))
+    //    dataChanges.foreach { data =>
+    //      server.onNotebookCellChange(notebookUri, data.asScala.toSeq)
+    //    }
+  }
+
+  @JsonNotification("notebookDocument/didSave")
+  def notebookDidSave(params: DidSaveNotebookDocumentParams): Unit = {
+    server.onNotebookSave(params.getNotebookDocument.getUri)
+  }
+
+  @JsonNotification("notebookDocument/didClose")
+  def notebookDidClose(params: DidCloseNotebookDocumentParams): Unit = {
+    params.getCellTextDocuments
+    val cellUris = params.getCellTextDocuments.asScala.map(_.getUri)
+    server.onNotebookClose(
+      params.getNotebookDocument.getUri,
+      cellUris.toSeq
+    )
+  }
 
   @JsonNotification("textDocument/codeAction")
   def codeactions(params: CodeActionParams): CompletableFuture[Array[CodeAction]] =
@@ -571,7 +748,7 @@ class Services[N, C <: Config, M <: Message](
                 action
             }
           ) yield codeActions.toArray
-        ).getOrElse(null)
+        ).orNull
     )
 
   @JsonNotification("textDocument/definition")
@@ -584,7 +761,7 @@ class Services[N, C <: Config, M <: Message](
             definition <- server.getDefinition(position);
             location = server.locationOfNode(definition)
           ) yield location
-        ).getOrElse(null)
+        ).orNull
     )
 
   @JsonNotification("textDocument/documentSymbol")
@@ -611,7 +788,7 @@ class Services[N, C <: Config, M <: Message](
             finish = new LSPPosition(source.lineCount, 0);
             edit = new TextEdit(new LSPRange(start, finish), formatted)
           ) yield Array(edit)
-        ).getOrElse(null)
+        ).orNull
     )
 
   def hoverMarkup(markdown: String): Hover = {
@@ -630,7 +807,7 @@ class Services[N, C <: Config, M <: Message](
             position <- positionOfNotification(params.getTextDocument, params.getPosition);
             markdown <- server.getHover(position)
           ) yield hoverMarkup(markdown)
-        ).getOrElse(null)
+        ).orNull
     )
 
   @JsonNotification("textDocument/references")
@@ -641,9 +818,9 @@ class Services[N, C <: Config, M <: Message](
           for (
             position <- positionOfNotification(params.getTextDocument, params.getPosition);
             references <- server.getReferences(position, params.getContext.isIncludeDeclaration);
-            locations = references.map(server.locationOfNode(_))
+            locations = references.map(server.locationOfNode)
           ) yield locations.toArray
-        ).getOrElse(null)
+        ).orNull
     )
 
   @JsonNotification("workspace/executeCommand")
@@ -658,7 +835,7 @@ class Services[N, C <: Config, M <: Message](
         } catch { case e: Throwable => None }
         src <- server.sources.get(uri)
         res <- server.executeCommand(src, params)
-      } yield res).getOrElse(null)
+      } yield res).orNull
     }
 
   // Workspace services
@@ -678,3 +855,12 @@ class Services[N, C <: Config, M <: Message](
 }
 
 class SetTraceNotificationParams(value: String = "off")
+
+// Notebooks
+
+case class NotebookCell(uri: String)
+
+case class Notebook(
+  uri: String,
+  cells: Map[String, NotebookCell] = Map.empty
+)
