@@ -9,7 +9,12 @@ lazy val replDependencies = Seq(
 
 lazy val lspDependencies = Seq(
   "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.23.1",
-  "com.google.code.gson" % "gson" % "2.8.2"
+  "com.google.code.gson" % "gson" % "2.11.0"
+)
+
+lazy val testingDependencies = Seq(
+  "org.scala-sbt" %% "io" % "1.6.0" % Test,
+  "org.scalameta" %% "munit" % "0.7.29" % Test
 )
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
@@ -32,7 +37,7 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."
     name := "kiama"
   )
   .jvmSettings(
-    libraryDependencies ++= (replDependencies ++ lspDependencies),
-    libraryDependencies += "com.lihaoyi" %% "utest" % "0.8.2" % "test",
-    testFrameworks += new TestFramework("utest.runner.Framework")
+    libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
+
+    Test / testOptions += Tests.Argument(TestFrameworks.MUnit, "-oD"),
   )
