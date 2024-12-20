@@ -49,16 +49,15 @@ struct Pos c_bytearray_set(const struct Pos arr, const Int index, const Byte val
 
 // Internal Operations
 
-struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
-    struct Pos arr = c_bytearray_new(n);
-    Byte *dataPtr = arr.obj + sizeof(struct Header);
-    memcpy(dataPtr, data, n);
-    return arr;
-}
-
 uint8_t* c_bytearray_data(const struct Pos arr) {
     uint8_t *data = arr.obj + sizeof(struct Header);
     return data;
+}
+
+struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
+    struct Pos arr = c_bytearray_new(n);
+    memcpy(c_bytearray_data(arr), data, n);
+    return arr;
 }
 
 // Complex Operations
