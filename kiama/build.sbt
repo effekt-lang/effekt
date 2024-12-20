@@ -32,5 +32,7 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."
     name := "kiama"
   )
   .jvmSettings(
-    libraryDependencies ++= (replDependencies ++ lspDependencies)
+    libraryDependencies ++= (replDependencies ++ lspDependencies),
+    libraryDependencies += "com.lihaoyi" %% "utest" % "0.8.2" % "test",
+    testFrameworks += new TestFramework("utest.runner.Framework")
   )
