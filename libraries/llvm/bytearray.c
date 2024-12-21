@@ -29,30 +29,34 @@ struct Pos c_bytearray_new(const Int size) {
 }
 
 Int c_bytearray_size(const struct Pos arr) {
+  erasePositive(arr);
   return arr.tag;
-}
-
-uint8_t* c_bytearray_data(const struct Pos arr) {
-  return arr.obj + sizeof(struct Header);
 }
 
 Byte c_bytearray_get(const struct Pos arr, const Int index) {
   Byte *dataPtr = arr.obj + sizeof(struct Header);
   Byte element = dataPtr[index];
+  erasePositive(arr);
   return element;
 }
 
 struct Pos c_bytearray_set(const struct Pos arr, const Int index, const Byte value) {
   Byte *dataPtr = arr.obj + sizeof(struct Header);
   dataPtr[index] = value;
+  erasePositive(arr);
   return Unit;
+}
+
+// Internal Operations
+
+uint8_t* c_bytearray_data(const struct Pos arr) {
+    uint8_t *data = arr.obj + sizeof(struct Header);
+    return data;
 }
 
 struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
     struct Pos arr = c_bytearray_new(n);
-
     memcpy(c_bytearray_data(arr), data, n);
-
     return arr;
 }
 
@@ -66,7 +70,7 @@ struct Pos c_bytearray_from_nullterminated_string(const char *data) {
 }
 
 char* c_bytearray_into_nullterminated_string(const struct Pos arr) {
-    uint64_t size = c_bytearray_size(arr);
+    uint64_t size = arr.tag;
 
     char* result = (char*)malloc(size + 1);
 
@@ -125,12 +129,14 @@ struct Pos c_bytearray_show_Double(const Double x) {
 
 // TODO do this in Effekt
 struct Pos c_bytearray_concatenate(const struct Pos left, const struct Pos right) {
-    const struct Pos concatenated = c_bytearray_new(c_bytearray_size(left) + c_bytearray_size(right));
-    for (int64_t j = 0; j < c_bytearray_size(concatenated); ++j)
+    uint64_t left_size = left.tag;
+    uint64_t right_size = right.tag;
+    const struct Pos concatenated = c_bytearray_new(left_size + right_size);
+    for (uint64_t j = 0; j < concatenated.tag; ++j)
         c_bytearray_data(concatenated)[j]
-            = j < c_bytearray_size(left)
+            = j < left_size
             ? c_bytearray_data(left)[j]
-            : c_bytearray_data(right)[j - c_bytearray_size(left)];
+            : c_bytearray_data(right)[j - left_size];
 
     erasePositive(left);
     erasePositive(right);
@@ -139,8 +145,8 @@ struct Pos c_bytearray_concatenate(const struct Pos left, const struct Pos right
 
 // TODO do this in Effekt
 struct Pos c_bytearray_equal(const struct Pos left, const struct Pos right) {
-    uint64_t left_size = c_bytearray_size(left);
-    uint64_t right_size = c_bytearray_size(right);
+    uint64_t left_size = left.tag;
+    uint64_t right_size = right.tag;
     if (left_size != right_size) {
         erasePositive(left);
         erasePositive(right);
@@ -161,7 +167,7 @@ struct Pos c_bytearray_equal(const struct Pos left, const struct Pos right) {
 // TODO deprecate
 struct Pos c_bytearray_substring(const struct Pos str, uint64_t start, uint64_t end) {
     const struct Pos substr = c_bytearray_new(end - start);
-    for (int64_t j = 0; j < c_bytearray_size(substr); ++j) {
+    for (uint64_t j = 0; j < substr.tag; ++j) {
         c_bytearray_data(substr)[j] = c_bytearray_data(str)[start+j];
     }
     erasePositive(str);
@@ -174,27 +180,27 @@ uint32_t c_bytearray_character_at(const struct Pos str, const uint64_t index) {
     uint8_t first_byte = bytes[index];
     uint32_t character = 0;
 
-    uint32_t length = c_bytearray_size(str);
+    uint32_t size = str.tag;
 
     if (first_byte < 0x80) {
         // Single-byte character (0xxxxxxx)
         character = first_byte;
     } else if ((first_byte & 0xE0) == 0xC0) {
         // Two-byte character (110xxxxx 10xxxxxx)
-        if (index + 1 < length) {
+        if (index + 1 < size) {
             character = ((first_byte & 0x1F) << 6) |
                         (bytes[index + 1] & 0x3F);
         }
     } else if ((first_byte & 0xF0) == 0xE0) {
         // Three-byte character (1110xxxx 10xxxxxx 10xxxxxx)
-        if (index + 2 < length) {
+        if (index + 2 < size) {
             character = ((first_byte & 0x0F) << 12) |
                         ((bytes[index + 1] & 0x3F) << 6) |
                         (bytes[index + 2] & 0x3F);
         }
     } else if ((first_byte & 0xF8) == 0xF0) {
         // Four-byte character (11110xxx 10xxxxxx 10xxxxxx 10xxxxxx)
-        if (index + 3 < length) {
+        if (index + 3 < size) {
             character = ((first_byte & 0x07) << 18) |
                         ((bytes[index + 1] & 0x3F) << 12) |
                         ((bytes[index + 2] & 0x3F) << 6) |
