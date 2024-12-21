@@ -99,7 +99,7 @@ case class StringSource(content: String, name: String = "") extends Source
  * A source that is a gap buffer (for easier incremental update).
  */
 case class BufferSource(contents: GapBuffer, name: String = "") extends Source {
-  lazy val content: String = contents.toString
+  lazy val content: String = contents.content
 }
 
 /**

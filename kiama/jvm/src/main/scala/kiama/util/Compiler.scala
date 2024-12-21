@@ -88,7 +88,7 @@ trait Compiler[C <: Config, M <: Message] {
   }
 
   /**
-   * Run the compiler given a configuration. Overriden in Server to
+   * Run the compiler given a configuration. Overwritten in Server to
    * also provide LSP services.
    */
   def run(config: C): Unit = ()

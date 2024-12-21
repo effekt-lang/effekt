@@ -317,9 +317,19 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
     }
   }
 
+  def toURI(filename: String): String = filename match {
+    case _ if filename startsWith "file:" =>
+      filename
+    case _ if filename startsWith "vscode-notebook-cell:" =>
+      filename
+    case _ if filename startsWith "./" =>
+      s"file://${Filenames.cwd()}/${Filenames.dropPrefix(filename, ".")}"
+    case _ =>
+      s"file://$filename"
+  }
+
   def publishDiagnostics(name: String, diagnostics: Vector[Diagnostic]): Unit = {
-    val uri = if (name startsWith "file://") name else s"file://$name"
-    val params = new PublishDiagnosticsParams(uri, seqToJavaList(diagnostics))
+    val params = new PublishDiagnosticsParams(toURI(name), seqToJavaList(diagnostics))
     client.publishDiagnostics(params)
   }
 
@@ -459,18 +469,12 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
     }
 
   // Support for services
-
   def locationOfNode(node: N): Location = {
     (positions.getStart(node), positions.getFinish(node)) match {
       case (start @ Some(st), finish @ Some(_)) =>
-        st.source match {
-          case StringSource(_, name) =>
-            val s = convertPosition(start)
-            val f = convertPosition(finish)
-            new Location(name, new LSPRange(s, f))
-          case _ =>
-            null
-        }
+        val s = convertPosition(start)
+        val f = convertPosition(finish)
+        new Location(toURI(st.source.name), new LSPRange(s, f))
       case _ =>
         null
     }
@@ -478,7 +482,6 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
 
   def rangeOfNode(node: N): LSPRange =
     convertRange(positions.getStart(node), positions.getFinish(node))
-
 }
 
 trait LanguageService[N] {
