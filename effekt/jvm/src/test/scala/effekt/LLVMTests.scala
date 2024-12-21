@@ -96,6 +96,9 @@ class LLVMTests extends EffektTests {
 
     // Generic equality
     examplesDir / "pos" / "issue429.effekt",
+
+    // Generic comparison
+    examplesDir / "pos" / "issue733.effekt",
   )
 
   override lazy val ignored: List[File] = bugs ++ missingFeatures

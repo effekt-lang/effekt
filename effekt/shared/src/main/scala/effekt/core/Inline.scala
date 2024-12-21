@@ -31,6 +31,8 @@ object Inline {
   ) {
     def ++(other: Map[Id, Definition]): InlineContext = InlineContext(usage, defs ++ other, maxInlineSize, inlineCount)
 
+    def ++(other: List[Definition]): InlineContext = ++(other.map(d => d.id -> d).toMap)
+
     def ++=(fresh: Map[Id, Usage]): Unit = { usage ++= fresh }
   }
 
@@ -85,8 +87,15 @@ object Inline {
   def used(id: Id)(using ctx: InlineContext): Boolean =
     ctx.usage.isDefinedAt(id)
 
+  /**
+   * Rewrites the list of definition and returns:
+   * 1. the updated list
+   * 2. definitions
+   *   a. original defnitions: in case we need to dealias elsewhere
+   *   b. the updated definitions, where the rhs might have been dealiased already (see #733)
+   */
   def rewrite(definitions: List[Definition])(using ctx: InlineContext): (List[Definition], InlineContext) =
-    given allDefs: InlineContext = ctx ++ definitions.map(d => d.id -> d).toMap
+    given allDefs: InlineContext = ctx ++ definitions
 
     val filtered = definitions.collect {
       case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
@@ -94,12 +103,11 @@ object Inline {
       case Definition.Let(id, tpe, binding) if !binding.isInstanceOf[ValueVar] =>
         Definition.Let(id, tpe, rewrite(binding))
     }
-    (filtered, allDefs)
+    (filtered, allDefs ++ filtered)
 
   def blockDefFor(id: Id)(using ctx: InlineContext): Option[Block] =
     ctx.defs.get(id) map {
-      // TODO rewriting here leads to a stack overflow in one test, why?
-      case Definition.Def(id, block) => block //rewrite(block)
+      case Definition.Def(id, block) => block
       case Definition.Let(id, _, binding) => INTERNAL_ERROR("Should not happen")
     }
 
