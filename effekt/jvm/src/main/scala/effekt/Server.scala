@@ -5,11 +5,9 @@ import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
-
-import kiama.util.{ Filenames, Position, Services, Source }
+import kiama.util.{ Filenames, Notebook, NotebookCell, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
-
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -94,28 +92,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     tree <- trees.collectFirst { case h: source.Hole => h }
     info <- getHoleInfo(tree)(context)
   } yield info
-
-  // The implementation in kiama.Server does not support file sources
-  def toURI(filename: String): String = {
-    if (filename startsWith "file://")
-      filename
-    else
-      if (filename startsWith "./")
-        "file://" ++ Filenames.cwd() ++ "/" ++ Filenames.dropPrefix(filename, ".")
-      else
-        s"file://$filename"
-  }
-
-  override def locationOfNode(node: Tree): Location = {
-    (positions.getStart(node), positions.getFinish(node)) match {
-      case (start @ Some(st), finish @ Some(_)) =>
-        val s = convertPosition(start)
-        val f = convertPosition(finish)
-        new Location(toURI(st.source.name), new LSPRange(s, f))
-      case _ =>
-        null
-    }
-  }
 
   def positionToLocation(p: Position): Location = {
     val s = convertPosition(Some(p))

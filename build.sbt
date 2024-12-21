@@ -47,8 +47,7 @@ lazy val replDependencies = Seq(
 )
 
 lazy val lspDependencies = Seq(
-  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.12.0",
-  "com.google.code.gson" % "gson" % "2.8.9"
+  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.23.1"
 )
 
 lazy val testingDependencies = Seq(
@@ -63,7 +62,8 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("ki
     name := "kiama"
   )
   .jvmSettings(
-    libraryDependencies ++= (replDependencies ++ lspDependencies)
+    libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
+    testFrameworks += new TestFramework("utest.runner.Framework")
   )
 
 lazy val root = project.in(file("effekt"))
@@ -115,6 +115,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     assembly / mainClass := Some("effekt.Server"),
 
     assembly / assemblyJarName := "effekt.jar",
+
+    // there is a conflict between the two transitive dependencies "gson:2.11.0"
+    // and "error_prone_annotations:2.27.0", so we need the merge strategy here for `sbt install`
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "versions", "9", "module-info.class") => MergeStrategy.first
+      case x =>
+        val oldStrategy = (assembly / assemblyMergeStrategy).value
+        oldStrategy(x)
+    },
 
     // we use the lib folder as resource directory to include it in the JAR
     Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "libraries",
