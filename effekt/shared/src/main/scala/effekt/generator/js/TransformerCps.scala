@@ -153,16 +153,17 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
-    case Pure.ValueVar(id)           => lookup(id)
-    case Pure.Literal(())            => $effekt.field("unit")
-    case Pure.Literal(s: String)     => JsString(escape(s))
-    case literal: Pure.Literal       => js.RawExpr(literal.value.toString)
-    case DirectApp(id, vargs, Nil)   => inlineExtern(id, vargs)
-    case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(toJS))
-    case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
-    case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
+    case Pure.ValueVar(id)            => lookup(id)
+    case Pure.Literal(())             => $effekt.field("unit")
+    case Pure.Literal(s: String)      => JsString(escape(s))
+    case Pure.TemplateStr(strs, args) => js.TemplateStr(strs.map(escape), args.map(toJS))
+    case literal: Pure.Literal        => js.RawExpr(literal.value.toString)
+    case DirectApp(id, vargs, Nil)    => inlineExtern(id, vargs)
+    case DirectApp(id, vargs, bargs)  => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(toJS))
+    case Pure.PureApp(id, vargs)      => inlineExtern(id, vargs)
+    case Pure.Make(data, tag, vargs)  => js.New(nameRef(tag), vargs map toJS)
     case Pure.Select(target, field)   => js.Member(toJS(target), memberNameRef(field))
-    case Pure.Box(b)                 => toJS(b)
+    case Pure.Box(b)                  => toJS(b)
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {

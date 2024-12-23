@@ -249,6 +249,7 @@ object Type {
     case Run(s) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
+    case Pure.TemplateStr(strs, args) => TString
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
     case Pure.Make(tpe, tag, args) => tpe
     case Pure.Select(target, field, annotatedType) => annotatedType

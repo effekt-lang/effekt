@@ -974,6 +974,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `fun`    => funExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
+    case _ if isString       => templateString()
     case _ if isLiteral      => literal()
     case _ if isVariable     => variable()
     case _ if isHole         => hole()
@@ -1016,6 +1017,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `false` => true
     case _ => isUnitLiteral
   }
+
+  def isString: Boolean = peek.kind match {
+    case _: Str => true
+    case _      => false
+  }
+
+  def templateString(): Term =
+    nonterminal:
+      template() match {
+        case Template(List(s), Nil) => StringLit(s)
+        case Template(strs, args) => TemplateStr(strs, args)
+      }
+  
   def literal(): Literal =
     nonterminal:
       peek.kind match {

@@ -210,6 +210,7 @@ enum Pure extends Expr {
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
+  case TemplateStr(strs: List[String], args: List[Pure])
 
   /**
    * Pure FFI calls. Invariant, block b is pure.
@@ -655,6 +656,7 @@ object Variables {
     case Run(s) => free(s)
     case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
+    case Pure.TemplateStr(strs, args) => all(args, free)
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
     case Pure.Make(data, tag, vargs) => all(vargs, free)
     case Pure.Select(target, field, annotatedType) => free(target)
@@ -870,6 +872,9 @@ object substitutions {
 
       case Literal(value, annotatedType) =>
         Literal(value, substitute(annotatedType))
+
+      case TemplateStr(strs, args) =>
+        TemplateStr(strs, args.map(substitute))
 
       case Make(tpe, tag, vargs) =>
         Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))

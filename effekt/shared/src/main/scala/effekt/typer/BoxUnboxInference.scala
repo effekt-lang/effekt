@@ -59,6 +59,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
     case l: Literal => l
 
+    case TemplateStr(strs, args) => TemplateStr(strs, args.map { rewriteAsExpr })
+
     case Assign(id, expr) =>
       Assign(id, rewriteAsExpr(expr))
 
