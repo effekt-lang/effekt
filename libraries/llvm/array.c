@@ -32,13 +32,16 @@ struct Pos c_array_new(const Int size) {
 
 Int c_array_size(const struct Pos arr) {
   uint64_t *sizePtr = arr.obj + sizeof(struct Header);
-  return *sizePtr;
+  uint64_t size = *sizePtr;
+  erasePositive(arr);
+  return size;
 }
 
 struct Pos c_array_get(const struct Pos arr, const Int index) {
   struct Pos *dataPtr = arr.obj + sizeof(struct Header) + sizeof(uint64_t);
   struct Pos element = dataPtr[index];
   sharePositive(element);
+  erasePositive(arr);
   return element;
 }
 
@@ -47,6 +50,7 @@ struct Pos c_array_set(const struct Pos arr, const Int index, const struct Pos v
   struct Pos element = dataPtr[index];
   erasePositive(element);
   dataPtr[index] = value;
+  erasePositive(arr);
   return Unit;
 }
 
