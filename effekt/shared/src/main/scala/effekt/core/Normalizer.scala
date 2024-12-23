@@ -93,10 +93,10 @@ object Normalizer {
     normalize(b) match {
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
         Active.Stuck(x)
-      case b @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(value) if value.size > C.maxInlineSize => Active.Stuck(value)
+      case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
+        case Some(value) if value.size > C.maxInlineSize => Active.Stuck(x)
         case Some(value)                                 => active(value)
-        case None                                        => Active.Stuck(b)
+        case None                                        => Active.Stuck(x)
       }
       case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
         Active.Value(b)
@@ -137,9 +137,10 @@ object Normalizer {
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
         case Active.Value(lit : Block.BlockLit) =>
-          normalize(reduce(lit, targs, vargs.map(normalize), bargs.map(normalize)))
+          reduce(lit, targs, vargs.map(normalize), bargs.map(normalize))
         case Active.Value(b) => ???
-        case Active.Stuck(x) => Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
+        case Active.Stuck(x) =>
+          Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
       }
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       active(b) match {
@@ -365,7 +366,7 @@ object Normalizer {
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
-    scope(bindings, body)
+    normalize(scope(bindings, body))
   }
 
   def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =

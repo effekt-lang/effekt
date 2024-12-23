@@ -190,7 +190,7 @@ object Transformer {
               ErrorReporter.panic("Applying an object")
 
             case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              ErrorReporter.panic("Call to block literal should have been reduced")
+              ErrorReporter.panic(pp"Call to block literal should have been reduced: ${stmt}")
           }
         }
 
