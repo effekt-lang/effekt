@@ -20,25 +20,27 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-    val tree = Context.timed("deadcode-elimination", source.name) { Deadcode.remove(mainSymbol, core) }
-
-    //val (normalized, _) = Inline.once(Set(mainSymbol), tree, 10)
+    val tree = Deadcode.remove(mainSymbol, core)
 
     if !Context.config.optimize() then return tree;
 
     // (2) lift static arguments (worker/wrapper)
-    val lifted = Context.timed("static-argument-transformation", source.name) {
-      StaticArguments.transform(mainSymbol, tree)
-    }
+    val lifted = StaticArguments.transform(mainSymbol, tree)
 
     val anfed = BindSubexpressions.transform(lifted)
 
     // println(s"BEFORE\n\n ${util.show(anfed)}")
 
-    val eliminated = Normalizer.normalize(Set(mainSymbol), anfed)
+    val normalized = Normalizer.normalize(Set(mainSymbol), anfed)
     //
-    val gced = Deadcode.remove(mainSymbol, eliminated)
+    val gced = Deadcode.remove(mainSymbol, normalized)
+
+    val anfed2 = BindSubexpressions.transform(gced)
+
+    val normalized2 = Normalizer.normalize(Set(mainSymbol), anfed2)
+    //
+    val gced2 = Deadcode.remove(mainSymbol, normalized2)
 
     //println(s"AFTER\n\n ${util.show(gced)}")
-    gced
+    gced2
 }

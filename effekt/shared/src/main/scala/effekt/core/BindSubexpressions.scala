@@ -4,7 +4,7 @@ package core
 
 
 // Establishes a normal form in which every subexpression
-// is explicitly named and aliasing is removed.
+// is explicitly named and aliasing (val x = y) is removed.
 //
 // let x = Cons(1, Cons(2, Cons(3, Nil())))
 //

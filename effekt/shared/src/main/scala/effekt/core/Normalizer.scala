@@ -154,6 +154,13 @@ object Normalizer {
         Stmt.Match(normalize(scrutinee), clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
     }
 
+    case Stmt.Shift(prompt, body) => normalize(body) match {
+      case BlockLit(tparams, cparams, vparams, List(k), body) if tailResumptive(k.id, body) =>
+        removeTailResumption(k.id, body)
+      case normalized @ BlockLit(tparams, cparams, vparams, ks, body) =>
+        Shift(prompt, normalized)
+    }
+
     // "Congruences"
     // -------------
 
@@ -170,9 +177,12 @@ object Normalizer {
 
       case other => Stmt.Val(id, tpe, other, normalize(body))
     }
-    case Stmt.If(cond, thn, els) => If(normalize(cond), normalize(thn), normalize(els))
+    case Stmt.If(cond, thn, els) => active(cond) match {
+      case Pure.Literal(true, annotatedType) => normalize(thn)
+      case Pure.Literal(false, annotatedType) => normalize(els)
+      case _ => If(normalize(cond), normalize(thn), normalize(els))
+    }
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
-    case Stmt.Shift(prompt, body) => Shift(prompt, normalize(body))
 
     case Stmt.Resume(k, body) => Resume(k, normalize(body))
     case Stmt.Region(body) => Region(normalize(body))
@@ -205,23 +215,26 @@ object Normalizer {
     }
 
   def normalize(p: Pure)(using ctx: Context): Pure = p match {
-    case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
-    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(normalize))
-    case x @ Pure.ValueVar(id, annotatedType) => x
-
-    // congruences
-    case Pure.Literal(value, annotatedType) => p
+    // [[ Constructor(f = v).f ]] = [[ v ]]
     case Pure.Select(target, field, annotatedType) => active(target) match {
       case Pure.Make(datatype, tag, fields) =>
         val constructor = ctx.decls.findConstructor(tag).get
-        val expr = (constructor.fields zip fields).collectFirst { case (f, expr) if f == field => expr }.get
+        val expr = (constructor.fields zip fields).collectFirst { case (f, expr) if f.id == field => expr }.get
         normalize(expr)
       case other => Pure.Select(normalize(target), field, annotatedType)
     }
+
+    // [[ box (unbox e) ]] = [[ e ]]
     case Pure.Box(b, annotatedCapture) => active(b) {
       case Left(Block.Unbox(e)) => normalize(e)
       case _ => Pure.Box(normalize(b), annotatedCapture)
     }
+
+    // congruences
+    case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
+    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(normalize))
+    case x @ Pure.ValueVar(id, annotatedType) => x
+    case Pure.Literal(value, annotatedType) => p
   }
 
   def normalize(e: Expr)(using Context): Expr = e match {
@@ -244,6 +257,66 @@ object Normalizer {
   def run(s: Stmt): Expr = s match {
     case Stmt.Return(expr) => expr
     case _ => Run(s)
+  }
+
+  // Helpers for tail resumption optimization
+  // ----------------------------------------
+
+  // A simple syntactic check whether this stmt is tailresumptive in k
+  def tailResumptive(k: Id, stmt: Stmt): Boolean =
+    def freeInStmt(stmt: Stmt): Boolean = Variables.free(stmt).containsBlock(k)
+    def freeInExpr(expr: Expr): Boolean = Variables.free(expr).containsBlock(k)
+    def freeInDef(definition: Definition): Boolean = Variables.free(definition).containsBlock(k)
+
+    stmt match {
+      case Stmt.Scope(definitions, body) => definitions.forall { d => !freeInDef(d) } && tailResumptive(k, body)
+      case Stmt.Return(expr) => false
+      case Stmt.Val(id, annotatedTpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
+      case Stmt.App(callee, targs, vargs, bargs) => false
+      case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
+      case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
+      // Interestingly, we introduce a join point making this more difficult to implement properly
+      case Stmt.Match(scrutinee, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
+        case (_, BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
+      } && default.forall { stmt => tailResumptive(k, stmt) }
+      case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
+      case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
+      case Stmt.Put(id, annotatedCapt, value) => false
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
+      case Stmt.Shift(prompt, body) => false
+      case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
+      case Stmt.Hole() => true
+    }
+
+  def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
+    case Stmt.Scope(definitions, body) => Stmt.Scope(definitions, removeTailResumption(k, body))
+    case Stmt.Val(id, annotatedTpe, binding, body) => Stmt.Val(id, annotatedTpe, binding, removeTailResumption(k, body))
+    case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
+    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
+      case (tag, block) => tag -> removeTailResumption(k, block)
+    }, default.map(removeTailResumption(k, _)))
+    case Stmt.Region(body : BlockLit) =>
+      Stmt.Region(removeTailResumption(k, body))
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
+    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
+    case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))
+    case Stmt.Resume(k2, body) if k2.id == k => body
+
+    case Stmt.Resume(k, body) => stmt
+    case Stmt.Shift(prompt, body) => stmt
+    case Stmt.Hole() => stmt
+    case Stmt.Return(expr) => stmt
+    case Stmt.App(callee, targs, vargs, bargs) => stmt
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
+    case Stmt.Get(id, annotatedCapt, annotatedTpe) => stmt
+    case Stmt.Put(id, annotatedCapt, value) => stmt
+  }
+
+  def removeTailResumption(k: Id, block: BlockLit): BlockLit = block match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockLit(tparams, cparams, vparams, bparams, removeTailResumption(k, body))
   }
 
   // Helpers for beta-reduction

@@ -11,6 +11,12 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
         // we only keep non-pure OR reachable let bindings
         case d: Definition.Let if d.capt.nonEmpty || reachable.isDefinedAt(d.id) => rewrite(d)
       }, rewrite(stmt))
+
+    case Reset(body) =>
+      rewrite(body) match {
+        case BlockLit(tparams, cparams, vparams, List(prompt), body) if !reachable.isDefinedAt(prompt.id) => body
+        case b => Stmt.Reset(b)
+      }
   }
 
   override def rewrite(m: ModuleDecl): ModuleDecl = m.copy(
