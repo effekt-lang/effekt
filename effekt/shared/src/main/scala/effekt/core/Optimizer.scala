@@ -27,20 +27,19 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     // (2) lift static arguments (worker/wrapper)
     val lifted = StaticArguments.transform(mainSymbol, tree)
 
-    val anfed = BindSubexpressions.transform(lifted)
+    val inlineSize = Context.config.maxInlineSize().toInt
 
-    // println(s"BEFORE\n\n ${util.show(anfed)}")
+    def normalizeOnce(m: ModuleDecl) = {
+      val anfed = BindSubexpressions.transform(m)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, inlineSize)
+      Deadcode.remove(mainSymbol, normalized)
+    }
 
-    val normalized = Normalizer.normalize(Set(mainSymbol), anfed)
-    //
-    val gced = Deadcode.remove(mainSymbol, normalized)
+    // we normalize twice in order to deadcode -> remove tailresumption
+    val normalized1 = normalizeOnce(lifted)
 
-    val anfed2 = BindSubexpressions.transform(gced)
+    // println(util.show(normalized1))
+    val normalized2 = normalizeOnce(normalized1)
+    normalized2
 
-    val normalized2 = Normalizer.normalize(Set(mainSymbol), anfed2)
-    //
-    val gced2 = Deadcode.remove(mainSymbol, normalized2)
-
-    //println(s"AFTER\n\n ${util.show(gced)}")
-    gced2
 }

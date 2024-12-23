@@ -2,7 +2,6 @@ package effekt
 package core
 
 import effekt.core.Block.BlockLit
-import effekt.core.Pure.ValueVar
 import effekt.util.messages.INTERNAL_ERROR
 
 import scala.collection.mutable
@@ -27,13 +26,12 @@ object Normalizer {
   case class Context(
     blocks: Map[Id, Block],
     exprs: Map[Id, Expr],
-    decls: DeclarationContext, // for field selection
-    stack: List[Id], // to detect recursion
-    recursive: mutable.Set[Id] // functions that have been identified to be recursive!
+    decls: DeclarationContext,    // for field selection
+    usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
+    maxInlineSize: Int
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
-    def enter(id: Id): Context = copy(stack = id :: stack)
   }
 
   def blockFor(id: Id)(using ctx: Context): Option[Block] =
@@ -42,14 +40,23 @@ object Normalizer {
   def exprFor(id: Id)(using ctx: Context): Option[Expr] =
     ctx.exprs.get(id)
 
-  def markRecursive(id: Id)(using ctx: Context): Unit = ctx.recursive.update(id, true)
-  def isRecursive(id: Id)(using ctx: Context): Boolean = ctx.recursive.contains(id) || ctx.stack.contains(id)
+  // we assume it is recursive, if we do not have any information...
+  def isRecursive(id: Id)(using ctx: Context): Boolean =
+    ctx.usage.get(id) match {
+      case Some(value) => value == Usage.Recursive
+      // We assume it is recursive, if (for some reason) we do not have information.
+      // This is, however, a strange case since this means we call a function we deemed unreachable.
+      case None => true
+    }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+    // usage information is used to detect recursive functions (and not inline them)
+    val usage = Reachable(entrypoints, m)
+
     val defs = m.definitions.collect {
       case Definition.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), Nil, mutable.Set.empty)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
 
     val (normalizedDefs, _) = normalize(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -59,61 +66,62 @@ object Normalizer {
     var contextSoFar = ctx
     val defs = definitions.map {
       case Definition.Def(id, block) =>
-        given Context = contextSoFar.enter(id)
-        val normalized = active(block) {
-          case Left(_) => normalize(block)
-          case Right(b) => b
-        }
+        given Context = contextSoFar
+        val normalized = active(block).get
         contextSoFar = contextSoFar.bind(id, normalized)
         Definition.Def(id, normalized)
       case Definition.Let(id, tpe, expr) =>
-        val normalized = active(expr)(using contextSoFar)
+        val normalized = active(expr)(using contextSoFar).get
         contextSoFar = contextSoFar.bind(id, normalized)
         Definition.Let(id, tpe, normalized)
     }
     (defs, contextSoFar)
 
-  /**
-   * The function is recursive, revert inlining!
-   */
-  case class IsRecursive(b: BlockVar) extends Throwable
+  // TODO better name
+  enum Active[V, S] {
+    case Value(v: V)
+    case Stuck(s: S)
 
-  // we need a better name for this... it is doing a bit more than looking up
-  // this is written in CPS to detect cycles
-  def active[R](b: Block)(using C: Context): (Context ?=> Either[Block, BlockLit | New] => R) => R = k =>
-    def value(b: BlockLit | New) = k(Right(b))
-    def stuck(x: Block) = k(Left(x))
-
-    normalize(b) match {
-      case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
-        markRecursive(id)
-        throw IsRecursive(x)
-      case b @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(value) => active(value)(using C.enter(id))(k)
-        case None => stuck(b)
-      }
-      case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-        value(b)
-      case Block.Unbox(pure) => active(pure) match {
-        case Pure.Box(b, annotatedCapture) => active(b)(k)
-        // we are stuck
-        case p: Pure => stuck(Block.Unbox(p))
-        case p: Expr => stuck(Block.Unbox(pure))
-      }
-      case b @ Block.New(impl) => value(b)
+    def get: V | S = this match {
+      case Active.Value(v) => v
+      case Active.Stuck(s) => s
     }
-
-  def active(e: Expr)(using Context): Expr = normalize(e) match {
-    case e @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
-      // We cannot inline side-effecting expressions
-      case Some(value) if value.capt.isEmpty => active(value)
-      case _ => e
-    }
-    case e => e
   }
 
+  // we need a better name for this... it is doing a bit more than looking up
+  def active[R](b: Block)(using C: Context): Active[BlockLit | New, Block] =
+    normalize(b) match {
+      case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
+        Active.Stuck(x)
+      case b @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
+        case Some(value) if value.size > C.maxInlineSize => Active.Stuck(value)
+        case Some(value)                                 => active(value)
+        case None                                        => Active.Stuck(b)
+      }
+      case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+        Active.Value(b)
+      case Block.Unbox(pure) => active(pure) match {
+        case Active.Value(Pure.Box(b, annotatedCapture)) => active(b)
+        case other => Active.Stuck(Block.Unbox(pure))
+      }
+      case b @ Block.New(impl) => Active.Value(b)
+    }
+
+  def active(e: Expr)(using Context): Active[Pure.Make | Pure.Literal | Pure.Box, Expr] =
+    normalize(e) match {
+      case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
+        case Some(p: Pure.Make)    => Active.Value(p)
+        case Some(p: Pure.Literal) => Active.Value(p)
+        case Some(p: Pure.Box)     => Active.Value(p)
+        // We cannot inline side-effecting expressions
+        case Some(other) if other.capt.isEmpty  => Active.Stuck(other)
+        case _ => Active.Stuck(x)
+      }
+      case other => Active.Stuck(other)
+    }
+
   def normalize(d: Definition)(using C: Context): Definition = d match {
-    case Definition.Def(id, block) => Definition.Def(id, normalize(block)(using C.enter(id)))
+    case Definition.Def(id, block)        => Definition.Def(id, normalize(block))
     case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, normalize(binding))
   }
 
@@ -126,32 +134,31 @@ object Normalizer {
 
     // Redexes
     // -------
-
     case Stmt.App(b, targs, vargs, bargs) =>
-      try active(b) {
-        case Right(lit : Block.BlockLit) =>
+      active(b) match {
+        case Active.Value(lit : Block.BlockLit) =>
           normalize(reduce(lit, targs, vargs.map(normalize), bargs.map(normalize)))
-        case Right(b) => ???
-        case Left(x) => Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
-      } catch {
-        case IsRecursive(x) => Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
+        case Active.Value(b) => ???
+        case Active.Stuck(x) => Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
       }
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      active(b) {
-        case Right(Block.New(impl)) =>
+      active(b) match {
+        case Active.Value(Block.New(impl)) =>
           normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
-        case Right(b) => ???
-        case Left(x) => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
+        case Active.Value(b) => ???
+        case Active.Stuck(x) => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
     case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
-      case Pure.Make(data, tag, vargs) if clauses.exists { case (id, _) => id == tag } =>
+      case Active.Value(Pure.Make(data, tag, vargs)) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         normalize(reduce(clause, Nil, vargs.map(normalize), Nil))
-      case Pure.Make(data, tag, vargs) if default.isDefined =>
+      case Active.Value(Pure.Make(data, tag, vargs)) if default.isDefined =>
         normalize(default.get)
-      case _ =>
-        Stmt.Match(normalize(scrutinee), clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
+      case Active.Value(other) => ???
+      case Active.Stuck(_) =>
+        val normalized = normalize(scrutinee)
+        Stmt.Match(normalized, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
     }
 
     case Stmt.Shift(prompt, body) => normalize(body) match {
@@ -178,8 +185,8 @@ object Normalizer {
       case other => Stmt.Val(id, tpe, other, normalize(body))
     }
     case Stmt.If(cond, thn, els) => active(cond) match {
-      case Pure.Literal(true, annotatedType) => normalize(thn)
-      case Pure.Literal(false, annotatedType) => normalize(els)
+      case Active.Value(Pure.Literal(true, annotatedType)) => normalize(thn)
+      case Active.Value(Pure.Literal(false, annotatedType)) => normalize(els)
       case _ => If(normalize(cond), normalize(thn), normalize(els))
     }
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
@@ -217,23 +224,23 @@ object Normalizer {
   def normalize(p: Pure)(using ctx: Context): Pure = p match {
     // [[ Constructor(f = v).f ]] = [[ v ]]
     case Pure.Select(target, field, annotatedType) => active(target) match {
-      case Pure.Make(datatype, tag, fields) =>
+      case Active.Value(Pure.Make(datatype, tag, fields)) =>
         val constructor = ctx.decls.findConstructor(tag).get
         val expr = (constructor.fields zip fields).collectFirst { case (f, expr) if f.id == field => expr }.get
         normalize(expr)
-      case other => Pure.Select(normalize(target), field, annotatedType)
+      case _ => Pure.Select(normalize(target), field, annotatedType)
     }
 
     // [[ box (unbox e) ]] = [[ e ]]
-    case Pure.Box(b, annotatedCapture) => active(b) {
-      case Left(Block.Unbox(e)) => normalize(e)
+    case Pure.Box(b, annotatedCapture) => active(b) match {
+      case Active.Stuck(Block.Unbox(e)) => e
       case _ => Pure.Box(normalize(b), annotatedCapture)
     }
 
     // congruences
     case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
     case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(normalize))
-    case x @ Pure.ValueVar(id, annotatedType) => x
+    case Pure.ValueVar(id, annotatedType) => p
     case Pure.Literal(value, annotatedType) => p
   }
 
@@ -342,6 +349,18 @@ object Normalizer {
     }
 
     val (renamedLit: BlockLit, renamedIds) = Renamer.rename(b)
+
+    // Update usage information
+    val usage = C.usage
+
+    renamedIds.foreach { case (from, to) =>
+      usage.get(from) match {
+        case Some(info) => usage.update(to, info)
+        case None => ()
+      }
+    }
+
+    val newUsage = usage.collect { case (id, usage) if util.show(id) contains "foreach" => (id, usage) }
 
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)

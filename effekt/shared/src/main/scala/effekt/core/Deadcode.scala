@@ -31,7 +31,7 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
 
 object Deadcode {
   def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
-    val reachable = Reachable(entrypoints, m.definitions.map(d => d.id -> d).toMap)
+    val reachable = Reachable(entrypoints, m)
     Deadcode(reachable).rewrite(m)
   def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     remove(Set(entrypoint), m)

@@ -115,11 +115,15 @@ class Reachable(
 }
 
 object Reachable {
+
   def apply(entrypoints: Set[Id], definitions: Map[Id, Definition]): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
     entrypoints.foreach(d => analysis.process(d)(using definitions))
     analysis.reachable
   }
+
+  def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] =
+    apply(entrypoints, m.definitions.map(d => d.id -> d).toMap)
 
   def apply(m: ModuleDecl): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
