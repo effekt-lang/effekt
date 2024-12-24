@@ -14,13 +14,13 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     input match {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.checkMain(mod)
-        val optimized = optimize(source, term, core)
+        val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
   def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-    val tree = Deadcode.remove(mainSymbol, core)
+    val tree = Context.timed("deadcode-elimination", source.name) { Deadcode.remove(mainSymbol, core) }
 
     if !Context.config.optimize() then return tree;
 
@@ -36,10 +36,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     // we normalize twice in order to deadcode -> remove tailresumption
-    val normalized1 = normalizeOnce(lifted)
+    val normalized1 = Context.timed("normalize-1", source.name) { normalizeOnce(lifted) }
+    val normalized2 = Context.timed("normalize-2", source.name) { normalizeOnce(normalized1) }
 
-    // println(util.show(normalized1))
-    val normalized2 = normalizeOnce(normalized1)
     normalized2
-
 }
