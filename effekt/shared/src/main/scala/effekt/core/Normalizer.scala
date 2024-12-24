@@ -49,6 +49,12 @@ object Normalizer {
       case None => true
     }
 
+  def isOnce(id: Id)(using ctx: Context): Boolean =
+    ctx.usage.get(id) match {
+      case Some(value) => value == Usage.Once
+      case None => false
+    }
+
   def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
@@ -94,8 +100,8 @@ object Normalizer {
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
         Active.Stuck(x)
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(value) if value.size > C.maxInlineSize => Active.Stuck(x)
-        case Some(value)                                 => active(value)
+        case Some(value) if value.size <= C.maxInlineSize || isOnce(id) => active(value)
+        case Some(value)                                 => Active.Stuck(x)
         case None                                        => Active.Stuck(x)
       }
       case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
