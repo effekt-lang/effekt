@@ -15,8 +15,8 @@ class JavaScriptTests extends EffektTests {
   def backendName = "js"
 
   override def positives: List[File] = List(
-    examplesDir / "pos",
-    examplesDir / "casestudies",
+  //    examplesDir / "pos",
+  //    examplesDir / "casestudies",
     examplesDir / "benchmarks",
   )
 

@@ -28,7 +28,7 @@ def parse(a: Int): Unit / {Read, Emit, Stop} = {
       do Stop()
     }
 }
-  
+
 def sum { action: () => Unit / Emit } = {
   var s = 0;
   try {

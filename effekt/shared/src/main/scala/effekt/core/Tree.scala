@@ -304,7 +304,7 @@ enum Stmt extends Tree {
   case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // (Type-monomorphic?) Regions
-  case Region(body: Block)
+  case Region(body: BlockLit)
   case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
@@ -386,12 +386,7 @@ object normal {
 
   def invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
     callee match {
-      case Block.New(impl) =>
-        val Operation(name, tps, cps, vps, bps, body) =
-           impl.operations.find(op => op.name == method).getOrElse {
-             INTERNAL_ERROR("Should not happen")
-           }
-        reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
+      case Block.New(impl) => reduce(impl, method, targs, vargs, bargs)
       case other => Invoke(callee, method, methodTpe, targs, vargs, bargs)
     }
 
@@ -462,6 +457,13 @@ object normal {
 
     scope(bindings, body)
   }
+
+  def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
+    val Operation(name, tps, cps, vps, bps, body) =
+      impl.operations.find(op => op.name == method).getOrElse {
+        INTERNAL_ERROR("Should not happen")
+      }
+    reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
 
   def run(s: Stmt): Expr = s match {
     case Stmt.Return(expr) => expr
@@ -838,6 +840,15 @@ object substitutions {
       case h : Hole => h
     }
 
+  def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
+      BlockLit(tparams, cparams,
+        vparams.map(p => substitute(p)(using shadowedTypelevel)),
+        bparams.map(p => substitute(p)(using shadowedTypelevel)),
+        substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
+  }
+
   def substituteAsVar(id: Id)(using subst: Substitution): Id =
     subst.blocks.get(id) map {
       case BlockVar(x, _, _) => x
@@ -848,19 +859,9 @@ object substitutions {
     block match {
       case BlockVar(id, tpe, capt) if subst.blocks.isDefinedAt(id) => subst.blocks(id)
       case BlockVar(id, tpe, capt) => BlockVar(id, substitute(tpe), substitute(capt))
-
-      case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
-        BlockLit(tparams, cparams,
-          vparams.map(p => substitute(p)(using shadowedTypelevel)),
-          bparams.map(p => substitute(p)(using shadowedTypelevel)),
-          substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
-
-      case Unbox(pure) =>
-        Unbox(substitute(pure))
-
-      case New(impl) =>
-        New(substitute(impl))
+      case b: BlockLit => substitute(b)
+      case Unbox(pure) => Unbox(substitute(pure))
+      case New(impl) => New(substitute(impl))
     }
 
   def substitute(pure: Pure)(using subst: Substitution): Pure =

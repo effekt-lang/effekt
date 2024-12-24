@@ -57,9 +57,13 @@ class Reachable(
       definitions.foreach {
         case d: Definition.Def =>
           currentDefs += d.id -> d // recursive
-          process(d)(using currentDefs)
+          // Do NOT process them here, since this would mean the definition is used
+          // process(d)(using currentDefs)
         case d: Definition.Let =>
-          process(d)(using currentDefs)
+          // DO only process if NOT pure
+          if (d.binding.capt.nonEmpty) {
+            process(d)(using currentDefs)
+          }
           currentDefs += d.id -> d // non-recursive
       }
       process(body)(using currentDefs)
@@ -115,11 +119,15 @@ class Reachable(
 }
 
 object Reachable {
+
   def apply(entrypoints: Set[Id], definitions: Map[Id, Definition]): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
     entrypoints.foreach(d => analysis.process(d)(using definitions))
     analysis.reachable
   }
+
+  def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] =
+    apply(entrypoints, m.definitions.map(d => d.id -> d).toMap)
 
   def apply(m: ModuleDecl): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
@@ -128,7 +136,7 @@ object Reachable {
     analysis.reachable
   }
 
-  def apply(s: Stmt.Scope): Map[Id, Usage] = {
+  def apply(s: Stmt): Map[Id, Usage] = {
     val analysis = new Reachable(Map.empty, Nil, Set.empty)
     analysis.process(s)(using Map.empty)
     analysis.reachable

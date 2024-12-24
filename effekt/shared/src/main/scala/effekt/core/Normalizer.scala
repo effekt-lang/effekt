@@ -1,0 +1,384 @@
+package effekt
+package core
+
+import effekt.core.Block.BlockLit
+import effekt.util.messages.INTERNAL_ERROR
+
+import scala.collection.mutable
+
+/**
+ * Removes "cuts", that is it performs a step of computation if enough information
+ * is available.
+ *
+ *    def foo(n: Int) = return n + 1
+ *
+ *    foo(42)
+ *
+ * becomes
+ *
+ *    def foo(n: Int) = return n + 1
+ *    return 42 + 1
+ *
+ * removing the overhead of the function call.
+ */
+object Normalizer {
+
+  case class Context(
+    blocks: Map[Id, Block],
+    exprs: Map[Id, Expr],
+    decls: DeclarationContext,    // for field selection
+    usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
+    maxInlineSize: Int
+  ) {
+    def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
+    def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
+  }
+
+  def blockFor(id: Id)(using ctx: Context): Option[Block] =
+    ctx.blocks.get(id)
+
+  def exprFor(id: Id)(using ctx: Context): Option[Expr] =
+    ctx.exprs.get(id)
+
+  // we assume it is recursive, if we do not have any information...
+  def isRecursive(id: Id)(using ctx: Context): Boolean =
+    ctx.usage.get(id) match {
+      case Some(value) => value == Usage.Recursive
+      // We assume it is recursive, if (for some reason) we do not have information.
+      // This is, however, a strange case since this means we call a function we deemed unreachable.
+      case None => true
+    }
+
+  def isOnce(id: Id)(using ctx: Context): Boolean =
+    ctx.usage.get(id) match {
+      case Some(value) => value == Usage.Once
+      case None => false
+    }
+
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+    // usage information is used to detect recursive functions (and not inline them)
+    val usage = Reachable(entrypoints, m)
+
+    val defs = m.definitions.collect {
+      case Definition.Def(id, block) => id -> block
+    }.toMap
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
+
+    val (normalizedDefs, _) = normalize(m.definitions)(using context)
+    m.copy(definitions = normalizedDefs)
+  }
+
+  def normalize(definitions: List[Definition])(using ctx: Context): (List[Definition], Context) =
+    var contextSoFar = ctx
+    val defs = definitions.map {
+      case Definition.Def(id, block) =>
+        given Context = contextSoFar
+        val normalized = active(block).get
+        contextSoFar = contextSoFar.bind(id, normalized)
+        Definition.Def(id, normalized)
+      case Definition.Let(id, tpe, expr) =>
+        val normalized = active(expr)(using contextSoFar).get
+        contextSoFar = contextSoFar.bind(id, normalized)
+        Definition.Let(id, tpe, normalized)
+    }
+    (defs, contextSoFar)
+
+  // TODO better name
+  enum Active[V, S] {
+    case Value(v: V)
+    case Stuck(s: S)
+
+    def get: V | S = this match {
+      case Active.Value(v) => v
+      case Active.Stuck(s) => s
+    }
+  }
+
+  // we need a better name for this... it is doing a bit more than looking up
+  def active[R](b: Block)(using C: Context): Active[BlockLit | New, Block] =
+    normalize(b) match {
+      case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
+        Active.Stuck(x)
+      case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
+        case Some(value) if value.size <= C.maxInlineSize || isOnce(id) => active(value)
+        case Some(value)                                 => Active.Stuck(x)
+        case None                                        => Active.Stuck(x)
+      }
+      case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+        Active.Value(b)
+      case Block.Unbox(pure) => active(pure) match {
+        case Active.Value(Pure.Box(b, annotatedCapture)) => active(b)
+        case other => Active.Stuck(Block.Unbox(pure))
+      }
+      case b @ Block.New(impl) => Active.Value(b)
+    }
+
+  def active(e: Expr)(using Context): Active[Pure.Make | Pure.Literal | Pure.Box, Expr] =
+    normalize(e) match {
+      case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
+        case Some(p: Pure.Make)    => Active.Value(p)
+        case Some(p: Pure.Literal) => Active.Value(p)
+        case Some(p: Pure.Box)     => Active.Value(p)
+        // We cannot inline side-effecting expressions
+        case Some(other) if other.capt.isEmpty  => Active.Stuck(other)
+        case _ => Active.Stuck(x)
+      }
+      case other => Active.Stuck(other)
+    }
+
+  def normalize(d: Definition)(using C: Context): Definition = d match {
+    case Definition.Def(id, block)        => Definition.Def(id, normalize(block))
+    case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, normalize(binding))
+  }
+
+  def normalize(s: Stmt)(using C: Context): Stmt = s match {
+
+    case Stmt.Scope(definitions, body) =>
+      val (defs, ctx) = normalize(definitions)
+      scope(defs, normalize(body)(using ctx))
+
+
+    // Redexes
+    // -------
+    case Stmt.App(b, targs, vargs, bargs) =>
+      active(b) match {
+        case Active.Value(lit : Block.BlockLit) =>
+          reduce(lit, targs, vargs.map(normalize), bargs.map(normalize))
+        case Active.Value(b) => ???
+        case Active.Stuck(x) =>
+          Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
+      }
+    case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
+      active(b) match {
+        case Active.Value(Block.New(impl)) =>
+          normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
+        case Active.Value(b) => ???
+        case Active.Stuck(x) => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
+      }
+
+    case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
+      case Active.Value(Pure.Make(data, tag, vargs)) if clauses.exists { case (id, _) => id == tag } =>
+        val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
+        normalize(reduce(clause, Nil, vargs.map(normalize), Nil))
+      case Active.Value(Pure.Make(data, tag, vargs)) if default.isDefined =>
+        normalize(default.get)
+      case Active.Value(other) => ???
+      case Active.Stuck(_) =>
+        val normalized = normalize(scrutinee)
+        Stmt.Match(normalized, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
+    }
+
+    case Stmt.Shift(prompt, body) => normalize(body) match {
+      case BlockLit(tparams, cparams, vparams, List(k), body) if tailResumptive(k.id, body) =>
+        removeTailResumption(k.id, body)
+      case normalized @ BlockLit(tparams, cparams, vparams, ks, body) =>
+        Shift(prompt, normalized)
+    }
+
+    // "Congruences"
+    // -------------
+
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
+    case Stmt.Return(expr) => Return(normalize(expr))
+    case Stmt.Val(id, tpe, binding, body) => normalize(binding) match {
+      case Stmt.Return(expr) =>
+        scope(List(Definition.Let(id, tpe, expr)),
+          normalize(body)(using C.bind(id, expr)))
+
+      case Stmt.Scope(definitions, Stmt.Return(expr)) =>
+        scope(definitions :+ Definition.Let(id, tpe, expr),
+          normalize(body)(using C.bind(id, expr)))
+
+      case other => Stmt.Val(id, tpe, other, normalize(body))
+    }
+    case Stmt.If(cond, thn, els) => active(cond) match {
+      case Active.Value(Pure.Literal(true, annotatedType)) => normalize(thn)
+      case Active.Value(Pure.Literal(false, annotatedType)) => normalize(els)
+      case _ => If(normalize(cond), normalize(thn), normalize(els))
+    }
+    case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
+
+    case Stmt.Resume(k, body) => Resume(k, normalize(body))
+    case Stmt.Region(body) => Region(normalize(body))
+    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, normalize(init), capture, normalize(body))
+    case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)
+    case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, normalize(value))
+    case Stmt.Hole() => s
+  }
+  def normalize(b: BlockLit)(using Context): BlockLit =
+    b match {
+      case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        BlockLit(tparams, cparams, vparams, bparams, normalize(body))
+    }
+
+  def normalize(b: Block)(using Context): Block = b match {
+    case b @ Block.BlockVar(id, _, _) => b
+    case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => normalize(b)
+    case Block.Unbox(pure) => normalize(pure) match {
+      case Pure.Box(b, capt) => b
+      case other => Block.Unbox(other)
+    }
+    case Block.New(impl) => New(normalize(impl))
+  }
+
+  def normalize(s: Implementation)(using Context): Implementation =
+    s match {
+      case Implementation(interface, operations) => Implementation(interface, operations.map { op =>
+        op.copy(body = normalize(op.body))
+      })
+    }
+
+  def normalize(p: Pure)(using ctx: Context): Pure = p match {
+    // [[ Constructor(f = v).f ]] = [[ v ]]
+    case Pure.Select(target, field, annotatedType) => active(target) match {
+      case Active.Value(Pure.Make(datatype, tag, fields)) =>
+        val constructor = ctx.decls.findConstructor(tag).get
+        val expr = (constructor.fields zip fields).collectFirst { case (f, expr) if f.id == field => expr }.get
+        normalize(expr)
+      case _ => Pure.Select(normalize(target), field, annotatedType)
+    }
+
+    // [[ box (unbox e) ]] = [[ e ]]
+    case Pure.Box(b, annotatedCapture) => active(b) match {
+      case Active.Stuck(Block.Unbox(e)) => e
+      case _ => Pure.Box(normalize(b), annotatedCapture)
+    }
+
+    // congruences
+    case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
+    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(normalize))
+    case Pure.ValueVar(id, annotatedType) => p
+    case Pure.Literal(value, annotatedType) => p
+  }
+
+  def normalize(e: Expr)(using Context): Expr = e match {
+    case DirectApp(b, targs, vargs, bargs) => DirectApp(normalize(b), targs, vargs.map(normalize), bargs.map(normalize))
+    case Run(s) => run(normalize(s))
+    case pure: Pure => normalize(pure)
+  }
+
+
+  // Smart Constructors
+  // ------------------
+
+  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
+  // TODO maybe drop bindings that are not free in body...
+  def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
+    case Stmt.Scope(others, body) => scope(definitions ++ others, body)
+    case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
+  }
+
+  def run(s: Stmt): Expr = s match {
+    case Stmt.Return(expr) => expr
+    case _ => Run(s)
+  }
+
+  // Helpers for tail resumption optimization
+  // ----------------------------------------
+
+  // A simple syntactic check whether this stmt is tailresumptive in k
+  def tailResumptive(k: Id, stmt: Stmt): Boolean =
+    def freeInStmt(stmt: Stmt): Boolean = Variables.free(stmt).containsBlock(k)
+    def freeInExpr(expr: Expr): Boolean = Variables.free(expr).containsBlock(k)
+    def freeInDef(definition: Definition): Boolean = Variables.free(definition).containsBlock(k)
+
+    stmt match {
+      case Stmt.Scope(definitions, body) => definitions.forall { d => !freeInDef(d) } && tailResumptive(k, body)
+      case Stmt.Return(expr) => false
+      case Stmt.Val(id, annotatedTpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
+      case Stmt.App(callee, targs, vargs, bargs) => false
+      case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
+      case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
+      // Interestingly, we introduce a join point making this more difficult to implement properly
+      case Stmt.Match(scrutinee, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
+        case (_, BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
+      } && default.forall { stmt => tailResumptive(k, stmt) }
+      case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
+      case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
+      case Stmt.Put(id, annotatedCapt, value) => false
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
+      case Stmt.Shift(prompt, body) => false
+      case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
+      case Stmt.Hole() => true
+    }
+
+  def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
+    case Stmt.Scope(definitions, body) => Stmt.Scope(definitions, removeTailResumption(k, body))
+    case Stmt.Val(id, annotatedTpe, binding, body) => Stmt.Val(id, annotatedTpe, binding, removeTailResumption(k, body))
+    case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
+    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
+      case (tag, block) => tag -> removeTailResumption(k, block)
+    }, default.map(removeTailResumption(k, _)))
+    case Stmt.Region(body : BlockLit) =>
+      Stmt.Region(removeTailResumption(k, body))
+    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
+    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
+    case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))
+    case Stmt.Resume(k2, body) if k2.id == k => body
+
+    case Stmt.Resume(k, body) => stmt
+    case Stmt.Shift(prompt, body) => stmt
+    case Stmt.Hole() => stmt
+    case Stmt.Return(expr) => stmt
+    case Stmt.App(callee, targs, vargs, bargs) => stmt
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
+    case Stmt.Get(id, annotatedCapt, annotatedTpe) => stmt
+    case Stmt.Put(id, annotatedCapt, value) => stmt
+  }
+
+  def removeTailResumption(k: Id, block: BlockLit): BlockLit = block match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockLit(tparams, cparams, vparams, bparams, removeTailResumption(k, body))
+  }
+
+  // Helpers for beta-reduction
+  // --------------------------
+
+  // TODO we should rename when inlining to maintain barendregdt, but need to copy usage information...
+  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
+
+    // Only bind if not already a variable!!!
+    var ids: Set[Id] = Set.empty
+    var bindings: List[Definition.Def] = Nil
+    var bvars: List[Block.BlockVar] = Nil
+
+    // (1) first bind
+    bargs foreach {
+      case x: Block.BlockVar => bvars = bvars :+ x
+      // introduce a binding
+      case block =>
+        val id = symbols.TmpBlock("blockBinding")
+        bindings = bindings :+ Definition.Def(id, block)
+        bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
+        ids += id
+    }
+
+    val (renamedLit: BlockLit, renamedIds) = Renamer.rename(b)
+
+    // Update usage information
+    val usage = C.usage
+
+    renamedIds.foreach { case (from, to) =>
+      usage.get(from) match {
+        case Some(info) => usage.update(to, info)
+        case None => ()
+      }
+    }
+
+    val newUsage = usage.collect { case (id, usage) if util.show(id) contains "foreach" => (id, usage) }
+
+    // (2) substitute
+    val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
+
+    normalize(scope(bindings, body))
+  }
+
+  def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =
+    val Operation(name, tps, cps, vps, bps, body) =
+      impl.operations.find(op => op.name == method).getOrElse {
+        INTERNAL_ERROR("Should not happen")
+      }
+    reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
+}

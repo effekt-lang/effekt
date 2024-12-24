@@ -14,7 +14,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     input match {
       case CoreTransformed(source, tree, mod, core) =>
         val term = Context.checkMain(mod)
-        val optimized = optimize(source, term, core)
+        val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
         Some(CoreTransformed(source, tree, mod, optimized))
     }
 
@@ -25,12 +25,19 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     if !Context.config.optimize() then return tree;
 
     // (2) lift static arguments (worker/wrapper)
-    val lifted = Context.timed("static-argument-transformation", source.name) {
-      StaticArguments.transform(mainSymbol, tree)
+    val lifted = StaticArguments.transform(mainSymbol, tree)
+
+    val inlineSize = Context.config.maxInlineSize().toInt
+
+    def normalizeOnce(m: ModuleDecl) = {
+      val anfed = BindSubexpressions.transform(m)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, inlineSize)
+      Deadcode.remove(mainSymbol, normalized)
     }
 
-    // (3) inline unique block definitions
-    Context.timed("inliner", source.name) {
-      Inline.full(Set(mainSymbol), lifted, Context.config.maxInlineSize().toInt)
-    }
+    // we normalize twice in order to deadcode -> remove tailresumption
+    val normalized1 = Context.timed("normalize-1", source.name) { normalizeOnce(lifted) }
+    val normalized2 = Context.timed("normalize-2", source.name) { normalizeOnce(normalized1) }
+
+    normalized2
 }
