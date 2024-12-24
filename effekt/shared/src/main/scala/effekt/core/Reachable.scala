@@ -57,9 +57,13 @@ class Reachable(
       definitions.foreach {
         case d: Definition.Def =>
           currentDefs += d.id -> d // recursive
-          process(d)(using currentDefs)
+          // Do NOT process them here, since this would mean the definition is used
+          // process(d)(using currentDefs)
         case d: Definition.Let =>
-          process(d)(using currentDefs)
+          // DO only process if NOT pure
+          if (d.binding.capt.nonEmpty) {
+            process(d)(using currentDefs)
+          }
           currentDefs += d.id -> d // non-recursive
       }
       process(body)(using currentDefs)
