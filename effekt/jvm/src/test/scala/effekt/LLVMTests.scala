@@ -48,12 +48,6 @@ class LLVMTests extends EffektTests {
    */
   lazy val missingFeatures: List[File] = List(
 
-    // TODO
-
-    // Objects not inlined anymore into passive positions (as desired),
-    // but now requires top-level objects, which are not supported by Machine
-    examplesDir / "pos" /" bidirectional" /" res_obj_boxed.effekt",
-
     // now show instance for records / datatypes
     examplesDir / "pos" / "builtins.effekt",
     examplesDir / "pos" / "namespaces.effekt",
