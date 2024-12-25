@@ -1,5 +1,6 @@
 package effekt
 package core
+package optimizer
 
 /**
  * A simple reachability analysis.

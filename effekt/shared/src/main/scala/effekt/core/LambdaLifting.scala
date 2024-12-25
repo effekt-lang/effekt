@@ -7,7 +7,7 @@ import scala.collection.mutable
 import effekt.core.Variables
 import effekt.core.Variables.{ all, bound, free }
 
-import effekt.core.normal.scope
+import effekt.core.optimizer.{ Normalizer => normal }
 
 class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite {
 
@@ -61,7 +61,7 @@ class LambdaLifting(m: core.ModuleDecl)(using Context) extends core.Tree.Rewrite
 
   override def stmt = {
     case core.Scope(defs, body) =>
-      scope(defs.flatMap {
+      normal.Scope(defs.flatMap {
         // we lift named local definitions to the toplevel
         case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
           lifted.append(Definition.Def(id,

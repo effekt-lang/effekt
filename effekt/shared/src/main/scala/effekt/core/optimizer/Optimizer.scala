@@ -1,5 +1,6 @@
 package effekt
 package core
+package optimizer
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context

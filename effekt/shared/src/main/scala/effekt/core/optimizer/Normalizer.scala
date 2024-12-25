@@ -1,7 +1,7 @@
 package effekt
 package core
+package optimizer
 
-import effekt.core.Block.BlockLit
 import effekt.util.messages.INTERNAL_ERROR
 
 import scala.annotation.tailrec
@@ -28,7 +28,7 @@ import scala.collection.mutable
  *
  * If the function is called exactly once, it is inlined regardless of the maxInlineSize.
  */
-object Normalizer {
+object Normalizer { normal =>
 
   case class Context(
     blocks: Map[Id, Block],
@@ -141,8 +141,7 @@ object Normalizer {
 
     case Stmt.Scope(definitions, body) =>
       val (defs, ctx) = normalize(definitions)
-      scope(defs, normalize(body)(using ctx))
-
+      normal.Scope(defs, normalize(body)(using ctx))
 
     // Redexes
     // -------
@@ -189,11 +188,11 @@ object Normalizer {
       //        normalize(body)(using C.bind(id, exprFor(x.id).getOrElse(x)))
 
       case Stmt.Return(expr) =>
-        scope(List(Definition.Let(id, tpe, expr)),
+        normal.Scope(List(Definition.Let(id, tpe, expr)),
           normalize(body)(using C.bind(id, expr)))
 
       case Stmt.Scope(definitions, Stmt.Return(expr)) =>
-        scope(definitions :+ Definition.Let(id, tpe, expr),
+        normal.Scope(definitions :+ Definition.Let(id, tpe, expr),
           normalize(body)(using C.bind(id, expr)))
 
       case other => Stmt.Val(id, tpe, other, normalize(body))
@@ -224,10 +223,7 @@ object Normalizer {
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => normalize(b)
 
     // [[ unbox (box b) ]] = [[ b ]]
-    case Block.Unbox(pure) => normalize(pure) match {
-      case Pure.Box(b, capt) => b
-      case other => Block.Unbox(other)
-    }
+    case Block.Unbox(pure) => normal.Unbox(normalize(pure))
     case Block.New(impl) => New(normalize(impl))
   }
 
@@ -249,10 +245,7 @@ object Normalizer {
     }
 
     // [[ box (unbox e) ]] = [[ e ]]
-    case Pure.Box(b, annotatedCapture) => active(b) match {
-      case Active.Stuck(Block.Unbox(e)) => e
-      case _ => Pure.Box(normalize(b), annotatedCapture)
-    }
+    case Pure.Box(b, annotatedCapture) => normal.Box(active(b).get, annotatedCapture)
 
     // congruences
     case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
@@ -265,10 +258,7 @@ object Normalizer {
     case DirectApp(b, targs, vargs, bargs) => DirectApp(normalize(b), targs, vargs.map(normalize), bargs.map(normalize))
 
     // [[ run (return e) ]] = [[ e ]]
-    case Run(s) => normalize(s) match {
-      case Stmt.Return(expr) => expr
-      case normalized => Run(normalized)
-    }
+    case Run(s) => normal.Run(normalize(s))
 
     case pure: Pure => normalize(pure)
   }
@@ -276,14 +266,56 @@ object Normalizer {
 
   // Smart Constructors
   // ------------------
+  // They are purposefully not _that_ smart to be usable by other phases
+  // as well.
 
   // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
-  // TODO maybe drop bindings that are not free in body...
+  def Val(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt =
+    (binding, body) match {
+
+      // [[ val x = STMT; return x ]] == STMT
+      case (_, Stmt.Return(Pure.ValueVar(other, _))) if other == id =>
+        binding
+
+      //  [[ val x = return EXPR; STMT ]] = [[ let x = EXPR; STMT ]]
+      //
+      // This opt is too good for JS: it blows the stack on
+      // recursive functions that are used to encode while...
+      //
+      // The solution to this problem is implemented in core.MakeStackSafe:
+      //   all recursive functions that could blow the stack are trivially wrapped
+      //   again, after optimizing.
+      case (Stmt.Return(expr), body) =>
+        normal.Scope(List(Definition.Let(id, tpe, expr)), body)
+
+      case _ => Stmt.Val(id, tpe, binding, body)
+    }
+
+  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
   @tailrec
-  def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
-    case Stmt.Scope(others, body) => scope(definitions ++ others, body)
+  def Scope(definitions: List[Definition], body: Stmt): Stmt = body match {
+    case Stmt.Scope(others, body) => normal.Scope(definitions ++ others, body)
     case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
   }
+
+  // run { return e }  =  e
+  def Run(s: Stmt): Expr = s match {
+    case Stmt.Return(expr) => expr
+    case _ => core.Run(s)
+  }
+
+  // box (unbox p)  =  p
+  def Box(b: Block, capt: Captures): Pure = b match {
+    case Block.Unbox(pure) => pure
+    case b => Pure.Box(b, capt)
+  }
+
+  // unbox (box b)  =  b
+  def Unbox(p: Pure): Block = p match {
+    case Pure.Box(b, _) => b
+    case p => Block.Unbox(p)
+  }
+
 
   // Helpers for beta-reduction
   // --------------------------
@@ -324,7 +356,7 @@ object Normalizer {
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
-    normalize(scope(bindings, body))
+    normalize(normal.Scope(bindings, body))
   }
 
   def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =

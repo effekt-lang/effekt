@@ -1,5 +1,6 @@
 package effekt
 package core
+package optimizer
 
 object RemoveTailResumptions {
 

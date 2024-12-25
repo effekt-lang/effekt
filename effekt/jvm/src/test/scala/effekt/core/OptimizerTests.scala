@@ -1,5 +1,8 @@
 package effekt
 package core
+
+import effekt.core.optimizer.*
+
 import effekt.symbols
 
 class OptimizerTests extends CoreTests {
