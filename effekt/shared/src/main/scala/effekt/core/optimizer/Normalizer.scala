@@ -347,6 +347,7 @@ object Normalizer { normal =>
           case (Some(Usage.Recursive), u2) => Some(Usage.Recursive)
           case (u1, Some(Usage.Recursive)) => Some(Usage.Recursive)
         }
+        usage.remove(x.id)
         newUsage.foreach { u => usage.update(x.id, u) }
         bvars = bvars :+ x
       // introduce a binding
