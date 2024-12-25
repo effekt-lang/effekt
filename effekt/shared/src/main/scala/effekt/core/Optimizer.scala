@@ -35,9 +35,9 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       Deadcode.remove(mainSymbol, normalized)
     }
 
-    // we normalize twice in order to deadcode -> remove tailresumption
     val normalized1 = Context.timed("normalize-1", source.name) { normalizeOnce(lifted) }
-    val normalized2 = Context.timed("normalize-2", source.name) { normalizeOnce(normalized1) }
+    val withoutTail = Context.timed("tail-resumptions", source.name) { RemoveTailResumptions(normalized1) }
+    val normalized2 = Context.timed("normalize-2", source.name) { normalizeOnce(withoutTail) }
 
     normalized2
 }

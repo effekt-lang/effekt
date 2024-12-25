@@ -4,6 +4,7 @@ package core
 import effekt.core.Block.BlockLit
 import effekt.util.messages.INTERNAL_ERROR
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 /**
@@ -19,7 +20,13 @@ import scala.collection.mutable
  *    def foo(n: Int) = return n + 1
  *    return 42 + 1
  *
- * removing the overhead of the function call.
+ * removing the overhead of the function call. Under the following conditions,
+ * cuts are _not_ removed:
+ *
+ * - the definition is recursive
+ * - inlining would exceed the maxInlineSize
+ *
+ * If the function is called exactly once, it is inlined regardless of the maxInlineSize.
  */
 object Normalizer {
 
@@ -40,7 +47,6 @@ object Normalizer {
   def exprFor(id: Id)(using ctx: Context): Option[Expr] =
     ctx.exprs.get(id)
 
-  // we assume it is recursive, if we do not have any information...
   def isRecursive(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Recursive
@@ -100,9 +106,9 @@ object Normalizer {
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
         Active.Stuck(x)
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(value) if value.size <= C.maxInlineSize || isOnce(id) => active(value)
-        case Some(value)                                 => Active.Stuck(x)
-        case None                                        => Active.Stuck(x)
+        case Some(value) if isOnce(id) || value.size <= C.maxInlineSize => active(value)
+        case Some(value) => Active.Stuck(x)
+        case None        => Active.Stuck(x)
       }
       case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
         Active.Value(b)
@@ -119,7 +125,7 @@ object Normalizer {
         case Some(p: Pure.Make)    => Active.Value(p)
         case Some(p: Pure.Literal) => Active.Value(p)
         case Some(p: Pure.Box)     => Active.Value(p)
-        // We cannot inline side-effecting expressions
+        // We only inline non side-effecting expressions
         case Some(other) if other.capt.isEmpty  => Active.Stuck(other)
         case _ => Active.Stuck(x)
       }
@@ -168,19 +174,20 @@ object Normalizer {
         Stmt.Match(normalized, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
     }
 
-    case Stmt.Shift(prompt, body) => normalize(body) match {
-      case BlockLit(tparams, cparams, vparams, List(k), body) if tailResumptive(k.id, body) =>
-        removeTailResumption(k.id, body)
-      case normalized @ BlockLit(tparams, cparams, vparams, ks, body) =>
-        Shift(prompt, normalized)
+    // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
+    case Stmt.If(cond, thn, els) => active(cond) match {
+      case Active.Value(Pure.Literal(true, annotatedType)) => normalize(thn)
+      case Active.Value(Pure.Literal(false, annotatedType)) => normalize(els)
+      case _ => If(normalize(cond), normalize(thn), normalize(els))
     }
 
-    // "Congruences"
-    // -------------
-
-    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
-    case Stmt.Return(expr) => Return(normalize(expr))
+    // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
     case Stmt.Val(id, tpe, binding, body) => normalize(binding) match {
+
+      // TODO maintain normal form and avoid aliasing
+      //      case Stmt.Return(x : ValueVar) =>
+      //        normalize(body)(using C.bind(id, exprFor(x.id).getOrElse(x)))
+
       case Stmt.Return(expr) =>
         scope(List(Definition.Let(id, tpe, expr)),
           normalize(body)(using C.bind(id, expr)))
@@ -191,13 +198,14 @@ object Normalizer {
 
       case other => Stmt.Val(id, tpe, other, normalize(body))
     }
-    case Stmt.If(cond, thn, els) => active(cond) match {
-      case Active.Value(Pure.Literal(true, annotatedType)) => normalize(thn)
-      case Active.Value(Pure.Literal(false, annotatedType)) => normalize(els)
-      case _ => If(normalize(cond), normalize(thn), normalize(els))
-    }
-    case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
 
+    // "Congruences"
+    // -------------
+
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
+    case Stmt.Shift(prompt, body) => Shift(prompt, normalize(body))
+    case Stmt.Return(expr) => Return(normalize(expr))
+    case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
     case Stmt.Resume(k, body) => Resume(k, normalize(body))
     case Stmt.Region(body) => Region(normalize(body))
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, normalize(init), capture, normalize(body))
@@ -214,6 +222,8 @@ object Normalizer {
   def normalize(b: Block)(using Context): Block = b match {
     case b @ Block.BlockVar(id, _, _) => b
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => normalize(b)
+
+    // [[ unbox (box b) ]] = [[ b ]]
     case Block.Unbox(pure) => normalize(pure) match {
       case Pure.Box(b, capt) => b
       case other => Block.Unbox(other)
@@ -253,7 +263,13 @@ object Normalizer {
 
   def normalize(e: Expr)(using Context): Expr = e match {
     case DirectApp(b, targs, vargs, bargs) => DirectApp(normalize(b), targs, vargs.map(normalize), bargs.map(normalize))
-    case Run(s) => run(normalize(s))
+
+    // [[ run (return e) ]] = [[ e ]]
+    case Run(s) => normalize(s) match {
+      case Stmt.Return(expr) => expr
+      case normalized => Run(normalized)
+    }
+
     case pure: Pure => normalize(pure)
   }
 
@@ -263,74 +279,10 @@ object Normalizer {
 
   // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
   // TODO maybe drop bindings that are not free in body...
+  @tailrec
   def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
     case Stmt.Scope(others, body) => scope(definitions ++ others, body)
     case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
-  }
-
-  def run(s: Stmt): Expr = s match {
-    case Stmt.Return(expr) => expr
-    case _ => Run(s)
-  }
-
-  // Helpers for tail resumption optimization
-  // ----------------------------------------
-
-  // A simple syntactic check whether this stmt is tailresumptive in k
-  def tailResumptive(k: Id, stmt: Stmt): Boolean =
-    def freeInStmt(stmt: Stmt): Boolean = Variables.free(stmt).containsBlock(k)
-    def freeInExpr(expr: Expr): Boolean = Variables.free(expr).containsBlock(k)
-    def freeInDef(definition: Definition): Boolean = Variables.free(definition).containsBlock(k)
-
-    stmt match {
-      case Stmt.Scope(definitions, body) => definitions.forall { d => !freeInDef(d) } && tailResumptive(k, body)
-      case Stmt.Return(expr) => false
-      case Stmt.Val(id, annotatedTpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
-      case Stmt.App(callee, targs, vargs, bargs) => false
-      case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
-      case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
-      // Interestingly, we introduce a join point making this more difficult to implement properly
-      case Stmt.Match(scrutinee, clauses, default) => !freeInExpr(scrutinee) && clauses.forall {
-        case (_, BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
-      } && default.forall { stmt => tailResumptive(k, stmt) }
-      case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
-      case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
-      case Stmt.Put(id, annotatedCapt, value) => false
-      case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
-      case Stmt.Shift(prompt, body) => false
-      case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
-      case Stmt.Hole() => true
-    }
-
-  def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
-    case Stmt.Scope(definitions, body) => Stmt.Scope(definitions, removeTailResumption(k, body))
-    case Stmt.Val(id, annotatedTpe, binding, body) => Stmt.Val(id, annotatedTpe, binding, removeTailResumption(k, body))
-    case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
-    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
-      case (tag, block) => tag -> removeTailResumption(k, block)
-    }, default.map(removeTailResumption(k, _)))
-    case Stmt.Region(body : BlockLit) =>
-      Stmt.Region(removeTailResumption(k, body))
-    case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
-    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
-    case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))
-    case Stmt.Resume(k2, body) if k2.id == k => body
-
-    case Stmt.Resume(k, body) => stmt
-    case Stmt.Shift(prompt, body) => stmt
-    case Stmt.Hole() => stmt
-    case Stmt.Return(expr) => stmt
-    case Stmt.App(callee, targs, vargs, bargs) => stmt
-    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
-    case Stmt.Get(id, annotatedCapt, annotatedTpe) => stmt
-    case Stmt.Put(id, annotatedCapt, value) => stmt
-  }
-
-  def removeTailResumption(k: Id, block: BlockLit): BlockLit = block match {
-    case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams, bparams, removeTailResumption(k, body))
   }
 
   // Helpers for beta-reduction
