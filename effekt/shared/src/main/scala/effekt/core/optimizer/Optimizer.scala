@@ -20,25 +20,35 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     }
 
   def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
+
+    var tree = core
+
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
-    val tree = Context.timed("deadcode-elimination", source.name) { Deadcode.remove(mainSymbol, core) }
+    tree = Context.timed("deadcode-elimination", source.name) {
+      Deadcode.remove(mainSymbol, tree)
+    }
 
     if !Context.config.optimize() then return tree;
 
-    // (2) lift static arguments (worker/wrapper)
-    val lifted = StaticArguments.transform(mainSymbol, tree)
+    // (2) lift static arguments
+    tree = Context.timed("static-argument-transformation", source.name) {
+      StaticArguments.transform(mainSymbol, tree)
+    }
 
-    val inlineSize = Context.config.maxInlineSize().toInt
-
-    def normalizeOnce(m: ModuleDecl) = {
+    def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, inlineSize)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
       Deadcode.remove(mainSymbol, normalized)
     }
 
-    val normalized1 = Context.timed("normalize-1", source.name) { normalizeOnce(lifted) }
-    val withoutTail = Context.timed("tail-resumptions", source.name) { RemoveTailResumptions(normalized1) }
-    val normalized2 = Context.timed("normalize-2", source.name) { normalizeOnce(withoutTail) }
+    // (3) normalize once and remove beta redexes
+    tree = Context.timed("normalize-1", source.name) { normalize(tree) }
 
-    normalized2
+    // (4) optimize continuation capture in the tail-resumptive case
+    tree = Context.timed("tail-resumptions", source.name) { RemoveTailResumptions(tree) }
+
+    // (5) normalize again to clean up and remove new redexes
+    tree = Context.timed("normalize-2", source.name) { normalize(tree) }
+
+    tree
 }
