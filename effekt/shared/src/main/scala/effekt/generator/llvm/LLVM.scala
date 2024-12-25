@@ -4,7 +4,6 @@ package llvm
 
 import effekt.context.Context
 import effekt.core.optimizer
-import effekt.core.optimizer.Optimizer
 import effekt.machine
 import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.Source
@@ -40,7 +39,7 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen Optimizer andThen Machine map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen optimizer.Optimizer andThen Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 

@@ -26,16 +26,16 @@ import scala.collection.mutable
  * - the definition is recursive
  * - inlining would exceed the maxInlineSize
  *
- * If the function is called exactly once, it is inlined regardless of the maxInlineSize.
+ * If the function is called _exactly once_, it is inlined regardless of the maxInlineSize.
  */
 object Normalizer { normal =>
 
   case class Context(
     blocks: Map[Id, Block],
     exprs: Map[Id, Expr],
-    decls: DeclarationContext,    // for field selection
+    decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int
+    maxInlineSize: Int             // to control inlining and avoid code bloat
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -52,7 +52,7 @@ object Normalizer { normal =>
       case Some(value) => value == Usage.Recursive
       // We assume it is recursive, if (for some reason) we do not have information.
       // This is, however, a strange case since this means we call a function we deemed unreachable.
-      case None => true
+      case None => true // TODO sys error s"No info for ${id}"
     }
 
   def isOnce(id: Id)(using ctx: Context): Boolean =
@@ -323,33 +323,44 @@ object Normalizer { normal =>
   // TODO we should rename when inlining to maintain barendregdt, but need to copy usage information...
   def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
 
+    // To update usage information
+    val usage = C.usage
+    def copyUsage(from: Id, to: Id) = usage.get(from) match {
+      case Some(info) => usage.update(to, info)
+      case None => ()
+    }
+
     // Only bind if not already a variable!!!
     var ids: Set[Id] = Set.empty
     var bindings: List[Definition.Def] = Nil
     var bvars: List[Block.BlockVar] = Nil
 
     // (1) first bind
-    bargs foreach {
-      case x: Block.BlockVar => bvars = bvars :+ x
+    (b.bparams zip bargs) foreach {
+      case (bparam, x: Block.BlockVar) =>
+
+        // Update usage: u1 + (u2 - 1)
+        val newUsage = (usage.get(bparam.id), usage.get(x.id)) match {
+          case (u1, Some(Usage.Once)) => u1
+          case (u1, None) => u1
+          case (Some(Usage.Once | Usage.Many) | None, Some(Usage.Many)) => Some(Usage.Many)
+          case (Some(Usage.Recursive), u2) => Some(Usage.Recursive)
+          case (u1, Some(Usage.Recursive)) => Some(Usage.Recursive)
+        }
+        newUsage.foreach { u => usage.update(x.id, u) }
+        bvars = bvars :+ x
       // introduce a binding
-      case block =>
+      case (bparam, block) =>
         val id = symbols.TmpBlock("blockBinding")
         bindings = bindings :+ Definition.Def(id, block)
         bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
+        copyUsage(bparam.id, id)
         ids += id
     }
 
     val (renamedLit: BlockLit, renamedIds) = Renamer.rename(b)
 
-    // Update usage information
-    val usage = C.usage
-
-    renamedIds.foreach { case (from, to) =>
-      usage.get(from) match {
-        case Some(info) => usage.update(to, info)
-        case None => ()
-      }
-    }
+    renamedIds.foreach(copyUsage)
 
     val newUsage = usage.collect { case (id, usage) if util.show(id) contains "foreach" => (id, usage) }
 
