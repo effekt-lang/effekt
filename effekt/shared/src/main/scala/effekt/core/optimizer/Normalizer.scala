@@ -50,9 +50,13 @@ object Normalizer { normal =>
   def isRecursive(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Recursive
-      // We assume it is recursive, if (for some reason) we do not have information.
+      // We assume it is recursive, if (for some reason) we do not have information;
+      // since reducing might diverge, otherwise.
+      //
       // This is, however, a strange case since this means we call a function we deemed unreachable.
-      case None => true // TODO sys error s"No info for ${id}"
+      // It _can_ happen, for instance, by updating the usage (subtracting) and not deadcode eliminating.
+      // This is the case for examples/pos/bidirectional/scheduler.effekt
+      case None => true // sys error s"No info for ${id}"
     }
 
   def isOnce(id: Id)(using ctx: Context): Boolean =
@@ -103,9 +107,8 @@ object Normalizer { normal =>
   // we need a better name for this... it is doing a bit more than looking up
   def active[R](b: Block)(using C: Context): Active[BlockLit | New, Block] =
     normalize(b) match {
-      case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) if isRecursive(id) =>
-        Active.Stuck(x)
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
+        case Some(value) if isRecursive(id) => Active.Stuck(x)
         case Some(value) if isOnce(id) || value.size <= C.maxInlineSize => active(value)
         case Some(value) => Active.Stuck(x)
         case None        => Active.Stuck(x)
@@ -326,7 +329,6 @@ object Normalizer { normal =>
 
   // TODO we should rename when inlining to maintain barendregdt, but need to copy usage information...
   def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
-
     // To update usage information
     val usage = C.usage
     def copyUsage(from: Id, to: Id) = usage.get(from) match {
