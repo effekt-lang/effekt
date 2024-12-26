@@ -83,56 +83,44 @@ object Normalizer { normal =>
     val defs = definitions.map {
       case Definition.Def(id, block) =>
         given Context = contextSoFar
-        val normalized = active(block).get
+        val normalized = active(block)
         contextSoFar = contextSoFar.bind(id, normalized)
         Definition.Def(id, normalized)
       case Definition.Let(id, tpe, expr) =>
-        val normalized = active(expr)(using contextSoFar).get
+        val normalized = active(expr)(using contextSoFar)
         contextSoFar = contextSoFar.bind(id, normalized)
         Definition.Let(id, tpe, normalized)
     }
     (defs, contextSoFar)
 
-  // TODO better name
-  enum Active[V, S] {
-    case Value(v: V)
-    case Stuck(s: S)
-
-    def get: V | S = this match {
-      case Active.Value(v) => v
-      case Active.Stuck(s) => s
-    }
-  }
-
   // we need a better name for this... it is doing a bit more than looking up
-  def active[R](b: Block)(using C: Context): Active[BlockLit | New, Block] =
+  def active[R](b: Block)(using C: Context): Block =
     normalize(b) match {
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(value) if isRecursive(id) => Active.Stuck(x)
+        case Some(value) if isRecursive(id) => x  // stuck
         case Some(value) if isOnce(id) || value.size <= C.maxInlineSize => active(value)
-        case Some(value) => Active.Stuck(x)
-        case None        => Active.Stuck(x)
+        case Some(value) => x // stuck
+        case None        => x // stuck
       }
-      case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-        Active.Value(b)
+      case b: Block.BlockLit => b
       case Block.Unbox(pure) => active(pure) match {
-        case Active.Value(Pure.Box(b, annotatedCapture)) => active(b)
-        case other => Active.Stuck(Block.Unbox(pure))
+        case Pure.Box(b, annotatedCapture) => active(b)
+        case other => Block.Unbox(pure) // stuck
       }
-      case b @ Block.New(impl) => Active.Value(b)
+      case b @ Block.New(impl) => b
     }
 
-  def active(e: Expr)(using Context): Active[Pure.Make | Pure.Literal | Pure.Box, Expr] =
+  def active(e: Expr)(using Context): Expr =
     normalize(e) match {
       case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
-        case Some(p: Pure.Make)    => Active.Value(p)
-        case Some(p: Pure.Literal) => Active.Value(p)
-        case Some(p: Pure.Box)     => Active.Value(p)
+        case Some(p: Pure.Make)    => p
+        case Some(p: Pure.Literal) => p
+        case Some(p: Pure.Box)     => p
         // We only inline non side-effecting expressions
-        case Some(other) if other.capt.isEmpty  => Active.Stuck(other)
-        case _ => Active.Stuck(x)
+        case Some(other) if other.capt.isEmpty  => other
+        case _ => x // stuck
       }
-      case other => Active.Stuck(other)
+      case other => other // stuck
     }
 
   def normalize(d: Definition)(using C: Context): Definition = d match {
@@ -150,36 +138,33 @@ object Normalizer { normal =>
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
-        case Active.Value(lit : Block.BlockLit) =>
+        case lit : Block.BlockLit =>
           reduce(lit, targs, vargs.map(normalize), bargs.map(normalize))
-        case Active.Value(b) => ???
-        case Active.Stuck(x) =>
+        case x =>
           Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
       }
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       active(b) match {
-        case Active.Value(Block.New(impl)) =>
+        case Block.New(impl) =>
           normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
-        case Active.Value(b) => ???
-        case Active.Stuck(x) => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
+        case x => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
     case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
-      case Active.Value(Pure.Make(data, tag, vargs)) if clauses.exists { case (id, _) => id == tag } =>
+      case Pure.Make(data, tag, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
         normalize(reduce(clause, Nil, vargs.map(normalize), Nil))
-      case Active.Value(Pure.Make(data, tag, vargs)) if default.isDefined =>
+      case Pure.Make(data, tag, vargs) if default.isDefined =>
         normalize(default.get)
-      case Active.Value(other) => ???
-      case Active.Stuck(_) =>
+      case _ =>
         val normalized = normalize(scrutinee)
         Stmt.Match(normalized, clauses.map { case (id, value) => id -> normalize(value) }, default.map(normalize))
     }
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
     case Stmt.If(cond, thn, els) => active(cond) match {
-      case Active.Value(Pure.Literal(true, annotatedType)) => normalize(thn)
-      case Active.Value(Pure.Literal(false, annotatedType)) => normalize(els)
+      case Pure.Literal(true, annotatedType) => normalize(thn)
+      case Pure.Literal(false, annotatedType) => normalize(els)
       case _ => If(normalize(cond), normalize(thn), normalize(els))
     }
 
@@ -244,7 +229,7 @@ object Normalizer { normal =>
   def normalize(p: Pure)(using ctx: Context): Pure = p match {
     // [[ Constructor(f = v).f ]] = [[ v ]]
     case Pure.Select(target, field, annotatedType) => active(target) match {
-      case Active.Value(Pure.Make(datatype, tag, fields)) =>
+      case Pure.Make(datatype, tag, fields) =>
         val constructor = ctx.decls.findConstructor(tag).get
         val expr = (constructor.fields zip fields).collectFirst { case (f, expr) if f.id == field => expr }.get
         normalize(expr)
@@ -252,7 +237,7 @@ object Normalizer { normal =>
     }
 
     // [[ box (unbox e) ]] = [[ e ]]
-    case Pure.Box(b, annotatedCapture) => normal.Box(active(b).get, annotatedCapture)
+    case Pure.Box(b, annotatedCapture) => normal.Box(active(b), annotatedCapture)
 
     // congruences
     case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
