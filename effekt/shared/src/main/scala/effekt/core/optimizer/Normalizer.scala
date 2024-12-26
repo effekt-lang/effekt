@@ -195,7 +195,11 @@ object Normalizer { normal =>
         normal.Scope(definitions :+ Definition.Let(id, tpe, expr),
           normalize(body)(using C.bind(id, expr)))
 
-      case other => Stmt.Val(id, tpe, other, normalize(body))
+      case other => normalize(body) match {
+        // [[ val x = stmt; return x ]]   =   [[ stmt ]]
+        case Stmt.Return(x: ValueVar) if x.id == id => other
+        case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
+      }
     }
 
     // "Congruences"
