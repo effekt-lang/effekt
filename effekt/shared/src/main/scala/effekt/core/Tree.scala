@@ -461,6 +461,55 @@ object Tree {
       case (p, b) => (p, rewrite(b))
     }
   }
+
+  class RewriteWithContext[Ctx] extends Structural {
+    def id(using Ctx): PartialFunction[Id, Id] = PartialFunction.empty
+    def pure(using Ctx): PartialFunction[Pure, Pure] = PartialFunction.empty
+    def expr(using Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
+    def stmt(using Ctx): PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def defn(using Ctx): PartialFunction[Definition, Definition] = PartialFunction.empty
+    def block(using Ctx): PartialFunction[Block, Block] = PartialFunction.empty
+    def handler(using Ctx): PartialFunction[Implementation, Implementation] = PartialFunction.empty
+    def param(using Ctx): PartialFunction[Param, Param] = PartialFunction.empty
+
+    def rewrite(x: Id)(using Ctx): Id = if id.isDefinedAt(x) then id(x) else x
+    def rewrite(p: Pure)(using Ctx): Pure = rewriteStructurally(p, pure)
+    def rewrite(e: Expr)(using Ctx): Expr = rewriteStructurally(e, expr)
+    def rewrite(s: Stmt)(using Ctx): Stmt = rewriteStructurally(s, stmt)
+    def rewrite(b: Block)(using Ctx): Block = rewriteStructurally(b, block)
+    def rewrite(d: Definition)(using Ctx): Definition = rewriteStructurally(d, defn)
+    def rewrite(e: Implementation)(using Ctx): Implementation = rewriteStructurally(e, handler)
+    def rewrite(o: Operation)(using Ctx): Operation = rewriteStructurally(o)
+    def rewrite(p: Param)(using Ctx): Param = rewriteStructurally(p, param)
+    def rewrite(p: Param.ValueParam)(using Ctx): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
+    def rewrite(p: Param.BlockParam)(using Ctx): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(b: ExternBody)(using Ctx): ExternBody= rewrite(b)
+
+    def rewrite(b: BlockLit)(using Ctx): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
+    }
+    def rewrite(b: BlockVar)(using Ctx): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+    }
+
+    def rewrite(t: ValueType)(using Ctx): ValueType = rewriteStructurally(t)
+    def rewrite(t: ValueType.Data)(using Ctx): ValueType.Data = rewriteStructurally(t)
+
+    def rewrite(t: BlockType)(using Ctx): BlockType = rewriteStructurally(t)
+    def rewrite(t: BlockType.Interface)(using Ctx): BlockType.Interface = rewriteStructurally(t)
+    def rewrite(capt: Captures)(using Ctx): Captures = capt.map(rewrite)
+
+    def rewrite(m: ModuleDecl)(using Ctx): ModuleDecl =
+      m match {
+        case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+          ModuleDecl(path, includes, declarations, externs, definitions.map(rewrite), exports)
+      }
+
+    def rewrite(matchClause: (Id, BlockLit))(using Ctx): (Id, BlockLit) = matchClause match {
+      case (p, b) => (p, rewrite(b))
+    }
+  }
 }
 
 enum Variable {

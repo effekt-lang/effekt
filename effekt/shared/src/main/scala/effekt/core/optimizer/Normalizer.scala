@@ -41,13 +41,13 @@ object Normalizer { normal =>
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
   }
 
-  def blockFor(id: Id)(using ctx: Context): Option[Block] =
+  private def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
 
-  def exprFor(id: Id)(using ctx: Context): Option[Expr] =
+  private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
     ctx.exprs.get(id)
 
-  def isRecursive(id: Id)(using ctx: Context): Boolean =
+  private def isRecursive(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Recursive
       // We assume it is recursive, if (for some reason) we do not have information;
@@ -59,7 +59,7 @@ object Normalizer { normal =>
       case None => true // sys error s"No info for ${id}"
     }
 
-  def isOnce(id: Id)(using ctx: Context): Boolean =
+  private def isOnce(id: Id)(using ctx: Context): Boolean =
     ctx.usage.get(id) match {
       case Some(value) => value == Usage.Once
       case None => false
@@ -313,7 +313,7 @@ object Normalizer { normal =>
   // --------------------------
 
   // TODO we should rename when inlining to maintain barendregdt, but need to copy usage information...
-  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
+  private def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
     // To update usage information
     val usage = C.usage
     def copyUsage(from: Id, to: Id) = usage.get(from) match {
@@ -331,15 +331,7 @@ object Normalizer { normal =>
       case (bparam, x: Block.BlockVar) =>
 
         // Update usage: u1 + (u2 - 1)
-        val newUsage = (usage.get(bparam.id), usage.get(x.id)) match {
-          case (u1, Some(Usage.Once)) => u1
-          case (u1, None) => u1
-          case (Some(Usage.Once | Usage.Many) | None, Some(Usage.Many)) => Some(Usage.Many)
-          case (Some(Usage.Recursive), u2) => Some(Usage.Recursive)
-          case (u1, Some(Usage.Recursive)) => Some(Usage.Recursive)
-        }
-        usage.remove(x.id)
-        newUsage.foreach { u => usage.update(x.id, u) }
+        usage.update(x.id, usage.getOrElse(bparam.id, Usage.Never) + usage.getOrElse(x.id, Usage.Never).decrement)
         bvars = bvars :+ x
       // introduce a binding
       case (bparam, block) =>
@@ -362,7 +354,7 @@ object Normalizer { normal =>
     normalize(normal.Scope(bindings, body))
   }
 
-  def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =
+  private def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =
     val Operation(name, tps, cps, vps, bps, body) =
       impl.operations.find(op => op.name == method).getOrElse {
         INTERNAL_ERROR("Should not happen")

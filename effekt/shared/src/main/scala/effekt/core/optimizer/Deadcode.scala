@@ -36,11 +36,8 @@ object Deadcode {
   def remove(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
     val reachable = Reachable(entrypoints, m)
     Deadcode(reachable).rewrite(m)
+
   def remove(entrypoint: Id, m: ModuleDecl): ModuleDecl =
     remove(Set(entrypoint), m)
-
-  def remove(stmt: Stmt): Stmt =
-    val reachable = Reachable(stmt)
-    Deadcode(reachable).rewrite(stmt)
 }
 
