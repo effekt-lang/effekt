@@ -292,6 +292,11 @@ object Normalizer { normal =>
 
   // run { return e }  =  e
   def Run(s: Stmt): Expr = s match {
+
+    // run { let x = e; return x }  =  e
+    case Stmt.Scope(Definition.Let(id1, _, binding) :: Nil, Stmt.Return(Pure.ValueVar(id2, _))) if id1 == id2 =>
+      binding
+
     case Stmt.Return(expr) => expr
     case _ => core.Run(s)
   }
