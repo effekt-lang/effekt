@@ -11,8 +11,94 @@ env:
   NODE_VERSION: '16.x'
 
 jobs:
+  check-release-needed:
+    name: Check if release is needed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          fetch-depth: 0  # Need full history for tags
+      
+      - name: Verify repository state
+        run: |
+          # Ensure we're on master
+          current_branch=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$current_branch" != "master" ]; then
+            echo "ERROR: Not on master branch! Current branch: $current_branch"
+            exit 1
+          fi
+          
+          # Ensure we have tags
+          if ! git tag | grep -q '^v'; then
+            echo "ERROR: No version tags found in repository!"
+            exit 1
+          fi
+          
+          # Get the latest commit
+          latest_commit=$(git rev-parse HEAD)
+          echo "Latest commit: $latest_commit"
+          
+          # Get all tags on the latest commit
+          tags_on_commit=$(git tag --points-at $latest_commit)
+          echo "Tags on latest commit:"
+          echo "$tags_on_commit"
+          
+          # Check for version tags
+          if echo "$tags_on_commit" | grep -q '^v'; then
+            echo "Latest commit already has a version tag. Details:"
+            echo "$tags_on_commit" | grep '^v'
+            echo "No new release needed."
+            exit 1
+          fi
+          
+          # Get the most recent version tag
+          previous_version=$(git tag --sort=-v:refname | grep '^v' | head -n1)
+          if [ -z "$previous_version" ]; then
+            echo "ERROR: Could not determine previous version!"
+            exit 1
+          fi
+          echo "Previous version: $previous_version"
+          
+          # Check what files changed since last release
+          echo "Changes since $previous_version:"
+          changes_all=$(git diff --name-only $previous_version HEAD)
+          echo "$changes_all"
+          
+          # Check if only .github files changed
+          changes_non_github=$(echo "$changes_all" | grep -v '^\.github/')
+          if [ -z "$changes_non_github" ]; then
+            echo "Only .github files changed since $previous_version. No release needed."
+            exit 1
+          fi
+          
+          # Verify the previous release commit message
+          prev_release_commit=$(git rev-list -n 1 $previous_version)
+          prev_commit_msg=$(git log -1 --format=%B $prev_release_commit)
+          prev_version_number=${previous_version#v}  # Remove 'v' prefix
+          expected_msg="Bump version to $prev_version_number"
+          
+          if [ "$prev_commit_msg" != "$expected_msg" ]; then
+            echo "WARNING: Previous release commit message doesn't match expected format"
+            echo "Expected: $expected_msg"
+            echo "Found: $prev_commit_msg"
+            # Not failing here as this is just a warning
+          fi
+          
+          # Verify previous release was made by the bot
+          prev_release_author=$(git log -1 --format='%ae' $prev_release_commit)
+          if ! echo "$prev_release_author" | grep -q "effekt-updater\[bot\]@users.noreply.github.com"; then
+            echo "WARNING: Previous release wasn't made by effekt-updater[bot]"
+            echo "Author: $prev_release_author"
+            # Not failing here as this is just a warning
+          fi
+          
+          echo "All checks passed. Release is needed!"
+
   run-tests: # redux of usual CI defined in `ci.yml`
     name: Run tests
+    needs: [check-release-needed]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
