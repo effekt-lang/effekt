@@ -37,8 +37,11 @@ object StaticArguments {
       types.forall(x => x) && (values.exists(x => x) || blocks.exists(x => x))
   }
 
-  def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
+  private def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
     (isStatic zip arguments).collect { case (false, arg) => arg }
+
+  private def selectStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
+    (isStatic zip arguments).collect { case (true, arg) => arg }
 
   /**
    * Wraps the definition in another function, abstracting arguments along the way.
@@ -61,7 +64,7 @@ object StaticArguments {
   def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): Definition.Def =
     val IsStatic(staticT, staticV, staticB) = ctx.statics(id)
 
-    assert(staticT.forall(x => x), "Can only apply the worker-wrapper translation, if all type arguments are static.")
+    assert(staticT.forall(x => x), "Can only apply the static arguments translation, if all type arguments are static.")
 
     val workerType = BlockType.Function(
       dropStatic(staticT, blockLit.tparams), // should always be empty!
@@ -72,11 +75,8 @@ object StaticArguments {
       blockLit.returnType
     )
 
-    val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, blockLit.capt)
-    ctx.workers(id) = workerVar
-
     // fresh params for the wrapper function and its invocation
-    // note: only freshen params if not static to prevent duplicates
+    // note: only freshen non-static params to prevent duplicates
     val freshCparams: List[Id] = (staticB zip blockLit.cparams).map {
       case (true, param) => param
       case (false, param) => Id(param)
@@ -85,10 +85,16 @@ object StaticArguments {
       case (true, param) => param
       case (false, ValueParam(id, tpe)) => ValueParam(Id(id), tpe)
     }
-    val freshBparams: List[BlockParam] = (staticB zip blockLit.bparams).map {
-      case (true, param) => param
-      case (false, BlockParam(id, tpe, capt)) => BlockParam(Id(id), tpe, capt)
+    val freshBparams: List[BlockParam] = (staticB zip blockLit.bparams zip freshCparams).map {
+      case ((true, param), capt) => param
+      case ((false, BlockParam(id, tpe, _)), capt) => BlockParam(Id(id), tpe, Set(capt))
     }
+
+    // the worker now closes over the static block arguments (`c` in the example above):
+    val newCapture = blockLit.capt ++ selectStatic(staticB, freshCparams).toSet
+
+    val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, newCapture)
+    ctx.workers(id) = workerVar
 
     Definition.Def(id, BlockLit(
       blockLit.tparams,
