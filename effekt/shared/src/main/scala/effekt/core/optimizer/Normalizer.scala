@@ -168,27 +168,28 @@ object Normalizer { normal =>
       case _ => If(normalize(cond), normalize(thn), normalize(els))
     }
 
-    // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
-    case Stmt.Val(id, tpe, binding, body) => normalize(binding) match {
+    case Stmt.Val(id, tpe, binding, body) =>
 
-      // TODO maintain normal form and avoid aliasing
-      //      case Stmt.Return(x : ValueVar) =>
-      //        normalize(body)(using C.bind(id, exprFor(x.id).getOrElse(x)))
+      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = binding match {
 
-      case Stmt.Return(expr) =>
-        normal.Scope(List(Definition.Let(id, tpe, expr)),
-          normalize(body)(using C.bind(id, expr)))
+        // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
+        case Stmt.Return(expr) =>
+          normal.Scope(List(Definition.Let(id, tpe, expr)),
+            normalize(body)(using C.bind(id, expr)))
 
-      case Stmt.Scope(definitions, Stmt.Return(expr)) =>
-        normal.Scope(definitions :+ Definition.Let(id, tpe, expr),
-          normalize(body)(using C.bind(id, expr)))
+        // Commute val and bindings
+        // TODO does this leak??? For definitions it should be ok.
+        // [[ val x = { def f = ...; let y = ...; STMT }; STMT ]] = def f = ...; let y = ...; val x = STMT; STMT
+        case Stmt.Scope(ds, bodyBinding) =>
+          normal.Scope(ds, normalizeVal(id, tpe, bodyBinding, body))
 
-      case other => normalize(body) match {
         // [[ val x = stmt; return x ]]   =   [[ stmt ]]
-        case Stmt.Return(x: ValueVar) if x.id == id => other
-        case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
+        case other => normalize(body) match {
+          case Stmt.Return(x: ValueVar) if x.id == id => other
+          case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
+        }
       }
-    }
+      normalizeVal(id, tpe, normalize(binding), body)
 
     // "Congruences"
     // -------------
@@ -261,43 +262,36 @@ object Normalizer { normal =>
   // They are purposefully not _that_ smart to be usable by other phases
   // as well.
 
-  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
-  def Val(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt =
-    (binding, body) match {
-
-      // [[ val x = STMT; return x ]] == STMT
-      case (_, Stmt.Return(Pure.ValueVar(other, _))) if other == id =>
-        binding
-
-      //  [[ val x = return EXPR; STMT ]] = [[ let x = EXPR; STMT ]]
-      //
-      // This opt is too good for JS: it blows the stack on
-      // recursive functions that are used to encode while...
-      //
-      // The solution to this problem is implemented in core.MakeStackSafe:
-      //   all recursive functions that could blow the stack are trivially wrapped
-      //   again, after optimizing.
-      case (Stmt.Return(expr), body) =>
-        normal.Scope(List(Definition.Let(id, tpe, expr)), body)
-
-      case _ => Stmt.Val(id, tpe, binding, body)
-    }
-
-  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
-  @tailrec
+    @tailrec
   def Scope(definitions: List[Definition], body: Stmt): Stmt = body match {
+
+    // flatten scopes
+    //   { def f = ...; { def g = ...; BODY } }  =  { def f = ...; def g; BODY }
     case Stmt.Scope(others, body) => normal.Scope(definitions ++ others, body)
-    case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
+
+    // commute bindings
+    //   let x = run { let y = e; s }  =   let y = e; let x = s
+    case _ => if (definitions.isEmpty) body else {
+      var defsSoFar: List[Definition] = Nil
+
+      definitions.foreach {
+        case Definition.Let(id, tpe, Run(Stmt.Scope(ds, body))) =>
+          defsSoFar = defsSoFar ++ (ds :+ Definition.Let(id, tpe, normal.Run(body)))
+        case d => defsSoFar = defsSoFar :+ d
+      }
+      Stmt.Scope(defsSoFar, body)
+    }
   }
 
-  // run { return e }  =  e
   def Run(s: Stmt): Expr = s match {
 
     // run { let x = e; return x }  =  e
     case Stmt.Scope(Definition.Let(id1, _, binding) :: Nil, Stmt.Return(Pure.ValueVar(id2, _))) if id1 == id2 =>
       binding
 
+    // run { return e }  =  e
     case Stmt.Return(expr) => expr
+
     case _ => core.Run(s)
   }
 
