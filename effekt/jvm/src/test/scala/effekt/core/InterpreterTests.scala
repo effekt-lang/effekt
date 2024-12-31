@@ -1,7 +1,7 @@
 package effekt
 package core
+package interpreter
 
-import effekt.core.Interpreter.{ InterpreterError, State }
 import effekt.source.FeatureFlag
 import effekt.symbols.QualifiedName
 import effekt.symbols.given
@@ -247,7 +247,7 @@ class InterpreterTests extends munit.FunSuite {
 
     try {
       object data extends Counting {
-        override def step(state: Interpreter.State) = state match {
+        override def step(state: State) = state match {
           case State.Done(result) => ???
           case State.Step(stmt, env, stack) =>
             //println(Interpreter.show(stack))

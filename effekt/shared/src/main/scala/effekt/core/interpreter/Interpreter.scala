@@ -1,7 +1,7 @@
 package effekt
 package core
+package interpreter
 
-import effekt.core.Interpreter.Stack.Segment
 import effekt.source.FeatureFlag
 
 import scala.annotation.tailrec
@@ -10,75 +10,136 @@ import scala.annotation.tailrec
 type ~>[-A, +B] = PartialFunction[A, B]
 
 
-trait Instrumentation {
-  def staticDispatch(id: Id): Unit = ()
-  def dynamicDispatch(id: Id): Unit = ()
-  def patternMatch(comparisons: Int): Unit = ()
-  def branch(): Unit = ()
-  def pushFrame(): Unit = ()
-  def popFrame(): Unit = ()
-  def allocate(v: Interpreter.Value.Data): Unit = ()
-  def closure(): Unit = ()
-  def fieldLookup(id: Id): Unit = ()
-  def step(state: Interpreter.State): Unit = ()
-  def readMutableVariable(id: Id): Unit = ()
-  def writeMutableVariable(id: Id): Unit = ()
-  def allocateVariable(id: Id): Unit = ()
-  def allocateRegion(region: Interpreter.Address): Unit = ()
-  def allocateVariableIntoRegion(id: Id, region: Interpreter.Address): Unit = ()
-  def reset(): Unit = ()
-  def shift(): Unit = ()
-  def resume(): Unit = ()
-  def builtin(name: String): Unit = ()
+type Address = Int
+private var lastAddress: Address = 0
+def freshAddress(): Address = { lastAddress += 1; lastAddress }
+
+val GLOBAL_PROMPT = 0
+
+class Reference(var value: Value)
+
+enum Value {
+  case Literal(value: Any)
+  // TODO this could also be Pointer(Array | Ref)
+  case Array(array: scala.Array[Value])
+  case Ref(ref: Reference)
+  case Data(data: ValueType.Data, tag: Id, fields: List[Value])
+  case Boxed(block: Computation)
 }
-object NoInstrumentation extends Instrumentation
+object Value {
+  def Int(v: Long): Value = Value.Literal(v)
+  def Bool(b: Boolean): Value = Value.Literal(b)
+  def Unit(): Value = Value.Literal(())
+  def Double(d: scala.Double): Value = Value.Literal(d)
+  def String(s: java.lang.String): Value = Value.Literal(s)
+}
 
-class Counting extends Instrumentation {
-  var staticDispatches = 0
-  var dynamicDispatches = 0
-  var patternMatches = 0
-  var branches = 0
-  var pushedFrames = 0
-  var poppedFrames = 0
-  var allocations = 0
-  var closures = 0
-  var fieldLookups = 0
-  var variableReads = 0
-  var variableWrites = 0
+def inspect(v: Value): String = v match {
+  case Value.Literal(value) => value.toString
+  case Value.Data(data, tag, fields) =>
+    tag.name.name + "(" + fields.map(inspect).mkString(", ") + ")"
+  case Value.Boxed(block) => block.toString
+  case Value.Array(arr) => ???
+  case Value.Ref(ref) => ???
+}
 
-  var resets = 0
-  var shifts = 0
-  var resumes = 0
+enum Computation {
+  case Closure(id: Id, env: Env)
+  case Object(methods: Map[Id, BlockLit], env: Env)
+  case Region(address: Address)
+  case Prompt(address: Address)
+  case Resumption(cont: Stack)
+}
 
-  override def staticDispatch(id: Id): Unit = staticDispatches += 1
-  override def dynamicDispatch(id: Id): Unit = dynamicDispatches += 1
-  override def patternMatch(comparisons: Int): Unit = patternMatches += 1
-  override def branch(): Unit = branches += 1
-  override def pushFrame(): Unit = pushedFrames += 1
-  override def popFrame(): Unit = poppedFrames += 1
-  override def allocate(v: Interpreter.Value.Data): Unit = allocations += 1
-  override def closure(): Unit = closures += 1
-  override def fieldLookup(id: Id): Unit = fieldLookups += 1
-  override def readMutableVariable(id: Id): Unit = variableReads += 1
-  override def writeMutableVariable(id: Id): Unit = variableWrites += 1
-  override def reset(): Unit = resets += 1
-  override def shift(): Unit = shifts += 1
-  override def resume(): Unit = resumes += 1
+enum Env {
+  case Top(functions: Map[Id, BlockLit], builtins: Map[Id, Builtin], declarations: List[core.Declaration])
+  case Static(id: Id, block: BlockLit, rest: Env)
+  case Dynamic(id: Id, block: Computation, rest: Env)
+  case Let(id: Id, value: Value, rest: Env)
 
-  def report() =
-    println(s"Static dispatches: ${staticDispatches}")
-    println(s"Dynamic dispatches: ${dynamicDispatches}")
-    println(s"Branches: ${branches}")
-    println(s"Pattern matches: ${patternMatches}")
-    println(s"Frames (pushed: ${pushedFrames}, popped: ${poppedFrames})")
-    println(s"Allocations: ${allocations}")
-    println(s"Closures: ${closures}")
-    println(s"Field lookups: ${fieldLookups}")
-    println(s"Variable reads: ${variableReads}")
-    println(s"Variable writes: ${variableWrites}")
-    println(s"Installed delimiters: ${resets}")
-    println(s"Captured continuations: ${shifts}")
-    println(s"Resumed continuations: ${resumes}")
+  def bind(id: Id, value: Value): Env = Let(id, value, this)
+  def bind(id: Id, lit: BlockLit): Env = Static(id, lit, this)
+  def bind(id: Id, block: Computation): Env = Dynamic(id, block, this)
+  def bindValues(otherValues: List[(Id, Value)]): Env =
+    otherValues.foldLeft(this) { case (env, (id, value)) => Let(id, value, env) }
+  def bindBlocks(otherBlocks: List[(Id, Computation)]): Env =
+    otherBlocks.foldLeft(this) { case (env, (id, block)) => Dynamic(id, block, env) }
+
+  def lookupValue(id: Id): Value = {
+    @tailrec
+    def go(rest: Env): Value = rest match {
+      case Env.Top(functions, builtins, declarations) => throw InterpreterError.NotFound(id)
+      case Env.Static(id, block, rest) => go(rest)
+      case Env.Dynamic(id, block, rest) => go(rest)
+      case Env.Let(otherId, value, rest) => if (id == otherId) value else go(rest)
+    }
+    go(this)
+  }
+
+  def lookupBuiltin(id: Id): Builtin = {
+    @tailrec
+    def go(rest: Env): Builtin = rest match {
+      case Env.Top(functions, builtins, declarations) => builtins.getOrElse(id, throw InterpreterError.NotFound(id))
+      case Env.Static(id, block, rest) => go(rest)
+      case Env.Dynamic(id, block, rest) => go(rest)
+      case Env.Let(id, value, rest) => go(rest)
+    }
+    go(this)
+  }
+
+  def lookupStatic(id: Id): (BlockLit, Env) = this match {
+    case Env.Top(functions, builtins, declarations) => (functions.getOrElse(id, throw InterpreterError.NotFound(id)), this)
+    case Env.Static(other, block, rest) => if (id == other) (block, this) else rest.lookupStatic(id)
+    case Env.Dynamic(other, block, rest) => rest.lookupStatic(id)
+    case Env.Let(other, value, rest) => rest.lookupStatic(id)
+  }
+}
+
+enum InterpreterError extends Throwable {
+  case NotFound(id: Id)
+  case NotAnExternFunction(id: Id)
+  case MissingBuiltin(name: String)
+  case RuntimeTypeError(msg: String)
+  case NonExhaustive(missingCase: Id)
+  case Hole()
+  case NoMain()
+}
+
+enum Stack {
+  case Empty
+  case Segment(frames: List[Frame], prompt: Address, rest: Stack)
+}
+object Stack {
+  val Toplevel = Stack.Segment(Nil, GLOBAL_PROMPT, Stack.Empty)
+}
+def show(stack: Stack): String = stack match {
+  case Stack.Empty => "Empty"
+  case Stack.Segment(frames, prompt, rest) =>
+    s"${frames.map(show).mkString(" :: ")} :: p${prompt } :: ${show(rest)}"
+}
+
+def show(frame: Frame): String = frame match {
+  case Frame.Var(x, value) => s"${util.show(x)}=${show(value)}"
+  case Frame.Val(x, body, env) => s"val ${util.show(x)}"
+  case Frame.Region(r, values) => s"region ${r} {${values.map {
+    case (id, value) => s"${util.show(id)}=${show(value)}}"
+  }.mkString(", ")}}"
+}
+
+def show(value: Value): String = inspect(value)
+
+enum Frame {
+  // mutable state
+  case Var(x: Id, value: Value)
+  // sequencing
+  case Val(x: Id, body: Stmt, env: Env)
+  // local regions
+  case Region(r: Address, values: Map[Id, Value])
+}
+
+enum State {
+  case Done(result: Value)
+  case Step(stmt: Stmt, env: Env, stack: Stack)
 }
 
 class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
@@ -316,7 +377,7 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
           val freshPrompt = freshAddress()
           instrumentation.reset()
           State.Step(body, env.bind(prompt.id, Computation.Prompt(freshPrompt)),
-            Segment(Nil, freshPrompt, stack))
+            Stack.Segment(Nil, freshPrompt, stack))
 
         case Stmt.Reset(b) => ???
 
@@ -460,316 +521,5 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
     val initial = State.Step(mainFun.body, env, Stack.Toplevel)
 
     run(initial)
-  }
-}
-
-object Interpreter {
-
-  type Address = Int
-  private var lastAddress: Address = 0
-  def freshAddress(): Address = { lastAddress += 1; lastAddress }
-
-  val GLOBAL_PROMPT = 0
-
-  class Reference(var value: Value)
-
-  enum Value {
-    case Literal(value: Any)
-    // TODO this could also be Pointer(Array | Ref)
-    case Array(array: scala.Array[Value])
-    case Ref(ref: Reference)
-    case Data(data: ValueType.Data, tag: Id, fields: List[Value])
-    case Boxed(block: Computation)
-  }
-  object Value {
-    def Int(v: Long): Value = Value.Literal(v)
-    def Bool(b: Boolean): Value = Value.Literal(b)
-    def Unit(): Value = Value.Literal(())
-    def Double(d: scala.Double): Value = Value.Literal(d)
-    def String(s: java.lang.String): Value = Value.Literal(s)
-  }
-
-  def inspect(v: Value): String = v match {
-    case Value.Literal(value) => value.toString
-    case Value.Data(data, tag, fields) =>
-      tag.name.name + "(" + fields.map(inspect).mkString(", ") + ")"
-    case Value.Boxed(block) => block.toString
-    case Value.Array(arr) => ???
-    case Value.Ref(ref) => ???
-  }
-
-  enum Computation {
-    case Closure(id: Id, env: Env)
-    case Object(methods: Map[Id, BlockLit], env: Env)
-    case Region(address: Address)
-    case Prompt(address: Address)
-    case Resumption(cont: Stack)
-  }
-
-  enum Env {
-    case Top(functions: Map[Id, BlockLit], builtins: Map[Id, Builtin], declarations: List[core.Declaration])
-    case Static(id: Id, block: BlockLit, rest: Env)
-    case Dynamic(id: Id, block: Computation, rest: Env)
-    case Let(id: Id, value: Value, rest: Env)
-
-    def bind(id: Id, value: Value): Env = Let(id, value, this)
-    def bind(id: Id, lit: BlockLit): Env = Static(id, lit, this)
-    def bind(id: Id, block: Computation): Env = Dynamic(id, block, this)
-    def bindValues(otherValues: List[(Id, Value)]): Env =
-      otherValues.foldLeft(this) { case (env, (id, value)) => Let(id, value, env) }
-    def bindBlocks(otherBlocks: List[(Id, Computation)]): Env =
-      otherBlocks.foldLeft(this) { case (env, (id, block)) => Dynamic(id, block, env) }
-
-    def lookupValue(id: Id): Value = {
-      @tailrec
-      def go(rest: Env): Value = rest match {
-        case Env.Top(functions, builtins, declarations) => throw InterpreterError.NotFound(id)
-        case Env.Static(id, block, rest) => go(rest)
-        case Env.Dynamic(id, block, rest) => go(rest)
-        case Env.Let(otherId, value, rest) => if (id == otherId) value else go(rest)
-      }
-      go(this)
-    }
-
-    def lookupBuiltin(id: Id): Builtin = {
-      @tailrec
-      def go(rest: Env): Builtin = rest match {
-        case Env.Top(functions, builtins, declarations) => builtins.getOrElse(id, throw InterpreterError.NotFound(id))
-        case Env.Static(id, block, rest) => go(rest)
-        case Env.Dynamic(id, block, rest) => go(rest)
-        case Env.Let(id, value, rest) => go(rest)
-      }
-      go(this)
-    }
-
-    def lookupStatic(id: Id): (BlockLit, Env) = this match {
-      case Env.Top(functions, builtins, declarations) => (functions.getOrElse(id, throw InterpreterError.NotFound(id)), this)
-      case Env.Static(other, block, rest) => if (id == other) (block, this) else rest.lookupStatic(id)
-      case Env.Dynamic(other, block, rest) => rest.lookupStatic(id)
-      case Env.Let(other, value, rest) => rest.lookupStatic(id)
-    }
-  }
-
-  enum InterpreterError extends Throwable {
-    case NotFound(id: Id)
-    case NotAnExternFunction(id: Id)
-    case MissingBuiltin(name: String)
-    case RuntimeTypeError(msg: String)
-    case NonExhaustive(missingCase: Id)
-    case Hole()
-    case NoMain()
-  }
-
-  enum Stack {
-    case Empty
-    case Segment(frames: List[Frame], prompt: Address, rest: Stack)
-  }
-  object Stack {
-    val Toplevel = Stack.Segment(Nil, GLOBAL_PROMPT, Stack.Empty)
-  }
-  def show(stack: Stack): String = stack match {
-    case Stack.Empty => "Empty"
-    case Stack.Segment(frames, prompt, rest) =>
-      s"${frames.map(show).mkString(" :: ")} :: p${prompt } :: ${show(rest)}"
-  }
-
-  def show(frame: Frame): String = frame match {
-    case Frame.Var(x, value) => s"${util.show(x)}=${show(value)}"
-    case Frame.Val(x, body, env) => s"val ${util.show(x)}"
-    case Frame.Region(r, values) => s"region ${r} {${values.map {
-      case (id, value) => s"${util.show(id)}=${show(value)}}"
-    }.mkString(", ")}}"
-  }
-
-  def show(value: Value): String = inspect(value)
-
-  enum Frame {
-    // mutable state
-    case Var(x: Id, value: Value)
-    // sequencing
-    case Val(x: Id, body: Stmt, env: Env)
-    // local regions
-    case Region(r: Address, values: Map[Id, Value])
-  }
-
-  enum State {
-    case Done(result: Value)
-    case Step(stmt: Stmt, env: Env, stack: Stack)
-  }
-
-  case class Builtin(name: String, impl: List[Value] ~> Value)
-
-  def builtin(name: String, impl: List[Value] ~> Value): (String, Builtin) = name -> Builtin(name, impl)
-
-  val builtins = Map(
-    builtin("effekt::println(String)", {
-      case As.String(msg) :: Nil =>
-        println(msg);
-        Value.Unit()
-    }),
-    builtin("effekt::show(Int)", {
-      case As.Int(n) :: Nil => Value.String(n.toString)
-    }),
-    builtin("effekt::infixAdd(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x + y)
-    }),
-    builtin("effekt::infixSub(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x - y)
-    }),
-    builtin("effekt::infixMul(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
-    }),
-    builtin("effekt::infixAdd(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x + y)
-    }),
-    builtin("effekt::infixSub(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x - y)
-    }),
-    builtin("effekt::infixMul(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x * y)
-    }),
-    builtin("effekt::infixDiv(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x / y)
-    }),
-    builtin("effekt::toInt(Double)", {
-      case As.Double(x) :: Nil => Value.Int(x.toLong)
-    }),
-    builtin("effekt::toDouble(Int)", {
-      case As.Int(x) :: Nil => Value.Double(x.toDouble)
-    }),
-    builtin("effekt::mod(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
-    }),
-    builtin("effekt::infixEq(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
-    }),
-    builtin("effekt::infixNeq(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x != y)
-    }),
-    builtin("effekt::infixLt(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x < y)
-    }),
-    builtin("effekt::infixGt(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
-    }),
-    builtin("effekt::infixLte(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
-    }),
-    builtin("effekt::infixGte(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x >= y)
-    }),
-
-    builtin("effekt::infixEq(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x == y)
-    }),
-    builtin("effekt::infixNeq(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x != y)
-    }),
-    builtin("effekt::infixLt(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x < y)
-    }),
-    builtin("effekt::infixGt(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x > y)
-    }),
-    builtin("effekt::infixLte(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x <= y)
-    }),
-    builtin("effekt::infixGte(Double, Double)", {
-      case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x >= y)
-    }),
-    builtin("effekt::sqrt(Double)", {
-      case As.Double(x) :: Nil => Value.Double(Math.sqrt(x))
-    }),
-
-    builtin("effekt::bitwiseShl(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x << y)
-    }),
-    builtin("effekt::bitwiseShr(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x >> y)
-    }),
-    builtin("effekt::bitwiseAnd(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x & y)
-    }),
-    builtin("effekt::bitwiseOr(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x | y)
-    }),
-    builtin("effekt::bitwiseXor(Int, Int)", {
-      case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x ^ y)
-    }),
-
-    builtin("effekt::infixConcat(String, String)", {
-      case As.String(x) :: As.String(y) :: Nil => Value.String(x + y)
-    }),
-    builtin("effekt::not(Bool)", {
-      case As.Bool(x) :: Nil => Value.Bool(!x)
-    }),
-    builtin("effekt::inspect(Any)", {
-      case any :: Nil => Value.String(inspect(any))
-    }),
-
-    // array
-    // -----
-    builtin("array::allocate(Int)", {
-      case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
-    }),
-    builtin("array::size[T](Array[T])", {
-      case As.Array(arr) :: Nil => Value.Int(arr.length.toLong)
-    }),
-    builtin("array::unsafeGet[T](Array[T], Int)", {
-      case As.Array(arr) :: As.Int(index) :: Nil => arr(index.toInt)
-    }),
-    builtin("array::unsafeSet[T](Array[T], Int, T)", {
-      case As.Array(arr) :: As.Int(index) :: value :: Nil => arr.update(index.toInt, value); Value.Unit()
-    }),
-
-    // ref
-    // ---
-    builtin("ref::ref[T](T)", {
-      case init :: Nil => Value.Ref(Reference(init))
-    }),
-    builtin("ref::get[T](Ref[T])", {
-      case As.Reference(ref) :: Nil => ref.value
-    }),
-    builtin("ref::set[T](Ref[T], T)", {
-      case As.Reference(ref) :: value :: Nil => ref.value = value; Value.Unit()
-    }),
-  )
-  object As {
-    object String {
-      def unapply(v: Value): Option[java.lang.String] = v match {
-        case Value.Literal(value: java.lang.String) => Some(value)
-        case _ => None
-      }
-    }
-    object Int {
-      def unapply(v: Value): Option[scala.Long] = v match {
-        case Value.Literal(value: scala.Long) => Some(value)
-        case _ => None
-      }
-    }
-    object Bool {
-      def unapply(v: Value): Option[scala.Boolean] = v match {
-        case Value.Literal(value: scala.Boolean) => Some(value)
-        case _ => None
-      }
-    }
-    object Double {
-      def unapply(v: Value): Option[scala.Double] = v match {
-        case Value.Literal(value: scala.Double) => Some(value)
-        case _ => None
-      }
-    }
-    object Array {
-      def unapply(v: Value): Option[scala.Array[Value]] = v match {
-        case Value.Array(array) => Some(array)
-        case _ => None
-      }
-    }
-    object Reference {
-      def unapply(v: Value): Option[Reference] = v match {
-        case Value.Ref(ref) => Some(ref)
-        case _ => None
-      }
-    }
   }
 }
