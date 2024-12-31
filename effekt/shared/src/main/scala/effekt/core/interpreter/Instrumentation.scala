@@ -72,3 +72,11 @@ class Counting extends Instrumentation {
     println(s"Captured continuations: ${shifts}")
     println(s"Resumed continuations: ${resumes}")
 }
+
+trait BuiltinHistogram extends Instrumentation {
+  var builtins: Map[String, Int] = Map.empty
+
+  override def builtin(name: String): Unit =
+    val before = builtins.getOrElse(name, 0)
+    builtins = builtins.updated(name, before + 1)
+}

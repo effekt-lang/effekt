@@ -142,22 +142,9 @@ enum State {
   case Step(stmt: Stmt, env: Env, stack: Stack)
 }
 
-class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
-
-  import Interpreter.*
+class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
   // TODO maybe replace region values by integers instead of Id
-
-  // TODO instrument the interpreter and count:
-  //   - heap allocations
-  //   - function calls
-  //   - virtual dispatch
-  //   - pattern match and field selection, etc.
-  //   - primitive operations
-
-  // things we need to know to run the interpreter:
-  // - FFI Builtins (like infixAdd) --> prepopulate environemtn
-  // - Datatype declarations (for generic comparison and field selection)
 
   @tailrec
   private def returnWith(value: Value, env: Env, stack: Stack): State =
@@ -456,7 +443,7 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
       case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
         instrumentation.builtin(name)
-        try { impl(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
+        try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
           case Value.Literal(l) => s"${l}: ${l.getClass.getName}"
           case other => other.toString
         }.mkString(", ")}" }
@@ -469,7 +456,7 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
       case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
         instrumentation.builtin(name)
-        try { impl(arguments) } catch { case e => sys error s"Cannot call ${x} with arguments ${arguments.map {
+        try { impl(runtime)(arguments) } catch { case e => sys error s"Cannot call ${x} with arguments ${arguments.map {
           case Value.Literal(l) => s"${l}: ${l.getClass.getName}"
           case other => other.toString
         }.mkString(", ")}" }

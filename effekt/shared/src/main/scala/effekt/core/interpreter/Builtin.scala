@@ -2,20 +2,29 @@ package effekt
 package core
 package interpreter
 
+import java.io.PrintStream
 
-case class Builtin(name: String, impl: List[Value] ~> Value)
+trait Runtime {
+  def out: PrintStream
+}
+def Runtime(using run: Runtime) = run
 
-def builtin(name: String)(impl: List[Value] ~> Value): (String, Builtin) = name -> Builtin(name, impl)
+case class Builtin(name: String, impl: Runtime => List[Value] ~> Value)
 
-val printing = Map(
+def builtin(name: String)(impl: Runtime ?=> List[Value] ~> Value): (String, Builtin) =
+  name -> Builtin(name, env => impl(using env))
+
+type Builtins = Map[String, Builtin]
+
+lazy val printing: Builtins = Map(
   builtin("effekt::println(String)") {
     case As.String(msg) :: Nil =>
-      println(msg);
+      Runtime.out.println(msg)
       Value.Unit()
   },
 )
 
-val doubles = Map(
+lazy val doubles: Builtins = Map(
   // Arithmetic
   // ----------
   builtin("effekt::infixAdd(Double, Double)") {
@@ -62,7 +71,7 @@ val doubles = Map(
   },
 )
 
-val integers = Map(
+lazy val integers: Builtins = Map(
   // Arithmetic
   // ----------
   builtin("effekt::infixAdd(Int, Int)") {
@@ -76,6 +85,9 @@ val integers = Map(
   },
   builtin("effekt::mod(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
+  },
+  builtin("effekt::infixDiv(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x / y)
   },
   builtin("effekt::bitwiseShl(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x << y)
@@ -125,13 +137,13 @@ val integers = Map(
   },
 )
 
-val booleans = Map(
+lazy val booleans: Builtins = Map(
   builtin("effekt::not(Bool)") {
     case As.Bool(x) :: Nil => Value.Bool(!x)
   },
 )
 
-val strings = Map(
+lazy val strings: Builtins = Map(
   builtin("effekt::infixConcat(String, String)") {
     case As.String(x) :: As.String(y) :: Nil => Value.String(x + y)
   },
@@ -141,7 +153,7 @@ val strings = Map(
   },
 )
 
-val arrays = Map(
+lazy val arrays: Builtins = Map(
   builtin("array::allocate(Int)") {
     case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
   },
@@ -156,7 +168,7 @@ val arrays = Map(
   },
 )
 
-val refs = Map(
+lazy val refs: Builtins = Map(
   builtin("ref::ref[T](T)") {
     case init :: Nil => Value.Ref(Reference(init))
   },
@@ -168,7 +180,7 @@ val refs = Map(
   },
 )
 
-val builtins = printing ++ integers ++ doubles ++ strings ++ arrays ++ refs
+lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ refs
 
 protected object As {
   object String {
