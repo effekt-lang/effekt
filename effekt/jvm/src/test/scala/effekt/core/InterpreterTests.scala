@@ -2,57 +2,72 @@ package effekt
 package core
 package interpreter
 
-import effekt.source.FeatureFlag
 import effekt.symbols.QualifiedName
 import effekt.symbols.given
-import kiama.util.FileSource
 
 class InterpreterTests extends munit.FunSuite {
 
   import effekt.context.{ Context, IOModuleDB }
-  import effekt.util.AnsiColoredMessaging
-  import kiama.util.{ Positions, StringSource }
+  import effekt.util.PlainMessaging
+  import effekt.generator.ir.IR
+  import kiama.util.{ Positions, StringSource, FileSource }
 
-  //  object driver extends effekt.Driver
-  //
-  //  def run(content: String): String =
-  //    var options = Seq(
-  //      "--Koutput", "string",
-  //      "--backend", "js",
-  //    )
-  //    val configs = driver.createConfig(options)
-  //    configs.verify()
-  //
-  //    val compiler = new TestFrontend
-  //    compiler.compile(StringSource(content, "input.effekt"))(using context).map {
-  //      case (_, decl) => decl
-  //    }
-  //    configs.stringEmitter.result()
+
   val positions = new Positions
-  object ansiMessaging extends AnsiColoredMessaging
+  object plainMessaging extends PlainMessaging
   object context extends Context(positions) with IOModuleDB {
-    val messaging = ansiMessaging
-    object testFrontend extends TestFrontend
-    override lazy val compiler = testFrontend.asInstanceOf
+    val messaging = plainMessaging
+    object frontend extends IR
+    override lazy val compiler = frontend.asInstanceOf
   }
 
-  def run(content: String) =
+  def compileString(content: String): (Id, symbols.Module, ModuleDecl) =
     val config = new EffektConfig(Seq("--Koutput", "string"))
     config.verify()
     context.setup(config)
-    context.testFrontend.compile(StringSource(content, "input.effekt"))(using context).map {
+    context.frontend.compile(StringSource(content, "input.effekt"))(using context).map {
       case (_, decl) => decl
+    }.getOrElse {
+      val errors = plainMessaging.formatMessages(context.messaging.buffer)
+      sys error errors
     }
 
-  def runFile(path: String) =
+  def compileFile(path: String): (Id, symbols.Module, ModuleDecl) =
     val config = new EffektConfig(Seq("--Koutput", "string"))
     config.verify()
     context.setup(config)
 
-    context.testFrontend.compile(FileSource(path))(using context).map {
+    context.frontend.compile(FileSource(path))(using context).map {
       case (_, decl) => decl
+    }.getOrElse {
+      val errors = plainMessaging.formatMessages(context.messaging.buffer)
+      sys error s"Cannot compile ${path}\n\n${errors}"
     }
 
+  class OutputCapturingRuntime extends Runtime {
+
+    import java.io.{ByteArrayOutputStream, PrintStream}
+
+    private val outputStream = new ByteArrayOutputStream()
+    val out = new PrintStream(outputStream)
+
+    def output(): String = {
+      out.flush()
+      outputStream.toString
+    }
+  }
+
+  def runString(contents: String): String =
+    val (main, mod, decl) = compileString(contents)
+    object runtime extends OutputCapturingRuntime
+    Interpreter(NoInstrumentation, runtime).run(main, decl)
+    runtime.output()
+
+  def runFile(file: String): String =
+    val (main, mod, decl) = compileFile(file)
+    object runtime extends OutputCapturingRuntime
+    Interpreter(NoInstrumentation, runtime).run(main, decl)
+    runtime.output()
 
   val recursion =
       """def countdown(n: Int): Int =
@@ -65,9 +80,11 @@ class InterpreterTests extends munit.FunSuite {
         |  else fib(n - 2) + fib(n - 1)
         |
         |def main() = {
-        |  println(fib(10))
+        |  println(fib(10).show)
         |}
         |""".stripMargin
+
+  assertEquals(runString(recursion), "89\n")
 
   val dynamicDispatch = """def size[T](l: List[T]): Int =
       |  l match {
@@ -85,6 +102,8 @@ class InterpreterTests extends munit.FunSuite {
       |  println(size([1, 2, 3].map { x => x + 1 }))
       |}
       |""".stripMargin
+
+  assertEquals(runString(dynamicDispatch), "3\n")
 
   val eraseUnused =
     """def replicate(v: Int, n: Int, a: List[Int]): List[Int] =
@@ -235,116 +254,20 @@ class InterpreterTests extends munit.FunSuite {
 
   // doesn't work: product_early (since it SO due to run run run)
 
-  def runTest(file: String): Unit =
-
-    val Some(main, mod, decl) = runFile(file): @unchecked
-
-    var tree = decl
-
-    tree = Deadcode.remove(main, tree)
-
-    //tree = Inline.full(Set(main), tree, 40)
-
-    try {
-      object data extends Counting {
-        override def step(state: State) = state match {
-          case State.Done(result) => ???
-          case State.Step(stmt, env, stack) =>
-            //println(Interpreter.show(stack))
-        }
-
-        var builtins: Map[String, Int] = Map.empty
-
-        override def builtin(name: String): Unit =
-          val before = builtins.getOrElse(name, 0)
-          builtins = builtins.updated(name, before + 1)
-      }
-      Interpreter(data).run(main, tree)
-
-      data.report()
-      println(data.builtins)
-
-    } catch {
-      case err: InterpreterError =>
-        err match {
-          case InterpreterError.NotFound(id) => println(s"Not found: ${util.show(id)}")
-          case InterpreterError.NotAnExternFunction(id) => err.printStackTrace()
-          case InterpreterError.MissingBuiltin(name) => println(s"Missing ${name}")
-          case InterpreterError.RuntimeTypeError(msg) => err.printStackTrace()
-          case InterpreterError.NonExhaustive(missingCase) => err.printStackTrace()
-          case InterpreterError.Hole() => err.printStackTrace()
-          case InterpreterError.NoMain() => err.printStackTrace()
-        }
-    }
-
-  class BuiltinHistogram extends Instrumentation {
-    var builtins: Map[String, Int] = Map.empty
-
-    override def builtin(name: String): Unit =
-      val before = builtins.getOrElse(name, 0)
-      builtins = builtins.updated(name, before + 1)
-  }
-
-  //  run(recursion) match {
-  //    case Some((main, mod, tree)) =>
-  //      val histogram = new BuiltinHistogram
-  //      Interpreter(histogram).run(main, tree)
-  //      println(histogram)
-  //    case None => ???
-  //  }
-
-
   // TODO allocate arrays and ref on a custom heap that could be inspected and visualized
-
-  runTest("examples/benchmarks/are_we_fast_yet/bounce.effekt")
-  runTest("examples/benchmarks/are_we_fast_yet/list_tail.effekt")
-  runTest("examples/benchmarks/are_we_fast_yet/mandelbrot.effekt")
-  runTest("examples/benchmarks/are_we_fast_yet/nbody.effekt")
-
-  // global is missing
-  //runTest("examples/benchmarks/are_we_fast_yet/permute.effekt")
-  //runTest("examples/benchmarks/are_we_fast_yet/storage.effekt")
-
-  runTest("examples/benchmarks/are_we_fast_yet/queens.effekt")
-  runTest("examples/benchmarks/are_we_fast_yet/sieve.effekt")
-  runTest("examples/benchmarks/are_we_fast_yet/towers.effekt")
-
-  runTest("examples/benchmarks/duality_of_compilation/fibonacci_recursive.effekt")
-}
-
-class TestFrontend extends Compiler[(Id, symbols.Module, core.ModuleDecl)] {
-
-
-  import effekt.PhaseResult.CoreTransformed
-  import effekt.context.Context
-  import kiama.output.PrettyPrinterTypes.Document
-  import kiama.util.Source
-
-
-  // Implementation of the Compiler Interface:
-  // -----------------------------------------
-  def extension = ".class"
-
-  override def supportedFeatureFlags: List[String] = List("jvm")
-
-  override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = None
-
-  override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = None
-
-  override def compile(source: Source)(using C: Context): Option[(Map[String, String], (Id, symbols.Module, core.ModuleDecl))] =
-    Optimized.run(source).map { res => (Map.empty, res) }
-
-
-  // The Compilation Pipeline
-  // ------------------------
-  // Source => Core => CPS => JS
-  lazy val Core = Phase.cached("core") {
-    Frontend andThen Middleend
-  }
-
-  lazy val Optimized = allToCore(Core) andThen Aggregate map {
-    case input @ CoreTransformed(source, tree, mod, core) =>
-      val mainSymbol = Context.checkMain(mod)
-      (mainSymbol, mod, core)
-  }
+  //
+  //  runTest("examples/benchmarks/are_we_fast_yet/bounce.effekt")
+  //  runTest("examples/benchmarks/are_we_fast_yet/list_tail.effekt")
+  //  runTest("examples/benchmarks/are_we_fast_yet/mandelbrot.effekt")
+  //  runTest("examples/benchmarks/are_we_fast_yet/nbody.effekt")
+  //
+  //  // global is missing
+  //  //runTest("examples/benchmarks/are_we_fast_yet/permute.effekt")
+  //  //runTest("examples/benchmarks/are_we_fast_yet/storage.effekt")
+  //
+  //  runTest("examples/benchmarks/are_we_fast_yet/queens.effekt")
+  //  runTest("examples/benchmarks/are_we_fast_yet/sieve.effekt")
+  //  runTest("examples/benchmarks/are_we_fast_yet/towers.effekt")
+  //
+  //  runTest("examples/benchmarks/duality_of_compilation/fibonacci_recursive.effekt")
 }
