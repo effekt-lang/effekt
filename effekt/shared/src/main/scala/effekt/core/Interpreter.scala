@@ -29,6 +29,7 @@ trait Instrumentation {
   def reset(): Unit = ()
   def shift(): Unit = ()
   def resume(): Unit = ()
+  def builtin(name: String): Unit = ()
 }
 object NoInstrumentation extends Instrumentation
 
@@ -391,8 +392,9 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
 
   def eval(e: Expr, env: Env): Value = e match {
     case DirectApp(b, targs, vargs, Nil) => env.lookupBuiltin(b.id) match {
-      case impl =>
+      case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
+        instrumentation.builtin(name)
         try { impl(arguments) } catch { case e => sys error s"Cannot call ${b} with arguments ${arguments.map {
           case Value.Literal(l) => s"${l}: ${l.getClass.getName}"
           case other => other.toString
@@ -403,8 +405,9 @@ class Interpreter(instrumentation: Instrumentation = NoInstrumentation) {
     case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
     case Pure.Literal(value, annotatedType) => Value.Literal(value)
     case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
-      case impl =>
+      case Builtin(name, impl) =>
         val arguments = vargs.map(a => eval(a, env))
+        instrumentation.builtin(name)
         try { impl(arguments) } catch { case e => sys error s"Cannot call ${x} with arguments ${arguments.map {
           case Value.Literal(l) => s"${l}: ${l.getClass.getName}"
           case other => other.toString
@@ -594,143 +597,142 @@ object Interpreter {
     case Step(stmt: Stmt, env: Env, stack: Stack)
   }
 
+  case class Builtin(name: String, impl: List[Value] ~> Value)
 
-  type Builtin = List[Value] ~> Value
-
-  def Builtin(impl: List[Value] ~> Value) = impl
+  def builtin(name: String, impl: List[Value] ~> Value): (String, Builtin) = name -> Builtin(name, impl)
 
   val builtins = Map(
-    "effekt::println(String)" -> Builtin {
+    builtin("effekt::println(String)", {
       case As.String(msg) :: Nil =>
         println(msg);
         Value.Unit()
-    },
-    "effekt::show(Int)" -> Builtin {
+    }),
+    builtin("effekt::show(Int)", {
       case As.Int(n) :: Nil => Value.String(n.toString)
-    },
-    "effekt::infixAdd(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixAdd(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x + y)
-    },
-    "effekt::infixSub(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixSub(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x - y)
-    },
-    "effekt::infixMul(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixMul(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
-    },
-    "effekt::infixAdd(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixAdd(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x + y)
-    },
-    "effekt::infixSub(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixSub(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x - y)
-    },
-    "effekt::infixMul(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixMul(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x * y)
-    },
-    "effekt::infixDiv(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixDiv(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Double(x / y)
-    },
-    "effekt::toInt(Double)" -> Builtin {
+    }),
+    builtin("effekt::toInt(Double)", {
       case As.Double(x) :: Nil => Value.Int(x.toLong)
-    },
-    "effekt::toDouble(Int)" -> Builtin {
+    }),
+    builtin("effekt::toDouble(Int)", {
       case As.Int(x) :: Nil => Value.Double(x.toDouble)
-    },
-    "effekt::mod(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::mod(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
-    },
-    "effekt::infixEq(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixEq(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
-    },
-    "effekt::infixNeq(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixNeq(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x != y)
-    },
-    "effekt::infixLt(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixLt(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x < y)
-    },
-    "effekt::infixGt(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixGt(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
-    },
-    "effekt::infixLte(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixLte(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
-    },
-    "effekt::infixGte(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::infixGte(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x >= y)
-    },
+    }),
 
-    "effekt::infixEq(Double, Double)" -> Builtin {
+    builtin("effekt::infixEq(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x == y)
-    },
-    "effekt::infixNeq(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixNeq(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x != y)
-    },
-    "effekt::infixLt(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixLt(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x < y)
-    },
-    "effekt::infixGt(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixGt(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x > y)
-    },
-    "effekt::infixLte(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixLte(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x <= y)
-    },
-    "effekt::infixGte(Double, Double)" -> Builtin {
+    }),
+    builtin("effekt::infixGte(Double, Double)", {
       case As.Double(x) :: As.Double(y) :: Nil => Value.Bool(x >= y)
-    },
-    "effekt::sqrt(Double)" -> Builtin {
+    }),
+    builtin("effekt::sqrt(Double)", {
       case As.Double(x) :: Nil => Value.Double(Math.sqrt(x))
-    },
+    }),
 
-    "effekt::bitwiseShl(Int, Int)" -> Builtin {
+    builtin("effekt::bitwiseShl(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x << y)
-    },
-    "effekt::bitwiseShr(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::bitwiseShr(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x >> y)
-    },
-    "effekt::bitwiseAnd(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::bitwiseAnd(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x & y)
-    },
-    "effekt::bitwiseOr(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::bitwiseOr(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x | y)
-    },
-    "effekt::bitwiseXor(Int, Int)" -> Builtin {
+    }),
+    builtin("effekt::bitwiseXor(Int, Int)", {
       case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x ^ y)
-    },
+    }),
 
-    "effekt::infixConcat(String, String)" -> Builtin {
+    builtin("effekt::infixConcat(String, String)", {
       case As.String(x) :: As.String(y) :: Nil => Value.String(x + y)
-    },
-    "effekt::not(Bool)" -> Builtin {
+    }),
+    builtin("effekt::not(Bool)", {
       case As.Bool(x) :: Nil => Value.Bool(!x)
-    },
-    "effekt::inspect(Any)" -> Builtin {
+    }),
+    builtin("effekt::inspect(Any)", {
       case any :: Nil => Value.String(inspect(any))
-    },
+    }),
 
     // array
     // -----
-    "array::allocate(Int)" -> Builtin {
+    builtin("array::allocate(Int)", {
       case As.Int(x) :: Nil => Value.Array(scala.Array.ofDim(x.toInt))
-    },
-    "array::size[T](Array[T])" -> Builtin {
+    }),
+    builtin("array::size[T](Array[T])", {
       case As.Array(arr) :: Nil => Value.Int(arr.length.toLong)
-    },
-    "array::unsafeGet[T](Array[T], Int)" -> Builtin {
+    }),
+    builtin("array::unsafeGet[T](Array[T], Int)", {
       case As.Array(arr) :: As.Int(index) :: Nil => arr(index.toInt)
-    },
-    "array::unsafeSet[T](Array[T], Int, T)" -> Builtin {
+    }),
+    builtin("array::unsafeSet[T](Array[T], Int, T)", {
       case As.Array(arr) :: As.Int(index) :: value :: Nil => arr.update(index.toInt, value); Value.Unit()
-    },
+    }),
 
     // ref
     // ---
-    "ref::ref[T](T)" -> Builtin {
+    builtin("ref::ref[T](T)", {
       case init :: Nil => Value.Ref(Reference(init))
-    },
-    "ref::get[T](Ref[T])" -> Builtin {
+    }),
+    builtin("ref::get[T](Ref[T])", {
       case As.Reference(ref) :: Nil => ref.value
-    },
-    "ref::set[T](Ref[T], T)" -> Builtin {
+    }),
+    builtin("ref::set[T](Ref[T], T)", {
       case As.Reference(ref) :: value :: Nil => ref.value = value; Value.Unit()
-    },
+    }),
   )
   object As {
     object String {
