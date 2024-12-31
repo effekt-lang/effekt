@@ -48,6 +48,7 @@ class InterpreterTests extends munit.FunSuite {
     val config = new EffektConfig(Seq("--Koutput", "string"))
     config.verify()
     context.setup(config)
+
     context.testFrontend.compile(FileSource(path))(using context).map {
       case (_, decl) => decl
     }
@@ -238,9 +239,11 @@ class InterpreterTests extends munit.FunSuite {
 
     val Some(main, mod, decl) = runFile(file): @unchecked
 
-    val gced = Deadcode.remove(main, decl)
+    var tree = decl
 
-    val inlined = Inline.full(Set(main), gced, 40)
+    tree = Deadcode.remove(main, tree)
+
+    //tree = Inline.full(Set(main), tree, 40)
 
     try {
       object data extends Counting {
@@ -249,10 +252,17 @@ class InterpreterTests extends munit.FunSuite {
           case State.Step(stmt, env, stack) =>
             //println(Interpreter.show(stack))
         }
+
+        var builtins: Map[String, Int] = Map.empty
+
+        override def builtin(name: String): Unit =
+          val before = builtins.getOrElse(name, 0)
+          builtins = builtins.updated(name, before + 1)
       }
-      Interpreter(data).run(main, inlined)
+      Interpreter(data).run(main, tree)
 
       data.report()
+      println(data.builtins)
 
     } catch {
       case err: InterpreterError =>
@@ -266,6 +276,23 @@ class InterpreterTests extends munit.FunSuite {
           case InterpreterError.NoMain() => err.printStackTrace()
         }
     }
+
+  class BuiltinHistogram extends Instrumentation {
+    var builtins: Map[String, Int] = Map.empty
+
+    override def builtin(name: String): Unit =
+      val before = builtins.getOrElse(name, 0)
+      builtins = builtins.updated(name, before + 1)
+  }
+
+  //  run(recursion) match {
+  //    case Some((main, mod, tree)) =>
+  //      val histogram = new BuiltinHistogram
+  //      Interpreter(histogram).run(main, tree)
+  //      println(histogram)
+  //    case None => ???
+  //  }
+
 
   // TODO allocate arrays and ref on a custom heap that could be inspected and visualized
 
@@ -281,6 +308,8 @@ class InterpreterTests extends munit.FunSuite {
   runTest("examples/benchmarks/are_we_fast_yet/queens.effekt")
   runTest("examples/benchmarks/are_we_fast_yet/sieve.effekt")
   runTest("examples/benchmarks/are_we_fast_yet/towers.effekt")
+
+  runTest("examples/benchmarks/duality_of_compilation/fibonacci_recursive.effekt")
 }
 
 class TestFrontend extends Compiler[(Id, symbols.Module, core.ModuleDecl)] {
