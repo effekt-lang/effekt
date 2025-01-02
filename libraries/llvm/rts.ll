@@ -114,6 +114,26 @@ declare void @exit(i64)
 declare void @llvm.assume(i1)
 
 
+; Boxing (externs functions, hence ccc)
+define ccc %Pos @box(%Neg %input) {
+    %vtable = extractvalue %Neg %input, 0
+    %heap_obj = extractvalue %Neg %input, 1
+    %vtable_as_int = ptrtoint ptr %vtable to i64
+    %pos_result = insertvalue %Pos undef, i64 %vtable_as_int, 0
+    %pos_result_with_heap = insertvalue %Pos %pos_result, ptr %heap_obj, 1
+    ret %Pos %pos_result_with_heap
+}
+
+define ccc %Neg @unbox(%Pos %input) {
+    %tag = extractvalue %Pos %input, 0
+    %heap_obj = extractvalue %Pos %input, 1
+    %vtable = inttoptr i64 %tag to ptr
+    %neg_result = insertvalue %Neg undef, ptr %vtable, 0
+    %neg_result_with_heap = insertvalue %Neg %neg_result, ptr %heap_obj, 1
+    ret %Neg %neg_result_with_heap
+}
+
+
 ; Prompts
 
 define private %Prompt @currentPrompt(%Stack %stack) {
