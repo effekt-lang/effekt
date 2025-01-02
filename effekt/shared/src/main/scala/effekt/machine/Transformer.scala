@@ -184,7 +184,12 @@ object Transformer {
               }
 
             case Block.Unbox(pure) =>
-              transform(pure).run { callee => Invoke(callee, builtins.Apply, values ++ blocks) }
+              transform(pure).run { boxedCallee =>
+                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+
+                ForeignCall(callee, "unbox", List(boxedCallee),
+                  Invoke(callee, builtins.Apply, values ++ blocks))
+              }
 
             case Block.New(impl) =>
               ErrorReporter.panic("Applying an object")
@@ -204,7 +209,12 @@ object Transformer {
               Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
 
             case Block.Unbox(pure) =>
-              transform(pure).run { callee => Invoke(callee, opTag, values ++ blocks) }
+              transform(pure).run { boxedCallee =>
+                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+
+                ForeignCall(callee, "unbox", List(boxedCallee),
+                  Invoke(callee, opTag, values ++ blocks))
+              }
 
             case Block.New(impl) =>
               ErrorReporter.panic("Method call to known object should have been reduced")
@@ -453,7 +463,12 @@ object Transformer {
       }
 
     case core.Box(block, annot) =>
-      transformBlockArg(block)
+      transformBlockArg(block).flatMap { unboxed =>
+        Binding { k =>
+          val boxed = Variable(freshName(unboxed.name), Type.Positive())
+          ForeignCall(boxed, "box", List(unboxed), k(boxed))
+        }
+      }
 
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")
@@ -487,7 +502,7 @@ object Transformer {
 
   def transform(tpe: core.ValueType)(using ErrorReporter): Type = tpe match {
     case core.ValueType.Var(name) => Positive() // assume all value parameters are data
-    case core.ValueType.Boxed(tpe, capt) => Negative()
+    case core.ValueType.Boxed(tpe, capt) => Positive()
     case core.Type.TUnit => builtins.UnitType
     case core.Type.TInt => Type.Int()
     case core.Type.TChar => Type.Int()
