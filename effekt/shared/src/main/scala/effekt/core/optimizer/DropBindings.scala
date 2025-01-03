@@ -2,8 +2,6 @@ package effekt
 package core
 package optimizer
 
-import optimizer. { Normalizer => normal }
-
 import context.Context
 
 /**
@@ -53,7 +51,7 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
             None
           case d => Some(rewrite(d)(using contextSoFar))
         }
-        normal.Scope(ds, rewrite(body)(using contextSoFar))
+        MaybeScope(ds, rewrite(body)(using contextSoFar))
     }
   }
 }

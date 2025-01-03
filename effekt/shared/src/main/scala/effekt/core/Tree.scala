@@ -338,6 +338,20 @@ enum Stmt extends Tree {
 export Stmt.*
 
 /**
+ * A smart constructor for `stmt.Scope` that only introduces a scope if there are bindings
+ */
+def MaybeScope(definitions: List[Definition], body: Stmt): Stmt = body match {
+  // flatten scopes
+  //   { def f = ...; { def g = ...; BODY } }  =  { def f = ...; def g; BODY }
+  case Stmt.Scope(others, body) => MaybeScope(definitions ++ others, body)
+
+  // Drop scope if empty
+  //   { ; BODY }  =  BODY
+  case _ if definitions.isEmpty => body
+  case _ => Stmt.Scope(definitions, body)
+}
+
+/**
  * An instance of an interface, concretely implementing the operations.
  *
  * Used to represent handlers / capabilities, and objects / modules.

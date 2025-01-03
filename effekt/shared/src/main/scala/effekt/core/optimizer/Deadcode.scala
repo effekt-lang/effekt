@@ -2,14 +2,12 @@ package effekt
 package core
 package optimizer
 
-import effekt.core.optimizer. { Normalizer => normal }
-
 class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
 
   override def stmt = {
     // Remove local unused definitions
     case Scope(defs, stmt) =>
-      normal.Scope(defs.collect {
+      MaybeScope(defs.collect {
         case d: Definition.Def if reachable.isDefinedAt(d.id) => rewrite(d)
         // we only keep non-pure OR reachable let bindings
         case d: Definition.Let if d.capt.nonEmpty || reachable.isDefinedAt(d.id) => rewrite(d)

@@ -2,8 +2,6 @@ package effekt
 package core
 package optimizer
 
-import effekt.core.optimizer. { Normalizer => normal }
-
 // Establishes a normal form in which every subexpression
 // is explicitly named and aliasing (val x = y) is removed.
 //
@@ -54,7 +52,7 @@ object BindSubexpressions {
   def transform(s: Stmt)(using env: Env): Stmt = s match {
     case Stmt.Scope(definitions, body) =>
       val (newDefs, newEnv) = transformDefs(definitions)
-      normal.Scope(newDefs, transform(body)(using newEnv))
+      MaybeScope(newDefs, transform(body)(using newEnv))
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
       for {
@@ -174,7 +172,7 @@ object BindSubexpressions {
   // Binding Monad
   // -------------
   case class Bind[+A](value: A, definitions: List[Definition]) {
-    def run(f: A => Stmt): Stmt = normal.Scope(definitions, f(value))
+    def run(f: A => Stmt): Stmt = MaybeScope(definitions, f(value))
     def map[B](f: A => B): Bind[B] = Bind(f(value), definitions)
     def flatMap[B](f: A => Bind[B]): Bind[B] =
       val Bind(result, other) = f(value)

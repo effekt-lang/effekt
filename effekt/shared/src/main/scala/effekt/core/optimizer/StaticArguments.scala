@@ -2,8 +2,6 @@ package effekt
 package core
 package optimizer
 
-import optimizer. { Normalizer => normal }
-
 import scala.collection.mutable
 
 import effekt.core.Type.returnType
@@ -129,7 +127,7 @@ object StaticArguments {
 
   def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
     case Stmt.Scope(definitions, body) =>
-      normal.Scope(rewrite(definitions), rewrite(body))
+      MaybeScope(rewrite(definitions), rewrite(body))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {

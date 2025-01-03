@@ -294,18 +294,15 @@ object Normalizer { normal =>
 
   // Smart Constructors
   // ------------------
-  // They are purposefully not _that_ smart to be usable by other phases
-  // as well.
-
-    @tailrec
-  def Scope(definitions: List[Definition], body: Stmt): Stmt = body match {
+  @tailrec
+  private def Scope(definitions: List[Definition], body: Stmt): Stmt = body match {
 
     // flatten scopes
     //   { def f = ...; { def g = ...; BODY } }  =  { def f = ...; def g; BODY }
     case Stmt.Scope(others, body) => normal.Scope(definitions ++ others, body)
 
     // commute bindings
-    //   let x = run { let y = e; s }  =   let y = e; let x = s
+    //   let x = run { let y = e; s }  =  let y = e; let x = run { s }
     case _ => if (definitions.isEmpty) body else {
       var defsSoFar: List[Definition] = Nil
 
@@ -318,7 +315,7 @@ object Normalizer { normal =>
     }
   }
 
-  def Run(s: Stmt): Expr = s match {
+  private def Run(s: Stmt): Expr = s match {
 
     // run { let x = e; return x }  =  e
     case Stmt.Scope(Definition.Let(id1, _, binding) :: Nil, Stmt.Return(Pure.ValueVar(id2, _))) if id1 == id2 =>
@@ -331,13 +328,13 @@ object Normalizer { normal =>
   }
 
   // box (unbox p)  =  p
-  def Box(b: Block, capt: Captures): Pure = b match {
+  private def Box(b: Block, capt: Captures): Pure = b match {
     case Block.Unbox(pure) => pure
     case b => Pure.Box(b, capt)
   }
 
   // unbox (box b)  =  b
-  def Unbox(p: Pure): Block = p match {
+  private def Unbox(p: Pure): Block = p match {
     case Pure.Box(b, _) => b
     case p => Block.Unbox(p)
   }
