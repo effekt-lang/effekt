@@ -7,7 +7,16 @@ import context.Context
 /**
  * This phase drops (inlines) unique value bindings.
  *
- * This improves the performance for JS on the benchmarks: ...
+ *   let x = 42
+ *   let y = x + 1
+ *   let z = y * 2
+ *   z
+ *
+ * -->
+ *
+ *   (42 + 1) * 2
+ *
+ * This improves the performance for JS on some benchmarks (mostly match_options, sum_range, and parsing_dollars).
  */
 object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
 
