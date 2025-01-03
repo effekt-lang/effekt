@@ -365,11 +365,12 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
-      case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
+      case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         val functionType = PointerType();
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(foreign), values.map(transform)));
+        eraseValues(List(variable), freeVariables(rest))
         transform(rest)
 
       case machine.Statement.Hole =>
