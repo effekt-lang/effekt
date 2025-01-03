@@ -23,6 +23,14 @@ class LLVMTests extends EffektTests {
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
 
+    // segfault
+    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
+    examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
+    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
+  )
+
+  lazy val noValgrind: List[File] = List(
     // sanitizer/valgrind: segfault
     examplesDir / "pos" / "parametrized.effekt",
 
@@ -37,10 +45,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
-    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
-    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
-    examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
-    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
   )
 
   /**
@@ -101,5 +105,8 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "issue733.effekt",
   )
 
-  override lazy val ignored: List[File] = bugs ++ missingFeatures
+  override lazy val ignored: List[File] = bugs ++ missingFeatures ++ noValgrind
+
+  // Also run the no-valgrind tests with valgrind disabled.
+  noValgrind.foreach(runPositiveTestsIn(valgrind = false, debug = debug, ignored = Nil))
 }

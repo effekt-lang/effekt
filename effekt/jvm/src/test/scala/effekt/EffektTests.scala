@@ -36,11 +36,6 @@ trait EffektTests extends munit.FunSuite {
 
   def negatives: List[File] = List()
 
-  def runTestFor(input: File, expected: String): Unit =
-    test(input.getPath + s" (${backendName})") {
-      assertNoDiff(run(input), expected)
-    }
-
   // one shared driver for all tests in this test runner
   object driver extends effekt.Driver
 
@@ -59,7 +54,7 @@ trait EffektTests extends munit.FunSuite {
     compiler.compileFile(input.getPath, configs)
     compiler.context.backup
 
-  def run(input: File): String =
+  def run(input: File, valgrind: Boolean, debug: Boolean): String =
     val compiler = driver
     var options = Seq(
       "--Koutput", "string",
@@ -90,28 +85,28 @@ trait EffektTests extends munit.FunSuite {
     compiler.messaging.get.toList
 
 
-  def runTests() =
+  def runTests(valgrind: Boolean, debug: Boolean, ignored: List[File]) =
     Backend.backend(backendName).runner.checkSetup() match {
       case Left(msg) => test(s"${this.getClass.getName}: ${msg}".ignore) { () }
       case Right(value) =>
-        negatives.foreach(runNegativeTestsIn)
-        positives.foreach(runPositiveTestsIn)
+        negatives.foreach(runNegativeTestsIn(valgrind, debug, ignored))
+        positives.foreach(runPositiveTestsIn(valgrind, debug, ignored))
     }
 
-  def runPositiveTestsIn(dir: File): Unit =
-    foreachFileIn(dir) {
+  def runPositiveTestsIn(valgrind: Boolean, debug: Boolean, ignored: List[File])(dir: File): Unit =
+    foreachFileIn(dir, ignored) {
       case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f), expected)
+          assertNoDiff(run(f, valgrind, debug), expected)
         }
     }
 
-  def runNegativeTestsIn(dir: File): Unit =
-    foreachFileIn(dir) {
+  def runNegativeTestsIn(valgrind: Boolean, debug: Boolean, ignored: List[File])(dir: File): Unit =
+    foreachFileIn(dir, ignored) {
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f), expected)
+          assertNoDiff(run(f, valgrind, debug), expected)
         }
 
       case (f, None) =>
@@ -158,24 +153,23 @@ trait EffektTests extends munit.FunSuite {
 
     assert(messages.nonEmpty)
 
-  def foreachFileIn(file: File)(test: (File, Option[String]) => Unit): Unit =
+  def expectedResultFor(f: File): Option[String] = {
+    val path = f.getParentFile
+    val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
+    val checkfile = path / (baseName + ".check")
+    if checkfile.exists() then Some(IO.read(checkfile)) else None
+  }
+
+  def foreachFileIn(file: File, ignored: List[File])(test: (File, Option[String]) => Unit): Unit =
     file match {
       case f if f.isDirectory && !ignored.contains(f) =>
-        f.listFiles.foreach(foreachFileIn(_)(test))
+        f.listFiles.foreach(f => foreachFileIn(f, ignored)(test))
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
-        val path = f.getParentFile
-        val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
-
-        if (ignored.contains(f)) {
-          ignored.contains(f)
-        } else {
-          val checkfile = path / (baseName + ".check")
-          val expected = if checkfile.exists() then Some(IO.read(checkfile)) else None
-
-          test(f, expected)
+        if (!ignored.contains(f)) {
+          test(f, expectedResultFor(f))
         }
       case _ => ()
     }
 
-  runTests()
+  runTests(valgrind, debug, ignored)
 }
