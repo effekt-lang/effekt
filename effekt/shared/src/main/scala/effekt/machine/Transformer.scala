@@ -123,15 +123,12 @@ object Transformer {
                 noteDefinition(id, free, params)
             }
 
-          case Definition.Def(id, core.Unbox(_)) =>
-            // TODO deal with this case
-            ()
+          case Definition.Def(id, b @ core.Unbox(_)) =>
+            noteParameter(id, b.tpe)
 
           case Definition.Let(_, _, _) =>
             ()
         }
-
-
 
         // (2) Actually translate the definitions
         definitions.foldRight(transform(rest)) {
@@ -151,9 +148,10 @@ object Transformer {
           case (core.Definition.Def(id, core.BlockVar(alias, tpe, _)), rest) =>
             Def(transformLabel(id), Jump(transformLabel(alias)), rest)
 
-          case (d @ core.Definition.Def(_, _: core.Unbox), rest) =>
-            // TODO deal with this case by substitution
-            ErrorReporter.abort(s"block definition: $d")
+          case (core.Definition.Def(id, core.Unbox(pure)), rest) =>
+            transform(pure).run { boxed =>
+              ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), rest)
+            }
         }
 
       case core.Return(expr) =>
@@ -583,7 +581,7 @@ object Transformer {
     BPC.globals += (id -> Label(transform(id), Nil))
 
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
-    BPC.info.getOrElse(id, sys error s"No block info for ${id}")
+    BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
 
   def getDefinition(id: Id)(using BPC: BlocksParamsContext): BlockInfo.Definition = getBlockInfo(id) match {
     case d : BlockInfo.Definition => d

@@ -83,7 +83,7 @@ object Normalizer { normal =>
     val defs = definitions.map {
       case Definition.Def(id, block) =>
         given Context = contextSoFar
-        val normalized = active(block)
+        val normalized = active(block).dealiased
         contextSoFar = contextSoFar.bind(id, normalized)
         Definition.Def(id, normalized)
       case Definition.Let(id, tpe, expr) =>
@@ -93,21 +93,47 @@ object Normalizer { normal =>
     }
     (defs, contextSoFar)
 
-  // we need a better name for this... it is doing a bit more than looking up
-  def active[R](b: Block)(using C: Context): Block =
+  private enum NormalizedBlock {
+    case Known(b: BlockLit | New)
+    case KnownUnbox(b: Unbox, boundBy: Option[BlockVar])
+    case Unknown(b: BlockVar)
+
+    def dealiased: Block = this match {
+      case NormalizedBlock.Known(b) => b
+      case NormalizedBlock.KnownUnbox(b, boundBy) => b
+      case NormalizedBlock.Unknown(b) => b
+    }
+    def shared: Block = this match {
+      case NormalizedBlock.Known(b) => b
+      case NormalizedBlock.KnownUnbox(b, boundBy) => boundBy.getOrElse(b)
+      case NormalizedBlock.Unknown(b) => b
+    }
+  }
+
+  /**
+   * This is a bit tricky: depending on the call-site of `active`
+   * we either want to find a redex (BlockLit | New), maximally dealias (in def bindings),
+   * discover the outmost Unbox (when boxing again), or preserve some sharing otherwise.
+   *
+   * A good testcase to look at for this is:
+   *   examples/pos/capture/regions.effekt
+   */
+  private def active[R](b: Block)(using C: Context): NormalizedBlock =
     normalize(b) match {
+      case b: Block.BlockLit => NormalizedBlock.Known(b)
+      case b @ Block.New(impl) => NormalizedBlock.Known(b)
+
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(value) if isRecursive(id) => x  // stuck
+        case Some(b: Unbox) => NormalizedBlock.KnownUnbox(b, Some(x)) // stuck (preserve sharing `def x = unbox e; ...`)
+        case Some(value) if isRecursive(id) => NormalizedBlock.Unknown(x)
         case Some(value) if isOnce(id) || value.size <= C.maxInlineSize => active(value)
-        case Some(value) => x // stuck
-        case None        => x // stuck
+        case Some(value) => NormalizedBlock.Unknown(x)
+        case None        => NormalizedBlock.Unknown(x)
       }
-      case b: Block.BlockLit => b
       case Block.Unbox(pure) => active(pure) match {
         case Pure.Box(b, annotatedCapture) => active(b)
-        case other => Block.Unbox(pure) // stuck
+        case other => NormalizedBlock.KnownUnbox(Block.Unbox(pure), None)
       }
-      case b @ Block.New(impl) => b
     }
 
   def active(e: Expr)(using Context): Expr =
@@ -137,14 +163,14 @@ object Normalizer { normal =>
     // Redexes
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
-      active(b) match {
+      active(b).shared match {
         case lit : Block.BlockLit =>
           reduce(lit, targs, vargs.map(normalize), bargs.map(normalize))
         case x =>
           Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
       }
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      active(b) match {
+      active(b).shared match {
         case Block.New(impl) =>
           normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
         case x => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
@@ -244,7 +270,10 @@ object Normalizer { normal =>
     }
 
     // [[ box (unbox e) ]] = [[ e ]]
-    case Pure.Box(b, annotatedCapture) => normal.Box(normalize(b), annotatedCapture)
+    case Pure.Box(b, annotatedCapture) => active(b) match {
+      case NormalizedBlock.KnownUnbox(Unbox(p), boundBy) => p
+      case _ => normal.Box(normalize(b), annotatedCapture)
+    }
 
     // congruences
     case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
