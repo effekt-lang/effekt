@@ -1,8 +1,9 @@
 package effekt
 package core
+package optimizer
 
-import effekt.core.normal.*
 import scala.collection.mutable
+
 import effekt.core.Type.returnType
 
 /**
@@ -34,8 +35,11 @@ object StaticArguments {
       types.forall(x => x) && (values.exists(x => x) || blocks.exists(x => x))
   }
 
-  def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
+  private def dropStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
     (isStatic zip arguments).collect { case (false, arg) => arg }
+
+  private def selectStatic[A](isStatic: List[Boolean], arguments: List[A]): List[A] =
+    (isStatic zip arguments).collect { case (true, arg) => arg }
 
   /**
    * Wraps the definition in another function, abstracting arguments along the way.
@@ -58,7 +62,7 @@ object StaticArguments {
   def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): Definition.Def =
     val IsStatic(staticT, staticV, staticB) = ctx.statics(id)
 
-    assert(staticT.forall(x => x), "Can only apply the worker-wrapper translation, if all type arguments are static.")
+    assert(staticT.forall(x => x), "Can only apply the static arguments translation, if all type arguments are static.")
 
     val workerType = BlockType.Function(
       dropStatic(staticT, blockLit.tparams), // should always be empty!
@@ -69,11 +73,8 @@ object StaticArguments {
       blockLit.returnType
     )
 
-    val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, blockLit.capt)
-    ctx.workers(id) = workerVar
-
     // fresh params for the wrapper function and its invocation
-    // note: only freshen params if not static to prevent duplicates
+    // note: only freshen non-static params to prevent duplicates
     val freshCparams: List[Id] = (staticB zip blockLit.cparams).map {
       case (true, param) => param
       case (false, param) => Id(param)
@@ -82,10 +83,16 @@ object StaticArguments {
       case (true, param) => param
       case (false, ValueParam(id, tpe)) => ValueParam(Id(id), tpe)
     }
-    val freshBparams: List[BlockParam] = (staticB zip blockLit.bparams).map {
-      case (true, param) => param
-      case (false, BlockParam(id, tpe, capt)) => BlockParam(Id(id), tpe, capt)
+    val freshBparams: List[BlockParam] = (staticB zip blockLit.bparams zip freshCparams).map {
+      case ((true, param), capt) => param
+      case ((false, BlockParam(id, tpe, _)), capt) => BlockParam(Id(id), tpe, Set(capt))
     }
+
+    // the worker now closes over the static block arguments (`c` in the example above):
+    val newCapture = blockLit.capt ++ selectStatic(staticB, freshCparams).toSet
+
+    val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, newCapture)
+    ctx.workers(id) = workerVar
 
     Definition.Def(id, BlockLit(
       blockLit.tparams,
@@ -120,22 +127,22 @@ object StaticArguments {
 
   def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
     case Stmt.Scope(definitions, body) =>
-      scope(rewrite(definitions), rewrite(body))
+      MaybeScope(rewrite(definitions), rewrite(body))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
         // if arguments are static && recursive call: call worker with reduced arguments
         case BlockVar(id, annotatedTpe, annotatedCapt) if hasStatics(id) && within(id) =>
           val IsStatic(staticT, staticV, staticB) = C.statics(id)
-          app(C.workers(id),
+          Stmt.App(C.workers(id),
             dropStatic(staticT, targs),
             dropStatic(staticV, vargs).map(rewrite),
             dropStatic(staticB, bargs).map(rewrite))
-        case _ => app(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
+        case _ => Stmt.App(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
       }
 
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
+      Stmt.Invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
 
     case Stmt.Reset(body) =>
       rewrite(body) match {
@@ -144,10 +151,9 @@ object StaticArguments {
 
     // congruences
     case Stmt.Return(expr) => Return(rewrite(expr))
-    case Stmt.Val(id, tpe, binding, body) => valDef(id, tpe, rewrite(binding), rewrite(body))
+    case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, rewrite(binding), rewrite(body))
     case Stmt.If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-    case Stmt.Match(scrutinee, clauses, default) =>
-      patternMatch(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
+    case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
     case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
     case Stmt.Resume(k, body) => Resume(k, rewrite(body))
@@ -155,7 +161,7 @@ object StaticArguments {
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, rewrite(init), capture, rewrite(body))
     case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)
     case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, rewrite(value))
-    case Stmt.Hole() => s
+    case Stmt.Hole() => Stmt.Hole()
   }
   def rewrite(b: BlockLit)(using StaticArgumentsContext): BlockLit =
     b match {
@@ -168,8 +174,8 @@ object StaticArguments {
 
     // congruences
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => rewrite(b)
-    case Block.Unbox(pure) => unbox(rewrite(pure))
-    case Block.New(impl) => New(rewrite(impl))
+    case Block.Unbox(pure) => Block.Unbox(rewrite(pure))
+    case Block.New(impl) => Block.New(rewrite(impl))
   }
 
   def rewrite(s: Implementation)(using StaticArgumentsContext): Implementation =
@@ -180,21 +186,21 @@ object StaticArguments {
     }
 
   def rewrite(p: Pure)(using StaticArgumentsContext): Pure = p match {
-    case Pure.PureApp(b, targs, vargs) => pureApp(rewrite(b), targs, vargs.map(rewrite))
-    case Pure.Make(data, tag, vargs) => make(data, tag, vargs.map(rewrite))
+    case Pure.PureApp(b, targs, vargs) => Pure.PureApp(rewrite(b), targs, vargs.map(rewrite))
+    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(rewrite))
     case x @ Pure.ValueVar(id, annotatedType) => x
 
     // congruences
     case Pure.Literal(value, annotatedType) => p
-    case Pure.Select(target, field, annotatedType) => select(rewrite(target), field, annotatedType)
-    case Pure.Box(b, annotatedCapture) => box(rewrite(b), annotatedCapture)
+    case Pure.Select(target, field, annotatedType) => Pure.Select(rewrite(target), field, annotatedType)
+    case Pure.Box(b, annotatedCapture) => Pure.Box(rewrite(b), annotatedCapture)
   }
 
   def rewrite(e: Expr)(using StaticArgumentsContext): Expr = e match {
-    case DirectApp(b, targs, vargs, bargs) => directApp(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
+    case DirectApp(b, targs, vargs, bargs) => DirectApp(rewrite(b), targs, vargs.map(rewrite), bargs.map(rewrite))
 
     // congruences
-    case Run(s) => run(rewrite(s))
+    case Run(s) => Run(rewrite(s))
     case pure: Pure => rewrite(pure)
   }
 
