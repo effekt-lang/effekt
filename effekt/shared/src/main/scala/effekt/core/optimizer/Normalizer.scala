@@ -183,6 +183,12 @@ object Normalizer { normal =>
         case Stmt.Scope(ds, bodyBinding) =>
           normal.Scope(ds, normalizeVal(id, tpe, bodyBinding, body))
 
+
+        // Flatten vals. This should be non-leaking since we use garbage free refcounting.
+        // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
+        case Stmt.Val(id2, tpe2, binding2, body2) =>
+          normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
+
         // [[ val x = stmt; return x ]]   =   [[ stmt ]]
         case other => normalize(body) match {
           case Stmt.Return(x: ValueVar) if x.id == id => other
