@@ -22,6 +22,11 @@ class LLVMTests extends EffektTests {
   lazy val bugs: List[File] = List(
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
+    // Jump to the invalid address stated on the next line
+    examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
+    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
+    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
   )
 
   /**
