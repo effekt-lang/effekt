@@ -115,7 +115,6 @@ extern pure def length(str: String): Int =
   chez "(string-length ${str})"
   llvm """
     %x = call %Int @c_bytearray_size(%Pos ${str})
-    call void @erasePositive(%Pos ${str})
     ret %Int %x
   """
 
