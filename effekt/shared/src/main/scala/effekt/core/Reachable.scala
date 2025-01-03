@@ -103,6 +103,7 @@ class Reachable(
     case Run(s) => process(s)
     case Pure.ValueVar(id, annotatedType) => process(id)
     case Pure.Literal(value, annotatedType) => ()
+    case Pure.TemplateStr(strs, args) => args.foreach(process)
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
     case Pure.Make(data, tag, vargs) => process(tag); vargs.foreach(process)
     case Pure.Select(target, field, annotatedType) => process(field); process(target)

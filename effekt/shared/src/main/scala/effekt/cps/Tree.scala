@@ -73,6 +73,7 @@ enum Pure extends Expr {
   case ValueVar(id: Id)
 
   case Literal(value: Any)
+  case TemplateStr(strs: List[String], args: List[Pure])
 
   /**
    * Pure FFI calls. Invariant, block b is pure.
@@ -182,6 +183,7 @@ object Variables {
     case DirectApp(id, vargs, bargs) => block(id) ++ all(vargs, free) ++ all(bargs, free)
     case Pure.ValueVar(id) => value(id)
     case Pure.Literal(value) => empty
+    case Pure.TemplateStr(strs, args) => all(args, free)
     case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)
     case Pure.Make(data, tag, vargs) => all(vargs, free)
     case Pure.Select(target, field) => free(target)

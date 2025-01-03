@@ -191,6 +191,7 @@ object Transformer {
   def transform(pure: core.Pure)(using C: TransformationContext): Pure = pure match {
     case core.Pure.ValueVar(id, annotatedType) => C.lookupValue(id)
     case core.Pure.Literal(value, annotatedType) => Literal(value)
+    case core.Pure.TemplateStr(strs, args) => TemplateStr(strs, args.map(transform))
     case core.Pure.PureApp(b, targs, vargs) => transform(b) match {
       case Block.BlockVar(id) => PureApp(id, vargs.map(transform))
       case _ => sys error "Should not happen"

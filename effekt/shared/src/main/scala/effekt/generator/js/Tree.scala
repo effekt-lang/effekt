@@ -102,6 +102,8 @@ enum Expr {
   //   raw JS literal, already converted to a string. Similar to RawExpr but will not be parenthesized
   case RawLiteral(raw: String)
 
+  case TemplateStr(strs: List[String], args: List[Expr])
+
   // e.g. (<EXPR> ? <EXPR> : <EXPR>)
   case IfExpr(cond: Expr, thn: Expr, els: Expr)
 

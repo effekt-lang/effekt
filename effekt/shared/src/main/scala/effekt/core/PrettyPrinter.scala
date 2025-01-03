@@ -95,6 +95,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
     case Literal(s: String, _)     => "\"" + s + "\""
+    case TemplateStr(strs, args)   => "\"" + strs.zip(args).foldLeft("") { case (doc, (str, arg)) => doc + str + toDoc(arg) } + "\""
     case Literal(value, _)         => value.toString
     case ValueVar(id, _)           => toDoc(id)
 
