@@ -244,7 +244,7 @@ object Normalizer { normal =>
     }
 
     // [[ box (unbox e) ]] = [[ e ]]
-    case Pure.Box(b, annotatedCapture) => normal.Box(active(b), annotatedCapture)
+    case Pure.Box(b, annotatedCapture) => normal.Box(normalize(b), annotatedCapture)
 
     // congruences
     case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
