@@ -211,16 +211,19 @@ object Normalizer { normal =>
             normalize(body)(using C.bind(id, expr)))
 
         // Commute val and bindings
-        // TODO does this leak??? For definitions it should be ok.
         // [[ val x = { def f = ...; let y = ...; STMT }; STMT ]] = def f = ...; let y = ...; val x = STMT; STMT
         case Stmt.Scope(ds, bodyBinding) =>
           normal.Scope(ds, normalizeVal(id, tpe, bodyBinding, body))
-
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>
           normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
+
+
+        // [[ val x = { var y in r = e; stmt1 }; stmt2 ]] = var y in r = e; [[ val x = stmt1; stmt2 ]]
+        case Stmt.Alloc(id2, init2, region2, body2) =>
+          Stmt.Alloc(id2, init2, region2, normalizeVal(id, tpe, body2, body))
 
         // [[ val x = stmt; return x ]]   =   [[ stmt ]]
         case other => normalize(body) match {
@@ -229,6 +232,7 @@ object Normalizer { normal =>
         }
       }
       normalizeVal(id, tpe, normalize(binding), body)
+
 
     // "Congruences"
     // -------------
