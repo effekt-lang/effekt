@@ -82,8 +82,7 @@ object Normalizer { normal =>
     var contextSoFar = ctx
     val defs = definitions.map {
       case Definition.Def(id, block) =>
-        given Context = contextSoFar
-        val normalized = active(block).dealiased
+        val normalized = active(block)(using contextSoFar).dealiased
         contextSoFar = contextSoFar.bind(id, normalized)
         Definition.Def(id, normalized)
       case Definition.Let(id, tpe, expr) =>
@@ -94,18 +93,15 @@ object Normalizer { normal =>
     (defs, contextSoFar)
 
   private enum NormalizedBlock {
-    case Known(b: BlockLit | New)
-    case KnownUnbox(b: Unbox, boundBy: Option[BlockVar])
+    case Known(b: BlockLit | New | Unbox, boundBy: Option[BlockVar])
     case Unknown(b: BlockVar)
 
     def dealiased: Block = this match {
-      case NormalizedBlock.Known(b) => b
-      case NormalizedBlock.KnownUnbox(b, boundBy) => b
+      case NormalizedBlock.Known(b, boundBy) => b
       case NormalizedBlock.Unknown(b) => b
     }
     def shared: Block = this match {
-      case NormalizedBlock.Known(b) => b
-      case NormalizedBlock.KnownUnbox(b, boundBy) => boundBy.getOrElse(b)
+      case NormalizedBlock.Known(b, boundBy) => boundBy.getOrElse(b)
       case NormalizedBlock.Unknown(b) => b
     }
   }
@@ -120,23 +116,28 @@ object Normalizer { normal =>
    */
   private def active[R](b: Block)(using C: Context): NormalizedBlock =
     normalize(b) match {
-      case b: Block.BlockLit => NormalizedBlock.Known(b)
-      case b @ Block.New(impl) => NormalizedBlock.Known(b)
+      case b: Block.BlockLit   => NormalizedBlock.Known(b, None)
+      case b @ Block.New(impl) => NormalizedBlock.Known(b, None)
 
       case x @ Block.BlockVar(id, annotatedTpe, annotatedCapt) => blockFor(id) match {
-        case Some(b: Unbox) => NormalizedBlock.KnownUnbox(b, Some(x)) // stuck (preserve sharing `def x = unbox e; ...`)
-        case Some(value) if isRecursive(id) => NormalizedBlock.Unknown(x)
-        case Some(value) if isOnce(id) || value.size <= C.maxInlineSize => active(value)
-        case Some(value) => NormalizedBlock.Unknown(x)
-        case None        => NormalizedBlock.Unknown(x)
+        case Some(b: (BlockLit | New | Unbox)) => NormalizedBlock.Known(b, Some(x))
+        case _ => NormalizedBlock.Unknown(x)
       }
       case Block.Unbox(pure) => active(pure) match {
         case Pure.Box(b, annotatedCapture) => active(b)
-        case other => NormalizedBlock.KnownUnbox(Block.Unbox(pure), None)
+        case other => NormalizedBlock.Known(Block.Unbox(pure), None)
       }
     }
 
-  def active(e: Expr)(using Context): Expr =
+  // TODO for `New` we should track how often each operation is used, not the object itself
+  //   to decide inlining.
+  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar])(using C: Context): Boolean = boundBy match {
+    case Some(id) if isRecursive(id.id) => false
+    case Some(id) => isOnce(id.id) || b.body.size <= C.maxInlineSize
+    case None => true
+  }
+
+  private def active(e: Expr)(using Context): Expr =
     normalize(e) match {
       case x @ Pure.ValueVar(id, annotatedType) => exprFor(id) match {
         case Some(p: Pure.Make)    => p
@@ -163,17 +164,23 @@ object Normalizer { normal =>
     // Redexes
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
-      active(b).shared match {
-        case lit : Block.BlockLit =>
-          reduce(lit, targs, vargs.map(normalize), bargs.map(normalize))
-        case x =>
-          Stmt.App(x, targs, vargs.map(normalize), bargs.map(normalize))
+      active(b) match {
+        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy) =>
+          reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+        case normalized =>
+           Stmt.App(normalized.shared, targs, vargs.map(normalize), bargs.map(normalize))
       }
+
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
-      active(b).shared match {
-        case Block.New(impl) =>
-          normalize(reduce(impl, method, targs, vargs.map(normalize), bargs.map(normalize)))
-        case x => Stmt.Invoke(x, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
+      active(b) match {
+        case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
+          selectOperation(impl, method) match {
+            case b: BlockLit if shouldInline(b, boundBy) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+            case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
+          }
+
+        case normalized =>
+          Stmt.Invoke(normalized.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
     case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
@@ -271,7 +278,7 @@ object Normalizer { normal =>
 
     // [[ box (unbox e) ]] = [[ e ]]
     case Pure.Box(b, annotatedCapture) => active(b) match {
-      case NormalizedBlock.KnownUnbox(Unbox(p), boundBy) => p
+      case NormalizedBlock.Known(Unbox(p), boundBy) => p
       case _ => normal.Box(normalize(b), annotatedCapture)
     }
 
@@ -343,7 +350,6 @@ object Normalizer { normal =>
   // Helpers for beta-reduction
   // --------------------------
 
-  // TODO we should rename when inlining to maintain barendregdt, but need to copy usage information...
   private def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using C: Context): Stmt = {
     // To update usage information
     val usage = C.usage
@@ -385,10 +391,8 @@ object Normalizer { normal =>
     normalize(normal.Scope(bindings, body))
   }
 
-  private def reduce(impl: Implementation, method: Id, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])(using Context): Stmt =
-    val Operation(name, tps, cps, vps, bps, body) =
-      impl.operations.find(op => op.name == method).getOrElse {
-        INTERNAL_ERROR("Should not happen")
-      }
-    reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
+  private def selectOperation(impl: Implementation, method: Id): Block.BlockLit =
+    impl.operations.collectFirst {
+      case Operation(name, tps, cps, vps, bps, body) if name == method => BlockLit(tps, cps, vps, bps, body): Block.BlockLit
+    }.getOrElse { INTERNAL_ERROR("Should not happen") }
 }
