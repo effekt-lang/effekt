@@ -287,14 +287,14 @@ object Normalizer { normal =>
     }
 
     // congruences
-    case Pure.PureApp(b, targs, vargs) => Pure.PureApp(normalize(b), targs, vargs.map(normalize))
+    case Pure.PureApp(bvar, targs, vargs) => Pure.PureApp(bvar, targs, vargs.map(normalize))
     case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(normalize))
     case Pure.ValueVar(id, annotatedType) => p
     case Pure.Literal(value, annotatedType) => p
   }
 
   def normalize(e: Expr)(using Context): Expr = e match {
-    case DirectApp(b, targs, vargs, bargs) => DirectApp(normalize(b), targs, vargs.map(normalize), bargs.map(normalize))
+    case DirectApp(bvar, targs, vargs, bargs) => DirectApp(bvar, targs, vargs.map(normalize), bargs.map(normalize))
 
     // [[ run (return e) ]] = [[ e ]]
     case Run(s) => normal.Run(normalize(s))
