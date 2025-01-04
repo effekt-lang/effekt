@@ -1,9 +1,7 @@
 package effekt
 package core
-package interpreter
 
-import effekt.symbols.QualifiedName
-import effekt.symbols.given
+import interpreter.*
 
 class InterpreterTests extends munit.FunSuite {
 
@@ -70,23 +68,23 @@ class InterpreterTests extends munit.FunSuite {
     runtime.output()
 
   val recursion =
-      """def countdown(n: Int): Int =
-        |  if (n == 0) 42
-        |  else countdown(n - 1)
-        |
-        |def fib(n: Int): Int =
-        |  if (n == 0) 1
-        |  else if (n == 1) 1
-        |  else fib(n - 2) + fib(n - 1)
-        |
-        |def main() = {
-        |  println(fib(10).show)
-        |}
-        |""".stripMargin
+    """def fib(n: Int): Int =
+      |  if (n == 0) 1
+      |  else if (n == 1) 1
+      |  else fib(n - 2) + fib(n - 1)
+      |
+      |def main() = {
+      |  println(fib(10).show)
+      |}
+      |""".stripMargin
 
-  assertEquals(runString(recursion), "89\n")
 
-  val dynamicDispatch = """def size[T](l: List[T]): Int =
+  test ("simple recursion") {
+    assertEquals(runString(recursion), "89\n")
+  }
+
+  val dynamicDispatch =
+    """def size[T](l: List[T]): Int =
       |  l match {
       |    case Nil() => 0
       |    case Cons(hd, tl) => 1 + size(tl)
@@ -103,30 +101,9 @@ class InterpreterTests extends munit.FunSuite {
       |}
       |""".stripMargin
 
-  assertEquals(runString(dynamicDispatch), "3\n")
-
-  val eraseUnused =
-    """def replicate(v: Int, n: Int, a: List[Int]): List[Int] =
-      |  if (n == 0) {
-      |    a
-      |  } else {
-      |    replicate(v, n - 1, Cons(v, a))
-      |  }
-      |
-      |def useless(i: Int, n: Int, _: List[Int]): Int =
-      |  if (i < n) {
-      |    useless(i + 1, n, replicate(0, i, Nil()))
-      |  } else {
-      |    i
-      |  }
-      |
-      |def run(n: Int) =
-      |  useless(0, n, Nil())
-      |
-      |def main() = {
-      |  println(run(10))
-      |}
-      |""".stripMargin
+  test ("dynamic dispatch") {
+    assertEquals(runString(dynamicDispatch), "3\n")
+  }
 
   val simpleObject =
     """interface Counter {
@@ -146,46 +123,29 @@ class InterpreterTests extends munit.FunSuite {
       |
       |""".stripMargin
 
-  val factorialAccumulator =
-    """import examples/benchmarks/runner
-      |
-      |def factorial(a: Int, i: Int): Int =
-      |  if (i == 0) {
-      |    a
-      |  } else {
-      |    factorial((i * a).mod(1000000007), i - 1)
-      |  }
-      |
-      |def run(n: Int): Int =
-      |  factorial(1, n)
-      |
-      |def main() = benchmark(5){run}
-      |
-      |""".stripMargin
-
-  val sort =
-    """import list
-      |
-      |def main() = {
-      |  // synchronized with doctest in `sortBy`
-      |  println([1, 3, -1, 5].sortBy { (a, b) => a <= b })
-      |}
-      |""".stripMargin
+  test ("simple object") {
+    assertEquals(runString(simpleObject), "tick\ntick\ntick\n")
+  }
 
   val mutableState =
     """def main() = {
       |  var x = 42;
       |  x = x + 1;
       |  println(x.show)
-      |  [1, 2, 3].map { x => x + 1 }.foreach { x => println(x) };
       |
       |  region r {
-      |    var x in r = 42;
+      |    var x in r = 10;
       |    x = x + 1
-      |    println(x)
+      |    println(x.show)
       |  }
       |}
       |""".stripMargin
+
+  test ("mutable state") {
+    // still buggy...
+    println(util.show(compileString(mutableState)._3))
+    //assertEquals(runString(mutableState), "43\n11\n")
+  }
 
   val simpleException =
     """effect raise(): Unit
@@ -200,74 +160,74 @@ class InterpreterTests extends munit.FunSuite {
       |
       |""".stripMargin
 
-  val triples =
-    """import examples/benchmarks/runner
+  test ("simple exception") {
+    assertEquals(runString(simpleException), "before\ncaught\n")
+  }
+
+  val sorting =
+    """import list
       |
-      |record Triple(a: Int, b: Int, c: Int)
-      |
-      |interface Flip {
-      |  def flip(): Bool
+      |def main() = {
+      |  // synchronized with doctest in `sortBy`
+      |  println([1, 3, -1, 5].sortBy { (a, b) => a <= b })
       |}
-      |
-      |interface Fail {
-      |  def fail(): Nothing
-      |}
-      |
-      |def choice(n: Int): Int / {Flip, Fail} = {
-      |  if (n < 1) {
-      |    do fail() match {}
-      |  } else if (do flip()) {
-      |    n
-      |  } else {
-      |    choice(n - 1)
-      |  }
-      |}
-      |
-      |def triple(n: Int, s: Int): Triple / {Flip, Fail} = {
-      |  val i = choice(n)
-      |  val j = choice(i - 1)
-      |  val k = choice(j - 1)
-      |  if (i + j + k == s) {
-      |    Triple(i, j, k)
-      |  } else {
-      |    do fail() match {}
-      |  }
-      |}
-      |
-      |def hash(triple: Triple): Int = triple match {
-      |  case Triple(a, b, c) => mod(((53 * a) + 2809 * b + 148877 * c), 1000000007)
-      |}
-      |
-      |def run(n: Int) =
-      |  try {
-      |    hash(triple(n, n))
-      |  } with Flip {
-      |    def flip() = mod(resume(true) + resume(false), 1000000007)
-      |  } with Fail {
-      |    def fail() = 0
-      |  }
-      |
-      |def main() = benchmark(10){run}
-      |
-      |
       |""".stripMargin
 
-  // doesn't work: product_early (since it SO due to run run run)
+  test ("sorting (integration)") {
+    assertEquals(runString(sorting), "Cons(-1, Cons(1, Cons(3, Cons(5, Nil()))))\n")
+  }
 
-  // TODO allocate arrays and ref on a custom heap that could be inspected and visualized
-  //
-  //  runTest("examples/benchmarks/are_we_fast_yet/bounce.effekt")
-  //  runTest("examples/benchmarks/are_we_fast_yet/list_tail.effekt")
-  //  runTest("examples/benchmarks/are_we_fast_yet/mandelbrot.effekt")
-  //  runTest("examples/benchmarks/are_we_fast_yet/nbody.effekt")
-  //
-  //  // global is missing
-  //  //runTest("examples/benchmarks/are_we_fast_yet/permute.effekt")
-  //  //runTest("examples/benchmarks/are_we_fast_yet/storage.effekt")
-  //
-  //  runTest("examples/benchmarks/are_we_fast_yet/queens.effekt")
-  //  runTest("examples/benchmarks/are_we_fast_yet/sieve.effekt")
-  //  runTest("examples/benchmarks/are_we_fast_yet/towers.effekt")
-  //
-  //  runTest("examples/benchmarks/duality_of_compilation/fibonacci_recursive.effekt")
+
+
+
+  import java.io.File
+  import sbt.io.*
+  import sbt.io.syntax.*
+
+  def examplesDir = new File("examples")
+
+  val testFiles: Seq[File] = Seq(
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "list_tail.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "mandelbrot.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
+
+    examplesDir / "benchmarks" / "duality_of_compilation" / "erase_unused.effekt",
+    examplesDir / "benchmarks" / "duality_of_compilation" / "factorial_accumulator.effekt",
+    examplesDir / "benchmarks" / "duality_of_compilation" / "fibonacci_recursive.effekt",
+    examplesDir / "benchmarks" / "duality_of_compilation" / "iterate_increment.effekt",
+    examplesDir / "benchmarks" / "duality_of_compilation" / "lookup_tree.effekt",
+    examplesDir / "benchmarks" / "duality_of_compilation" / "match_options.effekt",
+    examplesDir / "benchmarks" / "duality_of_compilation" / "sum_range.effekt",
+
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "countdown.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "iterator.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "nqueens.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "parsing_dollars.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "product_early.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "resume_nontail.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt",
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "triples.effekt",
+  )
+
+  val notWorking: Seq[File] = Seq(
+    // global is missing
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
+  )
+
+  def runTest(f: File): Unit =
+    val path = f.getPath
+    test(path) {
+      val result = runFile(path)
+      val expected = expectedResultFor(f).getOrElse { s"Missing checkfile for ${path}"}
+      assertNoDiff(result, expected)
+    }
+
+  testFiles.foreach(runTest)
+
+
 }
