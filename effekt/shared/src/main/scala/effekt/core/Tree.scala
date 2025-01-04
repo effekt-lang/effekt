@@ -6,6 +6,8 @@ import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
 
+import scala.annotation.tailrec
+
 /**
  * Tree structure of programs in our internal core representation.
  *
@@ -304,7 +306,7 @@ enum Stmt extends Tree {
   case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // (Type-monomorphic?) Regions
-  case Region(body: Block)
+  case Region(body: BlockLit)
   case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
@@ -336,147 +338,17 @@ enum Stmt extends Tree {
 export Stmt.*
 
 /**
- * Smart constructors to establish some normal form
+ * A smart constructor for `stmt.Scope` that only introduces a scope if there are bindings
  */
-object normal {
+def MaybeScope(definitions: List[Definition], body: Stmt): Stmt = body match {
+  // flatten scopes
+  //   { def f = ...; { def g = ...; BODY } }  =  { def f = ...; def g; BODY }
+  case Stmt.Scope(others, body) => MaybeScope(definitions ++ others, body)
 
-  def valDef(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt =
-    (binding, body) match {
-
-      // [[ val x = STMT; return x ]] == STMT
-      case (_, Stmt.Return(Pure.ValueVar(other, _))) if other == id =>
-        binding
-
-      //  [[ val x = return EXPR; STMT ]] = [[ let x = EXPR; STMT ]]
-      //
-      // This opt is too good for JS: it blows the stack on
-      // recursive functions that are used to encode while...
-      //
-      // The solution to this problem is implemented in core.MakeStackSafe:
-      //   all recursive functions that could blow the stack are trivially wrapped
-      //   again, after optimizing.
-      case (Stmt.Return(expr), body) =>
-        scope(List(Definition.Let(id, tpe, expr)), body)
-
-      // here we are flattening scopes; be aware that this extends
-      // life-times of bindings!
-      //
-      // { val x = { def...; BODY }; REST }  =  { def ...; val x = BODY }
-      case (Stmt.Scope(definitions, binding), body) =>
-        scope(definitions, valDef(id, tpe, binding, body))
-
-      case _ => Stmt.Val(id, tpe, binding, body)
-    }
-
-  // { def f=...; { def g=...; BODY } }  =  { def f=...; def g; BODY }
-  def scope(definitions: List[Definition], body: Stmt): Stmt = body match {
-    case Stmt.Scope(others, body) => scope(definitions ++ others, body)
-    case _ => if (definitions.isEmpty) body else Stmt.Scope(definitions, body)
-  }
-
-  // TODO perform record selection here, if known
-  def select(target: Pure, field: Id, annotatedType: ValueType): Pure =
-    Select(target, field, annotatedType)
-
-  def app(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
-    callee match {
-      case b : Block.BlockLit => reduce(b, targs, vargs, bargs)
-      case other => Stmt.App(callee, targs, vargs, bargs)
-    }
-
-  def invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
-    callee match {
-      case Block.New(impl) =>
-        val Operation(name, tps, cps, vps, bps, body) =
-           impl.operations.find(op => op.name == method).getOrElse {
-             INTERNAL_ERROR("Should not happen")
-           }
-        reduce(BlockLit(tps, cps, vps, bps, body), targs, vargs, bargs)
-      case other => Invoke(callee, method, methodTpe, targs, vargs, bargs)
-    }
-
-  def reset(body: BlockLit): Stmt = body match {
-    //    case BlockLit(tparams, cparams, vparams, List(prompt),
-    //      Stmt.Shift(prompt2, body) if prompt.id == prompt2.id => ???
-    case other => Stmt.Reset(body)
-  }
-
-  def make(tpe: ValueType.Data, tag: Id, vargs: List[Pure]): Pure =
-    Pure.Make(tpe, tag, vargs)
-
-  def pureApp(callee: Block, targs: List[ValueType], vargs: List[Pure]): Pure =
-    callee match {
-      case b : Block.BlockLit =>
-        INTERNAL_ERROR(
-          """|This should not happen!
-             |User defined functions always have to be called with App, not PureApp.
-             |If this error does occur, this means this changed.
-             |Check `core.Transformer.makeFunctionCall` for details.
-             |""".stripMargin)
-      case other =>
-        Pure.PureApp(callee, targs, vargs)
-    }
-
-  // "match" is a keyword in Scala
-  def patternMatch(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt]): Stmt =
-    scrutinee match {
-      case Pure.Make(dataType, ctorTag, vargs) =>
-        clauses.collectFirst { case (tag, lit) if tag == ctorTag => lit }
-          .map(body => app(body, Nil, vargs, Nil))
-          .orElse { default }.getOrElse { sys error "Pattern not exhaustive. This should not happen" }
-      case other => (clauses, default) match {
-        // Unit-like types: there is only one case and it is just a tag.
-        //   sc match { case Unit() => body }   ==>   body
-        case ((id, lit) :: Nil, None) if lit.vparams.isEmpty => lit.body
-        case _ => Match(scrutinee, clauses, default)
-      }
-    }
-
-
-  def directApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Expr =
-    callee match {
-      case b : Block.BlockLit => run(reduce(b, targs, vargs, Nil))
-      case other => DirectApp(callee, targs, vargs, bargs)
-    }
-
-  def reduce(b: BlockLit, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]): Stmt = {
-
-    // Only bind if not already a variable!!!
-    var ids: Set[Id] = Set.empty
-    var bindings: List[Definition.Def] = Nil
-    var bvars: List[Block.BlockVar] = Nil
-
-    // (1) first bind
-    bargs foreach {
-      case x: Block.BlockVar => bvars = bvars :+ x
-      // introduce a binding
-      case block =>
-        val id = symbols.TmpBlock("blockBinding")
-        bindings = bindings :+ Definition.Def(id, block)
-        bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
-        ids += id
-    }
-
-    // (2) substitute
-    val body = substitutions.substitute(b, targs, vargs, bvars)
-
-    scope(bindings, body)
-  }
-
-  def run(s: Stmt): Expr = s match {
-    case Stmt.Return(expr) => expr
-    case _ => Run(s)
-  }
-
-  def box(b: Block, capt: Captures): Pure = b match {
-    case Block.Unbox(pure) => pure
-    case b => Box(b, capt)
-  }
-
-  def unbox(p: Pure): Block = p match {
-    case Pure.Box(b, _) => b
-    case p => Unbox(p)
-  }
+  // Drop scope if empty
+  //   { ; BODY }  =  BODY
+  case _ if definitions.isEmpty => body
+  case _ => Stmt.Scope(definitions, body)
 }
 
 /**
@@ -600,6 +472,55 @@ object Tree {
       }
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
+      case (p, b) => (p, rewrite(b))
+    }
+  }
+
+  class RewriteWithContext[Ctx] extends Structural {
+    def id(using Ctx): PartialFunction[Id, Id] = PartialFunction.empty
+    def pure(using Ctx): PartialFunction[Pure, Pure] = PartialFunction.empty
+    def expr(using Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
+    def stmt(using Ctx): PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def defn(using Ctx): PartialFunction[Definition, Definition] = PartialFunction.empty
+    def block(using Ctx): PartialFunction[Block, Block] = PartialFunction.empty
+    def handler(using Ctx): PartialFunction[Implementation, Implementation] = PartialFunction.empty
+    def param(using Ctx): PartialFunction[Param, Param] = PartialFunction.empty
+
+    def rewrite(x: Id)(using Ctx): Id = if id.isDefinedAt(x) then id(x) else x
+    def rewrite(p: Pure)(using Ctx): Pure = rewriteStructurally(p, pure)
+    def rewrite(e: Expr)(using Ctx): Expr = rewriteStructurally(e, expr)
+    def rewrite(s: Stmt)(using Ctx): Stmt = rewriteStructurally(s, stmt)
+    def rewrite(b: Block)(using Ctx): Block = rewriteStructurally(b, block)
+    def rewrite(d: Definition)(using Ctx): Definition = rewriteStructurally(d, defn)
+    def rewrite(e: Implementation)(using Ctx): Implementation = rewriteStructurally(e, handler)
+    def rewrite(o: Operation)(using Ctx): Operation = rewriteStructurally(o)
+    def rewrite(p: Param)(using Ctx): Param = rewriteStructurally(p, param)
+    def rewrite(p: Param.ValueParam)(using Ctx): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
+    def rewrite(p: Param.BlockParam)(using Ctx): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(b: ExternBody)(using Ctx): ExternBody= rewrite(b)
+
+    def rewrite(b: BlockLit)(using Ctx): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        BlockLit(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(body))
+    }
+    def rewrite(b: BlockVar)(using Ctx): BlockVar = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
+      case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(rewrite(id), rewrite(annotatedTpe), rewrite(annotatedCapt))
+    }
+
+    def rewrite(t: ValueType)(using Ctx): ValueType = rewriteStructurally(t)
+    def rewrite(t: ValueType.Data)(using Ctx): ValueType.Data = rewriteStructurally(t)
+
+    def rewrite(t: BlockType)(using Ctx): BlockType = rewriteStructurally(t)
+    def rewrite(t: BlockType.Interface)(using Ctx): BlockType.Interface = rewriteStructurally(t)
+    def rewrite(capt: Captures)(using Ctx): Captures = capt.map(rewrite)
+
+    def rewrite(m: ModuleDecl)(using Ctx): ModuleDecl =
+      m match {
+        case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
+          ModuleDecl(path, includes, declarations, externs, definitions.map(rewrite), exports)
+      }
+
+    def rewrite(matchClause: (Id, BlockLit))(using Ctx): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b))
     }
   }
@@ -838,6 +759,15 @@ object substitutions {
       case h : Hole => h
     }
 
+  def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
+      BlockLit(tparams, cparams,
+        vparams.map(p => substitute(p)(using shadowedTypelevel)),
+        bparams.map(p => substitute(p)(using shadowedTypelevel)),
+        substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
+  }
+
   def substituteAsVar(id: Id)(using subst: Substitution): Id =
     subst.blocks.get(id) map {
       case BlockVar(x, _, _) => x
@@ -848,19 +778,9 @@ object substitutions {
     block match {
       case BlockVar(id, tpe, capt) if subst.blocks.isDefinedAt(id) => subst.blocks(id)
       case BlockVar(id, tpe, capt) => BlockVar(id, substitute(tpe), substitute(capt))
-
-      case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        val shadowedTypelevel = subst shadowTypes tparams shadowCaptures cparams
-        BlockLit(tparams, cparams,
-          vparams.map(p => substitute(p)(using shadowedTypelevel)),
-          bparams.map(p => substitute(p)(using shadowedTypelevel)),
-          substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
-
-      case Unbox(pure) =>
-        Unbox(substitute(pure))
-
-      case New(impl) =>
-        New(substitute(impl))
+      case b: BlockLit => substitute(b)
+      case Unbox(pure) => Unbox(substitute(pure))
+      case New(impl) => New(substitute(impl))
     }
 
   def substitute(pure: Pure)(using subst: Substitution): Pure =

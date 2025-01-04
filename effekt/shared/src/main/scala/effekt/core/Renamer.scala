@@ -18,6 +18,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   // list of scopes that map bound symbols to their renamed variants.
   private var scopes: List[Map[Id, Id]] = List.empty
 
+  // Here we track ALL renamings
+  var renamed: Map[Id, Id] = Map.empty
+
   private var suffix: Int = 0
 
   def freshIdFor(id: Id): Id =
@@ -28,7 +31,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   def withBindings[R](ids: List[Id])(f: => R): R =
     val before = scopes
     try {
-      scopes = ids.map { x => x -> freshIdFor(x) }.toMap :: scopes
+      val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
+      scopes = newScope :: scopes
+      renamed = renamed ++ newScope
       f
     } finally { scopes = before }
 
@@ -108,4 +113,8 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
 object Renamer {
   def rename(b: Block): Block = Renamer().rewrite(b)
+  def rename(b: BlockLit): (BlockLit, Map[Id, Id]) =
+    val renamer = Renamer()
+    val res = renamer.rewrite(b)
+    (res, renamer.renamed)
 }

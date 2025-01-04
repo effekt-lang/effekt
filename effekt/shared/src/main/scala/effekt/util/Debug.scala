@@ -4,7 +4,7 @@ package util
 import effekt.symbols.TypePrinter
 
 
-lazy val showGeneric: PartialFunction[Any, String] = {
+val showGeneric: PartialFunction[Any, String] = {
   case l: List[_] =>
     l.map(show).mkString("List(", ", ", ")")
   case o: Option[_] =>
@@ -12,7 +12,7 @@ lazy val showGeneric: PartialFunction[Any, String] = {
   case other => other.toString
 }
 
-lazy val show: PartialFunction[Any, String] =
+val show: PartialFunction[Any, String] =
   TypePrinter.show orElse
     core.PrettyPrinter.show orElse
     generator.js.PrettyPrinter.show orElse

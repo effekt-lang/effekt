@@ -369,7 +369,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           (BlockType.Function(tparams, cparams, vparams, bparams, boxedResult), boxedResult, result)
         case _ => Context.abort("Body of a region cannot have interface type")
       }
-      val doBoxResult = coercer[Block](tBody.tpe, expectedBodyTpe)
+      val doBoxResult = coercer[BlockLit](tBody.tpe, expectedBodyTpe)
       // Create coercer for eagerly unboxing the result again
       val doUnboxResult = coercer(actualReturnType, expectedReturnType)
       val resName = TmpValue("boxedResult")

@@ -117,9 +117,11 @@ trait Transformer {
     // currently bidirectional handlers are not supported
     case Resume(k, Return(expr)) => chez.Call(toChez(k), List(toChez(expr)))
 
+    case Resume(k, other) => sys error s"Not supported yet: ${util.show(stmt)}"
+
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case other => chez.Let(Nil, toChez(other))
+    case s: Scope => chez.Let(Nil, toChez(s))
   }
 
   def toChez(decl: core.Declaration): List[chez.Def] = decl match {

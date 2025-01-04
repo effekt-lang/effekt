@@ -6,6 +6,8 @@ import effekt.core.{ Block, DeclarationContext, Definition, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
+import effekt.symbols.ErrorMessageInterpolator
+
 
 object Transformer {
 
@@ -121,15 +123,12 @@ object Transformer {
                 noteDefinition(id, free, params)
             }
 
-          case Definition.Def(id, core.Unbox(_)) =>
-            // TODO deal with this case
-            ()
+          case Definition.Def(id, b @ core.Unbox(_)) =>
+            noteParameter(id, b.tpe)
 
           case Definition.Let(_, _, _) =>
             ()
         }
-
-
 
         // (2) Actually translate the definitions
         definitions.foldRight(transform(rest)) {
@@ -149,9 +148,10 @@ object Transformer {
           case (core.Definition.Def(id, core.BlockVar(alias, tpe, _)), rest) =>
             Def(transformLabel(id), Jump(transformLabel(alias)), rest)
 
-          case (d @ core.Definition.Def(_, _: core.Unbox), rest) =>
-            // TODO deal with this case by substitution
-            ErrorReporter.abort(s"block definition: $d")
+          case (core.Definition.Def(id, core.Unbox(pure)), rest) =>
+            transform(pure).run { boxed =>
+              ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), rest)
+            }
         }
 
       case core.Return(expr) =>
@@ -168,7 +168,7 @@ object Transformer {
         transform(vargs, bargs).run { (values, blocks) =>
           callee match {
             case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
-              BPC.info.getOrElse(id, sys.error(s"Cannot find block info for ${id}.\n${BPC.info}")) match {
+              BPC.info.getOrElse(id, sys.error(pp"In ${stmt}. Cannot find block info for ${id}: ${annotatedTpe}.\n${BPC.info}")) match {
                 // Unknown Jump to function
                 case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
                   Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
@@ -182,13 +182,18 @@ object Transformer {
               }
 
             case Block.Unbox(pure) =>
-              transform(pure).run { callee => Invoke(callee, builtins.Apply, values ++ blocks) }
+              transform(pure).run { boxedCallee =>
+                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+
+                ForeignCall(callee, "unbox", List(boxedCallee),
+                  Invoke(callee, builtins.Apply, values ++ blocks))
+              }
 
             case Block.New(impl) =>
               ErrorReporter.panic("Applying an object")
 
             case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              ErrorReporter.panic("Call to block literal should have been reduced")
+              ErrorReporter.panic(pp"Call to block literal should have been reduced: ${stmt}")
           }
         }
 
@@ -202,7 +207,12 @@ object Transformer {
               Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
 
             case Block.Unbox(pure) =>
-              transform(pure).run { callee => Invoke(callee, opTag, values ++ blocks) }
+              transform(pure).run { boxedCallee =>
+                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+
+                ForeignCall(callee, "unbox", List(boxedCallee),
+                  Invoke(callee, opTag, values ++ blocks))
+              }
 
             case Block.New(impl) =>
               ErrorReporter.panic("Method call to known object should have been reduced")
@@ -451,7 +461,12 @@ object Transformer {
       }
 
     case core.Box(block, annot) =>
-      transformBlockArg(block)
+      transformBlockArg(block).flatMap { unboxed =>
+        Binding { k =>
+          val boxed = Variable(freshName(unboxed.name), Type.Positive())
+          ForeignCall(boxed, "box", List(unboxed), k(boxed))
+        }
+      }
 
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")
@@ -485,7 +500,7 @@ object Transformer {
 
   def transform(tpe: core.ValueType)(using ErrorReporter): Type = tpe match {
     case core.ValueType.Var(name) => Positive() // assume all value parameters are data
-    case core.ValueType.Boxed(tpe, capt) => Negative()
+    case core.ValueType.Boxed(tpe, capt) => Positive()
     case core.Type.TUnit => builtins.UnitType
     case core.Type.TInt => Type.Int()
     case core.Type.TChar => Type.Int()
@@ -566,7 +581,7 @@ object Transformer {
     BPC.globals += (id -> Label(transform(id), Nil))
 
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
-    BPC.info.getOrElse(id, sys error s"No block info for ${id}")
+    BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
 
   def getDefinition(id: Id)(using BPC: BlocksParamsContext): BlockInfo.Definition = getBlockInfo(id) match {
     case d : BlockInfo.Definition => d

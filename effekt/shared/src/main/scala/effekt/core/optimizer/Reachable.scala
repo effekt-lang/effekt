@@ -1,5 +1,6 @@
 package effekt
 package core
+package optimizer
 
 /**
  * A simple reachability analysis.
@@ -10,35 +11,35 @@ class Reachable(
   var seen: Set[Id]
 ) {
 
+  private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
+  private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
+
   def process(d: Definition)(using defs: Map[Id, Definition]): Unit =
-    if stack.contains(d.id) then
-      reachable = reachable.updated(d.id, Usage.Recursive)
+    if stack.contains(d.id) then update(d.id, Usage.Recursive)
     else d match {
       case Definition.Def(id, block) =>
         seen = seen + id
+
         val before = stack
         stack = id :: stack
+
         process(block)
         stack = before
 
       case Definition.Let(id, _, binding) =>
         seen = seen + id
+
         process(binding)
     }
 
   def process(id: Id)(using defs: Map[Id, Definition]): Unit =
     if (stack.contains(id)) {
-      reachable = reachable.updated(id, Usage.Recursive)
+      update(id, Usage.Recursive)
       return;
     }
 
-    val count = reachable.get(id) match {
-      case Some(Usage.Once) => Usage.Many
-      case Some(Usage.Many) => Usage.Many
-      case Some(Usage.Recursive) => Usage.Recursive
-      case None => Usage.Once
-    }
-    reachable = reachable.updated(id, count)
+    update(id, usage(id) + Usage.Once)
+
     if (!seen.contains(id)) {
       defs.get(id).foreach(process)
     }
@@ -57,9 +58,13 @@ class Reachable(
       definitions.foreach {
         case d: Definition.Def =>
           currentDefs += d.id -> d // recursive
-          process(d)(using currentDefs)
+          // Do NOT process them here, since this would mean the definition is used
+          // process(d)(using currentDefs)
         case d: Definition.Let =>
-          process(d)(using currentDefs)
+          // DO only process if NOT pure
+          if (d.binding.capt.nonEmpty) {
+            process(d)(using currentDefs)
+          }
           currentDefs += d.id -> d // non-recursive
       }
       process(body)(using currentDefs)
@@ -111,32 +116,42 @@ class Reachable(
 
   def process(i: Implementation)(using defs: Map[Id, Definition]): Unit =
     i.operations.foreach { op => process(op.body) }
-
 }
 
 object Reachable {
-  def apply(entrypoints: Set[Id], definitions: Map[Id, Definition]): Map[Id, Usage] = {
-    val analysis = new Reachable(Map.empty, Nil, Set.empty)
+  def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
+    val definitions = m.definitions.map(d => d.id -> d).toMap
+    val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
+    val analysis = new Reachable(initialUsage, Nil, Set.empty)
+
     entrypoints.foreach(d => analysis.process(d)(using definitions))
-    analysis.reachable
-  }
 
-  def apply(m: ModuleDecl): Map[Id, Usage] = {
-    val analysis = new Reachable(Map.empty, Nil, Set.empty)
-    val defs = m.definitions.map(d => d.id -> d).toMap
-    m.definitions.foreach(d => analysis.process(d)(using defs))
-    analysis.reachable
-  }
-
-  def apply(s: Stmt.Scope): Map[Id, Usage] = {
-    val analysis = new Reachable(Map.empty, Nil, Set.empty)
-    analysis.process(s)(using Map.empty)
     analysis.reachable
   }
 }
 
 enum Usage {
+  case Never
   case Once
   case Many
   case Recursive
+
+  def +(other: Usage): Usage = (this, other) match {
+    case (Usage.Never, other) => other
+    case (other, Usage.Never) => other
+    case (other, Usage.Recursive) => Usage.Recursive
+    case (Usage.Recursive, other) => Usage.Recursive
+    case (Usage.Once, Usage.Once) => Usage.Many
+    case (Usage.Many, Usage.Many) => Usage.Many
+    case (Usage.Many, Usage.Once) => Usage.Many
+    case (Usage.Once, Usage.Many) => Usage.Many
+  }
+
+  // -1
+  def decrement: Usage = this match {
+    case Usage.Never => Usage.Never
+    case Usage.Once => Usage.Never
+    case Usage.Many => Usage.Many
+    case Usage.Recursive => Usage.Recursive
+  }
 }

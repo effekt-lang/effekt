@@ -3,8 +3,9 @@ package generator
 package llvm
 
 import effekt.context.Context
+import effekt.core.optimizer
 import effekt.machine
-import kiama.output.PrettyPrinterTypes.{Document, emptyLinks}
+import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.Source
 
 
@@ -38,7 +39,7 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Machine => LLVM
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer andThen Machine map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen optimizer.Optimizer andThen Machine map {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 
@@ -51,7 +52,7 @@ class LLVM extends Compiler[String] {
   // -----------------------------------
   object steps {
     // intermediate steps for VSCode
-    val afterCore = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen core.Optimizer
+    val afterCore = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen optimizer.Optimizer
     val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
       case machine.Program(decls, prog) =>

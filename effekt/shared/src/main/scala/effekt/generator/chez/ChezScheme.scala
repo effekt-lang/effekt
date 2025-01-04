@@ -3,7 +3,8 @@ package generator
 package chez
 
 import effekt.context.Context
-import effekt.symbols.{Module, Symbol}
+import effekt.core.optimizer.Optimizer
+import effekt.symbols.{ Module, Symbol }
 import effekt.util.messages.ErrorReporter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -52,7 +53,7 @@ trait ChezScheme extends Compiler[String] {
   // ------------------------
   // Source => Core => Chez
   lazy val Compile =
-    allToCore(Core) andThen Aggregate andThen core.Optimizer andThen Chez map { case (main, expr) =>
+    allToCore(Core) andThen Aggregate andThen Optimizer andThen Chez map { case (main, expr) =>
       (Map(main -> pretty(expr).layout), main)
     }
 
