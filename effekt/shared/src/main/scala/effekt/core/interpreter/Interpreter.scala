@@ -103,6 +103,16 @@ enum InterpreterError extends Throwable {
   case NonExhaustive(missingCase: Id)
   case Hole()
   case NoMain()
+
+  override def getMessage: String = this match {
+    case InterpreterError.NotFound(id) => s"Not found: ${id}"
+    case InterpreterError.NotAnExternFunction(id) => s"Not an extern function: ${id}"
+    case InterpreterError.MissingBuiltin(name) => s"Missing builtin: ${name}"
+    case InterpreterError.RuntimeTypeError(msg) => s"Runtime type error: ${msg}"
+    case InterpreterError.NonExhaustive(missingCase) => s"Non exhaustive: ${missingCase}"
+    case InterpreterError.Hole() => s"Reached hole"
+    case InterpreterError.NoMain() => s"No main"
+  }
 }
 
 enum Stack {
@@ -222,7 +232,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           definitions.foreach {
             case Definition.Def(id, block: Block.BlockLit) => envSoFar = envSoFar.bind(id, block)
             // TODO what is the cost model for aliased block literals?
-            case Definition.Def(id, block) => envSoFar = envSoFar.bind(id, eval(block, env))
+            case Definition.Def(id, block) => envSoFar = envSoFar.bind(id, eval(block, envSoFar))
             case Definition.Let(id, tpe, binding) => envSoFar = envSoFar.bind(id, eval(binding, envSoFar))
           }
           State.Step(body, envSoFar, stack)
@@ -332,7 +342,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Frame.Region(r, values) if r == address =>
               Frame.Region(r, values.updated(id, value))
           }
-          returnWith(Value.Literal(()), env, updated)
+          State.Step(body, env, updated)
 
         // TODO also use addresses for variables
         case Stmt.Var(id, init, capture, body) =>
@@ -493,7 +503,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   def run(main: Id, m: ModuleDecl): Unit = {
     val mainFun = m.definitions.collectFirst {
       case Definition.Def(id, b: BlockLit) if id == main => b
-    }.getOrElse { throw new InterpreterError.NoMain() }
+    }.getOrElse { throw InterpreterError.NoMain() }
 
     val functions = m.definitions.collect { case Definition.Def(id, b: Block.BlockLit) => id -> b }.toMap
 
