@@ -134,16 +134,14 @@ object BindSubexpressions {
     case Pure.Make(data, tag, vargs) => transformExprs(vargs) { vs =>
       bind(Pure.Make(data, tag, vs))
     }
-    case DirectApp(block, targs, vargs, bargs) => for {
-      b <- transform(block);
+    case DirectApp(f, targs, vargs, bargs) => for {
       vs <- transformExprs(vargs);
       bs <- transformBlocks(bargs);
-      res <- bind(DirectApp(b, targs.map(transform), vs, bs))
+      res <- bind(DirectApp(f, targs.map(transform), vs, bs))
     } yield res
-    case Pure.PureApp(block, targs, vargs) => for {
-      b <- transform(block);
+    case Pure.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
-      res <- bind(Pure.PureApp(b, targs.map(transform), vs))
+      res <- bind(Pure.PureApp(f, targs.map(transform), vs))
     } yield res
     case Pure.Select(target, field, tpe) => transform(target) { v => bind(Pure.Select(v, field, transform(tpe))) }
     case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
