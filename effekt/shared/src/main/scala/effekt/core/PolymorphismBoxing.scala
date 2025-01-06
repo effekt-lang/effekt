@@ -212,6 +212,11 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     if (coerce.isIdentity) { Bind.pure(expr) }
     else { Bind.bind(expr).map { x => coerce(x) } }
 
+  def coerce(pure: Pure, to: ValueType)(using PContext): Pure = coercer(pure.tpe, to)(pure)
+
+  def coerce(block: Block, to: BlockType)(using PContext): Block = coercer[Block](block.tpe, to)(block)
+
+
   def transform(block: Block.BlockLit)(using PContext): Block.BlockLit = block match {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       Block.BlockLit(tparams, cparams, vparams map transform, bparams map transform,
@@ -265,10 +270,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
       val tVargs = vargs map transform
       val tBargs = bargs map transform
-      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
-      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val vCoerced = (tVargs zip itpe.vparams).map { (v, tpe) => coerce(v, tpe) }
+      val bCoerced = (tBargs zip itpe.bparams).map { (b, tpe) => coerce(b, tpe) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
-      fcoercer.call(calleeT, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
+      fcoercer.call(calleeT, vCoerced, bCoerced)
 
     //                               [S](S) => (Int, S)
     case Stmt.Invoke(callee, method, methodTpe: BlockType.Function, targs, vargs, bargs) =>
@@ -301,12 +306,12 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val itpe = Type.instantiate(methodTpe, targs, methodTpe.cparams.map(Set(_)))
       val tVargs = vargs map transform
       val tBargs = bargs map transform
-      val vcoercers = (tVargs zip boxedTpe.vparams).map { (a, p) => coercer(a.tpe, p) }
-      val bcoercers = (tBargs zip boxedTpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val vCoerced = (tVargs zip boxedTpe.vparams).map { (a, tpe) => coerce(a, tpe) }
+      val bCoerced = (tBargs zip boxedTpe.bparams).map { (a, tpe) => coerce(a, tpe) }
       //                     (T, S)      (Int, Double)
       val rcoercer = coercer(tpe.result, itpe.result)
 
-      val result = Invoke(calleeT, method, boxedTpe, targs.map(transformArg), (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
+      val result = Invoke(calleeT, method, boxedTpe, targs.map(transformArg), vCoerced, bCoerced)
 
       // (BoxedInt, BoxedDouble)
       val out = result.tpe
@@ -397,10 +402,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
       val tVargs = vargs map transform
       val tBargs = bargs map transform
-      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
-      val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
+      val vCoerced = (tVargs zip itpe.vparams).map { (a, tpe) => coerce(a, tpe) }
+      val bCoerced = (tBargs zip itpe.bparams).map { (a, tpe) => coerce(a, tpe) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
-      fcoercer.callDirect(callee, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
+      fcoercer.callDirect(callee, vCoerced, bCoerced)
     case pure: Pure => Bind.pure(transform(pure))
   }
 
@@ -415,21 +420,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       }
       val itpe = Type.instantiate(tpe, targs, tpe.cparams.map(Set(_)))
       val tVargs = vargs map transform
-      val vcoercers = (tVargs zip itpe.vparams).map { (a, p) => coercer(a.tpe, p) }
+      val vCoerced = (tVargs zip itpe.vparams).map { (a, tpe) => coerce(a, tpe) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
-      fcoercer.callPure(b, (vcoercers zip tVargs).map(_(_)))
+      fcoercer.callPure(b, vCoerced)
     case Pure.Make(data, tag, vargs) =>
       val dataDecl = PContext.getData(data.name)
       val ctorDecl = dataDecl.constructors.find(_.id == tag).getOrElse {
         Context.panic(pp"No constructor found for tag ${tag} in data type: ${data}")
       }
-
-      val argTypes   = vargs.map(_.tpe)
       val paramTypes = ctorDecl.fields.map(_.tpe)
 
-      val coercedArgs = (paramTypes zip (argTypes zip vargs)).map { case (param, (targ, arg)) =>
-        coercer(targ, param)(transform(arg))
-      }
+      val coercedArgs = (vargs zip paramTypes).map { case (arg, paramTpe) => coerce(transform(arg), paramTpe) }
       Pure.Make(transform(data), tag, coercedArgs)
 
     case Pure.Select(target, field, annotatedType) => {
