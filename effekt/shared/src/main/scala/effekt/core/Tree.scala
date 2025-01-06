@@ -43,12 +43,9 @@ import scala.annotation.tailrec
  *     │  │─ [[ Unbox ]]
  *     │  │─ [[ New ]]
  *     │
- *     │─ [[ Param ]]
- *     │  │─ [[ ValueParam ]]
- *     │  │─ [[ BlockParam ]]
- *     │
  *     │─ [[ Stmt ]]
- *     │  │─ [[ Scope ]]
+ *     │  │─ [[ Def ]]
+ *     │  │─ [[ Let ]]
  *     │  │─ [[ Return ]]
  *     │  │─ [[ Val ]]
  *     │  │─ [[ App ]]
@@ -240,7 +237,8 @@ case class BlockParam(id: Id, tpe: BlockType, capt: Captures)
  * ----------[[ effekt.core.Stmt ]]----------
  *
  *   ─ [[ Stmt ]]
- *     │─ [[ Scope ]]
+ *     │─ [[ Def ]]
+ *     │─ [[ Let ]]
  *     │─ [[ Return ]]
  *     │─ [[ Val ]]
  *     │─ [[ App ]]
