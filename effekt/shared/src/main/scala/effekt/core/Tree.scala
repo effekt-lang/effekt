@@ -346,8 +346,15 @@ private[core] object Binding {
     case Binding.Let(name, tpe, binding) :: rest => Stmt.Let(name, tpe, binding, Binding(rest, body))
     case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
   }
-  // def unapply(stmt: Stmt): (List[Binding], Stmt) = ???
+
+  def toToplevel(b: Binding): Toplevel = b match {
+    case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
+    case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
+    case Binding.Def(name, binding) => Toplevel.Def(name, binding)
+  }
 }
+
+
 
 
 object Tree {

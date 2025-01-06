@@ -212,18 +212,18 @@ object Normalizer { normal =>
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = binding match {
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
-        case Stmt.Return(expr) =>
-          Stmt.Let(id, tpe, expr, normalize(body)(using C.bind(id, expr)))
+        case Stmt.Return(expr2) =>
+          Stmt.Let(id, tpe, expr2, normalize(body)(using C.bind(id, expr2)))
 
         // Commute val and bindings
         // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
-        case Stmt.Def(id, block, bodyBinding) =>
-          Stmt.Def(id, block, normalizeVal(id, tpe, bodyBinding, body))
+        case Stmt.Def(id2, block2, body2) =>
+          Stmt.Def(id2, block2, normalizeVal(id, tpe, body2, body))
 
         // Commute val and bindings
         // [[ val x = { let y = ...; STMT }; STMT ]] = let y = ...; val x = STMT; STMT
-        case Stmt.Let(id, tpe, binding, bodyBinding) =>
-          Stmt.Let(id, tpe, binding, normalizeVal(id, tpe, bodyBinding, body))
+        case Stmt.Let(id2, tpe2, binding2, body2) =>
+          Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]

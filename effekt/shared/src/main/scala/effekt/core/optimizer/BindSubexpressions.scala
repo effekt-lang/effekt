@@ -27,18 +27,11 @@ object BindSubexpressions {
   def transformToplevel(definitions: List[Toplevel])(using env: Env): List[Toplevel] =
     definitions.flatMap {
       case Toplevel.Def(id, block) => transform(block) match {
-        case Bind(block, bindings) => bindings.map(toToplevel) :+ Toplevel.Def(id, block)
+        case Bind(block, bindings) => bindings.map(Binding.toToplevel) :+ Toplevel.Def(id, block)
 
       }
       case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), transform(binding)) :: Nil
     }
-
-  def toToplevel(b: Binding): Toplevel = b match {
-    case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
-    case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
-    case Binding.Def(name, binding) => Toplevel.Def(name, binding)
-  }
-
 
   def transform(s: Stmt)(using env: Env): Stmt = s match {
 

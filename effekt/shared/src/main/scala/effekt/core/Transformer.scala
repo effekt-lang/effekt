@@ -95,7 +95,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
       // TODO convert binding into toplevel definition.
-      val additionalDefinitions: List[Toplevel] = ???
+      val additionalDefinitions: List[Toplevel] = bindings.map(core.Binding.toToplevel)
       //      bindings.map {
       //        case Binding.Let(name, tpe, binding) =>
       //          Definition.Let(name, tpe, binding)

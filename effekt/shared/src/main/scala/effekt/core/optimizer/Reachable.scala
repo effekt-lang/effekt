@@ -16,11 +16,13 @@ class Reachable(
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def process(d: Toplevel)(using defs: Definitions): Unit =
-    if stack.contains(d.id) then update(d.id, Usage.Recursive)
-    else d match {
-      case Toplevel.Def(id, block) =>
-        seen = seen + id
+  def processDefinition(id: Id, d: Block | Expr | Stmt)(using defs: Definitions): Unit = {
+    if stack.contains(id) then { update(id, Usage.Recursive); return }
+
+    seen = seen + id
+
+    d match {
+      case block: Block =>
 
         val before = stack
         stack = id :: stack
@@ -28,11 +30,10 @@ class Reachable(
         process(block)
         stack = before
 
-      case Toplevel.Val(id, _, binding) =>
-        seen = seen + id
-
-        process(binding)
+      case binding: Expr => process(binding)
+      case binding: Stmt => process(binding)
     }
+  }
 
   def process(id: Id)(using defs: Definitions): Unit =
     if (stack.contains(id)) {
@@ -44,11 +45,7 @@ class Reachable(
 
     if (!seen.contains(id)) {
       seen = seen + id
-      defs.get(id).foreach {
-        case d: Block => process(d)
-        case d: Expr => process(d)
-        case d: Stmt => process(d)
-      }
+      defs.get(id).foreach { d => processDefinition(id, d) }
     }
 
 
@@ -65,11 +62,9 @@ class Reachable(
       // Do NOT process `block` here, since this would mean the definition is used
       process(body)(using defs + (id -> block))
     case Stmt.Let(id, tpe, binding, body) =>
-      // DO only process if NOT pure
-      if (binding.capt.nonEmpty) {
-        seen = seen + id
-        process(binding)
-      }
+      // DO only process if impure, since we need to keep it in this case
+      // for its side effects
+      if (binding.capt.nonEmpty) { processDefinition(id, binding) }
       process(body)(using defs + (id -> binding))
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
@@ -105,7 +100,7 @@ class Reachable(
 
   def process(e: Expr)(using defs: Definitions): Unit = e match {
     case DirectApp(b, targs, vargs, bargs) =>
-      process(b);
+      process(b)
       vargs.foreach(process)
       bargs.foreach(process)
     case Pure.ValueVar(id, annotatedType) => process(id)

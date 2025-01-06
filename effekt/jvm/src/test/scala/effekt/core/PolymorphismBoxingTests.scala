@@ -3,7 +3,7 @@ package core
 
 import effekt.{core, source, symbols}
 import effekt.context.Context
-import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
+import effekt.core.{Block, DirectApp, PolymorphismBoxing, Pure, Stmt}
 import effekt.source.{IdDef, Include}
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging

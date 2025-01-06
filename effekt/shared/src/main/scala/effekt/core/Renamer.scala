@@ -50,7 +50,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   override def stmt: PartialFunction[Stmt, Stmt] = {
     case core.Def(id, block, body) =>
       // can be recursive
-      withBinding(id) { core.Def(id, rewrite(block), rewrite(body)) }
+      withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
 
     case core.Let(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)
