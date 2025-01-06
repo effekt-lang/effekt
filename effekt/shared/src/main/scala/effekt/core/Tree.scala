@@ -619,7 +619,7 @@ object Variables {
       free(body) -- all(vparams, bound) -- all(bparams, bound)
   }
   def free(s: Stmt): Variables = s match {
-    case Stmt.Def(id, block, body) => free(block) ++ (free(body) -- Variables.block(id, block.tpe, block.capt))
+    case Stmt.Def(id, block, body) => (free(block) ++ free(body)) -- Variables.block(id, block.tpe, block.capt)
     case Stmt.Let(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.Return(expr) => free(expr)
     case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))

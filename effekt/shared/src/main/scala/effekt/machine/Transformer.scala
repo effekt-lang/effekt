@@ -73,8 +73,6 @@ object Transformer {
         // (1) Collect all the information about free variables of local definitions
         noteParameters(bparams)
 
-        // TODO use existing lambda lifting code
-
         // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
         val freeVariables = core.Variables.free(block).toSet
           .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free

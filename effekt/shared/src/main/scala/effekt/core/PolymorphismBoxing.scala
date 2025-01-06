@@ -206,12 +206,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Val(orig, from, stmt, Stmt.Return(coerce(ValueVar(orig, from))))
     }
 
-  def coerce(pure: Pure, to: ValueType)(using PContext): Pure =
-    val from = pure.tpe
-    val coerce = coercer(from, to)
-    if (coerce.isIdentity) { pure }
-    else { coerce(pure) }
-
   def coerce(expr: Expr, to: ValueType)(using PContext): Bind[Expr] =
     val from = expr.tpe
     val coerce = coercer(from, to)
@@ -587,9 +581,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     override def callDirect(block: Block.BlockVar, vargs: List[Pure], bargs: List[Block])(using PContext): Bind[Expr] =
       Bind.pure(DirectApp(block, targs map transformArg, vargs, bargs))
   }
-  def coercer[B >: Block.BlockLit <: Block](fromtpe: BlockType, totpe: BlockType, targs: List[ValueType] = List())(using PContext): FunctionCoercer[BlockType, B] =
+  def coercer[B >: Block.BlockLit <: Block](fromtpe: BlockType, totpe: BlockType, targs: List[ValueType] = Nil)(using PContext): FunctionCoercer[BlockType, B] =
     (fromtpe, totpe) match {
-    case (f,t) if f == t => new FunctionIdentityCoercer(fromtpe, totpe, targs)
+    case (f, t) if f == t => new FunctionIdentityCoercer(fromtpe, totpe, targs)
     case (BlockType.Function(ftparams, fcparams, fvparams, fbparams, fresult),
           BlockType.Function(ttparams, tcparams, tvparams, tbparams, tresult)) =>
 
