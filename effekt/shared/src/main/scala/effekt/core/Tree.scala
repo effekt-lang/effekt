@@ -335,9 +335,11 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
  * Bindings are not part of the tree but used in transformations
  */
 private[core] enum Binding {
-  case Val(name: Id, tpe: ValueType, binding: Stmt)
-  case Let(name: Id, tpe: ValueType, binding: Expr)
-  case Def(name: Id, binding: Block)
+  case Val(id: Id, tpe: ValueType, binding: Stmt)
+  case Let(id: Id, tpe: ValueType, binding: Expr)
+  case Def(id: Id, binding: Block)
+
+  def id: Id
 }
 private[core] object Binding {
   def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
@@ -354,7 +356,34 @@ private[core] object Binding {
   }
 }
 
+// Binding Monad
+// -------------
+case class Bind[+A](value: A, bindings: List[Binding]) {
+  def run(f: A => Stmt): Stmt = Binding(bindings, f(value))
+  def map[B](f: A => B): Bind[B] = Bind(f(value), bindings)
+  def flatMap[B](f: A => Bind[B]): Bind[B] =
+    val Bind(result, other) = f(value)
+    Bind(result, bindings ++ other)
+  def apply[B](f: A => Bind[B]): Bind[B] = flatMap(f)
+}
+object Bind {
+  def pure[A](value: A): Bind[A] = Bind(value, Nil)
+  def bind[A](expr: Expr): Bind[ValueVar] =
+    val id = Id("tmp")
+    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr.tpe, expr)))
 
+  def bind[A](block: Block): Bind[BlockVar] =
+    val id = Id("tmp")
+    Bind(BlockVar(id, block.tpe, block.capt), List(Binding.Def(id, block)))
+
+  def delimit(b: Bind[Stmt]): Stmt = b.run(a => a)
+
+  def traverse[S, T](l: List[S])(f: S => Bind[T]): Bind[List[T]] =
+    l match {
+      case Nil => pure(Nil)
+      case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
+    }
+}
 
 
 object Tree {

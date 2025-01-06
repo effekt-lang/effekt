@@ -11,6 +11,7 @@ class Reachable(
   var seen: Set[Id]
 ) {
 
+  // TODO we could use [[Binding]] here.
   type Definitions = Map[Id, Block | Expr | Stmt]
 
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)

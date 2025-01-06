@@ -2,6 +2,8 @@ package effekt
 package core
 package optimizer
 
+import core.Bind.*
+
 // Establishes a normal form in which every subexpression
 // is explicitly named and aliasing (val x = y) is removed.
 //
@@ -158,33 +160,4 @@ object BindSubexpressions {
       BlockType.Interface(name, targs.map(transform))
   }
   def transform(captures: Captures)(using Env): Captures = captures.map(transform)
-
-
-  // Binding Monad
-  // -------------
-  case class Bind[+A](value: A, bindings: List[Binding]) {
-    def run(f: A => Stmt): Stmt = Binding(bindings, f(value))
-    def map[B](f: A => B): Bind[B] = Bind(f(value), bindings)
-    def flatMap[B](f: A => Bind[B]): Bind[B] =
-      val Bind(result, other) = f(value)
-      Bind(result, bindings ++ other)
-    def apply[B](f: A => Bind[B]): Bind[B] = flatMap(f)
-  }
-  def pure[A](value: A): Bind[A] = Bind(value, Nil)
-  def bind[A](expr: Expr): Bind[ValueVar] =
-    val id = Id("tmp")
-    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr.tpe, expr)))
-
-  def bind[A](block: Block): Bind[BlockVar] =
-    val id = Id("tmp")
-    Bind(BlockVar(id, block.tpe, block.capt), List(Binding.Def(id, block)))
-
-  def delimit(b: Bind[Stmt]): Stmt = b.run(a => a)
-
-  def traverse[S, T](l: List[S])(f: S => Bind[T]): Bind[List[T]] =
-    l match {
-      case Nil => pure(Nil)
-      case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
-    }
-
 }
