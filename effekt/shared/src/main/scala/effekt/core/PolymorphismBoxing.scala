@@ -455,7 +455,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case ValueType.Boxed(tpe, capt) => ValueType.Boxed(transform(tpe), capt)
   }
 
-  trait ValueCoercer {
+  sealed  trait ValueCoercer {
     def from: ValueType
     def to: ValueType
     def apply(t: Pure): Pure
@@ -529,15 +529,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     }
   }
 
-
-  trait BlockCoercer[Te <: Block] {
+  sealed trait BlockCoercer[Te <: Block] {
     def from: BlockType
     def to: BlockType
 
     def apply(t: Te): Te
     def isIdentity: Boolean = false
   }
-
   object BlockCoercer {
     class IdentityCoercer[Te <: Block](val from: BlockType, val to: BlockType, targs: List[ValueType]) extends BlockCoercer[Te] {
       override def apply(t: Te): Te = t
@@ -552,7 +550,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
         // note: Order inversed as contravariant in arguments
         val vcoercers = (fvparams zip tvparams).map { case (t, f) => ValueCoercer(f, t) }
-        val bcoercers: List[BlockCoercer[Block]] = (fbparams zip tbparams).map { case (t, f) => BlockCoercer(f,t) }
+        val bcoercers = (fbparams zip tbparams).map { case (t, f) => BlockCoercer[Block](f,t) }
         val rcoercer = ValueCoercer(fresult, tresult)
 
         if ((rcoercer :: vcoercers).forall(_.isIdentity) && bcoercers.forall(_.isIdentity)) {
@@ -572,11 +570,14 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
             val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
             Block.BlockLit(ftparams, bparams.map(_.id), vparams, bparams,
               Def(inner, block,
-                Stmt.Val(result, rcoercer.from, Stmt.App(Block.BlockVar(inner, block.tpe, block.capt),  (targs map transformArg) ++ (ftparams map core.ValueType.Var.apply), vargs, bargs),
-                  Stmt.Return(rcoercer(Pure.ValueVar(result, rcoercer.from))))))
+                coerce(Stmt.App(
+                  Block.BlockVar(inner, block.tpe, block.capt),
+                  (targs map transformArg) ++ (ftparams map core.ValueType.Var.apply),
+                  vargs,
+                  bargs), fresult, tresult)))
           }
         }
-      case (BlockType.Interface(n1,targs), BlockType.Interface(n2,_)) =>
+      case (BlockType.Interface(n1, targs), BlockType.Interface(n2, _)) =>
         IdentityCoercer(fromtpe, totpe, targs)
       case _ => Context.abort(pp"Unsupported coercion from ${fromtpe} to ${totpe}")
     }
