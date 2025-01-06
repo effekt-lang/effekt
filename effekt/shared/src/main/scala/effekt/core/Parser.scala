@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.core.Param.ValueParam
+import effekt.core.ValueParam
 import effekt.source.{FeatureFlag, NoSource}
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Success }
@@ -235,13 +235,13 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Signatures
   // -------
   // foo[Int, String](x: Int) { f@f2: Exc }: Int
-  lazy val signature: P[(Id, List[Id], List[Id], List[Param.ValueParam], List[Param.BlockParam], ValueType)] =
+  lazy val signature: P[(Id, List[Id], List[Id], List[ValueParam], List[BlockParam], ValueType)] =
     id ~ parameters ~ (`:` ~> valueType) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ result =>
         (name, tparams, cparams, vparams, bparams, result)
     }
 
-  lazy val parameters: P[(List[Id], List[Id], List[Param.ValueParam], List[Param.BlockParam])] =
+  lazy val parameters: P[(List[Id], List[Id], List[ValueParam], List[BlockParam])] =
     maybeTypeParams ~ valueParams ~ many(trackedBlockParam) ^^ {
       case tparams ~ vparams ~ bcparams =>
         val (cparams, bparams) = bcparams.unzip
@@ -254,7 +254,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
 
   lazy val valueParam: P[ValueParam] =
-    id ~ (`:` ~> valueType) ^^ { case id ~ tpe => Param.ValueParam(id, tpe): Param.ValueParam }
+    id ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, tpe) }
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~> manySep(valueParam, `,`) <~ `)`
@@ -262,14 +262,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // f@f2 : Exc
   lazy val trackedBlockParam: P[(Id, BlockParam)] =
     ( `{` ~> id ~ (`@` ~> id)  ~ (`:` ~> blockType) <~ `}` ^^ {
-        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe, Set(capt)): Param.BlockParam)
+        case id ~ capt ~ tpe => capt -> BlockParam(id, tpe, Set(capt))
       }
     // abbreviation: f : Exc .= f@f : Exc
     | blockParam ^^ { p => p.id -> p }
     )
 
   lazy val blockParam: P[BlockParam] =
-    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe, Set(id)): Param.BlockParam }
+    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => BlockParam(id, tpe, Set(id)) }
 
 
   // Types

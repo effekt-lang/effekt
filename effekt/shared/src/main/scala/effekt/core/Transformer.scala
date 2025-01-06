@@ -269,8 +269,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // if this block argument expects to be called using PureApp or DirectApp, make sure it is
           // by wrapping it in a BlockLit
           val targs = tparams.map(core.ValueType.Var.apply)
-          val vparams: List[Param.ValueParam] = vparamtps.map { t => Param.ValueParam(TmpValue("valueParam"), transform(t))}
-          val vargs = vparams.map { case Param.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
+          val vparams = vparamtps.map { t => core.ValueParam(TmpValue("valueParam"), transform(t))}
+          val vargs = vparams.map { case core.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
 
           // [[ f ]] = { (x) => f(x) }
           def etaExpandPure(b: ExternFunction): BlockLit = {
@@ -293,9 +293,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
           def etaExpandDirect(f: ExternFunction): BlockLit = {
             assert(effects.isEmpty)
-            val bparams: List[Param.BlockParam] = bparamtps.map { t => val id = TmpBlock("etaParam"); Param.BlockParam(id, transform(t), Set(id)) }
+            val bparams = bparamtps.map { t => val id = TmpBlock("etaParam"); core.BlockParam(id, transform(t), Set(id)) }
             val bargs = bparams.map {
-              case Param.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
+              case core.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
             }
             val result = TmpValue("etaBinding")
             val resultBinding = DirectApp(BlockVar(f), targs, vargs, bargs)
@@ -563,7 +563,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 val resumeCapture = Id("resume")
                 val resumeId = Id("k")
                 val resumeTpe = core.Type.TResume(resultTpe, answerTpe)
-                val resumeParam: core.BlockParam = core.BlockParam(resumeId, resumeTpe, Set(resumeCapture))
+                val resumeParam = core.BlockParam(resumeId, resumeTpe, Set(resumeCapture))
                 val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, Set(resumeCapture))
 
                 // (2) eta-expand and bind continuation as a function

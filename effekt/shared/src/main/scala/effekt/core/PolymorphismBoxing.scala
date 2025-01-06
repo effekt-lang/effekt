@@ -185,12 +185,12 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Extern.Include(ff, contents) => Extern.Include(ff, contents)
   }
 
-  def transform(valueParam: Param.ValueParam)(using PContext): Param.ValueParam = valueParam match {
-    case Param.ValueParam(id, tpe) => Param.ValueParam(id, transform(tpe))
+  def transform(valueParam: ValueParam)(using PContext): ValueParam = valueParam match {
+    case ValueParam(id, tpe) => ValueParam(id, transform(tpe))
   }
 
-  def transform(blockParam: Param.BlockParam)(using PContext): Param.BlockParam = blockParam match {
-    case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, transform(tpe), capt)
+  def transform(blockParam: BlockParam)(using PContext): BlockParam = blockParam match {
+    case BlockParam(id, tpe, capt) => BlockParam(id, transform(tpe), capt)
   }
 
   def transform(toplevel: Toplevel)(using PContext): Toplevel = toplevel match {
@@ -562,8 +562,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           override def to = totpe
 
           override def apply(block: Te): Te = {
-            val vparams: List[Param.ValueParam] = vcoercers.map { c => Param.ValueParam(TmpValue("coe"), transform(c.from)) }
-            val bparams: List[Param.BlockParam] = bcoercers.map { c => val id = TmpBlock("coe"); Param.BlockParam(id, transform(c.from), Set(id)) }
+            val vparams = vcoercers.map { c => ValueParam(TmpValue("coe"), transform(c.from)) }
+            val bparams = bcoercers.map { c => val id = TmpBlock("coe"); BlockParam(id, transform(c.from), Set(id)) }
             val result = TmpValue("coe")
             val inner = TmpBlock()
             val vargs = (vcoercers zip vparams).map { case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }

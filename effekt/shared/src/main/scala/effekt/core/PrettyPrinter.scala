@@ -114,7 +114,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     val bargsDoc = bargs.map(toDoc)
     targsDoc <> parens(vargsDoc ++ bargsDoc)
 
-  def paramsToDoc(tps: List[symbols.Symbol], vps: List[Param.ValueParam], bps: List[Param.BlockParam]): Doc = {
+  def paramsToDoc(tps: List[symbols.Symbol], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
     val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))
     tpsDoc <> parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
   }

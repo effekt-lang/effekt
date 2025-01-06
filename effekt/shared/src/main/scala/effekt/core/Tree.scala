@@ -131,7 +131,7 @@ case class Property(id: Id, tpe: BlockType) extends Tree
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: ValueType, annotatedCapture: Captures, body: ExternBody)
   case Include(featureFlag: FeatureFlag, contents: String)
 }
 sealed trait ExternBody extends Tree
@@ -221,7 +221,7 @@ export Pure.*
  */
 enum Block extends Tree {
   case BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures)
-  case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
+  case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
@@ -230,13 +230,9 @@ enum Block extends Tree {
 }
 export Block.*
 
-enum Param extends Tree {
-  def id: Id
+case class ValueParam(id: Id, tpe: ValueType)
+case class BlockParam(id: Id, tpe: BlockType, capt: Captures)
 
-  case ValueParam(id: Id, tpe: ValueType)
-  case BlockParam(id: Id, tpe: BlockType, capt: Captures)
-}
-export Param.*
 
 /**
  * Statements
@@ -327,7 +323,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  *
  * TODO drop resume here since it is not needed anymore...
  */
-case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt) {
+case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
 }
 
@@ -415,7 +411,6 @@ object Tree {
     def toplevel(using Ctx): PartialFunction[Toplevel, Res] = PartialFunction.empty
     def implementation(using Ctx): PartialFunction[Implementation, Res] = PartialFunction.empty
     def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
-    def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
     def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
     def externBody(using Ctx): PartialFunction[ExternBody, Res] = PartialFunction.empty
 
@@ -450,7 +445,6 @@ object Tree {
     def toplevel: PartialFunction[Toplevel, Toplevel] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
     def implementation: PartialFunction[Implementation, Implementation] = PartialFunction.empty
-    def param: PartialFunction[Param, Param] = PartialFunction.empty
 
     def rewrite(x: Id): Id = if id.isDefinedAt(x) then id(x) else x
     def rewrite(p: Pure): Pure = rewriteStructurally(p, pure)
@@ -460,9 +454,8 @@ object Tree {
     def rewrite(d: Toplevel): Toplevel = rewriteStructurally(d, toplevel)
     def rewrite(e: Implementation): Implementation = rewriteStructurally(e, implementation)
     def rewrite(o: Operation): Operation = rewriteStructurally(o)
-    def rewrite(p: Param): Param = rewriteStructurally(p, param)
-    def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
-    def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(p: ValueParam): ValueParam = rewriteStructurally(p)
+    def rewrite(p: BlockParam): BlockParam = rewriteStructurally(p)
     def rewrite(b: ExternBody): ExternBody= rewrite(b)
 
     def rewrite(b: BlockLit): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
@@ -499,7 +492,6 @@ object Tree {
     def toplevel(using Ctx): PartialFunction[Toplevel, Toplevel] = PartialFunction.empty
     def block(using Ctx): PartialFunction[Block, Block] = PartialFunction.empty
     def implementation(using Ctx): PartialFunction[Implementation, Implementation] = PartialFunction.empty
-    def param(using Ctx): PartialFunction[Param, Param] = PartialFunction.empty
 
     def rewrite(x: Id)(using Ctx): Id = if id.isDefinedAt(x) then id(x) else x
     def rewrite(p: Pure)(using Ctx): Pure = rewriteStructurally(p, pure)
@@ -509,9 +501,8 @@ object Tree {
     def rewrite(d: Toplevel)(using Ctx): Toplevel = rewriteStructurally(d, toplevel)
     def rewrite(e: Implementation)(using Ctx): Implementation = rewriteStructurally(e, implementation)
     def rewrite(o: Operation)(using Ctx): Operation = rewriteStructurally(o)
-    def rewrite(p: Param)(using Ctx): Param = rewriteStructurally(p, param)
-    def rewrite(p: Param.ValueParam)(using Ctx): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
-    def rewrite(p: Param.BlockParam)(using Ctx): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
+    def rewrite(p: ValueParam)(using Ctx): ValueParam = rewriteStructurally(p)
+    def rewrite(p: BlockParam)(using Ctx): BlockParam = rewriteStructurally(p)
     def rewrite(b: ExternBody)(using Ctx): ExternBody= rewrite(b)
 
     def rewrite(b: BlockLit)(using Ctx): BlockLit = if block.isDefinedAt(b) then block(b).asInstanceOf else b match {
@@ -666,10 +657,8 @@ object substitutions {
     def shadowValues(shadowed: IterableOnce[Id]): Substitution = copy(values = values -- shadowed)
     def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
 
-    def shadowParams(shadowed: Seq[Param]): Substitution = copy(
-      values = values -- shadowed.collect { case d: Param.ValueParam => d.id },
-      blocks = blocks -- shadowed.collect { case d: Param.BlockParam => d.id }
-    )
+    def shadowParams(vparams: Seq[ValueParam], bparams: Seq[BlockParam]): Substitution =
+      copy(values = values -- vparams.map(_.id), blocks = blocks -- bparams.map(_.id))
   }
 
   // Starting point for inlining, creates Maps(params -> args) and passes to normal substitute
@@ -761,7 +750,7 @@ object substitutions {
       BlockLit(tparams, cparams,
         vparams.map(p => substitute(p)(using shadowedTypelevel)),
         bparams.map(p => substitute(p)(using shadowedTypelevel)),
-        substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
+        substitute(body)(using shadowedTypelevel.shadowParams(vparams, bparams)))
   }
 
   def substituteAsVar(id: Id)(using subst: Substitution): Id =
@@ -815,17 +804,17 @@ object substitutions {
         Operation(name, tparams, cparams,
           vparams.map(p => substitute(p)(using shadowedTypelevel)),
           bparams.map(p => substitute(p)(using shadowedTypelevel)),
-          substitute(body)(using shadowedTypelevel shadowParams (vparams ++ bparams)))
+          substitute(body)(using shadowedTypelevel.shadowParams(vparams, bparams)))
     }
 
-  def substitute(param: Param.ValueParam)(using Substitution): Param.ValueParam =
+  def substitute(param: ValueParam)(using Substitution): ValueParam =
     param match {
-      case Param.ValueParam(id, tpe) => Param.ValueParam(id, substitute(tpe))
+      case ValueParam(id, tpe) => ValueParam(id, substitute(tpe))
     }
 
-  def substitute(param: Param.BlockParam)(using Substitution): Param.BlockParam =
+  def substitute(param: BlockParam)(using Substitution): BlockParam =
     param match {
-      case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, substitute(tpe), substitute(capt))
+      case BlockParam(id, tpe, capt) => BlockParam(id, substitute(tpe), substitute(capt))
     }
 
   def substitute(tpe: ValueType)(using subst: Substitution): ValueType =

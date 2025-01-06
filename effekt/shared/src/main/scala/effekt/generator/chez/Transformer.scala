@@ -60,7 +60,8 @@ trait Transformer {
     chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
-  def toChez(p: Param): ChezName = nameDef(p.id)
+  def toChez(p: ValueParam): ChezName = nameDef(p.id)
+  def toChez(p: BlockParam): ChezName = nameDef(p.id)
 
   def toChez(module: ModuleDecl)(using ErrorReporter): List[chez.Def] = {
     val decls = module.declarations.flatMap(toChez)
@@ -139,7 +140,7 @@ trait Transformer {
           chez.Builtin("hole")
       }
       chez.Constant(nameDef(id),
-        chez.Lambda((vps ++ bps) map { p => nameDef(p.id) },
+        chez.Lambda(vps.map { p => nameDef(p.id) } ++ bps.map { p => nameDef(p.id) },
           tBody))
 
     case Extern.Include(ff, contents) =>
@@ -181,7 +182,7 @@ trait Transformer {
 
   def toChez(block: BlockLit): chez.Lambda = block match {
     case BlockLit(tps, cps, vps, bps, body) =>
-      chez.Lambda((vps ++ bps) map toChez, toChez(body))
+      chez.Lambda(vps.map(toChez) ++ bps.map(toChez), toChez(body))
   }
 
   def toChez(block: Block): chez.Expr = block match {
@@ -201,7 +202,7 @@ trait Transformer {
 
   def toChez(op: Operation): chez.Expr = op match {
     case Operation(name, tps, cps, vps, bps, body) =>
-      chez.Lambda((vps ++ bps) map toChez, toChez(body))
+      chez.Lambda(vps.map(toChez) ++ bps.map(toChez), toChez(body))
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
