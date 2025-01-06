@@ -151,7 +151,7 @@ trait Transformer {
 
   def toChez(defn: Toplevel): chez.Def = defn match {
     case Toplevel.Def(id, block) => chez.Constant(nameDef(id), toChez(block))
-    case Toplevel.Val(id, tpe, binding) => chez.Constant(nameDef(id), toChezExpr(binding))
+    case Toplevel.Val(id, tpe, binding) => chez.Constant(nameDef(id), run(toChezExpr(binding)))
   }
 
   def toChez(stmt: Stmt): chez.Block = stmt match {
