@@ -2,7 +2,7 @@ package effekt
 package machine
 
 import effekt.context.Context
-import effekt.core.{ Block, DeclarationContext, Definition, Id, given }
+import effekt.core.{ Block, DeclarationContext, Toplevel, Id, given }
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
@@ -33,10 +33,10 @@ object Transformer {
     findToplevelBlocksParams(definitions)
 
     val transformedDefinitions = definitions.foldLeft(mainEntry) {
-      case (rest, core.Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body))) =>
+      case (rest, core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body))) =>
         Def(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body), rest)
-      case (rest, core.Definition.Let(id, tpe, binding)) =>
-        Def(BC.globals(id), transform(binding).run { value => Return(List(value)) }, rest)
+      case (rest, core.Toplevel.Val(id, tpe, binding)) =>
+        Def(BC.globals(id), transform(binding), rest)
       case (rest, d) =>
         ErrorReporter.abort(s"Toplevel object definitions not yet supported: ${d}")
     }
@@ -68,90 +68,75 @@ object Transformer {
 
   def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
     stmt match {
-      case core.Scope(definitions, rest) =>
+
+      case core.Def(id, block @ core.BlockLit(tparams, cparams, vparams, bparams, body), rest) =>
         // (1) Collect all the information about free variables of local definitions
-        definitions.foreach {
-          case Definition.Def(id,  block @ core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
+        noteParameters(bparams)
 
-            noteParameters(bparams)
+        // TODO use existing lambda lifting code
 
-            // TODO use existing lambda lifting code
+        // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
+        val freeVariables = core.Variables.free(block).toSet
+          .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free
 
-            // Does not work for mutually recursive local definitions (which are not supported anyway, at the moment)
-            val freeVariables = core.Variables.free(block).toSet
-              .filterNot(x => BPC.globals.contains(x.id)) // globals are NOT free
+        val freeParams = freeVariables.flatMap {
+          case core.Variable.Value(id, tpe) =>
+            Set(Variable(transform(id), transform(tpe)))
 
-            val freeParams = freeVariables.flatMap {
-              case core.Variable.Value(id, tpe) =>
-                Set(Variable(transform(id), transform(tpe)))
+          // Mutable variables are blocks and can be free, but do not have info.
+          case core.Variable.Block(id, core.Type.TState(stTpe), capt) =>
+            Set(Variable(transform(id), Type.Reference(transform(stTpe))))
 
-              // Mutable variables are blocks and can be free, but do not have info.
-              case core.Variable.Block(id, core.Type.TState(stTpe), capt) =>
-                Set(Variable(transform(id), Type.Reference(transform(stTpe))))
+          // Regions are blocks and can be free, but do not have info.
+          case core.Variable.Block(id, core.Type.TRegion, capt) =>
+            if id == symbols.builtins.globalRegion
+            then Set.empty
+            else Set(Variable(transform(id), Type.Prompt()))
 
-              // Regions are blocks and can be free, but do not have info.
-              case core.Variable.Block(id, core.Type.TRegion, capt) =>
-                if id == symbols.builtins.globalRegion
-                then Set.empty
-                else Set(Variable(transform(id), Type.Prompt()))
+          case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
+              // For each known free block we have to add its free variables to this one (flat closure)
+              case Some(BlockInfo.Definition(freeParams, blockParams)) =>
+                freeParams.toSet
 
-              case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
-                  // For each known free block we have to add its free variables to this one (flat closure)
-                  case Some(BlockInfo.Definition(freeParams, blockParams)) =>
-                    freeParams.toSet
+              // Unknown free blocks stay free variables
+              case Some(BlockInfo.Parameter(tpe)) =>
+                Set(Variable(transform(pid), transform(tpe)))
 
-                  // Unknown free blocks stay free variables
-                  case Some(BlockInfo.Parameter(tpe)) =>
-                    Set(Variable(transform(pid), transform(tpe)))
-
-                  // Everything else is considered bound or global
-                  case None =>
-                    ErrorReporter.panic(s"Could not find info for free variable $pid")
-                }
-              case _ => Set.empty
+              // Everything else is considered bound or global
+              case None =>
+                ErrorReporter.panic(s"Could not find info for free variable $pid")
             }
-
-            noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
-
-          case Definition.Def(id, block @ core.New(impl)) =>
-            // this is just a hack...
-            noteParameter(id, block.tpe)
-
-          case Definition.Def(id, core.BlockVar(alias, tpe, _)) =>
-            getDefinition(alias) match {
-              case BlockInfo.Definition(free, params) =>
-                noteDefinition(id, free, params)
-            }
-
-          case Definition.Def(id, b @ core.Unbox(_)) =>
-            noteParameter(id, b.tpe)
-
-          case Definition.Let(_, _, _) =>
-            ()
+          case _ => Set.empty
         }
 
+        noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
+
         // (2) Actually translate the definitions
-        definitions.foldRight(transform(rest)) {
-          case (core.Definition.Let(id, tpe, binding), rest) =>
-            transform(binding).run { value =>
-              // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-              // TODO it is important that we use the inferred [[binding.tpe]] and not the annotated type [[tpe]], but why?
-              Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), rest)
-            }
+        Def(transformLabel(id), transform(body), transform(rest))
 
-          case (core.Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)), rest) =>
-            Def(transformLabel(id), transform(body), rest)
+      case core.Def(id, block @ core.New(impl), rest) =>
+        // this is just a hack...
+        noteParameter(id, block.tpe)
+        New(Variable(transform(id), transform(impl.interface)), transform(impl), transform(rest))
 
-          case (core.Definition.Def(id, core.New(impl)), rest) =>
-            New(Variable(transform(id), transform(impl.interface)), transform(impl), rest)
+      case core.Def(id, block @ core.BlockVar(alias, tpe, _), rest) =>
+        getDefinition(alias) match {
+          case BlockInfo.Definition(free, params) =>
+            noteDefinition(id, free, params)
+        }
+        Def(transformLabel(id), Jump(transformLabel(alias)), transform(rest))
 
-          case (core.Definition.Def(id, core.BlockVar(alias, tpe, _)), rest) =>
-            Def(transformLabel(id), Jump(transformLabel(alias)), rest)
+      case core.Def(id, block @ core.Unbox(pure), rest) =>
+        noteParameter(id, block.tpe)
+        transform(pure).run { boxed =>
+          ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), transform(rest))
+        }
 
-          case (core.Definition.Def(id, core.Unbox(pure)), rest) =>
-            transform(pure).run { boxed =>
-              ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), rest)
-            }
+      case core.Let(id, tpe, binding, rest) =>
+        transform(binding).run { value =>
+          // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
+          // TODO it is important that we use the inferred [[binding.tpe]] and not the annotated type [[tpe]], but why?
+          Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), transform(rest))
         }
 
       case core.Return(expr) =>
@@ -453,13 +438,6 @@ object Transformer {
         }
       }
 
-    case core.Run(stmt) =>
-      // NOTE: `stmt` is guaranteed to be of type `tpe`.
-      val variable = Variable(freshName("run"), transform(stmt.tpe))
-      Binding { k =>
-        PushFrame(Clause(List(variable), k(variable)), transform(stmt))
-      }
-
     case core.Box(block, annot) =>
       transformBlockArg(block).flatMap { unboxed =>
         Binding { k =>
@@ -519,7 +497,7 @@ object Transformer {
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
 
-  def transformLabel(id: Id)(using BPC: BlocksParamsContext) = getDefinition(id) match {
+  def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getDefinition(id) match {
     case BlockInfo.Definition(freeParams, boundParams) => Label(transform(id), boundParams ++ freeParams)
   }
 
@@ -537,12 +515,12 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[core.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
+  def findToplevelBlocksParams(definitions: List[core.Toplevel])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
-      case Definition.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
+      case Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
-      case Definition.Let(id, tpe, binding) =>
+      case Toplevel.Val(id, tpe, binding) =>
         noteDefinition(id, Nil, Nil)
         noteGlobal(id)
       case other => ()

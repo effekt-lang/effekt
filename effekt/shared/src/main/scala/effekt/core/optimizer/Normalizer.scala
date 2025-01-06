@@ -70,25 +70,32 @@ object Normalizer { normal =>
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
-      case Definition.Def(id, block) => id -> block
+      case Toplevel.Def(id, block) => id -> block
     }.toMap
     val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
 
-    val (normalizedDefs, _) = normalize(m.definitions)(using context)
+    val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
   }
 
-  def normalize(definitions: List[Definition])(using ctx: Context): (List[Definition], Context) =
+  def normalizeToplevel(definitions: List[Toplevel])(using ctx: Context): (List[Toplevel], Context) =
     var contextSoFar = ctx
     val defs = definitions.map {
-      case Definition.Def(id, block) =>
-        val normalized = active(block)(using contextSoFar).dealiased
+      case Toplevel.Def(id, block) =>
+        val normalized = normalize(block)(using contextSoFar)
         contextSoFar = contextSoFar.bind(id, normalized)
-        Definition.Def(id, normalized)
-      case Definition.Let(id, tpe, expr) =>
-        val normalized = active(expr)(using contextSoFar)
-        contextSoFar = contextSoFar.bind(id, normalized)
-        Definition.Let(id, tpe, normalized)
+        Toplevel.Def(id, normalized)
+
+      case Toplevel.Val(id, tpe, binding) =>
+        // TODO commute (similar to normalizeVal)
+        // val foo = { val bar = ...; ... }   =   val bar = ...; val foo = ...;
+        val normalized = normalize(binding)(using contextSoFar)
+        normalized match {
+          case Stmt.Return(expr) =>
+            contextSoFar = contextSoFar.bind(id, expr)
+          case normalized => ()
+        }
+        Toplevel.Val(id, tpe, normalized)
     }
     (defs, contextSoFar)
 
@@ -150,16 +157,15 @@ object Normalizer { normal =>
       case other => other // stuck
     }
 
-  def normalize(d: Definition)(using C: Context): Definition = d match {
-    case Definition.Def(id, block)        => Definition.Def(id, normalize(block))
-    case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, normalize(binding))
-  }
-
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
 
-    case Stmt.Scope(definitions, body) =>
-      val (defs, ctx) = normalize(definitions)
-      normal.Scope(defs, normalize(body)(using ctx))
+    case Stmt.Def(id, block, body) =>
+      val normalized = active(block).dealiased
+      Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
+
+    case Stmt.Let(id, tpe, expr, body) =>
+      val normalized = active(expr)
+      Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
 
     // Redexes
     // -------
@@ -207,19 +213,22 @@ object Normalizer { normal =>
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr) =>
-          normal.Scope(List(Definition.Let(id, tpe, expr)),
-            normalize(body)(using C.bind(id, expr)))
+          Stmt.Let(id, tpe, expr, normalize(body)(using C.bind(id, expr)))
 
         // Commute val and bindings
-        // [[ val x = { def f = ...; let y = ...; STMT }; STMT ]] = def f = ...; let y = ...; val x = STMT; STMT
-        case Stmt.Scope(ds, bodyBinding) =>
-          normal.Scope(ds, normalizeVal(id, tpe, bodyBinding, body))
+        // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
+        case Stmt.Def(id, block, bodyBinding) =>
+          Stmt.Def(id, block, normalizeVal(id, tpe, bodyBinding, body))
+
+        // Commute val and bindings
+        // [[ val x = { let y = ...; STMT }; STMT ]] = let y = ...; val x = STMT; STMT
+        case Stmt.Let(id, tpe, binding, bodyBinding) =>
+          Stmt.Let(id, tpe, binding, normalizeVal(id, tpe, bodyBinding, body))
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>
           normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
-
 
         // [[ val x = { var y in r = e; stmt1 }; stmt2 ]] = var y in r = e; [[ val x = stmt1; stmt2 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
@@ -259,7 +268,10 @@ object Normalizer { normal =>
     case b @ Block.BlockLit(tparams, cparams, vparams, bparams, body) => normalize(b)
 
     // [[ unbox (box b) ]] = [[ b ]]
-    case Block.Unbox(pure) => normal.Unbox(normalize(pure))
+    case Block.Unbox(pure) => normalize(pure) match {
+      case Pure.Box(b, _) => b
+      case p => Block.Unbox(p)
+    }
     case Block.New(impl) => New(normalize(impl))
   }
 
@@ -283,7 +295,10 @@ object Normalizer { normal =>
     // [[ box (unbox e) ]] = [[ e ]]
     case Pure.Box(b, annotatedCapture) => active(b) match {
       case NormalizedBlock.Known(Unbox(p), boundBy) => p
-      case _ => normal.Box(normalize(b), annotatedCapture)
+      case _ => normalize(b) match {
+        case Block.Unbox(pure) => pure
+        case b => Pure.Box(b, annotatedCapture)
+      }
     }
 
     // congruences
@@ -296,60 +311,8 @@ object Normalizer { normal =>
   def normalize(e: Expr)(using Context): Expr = e match {
     case DirectApp(b, targs, vargs, bargs) => DirectApp(normalize(b), targs, vargs.map(normalize), bargs.map(normalize))
 
-    // [[ run (return e) ]] = [[ e ]]
-    case Run(s) => normal.Run(normalize(s))
-
     case pure: Pure => normalize(pure)
   }
-
-
-  // Smart Constructors
-  // ------------------
-  @tailrec
-  private def Scope(definitions: List[Definition], body: Stmt): Stmt = body match {
-
-    // flatten scopes
-    //   { def f = ...; { def g = ...; BODY } }  =  { def f = ...; def g; BODY }
-    case Stmt.Scope(others, body) => normal.Scope(definitions ++ others, body)
-
-    // commute bindings
-    //   let x = run { let y = e; s }  =  let y = e; let x = run { s }
-    case _ => if (definitions.isEmpty) body else {
-      var defsSoFar: List[Definition] = Nil
-
-      definitions.foreach {
-        case Definition.Let(id, tpe, Run(Stmt.Scope(ds, body))) =>
-          defsSoFar = defsSoFar ++ (ds :+ Definition.Let(id, tpe, normal.Run(body)))
-        case d => defsSoFar = defsSoFar :+ d
-      }
-      Stmt.Scope(defsSoFar, body)
-    }
-  }
-
-  private def Run(s: Stmt): Expr = s match {
-
-    // run { let x = e; return x }  =  e
-    case Stmt.Scope(Definition.Let(id1, _, binding) :: Nil, Stmt.Return(Pure.ValueVar(id2, _))) if id1 == id2 =>
-      binding
-
-    // run { return e }  =  e
-    case Stmt.Return(expr) => expr
-
-    case _ => core.Run(s)
-  }
-
-  // box (unbox p)  =  p
-  private def Box(b: Block, capt: Captures): Pure = b match {
-    case Block.Unbox(pure) => pure
-    case b => Pure.Box(b, capt)
-  }
-
-  // unbox (box b)  =  b
-  private def Unbox(p: Pure): Block = p match {
-    case Pure.Box(b, _) => b
-    case p => Block.Unbox(p)
-  }
-
 
   // Helpers for beta-reduction
   // --------------------------
@@ -364,20 +327,19 @@ object Normalizer { normal =>
 
     // Only bind if not already a variable!!!
     var ids: Set[Id] = Set.empty
-    var bindings: List[Definition.Def] = Nil
+    var bindings: List[Binding] = Nil
     var bvars: List[Block.BlockVar] = Nil
 
     // (1) first bind
     (b.bparams zip bargs) foreach {
       case (bparam, x: Block.BlockVar) =>
-
         // Update usage: u1 + (u2 - 1)
         usage.update(x.id, usage.getOrElse(bparam.id, Usage.Never) + usage.getOrElse(x.id, Usage.Never).decrement)
         bvars = bvars :+ x
       // introduce a binding
       case (bparam, block) =>
         val id = symbols.TmpBlock("blockBinding")
-        bindings = bindings :+ Definition.Def(id, block)
+        bindings = bindings :+ Binding.Def(id, block)
         bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
         copyUsage(bparam.id, id)
         ids += id
@@ -392,7 +354,7 @@ object Normalizer { normal =>
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
-    normalize(normal.Scope(bindings, body))
+    normalize(Binding(bindings, body))
   }
 
   private def selectOperation(impl: Implementation, method: Id): Block.BlockLit =

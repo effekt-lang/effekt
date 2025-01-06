@@ -33,13 +33,8 @@ import scala.annotation.tailrec
  *     │  │─ [[ StringExternBody ]]
  *     │  │─ [[ Unsupported ]]
  *     │
- *     │─ [[ Definition ]]
- *     │  │─ [[ Def ]]
- *     │  │─ [[ Let ]]
- *     │
  *     │─ [[ Expr ]]
  *     │  │─ [[ DirectApp ]]
- *     │  │─ [[ Run ]]
  *     │  │─ [[ Pure ]]
  *     │
  *     │─ [[ Block ]]
@@ -113,7 +108,7 @@ case class ModuleDecl(
   includes: List[String],
   declarations: List[Declaration],
   externs: List[Extern],
-  definitions: List[Definition],
+  definitions: List[Toplevel],
   exports: List[Id]
 ) extends Tree
 
@@ -147,37 +142,18 @@ object ExternBody {
   }
 }
 
-enum Definition extends Tree {
+enum Toplevel {
   def id: Id
 
   case Def(id: Id, block: Block)
-  case Let(id: Id, tpe: ValueType, binding: Expr) // PURE on the toplevel?
-
-  // TBD
-  // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
-
-  // TDB
-  // case Mutual(defs: List[Definition.Def])
-  val capt: Captures = Type.inferCapt(this)
+  case Val(id: Id, tpe: ValueType, binding: core.Stmt)
 }
 
-// Some smart constructors
-private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
-  case Scope(definitions, body) => Scope(definition :: definitions, body)
-  case other => Scope(List(definition), other)
-}
-
-def Def(id: Id, block: Block, rest: Stmt) =
-  addToScope(Definition.Def(id, block), rest)
-
-def Let(id: Id, tpe: ValueType, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id, tpe, binding), rest)
 
 /**
  * Expressions (with potential IO effects)
  *
  * - [[DirectApp]]
- * - [[Run]]
  * - [[Pure]]
  */
 sealed trait Expr extends Tree {
@@ -187,10 +163,6 @@ sealed trait Expr extends Tree {
 
 // invariant, block b is {io}.
 case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
-
-// only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt) extends Expr
-
 
 /**
  * Pure Expressions (no IO effects, or control effects)
@@ -293,7 +265,9 @@ export Param.*
  */
 enum Stmt extends Tree {
 
-  case Scope(definitions: List[Definition], body: Stmt)
+  // Definitions
+  case Def(id: Id, block: Block, body: Stmt)
+  case Let(id: Id, annotatedTpe: ValueType, binding: Expr, body: Stmt)
 
   // Fine-grain CBV
   case Return(expr: Pure)
@@ -337,19 +311,6 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
-/**
- * A smart constructor for `stmt.Scope` that only introduces a scope if there are bindings
- */
-def MaybeScope(definitions: List[Definition], body: Stmt): Stmt = body match {
-  // flatten scopes
-  //   { def f = ...; { def g = ...; BODY } }  =  { def f = ...; def g; BODY }
-  case Stmt.Scope(others, body) => MaybeScope(definitions ++ others, body)
-
-  // Drop scope if empty
-  //   { ; BODY }  =  BODY
-  case _ if definitions.isEmpty => body
-  case _ => Stmt.Scope(definitions, body)
-}
 
 /**
  * An instance of an interface, concretely implementing the operations.
@@ -368,6 +329,24 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  */
 case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
+}
+
+/**
+ * Bindings are not part of the tree but used in transformations
+ */
+private[core] enum Binding {
+  case Val(name: Id, tpe: ValueType, binding: Stmt)
+  case Let(name: Id, tpe: ValueType, binding: Expr)
+  case Def(name: Id, binding: Block)
+}
+private[core] object Binding {
+  def apply(bindings: List[Binding], body: Stmt): Stmt = bindings match {
+    case Nil => body
+    case Binding.Val(name, tpe, binding) :: rest => Stmt.Val(name, tpe, binding, Binding(rest, body))
+    case Binding.Let(name, tpe, binding) :: rest => Stmt.Let(name, tpe, binding, Binding(rest, body))
+    case Binding.Def(name, binding) :: rest => Stmt.Def(name, binding, Binding(rest, body))
+  }
+  // def unapply(stmt: Stmt): (List[Binding], Stmt) = ???
 }
 
 
@@ -397,8 +376,8 @@ object Tree {
     def expr(using Ctx): PartialFunction[Expr, Res] = PartialFunction.empty
     def stmt(using Ctx): PartialFunction[Stmt, Res] = PartialFunction.empty
     def block(using Ctx): PartialFunction[Block, Res] = PartialFunction.empty
-    def defn(using Ctx): PartialFunction[Definition, Res] = PartialFunction.empty
-    def impl(using Ctx): PartialFunction[Implementation, Res] = PartialFunction.empty
+    def toplevel(using Ctx): PartialFunction[Toplevel, Res] = PartialFunction.empty
+    def implementation(using Ctx): PartialFunction[Implementation, Res] = PartialFunction.empty
     def operation(using Ctx): PartialFunction[Operation, Res] = PartialFunction.empty
     def param(using Ctx): PartialFunction[Param, Res] = PartialFunction.empty
     def clause(using Ctx): PartialFunction[(Id, BlockLit), Res] = PartialFunction.empty
@@ -417,8 +396,8 @@ object Tree {
     def query(e: Expr)(using Ctx): Res = structuralQuery(e, expr)
     def query(s: Stmt)(using Ctx): Res = structuralQuery(s, stmt)
     def query(b: Block)(using Ctx): Res = structuralQuery(b, block)
-    def query(d: Definition)(using Ctx): Res = structuralQuery(d, defn)
-    def query(d: Implementation)(using Ctx): Res = structuralQuery(d, impl)
+    def query(d: Toplevel)(using Ctx): Res = structuralQuery(d, toplevel)
+    def query(d: Implementation)(using Ctx): Res = structuralQuery(d, implementation)
     def query(d: Operation)(using Ctx): Res = structuralQuery(d, operation)
     def query(matchClause: (Id, BlockLit))(using Ctx): Res =
       if clause.isDefinedAt(matchClause) then clause.apply(matchClause) else matchClause match {
@@ -432,9 +411,9 @@ object Tree {
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
+    def toplevel: PartialFunction[Toplevel, Toplevel] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
-    def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
+    def implementation: PartialFunction[Implementation, Implementation] = PartialFunction.empty
     def param: PartialFunction[Param, Param] = PartialFunction.empty
 
     def rewrite(x: Id): Id = if id.isDefinedAt(x) then id(x) else x
@@ -442,8 +421,8 @@ object Tree {
     def rewrite(e: Expr): Expr = rewriteStructurally(e, expr)
     def rewrite(s: Stmt): Stmt = rewriteStructurally(s, stmt)
     def rewrite(b: Block): Block = rewriteStructurally(b, block)
-    def rewrite(d: Definition): Definition = rewriteStructurally(d, defn)
-    def rewrite(e: Implementation): Implementation = rewriteStructurally(e, handler)
+    def rewrite(d: Toplevel): Toplevel = rewriteStructurally(d, toplevel)
+    def rewrite(e: Implementation): Implementation = rewriteStructurally(e, implementation)
     def rewrite(o: Operation): Operation = rewriteStructurally(o)
     def rewrite(p: Param): Param = rewriteStructurally(p, param)
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
@@ -481,9 +460,9 @@ object Tree {
     def pure(using Ctx): PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr(using Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt(using Ctx): PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def defn(using Ctx): PartialFunction[Definition, Definition] = PartialFunction.empty
+    def toplevel(using Ctx): PartialFunction[Toplevel, Toplevel] = PartialFunction.empty
     def block(using Ctx): PartialFunction[Block, Block] = PartialFunction.empty
-    def handler(using Ctx): PartialFunction[Implementation, Implementation] = PartialFunction.empty
+    def implementation(using Ctx): PartialFunction[Implementation, Implementation] = PartialFunction.empty
     def param(using Ctx): PartialFunction[Param, Param] = PartialFunction.empty
 
     def rewrite(x: Id)(using Ctx): Id = if id.isDefinedAt(x) then id(x) else x
@@ -491,8 +470,8 @@ object Tree {
     def rewrite(e: Expr)(using Ctx): Expr = rewriteStructurally(e, expr)
     def rewrite(s: Stmt)(using Ctx): Stmt = rewriteStructurally(s, stmt)
     def rewrite(b: Block)(using Ctx): Block = rewriteStructurally(b, block)
-    def rewrite(d: Definition)(using Ctx): Definition = rewriteStructurally(d, defn)
-    def rewrite(e: Implementation)(using Ctx): Implementation = rewriteStructurally(e, handler)
+    def rewrite(d: Toplevel)(using Ctx): Toplevel = rewriteStructurally(d, toplevel)
+    def rewrite(e: Implementation)(using Ctx): Implementation = rewriteStructurally(e, implementation)
     def rewrite(o: Operation)(using Ctx): Operation = rewriteStructurally(o)
     def rewrite(p: Param)(using Ctx): Param = rewriteStructurally(p, param)
     def rewrite(p: Param.ValueParam)(using Ctx): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
@@ -573,7 +552,6 @@ object Variables {
 
   def free(e: Expr): Variables = e match {
     case DirectApp(b, targs, vargs, bargs) => free(b) ++ all(vargs, free) ++ all(bargs, free)
-    case Run(s) => free(s)
     case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
@@ -590,9 +568,9 @@ object Variables {
     case Block.New(impl) => free(impl)
   }
 
-  def free(d: Definition): Variables = d match {
-    case Definition.Def(id, block) => free(block) - id
-    case Definition.Let(id, _, binding) => free(binding)
+  def free(d: Toplevel): Variables = d match {
+    case Toplevel.Def(id, block) => free(block) - id
+    case Toplevel.Val(id, _, binding) => free(binding)
   }
 
   def all[T](t: IterableOnce[T], f: T => Variables): Variables =
@@ -605,16 +583,8 @@ object Variables {
       free(body) -- all(vparams, bound) -- all(bparams, bound)
   }
   def free(s: Stmt): Variables = s match {
-    // currently local functions cannot be mutually recursive
-    case Stmt.Scope(defs, body) =>
-      var stillFree = Variables.empty
-      var boundSoFar = Variables.empty
-      defs.foreach { d =>
-        stillFree = stillFree ++ (free(d) -- boundSoFar -- bound(d))
-        boundSoFar = boundSoFar ++ bound(d)
-      }
-      stillFree ++ (free(body) -- boundSoFar)
-
+    case Stmt.Def(id, block, body) => free(block) ++ (free(body) -- Variables.block(id, block.tpe, block.capt))
+    case Stmt.Let(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.Return(expr) => free(expr)
     case Stmt.Val(id, tpe, binding, body) => free(binding) ++ (free(body) -- Variables.value(id, binding.tpe))
     case Stmt.App(callee, targs, vargs, bargs) => free(callee) ++ all(vargs, free) ++ all(bargs, free)
@@ -640,10 +610,9 @@ object Variables {
 
   def bound(t: ValueParam): Variables = Variables.value(t.id, t.tpe)
   def bound(t: BlockParam): Variables = Variables.block(t.id, t.tpe, t.capt)
-
-  def bound(d: Definition): Variables = d match {
-    case Definition.Def(id, block) => Variables.block(id, block.tpe, block.capt)
-    case Definition.Let(id, tpe, binding) => Variables.value(id, tpe)
+  def bound(t: Toplevel): Variables = t match {
+    case Toplevel.Def(id, block) => Variables.block(id, block.tpe, block.capt)
+    case Toplevel.Val(id, tpe, binding) => Variables.value(id, tpe)
   }
 }
 
@@ -660,11 +629,6 @@ object substitutions {
     def shadowCaptures(shadowed: IterableOnce[Id]): Substitution = copy(captures = captures -- shadowed)
     def shadowValues(shadowed: IterableOnce[Id]): Substitution = copy(values = values -- shadowed)
     def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
-
-    def shadowDefinitions(shadowed: Seq[Definition]): Substitution = copy(
-      values = values -- shadowed.collect { case d: Definition.Let => d.id },
-      blocks = blocks -- shadowed.collect { case d: Definition.Def => d.id }
-    )
 
     def shadowParams(shadowed: Seq[Param]): Substitution = copy(
       values = values -- shadowed.collect { case d: Param.ValueParam => d.id },
@@ -684,20 +648,10 @@ object substitutions {
         substitute(body)(using Substitution(tSubst, cSubst, vSubst, bSubst))
     }
 
-  //Replaces all variables contained in one of the Maps with their value
-  def substitute(definition: Definition)(using Substitution): Definition =
-    definition match {
-      case Definition.Def(id, block) => Definition.Def(id, substitute(block))
-      case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, substitute(binding))
-    }
-
   def substitute(expression: Expr)(using Substitution): Expr =
     expression match {
       case DirectApp(b, targs, vargs, bargs) =>
         DirectApp(substitute(b), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
-
-      case Run(s) =>
-        Run(substitute(s))
 
       case p: Pure =>
         substitute(p)
@@ -705,9 +659,13 @@ object substitutions {
 
   def substitute(statement: Stmt)(using subst: Substitution): Stmt =
     statement match {
-      case Scope(definitions, body) =>
-        Scope(definitions.map(substitute),
-          substitute(body)(using subst shadowDefinitions definitions))
+      case Def(id, block, body) =>
+        Def(id, substitute(block)(using subst shadowBlocks List(id)),
+          substitute(body)(using subst shadowBlocks List(id)))
+
+      case Let(id, tpe, binding, body) =>
+        Let(id, substitute(tpe), substitute(binding),
+          substitute(body)(using subst shadowValues List(id)))
 
       case Return(expr) =>
         Return(substitute(expr))

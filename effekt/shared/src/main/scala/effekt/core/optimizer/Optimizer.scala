@@ -50,5 +50,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     // (5) normalize again to clean up and remove new redexes
     tree = Context.timed("normalize-2", source.name) { normalize(tree) }
 
+    println(util.show(tree))
+
     tree
 }

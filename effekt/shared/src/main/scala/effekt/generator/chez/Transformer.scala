@@ -66,11 +66,7 @@ trait Transformer {
     val decls = module.declarations.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
-    val defns = module.definitions.map(toChez).flatMap {
-      case Left(d) => Some(d)
-      case Right(None) => None
-      case Right(e) => ???
-    }
+    val defns = module.definitions.map(toChez)
     decls ++ externs ++ defns
   }
 
@@ -121,7 +117,8 @@ trait Transformer {
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case s: Scope => chez.Let(Nil, toChez(s))
+    case stmt: (Def | Let) =>
+      chez.Let(Nil, toChez(stmt))
   }
 
   def toChez(decl: core.Declaration): List[chez.Def] = decl match {
@@ -152,33 +149,32 @@ trait Transformer {
   def toChez(t: Template[core.Expr]): chez.Expr =
     chez.RawExpr(t.strings, t.args.map(e => toChez(e)))
 
-  def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
-    case Definition.Def(id, block) =>
-      Left(chez.Constant(nameDef(id), toChez(block)))
+  def toChez(defn: Toplevel): chez.Def = defn match {
+    case Toplevel.Def(id, block) => chez.Constant(nameDef(id), toChez(block))
+    case Toplevel.Val(id, tpe, binding) => chez.Constant(nameDef(id), toChezExpr(binding))
+  }
 
-    case Definition.Let(Wildcard(), _, binding) =>
+  def toChez(stmt: Stmt): chez.Block = stmt match {
+    case Stmt.Def(id, block, body) =>
+      val chez.Block(defs, exprs, result) = toChez(body)
+      chez.Block(chez.Constant(nameDef(id), toChez(block)) :: defs, exprs, result)
+
+    case Stmt.Let(Wildcard(), tpe, binding, body) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
         // since this might lead to invalid scheme code.
-        case _: chez.Variable => Right(None)
-        case other => Right(Some(other))
+        case _: chez.Variable => toChez(body)
+        case expr =>
+          toChez(body) match {
+            case chez.Block(Nil, exprs, result) => chez.Block(Nil, expr :: exprs, result)
+            case rest => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
+          }
       }
 
-    // we could also generate a let here...
-    case Definition.Let(id, _, binding) =>
-      Left(chez.Constant(nameDef(id), toChez(binding)))
-  }
-
-  def toChez(stmt: Stmt): chez.Block = stmt match {
-    // TODO maybe this can be simplified after also introducing mutual definitions
-    case Scope(definitions, body) =>
-      definitions.map(toChez).foldRight(toChez(body)) {
-        case (Left(defn), chez.Block(defns, exprs, result)) => chez.Block(defn :: defns, exprs, result)
-        case (Right(Some(expr)), chez.Block(Nil, exprs, result)) => chez.Block(Nil, expr :: exprs, result)
-        case (Right(Some(expr)), rest) => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
-        case (Right(None), rest) => rest
-      }
+    case Stmt.Let(id, tpe, binding, body) =>
+      val chez.Block(defs, exprs, result) = toChez(body)
+      chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
 
     case other => chez.Block(Nil, Nil, toChezExpr(other))
   }
@@ -224,8 +220,6 @@ trait Transformer {
       chez.Call(nameRef(field), toChez(b))
 
     case Box(b, _) => toChez(b)
-
-    case Run(s) => run(toChezExpr(s))
   }
 
 

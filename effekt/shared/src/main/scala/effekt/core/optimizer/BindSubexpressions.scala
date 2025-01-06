@@ -20,39 +20,41 @@ object BindSubexpressions {
 
   def transform(m: ModuleDecl): ModuleDecl = m match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      val (newDefs, env) = transformDefs(definitions)(using Map.empty)
-      ModuleDecl(path, includes, declarations, externs, newDefs, exports)
+      given Env = Map.empty
+      ModuleDecl(path, includes, declarations, externs, transformToplevel(definitions), exports)
   }
 
-  def transformDefs(definitions: List[Definition])(using env: Env): (List[Definition], Env) =
-    var definitionsSoFar = List.empty[Definition]
-    var envSoFar = env
+  def transformToplevel(definitions: List[Toplevel])(using env: Env): List[Toplevel] =
+    definitions.flatMap {
+      case Toplevel.Def(id, block) => transform(block) match {
+        case Bind(block, bindings) => bindings.map(toToplevel) :+ Toplevel.Def(id, block)
 
-    definitions.foreach {
-      case Definition.Def(id, block) =>
-        transform(block)(using envSoFar) match {
-          case Bind(Block.BlockVar(x, _, _), defs) =>
-            definitionsSoFar ++= defs
-            envSoFar = alias(id, x, envSoFar)
-
-          case Bind(other, defs) =>
-            definitionsSoFar = definitionsSoFar ++ (defs :+ Definition.Def(id, other))
-        }
-      case Definition.Let(id, tpe, expr) =>
-        transform(expr)(using envSoFar) match {
-          case Bind(Pure.ValueVar(x, _), defs) =>
-            definitionsSoFar ++= defs
-            envSoFar = alias(id, x, envSoFar)
-          case Bind(other, defs) =>
-            definitionsSoFar = definitionsSoFar ++ (defs :+ Definition.Let(id, transform(tpe)(using envSoFar), other))
-        }
+      }
+      case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), transform(binding)) :: Nil
     }
-    (definitionsSoFar, envSoFar)
+
+  def toToplevel(b: Binding): Toplevel = b match {
+    case Binding.Val(name, tpe, binding) => Toplevel.Val(name, tpe, binding)
+    case Binding.Let(name, tpe, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
+    case Binding.Def(name, binding) => Toplevel.Def(name, binding)
+  }
+
 
   def transform(s: Stmt)(using env: Env): Stmt = s match {
-    case Stmt.Scope(definitions, body) =>
-      val (newDefs, newEnv) = transformDefs(definitions)
-      MaybeScope(newDefs, transform(body)(using newEnv))
+
+    case Stmt.Def(id, block, body) => transform(block) match {
+      case Bind(Block.BlockVar(x, _, _), bindings) =>
+        Binding(bindings, transform(body)(using alias(id, x, env)))
+      case Bind(other, bindings) =>
+        Binding(bindings, Stmt.Def(id, other, transform(body)))
+    }
+
+    case Stmt.Let(id, tpe, binding, body) => transform(binding) match {
+      case Bind(Pure.ValueVar(x, _), bindings) =>
+        Binding(bindings, transform(body)(using alias(id, x, env)))
+      case Bind(other, bindings) =>
+        Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
+    }
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
       for {
@@ -145,8 +147,6 @@ object BindSubexpressions {
     } yield res
     case Pure.Select(target, field, tpe) => transform(target) { v => bind(Pure.Select(v, field, transform(tpe))) }
     case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
-
-    case Run(s) => bind(Run(transform(s)))
   }
 
   def transformExprs(es: List[Expr])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
@@ -171,22 +171,22 @@ object BindSubexpressions {
 
   // Binding Monad
   // -------------
-  case class Bind[+A](value: A, definitions: List[Definition]) {
-    def run(f: A => Stmt): Stmt = MaybeScope(definitions, f(value))
-    def map[B](f: A => B): Bind[B] = Bind(f(value), definitions)
+  case class Bind[+A](value: A, bindings: List[Binding]) {
+    def run(f: A => Stmt): Stmt = Binding(bindings, f(value))
+    def map[B](f: A => B): Bind[B] = Bind(f(value), bindings)
     def flatMap[B](f: A => Bind[B]): Bind[B] =
       val Bind(result, other) = f(value)
-      Bind(result, definitions ++ other)
+      Bind(result, bindings ++ other)
     def apply[B](f: A => Bind[B]): Bind[B] = flatMap(f)
   }
   def pure[A](value: A): Bind[A] = Bind(value, Nil)
   def bind[A](expr: Expr): Bind[ValueVar] =
     val id = Id("tmp")
-    Bind(ValueVar(id, expr.tpe), List(Definition.Let(id, expr.tpe, expr)))
+    Bind(ValueVar(id, expr.tpe), List(Binding.Let(id, expr.tpe, expr)))
 
   def bind[A](block: Block): Bind[BlockVar] =
     val id = Id("tmp")
-    Bind(BlockVar(id, block.tpe, block.capt), List(Definition.Def(id, block)))
+    Bind(BlockVar(id, block.tpe, block.capt), List(Binding.Def(id, block)))
 
   def delimit(b: Bind[Stmt]): Stmt = b.run(a => a)
 

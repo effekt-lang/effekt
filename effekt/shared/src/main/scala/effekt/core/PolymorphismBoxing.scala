@@ -152,7 +152,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(decl: ModuleDecl)(using PContext): ModuleDecl = decl match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions flatMap transform, exports)
+      ModuleDecl(path, includes, declarations map transform, externs map transform, definitions map transform, exports)
   }
 
   def transform(declaration: Declaration)(using PContext): Declaration = declaration match {
@@ -187,24 +187,24 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(valueParam: Param.ValueParam)(using PContext): Param.ValueParam = valueParam match {
     case Param.ValueParam(id, tpe) => Param.ValueParam(id, transform(tpe))
   }
+
   def transform(blockParam: Param.BlockParam)(using PContext): Param.BlockParam = blockParam match {
     case Param.BlockParam(id, tpe, capt) => Param.BlockParam(id, transform(tpe), capt)
   }
 
-  def transform(definition: Definition)(using PContext): List[Definition] = definition match {
-    case Definition.Def(id, block) => List(Definition.Def(id, transform(block)))
-    case Definition.Let(id, tpe, binding) =>
-      val coerce = coercer(binding.tpe, transform(tpe))
-      if (coerce.isIdentity) {
-        List(Definition.Let(id, transform(tpe), transform(binding)))
-      } else {
-        val orig = TmpValue("coe")
-        val origTpe = binding.tpe
-        List(
-          Definition.Let(orig, origTpe, transform(binding)),
-          Definition.Let(id, transform(tpe), coerce(ValueVar(orig, origTpe))))
-      }
+  def transform(toplevel: Toplevel)(using PContext): Toplevel = toplevel match {
+    case Toplevel.Def(id, block) => Toplevel.Def(id, transform(block))
+    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), coerce(transform(binding), transform(tpe)))
   }
+
+  def coerce(stmt: Stmt, to: ValueType)(using PContext): Stmt =
+    val from = stmt.tpe
+    val coerce = coercer(from, to)
+    if (coerce.isIdentity) { stmt }
+    else {
+      val orig = TmpValue("coe")
+      Stmt.Val(orig, from, stmt, Stmt.Return(coerce(ValueVar(orig, from))))
+    }
 
   def transform(block: Block.BlockLit)(using PContext): Block.BlockLit = block match {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -240,8 +240,19 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(stmt: Stmt)(using PContext): Stmt = stmt match {
-    case Stmt.Scope(definitions, body) =>
-      Stmt.Scope(definitions flatMap transform, transform(body))
+    case Stmt.Def(id, block, rest) => Stmt.Def(id, transform(block), transform(rest))
+    case Stmt.Let(id, tpe, binding, rest) =>
+      val coerce = coercer(binding.tpe, transform(tpe))
+      if (coerce.isIdentity) {
+        Stmt.Let(id, transform(tpe), transform(binding), transform(rest))
+      } else {
+        val orig = TmpValue("coe")
+        val origTpe = binding.tpe
+        Stmt.Let(orig, origTpe, transform(binding),
+          Stmt.Let(id, transform(tpe), coerce(ValueVar(orig, origTpe)),
+            transform(rest)))
+      }
+
     case Stmt.Return(expr) => Stmt.Return(transform(expr))
     case Stmt.Val(id, tpe, binding, body) =>
       val coerce = coercer(binding.tpe, transform(tpe))
@@ -399,7 +410,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bcoercers = (tBargs zip itpe.bparams).map { (a, p) => coercer[Block](a.tpe, p) }
       val fcoercer = coercer[Block](tpe, itpe, targs)
       fcoercer.callDirect(callee, (vcoercers zip tVargs).map(_(_)), (bcoercers zip tBargs).map(_(_)))
-    case Run(s) => Run(transform(s))
     case pure: Pure => transform(pure)
   }
 
@@ -623,10 +633,11 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
         override def callDirect(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Expr = {
           val result = TmpValue("coe")
-          Run(Let(result, rcoercer.from, DirectApp(block, targs map transformArg,
-            (vcoercers zip vargs).map {case (c,v) => c(v)},
-            (bcoercers zip bargs).map {case (c,b) => c(b)}),
-            Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
+          //          Run(Let(result, rcoercer.from, DirectApp(block, targs map transformArg,
+          //            (vcoercers zip vargs).map {case (c,v) => c(v)},
+          //            (bcoercers zip bargs).map {case (c,b) => c(b)}),
+          //            Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
+          ???
         }
 
         override def call(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt = {

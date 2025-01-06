@@ -38,6 +38,9 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
     def clear() = scopes = Nil
 
     override def stmt: PartialFunction[Stmt, Stmt] = {
+      case Stmt.Def(id, b : Block.BlockLit, rest) =>
+        Stmt.Def(id, within(id) { rewrite(b) }, rewrite(rest))
+
       case Stmt.Val(id, tpe, binding, body) =>
         Stmt.Val(id, tpe, rewrite(binding), {
           // stop transformation under val binders, they already perform trampolining
@@ -49,9 +52,9 @@ object MakeStackSafe extends Phase[CoreTransformed, CoreTransformed] {
         thunk { Stmt.App(x, targs, vargs.map(rewrite), bargs.map(rewrite)) }
     }
 
-    override def defn: PartialFunction[Definition, Definition] = {
-      case Definition.Def(id, b : Block.BlockLit) =>
-        Definition.Def(id, within(id) { rewrite(b) })
+    override def toplevel: PartialFunction[Toplevel, Toplevel] = {
+      case Toplevel.Def(id, b : Block.BlockLit) =>
+        Toplevel.Def(id, within(id) { rewrite(b) })
     }
   }
 
