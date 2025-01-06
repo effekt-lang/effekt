@@ -203,7 +203,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     if (coerce.isIdentity) { stmt }
     else {
       val orig = TmpValue("coe")
-      Stmt.Val(orig, from, stmt, Stmt.Return(coerce(ValueVar(orig, from))))
+      Stmt.Val(orig, coerce.from, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
     }
 
   def coerce(stmt: Stmt, to: ValueType)(using PContext): Stmt = coerce(stmt, stmt.tpe, to)
