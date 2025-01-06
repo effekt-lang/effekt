@@ -564,7 +564,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           override def apply(block: Te): Te = {
             val vparams = vcoercers.map { c => ValueParam(TmpValue("coe"), transform(c.from)) }
             val bparams = bcoercers.map { c => val id = TmpBlock("coe"); BlockParam(id, transform(c.from), Set(id)) }
-            val result = TmpValue("coe")
+
             val inner = TmpBlock()
             val vargs = (vcoercers zip vparams).map { case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }
             val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }

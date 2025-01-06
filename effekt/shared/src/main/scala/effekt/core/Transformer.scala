@@ -94,15 +94,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Toplevel.Def(sym, transformAsBlock(binding))
       }
 
-      // TODO convert binding into toplevel definition.
-      val additionalDefinitions: List[Toplevel] = bindings.map(core.Binding.toToplevel)
-      //      bindings.map {
-      //        case Binding.Let(name, tpe, binding) =>
-      //          Definition.Let(name, tpe, binding)
-      //        case Binding.Def(name, binding) => Definition.Def(name, binding)
-      //        case Binding.Val(name, tpe, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
-      //      }
-      additionalDefinitions ++ List(definition)
+      bindings.map(core.Binding.toToplevel) ++ List(definition)
 
     case _: source.VarDef | _: source.RegDef =>
       Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
