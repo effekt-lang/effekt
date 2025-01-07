@@ -749,9 +749,9 @@ namespace sort {
 /// (works for ~5M random elements just fine, but OOMs on ~10M random elements)
 ///
 /// O(N log N) worstcase
-def sortBy[A](list: List[A]) { compare: (A, A) => Bool }: List[A] = {
-  val monotonicRuns = sort::sequences(list) {compare}
-  sort::mergeAll(monotonicRuns) {compare}
+def sortBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: List[A] = {
+  val monotonicRuns = sort::sequences(list) {lessOrEqual}
+  sort::mergeAll(monotonicRuns) {lessOrEqual}
 }
 
 /// Sort a list of integers in an ascending order.
@@ -770,12 +770,12 @@ def sort(l: List[Double]): List[Double] = l.sortBy { (a, b) => a <= b }
 /// Check if a list is sorted according to the given comparison function (less-or-equal).
 ///
 /// O(N)
-def isSortedBy[A](list: List[A]) { compare: (A, A) => Bool }: Bool = {
+def isSortedBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: Bool = {
   def go(list: List[A]): Bool = {
     list match {
       case Cons(x, Cons(y, rest)) =>
         val next = Cons(y, rest) // Future work: Replace this by an @-pattern!
-        compare(x, y) && go(next)
+        lessOrEqual(x, y) && go(next)
       case _ => true
     }
   }
