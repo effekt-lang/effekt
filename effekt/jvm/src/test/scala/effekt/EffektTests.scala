@@ -163,19 +163,19 @@ trait EffektTests extends munit.FunSuite {
       case f if f.isDirectory && !ignored.contains(f) =>
         f.listFiles.foreach(foreachFileIn(_)(test))
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".effekt.md") =>
-        val path = f.getParentFile
-        val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
-
-        if (ignored.contains(f)) {
-          ignored.contains(f)
-        } else {
-          val checkfile = path / (baseName + ".check")
-          val expected = if checkfile.exists() then Some(IO.read(checkfile)) else None
-
-          test(f, expected)
+        if (!ignored.contains(f)) {
+          test(f, expectedResultFor(f))
         }
       case _ => ()
     }
 
   runTests()
 }
+
+def expectedResultFor(f: File): Option[String] = {
+  val path = f.getParentFile
+  val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
+  val checkfile = path / (baseName + ".check")
+  if checkfile.exists() then Some(IO.read(checkfile)) else None
+}
+

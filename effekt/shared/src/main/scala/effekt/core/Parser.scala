@@ -176,7 +176,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
     | `make` ~> dataType ~ id ~ valueArgs ^^ Pure.Make.apply
-    | maybeParensBlockVar ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
+    | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
     | failure("Expected a pure expression.")
     )
 
@@ -196,8 +196,10 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // -----------
   lazy val expr: P[Expr] =
     ( pure
-    | (`!` ~/> maybeParensBlockVar) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ DirectApp.apply
+    | (`!` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ DirectApp.apply
     )
+
+  def maybeParens[T](p: P[T]): P[T] = (p | `(` ~> p <~ `)`)
 
 
   // Blocks
@@ -213,13 +215,8 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   lazy val blockVar: P[Block.BlockVar] =
     id ~ (`:` ~> blockType) ~ (`@` ~> captures) ^^ {
-      case (id ~ tpe ~ capt) => Block.BlockVar(id, tpe, capt) : Block.BlockVar
+      case id ~ tpe ~ capt => Block.BlockVar(id, tpe, capt) : Block.BlockVar
     }
-
-  lazy val maybeParensBlockVar: P[Block.BlockVar] =
-    ( `(` ~> blockVar <~ `)`
-    | blockVar
-    )
 
   lazy val blockLit: P[Block.BlockLit] =
     `{` ~> parameters ~ (`=>` ~/> stmts) <~ `}` ^^ {

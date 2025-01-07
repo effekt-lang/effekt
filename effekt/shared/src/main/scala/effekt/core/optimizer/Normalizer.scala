@@ -310,7 +310,6 @@ object Normalizer { normal =>
 
   def normalize(e: Expr)(using Context): Expr = e match {
     case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(normalize), bargs.map(normalize))
-
     case pure: Pure => normalize(pure)
   }
 

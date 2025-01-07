@@ -524,7 +524,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     def isIdentity: Boolean
   }
   object BlockCoercer {
-
     def apply(from: BlockType, to: BlockType, targs: List[ValueType] = Nil)(using PContext): BlockCoercer =
       (from, to) match {
         case (f, t) if f == t => IdentityCoercer(f, t)
