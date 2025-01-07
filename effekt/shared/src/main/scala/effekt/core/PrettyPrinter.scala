@@ -80,7 +80,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(b: Block): Doc = b match {
     case BlockVar(id, _, _) => toDoc(id)
     case BlockLit(tps, cps, vps, bps, body) =>
-      braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
+      braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line }
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
@@ -153,7 +153,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(d: Toplevel): Doc = d match {
     case Toplevel.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
-      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDoc(body))
+      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> toDoc(body)
     case Toplevel.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
     case Toplevel.Val(id, _, binding) =>
@@ -161,28 +161,34 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(s: Stmt): Doc = s match {
+    // requires a block to be readable:
+    case _ : (Stmt.Def | Stmt.Let | Stmt.Val | Stmt.Alloc | Stmt.Var) => block(toDocStmts(s))
+    case other => toDocStmts(s)
+  }
+
+  def toDocStmts(s: Stmt): Doc = s match {
     case Def(id, BlockLit(tps, cps, vps, bps, body), rest) =>
-      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDoc(body)) <> line <>
-        toDoc(rest)
+      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> toDoc(body) <> line <>
+        toDocStmts(rest)
 
     case Def(id, block, rest) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block) <> line <>
-        toDoc(rest)
+        toDocStmts(rest)
 
     case Let(id, _, binding, rest) =>
       "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
-        toDoc(rest)
+        toDocStmts(rest)
 
     case Return(e) =>
       "return" <+> toDoc(e)
 
     case Val(Wildcard(), _, binding, body) =>
       toDoc(binding) <> ";" <> line <>
-        toDoc(body)
+        toDocStmts(body)
 
     case Val(id, tpe, binding, body) =>
-      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> block(toDoc(binding)) <> ";" <> line <>
-        toDoc(body)
+      "val" <+> toDoc(id) <> ":" <+> toDoc(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+        toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>
       toDoc(b) <> argsToDoc(targs, vargs, bargs)
@@ -191,7 +197,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> method.name.toString <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
-      "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
+      "if" <+> parens(toDoc(cond)) <+> block(toDocStmts(thn)) <+> "else" <+> block(toDocStmts(els))
 
     case Reset(body) =>
       "reset" <+> toDoc(body)
@@ -200,13 +206,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "shift" <> parens(toDoc(prompt)) <+> toDoc(body)
 
     case Resume(k, body) =>
-      "resume" <> parens(toDoc(k)) <+> block(toDoc(body))
+      "resume" <> parens(toDoc(k)) <+> block(toDocStmts(body))
 
     case Alloc(id, init, region, body) =>
-      "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
+      "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <+> ";" <> line <>
+        toDocStmts(body)
 
     case Var(id, init, cap, body) =>
-      "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
+      "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <+> ";" <> line <>
+        toDocStmts(body)
 
     case Get(id, capt, tpe) =>
       "!" <> toDoc(id)
@@ -219,7 +227,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Match(sc, clauses, default) =>
       val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> toDoc(b) })) <> line)
-      val d = default.map { body => space <> "else" <+> braces(nest(line <> toDoc(body))) }.getOrElse { emptyDoc }
+      val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <+> cs <> d
 
     case Hole() =>
