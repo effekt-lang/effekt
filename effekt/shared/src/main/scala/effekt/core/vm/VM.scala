@@ -2,6 +2,7 @@ package effekt
 package core
 package vm
 
+import effekt.core.vm.Computation.Reference
 import effekt.source.FeatureFlag
 
 import scala.annotation.tailrec
@@ -48,6 +49,7 @@ enum Computation {
   case Object(methods: Map[Id, BlockLit], env: Env)
   case Region(address: Address)
   case Prompt(address: Address)
+  case Reference(region: Address)
   case Resumption(cont: Stack)
 }
 
@@ -140,11 +142,11 @@ def show(value: Value): String = inspect(value)
 
 enum Frame {
   // mutable state
-  case Var(x: Id, value: Value)
+  case Var(x: Address, value: Value)
   // sequencing
   case Val(x: Id, body: Stmt, env: Env)
   // local regions
-  case Region(r: Address, values: Map[Id, Value])
+  case Region(r: Address, values: Heap)
 }
 
 type Heap = Map[Address, Value]
@@ -328,43 +330,72 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         // TODO make the type of Region more precise...
         case Stmt.Region(_) => ???
 
+        case Stmt.Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
+          val value = eval(init, env)
+          val address = freshAddress()
+          State.Step(body, env.bind(id, Computation.Reference(address)), stack, heap.updated(address, value))
+
         case Stmt.Alloc(id, init, region, body) =>
           val value = eval(init, env)
 
-          val address = findFirst(env) {
-            case Env.Dynamic(id, Computation.Region(r), rest) => r
+          val address = freshAddress()
+
+          // we allocate into the region:
+          val regionAddress = findFirst(env) {
+            case Env.Dynamic(other, Computation.Region(r), rest) if region == other => r
           }
 
-          instrumentation.allocateVariableIntoRegion(id, address)
+          instrumentation.allocateVariableIntoRegion(id, regionAddress)
 
           val updated = updateOnce(stack) {
-            case Frame.Region(r, values) if r == address =>
-              Frame.Region(r, values.updated(id, value))
+            case Frame.Region(r, values) if r == regionAddress =>
+              Frame.Region(r, values.updated(address, value))
           }
-          State.Step(body, env, updated, heap)
+          State.Step(body, env.bind(id, Computation.Reference(address)), updated, heap)
 
         // TODO also use addresses for variables
         case Stmt.Var(id, init, capture, body) =>
           instrumentation.allocateVariable(id)
-          State.Step(body, env, push(Frame.Var(id, eval(init, env)), stack), heap)
+          val addr = freshAddress()
+          State.Step(body, env.bind(id, Computation.Reference(addr)), push(Frame.Var(addr, eval(init, env)), stack), heap)
 
         case Stmt.Get(id, annotatedCapt, annotatedTpe) =>
           instrumentation.readMutableVariable(id)
+
+          val address = findFirst(env) {
+            case Env.Dynamic(other, Computation.Reference(r), rest) if id == other => r
+          }
+
+          // global mutable state...
+          if (heap.isDefinedAt(address)) {
+            return returnWith(heap(address), env, stack, heap)
+          }
+
+          // reigon based mutable state or local variable
           val value = findFirst(stack) {
-            case Frame.Var(other, value) if other == id => value
-            case Frame.Region(_, values) if values.isDefinedAt(id) => values(id)
+            case Frame.Var(other, value) if other == address => value
+            case Frame.Region(_, values) if values.isDefinedAt(address) => values(address)
           } getOrElse ???
 
           returnWith(value, env, stack, heap)
 
         case Stmt.Put(id, annotatedCapt, value) =>
           instrumentation.writeMutableVariable(id)
+          val address = findFirst(env) {
+            case Env.Dynamic(other, Computation.Reference(r), rest) if id == other => r
+          }
           val newValue = eval(value, env)
+
+          // global mutable state...
+          if (heap.isDefinedAt(address)) {
+            return returnWith(Value.Literal(()), env, stack, heap.updated(address, newValue))
+          }
+
           val updated = updateOnce(stack) {
-            case Frame.Var(other, value) if other == id =>
+            case Frame.Var(other, value) if other == address =>
               Frame.Var(other, newValue)
-            case Frame.Region(r, values) if values.isDefinedAt(id) =>
-              Frame.Region(r, values.updated(id, newValue))
+            case Frame.Region(r, values) if values.isDefinedAt(address) =>
+              Frame.Region(r, values.updated(address, newValue))
           }
 
           returnWith(Value.Literal(()), env, updated, heap)
@@ -380,7 +411,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         case Stmt.Shift(prompt, BlockLit(tparams, cparams, vparams, List(resume), body)) =>
           instrumentation.shift()
           val address = findFirst(env) {
-            case Env.Dynamic(id, Computation.Prompt(addr), rest) => addr
+            case Env.Dynamic(id, Computation.Prompt(addr), rest) if id == prompt.id => addr
           }
           @tailrec
           def unwind(stack: Stack, cont: Stack): (Stack, Stack) = stack match {
@@ -399,7 +430,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         case Stmt.Resume(k, body) =>
           instrumentation.resume()
           val cont = findFirst(env) {
-            case Env.Dynamic(id, Computation.Resumption(k), rest) => k
+            case Env.Dynamic(id, Computation.Resumption(stack), rest) if id == k.id => stack
           }
           @tailrec
           def rewind(k: Stack, onto: Stack): Stack = k match {

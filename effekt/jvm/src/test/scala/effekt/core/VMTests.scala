@@ -349,7 +349,41 @@ class VMTests extends munit.FunSuite {
       resets = 0,
       shifts = 0,
       resumes = 0
-    ))
+    )),
+
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt" -> Some(Summary(
+      staticDispatches = 17326,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 17326,
+      pushedFrames = 54797,
+      poppedFrames = 54797,
+      allocations = 0,
+      closures = 0,
+      fieldLookups = 0,
+      variableReads = 32437,
+      variableWrites = 13699,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt" -> Some(Summary(
+      staticDispatches = 5463,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 5463,
+      pushedFrames = 28674,
+      poppedFrames = 28674,
+      allocations = 5461,
+      closures = 0,
+      fieldLookups = 0,
+      variableReads = 13654,
+      variableWrites = 9557,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
   )
 
   val duality_of_compilation: Seq[(File, Option[Summary])] = Seq(
@@ -612,13 +646,6 @@ class VMTests extends munit.FunSuite {
   )
 
   val testFiles: Seq[(File, Option[Summary])] = are_we_fast_yet ++ duality_of_compilation ++ effect_handlers_bench
-
-
-  val notWorking: Seq[File] = Seq(
-    // global is missing
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
-  )
 
   def runTest(f: File, expectedSummary: Option[Summary]): Unit =
     val path = f.getPath
