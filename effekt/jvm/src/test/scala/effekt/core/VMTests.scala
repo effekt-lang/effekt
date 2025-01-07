@@ -651,15 +651,81 @@ class VMTests extends munit.FunSuite {
     )),
   )
 
-  val others: Seq[(File, Option[Summary])] = Seq(
-    examplesDir / "casestudies" / "ad.effekt.md" -> None
+  val casestudies: Seq[(File, Option[Summary])] = Seq(
+    examplesDir / "casestudies" / "ad.effekt.md" -> Some(Summary(
+      staticDispatches = 19,
+      dynamicDispatches = 335,
+      patternMatches = 0,
+      branches = 285,
+      pushedFrames = 453,
+      poppedFrames = 453,
+      allocations = 174,
+      closures = 39,
+      fieldLookups = 706,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 8,
+      shifts = 29,
+      resumes = 29
+    )),
+
+    examplesDir / "casestudies" / "buildsystem.effekt.md" -> Some(Summary(
+      staticDispatches = 43,
+      dynamicDispatches = 57,
+      patternMatches = 31,
+      branches = 40,
+      pushedFrames = 33,
+      poppedFrames = 30,
+      allocations = 15,
+      closures = 36,
+      fieldLookups = 0,
+      variableReads = 7,
+      variableWrites = 3,
+      resets = 9,
+      shifts = 7,
+      resumes = 4
+    )),
+
+    examplesDir / "casestudies" / "scheduler.effekt.md" -> Some(Summary(
+      staticDispatches = 60,
+      dynamicDispatches = 8,
+      patternMatches = 95,
+      branches = 41,
+      pushedFrames = 106,
+      poppedFrames = 106,
+      allocations = 73,
+      closures = 8,
+      fieldLookups = 0,
+      variableReads = 29,
+      variableWrites = 18,
+      resets = 1,
+      shifts = 7,
+      resumes = 7
+    )),
+
+    examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
+      staticDispatches = 1457444,
+      dynamicDispatches = 3201452,
+      patternMatches = 1474376,
+      branches = 303298,
+      pushedFrames = 7574572,
+      poppedFrames = 6709277,
+      allocations = 4626007,
+      closures = 865541,
+      fieldLookups = 0,
+      variableReads = 2908620,
+      variableWrites = 1453663,
+      resets = 288559,
+      shifts = 297723,
+      resumes = 9275
+    )),
   )
 
   val testFiles: Seq[(File, Option[Summary])] =
     are_we_fast_yet ++
     duality_of_compilation ++
     effect_handlers_bench ++
-      others
+    casestudies
 
   def runTest(f: File, expectedSummary: Option[Summary]): Unit =
     val path = f.getPath

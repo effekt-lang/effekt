@@ -54,7 +54,7 @@ enum Computation {
 }
 
 enum Env {
-  case Top(functions: Map[Id, BlockLit], builtins: Map[Id, Builtin], declarations: List[core.Declaration])
+  case Top(functions: Map[Id, BlockLit], builtins: Map[Id, Builtin], toplevel: Map[Id, Value], declarations: List[core.Declaration])
   case Static(id: Id, block: BlockLit, rest: Env)
   case Dynamic(id: Id, block: Computation, rest: Env)
   case Let(id: Id, value: Value, rest: Env)
@@ -70,7 +70,8 @@ enum Env {
   def lookupValue(id: Id): Value = {
     @tailrec
     def go(rest: Env): Value = rest match {
-      case Env.Top(functions, builtins, declarations) => throw VMError.NotFound(id)
+      case Env.Top(functions, builtins, toplevel, declarations) =>
+        toplevel.getOrElse(id, throw VMError.NotFound(id))
       case Env.Static(id, block, rest) => go(rest)
       case Env.Dynamic(id, block, rest) => go(rest)
       case Env.Let(otherId, value, rest) => if (id == otherId) value else go(rest)
@@ -81,7 +82,7 @@ enum Env {
   def lookupBuiltin(id: Id): Builtin = {
     @tailrec
     def go(rest: Env): Builtin = rest match {
-      case Env.Top(functions, builtins, declarations) => builtins.getOrElse(id, throw VMError.NotFound(id))
+      case Env.Top(functions, builtins, toplevel, declarations) => builtins.getOrElse(id, throw VMError.NotFound(id))
       case Env.Static(id, block, rest) => go(rest)
       case Env.Dynamic(id, block, rest) => go(rest)
       case Env.Let(id, value, rest) => go(rest)
@@ -90,7 +91,7 @@ enum Env {
   }
 
   def lookupStatic(id: Id): (BlockLit, Env) = this match {
-    case Env.Top(functions, builtins, declarations) => (functions.getOrElse(id, throw VMError.NotFound(id)), this)
+    case Env.Top(functions, builtins, toplevel, declarations) => (functions.getOrElse(id, throw VMError.NotFound(id)), this)
     case Env.Static(other, block, rest) => if (id == other) (block, this) else rest.lookupStatic(id)
     case Env.Dynamic(other, block, rest) => rest.lookupStatic(id)
     case Env.Let(other, value, rest) => rest.lookupStatic(id)
@@ -219,7 +220,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   @tailrec
   private def findFirst[T](env: Env)(f: Env ~> T): T = env match {
     case e if f.isDefinedAt(e) => f(e)
-    case Env.Top(functions, builtins, declarations) => ???
+    case Env.Top(functions, builtins, toplevel, declarations) => ???
     case Env.Static(id, block, rest) => findFirst(rest)(f)
     case Env.Dynamic(id, block, rest) => findFirst(rest)(f)
     case Env.Let(id, value, rest) => findFirst(rest)(f)
@@ -249,7 +250,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         case Stmt.App(Block.BlockVar(id, _, _), targs, vargs, bargs) =>
           @tailrec
           def lookup(env: Env): (BlockLit, Env) = env match {
-            case Env.Top(functions, builtins, declarations) =>
+            case Env.Top(functions, builtins, toplevel, declarations) =>
               instrumentation.staticDispatch(id)
               (functions.getOrElse(id, throw VMError.NotFound(id)), env)
             case Env.Static(other, block, rest) if id == other =>
@@ -447,14 +448,20 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   @tailrec
   private def run(s: State): Value = s match {
     case State.Done(result) => result
-    case other => run(step(other))
+    case other =>
+      val next = try {
+        step(other)
+      } catch {
+        case e => throw new Exception(s"Error running ${util.show(other.asInstanceOf[State.Step].stmt)}", e)
+      }
+      run(next)
   }
 
   def eval(b: Block, env: Env): Computation = b match {
     case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
       @tailrec
       def go(env: Env): Computation = env match {
-        case Env.Top(functions, builtins, declarations) => instrumentation.closure(); Computation.Closure(id, env)
+        case Env.Top(functions, builtins, toplevel, declarations) => instrumentation.closure(); Computation.Closure(id, env)
         case Env.Static(other, block, rest) if other == id => instrumentation.closure(); Computation.Closure(id, env)
         case Env.Static(other, block, rest) => go(rest)
         case Env.Dynamic(other, block, rest) if other == id => block
@@ -507,7 +514,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     case Pure.Select(target, field, annotatedType) =>
       @tailrec
       def declarations(env: Env): List[Declaration] = env match {
-        case Env.Top(functions, builtins, declarations) => declarations
+        case Env.Top(functions, builtins, toplevel, declarations) => declarations
         case Env.Static(id, block, rest) => declarations(rest)
         case Env.Dynamic(id, block, rest) => declarations(rest)
         case Env.Let(id, value, rest) => declarations(rest)
@@ -533,15 +540,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
     val mainFun = m.definitions.collectFirst {
       case Toplevel.Def(id, b: BlockLit) if id == main => b
-    }.getOrElse { throw VMError.NoMain() } match {
-      case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        // evaluate toplevel bindings within main:
-        BlockLit(tparams, cparams, vparams, bparams, m.definitions.foldRight(body) {
-          case (effekt.core.Toplevel.Val(id, tpe, binding), body) =>
-            Stmt.Val(id, tpe, binding, body)
-          case (_, body) => body
-        }) : BlockLit
-    }
+    }.getOrElse { throw VMError.NoMain() }
 
     val functions = m.definitions.collect { case Toplevel.Def(id, b: Block.BlockLit) => id -> b }.toMap
 
@@ -551,7 +550,15 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           id -> builtins.getOrElse(name, throw VMError.MissingBuiltin(name))
     }.toMap
 
-    val env = Env.Top(functions, builtinFunctions, m.declarations)
+    var toplevels: Map[Id, Value] = Map.empty
+    def env = Env.Top(functions, builtinFunctions, toplevels, m.declarations)
+
+    // This is not ideal...
+    // First, we run all the toplevel vals:
+    m.definitions.collect {
+      case effekt.core.Toplevel.Val(id, tpe, binding) =>
+        toplevels = toplevels.updated(id, run(State.Step(binding, env, Stack.Toplevel, Map.empty)))
+    }
 
     val initial = State.Step(mainFun.body, env, Stack.Toplevel, Map.empty)
 

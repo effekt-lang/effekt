@@ -45,6 +45,31 @@ lazy val doubles: Builtins = Map(
   builtin("effekt::exp(Double)") {
     case As.Double(x) :: Nil => Value.Double(Math.exp(x))
   },
+  builtin("effekt::log(Double)") {
+    case As.Double(x) :: Nil => Value.Double(Math.log(x))
+  },
+  builtin("effekt::cos(Double)") {
+    case As.Double(x) :: Nil => Value.Double(Math.cos(x))
+  },
+  builtin("effekt::sin(Double)") {
+    case As.Double(x) :: Nil => Value.Double(Math.sin(x))
+  },
+  builtin("effekt::tan(Double)") {
+    case As.Double(x) :: Nil => Value.Double(Math.tan(x))
+  },
+  builtin("effekt::atan(Double)") {
+    case As.Double(x) :: Nil => Value.Double(Math.atan(x))
+  },
+  builtin("effekt::round(Double)") {
+    case As.Double(x) :: Nil => Value.Int(Math.round(x))
+  },
+  builtin("effekt::pow(Double, Double)") {
+    case As.Double(base) :: As.Double(exp) :: Nil => Value.Double(Math.pow(base, exp))
+  },
+  builtin("effekt::pi()") {
+    case Nil => Value.Double(Math.PI)
+  },
+
 
   // Comparison
   // ----------
@@ -73,11 +98,20 @@ lazy val doubles: Builtins = Map(
     case As.Double(x) :: Nil => Value.Int(x.toLong)
   },
   builtin("effekt::show(Double)") {
-    // TODO we should globally change the semantics of show for doubles... This mimics JS...
-    case As.Double(n) :: Nil => Value.String(if (n == n.toInt.toDouble) n.toInt.toString else {
-      val truncated = BigDecimal(n).setScale(15, BigDecimal.RoundingMode.FLOOR).toString
-      if (truncated.contains('.') && truncated.endsWith("0")) truncated.stripSuffix("0") else truncated
-    })
+    // TODO globally define show on double in a decent way... this mimicks JS
+    case As.Double(n) :: Nil =>
+      Value.String(
+        if (n == n.toInt.toDouble) n.toInt.toString // Handle integers like 15.0 → 15
+        else {
+          val formatted = BigDecimal(n)
+            .setScale(15, BigDecimal.RoundingMode.DOWN) // Truncate to 15 decimal places without rounding up
+            .bigDecimal
+            .stripTrailingZeros()
+            .toPlainString
+
+          formatted
+        }
+      )
   },
 )
 

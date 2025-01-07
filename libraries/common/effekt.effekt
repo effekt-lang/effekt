@@ -343,18 +343,22 @@ extern pure def infixDiv(x: Double, y: Double): Double =
 extern pure def cos(x: Double): Double =
   js "Math.cos(${x})"
   chez "(cos ${x})"
+  vm "effekt::cos(Double)"
 
 extern pure def sin(x: Double): Double =
   js "Math.sin(${x})"
   chez "(sin ${x})"
+  vm "effekt::sin(Double)"
 
 extern pure def atan(x: Double): Double =
   js "Math.atan(${x})"
   chez "(atan ${x})"
+  vm "effekt::atan(Double)"
 
 extern pure def tan(x: Double): Double =
   js "Math.tan(${x})"
   chez "(tan ${x})"
+  vm "effekt::tan(Double)"
 
 extern pure def sqrt(x: Double): Double =
   js "Math.sqrt(${x})"
@@ -376,6 +380,7 @@ def abs(n: Double): Double =
 extern pure def log(x: Double): Double =
   js "Math.log(${x})"
   chez "(log ${x})"
+  vm "effekt::log(Double)"
 
 extern pure def log1p(x: Double): Double =
   js "Math.log1p(${x})"
@@ -402,11 +407,13 @@ def pow(base: Double, exponent: Int): Double = {
 extern pure def pow(base: Double, exponent: Double): Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
+  vm "effekt::pow(Double, Double)"
 
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   js "Math.PI"
   chez "(* 4 (atan 1))"
+  vm "effekt::pi()"
 
 val PI: Double = _pi()
 
@@ -430,6 +437,7 @@ extern pure def round(d: Double): Int =
     %i = call %Double @llvm.round.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
   """
+  vm "effekt::round(Double)"
 
 def round(d: Double, digits: Int): Double = {
   val factor = pow(10.0, digits)
