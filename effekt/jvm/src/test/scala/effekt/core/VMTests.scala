@@ -1,13 +1,13 @@
 package effekt
 package core
 
-import interpreter.*
+import core.vm.*
 
-class InterpreterTests extends munit.FunSuite {
+class VMTests extends munit.FunSuite {
 
   import effekt.context.{ Context, IOModuleDB }
   import effekt.util.PlainMessaging
-  import effekt.generator.ir.IR
+  import effekt.generator.vm.VM
   import kiama.util.{ Positions, StringSource, FileSource }
 
 
@@ -15,7 +15,7 @@ class InterpreterTests extends munit.FunSuite {
   object plainMessaging extends PlainMessaging
   object context extends Context(positions) with IOModuleDB {
     val messaging = plainMessaging
-    object frontend extends IR
+    object frontend extends generator.vm.VM
     override lazy val compiler = frontend.asInstanceOf
   }
 
@@ -223,7 +223,7 @@ class InterpreterTests extends munit.FunSuite {
         val expected = expectedResultFor(f).getOrElse { s"Missing checkfile for ${path}"}
         assertNoDiff(result, expected)
       } catch {
-        case i: InterpreterError => fail(i.getMessage, i)
+        case i: VMError => fail(i.getMessage, i)
       }
     }
 

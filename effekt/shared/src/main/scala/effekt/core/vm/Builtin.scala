@@ -1,6 +1,6 @@
 package effekt
 package core
-package interpreter
+package vm
 
 import java.io.PrintStream
 

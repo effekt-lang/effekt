@@ -4,7 +4,7 @@ extern io def commandLineArgs(): List[String] =
   js { js::commandLineArgs() }
   chez { chez::commandLineArgs() }
   llvm { llvm::commandLineArgs() }
-  jvm { Nil() }
+  vm { Nil() }
 
 namespace js {
   extern type Args // = Array[String]

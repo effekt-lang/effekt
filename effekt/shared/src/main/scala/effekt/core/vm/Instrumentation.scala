@@ -1,6 +1,6 @@
 package effekt
 package core
-package interpreter
+package vm
 
 trait Instrumentation {
   def staticDispatch(id: Id): Unit = ()

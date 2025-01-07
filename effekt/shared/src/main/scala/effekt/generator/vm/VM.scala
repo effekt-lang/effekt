@@ -1,6 +1,6 @@
 package effekt
 package generator
-package ir
+package vm
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
@@ -15,12 +15,12 @@ import kiama.util.Source
  *
  * This is, for example, used by the interpreter.
  */
-class IR extends Compiler[(Id, symbols.Module, ModuleDecl)] {
+class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
 
   def extension = ".effekt-core.ir"
 
   // TODO change jvm to ir
-  override def supportedFeatureFlags: List[String] = List("jvm")
+  override def supportedFeatureFlags: List[String] = List("vm")
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = None
 

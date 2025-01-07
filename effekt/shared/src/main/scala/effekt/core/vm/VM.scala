@@ -1,6 +1,6 @@
 package effekt
 package core
-package interpreter
+package vm
 
 import effekt.source.FeatureFlag
 
@@ -68,7 +68,7 @@ enum Env {
   def lookupValue(id: Id): Value = {
     @tailrec
     def go(rest: Env): Value = rest match {
-      case Env.Top(functions, builtins, declarations) => throw InterpreterError.NotFound(id)
+      case Env.Top(functions, builtins, declarations) => throw VMError.NotFound(id)
       case Env.Static(id, block, rest) => go(rest)
       case Env.Dynamic(id, block, rest) => go(rest)
       case Env.Let(otherId, value, rest) => if (id == otherId) value else go(rest)
@@ -79,7 +79,7 @@ enum Env {
   def lookupBuiltin(id: Id): Builtin = {
     @tailrec
     def go(rest: Env): Builtin = rest match {
-      case Env.Top(functions, builtins, declarations) => builtins.getOrElse(id, throw InterpreterError.NotFound(id))
+      case Env.Top(functions, builtins, declarations) => builtins.getOrElse(id, throw VMError.NotFound(id))
       case Env.Static(id, block, rest) => go(rest)
       case Env.Dynamic(id, block, rest) => go(rest)
       case Env.Let(id, value, rest) => go(rest)
@@ -88,14 +88,14 @@ enum Env {
   }
 
   def lookupStatic(id: Id): (BlockLit, Env) = this match {
-    case Env.Top(functions, builtins, declarations) => (functions.getOrElse(id, throw InterpreterError.NotFound(id)), this)
+    case Env.Top(functions, builtins, declarations) => (functions.getOrElse(id, throw VMError.NotFound(id)), this)
     case Env.Static(other, block, rest) => if (id == other) (block, this) else rest.lookupStatic(id)
     case Env.Dynamic(other, block, rest) => rest.lookupStatic(id)
     case Env.Let(other, value, rest) => rest.lookupStatic(id)
   }
 }
 
-enum InterpreterError extends Throwable {
+enum VMError extends Throwable {
   case NotFound(id: Id)
   case NotAnExternFunction(id: Id)
   case MissingBuiltin(name: String)
@@ -105,13 +105,13 @@ enum InterpreterError extends Throwable {
   case NoMain()
 
   override def getMessage: String = this match {
-    case InterpreterError.NotFound(id) => s"Not found: ${id}"
-    case InterpreterError.NotAnExternFunction(id) => s"Not an extern function: ${id}"
-    case InterpreterError.MissingBuiltin(name) => s"Missing builtin: ${name}"
-    case InterpreterError.RuntimeTypeError(msg) => s"Runtime type error: ${msg}"
-    case InterpreterError.NonExhaustive(missingCase) => s"Non exhaustive: ${missingCase}"
-    case InterpreterError.Hole() => s"Reached hole"
-    case InterpreterError.NoMain() => s"No main"
+    case VMError.NotFound(id) => s"Not found: ${id}"
+    case VMError.NotAnExternFunction(id) => s"Not an extern function: ${id}"
+    case VMError.MissingBuiltin(name) => s"Missing builtin: ${name}"
+    case VMError.RuntimeTypeError(msg) => s"Runtime type error: ${msg}"
+    case VMError.NonExhaustive(missingCase) => s"Non exhaustive: ${missingCase}"
+    case VMError.Hole() => s"Reached hole"
+    case VMError.NoMain() => s"No main"
   }
 }
 
@@ -247,7 +247,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           def lookup(env: Env): (BlockLit, Env) = env match {
             case Env.Top(functions, builtins, declarations) =>
               instrumentation.staticDispatch(id)
-              (functions.getOrElse(id, throw InterpreterError.NotFound(id)), env)
+              (functions.getOrElse(id, throw VMError.NotFound(id)), env)
             case Env.Static(other, block, rest) if id == other =>
               instrumentation.staticDispatch(id)
               (block, env)
@@ -257,7 +257,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
                 instrumentation.dynamicDispatch(id)
                 env.lookupStatic(target)
               case _ =>
-                throw InterpreterError.RuntimeTypeError("Can only call functions")
+                throw VMError.RuntimeTypeError("Can only call functions")
             }
             case Env.Dynamic(other, block, rest) => lookup(rest)
             case Env.Let(other, value, rest) => lookup(rest)
@@ -277,7 +277,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
           eval(b, env) match {
             case Computation.Object(methods, definitionEnv) =>
-              val BlockLit(_, _, vparams, bparams, body) = methods.getOrElse(method, throw InterpreterError.NonExhaustive(method))
+              val BlockLit(_, _, vparams, bparams, body) = methods.getOrElse(method, throw VMError.NonExhaustive(method))
               instrumentation.dynamicDispatch(method)
               State.Step(
                 body,
@@ -285,7 +285,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
                   .bindValues((vparams zip vargs).map { case (p, a) => p.id -> eval(a, env) })
                   .bindBlocks((bparams zip bargs).map { case (p, a) => p.id -> eval(a, env) }),
                 stack)
-            case _ => throw InterpreterError.RuntimeTypeError("Can only call methods on objects")
+            case _ => throw VMError.RuntimeTypeError("Can only call methods on objects")
           }
 
         case Stmt.If(cond, thn, els) =>
@@ -293,7 +293,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           eval(cond, env) match {
             case As.Bool(true)  => State.Step(thn, env, stack)
             case As.Bool(false) => State.Step(els, env, stack)
-            case v => throw InterpreterError.RuntimeTypeError(s"Expected Bool, but got ${v}")
+            case v => throw VMError.RuntimeTypeError(s"Expected Bool, but got ${v}")
           }
 
         case Stmt.Match(scrutinee, clauses, default) => eval(scrutinee, env) match {
@@ -301,7 +301,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             @tailrec
             def search(clauses: List[(Id, BlockLit)], comparisons: Int): State = (clauses, default) match {
               case (Nil, None) =>
-                throw InterpreterError.NonExhaustive(tag)
+                throw VMError.NonExhaustive(tag)
               case (Nil, Some(stmt)) =>
                 instrumentation.patternMatch(comparisons)
                 State.Step(stmt, env, stack)
@@ -312,7 +312,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             }
             search(clauses, 0)
 
-          case other => throw InterpreterError.RuntimeTypeError(s"Expected value of a data type, but got ${other}")
+          case other => throw VMError.RuntimeTypeError(s"Expected value of a data type, but got ${other}")
         }
 
         case Stmt.Region(Block.BlockLit(_, _, _, List(region), body)) =>
@@ -407,7 +407,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           }
           State.Step(body, env, rewind(cont, stack))
 
-        case Stmt.Hole() => throw InterpreterError.Hole()
+        case Stmt.Hole() => throw VMError.Hole()
       }
     }
 
@@ -435,7 +435,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       Computation.Closure(tmp, env.bind(tmp, b))
     case Block.Unbox(pure) => eval(pure, env) match {
       case Value.Boxed(block) => block
-      case other => throw InterpreterError.RuntimeTypeError(s"Expected boxed block, but got ${other}")
+      case other => throw VMError.RuntimeTypeError(s"Expected boxed block, but got ${other}")
     }
     case Block.New(Implementation(interface, operations)) =>
       instrumentation.closure()
@@ -501,14 +501,14 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     // TODO toplevel val definitinos
     val mainFun = m.definitions.collectFirst {
       case Toplevel.Def(id, b: BlockLit) if id == main => b
-    }.getOrElse { throw InterpreterError.NoMain() }
+    }.getOrElse { throw VMError.NoMain() }
 
     val functions = m.definitions.collect { case Toplevel.Def(id, b: Block.BlockLit) => id -> b }.toMap
 
     val builtinFunctions = m.externs.collect {
       case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture,
-        ExternBody.StringExternBody(FeatureFlag.NamedFeatureFlag("jvm"), Template(name :: Nil, Nil))) =>
-          id -> builtins.getOrElse(name, throw InterpreterError.MissingBuiltin(name))
+        ExternBody.StringExternBody(FeatureFlag.NamedFeatureFlag("vm"), Template(name :: Nil, Nil))) =>
+          id -> builtins.getOrElse(name, throw VMError.MissingBuiltin(name))
     }.toMap
 
     val env = Env.Top(functions, builtinFunctions, m.declarations)
