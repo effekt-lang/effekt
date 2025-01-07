@@ -50,17 +50,10 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
       case Pure.ValueVar(id, tpe) if usedOnce(id) && hasDefinition(id) => definitionOf(id)
     }
 
-    override def stmt(using DropContext) = {
-      case Stmt.Scope(defs, body) =>
-        var contextSoFar = currentContext
-        val ds = defs.flatMap {
-          case Definition.Let(id, tpe, p: Pure) if usedOnce(id) =>
-            val transformed = rewrite(p)(using contextSoFar)
-            contextSoFar = contextSoFar.updated(id, transformed)
-            None
-          case d => Some(rewrite(d)(using contextSoFar))
-        }
-        MaybeScope(ds, rewrite(body)(using contextSoFar))
+    override def stmt(using C: DropContext) = {
+      case Stmt.Let(id, tpe, p: Pure, body) if usedOnce(id) =>
+        val transformed = rewrite(p)
+        rewrite(body)(using C.updated(id, transformed))
     }
   }
 }

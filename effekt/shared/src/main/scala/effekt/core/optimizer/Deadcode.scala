@@ -6,14 +6,10 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
 
   override def stmt = {
     // Remove local unused definitions
-    case Scope(defs, stmt) =>
-      MaybeScope(defs.collect {
-        case d: Definition.Def if reachable.isDefinedAt(d.id) => rewrite(d)
-        // we only keep non-pure OR reachable let bindings
-        case d: Definition.Let if d.capt.nonEmpty || reachable.isDefinedAt(d.id) => rewrite(d)
-      }, rewrite(stmt))
+    case Stmt.Def(id, block, body) if !reachable.isDefinedAt(id) => rewrite(body)
+    case Stmt.Let(id, tpe, binding, body) if binding.capt.isEmpty && !reachable.isDefinedAt(id) => rewrite(body)
 
-    case Reset(body) =>
+    case Stmt.Reset(body) =>
       rewrite(body) match {
         case BlockLit(tparams, cparams, vparams, List(prompt), body) if !reachable.isDefinedAt(prompt.id) => body
         case b => Stmt.Reset(b)

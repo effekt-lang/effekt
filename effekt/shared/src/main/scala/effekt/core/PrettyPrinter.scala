@@ -16,7 +16,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
 
-  def format(defs: List[Definition]): String =
+  def format(defs: List[Toplevel]): String =
     pretty(toDoc(defs), 60).layout
 
   def format(s: Stmt): String =
@@ -36,7 +36,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   val show: PartialFunction[Any, String] = {
     case m: ModuleDecl => format(m).layout
-    case d: Definition  => format(List(d))
+    case d: Toplevel   => format(List(d))
     case s: Stmt       => format(s)
     case t: ValueType  => format(t)
     case t: BlockType  => format(t)
@@ -56,7 +56,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(m.definitions)
   }
 
-  def toDoc(definitions: List[Definition]): Doc =
+  def toDoc(definitions: List[Toplevel]): Doc =
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
@@ -105,7 +105,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field, tpe) => toDoc(b) <> "." <> toDoc(field)
 
     case Box(b, capt) => parens("box" <+> toDoc(b))
-    case Run(s) => "run" <+> block(toDoc(s))
   }
 
   def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
@@ -115,7 +114,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     val bargsDoc = bargs.map(toDoc)
     targsDoc <> parens(vargsDoc ++ bargsDoc)
 
-  def paramsToDoc(tps: List[symbols.Symbol], vps: List[Param.ValueParam], bps: List[Param.BlockParam]): Doc = {
+  def paramsToDoc(tps: List[symbols.Symbol], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
     val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))
     tpsDoc <> parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
   }
@@ -152,18 +151,27 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Property(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
   }
 
-  def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
+  def toDoc(d: Toplevel): Doc = d match {
+    case Toplevel.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
       "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDoc(body))
-    case Definition.Def(id, block) =>
+    case Toplevel.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, _, binding) =>
-      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
+    case Toplevel.Val(id, _, binding) =>
+      "vet" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(s: Stmt): Doc = s match {
-    case Scope(definitions, rest) =>
-      toDoc(definitions) <> emptyline <> toDoc(rest)
+    case Def(id, BlockLit(tps, cps, vps, bps, body), rest) =>
+      "def" <+> toDoc(id) <> paramsToDoc(tps, vps, bps) <+> "=" <+> block(toDoc(body)) <> line <>
+        toDoc(rest)
+
+    case Def(id, block, rest) =>
+      "def" <+> toDoc(id) <+> "=" <+> toDoc(block) <> line <>
+        toDoc(rest)
+
+    case Let(id, _, binding, rest) =>
+      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> line <>
+        toDoc(rest)
 
     case Return(e) =>
       "return" <+> toDoc(e)

@@ -3,7 +3,7 @@ package core
 
 import effekt.{core, source, symbols}
 import effekt.context.Context
-import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
+import effekt.core.{Block, DirectApp, PolymorphismBoxing, Pure, Stmt}
 import effekt.source.{IdDef, Include}
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
@@ -125,13 +125,9 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |
         |def id = { ['A](a: 'A) => return a: 'A }
         |def idInt = { (x: Int) =>
-        |    {
-        |        let res = run {
-        |            let boxedRes = !(id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int))
-        |            return (unboxInt: (BoxedInt) => Int @ {})(boxedRes:BoxedInt)
-        |        }
-        |        return res: Int
-        |    }
+        |  let boxed = !(id: ['A]('A) => 'A @ {})[BoxedInt]((boxInt: (Int) => BoxedInt @ {})(x: Int))
+        |  let unboxed = (unboxInt: (BoxedInt) => Int @ {})(boxed:BoxedInt)
+        |  return unboxed: Int
         |}
         |""".stripMargin
     assertTransformsTo(from,to)
