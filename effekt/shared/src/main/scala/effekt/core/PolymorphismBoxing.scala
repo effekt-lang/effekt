@@ -3,10 +3,11 @@ package core
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
+import effekt.core.PolymorphismBoxing.ValueCoercer.IdentityCoercer
 import effekt.symbols
-import effekt.symbols.{TmpBlock, TmpValue}
-import effekt.{CoreTransformed, Phase}
-import effekt.symbols.builtins.{TBoolean, TByte, TChar, TDouble, TInt, TState, TUnit}
+import effekt.symbols.{ TmpBlock, TmpValue }
+import effekt.{ CoreTransformed, Phase }
+import effekt.symbols.builtins.{ TBoolean, TByte, TChar, TDouble, TInt, TState, TUnit }
 import effekt.symbols.ErrorMessageInterpolator
 
 import scala.util.boundary
@@ -198,33 +199,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), coerce(transform(binding), transform(tpe)))
   }
 
-  def coerce(stmt: Stmt, from: ValueType, to: ValueType)(using PContext): Stmt =
-    val coerce = ValueCoercer(from, to)
-    if (coerce.isIdentity) { stmt }
-    else {
-      val orig = TmpValue("coe")
-      Stmt.Val(orig, coerce.from, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
-    }
-
-  def coerce(stmt: Stmt, to: ValueType)(using PContext): Stmt = coerce(stmt, stmt.tpe, to)
-
-  def coerce(expr: Expr, from: ValueType, to: ValueType)(using PContext): Bind[Expr] =
-    val coerce = ValueCoercer(from, to)
-    if (coerce.isIdentity) { Bind.pure(expr) }
-    else { Bind.bind(expr).map { x => coerce(x) } }
-
-  def coerce(expr: Expr, to: ValueType)(using PContext): Bind[Expr] = coerce(expr, expr.tpe, to)
-
-  def coerce(pure: Pure, from: ValueType, to: ValueType)(using PContext): Pure = ValueCoercer(from, to)(pure)
-
-  def coerce(pure: Pure, to: ValueType)(using PContext): Pure = coerce(pure, pure.tpe, to)
-
-  def coerce(block: Block, from: BlockType, to: BlockType)(using PContext): Block = BlockCoercer(from, to)(block)
-
-  def coerce(block: Block, to: BlockType)(using PContext): Block = coerce(block, block.tpe, to)
-
-  def coerce(block: BlockLit, to: BlockType)(using PContext): BlockLit = BlockCoercer(block.tpe, to)(block)
-
   def transform(block: Block.BlockLit)(using PContext): Block.BlockLit = block match {
     case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       Block.BlockLit(tparams, cparams, vparams map transform, bparams map transform,
@@ -319,7 +293,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val bCoerced = (bargs zip boxedTpe.bparams).map { (a, tpe) => coerce(transform(a), tpe) }
 
       //                     (T, S)      (Int, Double)
-      coerce(Invoke(calleeT, method, boxedTpe, targs.map(transformArg), vCoerced, bCoerced), tpe.result, itpe.result)
+      coerce(Invoke(calleeT, method, boxedTpe, targs.map(transformArg), vCoerced, bCoerced), itpe.result)
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
 
@@ -337,7 +311,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
               val casetpe: BlockType.Function = BlockType.Function(tparams, List(),
                 constructor.fields.map(_.tpe), List(), Type.inferType(clause.body)
               )
-              (id, coerce(transform(clause),Type.instantiate(casetpe, targs map transformArg, List())))
+              (id, coerce(transform(clause), Type.instantiate(casetpe, targs map transformArg, List())))
           }, default map transform)
         case t => Context.abort(pp"Match on value of type ${t}")
       }
@@ -357,15 +331,12 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Resume(k, coerce(transform(body), expected))
 
     case Stmt.Region(body) =>
-      val tBody = transform(body)
-      // make sure the result type is a boxed one
-      val (expectedBodyTpe, actualReturnType, expectedReturnType) = tBody.tpe match {
-        case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-          val boxedResult = transformArg(result)
-          (BlockType.Function(tparams, cparams, vparams, bparams, boxedResult), boxedResult, result)
-        case _ => Context.abort("Body of a region cannot have interface type")
+      transform(body) match {
+        case BlockLit(tparams, cparams, vparams, bparams, body) =>
+          val originalResult = body.tpe
+          val boxedResult = transformArg(originalResult)
+          coerce(Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, coerce(body, boxedResult))), originalResult)
       }
-      coerce(Stmt.Region(coerce(tBody, expectedBodyTpe)), actualReturnType, expectedReturnType)
     case Stmt.Hole() => Stmt.Hole()
   }
 
@@ -418,7 +389,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val f = fields.find(_.id == field).getOrElse{
             Context.abort(s"${id} has no field ${field}.")
           }
-          coerce(Pure.Select(target, field, transform(annotatedType)), f.tpe, Type.substitute(f.tpe, (tparams zip targs).toMap, Map()))
+          coerce(Pure.Select(target, field, transform(annotatedType)), Type.substitute(f.tpe, (tparams zip targs).toMap, Map()))
         case t => Context.abort(s"Select on data type ${t.id} is not supported.")
       }
     }
@@ -455,6 +426,31 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case ValueType.Boxed(tpe, capt) => ValueType.Boxed(transform(tpe), capt)
   }
 
+
+  // Coercions
+  // ---------
+  def coerce(stmt: Stmt, to: ValueType)(using PContext): Stmt =
+    val from = stmt.tpe
+    val coerce = ValueCoercer(from, to)
+    if (coerce.isIdentity) { stmt }
+    else {
+      val orig = TmpValue("coe")
+      Stmt.Val(orig, coerce.from, stmt, Stmt.Return(coerce(ValueVar(orig, coerce.from))))
+    }
+
+  def coerce(expr: Expr, to: ValueType)(using PContext): Bind[Expr] =
+    val from = expr.tpe
+    val coerce = ValueCoercer(from, to)
+    if (coerce.isIdentity) { Bind.pure(expr) }
+    else { Bind.bind(expr).map { x => coerce(x) } }
+
+  def coerce(pure: Pure, to: ValueType)(using PContext): Pure = ValueCoercer(pure.tpe, to)(pure)
+
+  def coerce(block: Block, to: BlockType)(using PContext): Block = BlockCoercer(block.tpe, to)(block)
+
+  def coerce(block: BlockLit, to: BlockType)(using PContext): BlockLit = BlockCoercer(block.tpe, to)(block)
+
+
   sealed  trait ValueCoercer {
     def from: ValueType
     def to: ValueType
@@ -462,6 +458,34 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     def isIdentity: Boolean = false
   }
   object ValueCoercer {
+
+    def apply(from: ValueType, to: ValueType)(using PContext): ValueCoercer = (from, to) match {
+      case (f, t) if f == t => IdentityCoercer(f, t)
+      case (_: ValueType.Var, _: ValueType.Var) => IdentityCoercer(from, to) // are always boxed
+      case (unboxed, boxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => BoxCoercer(unboxed)
+      case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+      case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
+      case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
+      case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+      case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => BottomCoercer(unboxed)
+
+      // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
+      case (f @ core.ValueType.Boxed(bt1, cs1), t @ core.ValueType.Boxed(bt2, cs2)) =>
+        new ValueCoercer {
+          val from: ValueType = f
+          val to: ValueType = t
+          private val bcoercer = BlockCoercer(bt1, bt2)
+          override def isIdentity: Boolean = bcoercer.isIdentity
+          override def apply(t: Pure): Pure = if isIdentity then t else t match {
+            case Pure.Box(b, annotatedCapture) => Pure.Box(bcoercer(b), annotatedCapture)
+            case other => Pure.Box(bcoercer(Block.Unbox(t)), cs2)
+          }
+        }
+      case _ =>
+        //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
+        IdentityCoercer(from, to)
+    }
+
     class IdentityCoercer(val from: ValueType, val to: ValueType) extends ValueCoercer {
       override def apply(t: Pure): Pure = t
       override def isIdentity: Boolean = true
@@ -469,27 +493,19 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case class BoxCoercer(tpe: ValueType)(using PContext) extends ValueCoercer {
       override def from = tpe
       override def to = box(tpe).tpe
-
-      override def apply(t: Pure): Pure = {
-        val boxer = box(tpe)
-        boxer.box(t)
-      }
+      override def apply(t: Pure): Pure = box(tpe).box(t)
     }
     case class UnboxCoercer(tpe: ValueType)(using PContext) extends ValueCoercer {
       override def from = box(tpe).tpe
       override def to = tpe
-
-      override def apply(t: Pure): Pure = {
-        val boxer = box(tpe)
-        boxer.unbox(t)
-      }
+      override def apply(t: Pure): Pure = box(tpe).unbox(t)
     }
     case class BottomCoercer(tpe: ValueType)(using PContext) extends ValueCoercer {
       override def from = core.Type.TBottom
       override def to = tpe
 
       override def apply(t: Pure): Pure = to match {
-        case core.Type.TInt => Pure.Literal(1337L, core.Type.TInt)
+        case core.Type.TInt     => Pure.Literal(1337L, core.Type.TInt)
         case core.Type.TDouble  => Pure.Literal(13.37, core.Type.TDouble)
         // Do strings need to be boxed? Really?
         case core.Type.TString  => Pure.Literal("<?nothing>", core.Type.TString)
@@ -498,88 +514,60 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case _ => sys error s"Trying to unbox Nothing to ${t}"
       }
     }
-
-    def apply(from: ValueType, to: ValueType)(using PContext): ValueCoercer = (from, to) match {
-      case (f,t) if f==t => new IdentityCoercer(f,t)
-      case (_: ValueType.Var, _: ValueType.Var) => new IdentityCoercer(from, to) // are always boxed
-      case (unboxed, boxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => BoxCoercer(unboxed)
-      case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-      case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
-      case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
-      case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-      case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => BottomCoercer(unboxed)
-      case (core.ValueType.Boxed(bt1,cs1), core.ValueType.Boxed(bt2, cs2)) =>
-        // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
-        val bcoercer = BlockCoercer[Block](bt1, bt2)
-        if (bcoercer.isIdentity) then { IdentityCoercer(from, to) } else {
-          val _fr = from
-          val _to = to
-          new ValueCoercer {
-            val from: ValueType = _fr
-            val to: ValueType = _to
-            override def isIdentity: Boolean = false
-            override def apply(t: Pure): Pure = {
-              Pure.Box(bcoercer(Block.Unbox(t)), cs2)
-            }
-          }
-        }
-      case _ =>
-        //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
-        new IdentityCoercer(from, to)
-    }
   }
 
-  sealed trait BlockCoercer[Te <: Block] {
+  sealed trait BlockCoercer {
     def from: BlockType
     def to: BlockType
 
-    def apply(t: Te): Te
-    def isIdentity: Boolean = false
+    def apply[Te >: Block.BlockLit <: Block](t: Te): Te
+    def isIdentity: Boolean
   }
   object BlockCoercer {
-    class IdentityCoercer[Te <: Block](val from: BlockType, val to: BlockType, targs: List[ValueType]) extends BlockCoercer[Te] {
-      override def apply(t: Te): Te = t
+
+    def apply(from: BlockType, to: BlockType, targs: List[ValueType] = Nil)(using PContext): BlockCoercer =
+      (from, to) match {
+        case (f, t) if f == t => IdentityCoercer(f, t)
+        case (f: BlockType.Function, t: BlockType.Function) => FunctionCoercer(f, t, targs)
+        case (f: BlockType.Interface, t: BlockType.Interface) => IdentityCoercer(f, t)
+        case _ => Context.abort(pp"Unsupported coercion from ${from} to ${to}")
+      }
+
+    class IdentityCoercer(val from: BlockType, val to: BlockType) extends BlockCoercer {
+      override def apply[Te >: Block.BlockLit <: Block](t: Te): Te = t
       override def isIdentity: Boolean = true
     }
 
-    def apply[Te >: Block.BlockLit <: Block](fromtpe: BlockType, totpe: BlockType, targs: List[ValueType] = Nil)(using PContext): BlockCoercer[Te] =
-      (fromtpe, totpe) match {
-      case (f, t) if f == t => new IdentityCoercer(fromtpe, totpe, targs)
-      case (BlockType.Function(ftparams, fcparams, fvparams, fbparams, fresult),
-            BlockType.Function(ttparams, tcparams, tvparams, tbparams, tresult)) =>
+    class FunctionCoercer(
+      val from: BlockType.Function,
+      val to: BlockType.Function,
+      targs: List[ValueType]
+    )(using PContext) extends BlockCoercer {
 
-        // note: Order inversed as contravariant in arguments
-        val vcoercers = (fvparams zip tvparams).map { case (t, f) => ValueCoercer(f, t) }
-        val bcoercers = (fbparams zip tbparams).map { case (t, f) => BlockCoercer[Block](f,t) }
-        val rcoercer = ValueCoercer(fresult, tresult)
+      private val BlockType.Function(ftparams, fcparams, fvparams, fbparams, fresult) = from
+      private val BlockType.Function(ttparams, tcparams, tvparams, tbparams, tresult) = to
 
-        if ((rcoercer :: vcoercers).forall(_.isIdentity) && bcoercers.forall(_.isIdentity)) {
-          return new IdentityCoercer(fromtpe, totpe, targs) // nothing to do here
-        }
+      val vcoercers = (fvparams zip tvparams).map { case (t, f) => ValueCoercer(f, t) }
+      val bcoercers = (fbparams zip tbparams).map { case (t, f) => BlockCoercer(f,t) }
+      val rcoercer = ValueCoercer(fresult, tresult)
 
-        new BlockCoercer[Te] {
-          override def from = fromtpe
-          override def to = totpe
+      override def isIdentity = (rcoercer :: vcoercers).forall(_.isIdentity) && bcoercers.forall(_.isIdentity)
 
-          override def apply(block: Te): Te = {
-            val vparams = vcoercers.map { c => ValueParam(TmpValue("coe"), transform(c.from)) }
-            val bparams = bcoercers.map { c => val id = TmpBlock("coe"); BlockParam(id, transform(c.from), Set(id)) }
+      override def apply[Te >: Block.BlockLit <: Block](block: Te): Te = if (isIdentity) block else {
+        val vparams = vcoercers.map { c => ValueParam(TmpValue("coe"), transform(c.from)) }
+        val bparams = bcoercers.map { c => val id = TmpBlock("coe"); BlockParam(id, transform(c.from), Set(id)) }
 
-            val inner = TmpBlock()
-            val vargs = (vcoercers zip vparams).map { case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }
-            val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
-            Block.BlockLit(ftparams, bparams.map(_.id), vparams, bparams,
-              Def(inner, block,
-                coerce(Stmt.App(
-                  Block.BlockVar(inner, block.tpe, block.capt),
-                  (targs map transformArg) ++ (ftparams map core.ValueType.Var.apply),
-                  vargs,
-                  bargs), fresult, tresult)))
-          }
-        }
-      case (BlockType.Interface(n1, targs), BlockType.Interface(n2, _)) =>
-        IdentityCoercer(fromtpe, totpe, targs)
-      case _ => Context.abort(pp"Unsupported coercion from ${fromtpe} to ${totpe}")
+        val inner = TmpBlock()
+        val vargs = (vcoercers zip vparams).map { case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }
+        val bargs = (bcoercers zip bparams).map { case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
+        Block.BlockLit(ftparams, bparams.map(_.id), vparams, bparams,
+          Def(inner, block,
+            coerce(Stmt.App(
+              Block.BlockVar(inner, block.tpe, block.capt),
+              (targs map transformArg) ++ (ftparams map core.ValueType.Var.apply),
+              vargs,
+              bargs), tresult)))
+      }
     }
   }
 }
