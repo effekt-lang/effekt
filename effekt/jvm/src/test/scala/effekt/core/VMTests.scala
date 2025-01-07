@@ -217,7 +217,7 @@ class VMTests extends munit.FunSuite {
 
   def examplesDir = new File("examples")
 
-  val testFiles: Seq[(File, Option[Summary])] = Seq(
+  val are_we_fast_yet: Seq[(File, Option[Summary])] = Seq(
     examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt" -> Some(Summary(
       staticDispatches = 5202,
       dynamicDispatches = 5000,
@@ -335,8 +335,10 @@ class VMTests extends munit.FunSuite {
       resets = 0,
       shifts = 0,
       resumes = 0
-    )),
+    ))
+  )
 
+  val duality_of_compilation: Seq[(File, Option[Summary])] = Seq(
     examplesDir / "benchmarks" / "duality_of_compilation" / "erase_unused.effekt" -> None,
     examplesDir / "benchmarks" / "duality_of_compilation" / "factorial_accumulator.effekt" -> None,
     examplesDir / "benchmarks" / "duality_of_compilation" / "fibonacci_recursive.effekt" -> None,
@@ -344,7 +346,9 @@ class VMTests extends munit.FunSuite {
     examplesDir / "benchmarks" / "duality_of_compilation" / "lookup_tree.effekt" -> None,
     examplesDir / "benchmarks" / "duality_of_compilation" / "match_options.effekt" -> None,
     examplesDir / "benchmarks" / "duality_of_compilation" / "sum_range.effekt" -> None,
+  )
 
+  val effect_handlers_bench: Seq[(File, Option[Summary])] = Seq(
     examplesDir / "benchmarks" / "effect_handlers_bench" / "countdown.effekt" -> None,
     examplesDir / "benchmarks" / "effect_handlers_bench" / "iterator.effekt" -> None,
     examplesDir / "benchmarks" / "effect_handlers_bench" / "nqueens.effekt" -> None,
@@ -354,6 +358,9 @@ class VMTests extends munit.FunSuite {
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt" -> None,
     examplesDir / "benchmarks" / "effect_handlers_bench" / "triples.effekt" -> None,
   )
+
+  val testFiles: Seq[(File, Option[Summary])] = are_we_fast_yet ++ duality_of_compilation ++ effect_handlers_bench
+
 
   val notWorking: Seq[File] = Seq(
     // global is missing
