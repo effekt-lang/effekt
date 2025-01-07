@@ -147,9 +147,11 @@ enum Frame {
   case Region(r: Address, values: Map[Id, Value])
 }
 
+type Heap = Map[Address, Value]
+
 enum State {
   case Done(result: Value)
-  case Step(stmt: Stmt, env: Env, stack: Stack)
+  case Step(stmt: Stmt, env: Env, stack: Stack, heap: Heap)
 }
 
 class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
@@ -157,18 +159,18 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   // TODO maybe replace region values by integers instead of Id
 
   @tailrec
-  private def returnWith(value: Value, env: Env, stack: Stack): State =
+  private def returnWith(value: Value, env: Env, stack: Stack, heap: Heap): State =
     @tailrec
     def go(frames: List[Frame], prompt: Address, stack: Stack): State =
       frames match {
         case Frame.Val(x, body, frameEnv) :: rest =>
           instrumentation.popFrame()
-          State.Step(body, frameEnv.bind(x, value), Stack.Segment(rest, prompt, stack))
+          State.Step(body, frameEnv.bind(x, value), Stack.Segment(rest, prompt, stack), heap)
         // free the mutable state
         case Frame.Var(x, value) :: rest => go(rest, prompt, stack)
         // free the region
         case Frame.Region(x, values) :: rest => go(rest, prompt, stack)
-        case Nil => returnWith(value, env, stack)
+        case Nil => returnWith(value, env, stack, heap)
       }
     stack match {
       case Stack.Empty => State.Done(value)
@@ -225,22 +227,22 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     instrumentation.step(s)
     s match {
       case State.Done(result) => s
-      case State.Step(stmt, env, stack) => stmt match {
+      case State.Step(stmt, env, stack, heap) => stmt match {
         // do not create a closure
-        case Stmt.Def(id, block: Block.BlockLit, body) => State.Step(body, env.bind(id, block), stack)
+        case Stmt.Def(id, block: Block.BlockLit, body) => State.Step(body, env.bind(id, block), stack, heap)
 
         // create a closure
-        case Stmt.Def(id, block, body) => State.Step(body, env.bind(id, eval(block, env)), stack)
+        case Stmt.Def(id, block, body) => State.Step(body, env.bind(id, eval(block, env)), stack, heap)
 
-        case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack)
+        case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack, heap)
 
         case Stmt.Return(expr) =>
           val v = eval(expr, env)
-          returnWith(v, env, stack)
+          returnWith(v, env, stack, heap)
 
         case Stmt.Val(id, annotatedTpe, binding, body) =>
           instrumentation.pushFrame()
-          State.Step(binding, env, push(Frame.Val(id, body, env), stack))
+          State.Step(binding, env, push(Frame.Val(id, body, env), stack), heap)
 
         case Stmt.App(Block.BlockVar(id, _, _), targs, vargs, bargs) =>
           @tailrec
@@ -270,7 +272,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             definitionEnv
               .bindValues((vparams zip vargs).map { case (p, a) => p.id -> eval(a, env) })
               .bindBlocks((bparams zip bargs).map { case (p, a) => p.id -> eval(a, env) }),
-            stack)
+            stack, heap)
 
         case Stmt.App(callee, targs, vargs, bargs) => ???
 
@@ -284,15 +286,15 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
                 definitionEnv
                   .bindValues((vparams zip vargs).map { case (p, a) => p.id -> eval(a, env) })
                   .bindBlocks((bparams zip bargs).map { case (p, a) => p.id -> eval(a, env) }),
-                stack)
+                stack, heap)
             case _ => throw VMError.RuntimeTypeError("Can only call methods on objects")
           }
 
         case Stmt.If(cond, thn, els) =>
           instrumentation.branch()
           eval(cond, env) match {
-            case As.Bool(true)  => State.Step(thn, env, stack)
-            case As.Bool(false) => State.Step(els, env, stack)
+            case As.Bool(true)  => State.Step(thn, env, stack, heap)
+            case As.Bool(false) => State.Step(els, env, stack, heap)
             case v => throw VMError.RuntimeTypeError(s"Expected Bool, but got ${v}")
           }
 
@@ -304,10 +306,10 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
                 throw VMError.NonExhaustive(tag)
               case (Nil, Some(stmt)) =>
                 instrumentation.patternMatch(comparisons)
-                State.Step(stmt, env, stack)
+                State.Step(stmt, env, stack, heap)
               case ((id, BlockLit(tparams, cparams, vparams, bparams, body)) :: clauses, _) if id == tag =>
                 instrumentation.patternMatch(comparisons)
-                State.Step(body, env.bindValues(vparams.map(p => p.id) zip fields), stack)
+                State.Step(body, env.bindValues(vparams.map(p => p.id) zip fields), stack, heap)
               case (_ :: clauses, _) => search(clauses, comparisons + 1)
             }
             search(clauses, 0)
@@ -321,7 +323,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           instrumentation.allocateRegion(fresh)
 
           State.Step(body, env.bind(region.id, Computation.Region(fresh)),
-            push(Frame.Region(fresh, Map.empty), stack))
+            push(Frame.Region(fresh, Map.empty), stack), heap)
 
         // TODO make the type of Region more precise...
         case Stmt.Region(_) => ???
@@ -339,12 +341,12 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Frame.Region(r, values) if r == address =>
               Frame.Region(r, values.updated(id, value))
           }
-          State.Step(body, env, updated)
+          State.Step(body, env, updated, heap)
 
         // TODO also use addresses for variables
         case Stmt.Var(id, init, capture, body) =>
           instrumentation.allocateVariable(id)
-          State.Step(body, env, push(Frame.Var(id, eval(init, env)), stack))
+          State.Step(body, env, push(Frame.Var(id, eval(init, env)), stack), heap)
 
         case Stmt.Get(id, annotatedCapt, annotatedTpe) =>
           instrumentation.readMutableVariable(id)
@@ -353,7 +355,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Frame.Region(_, values) if values.isDefinedAt(id) => values(id)
           } getOrElse ???
 
-          returnWith(value, env, stack)
+          returnWith(value, env, stack, heap)
 
         case Stmt.Put(id, annotatedCapt, value) =>
           instrumentation.writeMutableVariable(id)
@@ -365,13 +367,13 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
               Frame.Region(r, values.updated(id, newValue))
           }
 
-          returnWith(Value.Literal(()), env, updated)
+          returnWith(Value.Literal(()), env, updated, heap)
 
         case Stmt.Reset(BlockLit(_, _, _, List(prompt), body)) =>
           val freshPrompt = freshAddress()
           instrumentation.reset()
           State.Step(body, env.bind(prompt.id, Computation.Prompt(freshPrompt)),
-            Stack.Segment(Nil, freshPrompt, stack))
+            Stack.Segment(Nil, freshPrompt, stack), heap)
 
         case Stmt.Reset(b) => ???
 
@@ -390,7 +392,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           }
           val (cont, rest) = unwind(stack, Stack.Empty)
 
-          State.Step(body, env.bind(resume.id, Computation.Resumption(cont)), rest)
+          State.Step(body, env.bind(resume.id, Computation.Resumption(cont)), rest, heap)
         case Stmt.Shift(_, _) => ???
 
 
@@ -405,7 +407,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Stack.Segment(frames, prompt, rest) =>
               rewind(rest, Stack.Segment(frames, prompt, onto))
           }
-          State.Step(body, env, rewind(cont, stack))
+          State.Step(body, env, rewind(cont, stack), heap)
 
         case Stmt.Hole() => throw VMError.Hole()
       }
@@ -520,7 +522,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
     val env = Env.Top(functions, builtinFunctions, m.declarations)
 
-    val initial = State.Step(mainFun.body, env, Stack.Toplevel)
+    val initial = State.Step(mainFun.body, env, Stack.Toplevel, Map.empty)
 
     run(initial)
   }
