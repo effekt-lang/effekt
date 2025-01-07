@@ -19,7 +19,6 @@ class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
 
   def extension = ".effekt-core.ir"
 
-  // TODO change jvm to ir
   override def supportedFeatureFlags: List[String] = List("vm")
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = None
