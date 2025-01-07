@@ -498,10 +498,17 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
   def run(main: Id, m: ModuleDecl): Unit = {
 
-    // TODO toplevel val definitinos
     val mainFun = m.definitions.collectFirst {
       case Toplevel.Def(id, b: BlockLit) if id == main => b
-    }.getOrElse { throw VMError.NoMain() }
+    }.getOrElse { throw VMError.NoMain() } match {
+      case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        // evaluate toplevel bindings within main:
+        BlockLit(tparams, cparams, vparams, bparams, m.definitions.foldRight(body) {
+          case (effekt.core.Toplevel.Val(id, tpe, binding), body) =>
+            Stmt.Val(id, tpe, binding, body)
+          case (_, body) => body
+        }) : BlockLit
+    }
 
     val functions = m.definitions.collect { case Toplevel.Def(id, b: Block.BlockLit) => id -> b }.toMap
 

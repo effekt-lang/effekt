@@ -210,6 +210,20 @@ class VMTests extends munit.FunSuite {
     assertEquals(runString(sorting)._1, "Cons(-1, Cons(1, Cons(3, Cons(5, Nil()))))\n")
   }
 
+  val toplevelVal =
+    """
+      |val top: Int = 43
+      |
+      |def main() = {
+      |  val x = top + top
+      |  println(x.show)
+      |}
+      |""".stripMargin
+
+  test ("toplevel val") {
+    assertEquals(runString(toplevelVal)._1, "86\n")
+  }
+
 
   import java.io.File
   import sbt.io.*
