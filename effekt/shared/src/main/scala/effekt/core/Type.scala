@@ -189,7 +189,8 @@ object Type {
   }
 
   def inferType(stmt: Stmt): ValueType = stmt match {
-    case Stmt.Scope(definitions, body) => body.tpe
+    case Stmt.Def(id, block, body) => body.tpe
+    case Stmt.Let(id, tpe, binding, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
     case Stmt.Val(id, tpe, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -219,13 +220,9 @@ object Type {
     case Stmt.Hole() => TBottom
   }
 
-  def inferCapt(defn: Definition): Captures = defn match {
-    case Definition.Def(id, block) => block.capt
-    case Definition.Let(id, tpe, binding) => binding.capt
-  }
-
   def inferCapt(stmt: Stmt): Captures = stmt match {
-    case Stmt.Scope(definitions, body) => definitions.foldLeft(body.capt)(_ ++ _.capt)
+    case Stmt.Def(id, block, body) => block.capt ++ body.capt
+    case Stmt.Let(id, tpe, binding, body) => binding.capt ++ body.capt
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, tpe, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
@@ -246,7 +243,6 @@ object Type {
   def inferType(expr: Expr): ValueType = expr match {
     case DirectApp(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
-    case Run(s) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
@@ -261,7 +257,6 @@ object Type {
   def inferCapt(expr: Expr): Captures = expr match {
     case DirectApp(callee, targs, vargs, bargs) =>
        callee.capt ++ bargs.flatMap(_.capt).toSet
-    case Run(s) => s.capt
     case pure: Pure => Set.empty
   }
 

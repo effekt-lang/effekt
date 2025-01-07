@@ -203,7 +203,7 @@ class InterpreterTests extends munit.FunSuite {
     examplesDir / "benchmarks" / "effect_handlers_bench" / "iterator.effekt",
     examplesDir / "benchmarks" / "effect_handlers_bench" / "nqueens.effekt",
     examplesDir / "benchmarks" / "effect_handlers_bench" / "parsing_dollars.effekt",
-
+    examplesDir / "benchmarks" / "effect_handlers_bench" / "product_early.effekt",
     examplesDir / "benchmarks" / "effect_handlers_bench" / "resume_nontail.effekt",
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt",
     examplesDir / "benchmarks" / "effect_handlers_bench" / "triples.effekt",
@@ -213,9 +213,6 @@ class InterpreterTests extends munit.FunSuite {
     // global is missing
     examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
     examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
-
-    // stack overflows on run run run
-    examplesDir / "benchmarks" / "effect_handlers_bench" / "product_early.effekt",
   )
 
   def runTest(f: File): Unit =

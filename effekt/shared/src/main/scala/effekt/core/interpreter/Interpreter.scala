@@ -226,16 +226,13 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     s match {
       case State.Done(result) => s
       case State.Step(stmt, env, stack) => stmt match {
+        // do not create a closure
+        case Stmt.Def(id, block: Block.BlockLit, body) => State.Step(body, env.bind(id, block), stack)
 
-        case Stmt.Scope(definitions, body) =>
-          var envSoFar = env
-          definitions.foreach {
-            case Definition.Def(id, block: Block.BlockLit) => envSoFar = envSoFar.bind(id, block)
-            // TODO what is the cost model for aliased block literals?
-            case Definition.Def(id, block) => envSoFar = envSoFar.bind(id, eval(block, envSoFar))
-            case Definition.Let(id, tpe, binding) => envSoFar = envSoFar.bind(id, eval(binding, envSoFar))
-          }
-          State.Step(body, envSoFar, stack)
+        // create a closure
+        case Stmt.Def(id, block, body) => State.Step(body, env.bind(id, eval(block, env)), stack)
+
+        case Stmt.Let(id, tpe, binding, body) => State.Step(body, env.bind(id, eval(binding, env)), stack)
 
         case Stmt.Return(expr) =>
           val v = eval(expr, env)
@@ -459,7 +456,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         }.mkString(", ")}" }
     }
     case DirectApp(b, targs, vargs, bargs) => ???
-    case Run(s) => run(State.Step(s, env, Stack.Toplevel))
     case Pure.ValueVar(id, annotatedType) => env.lookupValue(id)
     case Pure.Literal(value, annotatedType) => Value.Literal(value)
     case Pure.PureApp(x, targs, vargs) => env.lookupBuiltin(x.id) match {
@@ -501,11 +497,13 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   }
 
   def run(main: Id, m: ModuleDecl): Unit = {
+
+    // TODO toplevel val definitinos
     val mainFun = m.definitions.collectFirst {
-      case Definition.Def(id, b: BlockLit) if id == main => b
+      case Toplevel.Def(id, b: BlockLit) if id == main => b
     }.getOrElse { throw InterpreterError.NoMain() }
 
-    val functions = m.definitions.collect { case Definition.Def(id, b: Block.BlockLit) => id -> b }.toMap
+    val functions = m.definitions.collect { case Toplevel.Def(id, b: Block.BlockLit) => id -> b }.toMap
 
     val builtinFunctions = m.externs.collect {
       case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture,

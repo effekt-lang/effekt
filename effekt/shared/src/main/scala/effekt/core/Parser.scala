@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.core.Param.ValueParam
+import effekt.core.ValueParam
 import effekt.source.{FeatureFlag, NoSource}
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, ParseError }
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Success }
@@ -57,7 +57,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
       many(includeDecl) ~
       many(declaration) ~
       many(externDecl) ~
-      many(definition) ~
+      many(toplevel) ~
       many(exportDecl) ^^ ModuleDecl.apply
 
   lazy val includeDecl: P[String] =
@@ -103,14 +103,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   // Definitions
   // -----------
-  lazy val definition: P[Definition] =
-  ( `let` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ^^ {
-    case (name ~ tpe ~ binding) => Definition.Let(name, tpe.getOrElse(binding.tpe), binding)
+  lazy val toplevel: P[Toplevel] =
+  ( `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~/> stmt) ^^ {
+    case (name ~ tpe ~ binding) => Toplevel.Val(name, tpe.getOrElse(binding.tpe), binding)
   }
-  | `def` ~> id ~ (`=` ~/> block) ^^ Definition.Def.apply
+  | `def` ~> id ~ (`=` ~/> block) ^^ Toplevel.Def.apply
   | `def` ~> id ~ parameters ~ (`=` ~> stmt) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ body =>
-        Definition.Def(name, BlockLit(tparams, cparams, vparams, bparams, body))
+        Toplevel.Def(name, BlockLit(tparams, cparams, vparams, bparams, body))
     }
   | failure("Expected a definition.")
   )
@@ -119,28 +119,34 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Statements
   // ----------
   lazy val stmt: P[Stmt] =
-    ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
+    ( `{` ~/> stmts <~ `}`
     | `return` ~> pure ^^ Stmt.Return.apply
-    | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmt) ^^ {
-      case id ~ tpe ~ binding ~ body => Stmt.Val(id, tpe.getOrElse(binding.tpe), binding, body)
-    }
     | block ~ (`.` ~> id ~ (`:` ~> blockType)).? ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ {
-      case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
-      case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
-    }
+        case (recv ~ Some(method ~ tpe) ~ targs ~ vargs ~ bargs) => Invoke(recv, method, tpe, targs, vargs, bargs)
+        case (recv ~ None ~ targs ~ vargs ~ bargs) => App(recv, targs, vargs, bargs)
+      }
     | (`if` ~> `(` ~/> pure <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
-    | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
     | `<>` ^^^ Hole()
     | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 
   lazy val stmts: P[Stmt] =
-    many(definition) ~ stmt ^^ {
-      case Nil ~ stmt => stmt
-      case defs ~ stmt => Stmt.Scope(defs, stmt)
-    }
+    ( `let` ~/> id ~ maybeTypeAnnotation ~ (`=` ~/> expr) ~ stmts ^^ {
+        case (name ~ tpe ~ binding ~ body) => Let(name, tpe.getOrElse(binding.tpe), binding, body)
+      }
+    | `def` ~> id ~ (`=` ~/> block) ~ stmts ^^ Stmt.Def.apply
+    | `def` ~> id ~ parameters ~ (`=` ~/> stmt) ~ stmts ^^ {
+        case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
+          Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
+      }
+    | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
+        case id ~ tpe ~ binding ~ body => Val(id, tpe.getOrElse(binding.tpe), binding, body)
+      }
+    | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
+    | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
+    | stmt
+    )
 
   lazy val clause: P[(Id, BlockLit)] = (id <~ `:`) ~ blockLit ^^ { case id ~ cl => id -> cl }
 
@@ -190,7 +196,6 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // -----------
   lazy val expr: P[Expr] =
     ( pure
-    | `run` ~> stmt ^^ Run.apply
     | (`!` ~/> maybeParens(blockVar)) ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ DirectApp.apply
     )
 
@@ -210,7 +215,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   lazy val blockVar: P[Block.BlockVar] =
     id ~ (`:` ~> blockType) ~ (`@` ~> captures) ^^ {
-      case x ~ tpe ~ capt => Block.BlockVar(x, tpe, capt) : Block.BlockVar
+      case id ~ tpe ~ capt => Block.BlockVar(id, tpe, capt) : Block.BlockVar
     }
 
   lazy val blockLit: P[Block.BlockLit] =
@@ -227,13 +232,13 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Signatures
   // -------
   // foo[Int, String](x: Int) { f@f2: Exc }: Int
-  lazy val signature: P[(Id, List[Id], List[Id], List[Param.ValueParam], List[Param.BlockParam], ValueType)] =
+  lazy val signature: P[(Id, List[Id], List[Id], List[ValueParam], List[BlockParam], ValueType)] =
     id ~ parameters ~ (`:` ~> valueType) ^^ {
       case name ~ (tparams, cparams, vparams, bparams) ~ result =>
         (name, tparams, cparams, vparams, bparams, result)
     }
 
-  lazy val parameters: P[(List[Id], List[Id], List[Param.ValueParam], List[Param.BlockParam])] =
+  lazy val parameters: P[(List[Id], List[Id], List[ValueParam], List[BlockParam])] =
     maybeTypeParams ~ valueParams ~ many(trackedBlockParam) ^^ {
       case tparams ~ vparams ~ bcparams =>
         val (cparams, bparams) = bcparams.unzip
@@ -246,7 +251,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
 
   lazy val valueParam: P[ValueParam] =
-    id ~ (`:` ~> valueType) ^^ { case id ~ tpe => Param.ValueParam(id, tpe): Param.ValueParam }
+    id ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, tpe) }
 
   lazy val valueParams: P[List[ValueParam]] =
     `(` ~> manySep(valueParam, `,`) <~ `)`
@@ -254,14 +259,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // f@f2 : Exc
   lazy val trackedBlockParam: P[(Id, BlockParam)] =
     ( `{` ~> id ~ (`@` ~> id)  ~ (`:` ~> blockType) <~ `}` ^^ {
-        case id ~ capt ~ tpe => capt -> (Param.BlockParam(id, tpe, Set(capt)): Param.BlockParam)
+        case id ~ capt ~ tpe => capt -> BlockParam(id, tpe, Set(capt))
       }
     // abbreviation: f : Exc .= f@f : Exc
     | blockParam ^^ { p => p.id -> p }
     )
 
   lazy val blockParam: P[BlockParam] =
-    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => Param.BlockParam(id, tpe, Set(id)): Param.BlockParam }
+    `{` ~> id ~ (`:` ~> blockType) <~ `}` ^^ { case id ~ tpe => BlockParam(id, tpe, Set(id)) }
 
 
   // Types
@@ -341,7 +346,7 @@ object CoreParsers {
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.stmt, input)
 
-  def definition(input: String, names: Names): ParseResult[Definition] =
+  def definition(input: String, names: Names): ParseResult[Toplevel] =
     val parsers = CoreParsers(names)
-    parsers.parseAll(parsers.definition, input)
+    parsers.parseAll(parsers.toplevel, input)
 }

@@ -166,9 +166,9 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {
-    case cps.Stmt.Scope(defs, body) =>
+    case cps.Stmt.LetDef(id, block, body) =>
       Binding { k =>
-        defs.map(toJS) ++ toJS(body).run(k)
+        js.Const(nameDef(id), requiringThunk { toJS(block) }) :: toJS(body).run(k)
       }
 
     case cps.Stmt.If(cond, thn, els) =>

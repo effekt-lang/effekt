@@ -18,10 +18,11 @@ object RemoveTailResumptions {
   def tailResumptive(k: Id, stmt: Stmt): Boolean =
     def freeInStmt(stmt: Stmt): Boolean = Variables.free(stmt).containsBlock(k)
     def freeInExpr(expr: Expr): Boolean = Variables.free(expr).containsBlock(k)
-    def freeInDef(definition: Definition): Boolean = Variables.free(definition).containsBlock(k)
+    def freeInBlock(block: Block): Boolean = Variables.free(block).containsBlock(k)
 
     stmt match {
-      case Stmt.Scope(definitions, body) => definitions.forall { d => !freeInDef(d) } && tailResumptive(k, body)
+      case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)
+      case Stmt.Let(id, tpe, binding, body) => !freeInExpr(binding) && tailResumptive(k, body)
       case Stmt.Return(expr) => false
       case Stmt.Val(id, annotatedTpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
@@ -43,7 +44,8 @@ object RemoveTailResumptions {
     }
 
   def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
-    case Stmt.Scope(definitions, body) => Stmt.Scope(definitions, removeTailResumption(k, body))
+    case Stmt.Def(id, block, body) => Stmt.Def(id, block, removeTailResumption(k, body))
+    case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, binding, removeTailResumption(k, body))
     case Stmt.Val(id, annotatedTpe, binding, body) => Stmt.Val(id, annotatedTpe, binding, removeTailResumption(k, body))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
     case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {

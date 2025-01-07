@@ -284,7 +284,7 @@ trait Compiler[Executable] {
       // collect all information
       var declarations: List[core.Declaration] = Nil
       var externs: List[core.Extern] = Nil
-      var definitions: List[core.Definition] = Nil
+      var definitions: List[core.Toplevel] = Nil
       var exports: List[symbols.Symbol] = Nil
 
       (dependencies :+ main).foreach { module =>

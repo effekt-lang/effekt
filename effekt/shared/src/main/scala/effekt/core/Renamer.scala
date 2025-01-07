@@ -48,20 +48,13 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   }
 
   override def stmt: PartialFunction[Stmt, Stmt] = {
-    case core.Scope(definitions, body) =>
+    case core.Def(id, block, body) =>
+      // can be recursive
+      withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
 
-      def go(rest: List[Definition], defs: List[Definition]): core.Scope = rest match {
-        case (d : core.Definition.Def) :: rest =>
-          // can be recursive
-          withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
-        case core.Definition.Let(id, tpe, binding) :: rest =>
-          // resolve binding in outer scope
-          val resolvedBinding = rewrite(binding)
-          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), rewrite(tpe), resolvedBinding)) }
-        case Nil => core.Scope(defs, rewrite(body))
-      }
-
-      go(definitions, Nil)
+    case core.Let(id, tpe, binding, body) =>
+      val resolvedBinding = rewrite(binding)
+      withBinding(id) { core.Let(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
 
     case core.Val(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)

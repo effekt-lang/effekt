@@ -13,14 +13,19 @@ class Reachable(
   var seen: Set[Id]
 ) {
 
+  // TODO we could use [[Binding]] here.
+  type Definitions = Map[Id, Block | Expr | Stmt]
+
   private def update(id: Id, u: Usage): Unit = reachable = reachable.updated(id, u)
   private def usage(id: Id): Usage = reachable.getOrElse(id, Usage.Never)
 
-  def process(d: Definition)(using defs: Map[Id, Definition]): Unit =
-    if stack.contains(d.id) then update(d.id, Usage.Recursive)
-    else d match {
-      case Definition.Def(id, block) =>
-        seen = seen + id
+  def processDefinition(id: Id, d: Block | Expr | Stmt)(using defs: Definitions): Unit = {
+    if stack.contains(id) then { update(id, Usage.Recursive); return }
+
+    seen = seen + id
+
+    d match {
+      case block: Block =>
 
         val before = stack
         stack = id :: stack
@@ -28,13 +33,12 @@ class Reachable(
         process(block)
         stack = before
 
-      case Definition.Let(id, _, binding) =>
-        seen = seen + id
-
-        process(binding)
+      case binding: Expr => process(binding)
+      case binding: Stmt => process(binding)
     }
+  }
 
-  def process(id: Id)(using defs: Map[Id, Definition]): Unit =
+  def process(id: Id)(using defs: Definitions): Unit =
     if (stack.contains(id)) {
       update(id, Usage.Recursive)
       return;
@@ -43,10 +47,12 @@ class Reachable(
     update(id, usage(id) + Usage.Once)
 
     if (!seen.contains(id)) {
-      defs.get(id).foreach(process)
+      seen = seen + id
+      defs.get(id).foreach { d => processDefinition(id, d) }
     }
 
-  def process(b: Block)(using defs: Map[Id, Definition]): Unit =
+
+  def process(b: Block)(using defs: Definitions): Unit =
     b match {
       case Block.BlockVar(id, annotatedTpe, annotatedCapt) => process(id)
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) => process(body)
@@ -54,22 +60,15 @@ class Reachable(
       case Block.New(impl) => process(impl)
     }
 
-  def process(s: Stmt)(using defs: Map[Id, Definition]): Unit = s match {
-    case Stmt.Scope(definitions, body) =>
-      var currentDefs = defs
-      definitions.foreach {
-        case d: Definition.Def =>
-          currentDefs += d.id -> d // recursive
-          // Do NOT process them here, since this would mean the definition is used
-          // process(d)(using currentDefs)
-        case d: Definition.Let =>
-          // DO only process if NOT pure
-          if (d.binding.capt.nonEmpty) {
-            process(d)(using currentDefs)
-          }
-          currentDefs += d.id -> d // non-recursive
-      }
-      process(body)(using currentDefs)
+  def process(s: Stmt)(using defs: Definitions): Unit = s match {
+    case Stmt.Def(id, block, body) =>
+      // Do NOT process `block` here, since this would mean the definition is used
+      process(body)(using defs + (id -> block))
+    case Stmt.Let(id, tpe, binding, body) =>
+      // DO only process if impure, since we need to keep it in this case
+      // for its side effects
+      if (binding.capt.nonEmpty) { processDefinition(id, binding) }
+      process(body)(using defs + (id -> binding))
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
@@ -102,12 +101,11 @@ class Reachable(
     case Stmt.Hole() => ()
   }
 
-  def process(e: Expr)(using defs: Map[Id, Definition]): Unit = e match {
+  def process(e: Expr)(using defs: Definitions): Unit = e match {
     case DirectApp(b, targs, vargs, bargs) =>
-      process(b);
+      process(b)
       vargs.foreach(process)
       bargs.foreach(process)
-    case Run(s) => process(s)
     case Pure.ValueVar(id, annotatedType) => process(id)
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
@@ -116,13 +114,16 @@ class Reachable(
     case Pure.Box(b, annotatedCapture) => process(b)
   }
 
-  def process(i: Implementation)(using defs: Map[Id, Definition]): Unit =
+  def process(i: Implementation)(using defs: Definitions): Unit =
     i.operations.foreach { op => process(op.body) }
 }
 
 object Reachable {
   def apply(entrypoints: Set[Id], m: ModuleDecl): Map[Id, Usage] = {
-    val definitions = m.definitions.map(d => d.id -> d).toMap
+    val definitions: Map[Id, Block | Expr | Stmt] = m.definitions.map {
+      case Toplevel.Def(id, block) => id -> block
+      case Toplevel.Val(id, tpe, binding) => id -> binding
+    }.toMap
     val initialUsage = entrypoints.map { id => id -> Usage.Recursive }.toMap
     val analysis = new Reachable(initialUsage, Nil, Set.empty)
 

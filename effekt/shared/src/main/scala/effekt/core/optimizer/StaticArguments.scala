@@ -59,7 +59,7 @@ object StaticArguments {
    *     foo_worker(a_fresh, b_fresh)
    *   foo(4, 2, 0)
    */
-  def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): Definition.Def =
+  def wrapDefinition(id: Id, blockLit: BlockLit)(using ctx: StaticArgumentsContext): BlockLit = {
     val IsStatic(staticT, staticV, staticB) = ctx.statics(id)
 
     assert(staticT.forall(x => x), "Can only apply the static arguments translation, if all type arguments are static.")
@@ -94,40 +94,38 @@ object StaticArguments {
     val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, newCapture)
     ctx.workers(id) = workerVar
 
-    Definition.Def(id, BlockLit(
+    BlockLit(
       blockLit.tparams,
       freshCparams,
       freshVparams,
       freshBparams,
-      Scope(List(Definition.Def(workerVar.id, BlockLit(
+      Stmt.Def(workerVar.id, BlockLit(
         dropStatic(staticT, blockLit.tparams),
         dropStatic(staticB, blockLit.cparams),
         dropStatic(staticV, blockLit.vparams),
         dropStatic(staticB, blockLit.bparams),
         rewrite(blockLit.body)(using enterFunction(id))
-      ))), App(
+      ), App(
         workerVar,
         dropStatic(staticT, blockLit.tparams.map(t => ValueType.Var(t))),
         dropStatic(staticV, freshVparams.map(v => ValueVar(v.id, v.tpe))),
         dropStatic(staticB, freshBparams.map(b => BlockVar(b.id, b.tpe, b.capt)))
       ))
-    ))
+    )
+  }
 
-  def rewrite(definitions: List[Definition])(using ctx: StaticArgumentsContext): List[Definition] =
-    definitions.collect {
-      case Definition.Def(id, block: BlockLit) if hasStatics(id) => wrapDefinition(id, block)
-      case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
-      case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, rewrite(binding))
-    }
-
-  def rewrite(d: Definition)(using StaticArgumentsContext): Definition = d match {
-    case Definition.Def(id, block) => Definition.Def(id, rewrite(block))
-    case Definition.Let(id, tpe, binding) => Definition.Let(id, tpe, rewrite(binding))
+  def rewrite(d: Toplevel)(using StaticArgumentsContext): Toplevel = d match {
+    case Toplevel.Def(id, block: BlockLit) if hasStatics(id) => Toplevel.Def(id, wrapDefinition(id, block))
+    case Toplevel.Def(id, block) => Toplevel.Def(id, rewrite(block))
+    case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, tpe, rewrite(binding))
   }
 
   def rewrite(s: Stmt)(using C: StaticArgumentsContext): Stmt = s match {
-    case Stmt.Scope(definitions, body) =>
-      MaybeScope(rewrite(definitions), rewrite(body))
+
+    case Stmt.Def(id, block: BlockLit, body) if hasStatics(id) => Stmt.Def(id, wrapDefinition(id, block), rewrite(body))
+    case Stmt.Def(id, block, body) => Stmt.Def(id, rewrite(block), rewrite(body))
+
+    case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, rewrite(binding), rewrite(body))
 
     case Stmt.App(b, targs, vargs, bargs) =>
       b match {
@@ -186,7 +184,7 @@ object StaticArguments {
     }
 
   def rewrite(p: Pure)(using StaticArgumentsContext): Pure = p match {
-    case Pure.PureApp(b, targs, vargs) => Pure.PureApp(b, targs, vargs.map(rewrite))
+    case Pure.PureApp(f, targs, vargs) => Pure.PureApp(f, targs, vargs.map(rewrite))
     case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(rewrite))
     case x @ Pure.ValueVar(id, annotatedType) => x
 
@@ -200,7 +198,6 @@ object StaticArguments {
     case DirectApp(b, targs, vargs, bargs) => DirectApp(b, targs, vargs.map(rewrite), bargs.map(rewrite))
 
     // congruences
-    case Run(s) => Run(rewrite(s))
     case pure: Pure => rewrite(pure)
   }
 
@@ -236,7 +233,7 @@ object StaticArguments {
       List()
     )
 
-    val updatedDefs = rewrite(m.definitions)
+    val updatedDefs = m.definitions.map(rewrite)
     m.copy(definitions = updatedDefs)
 }
 

@@ -2,6 +2,8 @@ package effekt
 package core
 package optimizer
 
+import core.Bind.*
+
 // Establishes a normal form in which every subexpression
 // is explicitly named and aliasing (val x = y) is removed.
 //
@@ -20,39 +22,34 @@ object BindSubexpressions {
 
   def transform(m: ModuleDecl): ModuleDecl = m match {
     case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      val (newDefs, env) = transformDefs(definitions)(using Map.empty)
-      ModuleDecl(path, includes, declarations, externs, newDefs, exports)
+      given Env = Map.empty
+      ModuleDecl(path, includes, declarations, externs, transformToplevel(definitions), exports)
   }
 
-  def transformDefs(definitions: List[Definition])(using env: Env): (List[Definition], Env) =
-    var definitionsSoFar = List.empty[Definition]
-    var envSoFar = env
+  def transformToplevel(definitions: List[Toplevel])(using env: Env): List[Toplevel] =
+    definitions.flatMap {
+      case Toplevel.Def(id, block) => transform(block) match {
+        case Bind(block, bindings) => bindings.map(Binding.toToplevel) :+ Toplevel.Def(id, block)
 
-    definitions.foreach {
-      case Definition.Def(id, block) =>
-        transform(block)(using envSoFar) match {
-          case Bind(Block.BlockVar(x, _, _), defs) =>
-            definitionsSoFar ++= defs
-            envSoFar = alias(id, x, envSoFar)
-
-          case Bind(other, defs) =>
-            definitionsSoFar = definitionsSoFar ++ (defs :+ Definition.Def(id, other))
-        }
-      case Definition.Let(id, tpe, expr) =>
-        transform(expr)(using envSoFar) match {
-          case Bind(Pure.ValueVar(x, _), defs) =>
-            definitionsSoFar ++= defs
-            envSoFar = alias(id, x, envSoFar)
-          case Bind(other, defs) =>
-            definitionsSoFar = definitionsSoFar ++ (defs :+ Definition.Let(id, transform(tpe)(using envSoFar), other))
-        }
+      }
+      case Toplevel.Val(id, tpe, binding) => Toplevel.Val(id, transform(tpe), transform(binding)) :: Nil
     }
-    (definitionsSoFar, envSoFar)
 
   def transform(s: Stmt)(using env: Env): Stmt = s match {
-    case Stmt.Scope(definitions, body) =>
-      val (newDefs, newEnv) = transformDefs(definitions)
-      MaybeScope(newDefs, transform(body)(using newEnv))
+
+    case Stmt.Def(id, block, body) => transform(block) match {
+      case Bind(Block.BlockVar(x, _, _), bindings) =>
+        Binding(bindings, transform(body)(using alias(id, x, env)))
+      case Bind(other, bindings) =>
+        Binding(bindings, Stmt.Def(id, other, transform(body)))
+    }
+
+    case Stmt.Let(id, tpe, binding, body) => transform(binding) match {
+      case Bind(Pure.ValueVar(x, _), bindings) =>
+        Binding(bindings, transform(body)(using alias(id, x, env)))
+      case Bind(other, bindings) =>
+        Binding(bindings, Stmt.Let(id, tpe, other, transform(body)))
+    }
 
     case Stmt.App(callee, targs, vargs, bargs) => delimit {
       for {
@@ -132,19 +129,17 @@ object BindSubexpressions {
     case Pure.Make(data, tag, vargs) => transformExprs(vargs) { vs =>
       bind(Pure.Make(data, tag, vs))
     }
-    case DirectApp(bvar, targs, vargs, bargs) => for {
+    case DirectApp(f, targs, vargs, bargs) => for {
       vs <- transformExprs(vargs);
       bs <- transformBlocks(bargs);
-      res <- bind(DirectApp(bvar, targs.map(transform), vs, bs))
+      res <- bind(DirectApp(f, targs.map(transform), vs, bs))
     } yield res
-    case Pure.PureApp(bvar, targs, vargs) => for {
+    case Pure.PureApp(f, targs, vargs) => for {
       vs <- transformExprs(vargs);
-      res <- bind(Pure.PureApp(bvar, targs.map(transform), vs))
+      res <- bind(Pure.PureApp(f, targs.map(transform), vs))
     } yield res
     case Pure.Select(target, field, tpe) => transform(target) { v => bind(Pure.Select(v, field, transform(tpe))) }
     case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
-
-    case Run(s) => bind(Run(transform(s)))
   }
 
   def transformExprs(es: List[Expr])(using Env): Bind[List[ValueVar | Literal]] = traverse(es)(transform)
@@ -165,33 +160,4 @@ object BindSubexpressions {
       BlockType.Interface(name, targs.map(transform))
   }
   def transform(captures: Captures)(using Env): Captures = captures.map(transform)
-
-
-  // Binding Monad
-  // -------------
-  case class Bind[+A](value: A, definitions: List[Definition]) {
-    def run(f: A => Stmt): Stmt = MaybeScope(definitions, f(value))
-    def map[B](f: A => B): Bind[B] = Bind(f(value), definitions)
-    def flatMap[B](f: A => Bind[B]): Bind[B] =
-      val Bind(result, other) = f(value)
-      Bind(result, definitions ++ other)
-    def apply[B](f: A => Bind[B]): Bind[B] = flatMap(f)
-  }
-  def pure[A](value: A): Bind[A] = Bind(value, Nil)
-  def bind[A](expr: Expr): Bind[ValueVar] =
-    val id = Id("tmp")
-    Bind(ValueVar(id, expr.tpe), List(Definition.Let(id, expr.tpe, expr)))
-
-  def bind[A](block: Block): Bind[BlockVar] =
-    val id = Id("tmp")
-    Bind(BlockVar(id, block.tpe, block.capt), List(Definition.Def(id, block)))
-
-  def delimit(b: Bind[Stmt]): Stmt = b.run(a => a)
-
-  def traverse[S, T](l: List[S])(f: S => Bind[T]): Bind[List[T]] =
-    l match {
-      case Nil => pure(Nil)
-      case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
-    }
-
 }
