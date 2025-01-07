@@ -71,6 +71,7 @@ extern pure def show(value: Double): String =
     %z = call %Pos @c_bytearray_show_Double(%Double ${value})
     ret %Pos %z
   """
+  vm "effekt::show(Double)"
 
 def show(value: String): String =
   value
@@ -85,6 +86,7 @@ extern pure def show(value: Char): String =
     %z = call %Pos @c_bytearray_show_Char(%Int ${value})
     ret %Pos %z
   """
+  vm "effekt::show(Char)"
 
 extern pure def show(value: Byte): String =
   js "'' + ${value}"
@@ -92,6 +94,7 @@ extern pure def show(value: Byte): String =
     %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
     ret %Pos %z
   """
+  vm "effekt::show(Byte)"
 
 extern pure def genericShow[R](value: R): String =
   js "$effekt.show(${value})"
@@ -121,6 +124,7 @@ extern pure def length(str: String): Int =
     %x = call %Int @c_bytearray_size(%Pos ${str})
     ret %Int %x
   """
+  vm "effekt::length(String)"
 
 extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
   js "${str}.substring(${from}, ${to})"
@@ -129,6 +133,7 @@ extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
     %x = call %Pos @c_bytearray_substring(%Pos ${str}, i64 ${from}, i64 ${to})
     ret %Pos %x
   """
+  vm "effekt::substring(String, Int, Int)"
 
 
 // Side effecting ops
@@ -137,6 +142,7 @@ extern pure def unsafeSubstring(str: String, from: Int, to: Int): String =
 extern io def random(): Double =
   js "Math.random()"
   chez "(random 1.0)"
+  vm "effekt::random()"
 
 // References and state
 // ====================
@@ -196,8 +202,7 @@ def differsFrom[R](x: R, y: R): Bool =
 
 // TODO fix this in the pattern matching compiler
 extern pure def infixEq(x: Unit, y: Unit): Bool =
-  js "true"
-  chez "#t"
+  default { true }
 
 extern pure def infixEq(x: Int, y: Int): Bool =
   js "${x} === ${y}"
@@ -230,6 +235,7 @@ extern pure def infixEq(x: Char, y: Char): Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
+  vm "effekt::infixEq(Char, Char)"
 
 extern pure def infixNeq(x: Char, y: Char): Bool =
   js "${x} !== ${y}"
@@ -248,6 +254,7 @@ extern pure def infixEq(x: String, y: String): Bool =
     %res = call %Pos @c_bytearray_equal(%Pos ${x}, %Pos ${y})
     ret %Pos %res
   """
+  vm "effekt::infixEq(String, String)"
 
 def infixNeq(x: String, y: String): Bool = not(x == y)
 
@@ -262,6 +269,7 @@ extern pure def infixEq(x: Bool, y: Bool): Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
+  vm "effekt::infixEq(Bool, Bool)"
 
 extern pure def infixNeq(x: Bool, y: Bool): Bool =
   js "${x} !== ${y}"
@@ -376,6 +384,7 @@ extern pure def log1p(x: Double): Double =
 extern pure def exp(x: Double): Double =
   js "Math.exp(${x})"
   chez "(exp ${x})"
+  vm "effekt::exp(Double)"
 
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {

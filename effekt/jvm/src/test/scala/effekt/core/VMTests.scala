@@ -2,6 +2,7 @@ package effekt
 package core
 
 import core.vm.*
+import effekt.util.MarkdownSource
 
 class VMTests extends munit.FunSuite {
 
@@ -35,7 +36,12 @@ class VMTests extends munit.FunSuite {
     config.verify()
     context.setup(config)
 
-    context.frontend.compile(FileSource(path))(using context).map {
+    val source = if path.endsWith(".effekt.md") then
+      MarkdownSource(FileSource(path))
+    else
+      FileSource(path)
+
+    context.frontend.compile(source)(using context).map {
       case (_, decl) => decl
     }.getOrElse {
       val errors = plainMessaging.formatMessages(context.messaging.buffer)
@@ -645,7 +651,15 @@ class VMTests extends munit.FunSuite {
     )),
   )
 
-  val testFiles: Seq[(File, Option[Summary])] = are_we_fast_yet ++ duality_of_compilation ++ effect_handlers_bench
+  val others: Seq[(File, Option[Summary])] = Seq(
+    examplesDir / "casestudies" / "ad.effekt.md" -> None
+  )
+
+  val testFiles: Seq[(File, Option[Summary])] =
+    are_we_fast_yet ++
+    duality_of_compilation ++
+    effect_handlers_bench ++
+      others
 
   def runTest(f: File, expectedSummary: Option[Summary]): Unit =
     val path = f.getPath

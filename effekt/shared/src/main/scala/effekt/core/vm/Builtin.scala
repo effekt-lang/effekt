@@ -42,6 +42,9 @@ lazy val doubles: Builtins = Map(
   builtin("effekt::sqrt(Double)") {
     case As.Double(x) :: Nil => Value.Double(Math.sqrt(x))
   },
+  builtin("effekt::exp(Double)") {
+    case As.Double(x) :: Nil => Value.Double(Math.exp(x))
+  },
 
   // Comparison
   // ----------
@@ -68,6 +71,13 @@ lazy val doubles: Builtins = Map(
   // ----------
   builtin("effekt::toInt(Double)") {
     case As.Double(x) :: Nil => Value.Int(x.toLong)
+  },
+  builtin("effekt::show(Double)") {
+    // TODO we should globally change the semantics of show for doubles... This mimics JS...
+    case As.Double(n) :: Nil => Value.String(if (n == n.toInt.toDouble) n.toInt.toString else {
+      val truncated = BigDecimal(n).setScale(15, BigDecimal.RoundingMode.FLOOR).toString
+      if (truncated.contains('.') && truncated.endsWith("0")) truncated.stripSuffix("0") else truncated
+    })
   },
 )
 
@@ -150,6 +160,10 @@ lazy val strings: Builtins = Map(
 
   builtin("effekt::inspect(Any)") {
     case any :: Nil => Value.String(inspect(any))
+  },
+
+  builtin("effekt::infixEq(String, String)") {
+    case As.String(x) :: As.String(y) :: Nil => Value.Bool(x == y)
   },
 )
 
