@@ -352,7 +352,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val scrutineeTypeArgs = Context.inferredTypeOf(receiver) match {
         case effekt.symbols.ValueType.ValueTypeApp(constructor, args) => args
-        case _ => ???
+        case _ => Context.panic("Should not happen: selection from non ValueTypeApp")
       }
 
       val substitution = Substitutions((universals zip scrutineeTypeArgs).toMap, Map.empty)
