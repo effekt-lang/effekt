@@ -68,6 +68,10 @@ sealed trait Expr extends Tree
  */
 case class DirectApp(id: Id, vargs: List[Pure], bargs: List[Block]) extends Expr
 
+
+// run({ (ks, k) => STMT })
+case class Run(prog: BlockLit) extends Expr
+
 enum Pure extends Expr {
 
   case ValueVar(id: Id)
@@ -154,6 +158,8 @@ enum Cont extends Tree {
 
 case class MetaCont(id: Id) extends Tree
 
+val ToplevelCont = MetaCont(Id("toplevel"))
+
 case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree
 
 case class Operation(name: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt) extends Tree
@@ -178,6 +184,7 @@ object Variables {
 
   def free(e: Expr): Variables = e match {
     case DirectApp(id, vargs, bargs) => block(id) ++ all(vargs, free) ++ all(bargs, free)
+    case Run(prog) => free(prog)
     case Pure.ValueVar(id) => value(id)
     case Pure.Literal(value) => empty
     case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)

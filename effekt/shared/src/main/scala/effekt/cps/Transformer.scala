@@ -31,7 +31,7 @@ object Transformer {
     case core.Toplevel.Val(id, tpe, stmt) =>
       val ks = Id("ks")
       val k = Id("k")
-      ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
+      ToplevelDefinition.Val(id, ks, k, transform(stmt, MetaCont(ks), Continuation.Dynamic(k)))
   }
 
   def transform(extern: core.Extern)(using TransformationContext): Extern = extern match {
@@ -46,7 +46,7 @@ object Transformer {
     case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
   }
 
-  def transform(stmt: core.Stmt, ks: Id, k: Continuation)(using C: TransformationContext): Stmt = stmt match {
+  def transform(stmt: core.Stmt, ks: MetaCont, k: Continuation)(using C: TransformationContext): Stmt = stmt match {
 
     // dealiasing
     case core.Stmt.Def(id, core.BlockVar(x, _, _), body) =>
@@ -73,21 +73,33 @@ object Transformer {
     case core.Stmt.Return(value) =>
       k(transform(value), ks)
 
+    //    case core.Stmt.Val(id, annotatedTpe, rhs, body) if rhs.capt.isEmpty =>
+    //      val ks2 = Id("ks")
+    //      val k2 = Id("k")
+    //      LetExpr(id, Run(BlockLit(Nil, Nil, ks2, k2, transform(rhs, MetaCont(ks2), Continuation.Dynamic(k2)))),
+    //        transform(body, ks, k))
+
     case core.Stmt.Val(id, annotatedTpe, rhs, body) =>
       transform(rhs, ks, Continuation.Static(id) { (value, ks) =>
         binding(id, value) { transform(body, ks, k) }
       })
 
     case core.Stmt.App(callee, targs, vargs, bargs) =>
-      App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
+      App(transform(callee), vargs.map(transform), bargs.map(transform), ks, k.reify)
 
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) =>
-      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
+      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), ks, k.reify)
 
     case core.Stmt.If(cond, thn, els) =>
       withJoinpoint(k) { k2 =>
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
+
+    case core.Stmt.Match(scrutinee, clauses, default) if clauses.size <= 1 && default.isEmpty =>
+      Match(
+        transform(scrutinee),
+        clauses.map { case (id, rhs) => (id, transformClause(rhs, ks, k)) },
+        default.map(transform(_, ks, k)))
 
     case core.Stmt.Match(scrutinee, clauses, default) =>
       withJoinpoint(k) { k =>
@@ -100,8 +112,8 @@ object Transformer {
     case core.Stmt.Reset(core.Block.BlockLit(_, _, _, prompt :: Nil, body)) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
-      Reset(Block.BlockLit(Nil, List(prompt.id), ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
-        MetaCont(ks), k.reify)
+      Reset(Block.BlockLit(Nil, List(prompt.id), ks2, k2, transform(body, MetaCont(ks2), Continuation.Dynamic(k2))),
+        ks, k.reify)
 
     case core.Stmt.Reset(body) => sys error "Shouldn't happen"
 
@@ -112,22 +124,22 @@ object Transformer {
       val k2 = Id("k")
 
       val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
-        transform(body, ks2, Continuation.Dynamic(k2)))
+        transform(body, MetaCont(ks2), Continuation.Dynamic(k2)))
 
-      Shift(prompt.id, translatedBody, MetaCont(ks), k.reify)
+      Shift(prompt.id, translatedBody, ks, k.reify)
 
     case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
     case core.Stmt.Resume(cont, body) =>
       val ks2 = Id("ks")
       val k2 = Id("k")
-      Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
-        MetaCont(ks), k.reify)
+      Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, MetaCont(ks2), Continuation.Dynamic(k2))),
+        ks, k.reify)
 
     case core.Stmt.Hole() => Hole()
 
     case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>
-      cps.Region(region.id, MetaCont(ks),
+      cps.Region(region.id, ks,
         transform(body, ks,
           Continuation.Static(Id("tmp")) { (x, ks) =>
             Dealloc(region.id, k(x, ks))
@@ -139,7 +151,7 @@ object Transformer {
       cps.Alloc(id, transform(init), region, transform(body, ks, k))
 
     case core.Stmt.Var(id, init, capture, body) =>
-      cps.Var(id, transform(init), MetaCont(ks),
+      cps.Var(id, transform(init), ks,
         transform(body, ks,
           Continuation.Static(Id("tmp")) { (x, ks) =>
             Dealloc(id, k(x, ks))
@@ -153,7 +165,7 @@ object Transformer {
       cps.Put(ref, transform(value), k(cps.Pure.Literal(()), ks))
   }
 
-  def transformClause(clause: core.Block.BlockLit, ks: Id, k: Continuation)(using C: TransformationContext): Clause =
+  def transformClause(clause: core.Block.BlockLit, ks: MetaCont, k: Continuation)(using C: TransformationContext): Clause =
     clause match {
       case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
         Clause(vparams.map(_.id), transform(body, ks, k))
@@ -168,7 +180,7 @@ object Transformer {
         val ks = Id("ks")
         val k = Id("k")
         Operation(name, vparams.map(_.id), bparams.map(_.id), ks, k,
-          transform(body, ks, Continuation.Dynamic(k)))
+          transform(body, MetaCont(ks), Continuation.Dynamic(k)))
     }
 
   def transform(pure: core.Pure)(using C: TransformationContext): Pure = pure match {
@@ -187,7 +199,8 @@ object Transformer {
     case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       val ks = Id("ks")
       val k = Id("k")
-      BlockLit(vparams.map { p => p.id }, bparams.map { p => p.id }, ks, k, transform(body, ks, Continuation.Dynamic(k)))
+      BlockLit(vparams.map { p => p.id }, bparams.map { p => p.id }, ks, k,
+        transform(body, MetaCont(ks), Continuation.Dynamic(k)))
   }
 
   def transform(block: core.Block)(using C: TransformationContext): Block = block match {
@@ -212,11 +225,12 @@ def withJoinpoint(k: Continuation)(body: Continuation => Stmt): Stmt = k match {
 }
 
 enum Continuation {
+  //case Return
   case Dynamic(id: Id) // in ml this is an arbitrary term, why?
-  case Static(hint: Id, k: (Pure, Id) => Stmt)
+  case Static(hint: Id, k: (Pure, MetaCont) => Stmt)
 
-  def apply(arg: Pure, ks: Id): Stmt = this match {
-    case Continuation.Dynamic(id) => Jump(id, arg, MetaCont(ks))
+  def apply(arg: Pure, ks: MetaCont): Stmt = this match {
+    case Continuation.Dynamic(id) => Jump(id, arg, ks)
     case Continuation.Static(hint, k) => k(arg, ks)
   }
   def reify: Cont =
@@ -224,10 +238,9 @@ enum Continuation {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
       case Continuation.Static(hint, k) =>
         val ks = Id("ks")
-        cps.Cont.ContLam(hint, ks, k(Pure.ValueVar(hint), ks))
+        cps.Cont.ContLam(hint, ks, k(Pure.ValueVar(hint), MetaCont(ks)))
     }
 }
 object Continuation {
-  def Static(hint: Id)(k: (Pure, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
-
+  def Static(hint: Id)(k: (Pure, MetaCont) => Stmt): Continuation.Static = Continuation.Static(hint, k)
 }
