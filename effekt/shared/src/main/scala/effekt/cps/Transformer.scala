@@ -95,11 +95,10 @@ object Transformer {
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
 
-    case core.Stmt.Match(scrutinee, clauses, default) if clauses.size <= 1 && default.isEmpty =>
+    case core.Stmt.Match(scrutinee, List((id, rhs)), None) =>
       Match(
         transform(scrutinee),
-        clauses.map { case (id, rhs) => (id, transformClause(rhs, ks, k)) },
-        default.map(transform(_, ks, k)))
+        List((id, transformClause(rhs, ks, k))), None)
 
     case core.Stmt.Match(scrutinee, clauses, default) =>
       withJoinpoint(k) { k =>

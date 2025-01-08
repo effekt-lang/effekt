@@ -211,6 +211,11 @@ object Normalizer { normal =>
 
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = binding match {
 
+        // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
+        case Stmt.Match(sc, List((id, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
+          Stmt.Match(sc, List((id, BlockLit(tparams2, cparams2, vparams2, bparams2,
+            normalizeVal(id, tpe, body2, body)))), None)
+
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr2) =>
           Stmt.Let(id, tpe, expr2, normalize(body)(using C.bind(id, expr2)))
