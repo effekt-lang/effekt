@@ -511,27 +511,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
       result
-    case Pure.Select(target, field, annotatedType) =>
-      @tailrec
-      def declarations(env: Env): List[Declaration] = env match {
-        case Env.Top(functions, builtins, toplevel, declarations) => declarations
-        case Env.Static(id, block, rest) => declarations(rest)
-        case Env.Dynamic(id, block, rest) => declarations(rest)
-        case Env.Let(id, value, rest) => declarations(rest)
-      }
-      val decls = DeclarationContext(declarations(env), Nil)
-
-      // TODO clean this mess up!
-      val fieldSymbol = decls.findField(field).getOrElse(???)
-      val constrSymbol = decls.findConstructor(fieldSymbol).getOrElse(???)
-      val index = constrSymbol.fields.indexOf(fieldSymbol)
-
-      instrumentation.fieldLookup(field)
-
-      eval(target, env) match {
-        case Value.Data(data, tag, fields) => fields(index)
-        case _ => ???
-      }
 
     case Pure.Box(b, annotatedCapture) => Value.Boxed(eval(b, env))
   }

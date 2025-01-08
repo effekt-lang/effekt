@@ -171,7 +171,6 @@ case class DirectApp(b: Block.BlockVar, targs: List[ValueType], vargs: List[Pure
  *     │─ [[ Literal ]]
  *     │─ [[ PureApp ]]
  *     │─ [[ Make ]]
- *     │─ [[ Select ]]
  *     │─ [[ Box ]]
  *
  * -------------------------------------------
@@ -193,11 +192,6 @@ enum Pure extends Expr {
    * Note: the structure mirrors interface implementation
    */
   case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
-
-  /**
-   * Record Selection
-   */
-  case Select(target: Pure, field: Id, annotatedType: ValueType)
 
   case Box(b: Block, annotatedCapture: Captures)
 }
@@ -581,7 +575,6 @@ object Variables {
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
     case Pure.Make(data, tag, vargs) => all(vargs, free)
-    case Pure.Select(target, field, annotatedType) => free(target)
     case Pure.Box(b, annotatedCapture) => free(b)
   }
 
@@ -781,9 +774,6 @@ object substitutions {
         case g : Block.BlockVar => PureApp(g, targs.map(substitute), vargs.map(substitute))
         case _ => INTERNAL_ERROR("Should never substitute a concrete block for an FFI function.")
       }
-
-      case Select(target, field, annotatedType) =>
-        Select(substitute(target), field, substitute(annotatedType))
 
       case Box(b, annotatedCapture) =>
         Box(substitute(b), substitute(annotatedCapture))

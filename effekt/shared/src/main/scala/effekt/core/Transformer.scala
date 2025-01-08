@@ -337,8 +337,35 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Literal(value, tpe) =>
       Literal(value, transform(tpe))
 
+    // [[ sc.field ]] = val x = sc match { tag: { (_, _, x, _) => return x } }; ...
     case s @ source.Select(receiver, selector) =>
-      Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
+      val field: Field = s.definition
+
+      val constructor = field.constructor
+      val dataType: symbols.TypeConstructor = constructor.tpe
+      val universals: List[symbols.TypeParam] = dataType.tparams
+
+      // allTypeParams = universals ++ existentials
+      val allTypeParams: List[symbols.TypeParam] = constructor.tparams
+
+      assert(allTypeParams.length == universals.length, "Existentials on record selection not supported, yet.")
+
+      val scrutineeTypeArgs = Context.inferredTypeOf(receiver) match {
+        case effekt.symbols.ValueType.ValueTypeApp(constructor, args) => args
+        case _ => Context.panic("Should not happen: selection from non ValueTypeApp")
+      }
+
+      val substitution = Substitutions((universals zip scrutineeTypeArgs).toMap, Map.empty)
+
+      val selected = Id("x")
+      val tpe = transform(Context.inferredTypeOf(s))
+      val params = constructor.fields.map {
+        case f: Field =>
+          val tpe = transform(substitution.substitute(f.returnType))
+          core.ValueParam(if f == field then selected else Id("_"), tpe)
+      }
+      Context.bind(Stmt.Match(transformAsPure(receiver),
+        List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None))
 
     case source.Box(capt, block) =>
       transformBox(block)

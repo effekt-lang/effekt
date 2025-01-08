@@ -89,6 +89,11 @@ object Transformer {
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
 
+    case core.Stmt.Match(scrutinee, List((id, rhs)), None) =>
+      Match(
+        transform(scrutinee),
+        List((id, transformClause(rhs, ks, k))), None)
+
     case core.Stmt.Match(scrutinee, clauses, default) =>
       withJoinpoint(k) { k =>
         Match(
@@ -179,7 +184,6 @@ object Transformer {
       case _ => sys error "Should not happen"
     }
     case core.Pure.Make(data, tag, vargs) => Make(data, tag, vargs.map(transform))
-    case core.Pure.Select(target, field, annotatedType) => Select(transform(target), field)
     case core.Pure.Box(b, annotatedCapture) => Box(transform(b))
   }
 

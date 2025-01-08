@@ -217,9 +217,6 @@ trait Transformer {
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
     case Make(data, tag, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 
-    case Select(b, field, _) =>
-      chez.Call(nameRef(field), toChez(b))
-
     case Box(b, _) => toChez(b)
   }
 

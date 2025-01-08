@@ -81,11 +81,6 @@ enum Pure extends Expr {
 
   case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
 
-  /**
-   * Record Selection
-   */
-  case Select(target: Pure, field: Id)
-
   case Box(b: Block)
 }
 export Pure.*
@@ -182,7 +177,6 @@ object Variables {
     case Pure.Literal(value) => empty
     case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)
     case Pure.Make(data, tag, vargs) => all(vargs, free)
-    case Pure.Select(target, field) => free(target)
     case Pure.Box(b) => free(b)
   }
 

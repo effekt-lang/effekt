@@ -165,13 +165,6 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Pure Expressions
   // ----------------
   lazy val pure: P[Pure] =
-    pureNonAccess ~ many((`.` ~> id) ~ (`:` ~> valueType)) ^^ {
-      case firstTarget ~ accesses => accesses.foldLeft(firstTarget){
-        case (target, field ~ tpe) => Pure.Select(target, field, tpe)
-      }
-    }
-
-  lazy val pureNonAccess: P[Pure] =
     ( literal
     | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
