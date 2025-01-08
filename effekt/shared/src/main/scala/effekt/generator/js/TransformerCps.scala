@@ -12,7 +12,6 @@ object TransformerCps extends Transformer {
   // Defined in effekt_runtime.js
   // ---------------------------
   val RUN_TOPLEVEL = Variable(JSName("RUN_TOPLEVEL"))
-  val RUN = Variable(JSName("RUN"))
   val RESET = Variable(JSName("RESET"))
   val SHIFT = Variable(JSName("SHIFT"))
   val RESUME = Variable(JSName("RESUME"))
@@ -163,7 +162,6 @@ object TransformerCps extends Transformer {
     case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Pure.Box(b)                 => toJS(b)
-    case Run(prog)                   => Call(RUN, toJS(prog))
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {
