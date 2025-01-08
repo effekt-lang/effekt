@@ -11,7 +11,6 @@ trait Instrumentation {
   def popFrame(): Unit = ()
   def allocate(v: Value.Data): Unit = ()
   def closure(): Unit = ()
-  def fieldLookup(id: Id): Unit = ()
   def step(state: State): Unit = ()
   def readMutableVariable(id: Id): Unit = ()
   def writeMutableVariable(id: Id): Unit = ()
@@ -34,7 +33,6 @@ class Counting extends Instrumentation {
   var poppedFrames = 0
   var allocations = 0
   var closures = 0
-  var fieldLookups = 0
   var variableReads = 0
   var variableWrites = 0
 
@@ -50,7 +48,6 @@ class Counting extends Instrumentation {
   override def popFrame(): Unit = poppedFrames += 1
   override def allocate(v: Value.Data): Unit = allocations += 1
   override def closure(): Unit = closures += 1
-  override def fieldLookup(id: Id): Unit = fieldLookups += 1
   override def readMutableVariable(id: Id): Unit = variableReads += 1
   override def writeMutableVariable(id: Id): Unit = variableWrites += 1
   override def reset(): Unit = resets += 1
@@ -65,7 +62,6 @@ class Counting extends Instrumentation {
     println(s"Frames (pushed: ${pushedFrames}, popped: ${poppedFrames})")
     println(s"Allocations: ${allocations}")
     println(s"Closures: ${closures}")
-    println(s"Field lookups: ${fieldLookups}")
     println(s"Variable reads: ${variableReads}")
     println(s"Variable writes: ${variableWrites}")
     println(s"Installed delimiters: ${resets}")

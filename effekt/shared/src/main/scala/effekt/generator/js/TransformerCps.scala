@@ -191,14 +191,17 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Match(sc, List((tag, clause)), None) =>
       val scrutinee = toJS(sc)
       val (_, stmts) = toJS(scrutinee, tag, clause)
-      pure(js.MaybeBlock(stmts))
+      stmts
 
     // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
     case cps.Stmt.Match(sc, clauses, default) =>
       val scrutinee = toJS(sc)
 
       pure(js.Switch(js.Member(scrutinee, `tag`),
-        clauses.map { case (tag, clause) => toJS(scrutinee, tag, clause) },
+        clauses.map { case (tag, clause) =>
+          val (e, binding) = toJS(scrutinee, tag, clause);
+          (e, binding.stmts)
+        },
         default.map { s => toJS(s).stmts }))
 
     case cps.Stmt.Jump(k, arg, ks) =>
@@ -266,7 +269,7 @@ object TransformerCps extends Transformer {
       pure(js.Return($effekt.call("hole")))
   }
 
-  def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, List[js.Stmt]) =
+  def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[js.Stmt]) =
     clause match {
       case cps.Clause(vparams, body) =>
         val fields = C.declarations.getConstructor(variant).fields.map(_.id)
@@ -279,7 +282,7 @@ object TransformerCps extends Transformer {
           js.Const(nameDef(p), js.Member(scrutinee, memberNameRef(f)))
         }
 
-        (tag, extractedFields ++ toJS(body).stmts)
+        (tag, Binding { k => extractedFields ++ toJS(body).run(k) })
     }
 
   def toJS(d: cps.Def)(using T: TransformerContext): js.Stmt = d match {

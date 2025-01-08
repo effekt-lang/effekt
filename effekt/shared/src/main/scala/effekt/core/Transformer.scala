@@ -340,17 +340,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // [[ sc.field ]] = val x = sc match { tag: { (_, _, x, _) => return x } }; ...
     case s @ source.Select(receiver, selector) =>
 
-      // TODO we need to instantiate the datatype to compute the correct types
+      // TODO clean up!
 
       val field = s.definition
 
       val constructor = field.constructor
       //
-      val existentials: List[symbols.TypeParam] = constructor.tparams
-      assert(existentials.isEmpty) // for now not supported... need to be freshened and then bound by the pattern match...
+      val allTypeParams: List[symbols.TypeParam] = constructor.tparams
+      //assert(existentials.isEmpty) // for now not supported... need to be freshened and then bound by the pattern match...
 
       val dataType: symbols.TypeConstructor = constructor.tpe
       val universals: List[symbols.TypeParam] = dataType.tparams
+
+      assert(allTypeParams.length == universals.length, "Existentials on record selection not supported, yet.")
 
       val scrutineeTypeArgs = Context.inferredTypeOf(receiver) match {
         case effekt.symbols.ValueType.ValueTypeApp(constructor, args) => args
