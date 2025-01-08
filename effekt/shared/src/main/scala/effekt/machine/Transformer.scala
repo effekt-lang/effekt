@@ -425,17 +425,6 @@ object Transformer {
         }
       }
 
-    case core.Select(target, field, tpe) if DeclarationContext.findField(field).isDefined =>
-      // TODO all of this can go away, if we desugar records in the translation to core!
-      val fields = DeclarationContext.getField(field).constructor.fields
-      val fieldIndex = fields.indexWhere(_.id == field)
-      val variables = fields.map { f => Variable(freshName("select"), transform(f.tpe)) }
-      transform(target).flatMap { value =>
-        Binding { k =>
-          Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)
-        }
-      }
-
     case core.Box(block, annot) =>
       transformBlockArg(block).flatMap { unboxed =>
         Binding { k =>

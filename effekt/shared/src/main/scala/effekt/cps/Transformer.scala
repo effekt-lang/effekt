@@ -191,7 +191,6 @@ object Transformer {
       case _ => sys error "Should not happen"
     }
     case core.Pure.Make(data, tag, vargs) => Make(data, tag, vargs.map(transform))
-    case core.Pure.Select(target, field, annotatedType) => Select(transform(target), field)
     case core.Pure.Box(b, annotatedCapture) => Box(transform(b))
   }
 

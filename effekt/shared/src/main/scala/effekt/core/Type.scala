@@ -247,7 +247,6 @@ object Type {
     case Pure.Literal(value, tpe) => tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
     case Pure.Make(tpe, tag, args) => tpe
-    case Pure.Select(target, field, annotatedType) => annotatedType
     case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
 

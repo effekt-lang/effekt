@@ -190,7 +190,6 @@ object StaticArguments {
 
     // congruences
     case Pure.Literal(value, annotatedType) => p
-    case Pure.Select(target, field, annotatedType) => Pure.Select(rewrite(target), field, annotatedType)
     case Pure.Box(b, annotatedCapture) => Pure.Box(rewrite(b), annotatedCapture)
   }
 

@@ -49,19 +49,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   /**
-   * Describes how to box/unbox values using records
-   *
-   * @param boxTpe       The type BoxedT
-   * @param constructor  The constructor to use for boxing
-   * @param field        The field to access for unboxing
-   */
-  case class RecordBoxer(boxTpe: ValueType.Data, constructor: Constructor, field: Field) extends Boxer {
-    def tpe = boxTpe
-    def box(p: Pure) = Pure.Make(boxTpe, constructor.id, List(p))
-    def unbox(p: Pure) = Pure.Select(p, field.id, field.tpe)
-  }
-
-  /**
    * Partial function to describe which values to box and how.
    * Is defined iff values of the given type should be boxed.
    *
@@ -124,18 +111,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         }
         Some(ExternFnBoxer(boxRet, box, unbox))
       }
-      /** Try to find a `BoxedT` type */
-      def findRecordBoxer() = boundary {
-        findRecord("Boxed" ++ name) match {
-          case Some(Declaration.Data(tpe, List(), List(cns@Constructor(id, List(field))))) =>
-            Some(RecordBoxer(ValueType.Data(tpe, Nil), cns, field))
-          case _ => None
-        }
-      }
-      findExternFnBoxer() orElse findRecordBoxer() getOrElse {
+
+      findExternFnBoxer() getOrElse {
         Context.abort(s"Type ${name}, which needs to be boxed, is used as a type argument but no " +
-          s"corresponding pure externs box${name} and unbox${name} were defined in the prelude, " +
-          s"and also no record type Boxed${name}.")
+          s"corresponding pure externs box${name} and unbox${name} were defined in the prelude.")
       }
     }
   }
@@ -379,20 +358,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val coercedArgs = (vargs zip paramTypes).map { case (arg, paramTpe) => coerce(transform(arg), paramTpe) }
       Pure.Make(transform(data), tag, coercedArgs)
 
-    case Pure.Select(target, field, annotatedType) => {
-      val (symbol, targs) = target.tpe match {
-        case ValueType.Data(symbol, targs) => (symbol, targs)
-        case t => Context.abort(s"Select on value of type ${PrettyPrinter.format(t)} is not supported.")
-      }
-      PContext.getData(symbol) match {
-        case Declaration.Data(id, tparams, List(Constructor(cns, fields))) =>
-          val f = fields.find(_.id == field).getOrElse{
-            Context.abort(s"${id} has no field ${field}.")
-          }
-          coerce(Pure.Select(target, field, transform(annotatedType)), Type.substitute(f.tpe, (tparams zip targs).toMap, Map()))
-        case t => Context.abort(s"Select on data type ${t.id} is not supported.")
-      }
-    }
     case Pure.Box(b, annotatedCapture) =>
       Pure.Box(transform(b), annotatedCapture)
   }

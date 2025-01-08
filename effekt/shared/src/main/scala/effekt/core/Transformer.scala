@@ -337,8 +337,40 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Literal(value, tpe) =>
       Literal(value, transform(tpe))
 
+    // [[ sc.field ]] = val x = sc match { tag: { (_, _, x, _) => return x } }; ...
     case s @ source.Select(receiver, selector) =>
-      Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
+
+      // TODO we need to instantiate the datatype to compute the correct types
+
+      val field = s.definition
+
+      val constructor = field.constructor
+      //
+      val existentials: List[symbols.TypeParam] = constructor.tparams
+      assert(existentials.isEmpty) // for now not supported... need to be freshened and then bound by the pattern match...
+
+      val dataType: symbols.TypeConstructor = constructor.tpe
+      val universals: List[symbols.TypeParam] = dataType.tparams
+
+      val scrutineeTypeArgs = Context.inferredTypeOf(receiver) match {
+        case effekt.symbols.ValueType.ValueTypeApp(constructor, args) => args
+        case _ => ???
+      }
+
+      val substitution = Substitutions((universals zip scrutineeTypeArgs).toMap, Map.empty)
+
+      val selected = Id("x")
+      val tpe = transform(Context.inferredTypeOf(s))
+      val params = constructor.fields.map {
+        case f: Field =>
+          val tpe = transform(substitution.substitute(f.returnType))
+          core.ValueParam(if f == field then selected else Id("_"), tpe)
+      }
+      val desugared = Stmt.Match(transformAsPure(receiver),
+        List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None)
+
+      Context.bind(desugared)
+      // Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
 
     case source.Box(capt, block) =>
       transformBox(block)

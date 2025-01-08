@@ -283,15 +283,6 @@ object Normalizer { normal =>
     }
 
   def normalize(p: Pure)(using ctx: Context): Pure = p match {
-    // [[ Constructor(f = v).f ]] = [[ v ]]
-    case Pure.Select(target, field, annotatedType) => active(target) match {
-      case Pure.Make(datatype, tag, fields) =>
-        val constructor = ctx.decls.findConstructor(tag).get
-        val expr = (constructor.fields zip fields).collectFirst { case (f, expr) if f.id == field => expr }.get
-        normalize(expr)
-      case _ => Pure.Select(normalize(target), field, annotatedType)
-    }
-
     // [[ box (unbox e) ]] = [[ e ]]
     case Pure.Box(b, annotatedCapture) => active(b) match {
       case NormalizedBlock.Known(Unbox(p), boundBy) => p

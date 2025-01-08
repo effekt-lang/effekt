@@ -138,7 +138,6 @@ object BindSubexpressions {
       vs <- transformExprs(vargs);
       res <- bind(Pure.PureApp(f, targs.map(transform), vs))
     } yield res
-    case Pure.Select(target, field, tpe) => transform(target) { v => bind(Pure.Select(v, field, transform(tpe))) }
     case Pure.Box(block, capt) => transform(block) { b => bind(Pure.Box(b, transform(capt))) }
   }
 

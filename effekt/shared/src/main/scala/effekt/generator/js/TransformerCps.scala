@@ -162,7 +162,6 @@ object TransformerCps extends Transformer {
     case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(toJS))
     case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
-    case Pure.Select(target, field)   => js.Member(toJS(target), memberNameRef(field))
     case Pure.Box(b)                 => toJS(b)
     case Run(prog)                   => Call(RUN, toJS(prog))
   }
