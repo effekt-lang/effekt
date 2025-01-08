@@ -339,18 +339,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // [[ sc.field ]] = val x = sc match { tag: { (_, _, x, _) => return x } }; ...
     case s @ source.Select(receiver, selector) =>
-
-      // TODO clean up!
-
-      val field = s.definition
+      val field: Field = s.definition
 
       val constructor = field.constructor
-      //
-      val allTypeParams: List[symbols.TypeParam] = constructor.tparams
-      //assert(existentials.isEmpty) // for now not supported... need to be freshened and then bound by the pattern match...
-
       val dataType: symbols.TypeConstructor = constructor.tpe
       val universals: List[symbols.TypeParam] = dataType.tparams
+
+      // allTypeParams = universals ++ existentials
+      val allTypeParams: List[symbols.TypeParam] = constructor.tparams
 
       assert(allTypeParams.length == universals.length, "Existentials on record selection not supported, yet.")
 
@@ -368,11 +364,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val tpe = transform(substitution.substitute(f.returnType))
           core.ValueParam(if f == field then selected else Id("_"), tpe)
       }
-      val desugared = Stmt.Match(transformAsPure(receiver),
-        List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None)
-
-      Context.bind(desugared)
-      // Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
+      Context.bind(Stmt.Match(transformAsPure(receiver),
+        List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None))
 
     case source.Box(capt, block) =>
       transformBox(block)
