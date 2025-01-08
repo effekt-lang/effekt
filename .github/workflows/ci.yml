@@ -90,8 +90,10 @@ jobs:
     - name: Run tests with coverage
       run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt clean coverage test coverageReport
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+    - name: Upload test coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
