@@ -545,7 +545,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val ff = maybeFeatureFlag()
       next().kind match {
         case Str(contents, _) => ExternInclude(ff, "", Some(contents))
-        case t => fail(s"Expected string literal but got ${t}.")
+        case t => fail("Expected string literal.")
       }
 
   def externFun(): Def =
@@ -602,7 +602,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       next().kind match {
         case Str(s, _) => s
-        case t => fail(s"Expected string literal but got ${t}.")
+        case t => fail("Expected string literal.")
       }
 
 
