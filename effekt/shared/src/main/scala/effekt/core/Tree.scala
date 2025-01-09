@@ -156,6 +156,7 @@ enum Toplevel {
 sealed trait Expr extends Tree {
   val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
+  def show: String = core.PrettyPrinter.format(this)
 }
 
 // invariant, block b is {io}.
@@ -218,6 +219,7 @@ enum Block extends Tree {
 
   val tpe: BlockType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
+  def show: String = core.PrettyPrinter.format(this)
 }
 export Block.*
 
@@ -296,6 +298,7 @@ enum Stmt extends Tree {
 
   val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
+  def show: String = core.PrettyPrinter.format(this)
 }
 export Stmt.*
 

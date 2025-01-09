@@ -259,19 +259,21 @@ object Normalizer { normal =>
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
         // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, tpe2, binding2, body2) =>
-          normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
+          normalizeVal(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 
         // [[ val x = { var y in r = e; stmt1 }; stmt2 ]] = var y in r = e; [[ val x = stmt1; stmt2 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
           Stmt.Alloc(id2, init2, region2, normalizeVal(id, tpe, body2, body))
 
         // [[ val x = stmt; return x ]]   =   [[ stmt ]]
-        case other => normalize(body) match {
+        case other => body match {
           case Stmt.Return(x: ValueVar) if x.id == id => other
-          case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
+          case body => Stmt.Val(id, tpe, other, body)
         }
       }
-      normalizeVal(id, tpe, normalize(binding), body)
+
+      // We first normalize the body to not inline the continuation and THEN inline a function
+      normalizeVal(id, tpe, normalize(binding), normalize(body))
 
 
     // "Congruences"
