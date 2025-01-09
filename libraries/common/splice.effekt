@@ -1,0 +1,18 @@
+module splice
+
+import stringbuffer
+
+effect literal(s: String): Unit
+effect splice[A](x: A): Unit
+
+def s { prog: () => Unit / { literal, splice[String] } }: String = {
+  var buffer = StringBuffer()
+  try {
+    prog()
+    buffer.flush()
+  } with splice[String] { x =>
+    resume(buffer.write(x))
+  } with literal { s =>
+    resume(buffer.write(s))
+  }
+}

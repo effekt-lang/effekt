@@ -1,0 +1,60 @@
+module stringbuffer
+
+import bytearray
+
+interface StringBuffer {
+  def write(str: String): Unit
+  def flush(): String
+}
+
+def StringBuffer(): StringBuffer at {global} = {
+  val initialCapacity = 128
+  var buffer in global = bytearray::allocate(initialCapacity)
+  var pos in global = 0
+
+  def ensureCapacity(requiredSize: Int): Unit = {
+    val cap = buffer.size
+    if (requiredSize <= cap) ()
+    else {
+      val newSize = min(cap * 2, requiredSize)
+      val newBuffer = bytearray::allocate(newSize)
+      pos = 0
+      buffer.foreach { b =>
+        newBuffer.unsafeSet(pos, b)
+        pos = pos + 1
+      }
+      buffer = newBuffer
+    }
+  }
+
+  def stringBuffer = new StringBuffer {
+    def write(str) = {
+      val bytes = fromString(str)
+      ensureCapacity(bytes.size)
+      bytes.foreach { b =>
+        buffer.unsafeSet(pos, b)
+        pos = pos + 1
+      }
+    }
+
+    def flush() = {
+      val str = buffer.toString()
+      buffer = bytearray::allocate(initialCapacity)
+      str
+    }
+  }
+
+  stringBuffer
+}
+
+namespace examples {
+  def main() = {
+    def buffer = StringBuffer()
+    buffer.write("hello")
+    buffer.write(", world")
+    // prints `hello, world`
+    println(buffer.flush())
+    // prints the empty string
+    println(buffer.flush())
+  }
+}
