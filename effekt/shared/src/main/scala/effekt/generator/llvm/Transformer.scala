@@ -148,10 +148,12 @@ object Transformer {
         val closureEnvironment = freeVariables(clauses).toList;
         emit(Comment(s"new ${variable.name}, ${clauses.length} clauses, ${closureEnvironment.size} free variables"))
 
-        val clauseNames = clauses.map { clause =>
-          val clauseName = freshName(variable.name + "_clause");
+        val names = List.range(0, clauses.length).map(i => freshName(variable.name + i))
+        val vtable = ConstantArray(PointerType(), names.drop(1).reverse.map(ConstantGlobal(_))) // these are indexed in reverse
+        val clauseNames = clauses.zip(names).map { (clause, clauseName) =>
           val parameters = clause.parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
-          defineLabel(clauseName, Parameter(objectType, "closure") +: parameters) {
+          val prefix = if (clause == clauses.head) then Some(vtable) else None
+          defineLabel(clauseName, Parameter(objectType, "closure") +: parameters, prefix) {
             emit(Comment(s"new ${clauseName}, ${clause.parameters.length} parameters"))
             consumeObject(LocalReference(objectType, "closure"), closureEnvironment, freeVariables(clause));
             eraseValues(clause.parameters, freeVariables(clause.body));
@@ -160,13 +162,10 @@ object Transformer {
           ConstantGlobal(clauseName)
         }
 
-        val vtableName = freshName("vtable")
-        emit(GlobalConstant(vtableName, ConstantArray(methodType, clauseNames)))
-
-        val vtable = produceObject("closure", closureEnvironment, freeVariables(rest));
+        val environment = produceObject("closure", closureEnvironment, freeVariables(rest));
         val temporaryName = freshName("vtable_temporary");
-        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), ConstantGlobal(vtableName), 0));
-        emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), vtable, 1));
+        emit(InsertValue(temporaryName, ConstantAggregateZero(negativeType), names.headOption.map(ConstantGlobal(_)).getOrElse(ConstantNull(PointerType())), 0));
+        emit(InsertValue(variable.name, LocalReference(negativeType, temporaryName), environment, 1));
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -175,17 +174,22 @@ object Transformer {
         emit(Comment(s"invoke ${value.name}, tag ${tag}, ${values.length} values"))
         shareValues(value :: values, Set());
 
-        val vtableName = freshName("vtable");
+        val function0 = freshName("function0Pointer");
         val objectName = freshName("closure");
         val pointerName = freshName("functionPointer_pointer");
         val functionName = freshName("functionPointer");
         val arguments = values.map(transform)
 
-        emit(ExtractValue(vtableName, transform(value), 0));
+        emit(ExtractValue(function0, transform(value), 0));
         emit(ExtractValue(objectName, transform(value), 1));
-        emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), vtableName), List(tag)))
-        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), VTable))
-        emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
+        if (tag == 0) {
+          emit(callLabel(LocalReference(methodType, function0), LocalReference(objectType, objectName) +: arguments))
+        }
+        else {
+          emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), function0), List(-tag)))
+          emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), VTable))
+          emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
+        }
         RetVoid()
 
       case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, retType, rest) =>
