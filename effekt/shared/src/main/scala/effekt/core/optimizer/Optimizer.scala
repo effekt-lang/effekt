@@ -37,8 +37,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
-      Deadcode.remove(mainSymbol, normalized)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, Context.config.maxContinuationSize().toInt)
+      val renamed = new Renamer().apply(normalized)
+      // establish Barendregdt again, since this is required by usage analysis
+      Deadcode.remove(mainSymbol, renamed)
     }
 
     // (3) normalize once and remove beta redexes

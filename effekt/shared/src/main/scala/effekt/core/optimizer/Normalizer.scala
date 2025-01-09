@@ -35,7 +35,8 @@ object Normalizer { normal =>
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int             // to control inlining and avoid code bloat
+    maxInlineSize: Int,            // to control inlining and avoid code bloat
+    maxContinuationSize: Int       // to control duplication of continuations
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -65,14 +66,14 @@ object Normalizer { normal =>
       case None => false
     }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, maxContinuationSize: Int): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, maxContinuationSize)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -209,7 +210,32 @@ object Normalizer { normal =>
 
     case Stmt.Val(id, tpe, binding, body) =>
 
+      // form of a statement that should be inlined as continuation body
+      def shouldInline(stmt: Stmt, numberOfBranches: Int): Boolean = ((stmt.size * numberOfBranches) <= C.maxContinuationSize) || (stmt match {
+        case Stmt.Return(expr) => true
+        case Stmt.Get(id, annotatedCapt, annotatedTpe) => true
+        case Stmt.Put(id, annotatedCapt, value) => true
+        case Stmt.Resume(k, body) => shouldInline(body, numberOfBranches)
+        case Stmt.Hole() => true
+        case Stmt.App(callee, targs, vargs, bargs) => true
+        case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => true
+        case _ => false
+      })
+
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = binding match {
+
+        // [[ val x = if (cond) STMT1 else STMT2; STMT ]] = if (cond) [[ val x = STMT1; STMT ]] else [[ val x = STMT1; STMT ]]
+        case Stmt.If(cond, thn, els) if shouldInline(body, 2) =>
+          Stmt.If(cond, normalizeVal(id, tpe, thn, body), normalizeVal(id, tpe, els, body))
+
+        // [[ val x = sc match { case id(ps) => body2; ... }; return x ]] = sc match { case id(ps) => [[ val x = body2; return x ]]; ... };
+        case Stmt.Match(sc, clauses, default) if shouldInline(body, clauses.size + default.size) =>
+          val normalizedClauses: List[(Id, BlockLit)] = clauses map {
+            case (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2)) =>
+              id2 -> BlockLit(tparams2, cparams2, vparams2, bparams2,
+                normalizeVal(id, tpe, body2, body))
+          }
+          Stmt.Match(sc, normalizedClauses, default.map { body2 => normalizeVal(id, tpe, body2, body) })
 
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
@@ -226,7 +252,7 @@ object Normalizer { normal =>
           Stmt.Def(id2, block2, normalizeVal(id, tpe, body2, body))
 
         // Commute val and bindings
-        // [[ val x = { let y = ...; STMT }; STMT ]] = let y = ...; val x = STMT; STMT
+        // [[ val x = { let y = ...; stmt1 }; stmt2 ]] = let y = ...; val x = stmt1; stmt2
         case Stmt.Let(id2, tpe2, binding2, body2) =>
           Stmt.Let(id2, tpe2, binding2, normalizeVal(id, tpe, body2, body))
 

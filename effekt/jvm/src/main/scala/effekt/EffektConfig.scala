@@ -121,6 +121,14 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     noshort = true,
     group = advanced
   )
+
+  val maxContinuationSize: ScallopOption[Long] = opt(
+    "max-continuation-size",
+    descr = "Maximum size (number of core tree-nodes) of a continuation considered by the inliner",
+    default = Some(25L),
+    noshort = true,
+    group = advanced
+  )
   advanced.append(server)
 
 
