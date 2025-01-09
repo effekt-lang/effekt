@@ -545,7 +545,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val ff = maybeFeatureFlag()
       next().kind match {
         case Str(contents, _) => ExternInclude(ff, "", Some(contents))
-        case _ => fail("Expected string literal.")
+        case t => fail(s"Expected string literal but got ${t}.")
       }
 
   def externFun(): Def =
@@ -602,7 +602,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       next().kind match {
         case Str(s, _) => s
-        case _ => fail("Expected string literal.")
+        case t => fail(s"Expected string literal but got ${t}.")
       }
 
 
@@ -1024,15 +1024,23 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def templateString(): Term =
-    template() match {
-      case Template(s :: strs, arg :: args) =>
-        strs.zip(args)
-          .foldLeft(binaryOp(StringLit(s), `++`, arg)) {
-            case (acc, ("", arg)) => binaryOp(acc, `++`, arg)
-            case (acc, (s, arg)) => binaryOp(acc, `++`, binaryOp(StringLit(s), `++`, arg))
-          }
-      case Template(List(s), Nil) => StringLit(s)
-      case _ => fail("cannot occur")
+    (template()) match {
+      // We do not need to apply any transformation if there are no splices
+      case (Template(str :: Nil, Nil)) => StringLit(str)
+      case (Template(strs, Nil)) => fail("Cannot occur")
+      // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y) }
+      case (Template(strs, args)) =>
+        val target = IdRef(Nil, "s")
+        val doLits = strs.map { s =>
+          Do(None, IdRef(Nil, "literal"), Nil, List(StringLit(s)), Nil)
+        }
+        val doSplices = args.map { arg =>
+          Do(None, IdRef(Nil, "splice"), Nil, List(arg), Nil)
+        }
+        val body = interleave(doLits, doSplices)
+          .foldRight(Return(UnitLit())) { (term, acc) => ExprStmt(term, acc) }
+        val blk = BlockLiteral(Nil, Nil, Nil, body)
+        Call(IdTarget(target), Nil, Nil, List(blk))
     }
   
   def literal(): Literal =
@@ -1290,6 +1298,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     try { Some(p) } catch {
       case Fail(_, _) => position = before; None
     }
+
+  def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
+    case (x :: xs, y :: ys) => x :: y :: interleave(xs, ys)
+    case (Nil, ys) => ys
+    case (xs, Nil) => xs
+  }
 
   /**
    * Tiny combinator DSL to sequence parsers
