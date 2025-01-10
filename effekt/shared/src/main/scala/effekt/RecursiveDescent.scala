@@ -976,7 +976,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `do`                => doExpr()
     case _ if isString       => templateString()
     case _ if isLiteral      => literal()
-    case _ if isVariable     => variable()
+    case _ if isVariable     =>
+      peek(1).kind match {
+        case _: Str => templateString()
+        case _ => variable()
+      }
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
@@ -1024,24 +1028,25 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def templateString(): Term =
-    (template()) match {
-      // We do not need to apply any transformation if there are no splices
-      case (Template(str :: Nil, Nil)) => StringLit(str)
-      case (Template(strs, Nil)) => fail("Cannot occur")
-      // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y) }
-      case (Template(strs, args)) =>
-        val target = IdRef(Nil, "s")
-        val doLits = strs.map { s =>
-          Do(None, IdRef(Nil, "literal"), Nil, List(StringLit(s)), Nil)
-        }
-        val doSplices = args.map { arg =>
-          Do(None, IdRef(Nil, "splice"), Nil, List(arg), Nil)
-        }
-        val body = interleave(doLits, doSplices)
-          .foldRight(Return(UnitLit())) { (term, acc) => ExprStmt(term, acc) }
-        val blk = BlockLiteral(Nil, Nil, Nil, body)
-        Call(IdTarget(target), Nil, Nil, List(blk))
-    }
+    nonterminal:
+      backtrack(idRef()) ~ template() match {
+        // We do not need to apply any transformation if there are no splices
+        case _ ~ Template(str :: Nil, Nil) => StringLit(str)
+        case _ ~ Template(strs, Nil) => fail("Cannot occur")
+        // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y) }
+        case id ~ Template(strs, args) =>
+          val target = id.getOrElse(IdRef(Nil, "s"))
+          val doLits = strs.map { s =>
+            Do(None, IdRef(Nil, "literal"), Nil, List(StringLit(s)), Nil)
+          }
+          val doSplices = args.map { arg =>
+            Do(None, IdRef(Nil, "splice"), Nil, List(arg), Nil)
+          }
+          val body = interleave(doLits, doSplices)
+            .foldRight(Return(UnitLit())) { (term, acc) => ExprStmt(term, acc) }
+          val blk = BlockLiteral(Nil, Nil, Nil, body)
+          Call(IdTarget(target), Nil, Nil, List(blk))
+      }
   
   def literal(): Literal =
     nonterminal:

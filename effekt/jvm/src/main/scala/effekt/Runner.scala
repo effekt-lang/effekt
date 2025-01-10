@@ -151,7 +151,7 @@ object JSNodeRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "splice", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
@@ -192,7 +192,7 @@ object JSWebRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "splice", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   def checkSetup(): Either[String, Unit] =
     Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
@@ -267,7 +267,7 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string", "splice") // "array", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string") // "array", "ref")
 
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))

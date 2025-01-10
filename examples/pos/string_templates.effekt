@@ -1,3 +1,5 @@
+import splice
+
 def main() = {
   val domain = "https://api.effekt-lang.org"
   val user = "effekt"
