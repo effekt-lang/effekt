@@ -164,6 +164,36 @@ struct Pos c_bytearray_equal(const struct Pos left, const struct Pos right) {
     return BooleanTrue;
 }
 
+Int c_bytearray_compare(const struct Pos left, const struct Pos right) {
+    if (left.obj == right.obj) return 0;
+    
+    uint64_t left_size = left.tag;
+    uint64_t right_size = right.tag;
+    for (uint64_t j = 0; j < left_size && j < right_size; ++j) {
+        uint8_t left_data = c_bytearray_data(left)[j];
+        uint8_t right_data = c_bytearray_data(right)[j];
+        if (left_data < right_data) {
+            erasePositive(left);
+            erasePositive(right);
+            return -1;
+        } else if (left_data > right_data) {
+            erasePositive(left);
+            erasePositive(right);
+            return 1;
+        }
+    }
+    
+    erasePositive(left);
+    erasePositive(right);
+    if (left_size < right_size) {
+        return -1;
+    } else if (left_size > right_size) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // TODO deprecate
 struct Pos c_bytearray_substring(const struct Pos str, uint64_t start, uint64_t end) {
     const struct Pos substr = c_bytearray_new(end - start);
