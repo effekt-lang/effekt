@@ -110,14 +110,13 @@ object Transformer {
 
       case machine.Switch(value, clauses, default) =>
         emit(Comment(s"switch ${value.name}, ${clauses.length} clauses"))
-        shareValues(List(value), clauses.flatMap(freeVariables).toSet)
+        val freeInClauses = clauses.flatMap(freeVariables) ++ default.map(freeVariables).getOrElse(Set.empty)
+        shareValues(List(value), freeInClauses.toSet)
 
         val tagName = freshName("tag")
         val objectName = freshName("fields")
         emit(ExtractValue(tagName, transform(value), 0))
         emit(ExtractValue(objectName, transform(value), 1))
-
-        val freeInClauses = clauses.flatMap(freeVariables)
 
         val stack = getStack()
         def labelClause(clause: machine.Clause): String = {

@@ -24,7 +24,7 @@ def freeVariables(statement: Statement): Set[Variable] =
     case Construct(name, tag, values, rest) =>
       Set.from(values) ++ (freeVariables(rest) -- Set(name))
     case Switch(value, clauses, default: Option[Clause]) =>
-      Set(value) ++ clauses.flatMap { case (tag, branch) => freeVariables(branch) } ++ default.map(freeVariables).getOrElse(Set.empty)
+      Set(value) ++ clauses.flatMap(freeVariables) ++ default.map(freeVariables).getOrElse(Set.empty)
     case New(name, clauses, rest) =>
       freeVariables(clauses) ++ (freeVariables(rest) -- Set(name))
     case Invoke(value, tag, values) =>
