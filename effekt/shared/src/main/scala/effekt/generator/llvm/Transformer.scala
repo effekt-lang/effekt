@@ -110,8 +110,8 @@ object Transformer {
 
       case machine.Switch(value, clauses, default) =>
         emit(Comment(s"switch ${value.name}, ${clauses.length} clauses"))
-        val freeInClauses = clauses.flatMap(freeVariables) ++ default.map(freeVariables).getOrElse(Set.empty)
-        shareValues(List(value), freeInClauses.toSet)
+        val freeInClauses = clauses.flatMap(freeVariables).toSet ++ default.map(freeVariables).getOrElse(Set.empty)
+        shareValues(List(value), freeInClauses)
 
         val tagName = freshName("tag")
         val objectName = freshName("fields")
@@ -124,7 +124,7 @@ object Transformer {
           BC.stack = stack
 
           consumeObject(LocalReference(objectType, objectName), clause.parameters, freeVariables(clause.body));
-          eraseValues(freeInClauses, freeVariables(clause));
+          eraseValues(freeInClauses.toList, freeVariables(clause));
 
           val terminator = transform(clause.body);
 
