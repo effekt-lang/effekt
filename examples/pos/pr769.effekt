@@ -1,0 +1,16 @@
+def myprint(list: List[Int]): Unit = list match {
+  case Nil() => <>
+  case Cons(x, _) => println(x)
+}
+
+def updateFirst(list: List[Int]): List[Int] =
+  // list.drop(0) === list
+  // but if you replace it, everything works again
+  list.drop(0) match {
+    case Cons(x, right) =>
+      Cons(x + 100, right)
+    case _ => list
+  }
+
+def main() =
+  myprint([1].updateFirst())
