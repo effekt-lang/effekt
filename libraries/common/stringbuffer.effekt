@@ -10,14 +10,17 @@ interface StringBuffer {
 def StringBuffer(): StringBuffer at {global} = {
   val initialCapacity = 128
   var buffer in global = bytearray::allocate(initialCapacity)
+  // next free index to write to
   var pos in global = 0
 
-  def ensureCapacity(requiredSize: Int): Unit = {
-    val cap = buffer.size
-    if (requiredSize <= cap) ()
+  def ensureCapacity(sizeToAdd: Int): Unit = {
+    val cap = buffer.size - pos + 1
+    if (sizeToAdd <= cap) ()
     else {
-      val newSize = min(cap * 2, requiredSize)
+      // Double the capacity while ensuring the required capacity
+      val newSize = max(buffer.size * 2, buffer.size + sizeToAdd)
       val newBuffer = bytearray::allocate(newSize)
+      // copy content of old buffer into newly allocated buffer
       pos = 0
       buffer.foreach { b =>
         newBuffer.unsafeSet(pos, b)
