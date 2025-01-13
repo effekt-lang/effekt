@@ -25,7 +25,6 @@ trait EffektConfig {
     "exception",
     "array",
     "string",
-    "splice",
     "ref"
   )
 
