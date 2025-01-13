@@ -1,0 +1,19 @@
+module examples/pos/exception/runtime_error
+
+import exception
+
+def main() = {
+  def valueOrRuntimeError { p: => String / Exception[RuntimeError] }: Unit = {
+    with on[RuntimeError].default { println("Runtime error encountered") }
+    println(p().show)
+  }
+  
+  def divByZero() : String = {
+    val zero : Double =  2.0 / 0.0
+    "bla bla bla"
+  }
+
+  valueOrRuntimeError { raise("This is a runtime error.") }
+  valueOrRuntimeError {  divByZero() }
+  valueOrRuntimeError { "No error, valid string" }
+}
