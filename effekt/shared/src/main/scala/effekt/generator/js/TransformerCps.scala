@@ -4,8 +4,8 @@ package js
 
 import effekt.context.Context
 import effekt.context.assertions.*
-import effekt.cps.{ Block, * }
-import effekt.core.{ Block, DeclarationContext, Id }
+import effekt.cps.*
+import effekt.core.{ DeclarationContext, Id }
 
 import scala.collection.mutable
 
@@ -160,7 +160,6 @@ object TransformerCps extends Transformer {
     case cps.Block.BlockLit(vparams, bparams, ks, k, body) =>
       val used = new Used(false)
 
-      // for now we add while everywhere, this should be done selectively...
       val translatedBody = toJS(body)(using enterDefinition(id, used, b)).stmts
 
       if used.used then
