@@ -3,14 +3,14 @@ module examples/pos/exception/out_of_bounds
 import exception
 
 def main() = {
-  
   val str = "Hallo" 
-  charOrOutOfBounds { str.charAt(10) }
-  charOrOutOfBounds { str.charAt(1) }
-
-}
 
   def charOrOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
-    with on[OutOfBounds].default { println("Index Out of Bound") }
-    println(p().show)
+  with on[OutOfBounds].default { println("Index Out of Bound") }
+  println(p().show)
   }
+
+  charOrOutOfBounds { str.charAt(10) }
+  charOrOutOfBounds { str.charAt(1) }
+}
+

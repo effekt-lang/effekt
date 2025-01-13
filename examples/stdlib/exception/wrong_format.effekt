@@ -1,0 +1,15 @@
+module examples/pos/exception/wrong_format
+
+import exception
+
+def main() = {
+  def intOrWrongFormat { p: => Int / Exception[WrongFormat] }: Unit = {
+    with on[WrongFormat].default { println("Wrong Format") }
+    println(p().show)
+
+  }
+
+  intOrWrongFormat { "".toInt }
+  intOrWrongFormat { "99".toInt }
+}
+
