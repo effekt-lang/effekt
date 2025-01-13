@@ -153,7 +153,6 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
 
 case class Operation(name: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt) extends Tree
 
-
 // unless we need some more information, we keep it simple for now:
 type Variable = Id
 type Variables = Set[Id]

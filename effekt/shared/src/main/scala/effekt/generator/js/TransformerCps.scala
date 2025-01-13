@@ -5,6 +5,7 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.cps.*
+import effekt.cps.Variables.{ free, all }
 import effekt.core.{ DeclarationContext, Id }
 
 import scala.collection.mutable
@@ -210,7 +211,48 @@ object TransformerCps extends Transformer {
     case Pure.Box(b)                 => toJS(b)
   }
 
+  private def canBeLoop(id1: Id, stmt: cps.Stmt): Boolean = stmt match {
+    case Stmt.Jump(k, arg, ks) => true
+    case Stmt.App(callee, vargs, bargs, ks, k) => !(all(vargs, free) ++ all(bargs, free) ++ free(k)).contains(id1)
+    case Stmt.Invoke(callee, method, vargs, bargs, ks, k) => !free(stmt).contains(id1)
+    case Stmt.If(cond, thn, els) => canBeLoop(id1, thn) && canBeLoop(id1, els)
+    case Stmt.Match(scrutinee, clauses, default) => clauses.forall { case (id, Clause(v, body)) => canBeLoop(id1, body) } && default.forall(canBeLoop(id1, _))
+    case Stmt.LetDef(id, binding, body) => !free(binding).contains(id1) && canBeLoop(id1, body)
+    case Stmt.LetExpr(id, binding, body) => !free(binding).contains(id1) && canBeLoop(id1, body)
+    case Stmt.LetCont(id, binding, body) => !free(binding).contains(id1) && canBeLoop(id1, body)
+    case Stmt.Region(id, ks, body) => !free(stmt).contains(id1)
+    case Stmt.Alloc(id, init, region, body) => canBeLoop(id1, body)
+    case Stmt.Var(id, init, ks, body) => canBeLoop(id1, body)
+    case Stmt.Dealloc(ref, body) => canBeLoop(id1, body)
+    case Stmt.Get(ref, id, body) => canBeLoop(id1, body)
+    case Stmt.Put(ref, value, body) => canBeLoop(id1, body)
+    case Stmt.Reset(prog, ks, k) => !free(stmt).contains(id1)
+    case Stmt.Shift(prompt, body, ks, k) => !free(stmt).contains(id1)
+    case Stmt.Resume(resumption, body, ks, k) => !free(stmt).contains(id1)
+    case Stmt.Hole() => true
+  }
+
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {
+
+    // [[ def foo(x) { ... }; foo(42 |ks, res => ...); ... ]] = const x = 42;
+    case cps.Stmt.LetDef(id1, block @ BlockLit(vparams, bparams, ks1, k1, body), cps.Stmt.App(cps.Block.BlockVar(id2), vargs, bargs, ks2, k2))
+        if canBeLoop(id1, body) && !(free(k2) ++ all(vargs, free) ++ all(bargs, free)).contains(id1) =>
+      Binding { k =>
+        val vargsEvaluated = (vparams zip vargs) map { (param, arg) =>
+          js.Let(nameDef(param), toJS(arg))
+        }
+        val bargsEvaluated = (bparams zip bargs) map { (param, arg) =>
+          js.Let(nameDef(param), toJS(arg))
+        }
+        val kBound = js.Let(nameDef(k1), toJS(k2))
+        val ksBound = js.Let(nameDef(ks1), toJS(ks2))
+
+        val used = new Used(false)
+
+        val loop = js.While(RawExpr("true"), toJS(body)(using enterDefinition(id1, used, block)).run(k), Some(uniqueName(id1)))
+
+        vargsEvaluated ++ bargsEvaluated ++ (ksBound :: kBound :: loop :: Nil)
+      }
 
     case cps.Stmt.LetDef(id, block, body) =>
       Binding { k =>
