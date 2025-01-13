@@ -119,12 +119,13 @@ object Transformer {
         emit(ExtractValue(objectName, transform(value), 1))
 
         val stack = getStack()
-        def labelClause(clause: machine.Clause): String = {
+        def labelClause(clause: machine.Clause, isDefault: Boolean): String = {
           implicit val BC = BlockContext()
           BC.stack = stack
 
           consumeObject(LocalReference(objectType, objectName), clause.parameters, freeVariables(clause.body));
           eraseValues(freeInClauses.toList, freeVariables(clause));
+          if (isDefault) eraseValue(value)
 
           val terminator = transform(clause.body);
 
@@ -137,7 +138,7 @@ object Transformer {
         }
 
         val defaultLabel = default match {
-          case Some(clause) => labelClause(clause)
+          case Some(clause) => labelClause(clause, isDefault = true)
           case None =>
             val label = freshName("label");
             emit(BasicBlock(label, List(), RetVoid()))
@@ -145,7 +146,7 @@ object Transformer {
         }
 
         val labels = clauses.map {
-          case (tag, clause) => (tag, labelClause(clause))
+          case (tag, clause) => (tag, labelClause(clause, isDefault = false))
         }
 
         Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
