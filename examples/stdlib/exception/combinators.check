@@ -3,3 +3,6 @@ a
 a
 Index out of bounds: 10 in string: 'Hallo'
 a
+Finalizer executed
+a
+Finalizer executed

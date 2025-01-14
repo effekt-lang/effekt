@@ -33,16 +33,15 @@ def main() = {
   reportOutOfBounds { str.charAt(10) } // Index out of bounds: 10 in string: 'Hallo'
   reportOutOfBounds { str.charAt(1) }  // a
 
-  
-  /*def finalizeOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
-    with on[OutOfBounds].finalize { println("Finalizer executed") }
-    println(p().show) 
-    
-  
+  // Test for finalizing OutOfBoundsException
+  def finalizeOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    try {
+      with on[OutOfBounds].finalize { println("Finalizer executed") }
+      println(p().show) // Run the operation that might throw an exception
+    } with Exception[OutOfBounds] { def raise(exception, msg) = () } // Ignore the exception
   }
 
   finalizeOutOfBounds { str.charAt(10) } // Finalizer executed \n a
   finalizeOutOfBounds { str.charAt(1) } // Finalizer will execute even without exception
-  */
-  //!! This somehow causes : Main cannot have effects, but includes effects: { Exception[OutOfBounds] }
+  
 }
