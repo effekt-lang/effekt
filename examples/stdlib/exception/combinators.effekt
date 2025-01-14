@@ -1,6 +1,7 @@
 module examples/pos/exception/combinators
 
 import exception
+
 /**
  * Used as a type for `Exception` purely for independent testing
  */
@@ -11,11 +12,11 @@ def testException(): Nothing / Exception[TestException] =
 
 
 
-def main() = {
+def main() : Unit = {
   // Test for default handling of Test Exception
   def defaultTestException { p: => String / Exception[TestException] }: Unit = {
     with on[TestException].default { println("Exception handled by default combinator") }
-    println(p().show)
+    println(p().show) 
   }
 
   defaultTestException { testException() } // Exception
@@ -44,7 +45,7 @@ def main() = {
     try {
       with on[TestException].finalize { println("Finalizer executed") }
       println(p().show) // Run the operation that might throw an exception
-    } with Exception[TestException] { def raise(exception, msg) = () } // Ignore the exception
+    } with exc : Exception[TestException] { def exc::raise(exception, msg) = () } // Ignore the exception
   }
 
   finalizeTestException { testException() } // Finalizer executed with exception
