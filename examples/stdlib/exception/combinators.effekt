@@ -17,20 +17,32 @@ def main() = {
   // Test for ignoring OutOfBoundsException
   def ignoreOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
     with on[OutOfBounds].ignore();
-    println(p().show) // This will not raise the exception as it will be ignored
+    println(p().show) 
   }
   
   ignoreOutOfBounds { str.charAt(10) } // This will ignore the OutOfBoundsException
   ignoreOutOfBounds { str.charAt(1) } // a
 
-// Test for reporting OutOfBoundsException
+  // Test for reporting OutOfBoundsException
   def reportOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
     with on[OutOfBounds].report();
-      println(p().show) // If an exception occurs, it will be reported to the console
+    println(p().show) 
     
   }
 
-  reportOutOfBounds { str.charAt(10) } // Will report: "Index out of bounds"
-  reportOutOfBounds { str.charAt(1) }  // Will print: "a"
+  reportOutOfBounds { str.charAt(10) } // Index out of bounds: 10 in string: 'Hallo'
+  reportOutOfBounds { str.charAt(1) }  // a
+
   
+  /*def finalizeOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].finalize { println("Finalizer executed") }
+    println(p().show) 
+    
+  
+  }
+
+  finalizeOutOfBounds { str.charAt(10) } // Finalizer executed \n a
+  finalizeOutOfBounds { str.charAt(1) } // Finalizer will execute even without exception
+  */
+  //!! This somehow causes : Main cannot have effects, but includes effects: { Exception[OutOfBounds] }
 }
