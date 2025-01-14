@@ -1,53 +1,55 @@
 module examples/pos/exception/combinators
 
 import exception
-
-/**
- * Used as a type for `Exception` purely for independent testing
- */
 record TestException()
 
-def testException(): Nothing / Exception[TestException] =
-  do raise(TestException(), "Test Exception.")
 
+def generalOperation(str: String, index: Int): String / Exception[TestException] =
+  if (index > 1)
+    do raise(TestException(), "TestException with index :" ++ show(index) )
+  else
+    str
 
+def main() = {
+  val str = "Hallo"
 
-def main() : Unit = {
-  // Test for default handling of Test Exception
+  // Test for default handling of TestException
   def defaultTestException { p: => String / Exception[TestException] }: Unit = {
-    with on[TestException].default { println("Exception handled by default combinator") }
-    println(p().show) 
+    with on[TestException].default { println("default handled TestException") }
+    println(p().show)
   }
 
-  defaultTestException { testException() } // Exception
-  defaultTestException { "World" } // World
+  defaultTestException { str.generalOperation(10) } // 
+  defaultTestException { str.generalOperation(1) } // a
 
-  // Test for ignoring TestExceptionException
+  // Test for ignoring TestException
   def ignoreTestException { p: => String / Exception[TestException] }: Unit = {
     with on[TestException].ignore();
     println(p().show) 
   }
+  
+  ignoreTestException { str.generalOperation(10) } // This will ignore the TestException
+  ignoreTestException { str.generalOperation(1) } // a
 
-  ignoreTestException { testException() } // ignored
-  ignoreTestException { "World" } // World
-
-  // Test for reporting TestExceptionException
+  // Test for reporting TestException
   def reportTestException { p: => String / Exception[TestException] }: Unit = {
     with on[TestException].report();
     println(p().show) 
+    
   }
 
-  reportTestException { testException() } // Test Exception.
-  reportTestException { "World" }  // World
+  reportTestException { str.generalOperation(10) } // Index out of bounds: 10 in string: 'Hallo'
+  reportTestException { str.generalOperation(1) }  // a
 
-  // Test for finalizing TestExceptionException
+  // Test for finalizing TestException
   def finalizeTestException { p: => String / Exception[TestException] }: Unit = {
     try {
       with on[TestException].finalize { println("Finalizer executed") }
       println(p().show) // Run the operation that might throw an exception
-    } with exc : Exception[TestException] { def exc::raise(exception, msg) = () } // Ignore the exception
+    } with Exception[TestException] { def raise(exception, msg) = () } // Ignore the exception
   }
 
-  finalizeTestException { testException() } // Finalizer executed with exception
-  finalizeTestException { "World" } // World + Finalizer will execute even without exception
+  finalizeTestException { str.generalOperation(10) } // Finalizer executed \n a
+  finalizeTestException { str.generalOperation(1) } // Finalizer will execute even without exception
+  
 }
