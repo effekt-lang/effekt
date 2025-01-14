@@ -1,8 +1,8 @@
-Exception handled by default combinator
-World
-World
-Test Exception.
-World
-Finalizer executed
-World
-Finalizer executed
+Test: Default Handling
+hello
+hello
+Error: Invalid index (0)
+hello
+Test: Finalizer
+hello
+Test: Finalizer
