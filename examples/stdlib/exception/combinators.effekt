@@ -18,7 +18,7 @@ def generalOperation(str: String, index: Int): String / Exception[TestException]
 }
 
 def main() = {
-  val str = "hello"
+  val str : String = "hello"
 
   // Test for default handling of TestException
   def defaultTestException { p: => String / Exception[TestException] }: Unit = {
@@ -42,10 +42,10 @@ def main() = {
   def reportTestException { p: => String / Exception[TestException] }: Unit = {
     with on[TestException].report();
     println(p().show) 
-    
   }
 
   reportTestException { str.generalOperation(0) } // Error: Invalid index (0)
+  reportTestException { str.generalOperation(-1) }// Error: Invalid index (-1)
   reportTestException { str.generalOperation(1) } // hello
 
   // Test for finalizing TestException
