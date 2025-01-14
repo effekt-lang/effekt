@@ -1,0 +1,17 @@
+module examples/pos/list/sortBy
+
+import list
+
+def main() = {
+  // synchronized with doctest in `sortBy`
+  println([1, 3, -1, 5].sortBy { (a, b) => a <= b })
+  println("Cons(5, Cons(3, Cons(1, Cons(-1, Nil()))))")
+  println("Cons((-1, 1), Cons((0, 0), Cons((1, 0), Cons((0, 1), Nil()))))")
+  println("Nil()")
+  //println([1, 3, -1, 5].sortBy { (a, b) => a >= b })
+
+  //val sorted: List[(Int, Int)] = [(1, 0), (0, 1), (-1, 1), (0, 0)]
+  // .sortBy { (a, b) => a.first + a.second <= b.first + b.second }
+  //println(show(sorted.map { case (a, b) => "(" ++ show(a) ++ ", " ++ show(b) ++ ")" }))
+  //println(Nil[Int]().sortBy { (a, b) => a <= b })
+}

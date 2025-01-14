@@ -670,35 +670,113 @@ def partition[A](l: List[A]) { pred: A => Bool }: (List[A], List[A]) = {
   (lefts.reverse, rights.reverse)
 }
 
-/// Sort a list using a given comparison function.
-///
-/// Note: this implementation is not stacksafe!
-///
-/// O(N log N)
-def sortBy[A](l: List[A]) { compare: (A, A) => Bool }: List[A] =
-  l match {
-    case Nil() => Nil()
-    case Cons(pivot, rest) =>
-      val (lt, gt) = rest.partition { el => compare(el, pivot) };
-      val leftSorted = sortBy(lt) { (a, b) => compare(a, b) }
-      val rightSorted = sortBy(gt) { (a, b) => compare(a, b) }
-      leftSorted.append(Cons(pivot, rightSorted))
+/// Utilities for sorting, see 'sortBy' for more details.
+namespace sort {
+  /// Splits the given list into monotonic segments (so a list of lists).
+  ///
+  /// Internally used in the mergesort 'sortBy' to prepare the to-be-merged partitions.
+  def sequences[A](list: List[A]) { compare: (A, A) => Bool }: List[List[A]] = list match {
+    case Cons(a, Cons(b, rest)) =>
+      if (compare(a, b)) {
+        ascending(b, rest) { diffRest => Cons(a, diffRest) } {compare}
+      } else {
+        descending(b, [a], rest) {compare}
+      }
+    case _ => [list]
   }
 
-def sort(l: List[Int]): List[Int] = l.sortBy { (a, b) => a < b }
-def sort(l: List[Double]): List[Double] = l.sortBy { (a, b) => a < b }
+  /// When in an ascending sequence, try to add `current` to `run` (if possible)
+  def ascending[A](current: A, rest: List[A]) { runDiff: List[A] => List[A] } { compare: (A, A) => Bool }: List[List[A]] = rest match {
+    case Cons(next, tail) and compare(current, next) =>
+      ascending(next, tail) { diffRest => runDiff(Cons(current, diffRest)) }  {compare}
+    case _ => Cons(runDiff([current]), sequences(rest) {compare})
+  }
 
-/// Check if a list is sorted according to the given comparison function.
+  /// When in an descending sequence, try to add `current` to `run` (if possible)
+  def descending[A](current: A, run: List[A], rest: List[A]) { compare: (A, A) => Bool }: List[List[A]] = rest match {
+    case Cons(next, tail) and not(compare(current, next)) =>
+      descending(next, Cons(current, run), tail) {compare}
+    case _ => Cons(Cons(current, run), sequences(rest) {compare})
+  }
+
+  def mergeAll[A](runs: List[List[A]]) { compare: (A, A) => Bool }: List[A] = runs match {
+    case Cons(single, Nil()) => single
+    case _ => {
+      // recursively merge in pairs until there's only a single list
+      val newRuns = mergePairs(runs) {compare}
+      mergeAll(newRuns) {compare}
+    }
+  }
+
+  def mergePairs[A](runs: List[List[A]]) { compare: (A, A) => Bool }: List[List[A]] = runs match {
+    case Cons(a, Cons(b, rest)) =>
+      Cons(merge(a, b) {compare}, mergePairs(rest) {compare})
+    case _ => runs
+  }
+
+  def merge[A](l1: List[A], l2: List[A]) { compare: (A, A) => Bool }: List[A] =
+    (l1, l2) match {
+      case (Nil(), _) => l2
+      case (_, Nil()) => l1
+      case (Cons(h1, t1), Cons(h2, t2)) =>
+        if (compare(h1, h2)) {
+          Cons(h1, merge(t1, l2) {compare})
+        } else {
+          Cons(h2, merge(l1, t2) {compare})
+        }
+    }
+}
+
+/// Sort a list given a comparison operator (like less-or-equal!)
+/// The sorting algorithm is stable and should act reasonably well on partially sorted data.
+///
+/// Examples:
+/// ```
+/// > [1, 3, -1, 5].sortBy { (a, b) => a <= b }
+/// [-1, 1, 3, 5]
+///
+/// > [1, 3, -1, 5].sortBy { (a, b) => a >= b }
+/// [5, 3, 1, -1]
+///
+/// > [(1, 0), (0, 1), (-1, 1), (0, 0)].sortBy { (a, b) => a.first + a.second <= b.first + b.second }
+/// [(1, -1), (0, 0), (1, 0), (0, 1)]
+///
+/// > Nil[Int]().sortBy { (a, b) => a <= b }
+/// []
+/// ```
+///
+/// Note: this implementation is not stacksafe!
+/// (works for ~5M random elements just fine, but OOMs on ~10M random elements)
+///
+/// O(N log N) worstcase
+def sortBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: List[A] = {
+  val monotonicRuns = sort::sequences(list) {lessOrEqual}
+  sort::mergeAll(monotonicRuns) {lessOrEqual}
+}
+
+/// Sort a list of integers in an ascending order.
+/// See 'sortBy' for more details.
+///
+/// O(N log N) worstcase
+def sort(l: List[Int]): List[Int] = l.sortBy { (a, b) => a <= b }
+
+/// Sort a list of doubles in an ascending order.
+/// See 'sortBy' for more details.
+///
+/// O(N log N) worstcase
+def sort(l: List[Double]): List[Double] = l.sortBy { (a, b) => a <= b }
+
+
+/// Check if a list is sorted according to the given comparison function (less-or-equal).
 ///
 /// O(N)
-def isSortedBy[A](list: List[A]) { compare: (A, A) => Bool }: Bool = {
+def isSortedBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: Bool = {
   def go(list: List[A]): Bool = {
     list match {
-      case Nil() => true
-      case Cons(x, Nil()) => true
       case Cons(x, Cons(y, rest)) =>
         val next = Cons(y, rest) // Future work: Replace this by an @-pattern!
-        compare(x, y) && go(next)
+        lessOrEqual(x, y) && go(next)
+      case _ => true
     }
   }
   go(list)
