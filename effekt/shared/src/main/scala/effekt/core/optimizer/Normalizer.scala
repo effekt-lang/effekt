@@ -209,7 +209,7 @@ object Normalizer { normal =>
 
     case Stmt.Val(id, tpe, binding, body) =>
 
-      def barendregdt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
+      // def barendregt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
 
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
 
@@ -224,8 +224,8 @@ object Normalizer { normal =>
         // [[ val x = if (cond) { thn } else { els }; body ]] = if (cond) { [[ val x = thn; body ]] } else { [[ val x = els; body ]] }
 //        case normalized @ Stmt.If(cond, thn, els) if body.size <= 2 =>
 //            // since we duplicate the body, we need to freshen the names
-//            val normalizedThn = barendregdt(normalizeVal(id, tpe, thn, body))
-//            val normalizedEls = barendregdt(normalizeVal(id, tpe, els, body))
+//            val normalizedThn = barendregt(normalizeVal(id, tpe, thn, body))
+//            val normalizedEls = barendregt(normalizeVal(id, tpe, els, body))
 //
 //            Stmt.If(cond, normalizedThn, normalizedEls)
 //
@@ -235,9 +235,9 @@ object Normalizer { normal =>
 //            if body.size <= 2 && (clauses.size + default.size) >= 1 =>
 //          val normalizedClauses = clauses map {
 //            case (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2)) =>
-//              (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, barendregdt(normalizeVal(id, tpe, body2, body))): BlockLit)
+//              (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, barendregt(normalizeVal(id, tpe, body2, body))): BlockLit)
 //          }
-//          val normalizedDefault = default map { stmt => barendregdt(normalizeVal(id, tpe, stmt, body)) }
+//          val normalizedDefault = default map { stmt => barendregt(normalizeVal(id, tpe, stmt, body)) }
 //          Stmt.Match(sc, normalizedClauses, normalizedDefault)
 
         // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
