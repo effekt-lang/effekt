@@ -22,33 +22,23 @@ object TransformerCps extends Transformer {
   val DEALLOC = Variable(JSName("DEALLOC"))
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
 
-  class Used(var used: Boolean)
-  case class DefInfo(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: Used)
-
-  object DefInfo {
-    def unapply(b: cps.Block)(using C: TransformerContext): Option[(Id, List[Id], List[Id], Id, Id, Used)] = b match {
-      case cps.Block.BlockVar(id) => C.definitions.get(id) match {
-        case Some(DefInfo(id, vparams, bparams, ks, k, used)) => Some((id, vparams, bparams, ks, k, used))
-        case None => None
-      }
-      case _ => None
-    }
-  }
-
+  class RecursiveUsage(var jumped: Boolean)
+  case class RecursiveDefInfo(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
   case class ContinuationInfo(k: Id, param: Id, ks: Id)
 
   case class TransformerContext(
     requiresThunk: Boolean,
+    // known definitions of expressions (used to inline into externs)
     bindings: Map[Id, js.Expr],
     // definitions of externs (used to inline them)
     externs: Map[Id, cps.Extern.Def],
-    // currently, lexically enclosing functions and their parameters (used to determine whether a call is recursive, to rewrite into a loop)
-    definitions: Map[Id, DefInfo],
-    // the direct-style continuation, if available
+    // the innermost (in direct style) enclosing functions (used to rewrite a definition to a loop)
+    recursive: Option[RecursiveDefInfo],
+    // the direct-style continuation, if available (used in case cps.Stmt.LetCont)
     directStyle: Option[ContinuationInfo],
-    // the current (direct-style) metacontinuation
+    // the current direct-style metacontinuation
     metacont: Option[Id],
-    // substitutions for renaming of metaconts
+    // substitutions for renaming of metaconts (to avoid rebinding them)
     metaconts: Map[Id, Id],
     // the original declaration context (used to compile pattern matching)
     declarations: DeclarationContext,
@@ -57,28 +47,6 @@ object TransformerCps extends Transformer {
   )
   implicit def autoContext(using C: TransformerContext): Context = C.errors
 
-  def lookup(id: Id)(using C: TransformerContext): js.Expr = C.bindings.getOrElse(id, nameRef(id))
-
-  def recursive(id: Id, used: Used, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
-    case cps.BlockLit(vparams, bparams, ks, k, body) =>
-      C.copy(definitions = Map(id -> DefInfo(id, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
-    case _ => C
-  }
-
-  def nonrecursive(ks: Id)(using C: TransformerContext): TransformerContext =
-    C.copy(definitions = Map.empty, directStyle = None, metacont = Some(ks))
-
-  def nonrecursive(block: cps.BlockLit)(using C: TransformerContext): TransformerContext = nonrecursive(block.ks)
-
-  // ks |  let k1 x1 ks1 = { let k2 x2 ks2 = jump k v ks2 }; ...  = jump k v ks
-  def directstyle(ks: Id)(using C: TransformerContext): TransformerContext =
-    val outer = C.metacont.getOrElse { sys error "Metacontinuation missing..." }
-    val outerSubstituted = C.metaconts.getOrElse(outer, outer)
-    val subst = C.metaconts.updated(ks, outerSubstituted)
-    C.copy(metacont = Some(ks), metaconts = subst)
-
-  def bindingAll[R](bs: List[(Id, js.Expr)])(body: TransformerContext ?=> R)(using C: TransformerContext): R =
-    body(using C.copy(bindings = C.bindings ++ bs))
 
   /**
    * Entrypoint used by the compiler to compile whole programs
@@ -97,7 +65,7 @@ object TransformerCps extends Transformer {
           false,
           Map.empty,
           externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
-          Map.empty,
+          None,
           None,
           None,
           Map.empty,
@@ -122,7 +90,7 @@ object TransformerCps extends Transformer {
           false,
           Map.empty,
           input.externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
-          Map.empty,
+          None,
           None,
           None,
           Map.empty,
@@ -183,11 +151,11 @@ object TransformerCps extends Transformer {
 
   def toJS(id: Id, b: cps.Block)(using TransformerContext): js.Expr = b match {
     case cps.Block.BlockLit(vparams, bparams, ks, k, body) =>
-      val used = new Used(false)
+      val used = new RecursiveUsage(false)
 
       val translatedBody = toJS(body)(using recursive(id, used, b)).stmts
 
-      if used.used then
+      if used.jumped then
         js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
           List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(id)))))
       else
@@ -302,14 +270,14 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Jump(k, arg, ks) =>
       pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
 
-    case cps.Stmt.App(DefInfo(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k))
+    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k))
         // this call is a tailcall if the metacontinuation (after substitution) is the same and the continuation is the same.
         if ks1 == D.metaconts.getOrElse(ks, ks) && k1 == k =>
       Binding { k2 =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
         stmts.append(js.RawStmt("/* prepare tail call */"))
 
-        used.used = true
+        used.jumped = true
 
         // const x3 = [[ arg ]]; ...
         val vtmps = (vparams zip vargs).map { (id, arg) =>
@@ -425,7 +393,7 @@ object TransformerCps extends Transformer {
   // Inlining Externs
   // ----------------
 
-  def inlineExtern(id: Id, args: List[cps.Pure])(using T: TransformerContext): js.Expr =
+  private def inlineExtern(id: Id, args: List[cps.Pure])(using T: TransformerContext): js.Expr =
     T.externs.get(id) match {
       case Some(cps.Extern.Def(id, params, Nil, async,
         ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !async =>
@@ -440,9 +408,41 @@ object TransformerCps extends Transformer {
     case _ => false
   }
 
+  private def bindingAll[R](bs: List[(Id, js.Expr)])(body: TransformerContext ?=> R)(using C: TransformerContext): R =
+    body(using C.copy(bindings = C.bindings ++ bs))
 
-  // Predicates for Direct-Style Transformation
-  // ------------------------------------------
+  private def lookup(id: Id)(using C: TransformerContext): js.Expr = C.bindings.getOrElse(id, nameRef(id))
+
+
+  // Helpers for Direct-Style Transformation
+  // ---------------------------------------
+
+  private def recursive(id: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
+    case cps.BlockLit(vparams, bparams, ks, k, body) =>
+      C.copy(recursive = Some(RecursiveDefInfo(id, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
+    case _ => C
+  }
+
+  private def nonrecursive(ks: Id)(using C: TransformerContext): TransformerContext =
+    C.copy(recursive = None, directStyle = None, metacont = Some(ks))
+
+  private def nonrecursive(block: cps.BlockLit)(using C: TransformerContext): TransformerContext = nonrecursive(block.ks)
+
+  // ks |  let k1 x1 ks1 = { let k2 x2 ks2 = jump k v ks2 }; ...  = jump k v ks
+  private def directstyle(ks: Id)(using C: TransformerContext): TransformerContext =
+    val outer = C.metacont.getOrElse { sys error "Metacontinuation missing..." }
+    val outerSubstituted = C.metaconts.getOrElse(outer, outer)
+    val subst = C.metaconts.updated(ks, outerSubstituted)
+    C.copy(metacont = Some(ks), metaconts = subst)
+
+  private object Recursive {
+    def unapply(b: cps.Block)(using C: TransformerContext): Option[(Id, List[Id], List[Id], Id, Id, RecursiveUsage)] = b match {
+      case cps.Block.BlockVar(id) => C.recursive.collect {
+        case RecursiveDefInfo(id2, vparams, bparams, ks, k, used) if id == id2 => (id, vparams, bparams, ks, k, used)
+      }
+      case _ => None
+    }
+  }
 
   private def canBeDirect(k: Id, stmt: Stmt)(using T: TransformerContext): Boolean =
     def notIn(term: Stmt | Block | Expr | (Id, Clause) | Cont) =
