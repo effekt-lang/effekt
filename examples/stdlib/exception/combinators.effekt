@@ -21,5 +21,16 @@ def main() = {
   }
   
   ignoreOutOfBounds { str.charAt(10) } // This will ignore the OutOfBoundsException
-  ignoreOutOfBounds { str.charAt(1) } // 'a'
+  ignoreOutOfBounds { str.charAt(1) } // a
+
+// Test for reporting OutOfBoundsException
+  def reportOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].report();
+      println(p().show) // If an exception occurs, it will be reported to the console
+    
+  }
+
+  reportOutOfBounds { str.charAt(10) } // Will report: "Index out of bounds"
+  reportOutOfBounds { str.charAt(1) }  // Will print: "a"
+  
 }
