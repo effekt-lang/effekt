@@ -20,8 +20,6 @@ class LLVMTests extends EffektTests {
   )
 
   lazy val bugs: List[File] = List(
-    // names not sanitized (even?)
-    examplesDir / "pos" / "special_names.effekt",
     // Jump to the invalid address stated on the next line
     examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
     examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
@@ -36,7 +34,7 @@ class LLVMTests extends EffektTests {
 
     // now show instance for records / datatypes
     examplesDir / "pos" / "builtins.effekt",
-    examplesDir / "pos" / "namespaces.effekt",
+    examplesDir / "pos" / "namespaces.effekt", // also leaks
     examplesDir / "pos" / "triples.effekt",
     examplesDir / "pos" / "either.effekt",
 
@@ -46,23 +44,17 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "exists.effekt",
 
     // arrays
-    examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "raytracer.effekt",
     examplesDir / "pos" / "issue319.effekt",
-    examplesDir / "pos" / "array",
 
     // Regex
     examplesDir / "pos" / "simpleparser.effekt",
-
-    // tuples
-    examplesDir / "pos" / "records.effekt",
 
     // toplevel def and let bindings
     examplesDir / "pos" / "capture" / "mbed.effekt",
 
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt",
-    examplesDir / "pos" / "unsafe_cont.effekt",
 
     // Only JS (tests should be moved to a JS folder)
     examplesDir / "pos" / "genericcompare.effekt",
@@ -70,9 +62,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "maps.effekt",
     examplesDir / "pos" / "capture" / "resources.effekt",
     examplesDir / "pos" / "io",
-
-    // first class functions closing over capabilities
-    examplesDir / "pos" / "capture" / "state_eff.effekt",
 
     // higher order foreign functions are not supported
     examplesDir / "pos" / "capture" / "ffi_blocks.effekt",

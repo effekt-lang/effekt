@@ -1,10 +1,12 @@
 module examples/pos/list/collect
 
+import array
+
 def listToArrayAndBack[A](list: List[A]): Unit = {
   list.foreach { x => inspect(x) }
   println("")
 
-  val arr = fromList(list)
+  val arr = array::fromList(list)
   println("size " ++ show(arr.size))
   arr.foreachIndex { (i, x) =>
     println(i)

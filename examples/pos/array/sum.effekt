@@ -1,5 +1,7 @@
 module examples/pos/array/sum
 
+import array
+
 def main() = {
   val emptyArray: Array[Int] = array::allocate(0)
   println(emptyArray.sum())
