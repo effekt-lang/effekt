@@ -1,0 +1,25 @@
+module examples/pos/exception/combinators
+
+import exception
+
+def main() = {
+  val str = "Hallo"
+
+  // Test for default handling of OutOfBoundsException
+  def defaultOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].default { println("Index Out of Bound") }
+    println(p().show)
+  }
+
+  defaultOutOfBounds { str.charAt(10) } // Index Out of Bound
+  defaultOutOfBounds { str.charAt(1) } // a
+
+  // Test for ignoring OutOfBoundsException
+  def ignoreOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+    with on[OutOfBounds].ignore();
+    println(p().show) // This will not raise the exception as it will be ignored
+  }
+  
+  ignoreOutOfBounds { str.charAt(10) } // This will ignore the OutOfBoundsException
+  ignoreOutOfBounds { str.charAt(1) } // 'a'
+}
