@@ -209,12 +209,38 @@ object Normalizer { normal =>
 
     case Stmt.Val(id, tpe, binding, body) =>
 
-      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = binding match {
+      def barendregdt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
+
+      def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
 
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
             normalizeVal(id, tpe, body2, body)))), None)
+
+        // These rewrites do not seem to contribute a lot given their complexity...
+        // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+        // [[ val x = if (cond) { thn } else { els }; body ]] = if (cond) { [[ val x = thn; body ]] } else { [[ val x = els; body ]] }
+//        case normalized @ Stmt.If(cond, thn, els) if body.size <= 2 =>
+//            // since we duplicate the body, we need to freshen the names
+//            val normalizedThn = barendregdt(normalizeVal(id, tpe, thn, body))
+//            val normalizedEls = barendregdt(normalizeVal(id, tpe, els, body))
+//
+//            Stmt.If(cond, normalizedThn, normalizedEls)
+//
+//        case Stmt.Match(sc, clauses, default)
+//            //             necessary since otherwise we loose Nothing-boxing
+//            //                   vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+//            if body.size <= 2 && (clauses.size + default.size) >= 1 =>
+//          val normalizedClauses = clauses map {
+//            case (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2)) =>
+//              (id2, BlockLit(tparams2, cparams2, vparams2, bparams2, barendregdt(normalizeVal(id, tpe, body2, body))): BlockLit)
+//          }
+//          val normalizedDefault = default map { stmt => barendregdt(normalizeVal(id, tpe, stmt, body)) }
+//          Stmt.Match(sc, normalizedClauses, normalizedDefault)
+
+        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(expr2) =>
@@ -245,7 +271,7 @@ object Normalizer { normal =>
           case normalizedBody => Stmt.Val(id, tpe, other, normalizedBody)
         }
       }
-      normalizeVal(id, tpe, normalize(binding), body)
+      normalizeVal(id, tpe, binding, body)
 
 
     // "Congruences"
