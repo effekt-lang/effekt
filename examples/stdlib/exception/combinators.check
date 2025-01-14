@@ -1,8 +1,8 @@
-Index Out of Bound
-a
-a
-Index out of bounds: 10 in string: 'Hallo'
-a
+Exception handled by default combinator
+World
+World
+Test Exception.
+World
 Finalizer executed
-a
+World
 Finalizer executed

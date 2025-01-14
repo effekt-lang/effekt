@@ -1,47 +1,52 @@
 module examples/pos/exception/combinators
 
 import exception
+/**
+ * Used as a type for `Exception` purely for independent testing
+ */
+record TestException()
+
+def testException(): Nothing / Exception[TestException] =
+  do raise(TestException(), "Test Exception.")
+
+
 
 def main() = {
-  val str = "Hallo"
-
-  // Test for default handling of OutOfBoundsException
-  def defaultOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
-    with on[OutOfBounds].default { println("Index Out of Bound") }
+  // Test for default handling of Test Exception
+  def defaultTestException { p: => String / Exception[TestException] }: Unit = {
+    with on[TestException].default { println("Exception handled by default combinator") }
     println(p().show)
   }
 
-  defaultOutOfBounds { str.charAt(10) } // Index Out of Bound
-  defaultOutOfBounds { str.charAt(1) } // a
+  defaultTestException { testException() } // Exception
+  defaultTestException { "World" } // World
 
-  // Test for ignoring OutOfBoundsException
-  def ignoreOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
-    with on[OutOfBounds].ignore();
+  // Test for ignoring TestExceptionException
+  def ignoreTestException { p: => String / Exception[TestException] }: Unit = {
+    with on[TestException].ignore();
     println(p().show) 
   }
-  
-  ignoreOutOfBounds { str.charAt(10) } // This will ignore the OutOfBoundsException
-  ignoreOutOfBounds { str.charAt(1) } // a
 
-  // Test for reporting OutOfBoundsException
-  def reportOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
-    with on[OutOfBounds].report();
+  ignoreTestException { testException() } // ignored
+  ignoreTestException { "World" } // World
+
+  // Test for reporting TestExceptionException
+  def reportTestException { p: => String / Exception[TestException] }: Unit = {
+    with on[TestException].report();
     println(p().show) 
-    
   }
 
-  reportOutOfBounds { str.charAt(10) } // Index out of bounds: 10 in string: 'Hallo'
-  reportOutOfBounds { str.charAt(1) }  // a
+  reportTestException { testException() } // Test Exception.
+  reportTestException { "World" }  // World
 
-  // Test for finalizing OutOfBoundsException
-  def finalizeOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+  // Test for finalizing TestExceptionException
+  def finalizeTestException { p: => String / Exception[TestException] }: Unit = {
     try {
-      with on[OutOfBounds].finalize { println("Finalizer executed") }
+      with on[TestException].finalize { println("Finalizer executed") }
       println(p().show) // Run the operation that might throw an exception
-    } with Exception[OutOfBounds] { def raise(exception, msg) = () } // Ignore the exception
+    } with Exception[TestException] { def raise(exception, msg) = () } // Ignore the exception
   }
 
-  finalizeOutOfBounds { str.charAt(10) } // Finalizer executed \n a
-  finalizeOutOfBounds { str.charAt(1) } // Finalizer will execute even without exception
-  
+  finalizeTestException { testException() } // Finalizer executed with exception
+  finalizeTestException { "World" } // World + Finalizer will execute even without exception
 }
