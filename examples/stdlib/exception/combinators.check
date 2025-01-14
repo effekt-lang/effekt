@@ -7,3 +7,5 @@ hello
 Test: Finalizer
 hello
 Test: Finalizer
+Error: Invalid index (0)
+Success: hello

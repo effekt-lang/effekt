@@ -1,6 +1,7 @@
 module examples/pos/exception/combinators
 
 import exception
+import result
 
 /**
  * Used as a type for `Exception` purely for independent testing
@@ -59,4 +60,16 @@ def main() = {
   finalizeTestException { str.generalOperation(0) } // Test: Finalizer
   finalizeTestException { str.generalOperation(1) } // Test: Finalizer hello
   
+  // Test for "reifying" an Exception using Result
+  def resultTestException { p: => String / Exception[TestException] }: Unit = {
+    val res= result[String, TestException](on[TestException]) { p() }
+    res match {
+      case Success(msg) => println("Success: " ++ msg) 
+      case Error(exc, msg) => println(msg)
+    }
+  }
+
+  resultTestException { str.generalOperation(0) } // Error: Invalid index (0)
+  resultTestException { str.generalOperation(1) } // Success: hello
+
 }
