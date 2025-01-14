@@ -223,13 +223,9 @@ object TransformerCps extends Transformer {
     //    let x; if (...) { x = 42; ks = ks2 } else { x = 10; ks = ks3 } ...
     case cps.Stmt.LetCont(id, Cont.ContLam(param, ks, body), body2) if canBeDirect(id, body2) =>
       Binding { k =>
-        val withDirectStyle = D.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
-        val renamingMetacont = directstyle(ks)
-
-        val translatedIf = toJS(body2)(using withDirectStyle)
-        val translatedBody = toJS(body)(using renamingMetacont)
-
-        js.Let(nameDef(param), js.Undefined) :: translatedIf.stmts ++ translatedBody.run(k)
+        js.Let(nameDef(param), js.Undefined) ::
+          toJS(body2)(using withDirectStyle(id, param, ks)).stmts ++
+          toJS(body)(using directstyle(ks)).run(k)
       }
 
     case cps.Stmt.LetCont(id, binding @ Cont.ContLam(result2, ks2, body2), body) =>
@@ -270,9 +266,7 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Jump(k, arg, ks) =>
       pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
 
-    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k))
-        // this call is a tailcall if the metacontinuation (after substitution) is the same and the continuation is the same.
-        if ks1 == D.metaconts.getOrElse(ks, ks) && k1 == k =>
+    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k)) if sameScope(ks, k, ks1, k1) =>
       Binding { k2 =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
         stmts.append(js.RawStmt("/* prepare tail call */"))
@@ -416,6 +410,16 @@ object TransformerCps extends Transformer {
 
   // Helpers for Direct-Style Transformation
   // ---------------------------------------
+
+  /**
+   * Used to determine whether a call with continuations [[ ks ]] (after substitution) and [[ k ]]
+   * is the same as the original function definition (that is [[ ks1 ]] and [[ k1 ]].
+   */
+  private def sameScope(ks: Id, k: Id, ks1: Id, k1: Id)(using C: TransformerContext): Boolean =
+    ks1 == C.metaconts.getOrElse(ks, ks) && k1 == k
+
+  private def withDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
+    C.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
 
   private def recursive(id: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
     case cps.BlockLit(vparams, bparams, ks, k, body) =>
