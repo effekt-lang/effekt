@@ -1,0 +1,41 @@
+import splice
+import stringbuffer
+
+type Expr {
+  Var(id: String)
+  Abs(param: String, body: Expr)
+  App(fn: Expr, arg: Expr)
+}
+
+def pretty { prog: () => Unit / {literal, splice[Expr]} }: String = {
+  with stringBuffer
+  try {
+    prog()
+    do flush()
+  } with literal { s =>
+    resume(do write(s))
+  } with splice[Expr] { expr =>
+    expr match {
+      case Var(id) =>
+        do write(id)
+      case App(Abs(param, body), arg) =>
+        do write(pretty"(${Abs(param, body)}) ${arg}")
+      case App(fn, arg) =>
+        do write(pretty"${fn} ${arg}")
+      case Abs(param, body) =>
+        do write(s"\\ ${param} -> " ++ pretty"${body}")
+    }
+    resume(())
+  }
+}
+
+def main() = {
+  val domain = "https://api.effekt-lang.org"
+  val user = "effekt"
+  val resourceId = 42
+  println("GET ${domain}/users/${user}/resource/${resourceId.show}")
+
+  val fixpoint = Abs("f", App(Abs("x", App(Var("f"), App(Var("x"), Var("x")))), Abs("x", App(Var("f"), App(Var("x"), Var("x"))))))
+  println(pretty"Fix point combinator: ${fixpoint}")
+}
+

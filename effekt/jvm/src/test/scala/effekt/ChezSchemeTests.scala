@@ -34,7 +34,7 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "propagators.effekt",
 
     // bytearray is not implemented
-    examplesDir / "pos" / "string_templates.effekt",
+    examplesDir / "pos" / "string_interpolation.effekt",
 
     // the number representations differ in JS and Chez
     examplesDir / "casestudies" / "ad.effekt.md",
