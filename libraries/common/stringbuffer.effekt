@@ -7,11 +7,11 @@ interface StringBuffer {
   def flush(): String
 }
 
-def StringBuffer(): StringBuffer at {global} = {
+def stringBuffer[A] { prog: => A / StringBuffer }: A = {
   val initialCapacity = 128
-  var buffer in global = bytearray::allocate(initialCapacity)
+  var buffer = bytearray::allocate(initialCapacity)
   // next free index to write to
-  var pos in global = 0
+  var pos = 0
 
   def ensureCapacity(sizeToAdd: Int): Unit = {
     val cap = buffer.size - pos + 1
@@ -19,18 +19,12 @@ def StringBuffer(): StringBuffer at {global} = {
     else {
       // Double the capacity while ensuring the required capacity
       val newSize = max(buffer.size * 2, buffer.size + sizeToAdd)
-      val newBuffer = bytearray::allocate(newSize)
-      // copy content of old buffer into newly allocated buffer
-      pos = 0
-      buffer.foreach { b =>
-        newBuffer.unsafeSet(pos, b)
-        pos = pos + 1
-      }
-      buffer = newBuffer
+      buffer = bytearray::resize(buffer, newSize)
     }
   }
 
-  def stringBuffer = new StringBuffer {
+  try { prog() }
+  with StringBuffer {
     def write(str) = {
       val bytes = fromString(str)
       ensureCapacity(bytes.size)
@@ -38,26 +32,24 @@ def StringBuffer(): StringBuffer at {global} = {
         buffer.unsafeSet(pos, b)
         pos = pos + 1
       }
+      resume(())
     }
-
     def flush() = {
       val str = buffer.toString()
       buffer = bytearray::allocate(initialCapacity)
-      str
+      resume(str)
     }
   }
-
-  stringBuffer
 }
 
 namespace examples {
   def main() = {
-    def buffer = StringBuffer()
-    buffer.write("hello")
-    buffer.write(", world")
+    with stringBuffer
+    do write("hello")
+    do write(", world")
     // prints `hello, world`
-    println(buffer.flush())
+    println(do flush())
     // prints the empty string
-    println(buffer.flush())
+    println(do flush())
   }
 }
