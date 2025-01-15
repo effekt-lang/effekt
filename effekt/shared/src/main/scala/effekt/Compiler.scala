@@ -115,6 +115,11 @@ trait Compiler[Executable] {
    * - Server / Driver to typecheck and report type errors in VSCode
    */
   def runFrontend(source: Source)(using C: Context): Option[Module] =
+    def getStackTrace(e: Throwable): String =
+      val stringWriter = new java.io.StringWriter()
+      e.printStackTrace(new java.io.PrintWriter(stringWriter))
+      stringWriter.toString
+
     try {
       val res = Frontend(source).map { res =>
         val mod = res.mod
@@ -128,15 +133,11 @@ trait Compiler[Executable] {
         None
       case e @ CompilerPanic(msg) =>
         C.report(msg)
-        e.getStackTrace.foreach { line =>
-          C.info("  at " + line)
-        }
+        C.info(getStackTrace(e))
         None
       case e =>
-        C.info("Effekt Compiler Crash: " + e.getMessage)
-        e.getStackTrace.foreach { line =>
-          C.info("  at " + line)
-        }
+        C.info("Effekt Compiler Crash: " + e.toString)
+        C.info(getStackTrace(e))
         None
     }
 
