@@ -3,14 +3,12 @@ module examples/pos/exception/combinators
 import exception
 import result
 
-/**
- * Used as a type for `Exception` purely for independent testing
- */
+
+/// Used as a type for `Exception` purely for independent testing
 record TestException()
 
-/**
- * Returns the string if index > 0; otherwise raises a TestException.
- */
+
+/// Returns the string if index > 0; otherwise raises a TestException.
 def generalOperation(str: String, index: Int): String / Exception[TestException] = {
   if (index <= 0)
     do raise(TestException(), "Error: Invalid index (" ++ show(index) ++ ")")
@@ -19,7 +17,7 @@ def generalOperation(str: String, index: Int): String / Exception[TestException]
 }
 
 def main() = {
-  val str : String = "hello"
+  val str: String = "hello"
 
   // Test for default handling of TestException
   def defaultTestException { p: => String / Exception[TestException] }: Unit = {
@@ -60,9 +58,9 @@ def main() = {
   finalizeTestException { str.generalOperation(0) } // Test: Finalizer
   finalizeTestException { str.generalOperation(1) } // Test: Finalizer hello
   
-  // Test for "reifying" an Exception using Result
+  // Test for "reifying" an Exception usix^xng Result
   def resultTestException { p: => String / Exception[TestException] }: Unit = {
-    val res= result[String, TestException](on[TestException]) { p() }
+    val res= result[String, TestException] { p() }
     res match {
       case Success(msg) => println("Success: " ++ msg) 
       case Error(exc, msg) => println(msg)
