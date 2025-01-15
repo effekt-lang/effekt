@@ -1,5 +1,9 @@
 package effekt
 
+import java.nio.channels.FileLock
+import java.nio.file.{Paths, StandardOpenOption}
+import java.nio.channels.FileChannel
+
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{File, file}
@@ -83,32 +87,47 @@ trait Runner[Executable] {
    */
   def build(executable: Executable)(using Context): String
 
+  def withFileLock[T](filePath: String)(block: => T): T = {
+    val path = Paths.get(filePath)
+    val channel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE)
+    var lock: FileLock = null
+    try {
+      lock = channel.lock()
+      block
+    } finally {
+      if (lock != null) lock.release()
+      channel.close()
+    }
+  } 
+
   /**
    * Runs the executable (e.g. the main file) by calling the build function.
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
-    val valgrindArgs = Seq("--leak-check=full", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
-    val process = if (C.config.valgrind())
-      Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
-    else
-      Process(execFile, Context.config.runArgs())
+    withFileLock(execFile) {
+      val valgrindArgs = Seq("--leak-check=full", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
+      val process = if (C.config.valgrind())
+        Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
+      else
+        Process(execFile, Context.config.runArgs())
 
-    val exitCode = process.run(new ProcessLogger {
+      val exitCode = process.run(new ProcessLogger {
 
-      override def out(s: => String): Unit = {
-        C.config.output().emitln(s)
+        override def out(s: => String): Unit = {
+          C.config.output().emitln(s)
+        }
+
+        override def err(s: => String): Unit = System.err.println(s)
+
+        override def buffer[T](f: => T): T = f
+
+      }, connectInput = true).exitValue()
+
+      if (exitCode != 0) {
+        C.error(s"Process exited with non-zero exit code ${exitCode}.")
+        if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
       }
-
-      override def err(s: => String): Unit = System.err.println(s)
-
-      override def buffer[T](f: => T): T = f
-
-    }, connectInput = true).exitValue()
-
-    if (exitCode != 0) {
-      C.error(s"Process exited with non-zero exit code ${exitCode}.")
-      if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
   }
 
