@@ -1,0 +1,11 @@
+Test: Default Handling
+hello
+hello
+Error: Invalid index (0)
+Error: Invalid index (-1)
+hello
+Test: Finalizer
+hello
+Test: Finalizer
+Error: Invalid index (0)
+Success: hello
