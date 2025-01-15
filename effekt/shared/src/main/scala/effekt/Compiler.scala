@@ -133,7 +133,7 @@ trait Compiler[Executable] {
         }
         None
       case e =>
-        C.info("Effekt Compiler Crash: " + e.getMessage)
+        C.info("Effekt Compiler Crash: " + e.toString)
         e.getStackTrace.foreach { line =>
           C.info("  at " + line)
         }
