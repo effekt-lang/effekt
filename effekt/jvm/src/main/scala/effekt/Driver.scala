@@ -116,8 +116,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
       case PlainTextError(content, _, _) => content
       case _ => msg
     }
-
-
+    
     val effektVersion = effekt.util.Version.effektVersion
     val osInfoName = System.getProperty("os.name")
     val osInfoArch = System.getProperty("os.arch")
@@ -129,6 +128,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
 
     val errorReport = "The compiler unexpectedly panicked. This is a compiler bug.\nPlease report it:"
     val issueLink = "https://github.com/effekt-lang/effekt/issues/new?labels=bug"
+    
     val stringWriter = new java.io.StringWriter()
     e.printStackTrace(new java.io.PrintWriter(stringWriter))
     val stackTrace = stringWriter.toString
@@ -176,8 +176,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     val outputFile = outputPath.resolve("crash-report.md")
     try {
       Files.createDirectories(outputPath.getParent)
-      Files.write(outputFile, reportContent.getBytes(StandardCharsets.UTF_8))
-      //context.info(s"Crash report saved to: $outputPath")
+      Files.write(outputFile, reportContent.getBytes(StandardCharsets.UTF_8))     
     } catch {
       case ex: Exception =>
         context.info("Failed to save crash report to file: " + ex.getMessage)
