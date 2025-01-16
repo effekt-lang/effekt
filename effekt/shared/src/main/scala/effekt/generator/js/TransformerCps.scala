@@ -215,8 +215,8 @@ object TransformerCps extends Transformer {
     case cps.Stmt.LetCont(id, Cont.ContLam(param, ks, body), body2) if canBeDirect(id, body2) =>
       Binding { k =>
         js.Let(nameDef(param), js.Undefined) ::
-          toJS(body2)(using withDirectStyle(id, param, ks)).stmts ++
-          toJS(directstyle(ks, body)).run(k)
+          toJS(body2)(using markDirectStyle(id, param, ks)).stmts ++
+          toJS(maintainDirectStyle(ks, body)).run(k)
       }
 
     case cps.Stmt.LetCont(id, binding @ Cont.ContLam(result2, ks2, body2), body) =>
@@ -406,7 +406,11 @@ object TransformerCps extends Transformer {
   // Helpers for Direct-Style Transformation
   // ---------------------------------------
 
-  private def withDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
+  /**
+   * Marks continuation `id` to be optimized to direct assignments to `param` instead of return statements.
+   * This is only valid in the same metacontinuation scope `ks`.
+   */
+  private def markDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
 
   private def recursive(id: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
@@ -420,8 +424,12 @@ object TransformerCps extends Transformer {
 
   private def nonrecursive(block: cps.BlockLit)(using C: TransformerContext): TransformerContext = nonrecursive(block.ks)
 
-  // ks |  let k1 x1 ks1 = { let k2 x2 ks2 = jump k v ks2 }; ...  = jump k v ks
-  private def directstyle(ks: Id, body: Stmt)(using C: TransformerContext): Stmt = {
+  /**
+   * Ensures let-bound continuations can stay in direct style by aligning metacont scopes.
+   * This is used when the let-bound body jumps to an outer continuation.
+   *   ks |  let k1 x1 ks1 = { let k2 x2 ks2 = jump k v ks2 }; ...  = jump k v ks
+   */
+  private def maintainDirectStyle(ks: Id, body: Stmt)(using C: TransformerContext): Stmt = {
     val outer = C.metacont.getOrElse { sys error "Metacontinuation missing..." }
     substitutions.substitute(body)(using Substitution(metaconts = Map(ks -> MetaCont(outer))))
   }
@@ -458,7 +466,7 @@ object TransformerCps extends Transformer {
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
-        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, directstyle(ks2, body))
+        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
         willBeDirectItself || notFreeinContinuation
       case Stmt.Region(id, ks, body) => notIn(body)
