@@ -257,37 +257,31 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Jump(k, arg, ks) =>
       pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
 
-    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k)) if ks == ks1 && k == k1 =>
-       Binding { k2 =>
+
+    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), k) =>
+      Binding { k2 =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
-        stmts.append(js.RawStmt("/* prepare tail call */"))
+        stmts.append(js.RawStmt("/* prepare call */"))
 
         used.jumped = true
 
-        // We need to create temporaries for parameters that occur in arguments to prevent
-        // accidentally recursive bindings. For instance:
-        //   def f(x, k, ks) = ... f(42, () => k(...), ks) ...
-        // would generate the incorrect:
-        //   x = 42; k = () => k(...); ks = ks
-        // instead of the correct:
-        //   x = 42; tmp_k = k; k = () => tmp_k(...); ks = ks
+        // We need to create temporaries for all free variables that appear in arguments
         val freeInArgs = (vargs.flatMap(Variables.free) ++ bargs.flatMap(Variables.free)).toSet
-        val needsKTmp = freeInArgs.contains(k1)
-        val needsKsTmp = freeInArgs.contains(ks1)
-        val overlapping = freeInArgs.intersect((vparams ++ bparams).toSet)
+        // Only compute free vars of continuation if it's not a ContVar
+        val (isTailCall, freeInK) = k match {
+          case Cont.ContVar(kid) => (kid == k1 && ks == ks1, Set.empty[Id])
+          case _ => (false, Variables.free(k))
+        }
+        val allFreeVars = freeInArgs ++ freeInK
+        val needsKsTmp = allFreeVars.contains(ks1)
+        val overlapping = allFreeVars.intersect((vparams ++ bparams).toSet)
 
-        // Create temporaries for parameters that are used in the arguments
+        // Create temporaries for parameters that are used in the arguments or continuation
         val paramTmps = overlapping.map { param =>
           val tmp = Id(s"tmp_${param}")
           stmts.append(js.Const(nameDef(tmp), nameRef(param)))
           param -> tmp
         }.toMap
-
-        val tmp_k = if (needsKTmp) {
-          val tmp = Id("tmp_k")
-          stmts.append(js.Const(nameDef(tmp), nameRef(k1)))
-          Some(tmp)
-        } else None
 
         val tmp_ks = if (needsKsTmp) {
           val tmp = Id("tmp_ks")
@@ -295,7 +289,25 @@ object TransformerCps extends Transformer {
           Some(tmp)
         } else None
 
-        // Prepare the substitution for argument evaluation
+        // For non-tail calls, we need a continuation temporary if it's not a simple variable rename
+        val tmp_k = if (!isTailCall) k match {
+          case Cont.ContVar(kid) if kid != k1 =>
+            // simple continuation variable, no need for temp binding
+            None
+          case _ =>
+            val tmp = Id("tmp_k")
+            stmts.append(js.Const(nameDef(tmp), nameRef(k1)))
+            Some(tmp)
+        } else {
+          // For tail calls, only create temporary if k1 appears in arguments
+          if (freeInArgs.contains(k1)) {
+            val tmp = Id("tmp_k")
+            stmts.append(js.Const(nameDef(tmp), nameRef(k1)))
+            Some(tmp)
+          } else None
+        }
+
+        // Prepare the substitution
         val subst = Substitution(
           values = paramTmps.map { case (p, t) => p -> Pure.ValueVar(t) },
           blocks = Map.empty,
@@ -303,7 +315,16 @@ object TransformerCps extends Transformer {
           metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
         )
 
-        // Directly assign the substituted arguments
+        // Update the continuation if this is not a tail call
+        if (!isTailCall) k match {
+          case Cont.ContVar(kid) if kid != k1 =>
+            // simple variable rename
+            stmts.append(js.Assign(nameRef(k1), nameRef(kid)))
+          case _ =>
+            stmts.append(js.Assign(nameRef(k1), toJS(substitutions.substitute(k)(using subst))))
+        }
+
+        // Assign the substituted arguments
         (vparams zip vargs).foreach { (param, arg) =>
           stmts.append(js.Assign(nameRef(param), toJS(substitutions.substitute(arg)(using subst))))
         }
@@ -311,7 +332,7 @@ object TransformerCps extends Transformer {
           stmts.append(js.Assign(nameRef(param), toJS(substitutions.substitute(arg)(using subst))))
         }
 
-        if (needsKTmp) stmts.append(js.Assign(nameRef(k1), nameRef(tmp_k.get)))
+        // Restore metacont if needed
         if (needsKsTmp) stmts.append(js.Assign(nameRef(ks1), nameRef(tmp_ks.get)))
 
         val jump = js.Continue(Some(uniqueName(id)))
