@@ -7,7 +7,7 @@ import effekt.context.assertions.*
 import effekt.cps.*
 import effekt.core.{ DeclarationContext, Id }
 import effekt.cps.Variables.{ all, free }
-
+import effekt.cps.substitutions.Substitution
 import scala.collection.mutable
 
 object TransformerCps extends Transformer {
@@ -36,8 +36,6 @@ object TransformerCps extends Transformer {
     directStyle: Option[ContinuationInfo],
     // the current direct-style metacontinuation
     metacont: Option[Id],
-    // substitutions for renaming of metaconts (to avoid rebinding them)
-    metaconts: Map[Id, Id],
     // the original declaration context (used to compile pattern matching)
     declarations: DeclarationContext,
     // the usual compiler context
@@ -65,7 +63,6 @@ object TransformerCps extends Transformer {
           None,
           None,
           None,
-          Map.empty,
           D, C)
 
         val name      = JSName(jsModuleName(module.path))
@@ -89,7 +86,6 @@ object TransformerCps extends Transformer {
           None,
           None,
           None,
-          Map.empty,
           D, C)
 
     input.definitions.map(toJS)
@@ -178,8 +174,7 @@ object TransformerCps extends Transformer {
       })
   }
 
-  def toJS(ks: cps.MetaCont)(using T: TransformerContext): js.Expr =
-    nameRef(T.metaconts.getOrElse(ks.id, ks.id))
+  def toJS(ks: cps.MetaCont)(using T: TransformerContext): js.Expr = nameRef(ks.id)
 
   def toJS(k: cps.Cont)(using T: TransformerContext): js.Expr = k match {
     case Cont.ContVar(id) =>
@@ -221,7 +216,7 @@ object TransformerCps extends Transformer {
       Binding { k =>
         js.Let(nameDef(param), js.Undefined) ::
           toJS(body2)(using withDirectStyle(id, param, ks)).stmts ++
-          toJS(body)(using directstyle(ks)).run(k)
+          toJS(directstyle(ks, body)).run(k)
       }
 
     case cps.Stmt.LetCont(id, binding @ Cont.ContLam(result2, ks2, body2), body) =>
@@ -415,8 +410,7 @@ object TransformerCps extends Transformer {
    * Used to determine whether a call with continuations [[ ks ]] (after substitution) and [[ k ]]
    * is the same as the original function definition (that is [[ ks1 ]] and [[ k1 ]].
    */
-  private def sameScope(ks: Id, k: Id, ks1: Id, k1: Id)(using C: TransformerContext): Boolean =
-    ks1 == C.metaconts.getOrElse(ks, ks) && k1 == k
+  private def sameScope(ks: Id, k: Id, ks1: Id, k1: Id)(using C: TransformerContext): Boolean = ks1 == ks && k1 == k
 
   private def withDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
@@ -433,11 +427,10 @@ object TransformerCps extends Transformer {
   private def nonrecursive(block: cps.BlockLit)(using C: TransformerContext): TransformerContext = nonrecursive(block.ks)
 
   // ks |  let k1 x1 ks1 = { let k2 x2 ks2 = jump k v ks2 }; ...  = jump k v ks
-  private def directstyle(ks: Id)(using C: TransformerContext): TransformerContext =
+  private def directstyle(ks: Id, body: Stmt)(using C: TransformerContext): Stmt = {
     val outer = C.metacont.getOrElse { sys error "Metacontinuation missing..." }
-    val outerSubstituted = C.metaconts.getOrElse(outer, outer)
-    val subst = C.metaconts.updated(ks, outerSubstituted)
-    C.copy(metacont = Some(ks), metaconts = subst)
+    substitutions.substitute(body)(using Substitution(metaconts = Map(ks -> MetaCont(outer))))
+  }
 
   private object Recursive {
     def unapply(b: cps.Block)(using C: TransformerContext): Option[(Id, List[Id], List[Id], Id, Id, RecursiveUsage)] = b match {
@@ -471,7 +464,7 @@ object TransformerCps extends Transformer {
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
-        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, body)(using directstyle(ks2))
+        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, directstyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
         willBeDirectItself || notFreeinContinuation
       case Stmt.Region(id, ks, body) => notIn(body)

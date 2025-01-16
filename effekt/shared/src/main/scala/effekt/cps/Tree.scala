@@ -237,10 +237,10 @@ object Variables {
 object substitutions {
 
   case class Substitution(
-    values: Map[Id, Pure],
-    blocks: Map[Id, Block],
-    conts: Map[Id, Cont],
-    metaconts: Map[Id, MetaCont]
+    values: Map[Id, Pure] = Map.empty,
+    blocks: Map[Id, Block] = Map.empty,
+    conts: Map[Id, Cont] = Map.empty,
+    metaconts: Map[Id, MetaCont] = Map.empty
   ) {
     def shadowValues(shadowed: IterableOnce[Id]): Substitution = copy(values = values -- shadowed)
     def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
