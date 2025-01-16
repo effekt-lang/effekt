@@ -148,8 +148,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           |
           |**ERROR** : $errorMessage
           |
-          |$errorReport
-          |[Submit an issue]($issueLink)
+          |$errorReport [Submit an issue]($issueLink)
           |
           |### Compiler Information
           |Effekt Version: $effektVersion \n
