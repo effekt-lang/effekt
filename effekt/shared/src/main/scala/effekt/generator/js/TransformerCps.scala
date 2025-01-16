@@ -258,35 +258,63 @@ object TransformerCps extends Transformer {
       pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
 
     case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k)) if ks == ks1 && k == k1 =>
-      Binding { k2 =>
+       Binding { k2 =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
         stmts.append(js.RawStmt("/* prepare tail call */"))
 
         used.jumped = true
 
-        // const x3 = [[ arg ]]; ...
-        val vtmps = (vparams zip vargs).map { (id, arg) =>
-          val tmp = Id(id)
-          stmts.append(js.Const(nameDef(tmp), toJS(arg)))
-          tmp
+        // We need to create temporaries for parameters that occur in arguments to prevent
+        // accidentally recursive bindings. For instance:
+        //   def f(x, k, ks) = ... f(42, () => k(...), ks) ...
+        // would generate the incorrect:
+        //   x = 42; k = () => k(...); ks = ks
+        // instead of the correct:
+        //   x = 42; tmp_k = k; k = () => tmp_k(...); ks = ks
+        val freeInArgs = (vargs.flatMap(Variables.free) ++ bargs.flatMap(Variables.free)).toSet
+        val needsKTmp = freeInArgs.contains(k1)
+        val needsKsTmp = freeInArgs.contains(ks1)
+        val overlapping = freeInArgs.intersect((vparams ++ bparams).toSet)
+
+        // Create temporaries for parameters that are used in the arguments
+        val paramTmps = overlapping.map { param =>
+          val tmp = Id(s"tmp_${param}")
+          stmts.append(js.Const(nameDef(tmp), nameRef(param)))
+          param -> tmp
+        }.toMap
+
+        val tmp_k = if (needsKTmp) {
+          val tmp = Id("tmp_k")
+          stmts.append(js.Const(nameDef(tmp), nameRef(k1)))
+          Some(tmp)
+        } else None
+
+        val tmp_ks = if (needsKsTmp) {
+          val tmp = Id("tmp_ks")
+          stmts.append(js.Const(nameDef(tmp), nameRef(ks1)))
+          Some(tmp)
+        } else None
+
+        // Prepare the substitution for argument evaluation
+        val subst = Substitution(
+          values = paramTmps.map { case (p, t) => p -> Pure.ValueVar(t) },
+          blocks = Map.empty,
+          conts = tmp_k.map(t => k1 -> Cont.ContVar(t)).toMap,
+          metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
+        )
+
+        // Directly assign the substituted arguments
+        (vparams zip vargs).foreach { (param, arg) =>
+          stmts.append(js.Assign(nameRef(param), toJS(substitutions.substitute(arg)(using subst))))
         }
-        val btmps = (bparams zip bargs).map { (id, arg) =>
-          val tmp = Id(id)
-          stmts.append(js.Const(nameDef(tmp), toJS(arg)))
-          tmp
+        (bparams zip bargs).foreach { (param, arg) =>
+          stmts.append(js.Assign(nameRef(param), toJS(substitutions.substitute(arg)(using subst))))
         }
 
-        // x = x3;
-        (vparams zip vtmps).foreach {
-          (param, tmp) => stmts.append(js.Assign(nameRef(param), nameRef(tmp)))
-        }
-        (bparams zip btmps).foreach {
-          (param, tmp) => stmts.append(js.Assign(nameRef(param), nameRef(tmp)))
-        }
+        if (needsKTmp) stmts.append(js.Assign(nameRef(k1), nameRef(tmp_k.get)))
+        if (needsKsTmp) stmts.append(js.Assign(nameRef(ks1), nameRef(tmp_ks.get)))
 
-        // continue f;
-        val jump = js.Continue(Some(uniqueName(id)));
-
+        val jump = js.Continue(Some(uniqueName(id)))
         stmts.appendAll(k2(jump))
         stmts.toList
       }
