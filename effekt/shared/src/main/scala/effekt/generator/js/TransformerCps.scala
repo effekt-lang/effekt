@@ -257,7 +257,7 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Jump(k, arg, ks) =>
       pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
 
-    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k)) if sameScope(ks, k, ks1, k1) =>
+    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), Cont.ContVar(k)) if ks == ks1 && k == k1 =>
       Binding { k2 =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
         stmts.append(js.RawStmt("/* prepare tail call */"))
@@ -405,12 +405,6 @@ object TransformerCps extends Transformer {
 
   // Helpers for Direct-Style Transformation
   // ---------------------------------------
-
-  /**
-   * Used to determine whether a call with continuations [[ ks ]] (after substitution) and [[ k ]]
-   * is the same as the original function definition (that is [[ ks1 ]] and [[ k1 ]].
-   */
-  private def sameScope(ks: Id, k: Id, ks1: Id, k1: Id)(using C: TransformerContext): Boolean = ks1 == ks && k1 == k
 
   private def withDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
