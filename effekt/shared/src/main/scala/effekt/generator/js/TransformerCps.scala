@@ -28,8 +28,6 @@ object TransformerCps extends Transformer {
 
   case class TransformerContext(
     requiresThunk: Boolean,
-    // known definitions of expressions (used to inline into externs)
-    bindings: Map[Id, js.Expr],
     // definitions of externs (used to inline them)
     externs: Map[Id, cps.Extern.Def],
     // the innermost (in direct style) enclosing functions (used to rewrite a definition to a loop)
@@ -63,7 +61,6 @@ object TransformerCps extends Transformer {
       case cps.ModuleDecl(path, includes, declarations, externs, definitions, _) =>
         given TransformerContext(
           false,
-          Map.empty,
           externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
           None,
           None,
@@ -88,7 +85,6 @@ object TransformerCps extends Transformer {
     val D = new DeclarationContext(coreModule.declarations, coreModule.externs)
     given TransformerContext(
           false,
-          Map.empty,
           input.externs.collect { case d: Extern.Def => (d.id, d) }.toMap,
           None,
           None,
@@ -193,7 +189,7 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {
-    case Pure.ValueVar(id)           => lookup(id)
+    case Pure.ValueVar(id)           => nameRef(id)
     case Pure.Literal(())            => $effekt.field("unit")
     case Pure.Literal(s: String)     => JsString(escape(s))
     case literal: Pure.Literal       => js.RawExpr(literal.value.toString)
@@ -301,8 +297,8 @@ object TransformerCps extends Transformer {
       }
 
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
-      pure(js.Return(maybeThunking(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
-        requiringThunk { toJS(k) })))))
+      pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
+        requiringThunk { toJS(k) }))))
 
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
       val args = vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks), toJS(k))
@@ -350,13 +346,13 @@ object TransformerCps extends Transformer {
     }
 
     case cps.Stmt.Reset(prog, ks, k) =>
-      pure(js.Return(Call(RESET, toJS(prog)(using nonrecursive(prog)), toJS(ks), toJS(k))))
+      pure(js.Return(Call(RESET, requiringThunk { toJS(prog)(using nonrecursive(prog)) }, toJS(ks), toJS(k))))
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt), noThunking { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))))
+      pure(js.Return(Call(SHIFT, nameRef(prompt), requiringThunk { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))))
 
     case cps.Stmt.Resume(r, b, ks2, k2) =>
-      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), toJS(k2))))
+      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })))
 
     case cps.Stmt.Hole() =>
       pure(js.Return($effekt.call("hole")))
@@ -391,9 +387,19 @@ object TransformerCps extends Transformer {
     T.externs.get(id) match {
       case Some(cps.Extern.Def(id, params, Nil, async,
         ExternBody.StringExternBody(featureFlag, Template(strings, templateArgs)))) if !async =>
-          bindingAll(params.zip(args.map(toJS))) {
-            js.RawExpr(strings, templateArgs.map(toJS))
+          val subst = substitutions.Substitution(
+            values = (params zip args).toMap,
+            blocks = Map.empty,
+            conts = Map.empty,
+            metaconts = Map.empty
+          )
+
+          // Apply substitution to template arguments
+          val substitutedArgs = templateArgs.map { arg =>
+            toJS(substitutions.substitute(arg)(using subst))
           }
+
+          js.RawExpr(strings, substitutedArgs)
       case _ => js.Call(nameRef(id), args.map(toJS))
     }
 
@@ -401,12 +407,6 @@ object TransformerCps extends Transformer {
     case cps.Extern.Def(_, _, Nil, async, ExternBody.StringExternBody(_, Template(_, _))) => !async
     case _ => false
   }
-
-  private def bindingAll[R](bs: List[(Id, js.Expr)])(body: TransformerContext ?=> R)(using C: TransformerContext): R =
-    body(using C.copy(bindings = C.bindings ++ bs))
-
-  private def lookup(id: Id)(using C: TransformerContext): js.Expr = C.bindings.getOrElse(id, nameRef(id))
-
 
   // Helpers for Direct-Style Transformation
   // ---------------------------------------
