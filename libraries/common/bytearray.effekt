@@ -88,4 +88,20 @@ extern js """
     bytes[index] = value;
     return $effekt.unit;
   }
+
+  function bytearray$compare(arr1, arr2) {
+    const len = Math.min(arr1.length, arr2.length);
+
+    for (let i = 0; i < len; i++) {
+      if (arr1[i] !== arr2[i]) {
+        return arr1[i] < arr2[i] ? -1 : 1;
+      }
+    }
+
+    if (arr1.length !== arr2.length) {
+      return arr1.length < arr2.length ? -1 : 1;
+    } else {
+      return 0;
+    }
+  }
 """
