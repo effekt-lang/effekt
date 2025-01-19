@@ -105,3 +105,18 @@ extern js """
     }
   }
 """
+
+extern pure def compareByteArrayImpl(b1: ByteArray, b2: ByteArray): Int =
+  js "bytearray$compare(${b1}, ${b2})"
+  llvm """
+    %x = call %Int @c_bytearray_compare(%Pos ${b1}, %Pos ${b2})
+    ret %Int %x
+  """
+
+def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering =
+  compareByteArrayImpl(b1, b2) match {
+    case -1 => Less()
+    case 0 => Equal()
+    case 1 => Greater()
+    case _ => <{ "Impossible: ByteArray comparison returned invalid value!" }>
+  }
