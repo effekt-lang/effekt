@@ -23,7 +23,7 @@ object TransformerCps extends Transformer {
   val TRAMPOLINE = Variable(JSName("TRAMPOLINE"))
 
   class RecursiveUsage(var jumped: Boolean)
-  case class RecursiveDefInfo(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
+  case class RecursiveDefInfo(id: Id, label: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
   case class ContinuationInfo(k: Id, param: Id, ks: Id)
 
   case class TransformerContext(
@@ -144,12 +144,13 @@ object TransformerCps extends Transformer {
   def toJS(id: Id, b: cps.Block)(using TransformerContext): js.Expr = b match {
     case cps.Block.BlockLit(vparams, bparams, ks, k, body) =>
       val used = new RecursiveUsage(false)
+      val label = Id(id)
 
-      val translatedBody = toJS(body)(using recursive(id, used, b)).stmts
+      val translatedBody = toJS(body)(using recursive(id, label, used, b)).stmts
 
       if used.jumped then
         js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
-          List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(id)))))
+          List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
       else
         js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
           translatedBody)
@@ -258,7 +259,7 @@ object TransformerCps extends Transformer {
       pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
 
 
-    case cps.Stmt.App(Recursive(id, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), k) =>
+    case cps.Stmt.App(Recursive(id, label, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), k) =>
       Binding { k2 =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
         stmts.append(js.RawStmt("/* prepare call */"))
@@ -335,7 +336,7 @@ object TransformerCps extends Transformer {
         // Restore metacont if needed
         if (needsKsTmp) stmts.append(js.Assign(nameRef(ks1), nameRef(tmp_ks.get)))
 
-        val jump = js.Continue(Some(uniqueName(id)))
+        val jump = js.Continue(Some(uniqueName(label)))
         stmts.appendAll(k2(jump))
         stmts.toList
       }
@@ -462,9 +463,9 @@ object TransformerCps extends Transformer {
   private def markDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
 
-  private def recursive(id: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
+  private def recursive(id: Id, label: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
     case cps.BlockLit(vparams, bparams, ks, k, body) =>
-      C.copy(recursive = Some(RecursiveDefInfo(id, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
+      C.copy(recursive = Some(RecursiveDefInfo(id, label, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
     case _ => C
   }
 
@@ -484,9 +485,9 @@ object TransformerCps extends Transformer {
   }
 
   private object Recursive {
-    def unapply(b: cps.Block)(using C: TransformerContext): Option[(Id, List[Id], List[Id], Id, Id, RecursiveUsage)] = b match {
+    def unapply(b: cps.Block)(using C: TransformerContext): Option[(Id, Id, List[Id], List[Id], Id, Id, RecursiveUsage)] = b match {
       case cps.Block.BlockVar(id) => C.recursive.collect {
-        case RecursiveDefInfo(id2, vparams, bparams, ks, k, used) if id == id2 => (id, vparams, bparams, ks, k, used)
+        case RecursiveDefInfo(id2, label, vparams, bparams, ks, k, used) if id == id2 => (id, label, vparams, bparams, ks, k, used)
       }
       case _ => None
     }
