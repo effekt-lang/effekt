@@ -39,13 +39,7 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "either.effekt",
 
     // inspect
-    examplesDir / "pos" / "probabilistic.effekt",
-    examplesDir / "pos" / "nim.effekt",
     examplesDir / "pos" / "exists.effekt",
-
-    // arrays
-    examplesDir / "pos" / "raytracer.effekt",
-    examplesDir / "pos" / "issue319.effekt",
 
     // Regex
     examplesDir / "pos" / "simpleparser.effekt",

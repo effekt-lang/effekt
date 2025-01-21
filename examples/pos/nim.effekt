@@ -163,14 +163,14 @@ def testPrint2() = {
         bobChooses { val p = game(7); do UpdateScore(p); p }; ()
       }
     };
-    inspect(do GetScore())
+    println(do GetScore())
   }
 }
 
 def main() = {
-  inspect(perfect { game(7) }); // Alice
-  inspect(perfect { game(12) }); // Bob
-  inspect(gametree { game(3) }); // Figure 1 in the paper
+  println(perfect { game(7) }); // Alice
+  println(perfect { game(12) }); // Bob
+  println(gametree { game(3) }); // Figure 1 in the paper
   printError {
     val result = perfect { cheatReport { check { game(7) } } }; // alice
     println("result is " ++ genericShow(result))
@@ -182,7 +182,7 @@ def main() = {
     val result = cheatReport { check { pc { game(12) } } }; // bob
     println("result is " ++ genericShow(result))
   }};
-  inspect(allResults { bobChooses { game(7) } }); // List(Bob, Alice)
+  println(allResults { bobChooses { game(7) } }); // List(Bob, Alice)
   deterministic {
     println(do Choose()); // true
     println(do Choose()); // false
