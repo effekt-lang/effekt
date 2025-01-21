@@ -81,11 +81,6 @@ enum Pure extends Expr {
 
   case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
 
-  /**
-   * Record Selection
-   */
-  case Select(target: Pure, field: Id)
-
   case Box(b: Block)
 }
 export Pure.*
@@ -103,9 +98,6 @@ enum Stmt extends Tree {
 
   case Jump(k: Id, arg: Pure, ks: MetaCont) // if the continuation is known, we inline and don't jump
 
-  // these could in principle be mutually recursive
-  case Scope(definitions: List[Def], body: Stmt)
-
   case App(callee: Block, vargs: List[Pure], bargs: List[Block], ks: MetaCont, k: Cont)
 
   case Invoke(callee: Block, method: Id, vargs: List[Pure], bargs: List[Block], ks: MetaCont, k: Cont)
@@ -114,6 +106,7 @@ enum Stmt extends Tree {
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case Match(scrutinee: Pure, clauses: List[(Id, Clause)], default: Option[Stmt])
 
+  case LetDef(id: Id, binding: Block, body: Stmt)
   case LetExpr(id: Id, binding: Expr, body: Stmt)
   case LetCont(id: Id, binding: Cont.ContLam, body: Stmt)
 
@@ -184,7 +177,6 @@ object Variables {
     case Pure.Literal(value) => empty
     case Pure.PureApp(id, vargs) => block(id) ++ all(vargs, free)
     case Pure.Make(data, tag, vargs) => all(vargs, free)
-    case Pure.Select(target, field) => free(target)
     case Pure.Box(b) => free(b)
   }
 
@@ -203,12 +195,11 @@ object Variables {
   }
   def free(s: Stmt): Variables = s match {
     case Stmt.Jump(k, arg, ks) => cont(k) ++ free(arg) ++ free(ks)
-    case Stmt.Scope(definitions, body) =>
-      all(definitions, free) ++ free(body) -- all(definitions, d => block(d.id))
     case Stmt.App(callee, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
     case Stmt.Invoke(callee, method, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
     case Stmt.Match(scrutinee, clauses, default) => free(scrutinee) ++ all(clauses, free) ++ all(default, free)
+    case Stmt.LetDef(id, binding, body)  => (free(binding) ++ free(body)) -- block(id)
     case Stmt.LetExpr(id, binding, body) => free(binding) ++ (free(body) -- value(id))
     case Stmt.LetCont(id, binding, body) => free(binding) ++ (free(body) -- cont(id))
 

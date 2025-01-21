@@ -140,6 +140,9 @@ class RecursiveDescentTests extends munit.FunSuite {
     )
     parseExpr("box { (x: Int) => x }")
     parseExpr("box new Fresh { def fresh() = \"42\" }")
+    parseExpr("box foo()")
+    parseExpr("box bar(1)")
+    parseExpr("box baz(quux)")
 
     // { f } is parsed as a capture set and not backtracked.
     intercept[Throwable] { parseExpr("box { f }") }

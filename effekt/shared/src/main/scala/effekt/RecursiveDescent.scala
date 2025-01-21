@@ -672,7 +672,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val captures = `box` ~> backtrack(captureSet())
       val expr = if (peek(`{`)) functionArg()
         else if (peek(`new`)) newExpr()
-        else Var(idRef())
+        else callExpr()
       Box(captures, expr)
 
 

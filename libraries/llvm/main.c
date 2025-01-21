@@ -9,7 +9,6 @@
 
 #define DEBUG_REFCOUNT (false)
 
-#include "sanity.c"
 #include "types.c"
 #include "bytearray.c"
 #include "io.c"

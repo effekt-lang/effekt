@@ -1,0 +1,73 @@
+module examples/pos/exception/combinators
+
+import exception
+import result
+
+
+/// Used as a type for `Exception` purely for independent testing
+record TestException()
+
+
+/// Returns the string if index > 0; otherwise raises a TestException.
+def generalOperation(str: String, index: Int): String / Exception[TestException] = {
+  if (index <= 0)
+    do raise(TestException(), "Error: Invalid index (" ++ show(index) ++ ")")
+  else
+    str
+}
+
+def main() = {
+  val str: String = "hello"
+
+  // Test for default handling of TestException
+  def defaultTestException { p: => String / Exception[TestException] }: Unit = {
+    with on[TestException].default { println("Test: Default Handling") }
+    println(p().show)
+  }
+
+  defaultTestException { str.generalOperation(0) } // Test: Default Handling
+  defaultTestException { str.generalOperation(1) } // hello
+
+  // Test for ignoring TestException
+  def ignoreTestException { p: => String / Exception[TestException] }: Unit = {
+    with on[TestException].ignore();
+    println(p().show) 
+  }
+  
+  ignoreTestException { str.generalOperation(0) } // *ignores the TestException*
+  ignoreTestException { str.generalOperation(1) } // hello
+
+  // Test for reporting TestException
+  def reportTestException { p: => String / Exception[TestException] }: Unit = {
+    with on[TestException].report();
+    println(p().show) 
+  }
+
+  reportTestException { str.generalOperation(0) } // Error: Invalid index (0)
+  reportTestException { str.generalOperation(-1) }// Error: Invalid index (-1)
+  reportTestException { str.generalOperation(1) } // hello
+
+  // Test for finalizing TestException
+  def finalizeTestException { p: => String / Exception[TestException] }: Unit = {
+    try {
+      with on[TestException].finalize { println("Test: Finalizer") }
+      println(p().show) 
+    } with Exception[TestException] { def raise(exception, msg) = () } 
+  }
+
+  finalizeTestException { str.generalOperation(0) } // Test: Finalizer
+  finalizeTestException { str.generalOperation(1) } // Test: Finalizer hello
+  
+  // Test for "reifying" an Exception using Result
+  def resultTestException { p: => String / Exception[TestException] }: Unit = {
+    val res = result[String, TestException] { p() }
+    res match {
+      case Success(msg) => println("Success: " ++ msg) 
+      case Error(exc, msg) => println(msg)
+    }
+  }
+
+  resultTestException { str.generalOperation(0) } // Error: Invalid index (0)
+  resultTestException { str.generalOperation(1) } // Success: hello
+
+}

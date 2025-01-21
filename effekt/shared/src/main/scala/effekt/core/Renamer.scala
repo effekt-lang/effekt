@@ -18,17 +18,22 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   // list of scopes that map bound symbols to their renamed variants.
   private var scopes: List[Map[Id, Id]] = List.empty
 
+  // Here we track ALL renamings
+  var renamed: Map[Id, Id] = Map.empty
+
   private var suffix: Int = 0
 
   def freshIdFor(id: Id): Id =
     suffix = suffix + 1
-    val uniqueName = if prefix.isEmpty then id.name.name + suffix.toString else prefix + suffix.toString
+    val uniqueName = if prefix.isEmpty then id.name.name + "_" + suffix.toString else prefix + suffix.toString
     names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
     val before = scopes
     try {
-      scopes = ids.map { x => x -> freshIdFor(x) }.toMap :: scopes
+      val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
+      scopes = newScope :: scopes
+      renamed = renamed ++ newScope
       f
     } finally { scopes = before }
 
@@ -43,20 +48,13 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   }
 
   override def stmt: PartialFunction[Stmt, Stmt] = {
-    case core.Scope(definitions, body) =>
+    case core.Def(id, block, body) =>
+      // can be recursive
+      withBinding(id) { core.Def(rewrite(id), rewrite(block), rewrite(body)) }
 
-      def go(rest: List[Definition], defs: List[Definition]): core.Scope = rest match {
-        case (d : core.Definition.Def) :: rest =>
-          // can be recursive
-          withBinding(d.id) { go(rest, defs :+ rewrite(d)) }
-        case core.Definition.Let(id, tpe, binding) :: rest =>
-          // resolve binding in outer scope
-          val resolvedBinding = rewrite(binding)
-          withBinding(id) { go(rest, defs :+ core.Definition.Let(rewrite(id), rewrite(tpe), resolvedBinding)) }
-        case Nil => core.Scope(defs, rewrite(body))
-      }
-
-      go(definitions, Nil)
+    case core.Let(id, tpe, binding, body) =>
+      val resolvedBinding = rewrite(binding)
+      withBinding(id) { core.Let(rewrite(id), rewrite(tpe), resolvedBinding, rewrite(body)) }
 
     case core.Val(id, tpe, binding, body) =>
       val resolvedBinding = rewrite(binding)
@@ -108,4 +106,8 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
 object Renamer {
   def rename(b: Block): Block = Renamer().rewrite(b)
+  def rename(b: BlockLit): (BlockLit, Map[Id, Id]) =
+    val renamer = Renamer()
+    val res = renamer.rewrite(b)
+    (res, renamer.renamed)
 }

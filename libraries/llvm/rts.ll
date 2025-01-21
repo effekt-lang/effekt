@@ -109,9 +109,38 @@ declare double @llvm.sqrt.f64(double)
 declare double @llvm.round.f64(double)
 declare double @llvm.ceil.f64(double)
 declare double @llvm.floor.f64(double)
+declare double @llvm.cos.f64(double)
+declare double @llvm.sin.f64(double)
+declare double @llvm.log.f64(double)
+declare double @llvm.exp.f64(double)
+declare double @llvm.pow.f64(double, double)
+declare double @log1p(double)
+; Intrinsic versions of the following two only added in LLVM 19
+declare double @atan(double)
+declare double @tan(double)
 declare void @print(i64)
 declare void @exit(i64)
 declare void @llvm.assume(i1)
+
+
+; Boxing (externs functions, hence ccc)
+define ccc %Pos @box(%Neg %input) {
+    %vtable = extractvalue %Neg %input, 0
+    %heap_obj = extractvalue %Neg %input, 1
+    %vtable_as_int = ptrtoint ptr %vtable to i64
+    %pos_result = insertvalue %Pos undef, i64 %vtable_as_int, 0
+    %pos_result_with_heap = insertvalue %Pos %pos_result, ptr %heap_obj, 1
+    ret %Pos %pos_result_with_heap
+}
+
+define ccc %Neg @unbox(%Pos %input) {
+    %tag = extractvalue %Pos %input, 0
+    %heap_obj = extractvalue %Pos %input, 1
+    %vtable = inttoptr i64 %tag to ptr
+    %neg_result = insertvalue %Neg undef, ptr %vtable, 0
+    %neg_result_with_heap = insertvalue %Neg %neg_result, ptr %heap_obj, 1
+    ret %Neg %neg_result_with_heap
+}
 
 
 ; Prompts

@@ -16,20 +16,10 @@ class Recursive(
   val defs: mutable.Map[Id, RecursiveFunction],
   var stack: List[Id]
 ) {
-  def process(d: Definition): Unit =
+  def process(d: Toplevel): Unit =
     d match {
-      case Definition.Def(id, block) =>
-        block match {
-          case b @ BlockLit(tparams, cparams, vparams, bparams, body) =>
-            defs(id) = RecursiveFunction(b)
-            val before = stack
-            stack = id :: stack
-            process(block)
-            stack = before
-          case _ => ()
-        }
-      case Definition.Let(id, _, binding) =>
-        process(binding)
+      case Toplevel.Def(id, block) => process(id, block)
+      case Toplevel.Val(id, _, binding) => process(binding)
     }
 
   def process(b: Block): Unit =
@@ -40,15 +30,20 @@ class Recursive(
       case Block.New(impl) => process(impl)
     }
 
+  def process(id: Id, block: Block): Unit =
+    block match {
+      case b : BlockLit =>
+        defs(id) = RecursiveFunction(b)
+        val before = stack
+        stack = id :: stack
+        process(block)
+        stack = before
+      case _ => ()
+    }
+
   def process(s: Stmt): Unit = s match {
-    case Stmt.Scope(definitions, body) =>
-      definitions.foreach {
-        case d: Definition.Def =>
-          process(d)
-        case d: Definition.Let =>
-          process(d)
-      }
-      process(body)
+    case Stmt.Def(id, block, body) =>  process(id, block); process(body)
+    case Stmt.Let(id, tpe, binding, body) => process(binding); process(body)
     case Stmt.Return(expr) => process(expr)
     case Stmt.Val(id, tpe, binding, body) => process(binding); process(body)
     case a @ Stmt.App(callee, targs, vargs, bargs) =>
@@ -93,12 +88,10 @@ class Recursive(
       process(b)
       vargs.foreach(process)
       bargs.foreach(process)
-    case Run(s) => process(s)
     case Pure.ValueVar(id, annotatedType) => ()
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
     case Pure.Make(data, tag, vargs) => vargs.foreach(process)
-    case Pure.Select(target, field, annotatedType) => process(target)
     case Pure.Box(b, annotatedCapture) => process(b)
   }
 

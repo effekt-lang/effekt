@@ -26,14 +26,12 @@ object Transformer {
       ModuleDecl(path, includes, declarations, externs.map(transform), definitions.map(transformToplevel), exports)
   }
 
-  def transformToplevel(definition: core.Definition)(using TransformationContext): ToplevelDefinition = definition match {
-    case core.Definition.Def(id, block) => ToplevelDefinition.Def(id, transform(block))
-    case core.Definition.Let(id, tpe, core.Run(stmt)) =>
+  def transformToplevel(definition: core.Toplevel)(using TransformationContext): ToplevelDefinition = definition match {
+    case core.Toplevel.Def(id, block) => ToplevelDefinition.Def(id, transform(block))
+    case core.Toplevel.Val(id, tpe, stmt) =>
       val ks = Id("ks")
       val k = Id("k")
       ToplevelDefinition.Val(id, ks, k, transform(stmt, ks, Continuation.Dynamic(k)))
-    case core.Definition.Let(id, tpe, binding: core.DirectApp) => sys error "Not supported"
-    case core.Definition.Let(id, tpe, p: core.Pure) => ToplevelDefinition.Let(id, transform(p))
   }
 
   def transform(extern: core.Extern)(using TransformationContext): Extern = extern match {
@@ -48,44 +46,29 @@ object Transformer {
     case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
   }
 
-  def transform(stmt: core.Stmt, ks: Id, k: Continuation)(using TransformationContext): Stmt = stmt match {
-    case core.Stmt.Scope(definitions, body) =>
+  def transform(stmt: core.Stmt, ks: Id, k: Continuation)(using C: TransformationContext): Stmt = stmt match {
 
-      def go(definitions: List[core.Definition], acc: List[Def], ks: Id, k: Continuation)(using C: TransformationContext): Stmt =
-        definitions match {
-          case Nil => bindDefs(acc, transform(body, ks, k))
+    // dealiasing
+    case core.Stmt.Def(id, core.BlockVar(x, _, _), body) =>
+      binding(id, C.lookupBlock(x)) { transform(body, ks, k) }
 
-          // dealiasing
-          case core.Definition.Def(id, core.BlockVar(x, _, _)) :: xs =>
-            binding(id, C.lookupBlock(x)) { go(xs, acc, ks, k) }
+    case core.Stmt.Def(id, block, body) =>
+      LetDef(id, transform(block), transform(body, ks, k))
 
-          case core.Definition.Def(id, block) :: xs =>
-            go(xs, acc :+ Def(id, transform(block)), ks, k)
+    // dealiasing
+    case core.Stmt.Let(id, tpe, core.Pure.ValueVar(x, _), body) =>
+      binding(id, C.lookupValue(x)) { transform(body, ks, k) }
 
-          case core.Definition.Let(id, tpe, core.Run(stmt)) :: xs =>
-            bindDefs(acc, transform(stmt, ks, Continuation.Static(id) { (value, ks) =>
-              binding(id, value) { go(xs, Nil, ks, k) }
-            }))
+    case core.Stmt.Let(id, tpe, core.DirectApp(b, targs, vargs, bargs), body) =>
+      transform(b) match {
+        case Block.BlockVar(f) =>
+          LetExpr(id, DirectApp(f, vargs.map(transform), bargs.map(transform)),
+            transform(body, ks, k))
+        case _ => sys error "Should not happen"
+      }
 
-          case core.Definition.Let(id, tpe, core.DirectApp(b, targs, vargs, bargs)) :: xs =>
-            transform(b) match {
-              case Block.BlockVar(f) =>
-                bindDefs(acc, LetExpr(id, DirectApp(f, vargs.map(transform), bargs.map(transform)),
-                  go(xs, Nil, ks, k)))
-              case _ => sys error "Should not happen"
-            }
-
-          // dealias
-          case core.Definition.Let(id, tpe, core.Pure.ValueVar(x, _)) :: xs =>
-            binding(id, C.lookupValue(x)) { go(xs, acc, ks, k) }
-
-          case core.Definition.Let(id, tpe, pure: core.Pure) :: xs =>
-            bindDefs(acc, LetExpr(id, transform(pure), go(xs, Nil, ks, k)))
-        }
-
-      def bindDefs(acc: List[Def], body: Stmt): Stmt = if acc.isEmpty then body else Scope(acc, body)
-
-      go(definitions, Nil, ks, k)
+    case core.Stmt.Let(id, tpe, pure: core.Pure, body) =>
+      LetExpr(id, transform(pure), transform(body, ks, k))
 
     case core.Stmt.Return(value) =>
       k(transform(value), ks)
@@ -105,6 +88,11 @@ object Transformer {
       withJoinpoint(k) { k2 =>
         If(transform(cond), transform(thn, ks, k2), transform(els, ks, k2))
       }
+
+    case core.Stmt.Match(scrutinee, List((id, rhs)), None) =>
+      Match(
+        transform(scrutinee),
+        List((id, transformClause(rhs, ks, k))), None)
 
     case core.Stmt.Match(scrutinee, clauses, default) =>
       withJoinpoint(k) { k =>
@@ -196,7 +184,6 @@ object Transformer {
       case _ => sys error "Should not happen"
     }
     case core.Pure.Make(data, tag, vargs) => Make(data, tag, vargs.map(transform))
-    case core.Pure.Select(target, field, annotatedType) => Select(transform(target), field)
     case core.Pure.Box(b, annotatedCapture) => Box(transform(b))
   }
 

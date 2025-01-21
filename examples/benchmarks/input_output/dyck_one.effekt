@@ -1,0 +1,56 @@
+import examples/benchmarks/runner
+
+import io/error
+import io/filesystem
+import stream
+import scanner
+
+// dyck_one.txt
+// ((((()())(()())(()()))((()())(()())(()()))((()())(()())(()()))((()())(()())(()())))...
+
+def emitTree(n: Int): Unit / emit[Byte] =
+  if (n <= 0) {
+    ()
+  } else {
+    do emit(40.toByte)
+    repeat(n) { emitTree(n - 1) }
+    do emit(41.toByte)
+  }
+
+type Tree {
+  Leaf()
+  Node(children: List[Tree])
+}
+
+def readTree(): Tree / { Scan[Byte], stop } = {
+  readIf[Byte] { b => b.toInt == 40 }
+  val children = collectList[Tree] { many { readTree() } }
+  skipIf[Byte] { b => b.toInt == 41 }
+  Node(children)
+}
+
+def size(tree: Tree): Int =
+  tree match {
+    case Leaf() => 1
+    case Node(children) => 1 + sum {
+      for[Tree] { children.each } { tree => do emit(size(tree)) }
+    }
+  }
+
+def run(n: Int): Int = {
+  with on[IOError].panic
+
+  val filename = "/tmp/dyck_one.txt"
+
+  val _ = {
+    with writeFile(filename)
+    emitTree(n)
+  }
+
+  with readFile(filename)
+  with returning::scanner[Byte, Int]
+  attempt { readTree().size } { panic("Expected tree.")}
+}
+
+
+def main() = benchmark(5){run}

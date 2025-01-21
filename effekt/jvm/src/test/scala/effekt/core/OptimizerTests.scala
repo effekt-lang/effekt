@@ -1,5 +1,8 @@
 package effekt
 package core
+
+import effekt.core.optimizer.*
+
 import effekt.symbols
 
 class OptimizerTests extends CoreTests {
@@ -30,15 +33,11 @@ class OptimizerTests extends CoreTests {
       Deadcode.remove(Set(mainSymbol), tree)
     }
 
-  def inlineOnce(input: String, expected: String)(using munit.Location) =
+  def normalize(input: String, expected: String)(using munit.Location) =
     assertTransformsTo(input, expected) { tree =>
-      val (result, count) = Inline.once(Set(mainSymbol), tree, 50)
-      result
-    }
-
-  def inlineFull(input: String, expected: String)(using munit.Location) =
-    assertTransformsTo(input, expected) { tree =>
-      Inline.full(Set(mainSymbol), tree, 50)
+      val anfed = BindSubexpressions.transform(tree)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, 50)
+      Deadcode.remove(mainSymbol, normalized)
     }
 
   test("toplevel"){
@@ -155,11 +154,10 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def foo = { () => return 42 }
-        | def main = { () => return 42 }
+      """ def main = { () => return 42 }
         |""".stripMargin
 
-    inlineOnce(input, expected)
+    normalize(input, expected)
   }
 
   test("inline with argument"){
@@ -169,11 +167,10 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def foo = { (n: Int) => return n:Int }
-        | def main = { () => return 42 }
+      """ def main = { () => return 42 }
         |""".stripMargin
 
-    inlineOnce(input, expected)
+    normalize(input, expected)
   }
 
   test("inline higher order function"){
@@ -188,17 +185,10 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ def foo = { (n: Int) => return n:Int }
-        | def hof = { (){f : (Int) => Int} =>
-        |   (f : (Int) => Int @ {f})(1)
-        | }
-        | def main = { () =>
-        |   def local(n: Int) = return n:Int
-        |   (local : (Int) => Int @ {})(1)
-        | }
+      """ def main = { () => return 1 }
         |""".stripMargin
 
-    inlineOnce(input, expected)
+    normalize(input, expected)
   }
 
   test("fully inline higher order function"){
@@ -216,7 +206,7 @@ class OptimizerTests extends CoreTests {
       """ def main = { () => return 1 }
         |""".stripMargin
 
-    inlineFull(input, expected)
+    normalize(input, expected)
   }
 
 }

@@ -22,21 +22,9 @@ class LLVMTests extends EffektTests {
   lazy val bugs: List[File] = List(
     // names not sanitized (even?)
     examplesDir / "pos" / "special_names.effekt",
-
-    // sanitizer/valgrind: segfault
-    examplesDir / "pos" / "parametrized.effekt",
-
-    // Valgrind leak, unclear
-    examplesDir / "llvm" / "polymorphism_map.effekt",
-    examplesDir / "pos" / "type_parameters_blocks.effekt",
-
-    // Valgrind leak in array_new
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "sieve.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "nbody.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "bounce.effekt", // + c_ref_fresh
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "towers.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
-    examplesDir / "benchmarks" / "are_we_fast_yet" / "queens.effekt",
+    // Jump to the invalid address stated on the next line
+    examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
+    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
     examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
     examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
   )
@@ -94,6 +82,9 @@ class LLVMTests extends EffektTests {
 
     // Generic equality
     examplesDir / "pos" / "issue429.effekt",
+
+    // Generic comparison
+    examplesDir / "pos" / "issue733.effekt",
   )
 
   override lazy val ignored: List[File] = bugs ++ missingFeatures
