@@ -14,7 +14,7 @@ Examples of "computation" in Effekt are:
 - instances of interfaces (also known as "objects"), and
 - regions
 
-Functions (and all other computation tyoes) are _second-class_ in Effekt. To make this difference explicit, we pass values in parentheses (e.g. `f(42)`) and computation in braces (e.g. `f { x => println(x) }`).
+Functions (and all other computation types) are _second-class_ in Effekt. To make this difference explicit, we pass values in parentheses (e.g. `f(42)`) and computation in braces (e.g. `f { x => println(x) }`).
 
 ```
 def myMap[A, B](xs: List[A]) { f: A => B }: List[B] =

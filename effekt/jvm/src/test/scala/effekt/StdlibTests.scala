@@ -44,10 +44,6 @@ class StdlibLLVMTests extends StdlibTests {
     // segfaults
     examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
 
-    // valgrind
-    examplesDir / "stdlib" / "list" / "modifyat.effekt",
-    examplesDir / "stdlib" / "list" / "updateat.effekt",
-
     // Syscall param write(buf) points to uninitialised byte(s)
     examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
