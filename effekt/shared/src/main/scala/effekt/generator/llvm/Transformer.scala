@@ -414,7 +414,6 @@ object Transformer {
     case machine.Type.Int()          => IntegerType64()
     case machine.Type.Byte()         => IntegerType8()
     case machine.Type.Double()       => DoubleType()
-    case machine.Type.String()       => positiveType
     case machine.Type.Reference(tpe) => referenceType
   }
 
@@ -428,9 +427,8 @@ object Transformer {
       case machine.Type.Prompt()     => 8 // TODO Make fat?
       case machine.Type.Stack()      => 8 // TODO Make fat?
       case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Byte()       => 1
+      case machine.Type.Byte()       => 8
       case machine.Type.Double()     => 8 // TODO Make fat?
-      case machine.Type.String()     => 16
       case machine.Type.Reference(_) => 16
     }
 
@@ -665,7 +663,6 @@ object Transformer {
       case machine.Positive()    => Call("_", Ccc(), VoidType(), sharePositive, List(transform(value)))
       case machine.Negative()    => Call("_", Ccc(), VoidType(), shareNegative, List(transform(value)))
       case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), shareResumption, List(transform(value)))
-      case machine.Type.String() => Call("_", Ccc(), VoidType(), shareString, List(transform(value)))
     }.map(emit)
   }
 
@@ -674,7 +671,6 @@ object Transformer {
       case machine.Positive()    => Call("_", Ccc(), VoidType(), erasePositive, List(transform(value)))
       case machine.Negative()    => Call("_", Ccc(), VoidType(), eraseNegative, List(transform(value)))
       case machine.Type.Stack()  => Call("_", Ccc(), VoidType(), eraseResumption, List(transform(value)))
-      case machine.Type.String() => Call("_", Ccc(), VoidType(), eraseString, List(transform(value)))
     }.map(emit)
   }
 
@@ -702,14 +698,12 @@ object Transformer {
   val shareNegative = ConstantGlobal("shareNegative");
   val shareResumption = ConstantGlobal("shareResumption");
   val shareFrames = ConstantGlobal("shareFrames");
-  val shareString = ConstantGlobal("sharePositive");
 
   val eraseObject = ConstantGlobal("eraseObject");
   val erasePositive = ConstantGlobal("erasePositive");
   val eraseNegative = ConstantGlobal("eraseNegative");
   val eraseResumption = ConstantGlobal("eraseResumption");
   val eraseFrames = ConstantGlobal("eraseFrames");
-  val eraseString = ConstantGlobal("erasePositive");
 
   val alloc = ConstantGlobal("alloc")
   val getPointer = ConstantGlobal("getPointer")
