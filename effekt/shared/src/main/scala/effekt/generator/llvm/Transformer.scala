@@ -429,7 +429,7 @@ object Transformer {
       case machine.Type.Prompt()     => 8 // TODO Make fat?
       case machine.Type.Stack()      => 8 // TODO Make fat?
       case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Byte()       => 1
+      case machine.Type.Byte()       => 8 // TODO Make fat?
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
       case machine.Type.Reference(_) => 16
