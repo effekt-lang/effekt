@@ -222,7 +222,6 @@ enum Type {
   case Int()
   case Byte()
   case Double()
-  case String()
   case Reference(tpe: Type)
 }
 export Type.{ Positive, Negative }
@@ -240,6 +239,8 @@ object builtins {
   val True: Tag = 1
   val False: Tag = 0
   val BooleanType = Positive()
+
+  val StringType = Positive()
 
   val SingletonRecord: Tag = 0
 }
