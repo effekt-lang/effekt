@@ -178,11 +178,13 @@ extern pure def genericCompareImpl[R](x: R, y: R): Int =
 /// Compares two values of the same type, returning an `Ordering`.
 /// Only available on the JavaScript backend.
 def genericCompare[R](x: R, y: R): Ordering = {
-  genericCompareImpl(x, y) match {
-    case -1 => Less()
-    case 0 => Equal()
-    case 1 => Greater()
-    case _ => <{ "Impossible: JS comparison returned invalid value!" }>
+  val ret = genericCompareImpl(x, y)
+  if (ret == 0) {
+    Equal()
+  } else if (ret < 0) {
+    Less()
+  } else { // ret > 0
+    Greater()
   }
 }
 

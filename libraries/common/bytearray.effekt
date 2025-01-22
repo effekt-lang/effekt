@@ -136,13 +136,16 @@ extern pure def compareByteArrayImpl(b1: ByteArray, b2: ByteArray): Int =
   """
   chez "(bytearray$compare ${b1} ${b2})"
 
-def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering =
-  compareByteArrayImpl(b1, b2) match {
-    case -1 => Less()
-    case 0 => Equal()
-    case 1 => Greater()
-    case _ => <{ "Impossible: ByteArray comparison returned invalid value!" }>
+def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering = {
+  val ret = compareByteArrayImpl(b1, b2)
+  if (ret == 0) {
+    Equal()
+  } else if (ret < 0) {
+    Less()
+  } else { // ret > 0
+    Greater()
   }
+}
 
 def compareStringBytes(left: String, right: String): Ordering = {
   val l = left.fromString
