@@ -24,7 +24,7 @@ abstract class StdlibChezTests extends StdlibTests {
     // Not implemented yet
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
-    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
+    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
   )
 }
 class StdlibChezSchemeMonadicTests extends StdlibChezTests {
