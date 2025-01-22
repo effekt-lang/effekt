@@ -180,7 +180,7 @@ Int c_bytearray_compare(const struct Pos left, const struct Pos right) {
 
     if (cmp < 0) {
         return -1;
-    } else if(cmp > 0) {
+    } else if (cmp > 0) {
         return 1;
     }
     
