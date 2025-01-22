@@ -108,9 +108,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
     val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
     //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
-    val vargsDoc = vargs.map(toDoc)
+    val vargsDoc = if vargs.isEmpty && !bargs.isEmpty then emptyDoc else vargs.map(toDoc)
     val bargsDoc = bargs.map(toDoc)
-    targsDoc <> parens(vargsDoc ++ bargsDoc)
+    targsDoc <> parens(vargsDoc) <> braces(bargsDoc)
 
   def paramsToDoc(tps: List[symbols.Symbol], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
     val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))
