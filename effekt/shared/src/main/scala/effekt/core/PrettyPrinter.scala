@@ -197,7 +197,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDocStmts(thn)) <+> "else" <+> block(toDocStmts(els))
 
-    case Reset(body) =>
+    case Reset(answer, body) =>
       "reset" <+> toDoc(body)
 
     case Shift(prompt, body) =>

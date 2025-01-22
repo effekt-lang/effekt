@@ -298,8 +298,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Stmt.Alloc(id, transform(init), region, transform(body))
     case Stmt.Var(id, init, cap, body) =>
       Stmt.Var(id, transform(init), cap, transform(body))
-    case Stmt.Reset(body) =>
-      Stmt.Reset(transform(body))
+    case Stmt.Reset(answer, BlockLit(tps, cps, vps, bps, body)) =>
+      Stmt.Reset(answer, BlockLit(tps, cps, vps, bps, coerce(transform(body), answer)))
     case Stmt.Shift(prompt, body) =>
       Stmt.Shift(prompt, transform(body))
     case Stmt.Resume(k, body) =>

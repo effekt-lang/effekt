@@ -142,9 +142,9 @@ object StaticArguments {
     case Stmt.Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       Stmt.Invoke(rewrite(b), method, methodTpe, targs, vargs.map(rewrite), bargs.map(rewrite))
 
-    case Stmt.Reset(body) =>
+    case Stmt.Reset(answer, body) =>
       rewrite(body) match {
-        case b => Stmt.Reset(b)
+        case b => Stmt.Reset(answer, b)
       }
 
     // congruences

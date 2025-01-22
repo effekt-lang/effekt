@@ -215,7 +215,12 @@ object Normalizer { normal =>
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
 
         // [[ val x = ABORT; body ]] = ABORT
-        case s if !C.preserveBoxing && s.tpe == Type.TBottom  => s
+        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom  =>
+          abort
+
+        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams, List(k), body))
+            if !C.preserveBoxing && !Variables.free(body).containsBlock(k.id) =>
+          abort
 
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
@@ -281,7 +286,7 @@ object Normalizer { normal =>
     // "Congruences"
     // -------------
 
-    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
+    case Stmt.Reset(answer, body) => Stmt.Reset(answer, normalize(body))
     case Stmt.Shift(prompt, body) => Shift(prompt, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))

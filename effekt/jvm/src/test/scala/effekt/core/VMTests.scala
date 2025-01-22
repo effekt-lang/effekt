@@ -663,7 +663,7 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 7,
       patternMatches = 95,
       branches = 41,
-      pushedFrames = 106,
+      pushedFrames = 105,
       poppedFrames = 106,
       allocations = 73,
       closures = 7,

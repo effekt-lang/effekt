@@ -13,10 +13,10 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
     case Stmt.Def(id, block, body) if unused(id) => rewrite(body)
     case Stmt.Let(id, tpe, binding, body) if binding.capt.isEmpty && unused(id) => rewrite(body)
 
-    case Stmt.Reset(body) =>
+    case Stmt.Reset(answer, body) =>
       rewrite(body) match {
         case BlockLit(tparams, cparams, vparams, List(prompt), body) if unused(prompt.id) => body
-        case b => Stmt.Reset(b)
+        case b => Stmt.Reset(answer, b)
       }
 
     case Stmt.Match(sc, clauses, default) =>

@@ -280,7 +280,7 @@ enum Stmt extends Tree {
 
   // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
   //  Reset({ [cap]{p: Prompt[answer] at cap} => stmt: answer}): answer
-  case Reset(body: BlockLit)
+  case Reset(answer: ValueType, body: BlockLit)
 
   // captures the continuation up to the given prompt
   // Invariant, it always has the shape:
@@ -620,7 +620,7 @@ object Variables {
     case Stmt.Put(id, annotatedCapt, value) =>
       Variables.block(id, core.Type.TState(value.tpe), annotatedCapt) ++ free(value)
 
-    case Stmt.Reset(body) => free(body)
+    case Stmt.Reset(answer, body) => free(body)
     case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
     case Stmt.Resume(k, body) => free(k) ++ free(body)
     case Stmt.Hole() => Variables.empty
@@ -703,7 +703,7 @@ object substitutions {
 
       case Match(scrutinee, clauses, default) =>
         Match(substitute(scrutinee), clauses.map {
-          case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])
+          case (id, b) => (id, substitute(b))
         }, default.map(substitute))
 
       case Alloc(id, init, region, body) =>
@@ -719,11 +719,12 @@ object substitutions {
       case Put(id, capt, value) =>
         Put(substituteAsVar(id), substitute(capt), substitute(value))
 
-      case Reset(body) =>
-        Reset(substitute(body).asInstanceOf[BlockLit])
+      // We annotate the answer type here since it needs to be the union of body.tpe and all shifts
+      case Reset(answer, body) =>
+        Reset(substitute(answer), substitute(body))
 
       case Shift(prompt, body) =>
-        val after = substitute(body).asInstanceOf[BlockLit]
+        val after = substitute(body)
         Shift(substitute(prompt).asInstanceOf[BlockVar], after)
 
       case Resume(k, body) =>
