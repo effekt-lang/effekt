@@ -21,6 +21,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
 
+    val isLLVM = Context.config.backend().name == "llvm"
+
     var tree = core
 
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
@@ -37,9 +39,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, isLLVM)
       val live = Deadcode.remove(mainSymbol, normalized)
-      RemoveTailResumptions(live)
+      val tailRemoved = RemoveTailResumptions(live)
+      tailRemoved
     }
 
     // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)

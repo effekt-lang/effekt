@@ -81,6 +81,9 @@ object Transformer {
     case core.Stmt.App(callee, targs, vargs, bargs) =>
       App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
 
+    case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) if stmt.tpe == core.Type.TBottom =>
+      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), Continuation.Empty)
+
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) =>
       Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
 
@@ -119,7 +122,10 @@ object Transformer {
       val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
         transform(body, ks2, Continuation.Dynamic(k2)))
 
-      Shift(prompt.id, translatedBody, MetaCont(ks), k.reify)
+      // if the answer type is Nothing, then the continuation is discarded anyways...
+      val continuation = if (stmt.tpe == core.Type.TBottom) Continuation.Empty else k.reify
+
+      Shift(prompt.id, translatedBody, MetaCont(ks), continuation)
 
     case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
@@ -234,4 +240,9 @@ enum Continuation {
 object Continuation {
   def Static(hint: Id)(k: (Pure, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
 
+  val Empty: Cont = {
+    val a = Id("a")
+    val ks = Id("ks")
+    cps.Cont.ContLam(a, ks, cps.Hole())
+  }
 }

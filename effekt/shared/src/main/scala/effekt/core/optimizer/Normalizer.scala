@@ -35,7 +35,8 @@ object Normalizer { normal =>
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int             // to control inlining and avoid code bloat
+    maxInlineSize: Int,            // to control inlining and avoid code bloat
+    preserveBoxing: Boolean        // for LLVM, prevents some optimizations
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -65,14 +66,14 @@ object Normalizer { normal =>
       case None => false
     }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, preserveBoxing: Boolean): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, preserveBoxing)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -212,6 +213,9 @@ object Normalizer { normal =>
       // def barendregt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
 
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
+
+        // [[ val x = ABORT; body ]] = ABORT
+        case s if !C.preserveBoxing && s.tpe == Type.TBottom  => s
 
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
