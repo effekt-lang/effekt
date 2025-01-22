@@ -202,6 +202,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     ))
     case literal: Literal => jsonObjectSmall(ListMap("op" -> string("\"Literal\""), "type" -> toDoc(literal.tpe)) + (literal match {
       case Literal.Int(value) => "value" -> string(s"${value}")
+      case Literal.Bool(value) => "value" -> string(s"${value}")
       case Literal.Double(value) => "value" -> string(s"${value}")
       case Literal.String(value) => "value" -> toDoc(value)
       case Literal.NullLabel => "value" -> string("\"null\"") // will be ignored by parser

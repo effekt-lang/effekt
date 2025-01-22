@@ -61,6 +61,7 @@ case class Primitive(name: String, args: List[Term], returns: List[LhsOperand], 
 
 enum Literal extends Term {
   case Int(value: scala.Int)
+  case Bool(value: scala.Boolean)
   case Double(value: scala.Double)
   case String(value: java.lang.String)
   case NullLabel
@@ -68,6 +69,7 @@ enum Literal extends Term {
 
   def tpe: Base = this match {
     case Int(_) => Base.Int
+    case Bool(_) => Base.Bool
     case Double(_) => Base.Double
     case String(_) => Base.String
     case Unit => Base.Unit

@@ -23,7 +23,7 @@ object Transformer {
     case core.ValueType.Var(name) => jit.Top // Type variables are erased
     case core.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => jit.Base.Unit
     case core.ValueType.Data(symbols.builtins.IntSymbol, Nil) => jit.Base.Int
-    case core.ValueType.Data(symbols.builtins.BooleanSymbol, Nil) => jit.Base.Int
+    case core.ValueType.Data(symbols.builtins.BooleanSymbol, Nil) => jit.Base.Bool
     case core.ValueType.Data(symbols.builtins.DoubleSymbol, Nil) => jit.Base.Double
     case core.ValueType.Data(symbols.builtins.TopSymbol, Nil) => jit.Top
     case core.ValueType.Data(symbols.builtins.BottomSymbol, Nil) => jit.Bottom
@@ -154,7 +154,7 @@ object Transformer {
       jit.Literal.String(Character.toString(value)) // will be escaped in pretty-printer
     case core.Pure.Literal(_, ValueType.Data(symbols.builtins.UnitSymbol, Nil)) => jit.Literal.Unit
     case core.Pure.Literal(value: Boolean, ValueType.Data(symbols.builtins.BooleanSymbol, Nil)) =>
-      jit.Literal.Int(if value then 1 else 0)
+      jit.Literal.Bool(value)
     case core.Pure.Literal(value, annotatedType) =>
       C.abort(s"Unsupported ${core.PrettyPrinter.format(annotatedType)} literal" +
         s" (or unsupported scala representation as ${value.getClass}).")
