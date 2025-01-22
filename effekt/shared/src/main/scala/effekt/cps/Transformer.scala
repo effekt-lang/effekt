@@ -81,9 +81,6 @@ object Transformer {
     case core.Stmt.App(callee, targs, vargs, bargs) =>
       App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reifyAt(stmt.tpe))
 
-    case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) if stmt.tpe == core.Type.TBottom =>
-      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), Cont.Abort)
-
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) =>
       Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reifyAt(stmt.tpe))
 
@@ -130,7 +127,7 @@ object Transformer {
       val ks2 = Id("ks")
       val k2 = Id("k")
       Resume(cont.id, Block.BlockLit(Nil, Nil, ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
-        MetaCont(ks), k.reify)
+        MetaCont(ks), k.reifyAt(stmt.tpe))
 
     case core.Stmt.Hole() => Hole()
 
