@@ -572,19 +572,19 @@ extern pure def infixGte(x: Double, y: Double): Bool =
 // TODO do we really need those? if yes, move to string.effekt
 extern pure def infixLt(x: String, y: String): Bool =
   js "(${x} < ${y})"
-  chez "(< ${x} ${y})"
+  chez "(string<? ${x} ${y})"
 
 extern pure def infixLte(x: String, y: String): Bool =
   js "(${x} <= ${y})"
-  chez "(<= ${x} ${y})"
+  chez "(string<=? ${x} ${y})"
 
 extern pure def infixGt(x: String, y: String): Bool =
   js "(${x} > ${y})"
-  chez "(> ${x} ${y})"
+  chez "(string>? ${x} ${y})"
 
 extern pure def infixGte(x: String, y: String): Bool =
   js "(${x} >= ${y})"
-  chez "(>= ${x} ${y})"
+  chez "(string>=? ${x} ${y})"
 
 
 // Boolean operations

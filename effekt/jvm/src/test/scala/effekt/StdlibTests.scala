@@ -46,5 +46,8 @@ class StdlibLLVMTests extends StdlibTests {
 
     // Conditional jump or move depends on uninitialised value(s)
     examplesDir / "stdlib" / "io" / "filesystem" / "wordcount.effekt",
+
+    // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
+    examplesDir / "stdlib" / "string" / "compare.effekt",
   )
 }
