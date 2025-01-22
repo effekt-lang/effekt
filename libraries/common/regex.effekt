@@ -14,47 +14,51 @@ extern pure def regex(str: String): Regex =
   vm "regex::regex(String)"
 
 def exec(reg: Regex, str: String): Option[Match] = {
-  val v = reg.unsafeExec(str)
+  val v = internal::exec(reg, str)
   if (v.isUndefined)
     None()
   else
-    Some(Match(v.matched, v.index))
+    Some(Match(internal::matched(v), internal::index(v)))
 }
 
-extern type RegexMatch
-  // js: { matched: String, index: Int } | undefined
-  // vm: scala.util.matching.Regex.Match | null
+namespace internal {
 
-extern pure def matched(r: RegexMatch): String =
-  js "${r}.matched"
-  chez "(vector-ref ${r} 0)"
-  vm "regex::matched(RegexMatch)"
+  /// The type RegexMatch is used internally to represent platform
+  /// dependent results of matching a regex.
+  extern type RegexMatch
+    // js: { matched: String, index: Int } | undefined
+    // vm: scala.util.matching.Regex.Match | null
 
-extern pure def index(r: RegexMatch): Int =
-  js "${r}.index"
-  chez "(vector-ref ${r} 1)"
-  vm "regex::index(RegexMatch)"
+  extern pure def matched(r: RegexMatch): String =
+    js "${r}.matched"
+    chez "(vector-ref ${r} 0)"
+    vm "regex::matched(RegexMatch)"
 
-extern js """
-  function regex$exec(reg, str) {
-    var res = reg.exec(str);
-    if (res === null) { return undefined }
-    else { return { matched: res[0], index: res.index } }
-  }
-"""
+  extern pure def index(r: RegexMatch): Int =
+    js "${r}.index"
+    chez "(vector-ref ${r} 1)"
+    vm "regex::index(RegexMatch)"
 
-extern chez """
-(define regex-exec
-  (lambda (regex str)
-    (let* ([positions (pregexp-match-positions regex str)]
-       [match (pregexp-match regex str)])
-  (if (and positions match)
-      (vector (car match) (caar positions))
-      #f))))
-"""
+  extern js """
+    function regex$exec(reg, str) {
+      var res = reg.exec(str);
+      if (res === null) { return undefined }
+      else { return { matched: res[0], index: res.index } }
+    }
+  """
 
-// internals
-extern io def unsafeExec(reg: Regex, str: String): RegexMatch =
-  js "regex$exec(${reg}, ${str})"
-  chez "(regex-exec ${reg} ${str})"
-  vm "regex::exec(Regex, String)"
+  extern chez """
+  (define regex-exec
+    (lambda (regex str)
+      (let* ([positions (pregexp-match-positions regex str)]
+        [match (pregexp-match regex str)])
+    (if (and positions match)
+        (vector (car match) (caar positions))
+        #f))))
+  """
+
+  extern io def exec(reg: Regex, str: String): RegexMatch =
+    js "regex$exec(${reg}, ${str})"
+    chez "(regex-exec ${reg} ${str})"
+    vm "regex::exec(Regex, String)"
+}
