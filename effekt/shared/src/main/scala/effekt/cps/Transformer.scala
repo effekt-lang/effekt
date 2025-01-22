@@ -79,13 +79,13 @@ object Transformer {
       })
 
     case core.Stmt.App(callee, targs, vargs, bargs) =>
-      App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
+      App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reifyAt(stmt.tpe))
 
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) if stmt.tpe == core.Type.TBottom =>
       Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), Cont.Abort)
 
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) =>
-      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
+      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reifyAt(stmt.tpe))
 
     case core.Stmt.If(cond, thn, els) =>
       withJoinpoint(k) { k2 =>
@@ -122,10 +122,7 @@ object Transformer {
       val translatedBody: BlockLit = BlockLit(vparams.map { p => p.id }, List(resume.id), ks2, k2,
         transform(body, ks2, Continuation.Dynamic(k2)))
 
-      // if the answer type is Nothing, then the continuation is discarded anyways...
-      val continuation = if (stmt.tpe == core.Type.TBottom) Cont.Abort else k.reify
-
-      Shift(prompt.id, translatedBody, MetaCont(ks), continuation)
+      Shift(prompt.id, translatedBody, MetaCont(ks), k.reifyAt(stmt.tpe))
 
     case core.Stmt.Shift(prompt, body) => sys error "Shouldn't happen"
 
@@ -236,6 +233,9 @@ enum Continuation {
         val ks = Id("ks")
         cps.Cont.ContLam(hint, ks, k(Pure.ValueVar(hint), ks))
     }
+
+  def reifyAt(tpe: core.ValueType): Cont =
+    if (tpe == core.Type.TBottom) Cont.Abort else reify
 }
 object Continuation {
   def Static(hint: Id)(k: (Pure, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
