@@ -77,10 +77,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     /// TODO
     hsep(t.args.map(toDoc), comma)
 
-  def toDoc(b: Block): Doc = b match {
+  def toDoc(b: Block, preventBraces: Boolean = false): Doc = b match {
     case BlockVar(id, _, _) => toDoc(id)
     case BlockLit(tps, cps, vps, bps, body) =>
-      braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line }
+      val doc = space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
+      if preventBraces then doc else braces { doc }
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
@@ -108,13 +109,17 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
     val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
     //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
-    val vargsDoc = vargs.map(toDoc)
-    val bargsDoc = bargs.map(toDoc)
-    targsDoc <> parens(vargsDoc ++ bargsDoc)
+    val vargsDoc = if vargs.isEmpty && !bargs.isEmpty then emptyDoc else parens(vargs.map(toDoc))
+
+    // Wrap in braces individually, then concat with a space between. Force BlockLits to not add a layer of braces on top.
+    val bargsDoc = if bargs.isEmpty then emptyDoc else hcat { bargs.map { b => braces(toDoc(b, preventBraces = true)) } }
+    targsDoc <> vargsDoc <> bargsDoc
 
   def paramsToDoc(tps: List[symbols.Symbol], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
-    val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))
-    tpsDoc <> parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
+    val tpsDoc = if tps.isEmpty then emptyDoc else brackets(tps.map(toDoc))
+    val vpsDoc = if vps.isEmpty && !bps.isEmpty then emptyDoc else parens(vps.map(toDoc))
+    val bpsDoc = if bps.isEmpty then emptyDoc else hcat(bps.map(toDoc)) // already are in braces!
+    tpsDoc <> vpsDoc <> bpsDoc
   }
 
   def toDoc(instance: Implementation): Doc = {
@@ -155,7 +160,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Toplevel.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
     case Toplevel.Val(id, _, binding) =>
-      "vet" <+> toDoc(id) <+> "=" <+> toDoc(binding)
+      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(s: Stmt): Doc = s match {
