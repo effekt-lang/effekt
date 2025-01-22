@@ -38,7 +38,7 @@ object RemoveTailResumptions {
       case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
       case Stmt.Put(id, annotatedCapt, value) => false
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
-      case Stmt.Shift(prompt, body) => false
+      case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
       case Stmt.Hole() => true
     }

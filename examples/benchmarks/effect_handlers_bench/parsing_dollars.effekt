@@ -70,4 +70,3 @@ def run(n: Int) =
   sum { catch { feed(n) { parse(0) } } }
 
 def main() = benchmark(10){run}
-

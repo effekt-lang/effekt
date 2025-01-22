@@ -97,19 +97,21 @@ object Type {
   /**
    * Function types are the only type constructor that we have subtyping on.
    */
-  def merge(tpe1: ValueType, tpe2: ValueType, covariant: Boolean): ValueType = (tpe1, tpe2) match {
-    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) =>
+  def merge(tpe1: ValueType, tpe2: ValueType, covariant: Boolean): ValueType = (tpe1, tpe2, covariant) match {
+    case (tpe1, tpe2, covariant) if tpe1 == tpe2 => tpe1
+    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2), covariant) =>
       ValueType.Boxed(merge(btpe1, btpe2, covariant), merge(capt1, capt2, covariant))
-    case (tpe1, tpe2) if covariant =>
-      if (isSubtype(tpe1, tpe2)) tpe2 else tpe1
-    case (tpe1, tpe2) if !covariant =>
-      if (isSubtype(tpe1, tpe2)) tpe1 else tpe2
+    case (TBottom, tpe2, true) => tpe2
+    case (tpe1, TBottom, true) => tpe1
+    case (TTop, tpe2, true) => TTop
+    case (tpe1, TTop, true) => TTop
+    case (TBottom, tpe2, false) => TBottom
+    case (tpe1, TBottom, false) => TBottom
+    case (TTop, tpe2, false) => tpe2
+    case (tpe1, TTop, false) => tpe1
+    // TODO this swallows a lot of bugs that we NEED to fix
     case _ => tpe1
-  }
-  private def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
-    case (tpe1, TTop) => true
-    case (TBottom, tpe1) => true
-    case _ => false // conservative :)
+      // sys error s"Cannot compare ${tpe1} ${tpe2} in ${covariant}" // conservative :)
   }
 
   def merge(tpe1: BlockType, tpe2: BlockType, covariant: Boolean): BlockType = (tpe1, tpe2) match {
@@ -129,12 +131,12 @@ object Type {
       assert(targs.size == tparams.size, "Wrong number of type arguments")
       assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
-      val vsubst = (tparams zip targs).toMap
+      val tsubst = (tparams zip targs).toMap
       val csubst = (cparams zip cargs).toMap
       BlockType.Function(Nil, Nil,
-        vparams.map { tpe => substitute(tpe, vsubst, Map.empty) },
-        bparams.map { tpe => substitute(tpe, vsubst, Map.empty) },
-        substitute(result, vsubst, csubst))
+        vparams.map { tpe => substitute(tpe, tsubst, Map.empty) },
+        bparams.map { tpe => substitute(tpe, tsubst, Map.empty) },
+        substitute(result, tsubst, csubst))
   }
 
   def substitute(capt: Captures, csubst: Map[Id, Captures]): Captures = capt.flatMap {
@@ -206,7 +208,11 @@ object Type {
     case Stmt.Var(id, init, cap, body) => body.tpe
     case Stmt.Get(id, capt, tpe) => tpe
     case Stmt.Put(id, capt, value) => TUnit
-    case Stmt.Reset(body) => body.returnType
+    case Stmt.Reset(BlockLit(_, _, _, prompt :: Nil, body)) => prompt.tpe match {
+      case TPrompt(tpe) => tpe
+      case _ => ???
+    }
+    case Stmt.Reset(body) => ???
     case Stmt.Shift(prompt, body) => body.bparams match {
       case core.BlockParam(id, BlockType.Interface(ResumeSymbol, List(result, answer)), captures) :: Nil => result
       case _ => ???

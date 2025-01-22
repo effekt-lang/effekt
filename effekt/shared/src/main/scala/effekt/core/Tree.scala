@@ -272,7 +272,7 @@ enum Stmt extends Tree {
   case Alloc(id: Id, init: Pure, region: Id, body: Stmt)
 
   // creates a fresh state handler to model local (backtrackable) state.
-  // [[capture]] is a binding occurence.
+  // [[capture]] is a binding occurrence.
   // e.g. state(init) { [x]{x: Ref} => ... }
   case Var(id: Id, init: Pure, capture: Id, body: Stmt)
   case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
@@ -280,7 +280,7 @@ enum Stmt extends Tree {
 
   // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
   //  Reset({ [cap]{p: Prompt[answer] at cap} => stmt: answer}): answer
-  case Reset(body: BlockLit)
+  case Reset(body: Block.BlockLit)
 
   // captures the continuation up to the given prompt
   // Invariant, it always has the shape:
@@ -703,7 +703,7 @@ object substitutions {
 
       case Match(scrutinee, clauses, default) =>
         Match(substitute(scrutinee), clauses.map {
-          case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])
+          case (id, b) => (id, substitute(b))
         }, default.map(substitute))
 
       case Alloc(id, init, region, body) =>
@@ -719,11 +719,12 @@ object substitutions {
       case Put(id, capt, value) =>
         Put(substituteAsVar(id), substitute(capt), substitute(value))
 
+      // We annotate the answer type here since it needs to be the union of body.tpe and all shifts
       case Reset(body) =>
-        Reset(substitute(body).asInstanceOf[BlockLit])
+        Reset(substitute(body))
 
       case Shift(prompt, body) =>
-        val after = substitute(body).asInstanceOf[BlockLit]
+        val after = substitute(body)
         Shift(substitute(prompt).asInstanceOf[BlockVar], after)
 
       case Resume(k, body) =>
