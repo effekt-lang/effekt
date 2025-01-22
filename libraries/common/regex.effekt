@@ -1,0 +1,45 @@
+module regex
+
+import string
+
+extern type Regex
+
+record Match(matched: String, index: Int)
+
+extern pure def regex(str: String): Regex =
+  js "new RegExp(${str})"
+  vm "regex::regex(String)"
+
+def exec(reg: Regex, str: String): Option[Match] = {
+  val v = reg.unsafeExec(str)
+  if (v.isDefined)
+    Some(Match(v.matched, v.index))
+  else
+    None()
+}
+
+extern type RegexMatch
+  // js: { matched: String, index: Int } | undefined
+  // vm: scala.util.matching.Regex.Match | null
+extern pure def isDefined(r: RegexMatch): Bool =
+  js "!!${r}"
+  vm "regex::isDefined(RegexMatch)"
+extern pure def matched(r: RegexMatch): String =
+  js "${r}.matched"
+  vm "regex::matched(RegexMatch)"
+extern pure def index(r: RegexMatch): Int =
+  js "${r}.index"
+  vm "regex::index(RegexMatch)"
+
+extern js """
+function regex$exec(reg, str) {
+  var res = reg.exec(str);
+  if (res === null) { return undefined }
+  else { return { matched: res[0], index: res.index } }
+}
+"""
+
+// internals
+extern io def unsafeExec(reg: Regex, str: String): RegexMatch =
+  js "regex$exec(${reg}, ${str})"
+  vm "regex::exec(Regex, String)"
