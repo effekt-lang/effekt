@@ -59,13 +59,15 @@ def countWords(): Output / read[Byte] = {
   Output(chars, words, lines)
 }
 
+extern def filename(): String =
+  js { "/tmp/word_count_ascii_js.txt" }
+  llvm { "/tmp/word_count_ascii_llvm.txt" }
+
 def run(n: Int) = {
   with on[IOError].panic;
 
-  val filename = "/tmp/word_count_ascii.txt"
-
   val _ = {
-    with writeFile(filename)
+    with writeFile(filename())
     with repeat(n)
     for[Int] { range(32, 127) } { c =>
       repeat(10) {
@@ -76,7 +78,7 @@ def run(n: Int) = {
   }
 
   val output = {
-    with readFile(filename)
+    with readFile(filename())
     countWords()
   }
 

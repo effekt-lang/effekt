@@ -37,17 +37,19 @@ def size(tree: Tree): Int =
     }
   }
 
+extern def filename(): String =
+  js { "/tmp/dyck_one_js.txt" }
+  llvm { "/tmp/dyck_one_llvm.txt" }
+
 def run(n: Int): Int = {
   with on[IOError].panic
 
-  val filename = "/tmp/dyck_one.txt"
-
   val _ = {
-    with writeFile(filename)
+    with writeFile(filename())
     emitTree(n)
   }
 
-  with readFile(filename)
+  with readFile(filename())
   with returning::scanner[Byte, Int]
   attempt { readTree().size } { panic("Expected tree.")}
 }
