@@ -77,10 +77,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     /// TODO
     hsep(t.args.map(toDoc), comma)
 
-  def toDoc(b: Block): Doc = b match {
+  def toDoc(b: Block, preventBraces: Boolean = false): Doc = b match {
     case BlockVar(id, _, _) => toDoc(id)
     case BlockLit(tps, cps, vps, bps, body) =>
-      braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line }
+      val doc = space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDocStmts(body)) <> line
+      if preventBraces then doc else braces { doc }
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
@@ -109,7 +110,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
     //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
     val vargsDoc = if vargs.isEmpty && !bargs.isEmpty then emptyDoc else parens(vargs.map(toDoc))
-    val bargsDoc = if bargs.isEmpty then emptyDoc else braces(bargs.map(toDoc))
+
+    // Wrap in braces individually, then concat with a space between. Force BlockLits to not add a layer of braces on top.
+    val bargsDoc = if bargs.isEmpty then emptyDoc else hcat { bargs.map { b => braces(toDoc(b, preventBraces = true)) } }
     targsDoc <> vargsDoc <> bargsDoc
 
   def paramsToDoc(tps: List[symbols.Symbol], vps: List[ValueParam], bps: List[BlockParam]): Doc = {
