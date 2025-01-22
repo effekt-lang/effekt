@@ -262,6 +262,12 @@ lazy val arrays: Builtins = Map(
   },
 )
 
+lazy val undefined: Builtins = Map(
+  builtin("effekt::isUndefined[A](A)") {
+    case Value.Literal(m) :: Nil => Value.Bool(m == null)
+  },
+)
+
 lazy val refs: Builtins = Map(
   builtin("ref::ref[T](T)") {
     case init :: Nil => Value.Ref(Reference(init))
@@ -281,9 +287,6 @@ lazy val regexes: Builtins = Map(
   builtin("regex::exec(Regex, String)") {
     case As.Regex(r) :: As.String(str) :: Nil => Value.Literal(r.findFirstMatchIn(str).orNull)
   },
-  builtin("regex::isDefined(RegexMatch)") {
-    case As.RegexMatch(m) :: Nil => Value.Bool(m != null)
-  },
   builtin("regex::matched(RegexMatch)") {
     case As.RegexMatch(m) :: Nil => Value.String(m.matched)
   },
@@ -292,7 +295,7 @@ lazy val regexes: Builtins = Map(
   },
 )
 
-lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ refs ++ chars ++ regexes
+lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ refs ++ chars ++ regexes ++ undefined
 
 protected object As {
   object String {

@@ -667,11 +667,13 @@ extern pure def toInt(n: Byte): Int =
 extern pure def undefined[A](): A =
   js "undefined"
   chez "#f"
+  vm "effekt::undefined()"
 
 /// Is an FFI value undefined?
 extern pure def isUndefined[A](value: A): Bool =
   js "(${value} === undefined || ${value} === null)"
   chez "(eq? ${value} #f)"
+  vm "effekt::isUndefined[A](A)"
 
 
 // Tuples
