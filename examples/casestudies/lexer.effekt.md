@@ -15,7 +15,7 @@ Before we get started, we require a few imports to deal with strings and regular
 module examples/casestudies/lexer
 
 import string
-import text/regex
+import regex
 ```
 
 ## Tokens and Positions
