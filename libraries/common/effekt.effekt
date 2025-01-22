@@ -90,6 +90,7 @@ extern pure def show(value: Char): String =
 
 extern pure def show(value: Byte): String =
   js "'' + ${value}"
+  chez "(string ${value})"
   llvm """
     %z = call %Pos @c_bytearray_show_Byte(i8 ${value})
     ret %Pos %z
@@ -647,11 +648,13 @@ extern pure def bitwiseXor(x: Int, y: Int): Int =
 extern pure def toByte(n: Int): Byte =
   js "${n}"
   llvm "%z = trunc %Int ${n} to %Byte ret %Byte %z"
+  chez "${n}"
 
 extern pure def toInt(n: Byte): Int =
   js "${n}"
   llvm "%z = zext %Byte ${n} to %Int ret %Int %z"
   vm "effekt::toInt(Byte)"
+  chez "${n}"
 
 
 // Undefined and Null
