@@ -401,13 +401,13 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
           returnWith(Value.Literal(()), env, updated, heap)
 
-        case Stmt.Reset(answer, BlockLit(_, _, _, List(prompt), body)) =>
+        case Stmt.Reset(BlockLit(_, _, _, List(prompt), body)) =>
           val freshPrompt = freshAddress()
           instrumentation.reset()
           State.Step(body, env.bind(prompt.id, Computation.Prompt(freshPrompt)),
             Stack.Segment(Nil, freshPrompt, stack), heap)
 
-        case Stmt.Reset(answer, b) => ???
+        case Stmt.Reset(b) => ???
 
         case Stmt.Shift(prompt, BlockLit(tparams, cparams, vparams, List(resume), body)) =>
           instrumentation.shift()

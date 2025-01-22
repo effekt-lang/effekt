@@ -222,10 +222,11 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case core.Reset(answer, core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
+      case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
         noteParameters(List(prompt))
 
-        val variable = Variable(freshName("returned"), transform(answer))
+        val answerType = stmt.tpe
+        val variable = Variable(freshName("returned"), transform(answerType))
         val returnClause = Clause(List(variable), Return(List(variable)))
 
         Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))

@@ -76,7 +76,7 @@ class Recursive(
       process(body)
     case Stmt.Get(id, capt, tpe) => ()
     case Stmt.Put(id, tpe, value) => process(value)
-    case Stmt.Reset(answer, body) => process(body)
+    case Stmt.Reset(body) => process(body)
     case Stmt.Shift(prompt, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)

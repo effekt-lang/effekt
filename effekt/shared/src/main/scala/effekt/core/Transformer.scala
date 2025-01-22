@@ -459,7 +459,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val body: BlockLit = BlockLit(Nil, List(promptCapt), Nil, List(promptParam),
         Binding(transformedHandlers, transform(prog)))
 
-      Context.bind(Reset(answerType, body))
+      Context.bind(Reset(body))
 
     case r @ source.Region(name, body) =>
       val region = r.symbol

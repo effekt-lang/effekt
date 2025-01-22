@@ -286,7 +286,7 @@ object Normalizer { normal =>
     // "Congruences"
     // -------------
 
-    case Stmt.Reset(answer, body) => Stmt.Reset(answer, normalize(body))
+    case Stmt.Reset(body) => Stmt.Reset(normalize(body))
     case Stmt.Shift(prompt, body) => Shift(prompt, normalize(body))
     case Stmt.Return(expr) => Return(normalize(expr))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
