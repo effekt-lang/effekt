@@ -1,7 +1,7 @@
 module examples/pos/simpleparser
 
 import string
-import text/regex
+import regex
 
 effect fail(msg: String): Nothing
 

@@ -41,9 +41,6 @@ class StdlibLLVMTests extends StdlibTests {
   override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
 
   override def ignored: List[File] = List(
-    // segfaults
-    examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
-
     // Syscall param write(buf) points to uninitialised byte(s)
     examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
     examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",

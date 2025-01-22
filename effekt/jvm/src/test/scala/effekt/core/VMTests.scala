@@ -674,6 +674,54 @@ class VMTests extends munit.FunSuite {
       resumes = 7
     )),
 
+    examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
+      staticDispatches = 245,
+      dynamicDispatches = 18,
+      patternMatches = 298,
+      branches = 405,
+      pushedFrames = 703,
+      poppedFrames = 703,
+      allocations = 202,
+      closures = 27,
+      variableReads = 164,
+      variableWrites = 51,
+      resets = 31,
+      shifts = 11,
+      resumes = 11
+    )),
+
+    examplesDir / "casestudies" / "parser.effekt.md" -> Some(Summary(
+      staticDispatches = 8845,
+      dynamicDispatches = 783,
+      patternMatches = 13502,
+      branches = 14892,
+      pushedFrames = 28523,
+      poppedFrames = 28499,
+      allocations = 7923,
+      closures = 521,
+      variableReads = 6742,
+      variableWrites = 1901,
+      resets = 806,
+      shifts = 855,
+      resumes = 839
+    )),
+
+    examplesDir / "casestudies" / "anf.effekt.md" -> Some(Summary(
+      staticDispatches = 4775,
+      dynamicDispatches = 443,
+      patternMatches = 7272,
+      branches = 8110,
+      pushedFrames = 16275,
+      poppedFrames = 16260,
+      allocations = 4317,
+      closures = 358,
+      variableReads = 4080,
+      variableWrites = 1343,
+      resets = 481,
+      shifts = 660,
+      resumes = 644
+    )),
+
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
       staticDispatches = 1457444,
       dynamicDispatches = 3201452,
@@ -689,13 +737,80 @@ class VMTests extends munit.FunSuite {
       shifts = 297723,
       resumes = 9275
     )),
+
+    examplesDir / "pos" / "raytracer.effekt" -> Some(Summary(
+      staticDispatches = 79696,
+      dynamicDispatches = 0,
+      patternMatches = 1014772,
+      branches = 71995,
+      pushedFrames = 223269,
+      poppedFrames = 223269,
+      allocations = 127533,
+      closures = 0,
+      variableReads = 77886,
+      variableWrites = 26904,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+  )
+
+  val other: Seq[(File, Option[Summary])] = Seq(
+    examplesDir / "benchmarks" / "other" / "emit.effekt" -> Some(Summary(
+      staticDispatches = 11,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 11,
+      pushedFrames = 102,
+      poppedFrames = 102,
+      allocations = 0,
+      closures = 0,
+      variableReads = 61,
+      variableWrites = 30,
+      resets = 1,
+      shifts = 10,
+      resumes = 10
+    )),
+
+    examplesDir / "benchmarks" / "other" / "church_exponentiation.effekt" -> Some(Summary(
+      staticDispatches = 7,
+      dynamicDispatches = 1062912,
+      patternMatches = 0,
+      branches = 5,
+      pushedFrames = 531467,
+      poppedFrames = 531467,
+      allocations = 0,
+      closures = 265750,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "benchmarks" / "other" / "variadic_combinators.effekt" -> Some(Summary(
+      staticDispatches = 27057,
+      dynamicDispatches = 9009,
+      patternMatches = 30052,
+      branches = 3003,
+      pushedFrames = 54105,
+      poppedFrames = 54105,
+      allocations = 24060,
+      closures = 12030,
+      variableReads = 24048,
+      variableWrites = 18036,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
   )
 
   val testFiles: Seq[(File, Option[Summary])] =
     are_we_fast_yet ++
     duality_of_compilation ++
     effect_handlers_bench ++
-    casestudies
+    casestudies ++
+    other
 
   def runTest(f: File, expectedSummary: Option[Summary]): Unit =
     val path = f.getPath
@@ -711,6 +826,4 @@ class VMTests extends munit.FunSuite {
     }
 
   testFiles.foreach(runTest)
-
-
 }

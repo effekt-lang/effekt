@@ -243,11 +243,13 @@ extern pure def toInt(ch: Char): Int =
   js "${ch}"
   chez "${ch}"
   llvm "ret %Int ${ch}"
+  vm "string::toInt(Char)"
 
 extern pure def toChar(codepoint: Int): Char =
   js "${codepoint}"
   chez "${codepoint}"
   llvm "ret %Int ${codepoint}"
+  vm "string::toChar(Int)"
 
 
 extern pure def infixLt(x: Char, y: Char): Bool =
@@ -259,6 +261,7 @@ extern pure def infixLt(x: Char, y: Char): Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
+  vm "string::infixLt(Char, Char)"
 
 extern pure def infixLte(x: Char, y: Char): Bool =
   js "(${x} <= ${y})"
@@ -269,6 +272,7 @@ extern pure def infixLte(x: Char, y: Char): Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
+  vm "string::infixLte(Char, Char)"
 
 extern pure def infixGt(x: Char, y: Char): Bool =
   js "(${x} > ${y})"
@@ -279,6 +283,7 @@ extern pure def infixGt(x: Char, y: Char): Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
+  vm "string::infixGt(Char, Char)"
 
 extern pure def infixGte(x: Char, y: Char): Bool =
   js "(${x} >= ${y})"
@@ -289,6 +294,7 @@ extern pure def infixGte(x: Char, y: Char): Bool =
     %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0
     ret %Pos %adt_boolean
   """
+  vm "string::infixGte(Char, Char)"
 
 
 /**
@@ -327,3 +333,4 @@ extern pure def unsafeCharAt(str: String, n: Int): Char =
     %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
     ret %Int %x
   """
+  vm "string::unsafeCharAt(String, Int)"

@@ -32,7 +32,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Int()          => "Int"
     case Type.Byte()         => "Byte"
     case Type.Double()       => "Double"
-    case Type.String()       => "String"
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
   }
 

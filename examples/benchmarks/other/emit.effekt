@@ -1,0 +1,40 @@
+import examples/benchmarks/runner
+
+effect emit(value: Double): Unit
+
+def printDoubles { p: () => Unit / emit } =
+  try { p() } with emit { d =>
+    println(d)
+    resume(())
+  }
+
+def sumDoubles { p: () => Unit / emit } = {
+  var sum = 0.0
+  try { p() } with emit { d =>
+    sum = sum + d
+    resume(())
+  }
+  sum
+}
+
+def runningMean { stream: => Unit / emit }: Unit / emit = {
+  var n = 0
+  var mean = 0.0
+  try { stream() }
+  with emit { x =>
+    n = n + 1
+    mean = mean + ((x - mean) / n.toDouble)
+    do emit(mean)
+    resume(())
+  }
+}
+
+def generate(N: Int) = {
+  each(0, N) { n =>
+    do emit(n.toDouble)
+  }
+}
+
+def run(N: Int) = sumDoubles { runningMean { generate(N) } }.toInt
+
+def main() = benchmark(10){run}

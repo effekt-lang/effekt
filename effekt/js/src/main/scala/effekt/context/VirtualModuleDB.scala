@@ -17,11 +17,9 @@ trait VirtualModuleDB extends ModuleDB { self: Context =>
    * used by Namer to resolve FFI includes
    */
   override def contentsOf(path: String): Option[String] = {
-    val f = file(module.source.name).parent / path
-    if (!f.exists) {
-      None
-    } else {
-      Some(f.read)
+    val parent = file(module.source.name).parent
+    (parent :: config.includes().map(file)).collectFirst {
+      case base if (base / path).exists => (base / path).read
     }
   }
 

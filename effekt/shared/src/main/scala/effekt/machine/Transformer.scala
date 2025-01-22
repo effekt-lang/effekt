@@ -390,7 +390,7 @@ object Transformer {
       }
 
     case core.Literal(javastring: String, _) =>
-      val literal_binding = Variable(freshName("utf8StringLiteral"), Type.String());
+      val literal_binding = Variable(freshName("utf8StringLiteral"), builtins.StringType);
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
@@ -472,7 +472,7 @@ object Transformer {
     case core.Type.TByte => Type.Byte()
     case core.Type.TBoolean => builtins.BooleanType
     case core.Type.TDouble => Type.Double()
-    case core.Type.TString => Type.String()
+    case core.Type.TString => Positive()
     case core.ValueType.Data(symbol, targs) => Positive()
   }
 

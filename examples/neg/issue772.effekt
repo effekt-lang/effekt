@@ -1,0 +1,7 @@
+def main(): Unit = {
+  def sayHelloTo(name: String): Unit =
+    println("Hello, " ++ name ++ "!")
+
+  val _ = box sayHelloTo("Jolene") // ERROR Unbox requires a boxed type, but got Unit.
+  ()
+}
