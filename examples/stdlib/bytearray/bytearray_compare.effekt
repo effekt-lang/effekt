@@ -1,0 +1,14 @@
+module examples/pos/bytearray_compare
+
+import bytearray
+
+def main() = {
+  val b1 = fromString("Hey")
+  val b2 = fromString("Hey")
+  val b3 = fromString("He")
+  val b4 = fromString("Heys")
+  println(compareByteArray(b1, b1))
+  println(compareByteArray(b1, b2))
+  println(compareByteArray(b1, b3))
+  println(compareByteArray(b1, b4))
+}
