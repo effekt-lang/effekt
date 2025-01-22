@@ -22,7 +22,6 @@ class StdlibJavaScriptTests extends StdlibTests {
 abstract class StdlibChezTests extends StdlibTests {
   override def ignored: List[File] = List(
     // Not implemented yet
-    examplesDir / "stdlib" / "bytearray",
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
     examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
