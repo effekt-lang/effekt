@@ -155,7 +155,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Toplevel.Def(id, block) =>
       "def" <+> toDoc(id) <+> "=" <+> toDoc(block)
     case Toplevel.Val(id, _, binding) =>
-      "vet" <+> toDoc(id) <+> "=" <+> toDoc(binding)
+      "let" <+> toDoc(id) <+> "=" <+> toDoc(binding)
   }
 
   def toDoc(s: Stmt): Doc = s match {
