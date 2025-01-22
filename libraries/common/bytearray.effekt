@@ -143,3 +143,9 @@ def compareByteArray(b1: ByteArray, b2: ByteArray): Ordering =
     case 1 => Greater()
     case _ => <{ "Impossible: ByteArray comparison returned invalid value!" }>
   }
+
+def compareStringBytes(left: String, right: String): Ordering = {
+  val l = left.fromString
+  val r = right.fromString
+  compareByteArray(l, r)
+}

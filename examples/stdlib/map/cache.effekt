@@ -1,4 +1,5 @@
 import map
+import bytearray
 
 record CacheEntry[V](value: V, timestamp: Int)
 
@@ -7,7 +8,7 @@ effect time(): Int
 def main() = {
   var currentTime = 0
   try {
-    var cache: Map[String, CacheEntry[String]] = map::empty(compareString)
+    var cache: Map[String, CacheEntry[String]] = map::empty(compareStringBytes)
     val maxAge = 8
 
     def cachePut(key: String, value: String): Unit =

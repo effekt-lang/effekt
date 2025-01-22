@@ -172,7 +172,10 @@ def compareInt(n: Int, m: Int) =
   else if (n < m) Less()
   else Greater()
 
-def compareString(left: String, right: String) =
+/// JS only!
+///
+/// A byte-by-byte version exists in `bytearray`.
+def compareString(left: String, right: String): Ordering =
   if (left == right) Equal()
   else if (left < right) Less()
   else Greater()
