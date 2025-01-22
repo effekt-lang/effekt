@@ -40,7 +40,13 @@ def main() = {
   println("")
 
   def testSorted(s: Set[String]) = {
-    val sorted = s.toList.isSortedBy { (x, y) => x <= y }
+    val sorted = s.toList.isSortedBy { (x, y) =>
+      x.compareStringBytes(y) match {
+        case Equal() => true
+        case Less() => true
+        case Greater() => false
+      }
+    }
     if (sorted) {
       println("sorted")
     } else {
