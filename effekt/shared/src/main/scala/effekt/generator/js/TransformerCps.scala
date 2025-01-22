@@ -182,6 +182,7 @@ object TransformerCps extends Transformer {
       nameRef(id)
     case Cont.ContLam(result, ks, body) =>
       js.Lambda(List(nameDef(result), nameDef(ks)), toJS(body)(using nonrecursive(ks)).stmts)
+    case Cont.Abort => js.Undefined
   }
 
   def toJS(e: cps.Expr)(using D: TransformerContext): js.Expr = e match {

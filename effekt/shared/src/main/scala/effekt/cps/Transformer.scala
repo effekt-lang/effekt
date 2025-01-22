@@ -82,7 +82,7 @@ object Transformer {
       App(transform(callee), vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
 
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) if stmt.tpe == core.Type.TBottom =>
-      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), Continuation.Empty)
+      Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), Cont.Abort)
 
     case core.Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) =>
       Invoke(transform(callee), method, vargs.map(transform), bargs.map(transform), MetaCont(ks), k.reify)
@@ -123,7 +123,7 @@ object Transformer {
         transform(body, ks2, Continuation.Dynamic(k2)))
 
       // if the answer type is Nothing, then the continuation is discarded anyways...
-      val continuation = if (stmt.tpe == core.Type.TBottom) Continuation.Empty else k.reify
+      val continuation = if (stmt.tpe == core.Type.TBottom) Cont.Abort else k.reify
 
       Shift(prompt.id, translatedBody, MetaCont(ks), continuation)
 
@@ -239,10 +239,4 @@ enum Continuation {
 }
 object Continuation {
   def Static(hint: Id)(k: (Pure, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
-
-  val Empty: Cont = {
-    val a = Id("a")
-    val ks = Id("ks")
-    cps.Cont.ContLam(a, ks, cps.Hole())
-  }
 }

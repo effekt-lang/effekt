@@ -146,6 +146,7 @@ case class Clause(vparams: List[Id], body: Stmt) extends Tree
 enum Cont extends Tree {
   case ContVar(id: Id)
   case ContLam(result: Id, ks: Id, body: Stmt)
+  case Abort
 }
 
 case class MetaCont(id: Id) extends Tree
@@ -229,6 +230,7 @@ object Variables {
   def free(ks: MetaCont): Variables = meta(ks.id)
   def free(k: Cont): Variables = k match {
     case Cont.ContVar(id) => cont(id)
+    case Cont.Abort => Set()
     case Cont.ContLam(result, ks, body) => free(body) -- value(result) -- meta(ks)
   }
 }
@@ -385,6 +387,7 @@ object substitutions {
     case Cont.ContVar(id) if subst.conts.isDefinedAt(id) => subst.conts(id)
     case Cont.ContVar(id) => Cont.ContVar(id)
     case lam @ Cont.ContLam(result, ks, body) => substitute(lam)
+    case Cont.Abort => Cont.Abort
   }
 
   def substitute(k: Cont.ContLam)(using subst: Substitution): Cont.ContLam = k match {
