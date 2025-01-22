@@ -177,11 +177,11 @@ void c_fs_close(Int file, Stack stack) {
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
  *
- * Tries to use most common errno integer values, but introduces fresh values (> 200)
- * for those without common errno values.
+ * Tries to use most common error number integer values, but introduces fresh values (> 200)
+ * for those without common error number values.
  */
-Int c_error_number(Int errno) {
-    switch (errno) {
+Int c_error_number(Int error) {
+    switch (error) {
         case UV_EPERM:            return 1;    // EPERM
         case UV_ENOENT:           return 2;    // ENOENT
         case UV_ESRCH:            return 3;    // ESRCH
