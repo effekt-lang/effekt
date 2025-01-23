@@ -1,0 +1,16 @@
+import map
+
+def show(opt: Option[(Int, String)]): String = opt match {
+  case Some((k, v)) => k.show ++ " -> " ++ v
+  case None() => "X"
+}
+
+def main() = {
+  val m = map::fromList([(10, "Ten"), (20, "Twenty"), (5, "Five"), (30, "Thirty")], compareInt)
+
+  val min: Option[(Int, String)] = m.getMin
+  val max: Option[(Int, String)] = m.getMax
+
+  println("Min: " ++ min.show)
+  println("Max: " ++ max.show)
+}

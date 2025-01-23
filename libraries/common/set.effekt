@@ -1,0 +1,234 @@
+module set
+
+import map
+
+/// Ordered finite immutable set, backed by balanced binary trees of logarithmic depth.
+record Set[A](tree: internal::Tree[A, Unit], compare: (A, A) => Ordering at {})
+
+/// Create a new empty set using a pure, first-class comparison function.
+///
+/// O(1)
+def empty[A](compare: (A, A) => Ordering at {}): Set[A] =
+  Set(internal::empty(), compare)
+
+/// Create a new empty set using a generic comparison function.
+/// Only available on JavaScript backends!
+///
+/// O(1)
+def emptyGeneric[A](): Set[A] =
+  Set(
+    internal::empty(),
+    box { (left: A, right: A) => genericCompare(left, right) }
+  )
+
+/// Check if set `s` is empty.
+///
+/// O(1)
+def isEmpty[A](s: Set[A]): Bool = internal::isEmpty(s.tree)
+
+/// Check if set `s` is nonempty.
+///
+/// O(1)
+def nonEmpty[A](s: Set[A]): Bool = internal::nonEmpty(s.tree)
+
+/// Create a new set containing a single `element`.
+/// Requires a pure, first-class comparison function.
+///
+/// O(1)
+def singleton[A](element: A, compare: (A, A) => Ordering at {}): Set[A] =
+  Set(internal::singleton(element, ()), compare)
+
+/// Create a new set containing a single `element` and a generic comparison function.
+/// Only available on the JavaScript backends!
+///
+/// O(1)
+def singletonGeneric[A](element: A): Set[A] =
+  Set(
+    internal::singleton(element, ()),
+    box { (left: A, right: A) => genericCompare(left, right) }
+  )
+
+/// Get the size of the set (the number of its elements).
+///
+/// O(1)
+def size[A](s: Set[A]): Int = internal::size(s.tree)
+
+/// Insert a new element `a` into the set `s`.
+///
+/// O(log N)
+def insert[A](s: Set[A], a: A): Set[A] = {
+  val newTree = internal::put(s.tree, s.compare, a, ())
+  Set(newTree, s.compare)
+}
+
+/// Create a set from a given map by ignoring the values.
+///
+/// O(N)
+def fromMapKeys[K, V](map: Map[K, V]): Set[K] =
+  Set(internal::forget(map.tree), map.compare)
+
+/// Create a map from a set and a function,
+/// reusing the set's comparison.
+///
+/// O(N)
+def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
+  val newTree: internal::Tree[K, V] = internal::map(keys.tree) { (k, _v) => valueOf(k) }
+  Map(newTree, keys.compare)
+}
+
+/// Create a set from a given list and a pure, first-class comparison function.
+///
+/// O(N log N)
+/// O(N) if the list is sorted
+def fromList[A](list: List[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
+  Set(tree, compare)
+}
+
+/// Create a set from a given list with a generic comparison function.
+/// Works only on the JavaScript backends!
+///
+/// O(N log N)
+/// O(N) if the list is sorted
+def fromListGeneric[A](list: List[A]): Set[A] = {
+  val compare: (A, A) => Ordering at {} = box { (left, right) => genericCompare(left, right) }
+  val tree: internal::Tree[A, Unit] = internal::fromList(list.map { k => (k, ()) }, compare)
+  Set(tree, compare)
+}
+
+/// Traverse all elements in order, running the function `action` on each element.
+///
+/// Law: `s.foreach { action } === s.toList.foreach { action }`
+///
+/// O(N)
+def foreach[A](s: Set[A]) { action: A => Unit }: Unit =
+  internal::foreach(s.tree) { (k, _v) => action(k) }
+
+/// Create a list from a given set.
+///
+/// O(N)
+def toList[A](s: Set[A]): List[A] = {
+  var acc = Nil()
+  s.foreach { a =>
+    acc = Cons(a, acc)
+  }
+  acc.reverse
+}
+
+/// Check if a predicate holds for all elements in a given set.
+///
+/// O(N)
+def all[A](s: Set[A]) { predicate : A => Bool }: Bool = {
+  var result = true
+  s.foreach { a =>
+    if (not(predicate(a))) { result = false }
+  }
+  result
+}
+
+/// Check if a predicate holds for at least one element in a given set.
+///
+/// O(N)
+def any[A](s: Set[A]) { predicate: A => Bool }: Bool = {
+  var result = false
+  s.foreach { a =>
+    if (predicate(a)) { result = true }
+  }
+  result
+}
+
+/// Check if a set contains a given element.
+///
+/// O(log N)
+def contains[A](s: Set[A], a: A): Bool =
+  internal::get(s.tree, s.compare, a) match {
+    case None() => false
+    case Some(v) => true
+  }
+
+
+/// Check if set `s1` is a subset of set `s2`.
+///
+/// O(N log N)
+def subset[A](s1: Set[A], s2: Set[A]): Bool = {
+  s1.all { a =>
+    s2.contains(a)
+  }
+}
+
+/// Check if set `s1` is a superset of set `s2`.
+///
+/// O(N log N)
+def superset[A](s1: Set[A], s2: Set[A]): Bool = {
+  s2.subset(s1)
+}
+
+/// Remove an element from a set.
+/// If the element is not in the set, the original set is returned.
+///
+/// O(log N)
+def delete[A](s: Set[A], a: A): Set[A] = {
+  val newTree = internal::delete(s.tree, s.compare, a)
+  Set(newTree, s.compare)
+}
+
+/// Remove many elements from a set.
+///
+/// O(M log N) where M is the size of the list.
+def deleteMany[A](s: Set[A], list: List[A]): Set[A] = {
+  var tmp = s
+  list.foreach { a =>
+    tmp = tmp.delete(a)
+  }
+  tmp
+}
+
+/// Construct a new set which contains all elements of `s1`
+/// except those where the element is in `s2`.
+/// Uses an explicit comparison function.
+///
+/// O(???)
+def difference[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val newTree = internal::difference(s1.tree, s2.tree, compare)
+  Set(newTree, compare)
+}
+
+/// Construct a new set which contains all elements of `s1`
+/// except those where the element is in `s2`.
+/// Uses a comparison function from `s1`.
+///
+/// O(???)
+def difference[A](s1: Set[A], s2: Set[A]): Set[A] =
+  s1.difference(s2, s1.compare)
+
+/// Construct a new set which contains both elements of `s1` and `s2`.
+/// Uses an explicit comparison function.
+///
+/// O(???)
+def union[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val newTree = internal::union(s1.tree, s2.tree, compare) { (_k, _v1, _v2) => () }
+  Set(newTree, compare)
+}
+
+/// Construct a new set which contains both elements of `s1` and `s2`.
+/// Uses a comparison function from `s1`.
+///
+/// O(???)
+def union[A](s1: Set[A], s2: Set[A]): Set[A] =
+  s1.union(s2, s1.compare)
+
+/// Construct a new set which contains only elements which are in both of `s1` and `s2`.
+/// Uses an explicit comparison function.
+///
+/// O(???)
+def intersection[A](s1: Set[A], s2: Set[A], compare: (A, A) => Ordering at {}): Set[A] = {
+  val newTree = internal::intersection(s1.tree, s2.tree, compare) { (_k, _v1, _v2) => () }
+  Set(newTree, compare)
+}
+
+/// Construct a new set which contains only elements which are in both of `s1` and `s2`.
+/// Uses a comparison function from `s1`.
+///
+/// O(???)
+def intersection[A](s1: Set[A], s2: Set[A]): Set[A] =
+  s1.intersection(s2, s1.compare)
