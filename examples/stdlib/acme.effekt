@@ -26,6 +26,7 @@ import ref
 import regex
 import result
 import scanner
+import seq
 import set
 import stream
 import string
