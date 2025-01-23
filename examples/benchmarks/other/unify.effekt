@@ -120,14 +120,13 @@ def reporting { body : => Substitution / Exception[UnificationError] }: Unit = {
 }
 
 def main() = {
-  ()
-  // reporting {
-  //   val intType = Con("Int", [])
-  //   val listType = Con("List", [intType])
-  //   val typeVar = Var("a")
+  reporting {
+     val intType = Con("Int", [])
+     val listType = Con("List", [intType])
+     val typeVar = Var("a")
 
-  //   unify(typeVar, listType)
-  // }
+     unify(typeVar, listType)
+  }
 /*
   reporting {
     val functionalType =
