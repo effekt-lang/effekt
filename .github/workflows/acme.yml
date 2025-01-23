@@ -32,7 +32,8 @@ jobs:
 
           # Create the new acme.effekt content
           {
-            echo "/// This module imports **every** stdlib module"
+            echo "/// This module is auto-generated and checked in CI."
+            echo "/// It imports **every** stdlib module: ACME = All Common Modules in Effekt"
             echo "module acme"
             echo ""
             for module in $MODULES; do

@@ -1,4 +1,5 @@
-/// This module imports **every** stdlib module
+/// This module is auto-generated and checked in CI.
+/// It imports **every** stdlib module: ACME = All Common Modules in Effekt
 module acme
 
 import args
