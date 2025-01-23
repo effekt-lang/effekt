@@ -62,7 +62,7 @@ def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / emit[String] = {
   do emit("{")
   def c(k: String) = {
     if (not(first)) { do emit(",") }
-    do emit(escape(k)); do emit(":") 
+    do emit(escape(k)); do emit(":")
     first = false
   }
   val r = encodeJson {
@@ -76,7 +76,7 @@ def encodeJsonObject[R]{ body: => R / JsonObjectBuilder }: R / emit[String] = {
 /// Main entry point for encoding json.
 /// Emits individual tokens of the resulting json.
 def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
-  try body() with JsonBuilder { 
+  try body() with JsonBuilder {
       def null() = { resume(do emit("null")) }
       def bool(v) = { resume(do emit( if(v){ "true" } else { "false" } )) }
       def number(n) = { resume(do emit(show(n))) }
@@ -112,7 +112,7 @@ def readDouble(): Double / Scan[Char] = {
     if (optionally { readIf('.') }) {
       var b = 0.1
       var r = pre.toDouble
-      while (optionally[Int] { readDigit() } is Some(d)) {
+      while (returning::optionally[Int] { readDigit() } is Some(d)) {
         r = r + b * d.toDouble
         b = b * 0.1
       }
@@ -126,14 +126,14 @@ def readDouble(): Double / Scan[Char] = {
 
 def expectString(string: String): Unit / { Scan[Char], Exception[WrongFormat] } =
   for[Char] { string.each } { char =>
-    expect[Unit]("Expected " ++ string) { readIf(char) }
+    expect("Expected " ++ string) { readIf(char) }
   }
 
 /// Read and unescape a string in ""
 def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] } = {
   try {
     skipWhitespace()
-    expect[Unit]("Expected \"") { readIf('"') }
+    expect("Expected \"") { readIf('"') }
     while(read[Char]() is c and c != '"') {
       c match {
         case '\\' => read[Char]() match {
@@ -191,7 +191,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
   }
   do skip[Char]()
 }
-def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = { 
+def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
   var first = true
   expectString("[")
   with boundary
@@ -278,7 +278,7 @@ def build[R](){ body: => R / JsonBuilder }: (R, JsonValue) = {
   }
   (x, r)
 }
-def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = collectList[JsonValue, R] {
+def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = returning::collectList[JsonValue, R] {
   try body() with JsonBuilder {
     def number(n) = { do emit(Number(n)); resume(()) }
     def bool(b) = { do emit(Bool(b)); resume(()) }
@@ -296,7 +296,7 @@ def buildList[R](){ body: => R / JsonBuilder }: (R, List[JsonValue]) = collectLi
     }
   }
 }
-def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = collectList[(String, JsonValue), R] {
+def buildDict[R](){ body: => R / JsonObjectBuilder }: (R, List[(String, JsonValue)]) = returning::collectList[(String, JsonValue), R] {
   try body() with JsonObjectBuilder {
     def field(k) = resume { {v} =>
       val x = build{v}
@@ -315,9 +315,11 @@ namespace test {
 
     // Read quoted string
     feed("\"\ta\n\ra\"") {
-      with scanner[Char, Unit]
+      with scanner[Char]
       println(collectString { readQuotedString() })
     }
+
+    println("")
 
     // Parse example
     feed("""{ "a": null, "b": [true,false,false,true], "f": 12.532   }"""){
@@ -336,8 +338,10 @@ namespace test {
       }
       handleJsonBuilder{d}{ decodeJson() }
     }
-    try{
-  
+
+    println("")
+
+    try {
       // Encode example
       encodeJson {
         do dict{
@@ -352,13 +356,15 @@ namespace test {
           }
         }
       }
-  
+
+      println("")
+
       // format with intermediate value
-      val j = feed("""{ 
-                  "a": null, 
-                  "b": [true, false, false, true], "f": 12.532   
+      val j = feed[JsonValue]("""{
+                  "a": null,
+                  "b": [true, false, false, true], "f": 12.532
                 } """){
-        with scanner[Char, JsonValue]
+        with returning::scanner[Char, JsonValue]
         build {
           decodeJson()
         }.second
@@ -366,18 +372,20 @@ namespace test {
       encodeJson{
         unbuild(j)
       }
-      
+
+      println("")
+
       // format (minify) example
       encodeJson{
-        feed("""{ 
-                  "a": null, 
-                  "b": [true, false, false, true], "f": 12.532   
+        feed("""{
+                  "a": null,
+                  "b": [true, false, false, true], "f": 12.532
                 } """){
-          with scanner[Char, Unit]
+          with scanner[Char]
           decodeJson()
         }
       }
-  
+
     } with emit[String] { e =>
       resume(println(e))
     }
