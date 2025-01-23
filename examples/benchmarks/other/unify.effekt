@@ -132,6 +132,8 @@ def main() = {
 
   val N = 16
 
+  var found = 0
+
   // the actual test
   for {
     reporting {
@@ -154,7 +156,12 @@ def main() = {
       unify(deepType1, deepType2)
     }
   } {
-    case (l, Var(r)) and l.substring(1) == r.substring(1) => ()
-    case (l, r) => println("error! " ++ l ++ " -> " ++ showType(r))
+    case (l, Var(r)) and l.substring(1) == r.substring(1) =>
+      found = found + 1
+    case (l, r) =>
+      println("error! " ++ l ++ " -> " ++ showType(r))
   }
+
+  println("Found: " ++ found.show)
+  println("Expected: " ++ 2.0.pow(N).show)
 }

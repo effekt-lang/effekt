@@ -1,3 +1,5 @@
 Unification successful!
-Substitution:
   a -> List(Int)
+Unification successful!
+Found: 65536
+Expected: 65536
