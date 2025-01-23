@@ -60,7 +60,9 @@ def unify(ty1: Type, ty2: Type, subst: Substitution): Substitution / Exception[U
 
     // If both are constructors, unify their arguments
     case (Con(name1, args1), Con(name2, args2)) =>
-      if (name1 != name2 || args1.size != args2.size) {
+      if (name1 != name2) {
+        do raise(UnificationFailure(substTy1, substTy2), "Different constructors!")
+      } else if (args1.size != args2.size) {
         do raise(UnificationFailure(substTy1, substTy2), "Different number of arguments!")
       } else {
         unifyMany(args1, args2, subst)
