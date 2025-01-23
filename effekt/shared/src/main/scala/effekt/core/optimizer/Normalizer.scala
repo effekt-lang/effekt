@@ -160,8 +160,10 @@ object Normalizer { normal =>
 
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
 
-    case Stmt.Def(id, block, body) if !C.usage.contains(id) || C.usage.get(id).contains(Usage.Never) => // see #798
+    // see #798 for context (led to stack overflow)
+    case Stmt.Def(id, block, body) if !C.usage.contains(id) || C.usage.get(id).contains(Usage.Never) =>
       normalize(body)
+
     case Stmt.Def(id, block, body) =>
       val normalized = active(block).dealiased
       Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
