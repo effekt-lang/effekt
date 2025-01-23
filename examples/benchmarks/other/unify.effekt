@@ -21,15 +21,14 @@ type UnificationError {
 
 // Check if a type variable occurs in another type
 def occurs(variable: String, ty: Type): Bool = ty match {
-  case Var(name) => name == variable
+  case Var(name)    => name == variable
   case Con(_, args) => args.any { arg => variable.occurs(arg) }
 }
 
 // Apply a substitution to a type
 def apply(subst: Substitution, ty: Type): Type = ty match {
   case Var(name) =>
-    val substitutedType = subst.getOrElse(name) { () => ty }
-    subst.apply(substitutedType)
+    subst.getOrElse(name) { () => ty }
   case Con(name, args) =>
     Con(name, args.map { arg => subst.apply(arg) })
 }
@@ -127,7 +126,7 @@ def main() = {
 
      unify(typeVar, listType)
   }
-/*
+
   reporting {
     val functionalType =
       Con("Func", [
@@ -168,5 +167,37 @@ def main() = {
       ])
 
     unify(functionalType, concreteType, initialSubstitution)
-  }*/
+  }
+
+  reporting {
+    val x = Var("X")
+        val z = Var("Z")
+
+    def pairOf(x: Type) = Con("Pair", [x, x])
+    val intPair = pairOf(Con("Int", []))
+
+    val term1 = Con("Pair", [
+      Con("Pair", [pairOf(x), pairOf(x)]),
+      Con("Pair", [pairOf(x), pairOf(x)])
+    ])
+
+    val term2 = Con("Pair", [
+      Con("Pair", [intPair, Var("y")]),
+      z
+    ])
+
+    val subst1 = unify(term1, term2)
+
+    val term3 = Con("Pair", [
+      Con("Pair", [pairOf(z), pairOf(z)]),
+      Con("Pair", [pairOf(z), pairOf(z)])
+    ])
+
+    val term4 = Con("Pair", [
+      Con("Pair", [Var("a"), Var("b")]),
+      Var("c")
+    ])
+
+    unify(term3, term4, subst1)
+  }
 }
