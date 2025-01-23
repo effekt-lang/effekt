@@ -22,8 +22,7 @@ jobs:
             # Remove libraries/common/ prefix and .effekt suffix
             local module_path="${filepath#libraries/common/}"
             module_path="${module_path%.effekt}"
-            # Replace / with .
-            echo "${module_path//\//.}"
+            echo "$module_path"
           }
 
           # Find all .effekt files in libraries/common, excluding acme.effekt
