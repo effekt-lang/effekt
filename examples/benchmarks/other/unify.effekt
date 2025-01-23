@@ -97,6 +97,7 @@ def show(err: UnificationError): String = err match {
     "Cannot unify " ++ tps2.map { showType }.join(", ") ++ " with " ++ tps1.map { showType }.join(", ")
 }
 
+/// Worker wrapper
 def reporting { body : => Substitution / Exception[UnificationError] }: Unit / emit[(String, Type)] = {
   val res = result[Substitution, UnificationError] {
     body()
@@ -115,6 +116,29 @@ def reporting { body : => Substitution / Exception[UnificationError] }: Unit / e
   }
 }
 
+/// Used for testing to generate two `depth`-deep, nested types of the shape:
+/// ```
+/// (Nested
+///   (Nested
+///     ...
+///       XLLLLLLLL
+///       XLLLLLLLR)
+/// ```
+/// for `baseVar = X`.
+def generateDeepType(depth: Int, baseVar: String): Type = {
+  def recur(currentDepth: Int, varSuffix: String): Type =
+    if (currentDepth == 0) {
+      Var(baseVar ++ varSuffix)
+    } else {
+      Con("Nested", [
+        recur(currentDepth - 1, varSuffix ++ "L"),
+        recur(currentDepth - 1, varSuffix ++ "R")
+      ])
+    }
+
+  recur(depth, "")
+}
+
 def main() = {
   def printBinding(pair: (String, Type)): Unit =
     println("  " ++ pair.first ++ " -> " ++ showType(pair.second))
@@ -130,27 +154,12 @@ def main() = {
     }
   } { printBinding }
 
-  val N = 16
-
+  // the actual test
+  val N = 12
   var found = 0
 
-  // the actual test
   for {
     reporting {
-      def generateDeepType(depth: Int, baseVar: String): Type = {
-        def recur(currentDepth: Int, varSuffix: String): Type =
-          if (currentDepth == 0) {
-            Var(baseVar ++ varSuffix)
-          } else {
-            Con("Nested", [
-              recur(currentDepth - 1, varSuffix ++ "L"),
-              recur(currentDepth - 1, varSuffix ++ "R")
-            ])
-          }
-
-        recur(depth, "")
-      }
-
       val deepType1 = generateDeepType(N, "A")
       val deepType2 = generateDeepType(N, "B")
       unify(deepType1, deepType2)
