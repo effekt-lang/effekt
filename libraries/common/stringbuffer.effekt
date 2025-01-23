@@ -1,5 +1,6 @@
 module stringbuffer
 
+import effekt
 import bytearray
 
 interface StringBuffer {
@@ -36,8 +37,7 @@ def stringBuffer[A] { prog: => A / StringBuffer }: A = {
     }
     def flush() = {
       // resize buffer to strip trailing zeros that otherwise would be converted into 0x00 characters
-      buffer = bytearray::resize(buffer, pos)
-      val str = buffer.toString()
+      val str = bytearray::resize(buffer, pos).toString()
       // after flushing, the stringbuffer should be empty again
       buffer = bytearray::allocate(initialCapacity)
       resume(str)

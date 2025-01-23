@@ -1,5 +1,6 @@
 module splice
 
+import effekt
 import stringbuffer
 
 effect literal(s: String): Unit

@@ -1,6 +1,3 @@
-import splice
-import stringbuffer
-
 type Expr {
   Var(id: String)
   Abs(param: String, body: Expr)
