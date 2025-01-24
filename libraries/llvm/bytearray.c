@@ -22,7 +22,6 @@ struct Pos c_bytearray_new(const Int size) {
   void *objPtr = malloc(sizeof(struct Header) + size);
   struct Header *headerPtr = objPtr;
   *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
-  memset(objPtr + sizeof(struct Header), 0, size);
   return (struct Pos) {
     .tag = size,
     .obj = objPtr,
