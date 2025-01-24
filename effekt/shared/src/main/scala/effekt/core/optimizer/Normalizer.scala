@@ -66,6 +66,9 @@ object Normalizer { normal =>
       case None => false
     }
 
+  private def isUnused(id: Id)(using ctx: Context): Boolean =
+    ctx.usage.get(id).forall { u => u == Usage.Never }
+
   def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, preserveBoxing: Boolean): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
@@ -159,6 +162,10 @@ object Normalizer { normal =>
     }
 
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
+
+    // see #798 for context (led to stack overflow)
+    case Stmt.Def(id, block, body) if isUnused(id) =>
+      normalize(body)
 
     case Stmt.Def(id, block, body) =>
       val normalized = active(block).dealiased

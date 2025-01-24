@@ -167,6 +167,11 @@ object TransformerCps extends Transformer {
       js.Lambda(vps.map(nameDef) ++ bps.map(nameDef) ++ List(nameDef(ks), nameDef(k)), toJS(body).stmts)
   }
 
+  def argumentToJS(b: cps.Block)(using TransformerContext): js.Expr = b match {
+    case cps.BlockLit(vps, bps, ks, k, body) => toJS(b)(using nonrecursive(ks))
+    case other => toJS(b)
+  }
+
   def toJS(handler: cps.Implementation)(using TransformerContext): js.Expr = handler match {
     case cps.Implementation(interface, operations) =>
       js.Object(operations.map {
@@ -191,7 +196,7 @@ object TransformerCps extends Transformer {
     case Pure.Literal(s: String)     => JsString(escape(s))
     case literal: Pure.Literal       => js.RawExpr(literal.value.toString)
     case DirectApp(id, vargs, Nil)   => inlineExtern(id, vargs)
-    case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(toJS))
+    case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(argumentToJS))
     case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Pure.Box(b)                 => toJS(b)
@@ -331,7 +336,7 @@ object TransformerCps extends Transformer {
           stmts.append(js.Assign(nameRef(param), toJS(substitutions.substitute(arg)(using subst))))
         }
         (bparams zip bargs).foreach { (param, arg) =>
-          stmts.append(js.Assign(nameRef(param), toJS(substitutions.substitute(arg)(using subst))))
+          stmts.append(js.Assign(nameRef(param), argumentToJS(substitutions.substitute(arg)(using subst))))
         }
 
         // Restore metacont if needed
@@ -343,11 +348,11 @@ object TransformerCps extends Transformer {
       }
 
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
-      pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks),
+      pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks),
         requiringThunk { toJS(k) }))))
 
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
-      val args = vargs.map(toJS) ++ bargs.map(toJS) ++ List(toJS(ks), toJS(k))
+      val args = vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks), toJS(k))
       pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)))
 
     // const r = ks.arena.newRegion(); body
