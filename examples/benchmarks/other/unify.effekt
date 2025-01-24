@@ -1,6 +1,7 @@
 /// Robinson-style Unification Algorithm
 module examples/benchmarks/unify
 
+import examples/benchmarks/runner
 import map
 import result
 import bytearray
@@ -141,7 +142,7 @@ def generateDeepType(depth: Int, baseVar: String): Type = {
   recur(depth, "")
 }
 
-def main() = {
+def run(N: Int) = {
   def printBinding(pair: (String, Type)): Unit =
     println("  " ++ pair.first ++ " -> " ++ showType(pair.second))
 
@@ -157,7 +158,6 @@ def main() = {
   } { printBinding }
 
   // the actual test
-  val N = 12
   var found = 0
 
   for {
@@ -173,6 +173,11 @@ def main() = {
       println("error! " ++ l ++ " -> " ++ showType(r))
   }
 
-  println("Found: " ++ found.show)
-  println("Expected: " ++ 2.0.pow(N).show)
+  val expected = 2.0.pow(N).toInt
+  if (found != expected) {
+    panic("found: " ++ found.show ++ ", but expected: " ++ expected.show)
+  }
+  found
 }
+
+def main() = benchmark(12){run}
