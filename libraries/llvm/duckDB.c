@@ -1,67 +1,61 @@
 #ifndef EFFEKT_DUCKDB_C
 #define EFFEKT_DUCKDB_C
 
-#include <iostream>
 #include <duckdb.h>
 
+Int c_simple_inc(Int n) {
+  return n + 1;
+}
 
-int c_test_duckDB(Stack stack) {
-    duckdb_database db;
-    duckdb_connection con;
-    duckdb_open(nullptr, &db);
-    duckdb_connect(db, &con);
+void c_test_duckDB(Stack stack) {
+    duckdb_database db = NULL;
+	duckdb_connection con = NULL;
+	duckdb_result result;
 
-    duckdb_result res;
-    duckdb_query(con, "CREATE TABLE integers (i INTEGER, j INTEGER);", NULL);
-    duckdb_query(con, "INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);", NULL);
-    duckdb_query(con, "SELECT * FROM integers;", &res);
+	if (duckdb_open(NULL, &db) == DuckDBError) {
+		fprintf(stderr, "Failed to open database\n");
+		goto cleanup;
+	}
+	if (duckdb_connect(db, &con) == DuckDBError) {
+		fprintf(stderr, "Failed to open connection\n");
+		goto cleanup;
+	}
+	if (duckdb_query(con, "CREATE TABLE integers(i INTEGER, j INTEGER);", NULL) == DuckDBError) {
+		fprintf(stderr, "Failed to query database\n");
+		goto cleanup;
+	}
+	if (duckdb_query(con, "INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);", NULL) == DuckDBError) {
+		fprintf(stderr, "Failed to query database\n");
+		goto cleanup;
+	}
+	if (duckdb_query(con, "SELECT * FROM integers", &result) == DuckDBError) {
+		fprintf(stderr, "Failed to query database\n");
+		goto cleanup;
+	}
+	// print the names of the result
+	idx_t row_count = duckdb_row_count(&result);
+	idx_t column_count = duckdb_column_count(&result);
+	for (size_t i = 0; i < column_count; i++) {
+		printf("%s ", duckdb_column_name(&result, i));
+	}
+	printf("\n");
+	// print the data of the result
+	for (size_t row_idx = 0; row_idx < row_count; row_idx++) {
+		for (size_t col_idx = 0; col_idx < column_count; col_idx++) {
+			char *val = duckdb_value_varchar(&result, col_idx, row_idx);
+			printf("%s ", val);
+			duckdb_free(val);
+		}
+		printf("\n");
+	}
+	// duckdb_print_result(result);
+cleanup:
+	duckdb_destroy_result(&result);
+	duckdb_disconnect(&con);
+	duckdb_close(&db);
 
-    struct Pos rows = c_list_make_empty(); // Effekt-kompatible leere Liste erstellen
-
-    while (true) {
-        duckdb_data_chunk result = duckdb_fetch_chunk(res);
-        if (!result) {
-            break;
-        }
-
-        idx_t row_count = duckdb_data_chunk_get_size(result);
-
-        duckdb_vector col1 = duckdb_data_chunk_get_vector(result, 0);
-        int32_t* col1_data = (int32_t*)duckdb_vector_get_data(col1);
-        uint64_t* col1_validity = duckdb_vector_get_validity(col1);
-
-        duckdb_vector col2 = duckdb_data_chunk_get_vector(result, 1);
-        int32_t* col2_data = (int32_t*)duckdb_vector_get_data(col2);
-        uint64_t* col2_validity = duckdb_vector_get_validity(col2);
-
-        for (idx_t row = 0; row < row_count; row++) {
-            struct Pos row_tuple = c_tuple_make(2); // Effekt-Tupel erstellen
-
-            if (duckdb_validity_row_is_valid(col1_validity, row)) {
-                c_tuple_set(row_tuple, 0, c_int_make(col1_data[row]));
-            } else {
-                c_tuple_set(row_tuple, 0, c_none_make());
-            }
-
-            if (duckdb_validity_row_is_valid(col2_validity, row)) {
-                c_tuple_set(row_tuple, 1, c_int_make(col2_data[row]));
-            } else {
-                c_tuple_set(row_tuple, 1, c_none_make());
-            }
-
-            rows = c_list_cons(row_tuple, rows); // Zeile zur Liste hinzufügen
-        }
-
-        duckdb_destroy_data_chunk(&result);
-    }
-
-    // clean-up
-    duckdb_destroy_result(&res);
-    duckdb_disconnect(&con);
-    duckdb_close(&db);
-
-    resume_Pos(stack, rows); // Rückgabe der Liste an Effekt
-    return 0;
+	resume_Int(stack, 1337); // Rückgabe der Liste an Effekt
+	return;
 }
 
 #endif

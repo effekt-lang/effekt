@@ -42,6 +42,7 @@ extern jsNode """
 
 extern llvm """
   declare void @c_test_duckDB(%Stack)
+  declare %Int @c_simple_inc(%Int)
 """
 
 extern type Database
@@ -50,9 +51,15 @@ extern type Connection
 
 extern type JSValue
 
-extern async def testC(): JSValue = 
+extern pure def inc(n: Int): Int =
   llvm """
-      call void @c_test_duckDB(%Stack)
+    %res = call ccc %Int @c_simple_inc(%Int ${n})
+    ret %res
+  """
+
+extern async def testC(): Int =
+  llvm """
+      call ccc void @c_test_duckDB(%Stack %stack)
       ret void
   """
 
@@ -62,7 +69,7 @@ extern async def createDB(): Database =
 extern async def createConnection(db: Database): Connection =
   jsNode "$effekt.capture(callback => createConnection(${db}, callback));"
 
-extern def createTableFromFile(con: Connection, path: String, tableName: String): JSValue = 
+extern def createTableFromFile(con: Connection, path: String, tableName: String): JSValue =
   jsNode "runQuery(${con}, 'CREATE TABLE ' + ${tableName} + ' AS SELECT * FROM ' + ${path}, x => x);"
 
 extern async def runAndGet(con: Connection, query: String): JSValue =
@@ -73,6 +80,6 @@ def main() = {
   // val con = createConnection(db)
   // createTableFromFile(con, "sample_database.json", "test")
   // inspect(runAndGet(con, "SELECT id FROM test"))
-  inspect(testC())
-  println("Placeholder")
+  val n = testC()
+  println("after: " ++ inc(n).show)
 }
