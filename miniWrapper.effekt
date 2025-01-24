@@ -1,0 +1,78 @@
+extern jsNode """
+  const duckDB = require('@duckdb/node-api').DuckDBInstance;
+
+  function createDB(callback) {
+    duckDB.create(':memory:', function() {
+      $effekt.runToplevel(callback)
+    })
+  }
+
+  function createConnection(db, callback) {
+    db.connect(function() {
+      $effekt.runToplevel(callback)
+    });
+  }
+
+  function runQuery(con, query, callback) {
+    con.run(query, function() {
+      $effekt.runToplevel(callback)
+    });
+  }
+
+  function getChunk(res, callback){
+    res.fetchChunk(function() {
+      $effekt.runToplevel(callback)
+    });
+  }
+
+  function getOne(res, callback) {
+    getChunk(res, chunk => {
+      // Last chunk will have zero rows.
+      if (chunk.rowCount === 0) {
+          return;
+      }
+      callback(chunk.getColumns());
+    });
+  }
+
+  function runAndGet(con, query, callback) {
+    runQuery(con, query, res => getOne(res, callback));
+  }
+"""
+
+extern llvm """
+  declare void @c_test_duckDB(%Stack)
+"""
+
+extern type Database
+
+extern type Connection
+
+extern type JSValue
+
+extern async def testC(): JSValue = 
+  llvm """
+      call void @c_test_duckDB(%Stack)
+      ret void
+  """
+
+extern async def createDB(): Database =
+  jsNode "$effekt.capture(callback => createDB(callback));"
+
+extern async def createConnection(db: Database): Connection =
+  jsNode "$effekt.capture(callback => createConnection(${db}, callback));"
+
+extern def createTableFromFile(con: Connection, path: String, tableName: String): JSValue = 
+  jsNode "runQuery(${con}, 'CREATE TABLE ' + ${tableName} + ' AS SELECT * FROM ' + ${path}, x => x);"
+
+extern async def runAndGet(con: Connection, query: String): JSValue =
+  jsNode "$effekt.capture(callback => runAndGet(${con}, ${query}, callback));"
+
+def main() = {
+  // val db = createDB()
+  // val con = createConnection(db)
+  // createTableFromFile(con, "sample_database.json", "test")
+  // inspect(runAndGet(con, "SELECT id FROM test"))
+  inspect(testC())
+  println("Placeholder")
+}

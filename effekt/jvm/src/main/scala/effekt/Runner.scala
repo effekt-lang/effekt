@@ -276,8 +276,8 @@ object LLVMRunner extends Runner[String] {
 
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
-  lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
-  lazy val optCmd = discoverExecutable(List("opt", "opt-15", "opt-16"), List("--version"))
+  lazy val llcCmd = Some("G:/Programme/llvm-3.4-tools-windows/llc.exe")
+  lazy val optCmd = Some("G:/Programme/llvm-3.4-tools-windows/opt.exe")
 
   def checkSetup(): Either[String, Unit] =
     gccCmd.getOrElseAborting { return Left("Cannot find gcc. This is required to use the LLVM backend.") }
@@ -325,6 +325,7 @@ object LLVMRunner extends Runner[String] {
     val objPath = basePath + ".o"
     val linkedLibraries = Seq(
       "-lm", // Math library
+      "-lduckdb", // DuckDB library
     ) ++ libuvArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")

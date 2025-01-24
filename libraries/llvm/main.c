@@ -15,6 +15,7 @@
 #include "hole.c"
 #include "ref.c"
 #include "array.c"
+#include "duckDB.c"
 
 
 extern void effektMain();
@@ -40,5 +41,4 @@ int main(int argc, char *argv[]) {
     uv_loop_t *loop = uv_default_loop();
     uv_run(loop, UV_RUN_DEFAULT);
     uv_loop_close(loop);
-    return 0;
 }
