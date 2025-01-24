@@ -1,0 +1,28 @@
+import map
+
+def main() = {
+    val l = [(0, "Hello"), (1, "World"), (2, "Woo!")]
+
+    val m = map::fromList(l, compareInt)
+    println(map::internal::prettyPairs(m.toList) { n => show(n) } { s => show(s) })
+
+    val m2 = m.put(-1, "Hullo")
+    println(map::internal::prettyPairs(m2.toList) { n => show(n) } { s => show(s) })
+
+    val m3 = m2.put(-10, "EY")
+    println(map::internal::prettyPairs(m3.toList) { n => show(n) } { s => show(s) })
+
+    // ...
+
+    val m4 = m.delete(1).put(42, "Whole new world!").put(100, "Big").put(1000, "Bigger").put(10000, "Biggest!")
+    println(map::internal::prettyPairs(m4.toList) { n => show(n) } { s => show(s) })
+
+    val m5 = map::fromList(Cons((1, "Foo"), Cons((-1, "Huh?!"), m4.toList.reverse)), compareInt)
+    println(map::internal::prettyPairs(m5.toList) { n => show(n) } { s => show(s) })
+
+    val m6: Map[Int, String] = m5.toList.fromList(compareInt)
+    println(map::internal::prettyPairs(m6.toList) { n => show(n) } { s => show(s) })
+
+    val nuMap = map::fromList(l.reverse, compareInt)
+    println(map::internal::prettyPairs(nuMap.toList) { n => show(n) } { s => show(s) })
+}

@@ -1,0 +1,8 @@
+Union (keeping first value):
+[1 → apple, 2 → banana, 3 → cherry, 4 → elderberry]
+
+Union (combining values):
+[1 → apple, 2 → banana/berry, 3 → cherry/date, 4 → elderberry]
+
+Intersection (combining keys):
+[2 → banana-berry, 3 → cherry-date]

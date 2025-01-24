@@ -22,7 +22,6 @@ class StdlibJavaScriptTests extends StdlibTests {
 abstract class StdlibChezTests extends StdlibTests {
   override def ignored: List[File] = List(
     // Not implemented yet
-    examplesDir / "stdlib" / "bytearray",
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
     examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt"
@@ -47,5 +46,12 @@ class StdlibLLVMTests extends StdlibTests {
 
     // Conditional jump or move depends on uninitialised value(s)
     examplesDir / "stdlib" / "io" / "filesystem" / "wordcount.effekt",
+
+    // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
+    examplesDir / "stdlib" / "string" / "compare.effekt",
+
+    // Wrong codegen for negative types, see #801
+    examplesDir / "stdlib" / "json.effekt",
+    examplesDir / "stdlib" / "buffer.effekt",
   )
 }

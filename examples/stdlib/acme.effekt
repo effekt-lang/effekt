@@ -1,0 +1,37 @@
+/// This module is auto-generated and checked in CI.
+/// It imports **every** stdlib module: ACME = All Common Modules in Effekt
+module acme
+
+import args
+import array
+import bench
+import buffer
+import bytearray
+import char
+import dequeue
+import effekt
+import exception
+import io
+import io/console
+import io/error
+import io/filesystem
+import io/network
+import io/time
+import json
+import list
+import map
+import option
+import process
+import queue
+import ref
+import regex
+import result
+import scanner
+import seq
+import set
+import stream
+import string
+import test
+import tty
+
+def main() = ()

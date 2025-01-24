@@ -1,0 +1,183 @@
+/// Robinson-style Unification Algorithm
+module examples/benchmarks/unify
+
+import examples/benchmarks/runner
+import map
+import result
+import bytearray
+import stream
+
+type Type {
+  Var(name: String)
+  Con(name: String, args: List[Type])
+}
+
+type Substitution = Map[String, Type]
+
+type UnificationError {
+  OccursCheckFailure(variable: String, tpe: Type)
+  UnificationFailure(tpe1: Type, tpe2: Type)
+  UnificationManyFailure(tps1: List[Type], tps2: List[Type])
+}
+
+// Check if a type variable occurs in another type
+def occurs(variable: String, ty: Type): Bool = ty match {
+  case Var(name)    => name == variable
+  case Con(_, args) => args.any { arg => variable.occurs(arg) }
+}
+
+// Apply a substitution to a type
+def apply(subst: Substitution, ty: Type): Type = ty match {
+  case Var(name) =>
+    subst.getOrElse(name) { () => ty }
+  case Con(name, args) =>
+    Con(name, args.map { arg => subst.apply(arg) })
+}
+
+def unify(ty1: Type, ty2: Type, subst: Substitution): Substitution / Exception[UnificationError] = {
+  val substTy1 = subst.apply(ty1)
+  val substTy2 = subst.apply(ty2)
+
+  (substTy1, substTy2) match {
+    // If both are the same variable, return current substitution
+    case (Var(x), Var(y)) and x == y =>
+      subst
+
+    // If first is a variable, try to bind it
+    case (Var(x), _) =>
+      if (x.occurs(substTy2)) {
+        do raise(OccursCheckFailure(x, substTy2), "")
+      } else {
+        subst.put(x, substTy2)
+      }
+
+    // If second is a variable, try to bind it
+    case (_, Var(y)) =>
+      if (occurs(y, substTy1)) {
+        do raise(OccursCheckFailure(y, substTy1), "")
+      } else {
+        subst.put(y, substTy1)
+      }
+
+    // If both are constructors, unify their arguments
+    case (Con(name1, args1), Con(name2, args2)) =>
+      if (name1 != name2) {
+        do raise(UnificationFailure(substTy1, substTy2), "Different constructors!")
+      } else if (args1.size != args2.size) {
+        do raise(UnificationFailure(substTy1, substTy2), "Different number of arguments!")
+      } else {
+        unifyMany(args1, args2, subst)
+      }
+  }
+}
+
+// Unify a list of arguments with a current substitution
+def unifyMany(args1: List[Type], args2: List[Type], subst: Substitution): Substitution / Exception[UnificationError] =
+  (args1, args2) match {
+    case (Nil(), Nil()) => subst
+    case (Cons(a1, rest1), Cons(a2, rest2)) =>
+      val newSubst = unify(a1, a2, subst)
+      unifyMany(rest1, rest2, newSubst)
+    case _ => do raise(UnificationManyFailure(args1, args2), "Different numbers of types on each side!")
+  }
+
+def unify(ty1: Type, ty2: Type): Substitution / Exception[UnificationError] =
+  unify(ty1, ty2, map::empty(box bytearray::compareStringBytes))
+
+def showType(ty: Type): String = ty match {
+  case Var(name) => name
+  case Con(name, Nil()) => name
+  case Con(name, args) =>
+    name ++ "(" ++ args.map { t => showType(t) }.join(", ") ++ ")"
+}
+
+def show(err: UnificationError): String = err match {
+  case OccursCheckFailure(variable, ty) =>
+    "Occurs check failed: " ++ variable ++ " occurs in " ++ showType(ty)
+  case UnificationFailure(ty1, ty2) =>
+    "Cannot unify " ++ showType(ty1) ++ " with " ++ showType(ty2)
+  case UnificationManyFailure(tps1, tps2) =>
+    "Cannot unify " ++ tps2.map { showType }.join(", ") ++ " with " ++ tps1.map { showType }.join(", ")
+}
+
+/// Worker wrapper
+def reporting { body : => Substitution / Exception[UnificationError] }: Unit / emit[(String, Type)] = {
+  val res = result[Substitution, UnificationError] {
+    body()
+  }
+
+  res match {
+    case Success(subst) => {
+      println("Unification successful!")
+      subst.each
+    }
+    case Error(err, msg) =>
+      println("Unification failed: " ++ show(err))
+      if (msg.length > 0) {
+        println(msg)
+      }
+  }
+}
+
+/// Used for testing to generate two `depth`-deep, nested types of the shape:
+/// ```
+/// (Nested
+///   (Nested
+///     ...
+///       XLLLLLLLL
+///       XLLLLLLLR)
+/// ```
+/// for `baseVar = X`.
+def generateDeepType(depth: Int, baseVar: String): Type = {
+  def recur(currentDepth: Int, varSuffix: String): Type =
+    if (currentDepth == 0) {
+      Var(baseVar ++ varSuffix)
+    } else {
+      Con("Nested", [
+        recur(currentDepth - 1, varSuffix ++ "L"),
+        recur(currentDepth - 1, varSuffix ++ "R")
+      ])
+    }
+
+  recur(depth, "")
+}
+
+def run(N: Int) = {
+  def printBinding(pair: (String, Type)): Unit =
+    println("  " ++ pair.first ++ " -> " ++ showType(pair.second))
+
+  // sanity check
+  for {
+    reporting {
+      val intType = Con("Int", [])
+      val listType = Con("List", [intType])
+      val typeVar = Var("a")
+
+      unify(typeVar, listType)
+    }
+  } { printBinding }
+
+  // the actual test
+  var found = 0
+
+  for {
+    reporting {
+      val deepType1 = generateDeepType(N, "A")
+      val deepType2 = generateDeepType(N, "B")
+      unify(deepType1, deepType2)
+    }
+  } {
+    case (l, Var(r)) and l.substring(1) == r.substring(1) =>
+      found = found + 1
+    case (l, r) =>
+      println("error! " ++ l ++ " -> " ++ showType(r))
+  }
+
+  val expected = 2.0.pow(N).toInt
+  if (found != expected) {
+    panic("found: " ++ found.show ++ ", but expected: " ++ expected.show)
+  }
+  found
+}
+
+def main() = benchmark(12){run}

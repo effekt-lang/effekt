@@ -4,6 +4,7 @@ package cps
 import core.{ Id, ValueType, BlockType, Captures }
 import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
+import effekt.util.messages.INTERNAL_ERROR
 
 
 sealed trait Tree extends Product {
@@ -145,6 +146,7 @@ case class Clause(vparams: List[Id], body: Stmt) extends Tree
 enum Cont extends Tree {
   case ContVar(id: Id)
   case ContLam(result: Id, ks: Id, body: Stmt)
+  case Abort
 }
 
 case class MetaCont(id: Id) extends Tree
@@ -228,6 +230,186 @@ object Variables {
   def free(ks: MetaCont): Variables = meta(ks.id)
   def free(k: Cont): Variables = k match {
     case Cont.ContVar(id) => cont(id)
+    case Cont.Abort => Set()
     case Cont.ContLam(result, ks, body) => free(body) -- value(result) -- meta(ks)
   }
+}
+
+
+object substitutions {
+
+  case class Substitution(
+    values: Map[Id, Pure] = Map.empty,
+    blocks: Map[Id, Block] = Map.empty,
+    conts: Map[Id, Cont] = Map.empty,
+    metaconts: Map[Id, MetaCont] = Map.empty
+  ) {
+    def shadowValues(shadowed: IterableOnce[Id]): Substitution = copy(values = values -- shadowed)
+    def shadowBlocks(shadowed: IterableOnce[Id]): Substitution = copy(blocks = blocks -- shadowed)
+    def shadowConts(shadowed: IterableOnce[Id]): Substitution = copy(conts = conts -- shadowed)
+    def shadowMetaconts(shadowed: IterableOnce[Id]): Substitution = copy(metaconts = metaconts -- shadowed)
+
+    def shadowParams(vparams: Seq[Id], bparams: Seq[Id]): Substitution =
+      copy(values = values -- vparams, blocks = blocks -- bparams)
+  }
+
+  def substitute(expression: Expr)(using Substitution): Expr = expression match {
+    case DirectApp(id, vargs, bargs) =>
+      DirectApp(id, vargs.map(substitute), bargs.map(substitute))
+    case p: Pure => substitute(p)
+  }
+
+  def substitute(pure: Pure)(using subst: Substitution): Pure = pure match {
+    case ValueVar(id) if subst.values.isDefinedAt(id) => subst.values(id)
+    case ValueVar(id) => ValueVar(id)
+    case Literal(value) => Literal(value)
+    case Make(tpe, tag, vargs) => Make(tpe, tag, vargs.map(substitute))
+    case PureApp(id, vargs) => PureApp(id, vargs.map(substitute))
+    case Box(b) => Box(substitute(b))
+  }
+
+  def substitute(block: Block)(using subst: Substitution): Block = block match {
+    case BlockVar(id) if subst.blocks.isDefinedAt(id) => subst.blocks(id)
+    case BlockVar(id) => BlockVar(id)
+    case b: BlockLit => substitute(b)
+    case Unbox(pure) => Unbox(substitute(pure))
+    case New(impl) => New(substitute(impl))
+  }
+
+  def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
+    case BlockLit(vparams, bparams, ks, k, body) =>
+      BlockLit(vparams, bparams, ks, k,
+        substitute(body)(using subst
+          .shadowParams(vparams, bparams)
+          .shadowMetaconts(List(ks))
+          .shadowConts(List(k))))
+  }
+
+  def substitute(stmt: Stmt)(using subst: Substitution): Stmt = stmt match {
+    case Jump(k, arg, ks) =>
+      Jump(
+        substituteAsContVar(k),
+        substitute(arg),
+        substitute(ks))
+
+    case App(callee, vargs, bargs, ks, k) =>
+      App(
+        substitute(callee),
+        vargs.map(substitute),
+        bargs.map(substitute),
+        substitute(ks),
+        substitute(k))
+
+    case Invoke(callee, method, vargs, bargs, ks, k) =>
+      Invoke(
+        substitute(callee),
+        method,
+        vargs.map(substitute),
+        bargs.map(substitute),
+        substitute(ks),
+        substitute(k))
+
+    case If(cond, thn, els) =>
+      If(substitute(cond), substitute(thn), substitute(els))
+
+    case Match(scrutinee, clauses, default) =>
+      Match(
+        substitute(scrutinee),
+        clauses.map { case (id, cl) => (id, substitute(cl)) },
+        default.map(substitute))
+
+    case LetDef(id, binding, body) =>
+      LetDef(id, substitute(binding),
+        substitute(body)(using subst.shadowBlocks(List(id))))
+
+    case LetExpr(id, binding, body) =>
+      LetExpr(id, substitute(binding),
+        substitute(body)(using subst.shadowValues(List(id))))
+
+    case LetCont(id, binding, body) =>
+      LetCont(id, substitute(binding),
+        substitute(body)(using subst.shadowConts(List(id))))
+
+    case Region(id, ks, body) =>
+      Region(id, substitute(ks),
+        substitute(body)(using subst.shadowBlocks(List(id))))
+
+    case Alloc(id, init, region, body) =>
+      Alloc(id, substitute(init), substituteAsBlockVar(region),
+        substitute(body)(using subst.shadowBlocks(List(id))))
+
+    case Var(id, init, ks, body) =>
+      Var(id, substitute(init), substitute(ks),
+        substitute(body)(using subst.shadowBlocks(List(id))))
+
+    case Dealloc(ref, body) =>
+      Dealloc(substituteAsBlockVar(ref), substitute(body))
+
+    case Get(ref, id, body) =>
+      Get(substituteAsBlockVar(ref), id,
+        substitute(body)(using subst.shadowValues(List(id))))
+
+    case Put(ref, value, body) =>
+      Put(substituteAsBlockVar(ref), substitute(value), substitute(body))
+
+    case Reset(prog, ks, k) =>
+      Reset(substitute(prog), substitute(ks), substitute(k))
+
+    case Shift(prompt, body, ks, k) =>
+      Shift(substituteAsBlockVar(prompt), substitute(body), substitute(ks), substitute(k))
+
+    case Resume(r, body, ks, k) =>
+      Resume(substituteAsBlockVar(r), substitute(body), substitute(ks), substitute(k))
+
+    case h: Hole => h
+  }
+
+  def substitute(impl: Implementation)(using Substitution): Implementation = impl match {
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(substitute))
+  }
+
+  def substitute(op: Operation)(using subst: Substitution): Operation = op match {
+    case Operation(name, vparams, bparams, ks, k, body) =>
+      Operation(name, vparams, bparams, ks, k,
+        substitute(body)(using subst
+          .shadowParams(vparams, bparams)
+          .shadowMetaconts(List(ks))
+          .shadowConts(List(k))))
+  }
+
+  def substitute(clause: Clause)(using subst: Substitution): Clause = clause match {
+    case Clause(vparams, body) =>
+      Clause(vparams, substitute(body)(using subst.shadowValues(vparams)))
+  }
+
+  def substitute(k: Cont)(using subst: Substitution): Cont = k match {
+    case Cont.ContVar(id) if subst.conts.isDefinedAt(id) => subst.conts(id)
+    case Cont.ContVar(id) => Cont.ContVar(id)
+    case lam @ Cont.ContLam(result, ks, body) => substitute(lam)
+    case Cont.Abort => Cont.Abort
+  }
+
+  def substitute(k: Cont.ContLam)(using subst: Substitution): Cont.ContLam = k match {
+    case Cont.ContLam(result, ks, body) =>
+      Cont.ContLam(result, ks,
+        substitute(body)(using subst
+          .shadowValues(List(result))
+          .shadowMetaconts(List(ks))))
+  }
+
+  def substitute(ks: MetaCont)(using subst: Substitution): MetaCont =
+    subst.metaconts.getOrElse(ks.id, ks)
+
+  def substituteAsBlockVar(id: Id)(using subst: Substitution): Id =
+    subst.blocks.get(id) map {
+      case BlockVar(x) => x
+      case _ => INTERNAL_ERROR("References should always be variables")
+    } getOrElse id
+
+  def substituteAsContVar(id: Id)(using subst: Substitution): Id =
+    subst.conts.get(id) map {
+      case Cont.ContVar(x) => x
+      case _ => INTERNAL_ERROR("Continuation references should always be variables")
+    } getOrElse id
 }

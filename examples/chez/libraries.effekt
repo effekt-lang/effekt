@@ -12,7 +12,7 @@ import array
 import mutable/dict
 import ref
 
-import text/regex
+import regex
 import string
 
 def main() = ()

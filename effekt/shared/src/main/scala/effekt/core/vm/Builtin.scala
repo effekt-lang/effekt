@@ -3,6 +3,8 @@ package core
 package vm
 
 import java.io.PrintStream
+import scala.util.matching as regex
+import scala.util.matching.Regex
 
 trait Runtime {
   def out: PrintStream
@@ -193,11 +195,55 @@ lazy val strings: Builtins = Map(
   },
 
   builtin("effekt::inspect(Any)") {
-    case any :: Nil => Value.String(inspect(any))
+    case any :: Nil =>
+      Runtime.out.println(inspect(any))
+      Value.Unit()
   },
 
   builtin("effekt::infixEq(String, String)") {
     case As.String(x) :: As.String(y) :: Nil => Value.Bool(x == y)
+  },
+
+  builtin("effekt::length(String)") {
+    case As.String(x) :: Nil => Value.Int(x.length)
+  },
+
+  builtin("effekt::substring(String, Int, Int)") {
+    case As.String(x) :: As.Int(from) :: As.Int(to) :: Nil => Value.String(x.substring(from.toInt, to.toInt))
+  },
+
+  builtin("string::unsafeCharAt(String, Int)") {
+    case As.String(x) :: As.Int(at) :: Nil => Value.Int(x.charAt(at.toInt).toLong)
+  },
+
+  builtin("string::toInt(Char)") {
+    case As.Int(n) :: Nil => Value.Int(n)
+  },
+
+  builtin("string::toChar(Int)") {
+    case As.Int(n) :: Nil => Value.Int(n)
+  },
+
+  builtin("string::infixLte(Char, Char)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x <= y)
+  },
+
+  builtin("string::infixLt(Char, Char)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x < y)
+  },
+
+  builtin("string::infixGt(Char, Char)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x > y)
+  },
+
+  builtin("string::infixGte(Char, Char)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x >= y)
+  },
+)
+
+lazy val chars: Builtins = Map(
+  builtin("effekt::infixEq(Char, Char)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Bool(x == y)
   },
 )
 
@@ -216,6 +262,12 @@ lazy val arrays: Builtins = Map(
   },
 )
 
+lazy val undefined: Builtins = Map(
+  builtin("effekt::isUndefined[A](A)") {
+    case Value.Literal(m) :: Nil => Value.Bool(m == null)
+  },
+)
+
 lazy val refs: Builtins = Map(
   builtin("ref::ref[T](T)") {
     case init :: Nil => Value.Ref(Reference(init))
@@ -228,7 +280,22 @@ lazy val refs: Builtins = Map(
   },
 )
 
-lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ refs
+lazy val regexes: Builtins = Map(
+  builtin("regex::regex(String)") {
+    case As.String(str) :: Nil => Value.Literal(new Regex(str))
+  },
+  builtin("regex::exec(Regex, String)") {
+    case As.Regex(r) :: As.String(str) :: Nil => Value.Literal(r.findFirstMatchIn(str).orNull)
+  },
+  builtin("regex::matched(RegexMatch)") {
+    case As.RegexMatch(m) :: Nil => Value.String(m.matched)
+  },
+  builtin("regex::index(RegexMatch)") {
+    case As.RegexMatch(m) :: Nil => Value.Int(m.start)
+  },
+)
+
+lazy val builtins: Builtins = printing ++ integers ++ doubles ++ booleans ++ strings ++ arrays ++ refs ++ chars ++ regexes ++ undefined
 
 protected object As {
   object String {
@@ -240,6 +307,8 @@ protected object As {
   object Int {
     def unapply(v: Value): Option[scala.Long] = v match {
       case Value.Literal(value: scala.Long) => Some(value)
+      case Value.Literal(value: scala.Int) => Some(value.toLong)
+      case Value.Literal(value: java.lang.Integer) => Some(value.toLong)
       case _ => None
     }
   }
@@ -264,6 +333,19 @@ protected object As {
   object Reference {
     def unapply(v: Value): Option[Reference] = v match {
       case Value.Ref(ref) => Some(ref)
+      case _ => None
+    }
+  }
+  object Regex {
+    def unapply(v: Value): Option[regex.Regex] = v match {
+      case Value.Literal(v: regex.Regex) => Some(v)
+      case _ => None
+    }
+  }
+  object RegexMatch {
+    def unapply(v: Value): Option[regex.Regex.Match | Null] = v match {
+      case Value.Literal(null) => Some(null)
+      case Value.Literal(v: regex.Regex.Match) => Some(v)
       case _ => None
     }
   }

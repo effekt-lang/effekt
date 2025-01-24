@@ -1,0 +1,53 @@
+module examples/pos/bytearray_compare
+
+import bytearray
+
+def main() = {
+  val empty: ByteArray = "".fromString
+  val zeros: ByteArray = bytearray::allocate(8)
+  each(0, zeros.size) { i =>
+    zeros.unsafeSet(i, 0.toByte)
+  }
+  val abcs: ByteArray = bytearray::allocate(8)
+  each(0, abcs.size) { i =>
+    abcs.unsafeSet(i, (97 + i).toByte)
+  }
+
+  println(empty.compareByteArray(empty))
+  println(zeros.compareByteArray(empty))
+  println(empty.compareByteArray(zeros))
+  println(zeros.compareByteArray(zeros))
+
+  println("")
+
+  println(abcs.compareByteArray(abcs))
+  println(abcs.compareByteArray(zeros))
+  println(abcs.compareByteArray(empty))
+
+  println("")
+
+  val hey1: ByteArray = "Hey".fromString
+  val hey2: ByteArray = "Hey".fromString
+  val he: ByteArray = "He".fromString
+  val heys: ByteArray = "Heys".fromString
+
+  println(hey1.compareByteArray(hey1))
+  println(hey1.compareByteArray(empty))
+  println(empty.compareByteArray(hey1))
+  println(hey1.compareByteArray(hey2))
+  println(hey2.compareByteArray(hey1))
+
+  println("")
+
+  println(hey1.compareByteArray(he))
+  println(he.compareByteArray(hey1))
+  println(he.compareByteArray(empty))
+  println(empty.compareByteArray(he))
+
+  println("")
+
+  println(hey1.compareByteArray(heys))
+  println(heys.compareByteArray(hey1))
+  println(he.compareByteArray(heys))
+  println(heys.compareByteArray(he))
+}

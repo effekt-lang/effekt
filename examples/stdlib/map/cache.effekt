@@ -1,0 +1,50 @@
+import map
+import bytearray
+
+record CacheEntry[V](value: V, timestamp: Int)
+
+effect time(): Int
+
+def main() = {
+  var currentTime = 0
+  try {
+    var cache: Map[String, CacheEntry[String]] = map::empty(compareStringBytes)
+    val maxAge = 8
+
+    def cachePut(key: String, value: String): Unit =
+      cache = cache.put(key, CacheEntry(value, do time()))
+
+    def cacheGet(key: String): Option[String] =
+      cache.get(key) match {
+        case Some(entry) and do time() - entry.timestamp < maxAge => Some(entry.value)
+        case _ => None()
+      }
+
+    def cleanExpiredEntries(): Unit = {
+      val currentTime = do time()
+      cache = cache.filter { (_, entry) =>
+        currentTime - entry.timestamp < maxAge
+      }
+    }
+
+    cachePut("key1", "value1")
+    cachePut("key2", "value2")
+
+    println("Get key1: " ++ cacheGet("key1").getOrElse { "Not found" })
+    println("Get key2: " ++ cacheGet("key2").getOrElse { "Not found" })
+
+    cachePut("key1", "newValue1")
+
+    println("Get key1: " ++ cacheGet("key1").getOrElse { "Not found" })
+    println("Get key2: " ++ cacheGet("key2").getOrElse { "Not found" })
+
+    cleanExpiredEntries()
+
+    println("After cleaning:")
+    println("Get key1: " ++ cacheGet("key1").getOrElse { "Not found" })
+    println("Get key2: " ++ cacheGet("key2").getOrElse { "Not found" })
+  } with time {
+    currentTime = currentTime + 1
+    resume(currentTime)
+  }
+}

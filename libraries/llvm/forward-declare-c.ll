@@ -37,6 +37,7 @@ declare %Pos @c_bytearray_show_Double(double)
 
 declare %Pos @c_bytearray_concatenate(%Pos, %Pos)
 declare %Pos @c_bytearray_equal(%Pos, %Pos)
+declare %Int @c_bytearray_compare(%Pos, %Pos)
 
 declare %Pos @c_bytearray_substring(%Pos, i64, i64)
 declare %Int @c_bytearray_character_at(%Pos, i64)

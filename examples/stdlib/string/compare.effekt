@@ -1,0 +1,46 @@
+def main() = {
+  val empty = ""
+  val a = "a"
+
+  println(empty < empty)
+  println(empty <= empty)
+  println(empty > empty)
+  println(empty >= empty)
+  println(a < a)
+  println(a <= a)
+  println(a > a)
+  println(a >= a)
+  println("")
+
+  val b = "b"
+
+  println(a < b)
+  println(a <= b)
+  println(a > b)
+  println(a >= b)
+  println(b < a)
+  println(b <= a)
+  println(b > a)
+  println(b >= a)
+  println("")
+
+  val ab = "ab"
+  println(ab < b)
+  println(ab <= b)
+  println(ab > b)
+  println(ab >= b)
+  println(b < ab)
+  println(b <= ab)
+  println(b > ab)
+  println(b >= ab)
+  println("")
+
+  println(a < ab)
+  println(a <= ab)
+  println(a > ab)
+  println(a >= ab)
+  println(ab < a)
+  println(ab <= a)
+  println(ab > a)
+  println(ab >= a)
+}

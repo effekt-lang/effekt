@@ -23,7 +23,7 @@ Parsers can be expressed by using the lexer effect and process the token stream.
 ```
 interface Nondet {
   def alt(): Bool
-  def fail[A](msg: String): A
+  def fail(msg: String): Nothing
 }
 
 effect Parser = { Nondet, Lexer }
@@ -205,7 +205,7 @@ def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
   }
-  def fail[A](msg) = Failure(msg)
+  def fail(msg) = Failure(msg)
 } with LexerError { (msg, pos) =>
   Failure(msg)
 }

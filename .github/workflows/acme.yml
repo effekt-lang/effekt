@@ -1,0 +1,52 @@
+name: Check every stdlib module is compiled (acme)
+
+on:
+  pull_request:
+    paths:
+      - 'libraries/common/**'
+
+jobs:
+  check-stdlib-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate acme and test for differences
+        id: generate-acme
+        shell: bash
+        run: |
+          # Function to convert file path to module import path
+          path_to_module() {
+            local filepath="$1"
+            # Remove libraries/common/ prefix and .effekt suffix
+            local module_path="${filepath#libraries/common/}"
+            module_path="${module_path%.effekt}"
+            echo "$module_path"
+          }
+
+          # Find all .effekt files in libraries/common, excluding acme.effekt
+          MODULES=$(find libraries/common -type f -name "*.effekt" | sort | while read -r file; do
+            path_to_module "$file"
+          done)
+
+          # Create the new acme.effekt content
+          {
+            echo "/// This module is auto-generated and checked in CI."
+            echo "/// It imports **every** stdlib module: ACME = All Common Modules in Effekt"
+            echo "module acme"
+            echo ""
+            for module in $MODULES; do
+              echo "import $module"
+            done
+            echo ""
+            echo "def main() = ()"
+          } > generated-acme.effekt
+
+          # Compare files, ignoring whitespace, blank lines, and line ending differences
+          if ! diff -Bbq examples/stdlib/acme.effekt generated-acme.effekt; then
+            echo "::error::The stdlib import file (examples/stdlib/acme.effekt) is out of sync with the modules in libraries/common."
+            echo "Differences found:"
+            diff -Bu examples/stdlib/acme.effekt generated-acme.effekt
+            exit 1
+          fi

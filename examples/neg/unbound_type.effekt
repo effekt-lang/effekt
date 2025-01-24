@@ -1,7 +1,7 @@
 module examples/pos/lexer
 
 import string
-import text/regex
+import regex
 
 effect EOS(): Nothing
 effect LexerError(msg: String, pos: Position): Nothing

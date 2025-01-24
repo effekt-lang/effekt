@@ -21,6 +21,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
 
+    val isLLVM = Context.config.backend().name == "llvm"
+
     var tree = core
 
      // (1) first thing we do is simply remove unused definitions (this speeds up all following analysis and rewrites)
@@ -37,18 +39,16 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt)
-      Deadcode.remove(mainSymbol, normalized)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, isLLVM)
+      val live = Deadcode.remove(mainSymbol, normalized)
+      val tailRemoved = RemoveTailResumptions(live)
+      tailRemoved
     }
 
-    // (3) normalize once and remove beta redexes
+    // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
     tree = Context.timed("normalize-1", source.name) { normalize(tree) }
-
-    // (4) optimize continuation capture in the tail-resumptive case
-    tree = Context.timed("tail-resumptions", source.name) { RemoveTailResumptions(tree) }
-
-    // (5) normalize again to clean up and remove new redexes
     tree = Context.timed("normalize-2", source.name) { normalize(tree) }
+    tree = Context.timed("normalize-3", source.name) { normalize(tree) }
 
     tree
 }

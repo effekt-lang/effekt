@@ -1,0 +1,17 @@
+import stream
+import map
+
+def main() = {
+  val m = map::fromList([(1, 'H'), (2, 'e'), (3, 'l'), (4, 'l'), (5, 'o')], compareInt)
+
+  for[(Int, Char)] { each(m) } { case (k, v) =>
+    println(show(k) ++ ": " ++ show(v) ++ " (" ++ show(v.toInt) ++ ")")
+  }
+
+  val newMap = collectMap[Int, Char](compareInt) { each(m) }
+  println(map::internal::prettyPairs(newMap.toList) { n => show(n) } { c => show(c) })
+
+  val hello: String = collectString { eachValue(m) }
+  println(hello)
+}
+

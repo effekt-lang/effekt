@@ -35,7 +35,8 @@ object Normalizer { normal =>
     exprs: Map[Id, Expr],
     decls: DeclarationContext,     // for field selection
     usage: mutable.Map[Id, Usage], // mutable in order to add new information after renaming
-    maxInlineSize: Int             // to control inlining and avoid code bloat
+    maxInlineSize: Int,            // to control inlining and avoid code bloat
+    preserveBoxing: Boolean        // for LLVM, prevents some optimizations
   ) {
     def bind(id: Id, expr: Expr): Context = copy(exprs = exprs + (id -> expr))
     def bind(id: Id, block: Block): Context = copy(blocks = blocks + (id -> block))
@@ -65,14 +66,17 @@ object Normalizer { normal =>
       case None => false
     }
 
-  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int): ModuleDecl = {
+  private def isUnused(id: Id)(using ctx: Context): Boolean =
+    ctx.usage.get(id).forall { u => u == Usage.Never }
+
+  def normalize(entrypoints: Set[Id], m: ModuleDecl, maxInlineSize: Int, preserveBoxing: Boolean): ModuleDecl = {
     // usage information is used to detect recursive functions (and not inline them)
     val usage = Reachable(entrypoints, m)
 
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), maxInlineSize, preserveBoxing)
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -138,10 +142,10 @@ object Normalizer { normal =>
 
   // TODO for `New` we should track how often each operation is used, not the object itself
   //   to decide inlining.
-  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar])(using C: Context): Boolean = boundBy match {
+  private def shouldInline(b: BlockLit, boundBy: Option[BlockVar], blockArgs: List[Block])(using C: Context): Boolean = boundBy match {
     case Some(id) if isRecursive(id.id) => false
     case Some(id) => isOnce(id.id) || b.body.size <= C.maxInlineSize
-    case None => true
+    case _ => blockArgs.exists { b => b.isInstanceOf[BlockLit] } // higher-order function with known arg
   }
 
   private def active(e: Expr)(using Context): Expr =
@@ -159,6 +163,10 @@ object Normalizer { normal =>
 
   def normalize(s: Stmt)(using C: Context): Stmt = s match {
 
+    // see #798 for context (led to stack overflow)
+    case Stmt.Def(id, block, body) if isUnused(id) =>
+      normalize(body)
+
     case Stmt.Def(id, block, body) =>
       val normalized = active(block).dealiased
       Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
@@ -171,7 +179,7 @@ object Normalizer { normal =>
     // -------
     case Stmt.App(b, targs, vargs, bargs) =>
       active(b) match {
-        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy) =>
+        case NormalizedBlock.Known(b: BlockLit, boundBy) if shouldInline(b, boundBy, bargs) =>
           reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
         case normalized =>
            Stmt.App(normalized.shared, targs, vargs.map(normalize), bargs.map(normalize))
@@ -181,7 +189,7 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
-            case b: BlockLit if shouldInline(b, boundBy) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+            case b: BlockLit if shouldInline(b, boundBy, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
 
@@ -212,6 +220,14 @@ object Normalizer { normal =>
       // def barendregt(stmt: Stmt): Stmt = new Renamer().apply(stmt)
 
       def normalizeVal(id: Id, tpe: ValueType, binding: Stmt, body: Stmt): Stmt = normalize(binding) match {
+
+        // [[ val x = ABORT; body ]] = ABORT
+        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom  =>
+          abort
+
+        case abort @ Stmt.Shift(p, BlockLit(tparams, cparams, vparams, List(k), body))
+            if !C.preserveBoxing && !Variables.free(body).containsBlock(k.id) =>
+          abort
 
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
