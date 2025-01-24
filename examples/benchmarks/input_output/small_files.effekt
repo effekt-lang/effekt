@@ -1,0 +1,43 @@
+import examples/benchmarks/runner
+
+import bytearray
+import io/error
+import io/filesystem
+
+
+def run(n: Int) = {
+  with on[IOError].panic;
+
+  val foldername = "/tmp/small_files/"
+  val size = 4096
+
+  on[IOError].result { mkdir(foldername) } match {
+    case Error(EEXIST(), msg) => ()
+    case Error(e, m) => do raise(e, m)
+    case Success(()) => ()
+  }
+
+  val buffer = bytearray(size, 33.toByte)
+  each(0, n) { i =>
+    val filename = foldername ++ i.show ++ ".txt"
+    val file = open(filename, WriteOnly())
+    if (write(file, buffer, 0, size, -1) < size) {
+      panic("failed write")
+    }
+    close(file)
+  }
+
+  each(0, n) { i =>
+    val filename = foldername ++ i.show ++ ".txt"
+    val file = open(filename, ReadOnly())
+    if (read(file, buffer, 0, size, -1) < size) {
+      panic("failed read")
+    }
+    close(file)
+  }
+
+  return 0
+}
+
+def main() = benchmark(5){run}
+

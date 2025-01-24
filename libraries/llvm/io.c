@@ -117,7 +117,7 @@ void c_fs_open(String path, struct Pos mode, Stack stack) {
         resume_Int(stack, result);
     }
 
-    // We must free the string either way, since libuv copies it into the request
+    // Free the string since libuv copies it into the request
     free(path_str);
 
     return;
@@ -173,6 +173,29 @@ void c_fs_close(Int file, Stack stack) {
     }
 }
 
+void c_fs_mkdir(String path, Stack stack) {
+
+    // Convert the Effekt String to a null-terminated string
+    char* path_str = c_bytearray_into_nullterminated_string(path);
+    erasePositive((struct Pos) path);
+
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
+    request->data = stack;
+
+    // Perform the mkdir operation
+    int result = uv_fs_mkdir(uv_default_loop(), request, path_str, 0666, c_resume_int_fs);
+
+    if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
+
+    // Free the string since libuv copies it into the request
+    free(path_str);
+
+    return;
+}
 
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
@@ -180,8 +203,8 @@ void c_fs_close(Int file, Stack stack) {
  * Tries to use most common errno integer values, but introduces fresh values (> 200)
  * for those without common errno values.
  */
-Int c_error_number(Int errno) {
-    switch (errno) {
+Int c_error_number(Int error) {
+    switch (error) {
         case UV_EPERM:            return 1;    // EPERM
         case UV_ENOENT:           return 2;    // ENOENT
         case UV_ESRCH:            return 3;    // ESRCH
