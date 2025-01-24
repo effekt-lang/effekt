@@ -32,6 +32,10 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
     examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
     examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
+    examplesDir / "benchmarks" / "input_output" / "large_file.effekt",
+    examplesDir / "benchmarks" / "input_output" / "small_files.effekt",
+    examplesDir / "benchmarks" / "input_output" / "interleave_promises.effekt",
+    examplesDir / "benchmarks" / "input_output" / "financial_format.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
