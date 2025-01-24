@@ -150,8 +150,10 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Parameter(tpe, name) => s"${show(tpe)} ${localName(name)}"
   }
 
-  def localName(name: String): LLVMString = "%" + name
-  def globalName(name: String): LLVMString = "@" + name
+  def sanitize(name: String): String = name.replace("?", "Q").replace("!", "B")
+
+  def localName(name: String): LLVMString = "%" + sanitize(name)
+  def globalName(name: String): LLVMString = "@" + sanitize(name)
 
   // indent all lines with four spaces
   def indentedLines(text: String): String = text.split("\n").map("    " + _).mkString("\n")

@@ -1,4 +1,6 @@
+import array
+
 def main() = {
-  val array = fromList([1,2,3]);
-  inspect(array.toList)
+  val array = array::fromList([1,2,3]);
+  println(array.toList)
 }

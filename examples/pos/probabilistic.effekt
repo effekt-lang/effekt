@@ -167,7 +167,7 @@ def main() = {
   val res = handleProb {
     test()
   };
-  inspect(res);
+  println(res);
 
   catch {
     heapTest()
@@ -179,7 +179,7 @@ def main() = {
         do disj(do flip(0.2), r)
       }
     };
-    inspect(res)
+    println(res)
   }
 
 }
