@@ -1,0 +1,41 @@
+import examples/benchmarks/runner
+
+import bytearray
+import io/error
+import io/filesystem
+
+
+def run(n: Int) = {
+  with on[IOError].panic;
+
+  val filename = "/tmp/large_file.txt"
+  val size = 4096
+
+  val _ = {
+    val file = open(filename, WriteOnly())
+    val outputBuffer = bytearray(size, 33.toByte)
+    outputBuffer.unsafeSet(999, 10.toByte)
+    repeat(n) {
+      val i = write(file, outputBuffer, 0, size, -1)
+      if (i < size) {
+        panic("failed write")
+      }
+    }
+    close(file)
+  }
+
+  val file = open(filename, ReadOnly())
+  val inputBuffer = bytearray::allocate(size)
+  repeat(n) {
+    val i = read(file, inputBuffer, 0, size, -1)
+    if (i < size) {
+      panic("failed read")
+    }
+  }
+  close(file)
+
+  return 0
+}
+
+def main() = benchmark(5){run}
+

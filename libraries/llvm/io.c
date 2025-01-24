@@ -79,7 +79,7 @@ void c_fs_open(String path, int flags, Stack stack) {
         resume_Int(stack, result);
     }
 
-    // We must free the string either way, since libuv copies it into the request
+    // Free the string since libuv copies it into the request
     free(path_str);
 
     return;
@@ -147,6 +147,29 @@ void c_fs_close(Int file, Stack stack) {
     }
 }
 
+void c_fs_mkdir(String path, Stack stack) {
+
+    // Convert the Effekt String to a null-terminated string
+    char* path_str = c_bytearray_into_nullterminated_string(path);
+    erasePositive((struct Pos) path);
+
+    uv_fs_t* request = malloc(sizeof(uv_fs_t));
+    request->data = stack;
+
+    // Perform the mkdir operation
+    int result = uv_fs_mkdir(uv_default_loop(), request, path_str, 0666, c_resume_int_fs);
+
+    if (result < 0) {
+        uv_fs_req_cleanup(request);
+        free(request);
+        resume_Int(stack, result);
+    }
+
+    // Free the string since libuv copies it into the request
+    free(path_str);
+
+    return;
+}
 
 /**
  * Maps the libuv error code to a stable (platform independent) numeric value.
