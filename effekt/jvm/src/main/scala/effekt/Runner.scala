@@ -35,7 +35,13 @@ trait Runner[Executable] {
   def includes(stdlibPath: File): List[File] = Nil
 
   /**
-   * Modules this backend loads by default
+   * Modules this backend loads by default.
+   *
+   * Invariants:
+   * - All imports of prelude modules have to be in the prelude as well.
+   * - The order matters and should correspond to the topological ordering with respect to the imports, that is,
+   * if module A depends on module B, then B should come before A.
+   * - Furthermore, each module mentioned here must import the `effekt` module as its first import.
    */
   def prelude: List[String] = List("effekt")
 
@@ -151,7 +157,7 @@ object JSNodeRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref", "bytearray", "stringbuffer", "splice")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
@@ -192,7 +198,7 @@ object JSWebRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref", "bytearray", "stringbuffer", "splice")
 
   def checkSetup(): Either[String, Unit] =
     Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
@@ -272,7 +278,7 @@ object LLVMRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string") // "array", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string", "bytearray", "stringbuffer", "splice") // "array", "ref")
 
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
