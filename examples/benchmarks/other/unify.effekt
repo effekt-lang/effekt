@@ -96,7 +96,7 @@ def show(err: UnificationError): String = err match {
     "Occurs check failed: " ++ variable ++ " occurs in " ++ showType(ty)
   case UnificationFailure(ty1, ty2) =>
     "Cannot unify " ++ showType(ty1) ++ " with " ++ showType(ty2)
-    case UnificationManyFailure(tps1, tps2) =>
+  case UnificationManyFailure(tps1, tps2) =>
     "Cannot unify " ++ tps2.map { showType }.join(", ") ++ " with " ++ tps1.map { showType }.join(", ")
 }
 
