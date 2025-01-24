@@ -57,14 +57,17 @@ def server(host: String, port: Int, handler: () => Unit / Socket at {io, async, 
 
 namespace examples {
   def helloWorldApp(): Unit / Socket = {
-    val request = do receive();
+    val request = do receive().toString;
 
-    println("Received a request: " ++ request.toUTF8)
+    println("Received a request: " ++ request)
 
-    if (request.toUTF8.startsWith("GET /")) {
-      do send(fromUTF8("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!"))
+    def respond(s: String): Unit / Socket =
+      do send(s.fromString)
+
+    if (request.startsWith("GET /")) {
+      respond("HTTP/1.1 200 OK\r\n\r\nHello from Effekt!")
     } else {
-      do send("HTTP/1.1 400 Bad Request\r\n\r\n".fromUTF8)
+      respond("HTTP/1.1 400 Bad Request\r\n\r\n")
     }
     do end()
   }

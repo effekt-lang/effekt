@@ -34,7 +34,7 @@ def emptyBuffer[T](capacity: Int): Buffer[T] at {global} = {
 }
 def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
   // TODO allocate buffer (and array) into a region r.
-  val contents = emptyArray[T](initialCapacity)
+  val contents = array::allocate[T](initialCapacity)
   var head in global = 0
   var tail in global = 0
 
@@ -51,7 +51,7 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
     def read() = {
       if (buffer.empty?) None()
       else {
-        val result: T = contents.remove(head).getOrElse { <> };
+        val result: T = contents.unsafeGet(head);
         head = mod(head + 1, initialCapacity)
         Some(result)
       }
@@ -59,7 +59,7 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
     def write(el: T) = {
       if (buffer.full?) <> // raise(BufferOverflow())
 
-      contents.put(tail, el)
+      contents.unsafeSet(tail, el)
       tail = mod(tail + 1, initialCapacity)
     }
   }

@@ -49,5 +49,9 @@ class StdlibLLVMTests extends StdlibTests {
 
     // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
     examplesDir / "stdlib" / "string" / "compare.effekt",
+
+    // Wrong codegen for negative types, see #801
+    examplesDir / "stdlib" / "json.effekt",
+    examplesDir / "stdlib" / "buffer.effekt",
   )
 }
