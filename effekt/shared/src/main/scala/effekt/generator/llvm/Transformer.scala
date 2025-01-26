@@ -580,22 +580,19 @@ object Transformer {
   }
 
   def pushFrameOnto(stack: Operand, environment: machine.Environment, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext) = {
-    if (!environment.isEmpty) {
-      val envStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-      val envSize = ConstantInt(environmentSize(environment));
-      emit(Call(envStackPointer.name, Ccc(), envStackPointer.tpe, stackAllocate, List(stack, envSize)));
-      storeEnvironmentAt(envStackPointer, environment);
-    }
-
     val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-    val size = ConstantInt(24);
+    val size = ConstantInt(environmentSize(environment) + 24);
     emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackAllocate, List(stack, size)));
+
+    val frameType = StructureType(List(environmentType(environment), frameHeaderType));
+    storeEnvironmentAt(stackPointer, environment);
+
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
-    emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
+    emit(GetElementPtr(returnAddressPointer.name, frameType, stackPointer, List(0, 1, 0)));
     val sharerPointer = LocalReference(PointerType(), freshName("sharer_pointer"));
-    emit(GetElementPtr(sharerPointer.name, frameHeaderType, stackPointer, List(0, 1)));
+    emit(GetElementPtr(sharerPointer.name, frameType, stackPointer, List(0, 1, 1)));
     val eraserPointer = LocalReference(PointerType(), freshName("eraser_pointer"));
-    emit(GetElementPtr(eraserPointer.name, frameHeaderType, stackPointer, List(0, 2)));
+    emit(GetElementPtr(eraserPointer.name, frameType, stackPointer, List(0, 1, 2)));
 
     emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
     emit(Store(sharerPointer, sharer));
