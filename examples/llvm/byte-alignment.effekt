@@ -1,0 +1,101 @@
+def oneByte { action: (Byte) => Unit }: Unit =
+  action(42.toByte)
+
+def twoByte { action: (Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte)
+
+def threeByte { action: (Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte)
+
+def fourByte { action: (Byte, Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte, 42.toByte)
+
+def fiveByte { action: (Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+
+def sixByte { action: (Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+
+def sevenByte { action: (Byte, Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+
+def eightByte { action: (Byte, Byte, Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+
+def nineByte { action: (Byte, Byte, Byte, Byte, Byte, Byte, Byte, Byte, Byte) => Unit }: Unit =
+  action(42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte, 42.toByte)
+
+def main() = {
+  oneByte { (b0) =>
+    println(1)
+    println(b0)
+  }
+  twoByte { (b0, b1) =>
+    println(2)
+    println(b0)
+    println(b1)
+  }
+  threeByte { (b0, b1, b2) =>
+    println(3)
+    println(b0)
+    println(b1)
+    println(b2)
+  }
+  fourByte { (b0, b1, b2, b3) =>
+    println(4)
+    println(b0)
+    println(b1)
+    println(b2)
+    println(b3)
+  }
+  fiveByte { (b0, b1, b2, b3, b4) =>
+    println(5)
+    println(b0)
+    println(b1)
+    println(b2)
+    println(b3)
+    println(b4)
+  }
+  sixByte { (b0, b1, b2, b3, b4, b5) =>
+    println(6)
+    println(b0)
+    println(b1)
+    println(b2)
+    println(b3)
+    println(b4)
+    println(b5)
+  }
+  sevenByte { (b0, b1, b2, b3, b4, b5, b6) =>
+    println(7)
+    println(b0)
+    println(b1)
+    println(b2)
+    println(b3)
+    println(b4)
+    println(b5)
+    println(b6)
+  }
+  eightByte { (b0, b1, b2, b3, b4, b5, b6, b7) =>
+    println(8)
+    println(b0)
+    println(b1)
+    println(b2)
+    println(b3)
+    println(b4)
+    println(b5)
+    println(b6)
+    println(b7)
+  }
+  nineByte { (b0, b1, b2, b3, b4, b5, b6, b7, b8) =>
+    println(9)
+    println(b0)
+    println(b1)
+    println(b2)
+    println(b3)
+    println(b4)
+    println(b5)
+    println(b6)
+    println(b7)
+    println(b8)
+  }
+}
