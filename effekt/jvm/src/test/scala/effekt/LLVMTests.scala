@@ -31,9 +31,6 @@ class LLVMTests extends EffektTests {
    * Documentation of currently failing tests and their reason
    */
   lazy val missingFeatures: List[File] = List(
-    // inspect
-    examplesDir / "pos" / "exists.effekt",
-
     // Regex
     examplesDir / "pos" / "simpleparser.effekt",
 
