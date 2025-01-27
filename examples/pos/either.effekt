@@ -6,8 +6,8 @@ type Either[A, B] {
 }
 
 def show(either: Either[Int, String]): String = either match {
-  case Left(value) => show(value)
-  case Right(value) => value
+  case Left(value) => "Left(" ++ show(value) ++ ")"
+  case Right(value) => "Right(" ++ value ++ ")"
 }
 
 def main() = {

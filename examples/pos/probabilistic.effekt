@@ -72,13 +72,15 @@ def choose3[R] { x: => R } { y: => R } { z: => R } : R / fork =
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
-def show(l: Weighted[Bool]): String = l match {
-  case MkWeighted(weight, value) => "MkWeighted(" ++ show(weight) ++ ", " ++ show(value) ++ ")"
+def showRounded(d: Double): String = show(d.round(2))
+
+def show(w: Weighted[Bool]): String = w match {
+  case MkWeighted(weight, value) => "MkWeighted(" ++ showRounded(weight) ++ ", " ++ show(value) ++ ")"
 }
 
-def show(l: Weighted[Var]): String = l match {
-  case MkWeighted(weight, Observed(value)) => "MkWeighted(" ++ show(weight) ++ ", Observed(" ++ show(value) ++ "))"
-  case MkWeighted(weight, Unobserved()) => "MkWeighted(" ++ show(weight) ++ ", Unobserved())"
+def show(w: Weighted[Var]): String = w match {
+  case MkWeighted(weight, Observed(value)) => "MkWeighted(" ++ showRounded(weight) ++ ", Observed(" ++ show(value) ++ "))"
+  case MkWeighted(weight, Unobserved()) => "MkWeighted(" ++ showRounded(weight) ++ ", Unobserved())"
 }
 
 def handleProb[R] { prog: => R / { score, fork, fail } } = {
