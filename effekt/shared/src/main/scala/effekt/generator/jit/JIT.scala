@@ -3,7 +3,6 @@ package generator
 package jit
 
 import effekt.context.Context
-import effekt.lifted.LiftInference
 import effekt.symbols.{Module, TermSymbol}
 import effekt.util.paths.*
 
@@ -23,14 +22,14 @@ class JIT() extends Compiler[String] {
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
-    case Stage.Lifted | Stage.Machine => None
     case Stage.Target => steps.afterJIT(source).map { res => pretty(res) }
+    case _ => None
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => res.core }
-    case Stage.Lifted | Stage.Machine => None
     case Stage.Target => steps.afterJIT(source)
+    case _ => None
   }
 
   override def compile(source: Source)(using C: Context) =
@@ -42,7 +41,7 @@ class JIT() extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => JIT
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.Optimizer map {
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen core.optimizer.Optimizer map {
     case CoreTransformed(source, tree, mod, core) =>
       (mod, jit.Transformer.transform(core, mod))
   }

@@ -8,12 +8,11 @@ import effekt.context.Context
 import scala.collection.mutable
 import effekt.core.ValueType
 import effekt.util.messages.ErrorReporter
-import effekt.core.Param
 import effekt.symbols.{TmpBlock, TmpValue}
 
 object Transformer {
 
-  import effekt.core.Extern
+  import effekt.core.{Extern, Stmt, Toplevel}
 
   def transform(t: core.Type)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Type = t match {
     case valueType: core.ValueType => transform(valueType)
@@ -63,25 +62,14 @@ object Transformer {
         jit.Method(prop.id, ((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams).map(_.tpe), transform(result))
       })
   }
+  def transform(p: core.ValueParam | core.BlockParam)(using C: ErrorReporter, DC: core.DeclarationContext): jit.LhsOperand = p match {
+    case core.ValueParam(id, tpe) => jit.Var(id, transform(tpe))
+    case core.BlockParam(id, tpe, capt) => jit.Var(id, transform(tpe))
+  }
   def transform(b: core.Block)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Term = b match {
     case core.Block.BlockVar(id, annotatedTpe, annotatedCapt) => jit.Var(id, transform(annotatedTpe))
     case core.Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
       jit.Abs(((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams), transform(body))
-    case core.Block.Member(ref, symbols.builtins.TState.put, core.BlockType.Function(_,_,List(vtpe),_,_)) =>
-      val v = jit.Var(TmpValue(), transform(vtpe))
-      jit.Abs(List(v), jit.Store(transform(ref), v))
-    case core.Block.Member(ref, symbols.builtins.TState.get, annotatedTpe) =>
-      jit.Abs(Nil, jit.Load(transform(ref)))
-    case core.Block.Member(block, field, annotatedTpe) =>
-      // `block` does not have side-effects, so we can defer it until the member call
-      val core.BlockType.Interface(ifceTag, targs) = core.Type.inferType(block) : @unchecked
-      val args = DC.getInterface(ifceTag).properties.collectFirst {
-        case core.Property(`field`, core.BlockType.Function(tparams, cparams, vparams, bparams, result)) =>
-          (vparams map { t => jit.Var(TmpValue(), transform(t)) })
-            ++ (bparams map { t => jit.Var(TmpBlock(), transform(t)) })
-            ++ capabilityParamsFor(cparams)
-      }.get
-      jit.Abs(args, jit.Invoke(transform(block), ifceTag, field, args))
     case core.Block.Unbox(pure) => transform(pure)
     case core.Block.New(impl: core.Implementation) =>
       transform(impl, None)
@@ -93,47 +81,13 @@ object Transformer {
       jit.New(name, operations.map(transform(_, prompt)))
   }
   def transform(op: core.Operation, prompt: Option[jit.Var])(using DC: core.DeclarationContext, C: ErrorReporter): (Id, jit.Clause) = op match {
-    case core.Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
-      val tBody = (prompt, resume) match {
-        case (Some(prompt), Some(resume)) =>
-          val (k, resumeFn, resumeResultTpe) = resume.tpe match {
-
-            case core.BlockType.Function(_, _, List(vparam), List(), result) =>
-              // resume(value)
-              val resumeArg = jit.Var(TmpValue(), transform(vparam))
-              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe)))
-              (k, jit.Abs(List(resumeArg),
-                 jit.Resume(k, List(resumeArg))),
-               transform(vparam))
-
-            case core.BlockType.Function(_, _, List(), List(bparam: core.BlockType.Function), result) =>
-              // resume{ block }
-              val resumeArg = jit.Var(TmpBlock(), transform(bparam))
-              val k = jit.Var(TmpValue(), Stack(transform(result), List(resumeArg.tpe)))
-              (k, jit.Abs(List(resumeArg),
-                 jit.Resumed(k, jit.App(resumeArg, bparams map transform))),
-               transform(bparam.result))
-
-            case t => C.abort(s"resume parameter has unsupported type ${core.PrettyPrinter.format(t)}")
-          }
-
-          jit.Shift(prompt, Literal.Int(0), k,
-            jit.Let(List(jit.Definition(transform(resume), resumeFn)),
-              transform(body)),
-            resumeResultTpe)
-        case (None, None) => transform(body)
-        case _ =>
-          C.abort("Exactly the operations with a resume should get defined using Try.")
-      }
+    case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
+      val tBody =  transform(body)
       (name, jit.Clause(
         ((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams),
         tBody))
   }
 
-  def transform(p: core.Param)(using core.DeclarationContext, ErrorReporter): jit.LhsOperand = p match {
-    case Param.ValueParam(id, tpe) => jit.Var(id, transform(tpe))
-    case Param.BlockParam(id, tpe, capt) => jit.Var(id, transform(tpe))
-  }
   def transformClause(b: core.BlockLit)(using core.DeclarationContext, ErrorReporter): jit.Clause = b match {
     case core.BlockLit(tparams, cparams, vparams, bparams, body) =>
       jit.Clause(((vparams ++ bparams) map transform) ++ capabilityParamsFor(cparams),
@@ -141,7 +95,6 @@ object Transformer {
   }
   def transform(e: core.Expr)(using core.DeclarationContext, ErrorReporter): jit.Term = e match {
     case core.DirectApp(b, targs, vargs, bargs) => jit.App(transform(b), (vargs map transform) ++ (bargs map transform))
-    case core.Run(s) => transform(s)
     case pure: core.Pure => transform(pure)
   }
   def transform(e: core.Pure)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Term = e match {
@@ -160,32 +113,47 @@ object Transformer {
         s" (or unsupported scala representation as ${value.getClass}).")
     case core.Pure.PureApp(b, targs, vargs) => jit.App(transform(b), vargs map transform)
     case core.Pure.Make(data, tag, vargs) => jit.The(transform(data), jit.Construct(data.name, tag, vargs map transform))
-    case core.Pure.Select(target, field, annotatedType: ValueType.Data) =>
-      val dField = DC.getField(field)
-      val dConstructor = dField.constructor
-      jit.Project(transform(target), annotatedType.name, dConstructor.id, dConstructor.fields.indexOf(dField))
-    case core.Pure.Select(target, field, annotatedType) =>
-      C.abort(s"Unsupported record select on value of type ${core.PrettyPrinter.format(annotatedType)}")
     case core.Pure.Box(b, annotatedCapture) => transform(b)
   }
   def transform(stmt: core.Stmt)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Term = stmt match {
-    case core.Stmt.Scope(definitions, body) =>
-      jit.LetRec(definitions map transform, transform(body))
-    case core.Stmt.Return(expr) => transform(expr)
+    case Stmt.Def(id, block, body) =>
+      jit.Let(List(jit.Definition(jit.Var(id, transform(block.tpe)), transform(block))), transform(body))
+    case Stmt.Let(id, annotatedTpe, binding, body) =>
+      jit.Let(List(jit.Definition(jit.Var(id, transform(annotatedTpe)), transform(binding))), transform(body))
+    case Stmt.Reset(core.BlockLit(tparams, cparams, List(), List(prmpt), body)) =>
+      val prmptV = transform(prmpt)
+      val r = jit.Var(TmpValue(), transform(body.tpe))
+      jit.Let(List(jit.Definition(prmptV, jit.FreshLabel())),
+        jit.Reset(prmptV, jit.Var(TmpValue(), jit.Region), transform(body),
+          jit.Clause(List(r), r)))
+    case Stmt.Reset(_) => C.abort("Parameter to reset does not have 0 value and 1 block parameters.")
+    case Stmt.Shift(prompt, core.BlockLit(tparams, cparams, List(), List(k), body)) =>
+      jit.Shift(transform(prompt), jit.Literal.Int(0), transform(k), transform(body), transform(body.tpe))
+    case Stmt.Shift(_, _) => C.abort("Shift body does not take exactly one block parameter.")
+    case Stmt.Resume(k, body) =>
+      jit.Resumed(transform(k), transform(body))
+    case Stmt.Return(expr) => transform(expr)
+    case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
+      import effekt.core.BlockType
+      val ifce = callee.tpe match {
+        case BlockType.Interface(name, targs) => name
+        case _ => C.abort("Invoke on function value")
+      }
+      jit.Invoke(transform(callee), ifce, method, vargs.map(transform) ++ bargs.map(transform))
     case core.Stmt.Val(id, tpe, binding, body) =>
       jit.Let(List(jit.Definition(
-          jit.Var(id, transform(tpe)),
-          transform(binding))),
+        jit.Var(id, transform(tpe)),
+        transform(binding))),
         transform(body))
     case core.Stmt.App(callee, targs, vargs, bargs) =>
       jit.App(transform(callee), (vargs map transform) ++ (bargs map transform))
     case core.Stmt.If(cond, thn, els) =>
       jit.IfZero(transform(cond), transform(els), transform(thn))
     case core.Stmt.Match(scrutinee, clauses, default) =>
-      val tClauses = clauses.map{
+      val tClauses = clauses.map {
         case (id, b) => (id, transformClause(b))
       }
-      val tDefault = default.map{ d => jit.Clause(Nil, transform(d)) }.getOrElse{
+      val tDefault = default.map { d => jit.Clause(Nil, transform(d)) }.getOrElse {
         val ret = Var("%bottom", Bottom)
         jit.Clause(Nil, jit.Primitive("non-exhaustive match", Nil, List(ret), ret))
       }
@@ -209,30 +177,7 @@ object Transformer {
       jit.Load(jit.Var(id, jit.Ref(transform(annotatedTpe))))
     case core.Stmt.Put(id, annotatedCapt, value) =>
       jit.Store(jit.Var(id, jit.Ref(transform(core.Type.inferType(value)))), transform(value))
-    case core.Stmt.Try(core.BlockLit(tparams, cparams, vparams, bparams, body), handlers) =>
-      assert(vparams.isEmpty, "Only block parameters for body of Try")
-      val prompt = jit.Var(TmpValue(), jit.Ptr)
-      val retVal = jit.Var(TmpValue(), transform(body.tpe))
-      val region = jit.Var(TmpValue(), jit.Ptr)
-      val tBody = transform(body)
-
-      val capabilityDefs = (bparams zip handlers).map { (bparam, handler) =>
-        jit.Definition(transform(bparam),
-          transform(handler, Some(prompt)))
-      }
-
-      jit.Let(List(jit.Definition(prompt, jit.FreshLabel())),
-        jit.Reset(prompt, region,
-          jit.Let(capabilityDefs, tBody),
-          jit.Clause(List(retVal), retVal))
-      )
-    case core.Stmt.Try(body, handlers) =>
-      C.abort("Body of a Try should be a block literal.")
     case core.Stmt.Hole() => jit.Primitive("hole", Nil, Nil, jit.Literal.Unit)
-  }
-  def transform(d: core.Definition)(using core.DeclarationContext, ErrorReporter): jit.Definition = d match {
-    case core.Definition.Def(id, block) => jit.Definition(jit.Var(id, transform(core.Type.inferType(block))), transform(block))
-    case core.Definition.Let(id, tpe, binding) => jit.Definition(jit.Var(id, transform(tpe)), transform(binding))
   }
   def transform(e: core.Extern)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Definition = e match {
     case Extern.Def(id, tparams, cparams, vparams, bparams, retTpe, annotatedCapture,
@@ -255,6 +200,10 @@ object Transformer {
     case Extern.Include(_, contents) =>
       C.abort("Extern includes are not supported in the JIT backend.")
     case e => C.abort(s"Unsupported extern: ${e}")
+  }
+  def transform(tl: core.Toplevel)(using C: ErrorReporter, DC: core.DeclarationContext): jit.Definition = tl match {
+    case Toplevel.Def(id, block) => jit.Definition(jit.Var(id, transform(block.tpe)), transform(block))
+    case Toplevel.Val(id, tpe, binding) => jit.Definition(jit.Var(id, transform(tpe)), transform(binding))
   }
   def transform(coreMod: core.ModuleDecl, mod: effekt.symbols.Module)(using C: Context): jit.Program = coreMod match {
     case core.ModuleDecl(path, imports, declarations, externs, definitions, exports) =>

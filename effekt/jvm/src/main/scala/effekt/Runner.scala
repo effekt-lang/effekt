@@ -429,17 +429,5 @@ object JITRunner extends Runner[String] {
     executableFile
   }
 
-  override def eval(executable: String)(using C: Context): Unit = {
-    val out = C.config.outputPath()
-    findAsmJar() match {
-      case Left(err) => sys.error(err)
-      case Right(asmJar) => ???
-    };
-    findJITBinary(platform) match {
-      case Left(err) => sys.error(err)
-      case Right(jitBinary) =>
-        exec(jitBinary.unixPath, (out / executable).canonicalPath)
-    }
-  }
 }
 
