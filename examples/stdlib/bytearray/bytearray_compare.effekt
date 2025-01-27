@@ -1,7 +1,5 @@
 module examples/pos/bytearray_compare
 
-import bytearray
-
 def main() = {
   val empty: ByteArray = "".fromString
   val zeros: ByteArray = bytearray::allocate(8)

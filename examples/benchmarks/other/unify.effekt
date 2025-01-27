@@ -4,7 +4,6 @@ module examples/benchmarks/unify
 import examples/benchmarks/runner
 import map
 import result
-import bytearray
 import stream
 
 type Type {

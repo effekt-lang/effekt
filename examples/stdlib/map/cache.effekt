@@ -1,5 +1,4 @@
 import map
-import bytearray
 
 record CacheEntry[V](value: V, timestamp: Int)
 

@@ -1,5 +1,3 @@
-import bytearray
-
 def main() = {
 
   val b = bytearray::allocate(8);
