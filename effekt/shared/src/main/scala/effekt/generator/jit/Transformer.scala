@@ -51,6 +51,8 @@ object Transformer {
         transform(result),
         Purity.Effectful) // FIXME
     case core.BlockType.Interface(symbols.builtins.RegionSymbol, _) => jit.Region
+    case core.BlockType.Interface(core.Type.PromptSymbol, _) => jit.Base.Label
+    case core.BlockType.Interface(core.Type.ResumeSymbol, List(result, answer)) => jit.Stack(transform(answer), List(transform(result)))
     case core.BlockType.Interface(symbols.builtins.TState.interface, List(to)) => jit.Ref(transform(to))
     case core.BlockType.Interface(name, _) if symbols.builtins.rootTypes.values.exists(_ == name) =>
       C.error(s"Unsupported builtin type ${core.PrettyPrinter.format(t)}.")
@@ -117,7 +119,7 @@ object Transformer {
   }
   def transform(stmt: core.Stmt)(using DC: core.DeclarationContext, C: ErrorReporter): jit.Term = stmt match {
     case Stmt.Def(id, block, body) =>
-      jit.Let(List(jit.Definition(jit.Var(id, transform(block.tpe)), transform(block))), transform(body))
+      jit.LetRec(List(jit.Definition(jit.Var(id, transform(block.tpe)), transform(block))), transform(body))
     case Stmt.Let(id, annotatedTpe, binding, body) =>
       jit.Let(List(jit.Definition(jit.Var(id, transform(annotatedTpe)), transform(binding))), transform(body))
     case Stmt.Reset(core.BlockLit(tparams, cparams, List(), List(prmpt), body)) =>

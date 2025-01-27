@@ -1,7 +1,9 @@
 
 
 effect Flip(): Bool
-effect Fail[A](): A
+interface Fail {
+  def Fail[A](): A
+}
 
 def choice(n : Int): Int / { Flip, Fail } =
   if (n < 1) {
@@ -16,7 +18,7 @@ def handledTriples(n : Int, s : Int) =
   try {
     try {
       println(choice(1))
-    } with Fail[A] { () }
+    } with Fail { [A]() => () }
   } with Flip { resume(true); resume(false) }
 
 def main() = handledTriples(6, 6)

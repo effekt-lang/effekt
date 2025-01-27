@@ -1,6 +1,8 @@
 
 effect Flip(): Bool
-effect Fail[A](): A
+interface Fail {
+  def Fail[A](): A
+}
 
 record Triple(a: Int, b: Int, c: Int)
 
@@ -29,7 +31,7 @@ def handledTriples(n : Int, s : Int) =
     try {
       val t = triples(n, s);
       println(t.a); println(t.b); println(t.c)
-    } with Fail[A] { () }
+    } with Fail { [A]() => () }
   } with Flip { resume(true); resume(false) }
 
 def main() = handledTriples(100, 15)
