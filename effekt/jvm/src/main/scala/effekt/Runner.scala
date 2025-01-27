@@ -239,7 +239,7 @@ trait ChezRunner extends Runner[String] {
 
    def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
+  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "bytearray", "stringbuffer", "splice", "ref")
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
