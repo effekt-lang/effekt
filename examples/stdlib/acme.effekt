@@ -11,6 +11,7 @@ import char
 import dequeue
 import effekt
 import exception
+import heap
 import io
 import io/console
 import io/error
@@ -25,6 +26,7 @@ import process
 import queue
 import ref
 import regex
+import resizable_array
 import result
 import scanner
 import seq
@@ -33,5 +35,6 @@ import stream
 import string
 import test
 import tty
+import union_find
 
 def main() = ()
