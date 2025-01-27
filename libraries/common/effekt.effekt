@@ -103,6 +103,7 @@ extern pure def show(value: Byte): String =
 extern pure def genericShow[R](value: R): String =
   js "$effekt.show(${value})"
   chez "(show_impl ${value})"
+  jit "show(Any): String"
 
 extern io def inspect[R](value: R): Unit =
   js { println(genericShow(value)) }
