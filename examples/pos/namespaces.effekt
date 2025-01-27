@@ -2,7 +2,11 @@ module namespaces
 
 type Person { Person(name: String, id: Int) }
 
+def show(p: Person): String = p match {
+  case Person(name, id) => "Person(" ++ name ++ ", " ++ show(id) ++ ")"
+}
+
 def somePerson(): Person =
   Person("Jonathan", 1334579)
 
-def main() = inspect(somePerson())
+def main() = println(show(somePerson()))

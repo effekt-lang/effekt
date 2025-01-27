@@ -1,5 +1,7 @@
 module triples
 
+import list
+
 effect flip(): Bool
 effect fail(): Nothing
 
@@ -7,13 +9,8 @@ type Triple {
   MkTriple(x: Int, y: Int, z: Int)
 }
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
-  case Nil() => l2
-  case Cons(a, rest) => Cons(a, concat(rest, l2))
+def show(t: Triple): String = t match {
+  case MkTriple(x, y, z) => "MkTriple(" ++ show(x) ++ ", " ++ show(y) ++ ", " ++ show(z) ++ ")"
 }
 
 def choice(n : Int): Int / { flip, fail } =
@@ -44,6 +41,6 @@ def handledTriple(n : Int, s : Int) =
     // what if that function is used under a handler?
     try { Cons(triple(n, s), Nil[Triple]()) }
     with fail { () => Nil[Triple]() }
-  } with flip { () => concat(resume(true), resume(false)) }
+  } with flip { () => append(resume(true), resume(false)) }
 
-def main() = inspect(handledTriple(10, 15))
+def main() = println(show(handledTriple(10, 15)) { e => show(e) })
