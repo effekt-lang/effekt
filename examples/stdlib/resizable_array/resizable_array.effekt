@@ -27,7 +27,6 @@ def main() = {
       assert(a.popRight(), 1)
       assert(a.popRight(), 1)
     }
-    // TODO
   };
   ()
 }
