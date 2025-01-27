@@ -211,6 +211,7 @@ def println(o: Ordering): Unit = println(o.show)
 extern pure def equals[R](x: R, y: R): Bool =
   js "$effekt.equals(${x}, ${y})"
   chez "(equal? ${x} ${y})"
+  jit "equals(Any, Any): Bool"
 
 def differsFrom[R](x: R, y: R): Bool =
   not(equals(x, y))
