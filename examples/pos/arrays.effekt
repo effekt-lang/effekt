@@ -1,5 +1,7 @@
 module examples/pos/arrays
 
+import array
+
 def main() = {
     val arr = array::allocate[String](5);
 

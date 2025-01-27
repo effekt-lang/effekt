@@ -8,6 +8,7 @@
 module examples/pos/raytracer
 
 import bench
+import array
 
 // replacing all vector operations by `inline pure def` buys us 20%
 record Vector(x: Double, y: Double, z: Double)

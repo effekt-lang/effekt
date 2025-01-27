@@ -90,6 +90,7 @@ class ReplTests extends munit.FunSuite {
          |Imported Functions
          |==================
          |def main(): Unit / {}
+         |def show(c: Color): String / {}
          |""".stripMargin
 
     assertNoDiff(runRepl("import examples/pos/builtins"), expected)

@@ -1,14 +1,14 @@
 type Exists {
-  Op[Z](el: Z, combine: (Z, Z) => Z at {})
+  Op[Z](el: Z, combine: (Z, Z) => Z at {}, show: Z => String at {})
 }
 
 
 def test1() = {
-  val intBox = Op(1, box { (x, y) => x + y });
-  val stringBox = Op("hello!", box { (x, y) => x ++ y });
+  val intBox = Op(1, box { (x, y) => x + y }, box { e => show(e) });
+  val stringBox = Op("hello!", box { (x, y) => x ++ y }, box { e => e});
 
   def combineAndPrint(op: Exists): Unit = op match {
-    case Op(el, combine) => inspect(combine(el, el))
+    case Op(el, combine, show) => println(show(combine(el, el)))
   }
 
   combineAndPrint(intBox)
@@ -16,15 +16,15 @@ def test1() = {
 }
 
 def test2() = {
-  val intBox = Op(1, box { (x, y) => x + y });
-  val stringBox = Op("hello!", box { (x, y) => x ++ y });
+  val intBox = Op(1, box { (x, y) => x + y }, box { e => show(e) });
+  val stringBox = Op("hello!", box { (x, y) => x ++ y }, box { e => e });
 
   def repack(op: Exists): Exists = op match {
-    case Op(el, combine) => Op(el, combine)
+    case Op(el, combine, show) => Op(el, combine, show)
   }
 
   def combineAndPrint(op: Exists): Unit = op match {
-    case Op(el, combine) => inspect(combine(el, el))
+    case Op(el, combine, show) => println(show(combine(el, el)))
   }
 
   combineAndPrint(repack(intBox))

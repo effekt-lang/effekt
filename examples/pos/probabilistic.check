@@ -1,4 +1,4 @@
-Cons(MkWeighted(0.2, false), Cons(MkWeighted(0.48, true), Cons(MkWeighted(0.32000000000000006, false), Nil())))
+Cons(MkWeighted(0.2, false), Cons(MkWeighted(0.48, true), Cons(MkWeighted(0.32, false), Nil())))
 Unobserved()Unobserved()Unobserved()
 Unobserved()Observed(true)Unobserved()
 Unobserved()Observed(true)Observed(false)

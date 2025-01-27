@@ -1,16 +1,8 @@
 module probabilistic
 
+import list
+
 effect indexOutOfBounds(): Nothing
-
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-
-def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
-  case Nil() => l2
-  case Cons(a, rest) => concat(rest, Cons(a, l2))
-}
 
 def lookup[A](l: List[A], idx: Int): A / indexOutOfBounds = l match {
   case Nil() => do indexOutOfBounds()
@@ -80,6 +72,17 @@ def choose3[R] { x: => R } { y: => R } { z: => R } : R / fork =
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
+def showRounded(d: Double): String = show(d.round(2))
+
+def show(w: Weighted[Bool]): String = w match {
+  case MkWeighted(weight, value) => "MkWeighted(" ++ showRounded(weight) ++ ", " ++ show(value) ++ ")"
+}
+
+def show(w: Weighted[Var]): String = w match {
+  case MkWeighted(weight, Observed(value)) => "MkWeighted(" ++ showRounded(weight) ++ ", Observed(" ++ show(value) ++ "))"
+  case MkWeighted(weight, Unobserved()) => "MkWeighted(" ++ showRounded(weight) ++ ", Unobserved())"
+}
+
 def handleProb[R] { prog: => R / { score, fork, fail } } = {
   val empty: List[Weighted[R]] = Nil();
   try {
@@ -88,7 +91,7 @@ def handleProb[R] { prog: => R / { score, fork, fail } } = {
       val res = prog();
       Cons(MkWeighted(current, res), empty)
     } with score { p => current = current * p; resume(()) }
-  } with fork { () => concat(resume(true), resume(false)) }
+  } with fork { () => append(resume(true), resume(false)) }
     with fail { () => empty }
 }
 
@@ -167,7 +170,7 @@ def main() = {
   val res = handleProb {
     test()
   };
-  inspect(res);
+  println(show(res) { e => show(e) })
 
   catch {
     heapTest()
@@ -179,7 +182,7 @@ def main() = {
         do disj(do flip(0.2), r)
       }
     };
-    inspect(res)
+    println(show(res) { e => show(e) })
   }
 
 }

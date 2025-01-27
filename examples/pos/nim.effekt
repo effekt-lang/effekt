@@ -1,11 +1,18 @@
 module examples/pos/nim
 
+import list
+
 // Example from "Liberating effects with rows and handlers"
 // Translated from Koka https://github.com/koka-lang/koka/blob/master/test/algeff/nim.kk
 
 type Player {
   Bob();
   Alice()
+}
+
+def show(p: Player): String = p match {
+  case Bob() => "Bob()"
+  case Alice() => "Alice()"
 }
 
 effect Move(p: Player, sticks: Int): Int
@@ -46,6 +53,16 @@ type GTree {
   Winner(p: Player)
 }
 
+def show(moves: Moves[GTree]): String = moves match {
+  case Done() => "Done()"
+  case Step(n, g, rest) => "Step(" ++ show(n) ++ ", " ++ show(g) ++ ", " ++ show(rest) ++ ")"
+}
+
+def show(tree: GTree): String = tree match {
+  case Take(p, moves) => "Take(" ++ show(p) ++ ", " ++ show(moves) ++ ")"
+  case Winner(p) => "Winner(" ++ show(p) ++ ")"
+}
+
 def range(from: Int, to: Int) { block: Int => Unit } = {
   var i = from;
   while (i <= to) {
@@ -74,7 +91,7 @@ def printError { prog: => Unit / error } = try { prog() } with error { (msg) =>
 
 def cheatReport[R] { prog: => R / cheat }: R / error =
   try { prog() } with cheat { (p) =>
-    do error(genericShow(p) ++ " cheated!")
+    do error(show(p) ++ " cheated!")
   }
 
 def check { prog: => Player / Move } = try { prog() } with Move { (p, n) =>
@@ -91,15 +108,6 @@ def pc  { prog: => Player / Move } = try { prog() } with Move { (p, n) =>
 
 effect Choose(): Bool
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
-  case Nil() => l2
-  case Cons(a, rest) => concat(rest, Cons(a, l2))
-}
-
 def bobChooses { prog: => Player / Move } =
   if (do Choose()) {
     pc { prog() }
@@ -108,7 +116,7 @@ def bobChooses { prog: => Player / Move } =
   }
 
 def allResults[R] { prog: => R / Choose } = try { [prog()] } with Choose { () =>
-  concat(resume(true), resume(false))
+  append(resume(true), resume(false))
 }
 
 def coin[R] { prog: => R / Choose } = try { prog() } with Choose { () =>
@@ -131,6 +139,10 @@ def deterministic[R] { prog: => R / Choose } = {
 // ----------------
 type Scoreboard {
   Board(alice: Int, bob: Int)
+}
+
+def show(board: Scoreboard): String = board match {
+  case Board(alice, bob) => "Board(" ++ show(alice) ++ ", " ++ show(bob) ++ ")"
 }
 
 effect GetScore(): Scoreboard
@@ -163,26 +175,26 @@ def testPrint2() = {
         bobChooses { val p = game(7); do UpdateScore(p); p }; ()
       }
     };
-    inspect(do GetScore())
+    println(show(do GetScore()))
   }
 }
 
 def main() = {
-  inspect(perfect { game(7) }); // Alice
-  inspect(perfect { game(12) }); // Bob
-  inspect(gametree { game(3) }); // Figure 1 in the paper
+  println(perfect { show(game(7)) }); // Alice
+  println(perfect { show(game(12)) }); // Bob
+  println(show(gametree { game(3) })); // Figure 1 in the paper
   printError {
     val result = perfect { cheatReport { check { game(7) } } }; // alice
-    println("result is " ++ genericShow(result))
+    println("result is " ++ show(result))
   };
   printError {
     pc { cheatReport { check { game(12) } } }; () // bob cheats
   };
   printError { perfect {
     val result = cheatReport { check { pc { game(12) } } }; // bob
-    println("result is " ++ genericShow(result))
+    println("result is " ++ show(result))
   }};
-  inspect(allResults { bobChooses { game(7) } }); // List(Bob, Alice)
+  println(show(allResults { bobChooses { game(7) } }) { e => show(e) }); // List(Bob, Alice)
   deterministic {
     println(do Choose()); // true
     println(do Choose()); // false
