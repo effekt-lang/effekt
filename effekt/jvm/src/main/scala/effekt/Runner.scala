@@ -43,7 +43,7 @@ trait Runner[Executable] {
    * if module A depends on module B, then B should come before A.
    * - Furthermore, each module mentioned here must import the `effekt` module as its first import.
    */
-  def prelude: List[String] = List("effekt")
+  def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref", "bytearray", "stringbuffer", "splice")
 
   /**
    * Creates a OS-specific script file that will execute the command when executed,
@@ -157,8 +157,6 @@ object JSNodeRunner extends Runner[String] {
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
 
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref", "bytearray", "stringbuffer", "splice")
-
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("node", "--version") then Right(())
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
@@ -190,15 +188,12 @@ object JSNodeRunner extends Runner[String] {
     }
 }
 object JSWebRunner extends Runner[String] {
-  import scala.sys.process.Process
 
   val extension = "js"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
   override def includes(path: File): List[File] = List(path / ".." / "js")
-
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref", "bytearray", "stringbuffer", "splice")
 
   def checkSetup(): Either[String, Unit] =
     Left("Running js-web code directly is not supported. Use `--compile` to generate a js file / `--build` to generate a html file.")
@@ -208,7 +203,6 @@ object JSWebRunner extends Runner[String] {
    * and then errors out, printing it's path.
    */
   def build(path: String)(using C: Context): String =
-    import java.nio.file.Path
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).unixPath
     val jsFileName = path.unixPath.split("/").last
@@ -237,9 +231,7 @@ object JSWebRunner extends Runner[String] {
 trait ChezRunner extends Runner[String] {
   val extension = "ss"
 
-   def standardLibraryPath(root: File): File = root / "libraries" / "common"
-
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "bytearray", "stringbuffer", "splice", "ref")
+  def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
   def checkSetup(): Either[String, Unit] =
     if canRunExecutable("scheme", "--help") then Right(())
@@ -270,16 +262,12 @@ object ChezCallCCRunner extends ChezRunner {
 }
 
 object LLVMRunner extends Runner[String] {
-  import scala.sys.process.Process
 
   val extension = "ll"
 
   def standardLibraryPath(root: File): File = root / "libraries" / "common"
 
   override def includes(path: File): List[File] = List(path / ".." / "llvm")
-
-  override def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "string", "bytearray", "stringbuffer", "splice") // "array", "ref")
-
 
   lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
   lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-16"), List("--version"))
