@@ -29,7 +29,6 @@ import result
 import scanner
 import seq
 import set
-import splice
 import stream
 import string
 import stringbuffer

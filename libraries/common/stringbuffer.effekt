@@ -1,6 +1,5 @@
 module stringbuffer
 
-import effekt
 import bytearray
 
 interface StringBuffer {
@@ -44,6 +43,14 @@ def stringBuffer[A] { prog: => A / StringBuffer }: A = {
     }
   }
 }
+
+/// Handler for string interpolation using a string buffer
+def s { prog: () => Unit / { literal, splice[String] } }: String =
+  stringBuffer {
+    try { prog(); do flush() }
+    with splice[String] { x => resume(do write(x)) }
+    with literal { s => resume(do write(s)) }
+  }
 
 namespace examples {
   def main() = {

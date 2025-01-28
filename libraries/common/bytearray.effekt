@@ -1,7 +1,5 @@
 module bytearray
 
-import effekt
-
 /**
  * A memory managed, mutable, fixed-length array of bytes.
  */

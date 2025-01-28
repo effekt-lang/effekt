@@ -1,3 +1,5 @@
+import stringbuffer
+
 type Expr {
   Var(id: String)
   Abs(param: String, body: Expr)
@@ -35,4 +37,3 @@ def main() = {
   val fixpoint = Abs("f", App(Abs("x", App(Var("f"), App(Var("x"), Var("x")))), Abs("x", App(Var("f"), App(Var("x"), Var("x"))))))
   println(pretty"Fix point combinator: ${fixpoint}")
 }
-

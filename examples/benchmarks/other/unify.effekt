@@ -5,6 +5,7 @@ import examples/benchmarks/runner
 import map
 import result
 import stream
+import bytearray
 
 type Type {
   Var(name: String)

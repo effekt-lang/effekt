@@ -43,7 +43,7 @@ trait Runner[Executable] {
    * if module A depends on module B, then B should come before A.
    * - Furthermore, each module mentioned here must import the `effekt` module as its first import.
    */
-  def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref", "bytearray", "stringbuffer", "splice")
+  def prelude: List[String] = List("effekt", "option", "list", "result", "exception", "array", "string", "ref")
 
   /**
    * Creates a OS-specific script file that will execute the command when executed,
