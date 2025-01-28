@@ -1,0 +1,65 @@
+module stringbuffer
+
+import bytearray
+
+interface StringBuffer {
+  def write(str: String): Unit
+  def flush(): String
+}
+
+def stringBuffer[A] { prog: => A / StringBuffer }: A = {
+  val initialCapacity = 128
+  var buffer = bytearray::allocate(initialCapacity)
+  // next free index to write to
+  var pos = 0
+
+  def ensureCapacity(sizeToAdd: Int): Unit = {
+    val cap = buffer.size - pos + 1
+    if (sizeToAdd <= cap) ()
+    else {
+      // Double the capacity while ensuring the required capacity
+      val newSize = max(buffer.size * 2, buffer.size + sizeToAdd)
+      buffer = buffer.resize(newSize)
+    }
+  }
+
+  try { prog() }
+  with StringBuffer {
+    def write(str) = {
+      val bytes = fromString(str)
+      ensureCapacity(bytes.size)
+      bytes.foreach { b =>
+        buffer.unsafeSet(pos, b)
+        pos = pos + 1
+      }
+      resume(())
+    }
+    def flush() = {
+      // resize buffer to strip trailing zeros that otherwise would be converted into 0x00 characters
+      val str = bytearray::resize(buffer, pos).toString()
+      // after flushing, the stringbuffer should be empty again
+      buffer = bytearray::allocate(initialCapacity)
+      resume(str)
+    }
+  }
+}
+
+/// Handler for string interpolation using a string buffer
+def s { prog: () => Unit / { literal, splice[String] } }: String =
+  stringBuffer {
+    try { prog(); do flush() }
+    with splice[String] { x => resume(do write(x)) }
+    with literal { s => resume(do write(s)) }
+  }
+
+namespace examples {
+  def main() = {
+    with stringBuffer
+    do write("hello")
+    do write(", world")
+    // prints `hello, world`
+    println(do flush())
+    // prints the empty string
+    println(do flush())
+  }
+}

@@ -736,6 +736,28 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 
 def repeat(n: Int) { action: () {Control} => Unit } = each(0, n) { (n) {l} => action() {l} }
 
+
+// Splices
+// =======
+//
+// The Effekt compiler translates the string interpolation
+//
+//     "foo ${42} bar ${43}"
+//
+// to the following stream of `literal`s and `splice[Int]`s:
+//
+//     do literal("foo "); do splice(42); do literal(" bar "); do splice(43)
+//
+// The stream is wrapped into a handler function, which defaults to `stringbuffer::s`
+//
+//    s { ... }
+//
+// but can be specified by prefixing the string interpolation `custom"..."`.
+
+effect literal(s: String): Unit
+effect splice[A](x: A): Unit
+
+
 namespace internal {
   namespace boxing {
     // For boxing polymorphic values

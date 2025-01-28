@@ -1,4 +1,5 @@
 import map
+
 import bytearray
 
 def counter(words: List[String]): Map[String, Int] = {

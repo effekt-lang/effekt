@@ -4,8 +4,8 @@ module examples/benchmarks/unify
 import examples/benchmarks/runner
 import map
 import result
-import bytearray
 import stream
+import bytearray
 
 type Type {
   Var(name: String)

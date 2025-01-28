@@ -974,8 +974,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `fun`    => funExpr()
     case `new`    => newExpr()
     case `do`                => doExpr()
+    case _ if isString       => templateString()
     case _ if isLiteral      => literal()
-    case _ if isVariable     => variable()
+    case _ if isVariable     =>
+      peek(1).kind match {
+        case _: Str => templateString()
+        case _ => variable()
+      }
     case _ if isHole         => hole()
     case _ if isTupleOrGroup => tupleOrGroup()
     case _ if isListLiteral  => listLiteral()
@@ -1016,6 +1021,33 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case `false` => true
     case _ => isUnitLiteral
   }
+
+  def isString: Boolean = peek.kind match {
+    case _: Str => true
+    case _      => false
+  }
+
+  def templateString(): Term =
+    nonterminal:
+      backtrack(idRef()) ~ template() match {
+        // We do not need to apply any transformation if there are no splices
+        case _ ~ Template(str :: Nil, Nil) => StringLit(str)
+        case _ ~ Template(strs, Nil) => fail("Cannot occur")
+        // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y) }
+        case id ~ Template(strs, args) =>
+          val target = id.getOrElse(IdRef(Nil, "s"))
+          val doLits = strs.map { s =>
+            Do(None, IdRef(Nil, "literal"), Nil, List(StringLit(s)), Nil)
+          }
+          val doSplices = args.map { arg =>
+            Do(None, IdRef(Nil, "splice"), Nil, List(arg), Nil)
+          }
+          val body = interleave(doLits, doSplices)
+            .foldRight(Return(UnitLit())) { (term, acc) => ExprStmt(term, acc) }
+          val blk = BlockLiteral(Nil, Nil, Nil, body)
+          Call(IdTarget(target), Nil, Nil, List(blk))
+      }
+  
   def literal(): Literal =
     nonterminal:
       peek.kind match {
@@ -1271,6 +1303,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     try { Some(p) } catch {
       case Fail(_, _) => position = before; None
     }
+
+  def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
+    case (x :: xs, y :: ys) => x :: y :: interleave(xs, ys)
+    case (Nil, ys) => ys
+    case (xs, Nil) => xs
+  }
 
   /**
    * Tiny combinator DSL to sequence parsers
