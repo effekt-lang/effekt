@@ -581,25 +581,26 @@ object Transformer {
 
   def pushFrameOnto(stack: Operand, environment: machine.Environment, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext) = {
     val tmp = LocalReference(StructureType(List(stackType, stackPointerType)), freshName("tmp"))
-    val size = ConstantInt(environmentSize(environment) + 24);
-    emit(Call(tmp.name, Ccc(), tmp.tpe, stackAllocate, List(stack, size)));
+    val size = environmentSize(environment);
 
     val newStack = LocalReference(stackType, freshName("stack"))
-    val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-
-    emit(ExtractValue(newStack.name, tmp, 0));
-    emit(ExtractValue(stackPointer.name, tmp, 1));
+    emit(Call(newStack.name, Ccc(), stackType, checkLimit, List(stack, ConstantInt(size + 24))));
     setStack(newStack);
 
-    val frameType = StructureType(List(environmentType(environment), frameHeaderType));
-    storeEnvironmentAt(stackPointer, environment);
+    val environmentPointer = LocalReference(stackPointerType, freshName("environmentPointer"));
+    emit(Call(environmentPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(size))));
+
+    storeEnvironmentAt(environmentPointer, environment);
+
+    val headerPointer = LocalReference(stackPointerType, freshName("headerPointer"));
+    emit(Call(headerPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(24))));
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
-    emit(GetElementPtr(returnAddressPointer.name, frameType, stackPointer, List(0, 1, 0)));
+    emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, headerPointer, List(0, 0)));
     val sharerPointer = LocalReference(PointerType(), freshName("sharer_pointer"));
-    emit(GetElementPtr(sharerPointer.name, frameType, stackPointer, List(0, 1, 1)));
+    emit(GetElementPtr(sharerPointer.name, frameHeaderType, headerPointer, List(0, 1)));
     val eraserPointer = LocalReference(PointerType(), freshName("eraser_pointer"));
-    emit(GetElementPtr(eraserPointer.name, frameType, stackPointer, List(0, 1, 2)));
+    emit(GetElementPtr(eraserPointer.name, frameHeaderType, headerPointer, List(0, 2)));
 
     emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
     emit(Store(sharerPointer, sharer));
@@ -728,6 +729,7 @@ object Transformer {
   val underflowStack = ConstantGlobal("underflowStack");
   val uniqueStack = ConstantGlobal("uniqueStack");
   val withEmptyStack = ConstantGlobal("withEmptyStack");
+  val checkLimit = ConstantGlobal("checkLimit")
   val stackAllocate = ConstantGlobal("stackAllocate");
   val stackDeallocate = ConstantGlobal("stackDeallocate");
 

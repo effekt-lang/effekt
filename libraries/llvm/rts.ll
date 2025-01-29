@@ -279,7 +279,7 @@ define private %Reference @newReference(%Stack %stack) alwaysinline {
 
 ; Stack management
 
-define private { %Stack, %StackPointer } @stackAllocate(%Stack %stack, i64 %n) {
+define private %Stack @checkLimit(%Stack %stack, i64 %n) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
 
@@ -287,13 +287,10 @@ define private { %Stack, %StackPointer } @stackAllocate(%Stack %stack, i64 %n) {
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
     %isInside = icmp ule %StackPointer %nextStackPointer, %limit
-    br i1 %isInside, label %continue, label %realloc
+    br i1 %isInside, label %done, label %realloc
 
-continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
-    %result.0 = insertvalue {%Stack, %StackPointer} zeroinitializer, %Stack %stack, 0
-    %result.1 = insertvalue  {%Stack, %StackPointer} %result.0, %StackPointer %currentStackPointer, 1
-    ret  {%Stack, %StackPointer} %result.1
+done:
+    ret %Stack %stack
 
 realloc:
     %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
@@ -306,12 +303,11 @@ realloc:
     %newStack = call ptr @realloc(ptr %stack, i64 %newSize)
     %newLimit = getelementptr i8, %Base %newStack, i64 %newSize
     %newStackPointer = getelementptr i8, %Base %newStack, i64 %size
-    %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %n
 
     %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
 
-    store %StackPointer %newNextStackPointer, ptr %newStackPointer_pointer, !alias.scope !2
+    store %StackPointer %newStackPointer, ptr %newStackPointer_pointer, !alias.scope !2
     store %Limit %newLimit, ptr %newLimit_pointer, !alias.scope !2
 
     %prompt_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
@@ -319,9 +315,19 @@ realloc:
     %promptStack = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     store %Stack %newStack, ptr %promptStack
 
-    %result.00 = insertvalue {%Stack, %StackPointer} zeroinitializer, %Stack %newStack, 0
-    %result.11 = insertvalue {%Stack, %StackPointer} %result.00, %StackPointer %newStackPointer, 1
-    ret {%Stack, %StackPointer} %result.11
+    ret %Stack %newStack
+}
+
+define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+
+    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
+    %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
+
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    ret %StackPointer %currentStackPointer
 }
 
 define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
