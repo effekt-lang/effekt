@@ -55,9 +55,6 @@
 %ReturnAddress = type ptr
 %FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
 
-; Pointers for a heap allocated stack
-%Memory = type { %StackPointer, %Base, %Limit }
-
 ; Unique address for each handler.
 %Prompt = type ptr
 

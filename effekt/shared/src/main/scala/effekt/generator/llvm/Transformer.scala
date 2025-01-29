@@ -580,7 +580,6 @@ object Transformer {
   }
 
   def pushFrameOnto(stack: Operand, environment: machine.Environment, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext) = {
-    val tmp = LocalReference(StructureType(List(stackType, stackPointerType)), freshName("tmp"))
     val size = environmentSize(environment);
 
     val newStack = LocalReference(stackType, freshName("stack"))
