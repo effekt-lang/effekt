@@ -65,7 +65,7 @@ function RESUME(p, c, ks, k) {
 
   const top = p.first
 
-  if (!!top) { throw `Cannot resume a continuation multiple times in this backend!` }
+  if (!top) { throw `Cannot resume a continuation multiple times in this backend!` }
   p.first = null
   p.rest = ks
 
