@@ -55,9 +55,6 @@
 %ReturnAddress = type ptr
 %FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
 
-; Pointers for a heap allocated stack
-%Memory = type { %StackPointer, %Base, %Limit }
-
 ; Unique address for each handler.
 %Prompt = type ptr
 
@@ -74,7 +71,7 @@
 ; This is used for two purposes:
 ;   - a refied first-class list of stacks (cyclic linked-list)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
-%StackValue = type { %ReferenceCount, %Memory, %Prompt, %Stack }
+%StackValue = type { %ReferenceCount, %StackPointer, %Limit, %Prompt, %Stack }
 
 
 
@@ -146,7 +143,7 @@ define ccc %Neg @unbox(%Pos %input) {
 ; Prompts
 
 define private %Prompt @currentPrompt(%Stack %stack) {
-    %prompt_pointer = getelementptr %StackValue, ptr %stack, i64 0, i32 2
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer
     ret %Prompt %prompt
 }
@@ -256,21 +253,16 @@ define private ptr @getVarPointer(%Reference %reference, %Stack %stack) {
     %offset = extractvalue %Reference %reference, 1
 
     %targetStack = call %Stack @getStack(%Prompt %prompt)
-    %base_pointer = getelementptr %StackValue, %Stack %targetStack, i64 0, i32 1, i32 1
-    %base = load %Base, ptr %base_pointer
-    %varPointer = getelementptr i8, %Base %base, i64 %offset
+    %varPointer = getelementptr i8, %Base %targetStack, i64 %offset
     ret ptr %varPointer
 }
 
 define private %Reference @newReference(%Stack %stack) alwaysinline {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
-
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer
-    %base = load %StackPointer, ptr %base_pointer
 
     %intStack = ptrtoint %StackPointer %stackPointer to i64
-    %intBase = ptrtoint %StackPointer %base to i64
+    %intBase = ptrtoint %Stack %stack to i64
 
     %offset = sub i64 %intStack, %intBase
 
@@ -284,48 +276,62 @@ define private %Reference @newReference(%Stack %stack) alwaysinline {
 
 ; Stack management
 
-define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+define private %Stack @checkLimit(%Stack %stack, i64 %n) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
 
     %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
     %isInside = icmp ule %StackPointer %nextStackPointer, %limit
-    br i1 %isInside, label %continue, label %realloc
+    br i1 %isInside, label %done, label %realloc
 
-continue:
-    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
-    ret %StackPointer %currentStackPointer
+done:
+    ret %Stack %stack
 
 realloc:
-    %base_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 1
-    %base = load %Base, ptr %base_pointer, !alias.scope !2
-
     %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
-    %intBase = ptrtoint %Base %base to i64
+    %intBase = ptrtoint %Stack %stack to i64
 
     %size = sub i64 %intStackPointer, %intBase
     %nextSize = add i64 %size, %n
     %newSize = call i64 @nextPowerOfTwo(i64 %nextSize)
 
-    %newBase = call ptr @realloc(ptr %base, i64 %newSize)
-    %newLimit = getelementptr i8, %Base %newBase, i64 %newSize
-    %newStackPointer = getelementptr i8, %Base %newBase, i64 %size
-    %newNextStackPointer = getelementptr i8, %StackPointer %newStackPointer, i64 %n
+    %newStack = call ptr @realloc(ptr %stack, i64 %newSize)
+    %newLimit = getelementptr i8, %Base %newStack, i64 %newSize
+    %newStackPointer = getelementptr i8, %Base %newStack, i64 %size
 
-    store %StackPointer %newNextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
-    store %Base %newBase, ptr %base_pointer, !alias.scope !2
-    store %Limit %newLimit, ptr %limit_pointer, !alias.scope !2
+    %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
+    %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
 
-    ret %StackPointer %newStackPointer
+    store %StackPointer %newStackPointer, ptr %newStackPointer_pointer, !alias.scope !2
+    store %Limit %newLimit, ptr %newLimit_pointer, !alias.scope !2
+
+    %prompt_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %prompt = load %Prompt, ptr %prompt_pointer
+    %promptStack = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    store %Stack %newStack, ptr %promptStack
+
+    ret %Stack %newStack
+}
+
+define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+
+    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
+    %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
+
+    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !2
+    ret %StackPointer %currentStackPointer
 }
 
 define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
 
-    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %isInside = icmp ule %StackPointer %stackPointer, %limit
     call void @llvm.assume(i1 %isInside)
@@ -345,11 +351,11 @@ define private i64 @nextPowerOfTwo(i64 %x) {
 }
 
 define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !2
     %oldStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
 
-    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 2
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !2
     %isInside = icmp ule %StackPointer %oldStackPointer, %limit
     call void @llvm.assume(i1 %isInside)
@@ -358,42 +364,30 @@ define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
 
 ; Meta-stack management
 
-define private %Memory @newMemory() {
-    %size = shl i64 1, 6
-    %stackPointer = call %StackPointer @malloc(i64 %size)
-    %limit = getelementptr i8, ptr %stackPointer, i64 %size
-
-    %memory.0 = insertvalue %Memory undef, %StackPointer %stackPointer, 0
-    %memory.1 = insertvalue %Memory %memory.0, %Base %stackPointer, 1
-    %memory.2 = insertvalue %Memory %memory.1, %Limit %limit, 2
-
-    ret %Memory %memory.2
-}
-
 define private %Stack @reset(%Stack %oldStack) {
 
     %prompt = call %Prompt @freshPrompt()
 
-    %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
+    %size = shl i64 1, 7
     %stack = call ptr @malloc(i64 %size)
+    %stackPointer = getelementptr %StackValue, %Stack %stack, i64 1
+    %limit = getelementptr i8, ptr %stack, i64 %size
 
+    %stack.0 = insertvalue %StackValue zeroinitializer, %StackPointer %stackPointer, 1
+    %stack.1 = insertvalue %StackValue %stack.0, %Limit %limit, 2
+    %stack.2 = insertvalue %StackValue %stack.1, %Prompt %prompt, 3
+    %stack.3 = insertvalue %StackValue %stack.2, %Stack %oldStack, 4
 
-    %stackMemory = call %Memory @newMemory()
+    store %StackValue %stack.3, %Stack %stack
 
-    %stack.0 = insertvalue %StackValue zeroinitializer, %Memory %stackMemory, 1
-    %stack.1 = insertvalue %StackValue %stack.0, %Prompt %prompt, 2
-    %stack.2 = insertvalue %StackValue %stack.1, %Stack %oldStack, 3
-
-    store %StackValue %stack.2, %Stack %stack
-
-    %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
-    store %Stack %stack, ptr %stack_pointer
+    %promptStack = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
+    store %Stack %stack, ptr %promptStack
 
     ret %Stack %stack
 }
 
 define private void @updatePrompts(%Stack %stack) {
-    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer
     %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     %promptStack = load %Stack, ptr %stack_pointer
@@ -414,15 +408,15 @@ displace:
 update:
     store %Stack %stack, ptr %stack_pointer
 
-    %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %next = load %Stack, ptr %next_pointer
     tail call void @updatePrompts(%Stack %next)
     ret void
 }
 
 define private void @displace(%Stack %stack, %Stack %end) {
-    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %prompt = load %Prompt, ptr %prompt_pointer
     %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     store %Stack null, ptr %stack_pointer
@@ -441,7 +435,7 @@ continue:
 
 define private %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
     %uniqueResumption = call %Resumption @uniqueStack(%Resumption %resumption)
-    %rest_pointer = getelementptr %StackValue, %Resumption %uniqueResumption, i64 0, i32 3
+    %rest_pointer = getelementptr %StackValue, %Resumption %uniqueResumption, i64 0, i32 4
     %start = load %Stack, ptr %rest_pointer
     call void @updatePrompts(%Stack %start)
 
@@ -453,7 +447,7 @@ define private %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
 define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
     %resumpion_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     %resumption = load %Stack, ptr %resumpion_pointer
-    %next_pointer = getelementptr %StackValue, %Stack %resumption, i64 0, i32 3
+    %next_pointer = getelementptr %StackValue, %Stack %resumption, i64 0, i32 4
     %next = load %Stack, ptr %next_pointer
 
     store %Stack %stack, ptr %next_pointer
@@ -461,12 +455,6 @@ define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
     %result.0 = insertvalue {%Resumption, %Stack} undef, %Resumption %resumption, 0
     %result = insertvalue {%Resumption, %Stack} %result.0, %Stack %next, 1
     ret {%Resumption, %Stack} %result
-}
-
-define private void @eraseMemory(%Memory %memory) {
-    %stackPointer = extractvalue %Memory %memory, 0
-    call void @free(%StackPointer %stackPointer)
-    ret void
 }
 
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
@@ -493,18 +481,15 @@ define private void @sharePrompt(%Prompt %prompt) alwaysinline {
 }
 
 define private %Stack @underflowStack(%Stack %stack) {
-    %stackMemory = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %stackPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
-    %memory = load %Memory, ptr %stackMemory
     %prompt = load %Prompt, ptr %stackPrompt
     %rest = load %Stack, ptr %stackRest
 
     %promptStack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     store %Stack null, ptr %promptStack_pointer
 
-    call void @eraseMemory(%Memory %memory)
     call void @erasePrompt(%Prompt %prompt)
     call void @free(%Stack %stack)
 
@@ -515,31 +500,41 @@ define private void @nop(%Stack %stack) {
     ret void
 }
 
-define private %Memory @copyMemory(%Memory %memory) alwaysinline {
-    %stackPointer = extractvalue %Memory %memory, 0
-    %base = extractvalue %Memory %memory, 1
-    %limit = extractvalue %Memory %memory, 2
+define private %Stack @copyStack(%Stack %stack) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer
+    %limit = load %Limit, ptr %limit_pointer
 
     %intStackPointer = ptrtoint %StackPointer %stackPointer to i64
-    %intBase = ptrtoint %Base %base to i64
+    %intBase = ptrtoint %Stack %stack to i64
     %intLimit = ptrtoint %Limit %limit to i64
     %used = sub i64 %intStackPointer, %intBase
     %size = sub i64 %intLimit, %intBase
 
-    %newBase = call ptr @malloc(i64 %size)
-    %intNewBase = ptrtoint %Base %newBase to i64
-    %intNewStackPointer = add i64 %intNewBase, %used
-    %intNewLimit = add i64 %intNewBase, %size
-    %newStackPointer = inttoptr i64 %intNewStackPointer to %StackPointer
-    %newLimit = inttoptr i64 %intNewLimit to %Limit
+    %newStack = call ptr @malloc(i64 %size)
+    %newStackPointer = getelementptr i8, %Stack %newStack, i64 %used
+    %newLimit = getelementptr i8, %Stack %newStack, i64 %size
 
-    call void @memcpy(ptr %newBase, ptr %base, i64 %used)
+    call void @memcpy(ptr %newStack, ptr %stack, i64 %used)
 
-    %memory.0 = insertvalue %Memory undef, %StackPointer %newStackPointer, 0
-    %memory.1 = insertvalue %Memory %memory.0, %Base %newBase, 1
-    %memory.2 = insertvalue %Memory %memory.1, %Limit %newLimit, 2
+    %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
+    %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
 
-    ret %Memory %memory.2
+    store %StackPointer %newStackPointer, ptr %newStackPointer_pointer
+    store %Limit %newLimit, ptr %newLimit_pointer
+
+    call void @shareFrames(%StackPointer %newStackPointer)
+
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %prompt = load %Prompt, ptr %prompt_pointer
+    call void @sharePrompt(%Prompt %prompt)
+
+    %referenceCount_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 0
+    store i64 0, ptr %referenceCount_pointer
+
+    ret %Stack %newStack
 }
 
 
@@ -556,53 +551,37 @@ done:
 copy:
     %newOldReferenceCount = sub %ReferenceCount %referenceCount, 1
     store %ReferenceCount %newOldReferenceCount, ptr %referenceCount_pointer
-    %stack_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 3
+
+    %firstCopy = call %Stack @copyStack(%Stack %resumption)
+
+    %stack_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 4
     %stack = load %Stack, ptr %stack_pointer
 
-    %size = ptrtoint ptr getelementptr (%StackValue, ptr null, i64 1) to i64
-    %newHead = call ptr @malloc(i64 %size)
+    br label %check
 
-    br label %loop
+check:
+    %current = phi %Stack [%stack, %copy], [%next, %loop]
+    %previousCopy = phi %Stack [%firstCopy, %copy], [%newCopy, %loop]
+
+    %rest_pointer = getelementptr %StackValue, %Stack %previousCopy, i64 0, i32 4
+
+    %isEnd = icmp eq %Stack %current, %resumption
+    br i1 %isEnd, label %stop, label %loop
 
 loop:
-    %old = phi %Stack [%stack, %copy], [%rest, %next]
-    %newStack = phi %Stack [%newHead, %copy], [%nextNew, %next]
 
-    %stackMemory = getelementptr %StackValue, %Stack %old, i64 0, i32 1
-    %stackPrompt = getelementptr %StackValue, %Stack %old, i64 0, i32 2
-    %stackRest = getelementptr %StackValue, %Stack %old, i64 0, i32 3
+    %newCopy = call %Stack @copyStack(%Stack %current)
 
-    %memory = load %Memory, ptr %stackMemory
-    %prompt = load %Prompt, ptr %stackPrompt
-    %rest = load %Stack, ptr %stackRest
+    store %Stack %newCopy, ptr %rest_pointer
 
-    %newStackReferenceCounter = getelementptr %StackValue, %Stack %newStack, i64 0, i32 0
-    %newStackMemory = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
-    %newStackPrompt = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
-    %newStackRest = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
+    %next_pointer = getelementptr %StackValue, %Stack %current, i64 0, i32 4
+    %next = load %Stack, ptr %next_pointer
 
-    %newMemory = call %Memory @copyMemory(%Memory %memory)
-
-    %newStackPointer = extractvalue %Memory %newMemory, 0
-    call void @shareFrames(%StackPointer %newStackPointer)
-
-    call void @sharePrompt(%Prompt %prompt)
-
-    store %ReferenceCount 0, ptr %newStackReferenceCounter
-    store %Memory %newMemory, ptr %newStackMemory
-    store %Prompt %prompt, ptr %newStackPrompt
-
-    %isEnd = icmp eq %Stack %old, %resumption
-    br i1 %isEnd, label %stop, label %next
-
-next:
-    %nextNew = call ptr @malloc(i64 %size)
-    store %Stack %nextNew, ptr %newStackRest
-    br label %loop
+    br label %check
 
 stop:
-    store %Stack %newHead, ptr %newStackRest
-    ret %Stack %newStack
+    store %Stack %firstCopy, ptr %rest_pointer
+    ret %Stack %firstCopy
 }
 
 define void @shareResumption(%Resumption %resumption) alwaysinline {
@@ -624,7 +603,7 @@ define void @eraseResumption(%Resumption %resumption) alwaysinline {
     ret void
 
     free:
-    %stack_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 3
+    %stack_pointer = getelementptr %StackValue, %Resumption %resumption, i64 0, i32 4
     %stack = load %Stack, ptr %stack_pointer
     store %Stack null, ptr %stack_pointer
     call void @eraseStack(%Stack %stack)
@@ -632,9 +611,9 @@ define void @eraseResumption(%Resumption %resumption) alwaysinline {
 }
 
 define void @eraseStack(%Stack %stack) alwaysinline {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
-    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
-    %rest_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
+    %rest_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
     %stackPointer = load %StackPointer, ptr %stackPointer_pointer
     %prompt = load %Stack, ptr %prompt_pointer
@@ -650,7 +629,6 @@ clearPrompt:
     br label %free
 
 free:
-    call void @free(%Stack %stack)
     call void @eraseFrames(%StackPointer %stackPointer)
     call void @erasePrompt(%Prompt %prompt)
 
@@ -681,12 +659,23 @@ define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     ret void
 }
 
+define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
+    %base = getelementptr %StackValue, %StackPointer %stackPointer, i64 -1
+    call void @free(%Base %base)
+    ret void
+}
+
 ; RTS initialization
 
 define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
     %rest = call %Stack @underflowStack(%Stack %stack)
     ; rest holds global variables
-    call void @eraseStack(%Stack %rest)
+    call void @resume_Pos(%Stack %rest, %Pos %val)
+    ret void
+}
+
+define private tailcc void @globalsReturn(%Pos %val, %Stack %stack) {
+    %rest = call %Stack @underflowStack(%Stack %stack)
     ret void
 }
 
@@ -705,16 +694,16 @@ define private void @topLevelEraser(%Environment %environment) {
 define private %Stack @withEmptyStack() {
     %globals = call %Stack @reset(%Stack null)
 
-    %globalsStackPointer_pointer = getelementptr %StackValue, %Stack %globals, i64 0, i32 1, i32 0
+    %globalsStackPointer_pointer = getelementptr %StackValue, %Stack %globals, i64 0, i32 1
     %globalsStackPointer = load %StackPointer, ptr %globalsStackPointer_pointer
 
     %returnAddressPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 0
     %sharerPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 1
     %eraserPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 2
 
-    store ptr @nop, ptr %returnAddressPointer.0
-    store ptr @nop, ptr %sharerPointer.0
-    store ptr @free, ptr %eraserPointer.0
+    store ptr @globalsReturn, ptr %returnAddressPointer.0
+    store ptr @topLevelSharer, ptr %sharerPointer.0
+    store ptr @topLevelEraser, ptr %eraserPointer.0
 
     %globalsStackPointer_2 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 1
     store %StackPointer %globalsStackPointer_2, ptr %globalsStackPointer_pointer
@@ -724,7 +713,7 @@ define private %Stack @withEmptyStack() {
     %globalStack = getelementptr %PromptValue, %Prompt @global, i64 0, i32 1
     store %Stack %stack, ptr %globalStack
 
-    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1, i32 0
+    %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPointer = load %StackPointer, ptr %stackStackPointer
 
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
