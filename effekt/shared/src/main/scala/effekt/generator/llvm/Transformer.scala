@@ -516,7 +516,7 @@ object Transformer {
             loadEnvironmentAt(nextStackPointer, freshEnvironment);
 
             eraseValues(freshEnvironment, Set());
-            val next = if (kind == StackEraser) free else eraseFrames // TODO: improve this (in RTS?)
+            val next = if (kind == StackEraser) freeStack else eraseFrames // TODO: improve this (in RTS?)
             emit(Call("_", Ccc(), VoidType(), next, List(nextStackPointer)));
             RetVoid()
           };
@@ -580,9 +580,16 @@ object Transformer {
   }
 
   def pushFrameOnto(stack: Operand, environment: machine.Environment, returnAddressName: String, sharer: Operand, eraser: Operand)(using ModuleContext, FunctionContext, BlockContext) = {
-    val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+    val tmp = LocalReference(StructureType(List(stackType, stackPointerType)), freshName("tmp"))
     val size = ConstantInt(environmentSize(environment) + 24);
-    emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackAllocate, List(stack, size)));
+    emit(Call(tmp.name, Ccc(), tmp.tpe, stackAllocate, List(stack, size)));
+
+    val newStack = LocalReference(stackType, freshName("stack"))
+    val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+
+    emit(ExtractValue(newStack.name, tmp, 0));
+    emit(ExtractValue(stackPointer.name, tmp, 1));
+    setStack(newStack);
 
     val frameType = StructureType(List(environmentType(environment), frameHeaderType));
     storeEnvironmentAt(stackPointer, environment);
@@ -705,6 +712,8 @@ object Transformer {
   val eraseNegative = ConstantGlobal("eraseNegative");
   val eraseResumption = ConstantGlobal("eraseResumption");
   val eraseFrames = ConstantGlobal("eraseFrames");
+
+  val freeStack = ConstantGlobal("freeStack")
 
   val alloc = ConstantGlobal("alloc")
   val getPointer = ConstantGlobal("getPointer")
