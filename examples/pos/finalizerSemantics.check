@@ -1,3 +1,11 @@
+tail resumptive handler
+Eff
+returning inner
+Eff
+returning outer
+87
+
+non tail resumptive handler
 suspending inner
 Eff
 Eff
@@ -6,4 +14,4 @@ Eff
 returning inner
 Eff
 returning outer
-87
+1

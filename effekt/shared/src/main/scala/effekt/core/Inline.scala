@@ -143,9 +143,9 @@ object Inline {
       patternMatch(rewrite(scrutinee), clauses.map { case (id, value) => id -> rewrite(value) }, default.map(rewrite))
     case Stmt.Alloc(id, init, region, body) => Alloc(id, rewrite(init), region, rewrite(body))
     // Note: We cannot inline tail resumptive shifts, otherwise and the suspend and resume clauses are not executed
-    // case Stmt.Shift(prompt, b @ BlockLit(tparams, cparams, vparams, List(k), body)) if tailResumptive(k.id, body) =>
-    //   C.inlineCount.next()
-    //   rewrite(removeTailResumption(k.id, body))
+    case Stmt.Shift(prompt, b @ BlockLit(tparams, cparams, vparams, List(k), body)) if tailResumptive(k.id, body) =>
+      C.inlineCount.next()
+      rewrite(removeTailResumption(k.id, body))
 
     case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
 

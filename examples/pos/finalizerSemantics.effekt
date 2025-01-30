@@ -1,31 +1,61 @@
 effect Eff(): Unit
 
-def main() = {
-  val x = 
+def tailResumptive() = 
+  try {
     try {
-      try {
-        do Eff()
-        42
-      } on suspend {
-        println("suspending inner")
-        do Eff()
-      } on resume { _ =>
-        println("resuming inner")
-        do Eff()
+      do Eff()
+      42
+    } on suspend {
+      println("suspending inner")
+      do Eff()
+    } on resume { _ =>
+      println("resuming inner")
+      do Eff()
     } on return { x =>
-        println("returning inner")
-        do Eff()
-        x * 2
-      }
-    } with Eff { () => println("Eff"); resume(()) }
-    on suspend {
-      println("suspending outer")
-    } on resume {
-      _ => println("resuming outer")
-    } on return { x =>
-      println("returning outer")
-      x + 3
+      println("returning inner")
+      do Eff()
+      x * 2
     }
-  println(x)
-  ()
+  } with Eff { () => println("Eff"); resume(()) }
+  on suspend {
+    println("suspending outer")
+  } on resume {
+    _ => println("resuming outer")
+  } on return { x =>
+    println("returning outer")
+    x + 3
+  }
+
+def nonTailResumptive() =
+  try {
+    try {
+      do Eff()
+      42
+    } on suspend {
+      println("suspending inner")
+      do Eff()
+    } on resume { _ =>
+      println("resuming inner")
+      do Eff()
+    } on return { x =>
+      println("returning inner")
+      do Eff()
+      x * 2
+    }
+  } with Eff { () => println("Eff"); resume(()); 1 }
+  on suspend {
+    println("suspending outer")
+  } on resume {
+    _ => println("resuming outer")
+  } on return { x =>
+    println("returning outer")
+    x + 3
+  }
+
+def main() = {
+  println("tail resumptive handler")
+  println(tailResumptive())
+  println("")
+  println("non tail resumptive handler")
+  println(nonTailResumptive())
 }
