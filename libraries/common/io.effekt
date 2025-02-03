@@ -34,6 +34,34 @@ extern def abort() at async: Nothing =
     ret void
   """
 
+// Futures
+// -------
+
+extern type Future[T]
+
+extern global def allocate[T](): Future[T] =
+  llvm """
+    %future = call %Pos @c_future_make()
+    ret %Pos %future
+  """
+
+extern global def fill[T](future: Future[T], value: T): Unit =
+  llvm """
+    call void @c_future_fill(%Pos ${future}, %Pos ${value})
+    ret %Pos zeroinitializer
+  """
+
+extern async def wait[T](future: Future[T]): T =
+  llvm """
+    call void @c_future_wait(%Pos ${future}, %Stack %stack)
+    ret void
+  """
+
+extern llvm """
+  declare %Pos @c_future_make()
+  declare void @c_future_fill(%Pos, %Pos)
+  declare void @c_future_wait(%Pos, %Stack)
+"""
 
 // Promises
 // --------
