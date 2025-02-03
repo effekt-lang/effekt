@@ -422,6 +422,16 @@ define private void @displace(%Stack %stack, %Stack %end) {
     store %Stack null, ptr %stack_pointer
 
     %next = load %Stack, ptr %next_pointer
+
+    %isNull = icmp eq %Stack %next, null
+    br i1 %isNull, label %error, label %check
+
+error:
+    ; TODO print error message
+    call void @exit(i64 1)
+    ret void
+
+check:
     %isEnd = icmp eq %Stack %next, %end
     br i1 %isEnd, label %done, label %continue
 
