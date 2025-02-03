@@ -572,6 +572,90 @@ void c_yield(Stack stack) {
     c_timer_start(0, stack);
 }
 
+// Futures
+// -------
+
+typedef enum { EMPTY, FILLED, WAITED } future_state_t;
+
+typedef struct {
+    uint64_t rc;
+    void* eraser;
+    future_state_t state;
+    union {
+        struct Pos value;
+        Stack stack;
+    } payload;
+} Future;
+
+void c_future_erase(void *envPtr) {
+    // envPtr points to a Future _after_ the eraser, so let's adjust it to point to the beginning.
+    Future *future = (Future*) (envPtr - offsetof(Future, state));
+    future_state_t state = future->state;
+    switch (state) {
+    case EMPTY:
+        break;
+    case FILLED:
+        erasePositive(future->payload.value);
+        break;
+    case WAITED:
+        eraseStack(future->payload.stack);
+        break;
+    }
+}
+
+struct Pos c_future_make() {
+    Future* future = (Future*)malloc(sizeof(Future));
+
+    future->rc = 0;
+    future->eraser = c_future_erase;
+    future->state = EMPTY;
+
+    return (struct Pos) { .tag = 0, .obj = future, };
+}
+
+void c_future_fill(struct Pos future, struct Pos value) {
+    Future* f = (Future*)future.obj;
+    switch (f->state) {
+    case EMPTY:
+        f->state = FILLED;
+        f->payload.value = value;
+        break;
+    case FILLED:
+        erasePositive(future);
+        erasePositive(value);
+        // TODO more graceful panic
+        fprintf(stderr, "ERROR: Future already filled\n");
+        exit(1);
+        break;
+    case WAITED:
+        Stack stack = f->payload.stack;
+        free(f);
+        resume_Pos(stack, value);
+        break;
+    }
+}
+
+void c_future_wait(struct Pos future, Stack stack) {
+    Future* f = (Future*)future.obj;
+    switch (f->state) {
+    case EMPTY:
+        f->state = WAITED;
+        f->payload.stack = stack;
+        break;
+    case FILLED:
+        struct Pos value = f->payload.value;
+        free(f);
+        resume_Pos(stack, value);
+        break;
+    case WAITED:
+        erasePositive(future);
+        eraseStack(stack);
+        // TODO more graceful panic
+        fprintf(stderr, "ERROR: Future already waited\n");
+        exit(1);
+        break;
+    }
+}
 
 // Promises
 // --------
