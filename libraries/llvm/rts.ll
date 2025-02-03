@@ -386,7 +386,7 @@ define private %Stack @reset(%Stack %oldStack) {
     ret %Stack %stack
 }
 
-define private void @updatePrompts(%Stack %stack) {
+define private void @revalidate(%Stack %stack) {
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer
     %stack_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
@@ -402,7 +402,7 @@ continue:
     br i1 %isOccupied, label %displace, label %update
 
 displace:
-    call void @displace(%Stack %promptStack, %Stack %promptStack)
+    call void @invalidate(%Stack %promptStack, %Stack %promptStack)
     br label %update
 
 update:
@@ -410,11 +410,12 @@ update:
 
     %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %next = load %Stack, ptr %next_pointer
-    tail call void @updatePrompts(%Stack %next)
+    tail call void @revalidate(%Stack %next)
     ret void
 }
 
-define private void @displace(%Stack %stack, %Stack %end) {
+; This panics if we invalidate the meta stack
+define private void @invalidate(%Stack %stack, %Stack %end) {
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %next_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
     %prompt = load %Prompt, ptr %prompt_pointer
@@ -439,7 +440,7 @@ done:
     ret void
 
 continue:
-    tail call void @displace(%Stack %next, %Stack %end)
+    tail call void @invalidate(%Stack %next, %Stack %end)
     ret void
 }
 
@@ -447,7 +448,7 @@ define private %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
     %uniqueResumption = call %Resumption @uniqueStack(%Resumption %resumption)
     %rest_pointer = getelementptr %StackValue, %Resumption %uniqueResumption, i64 0, i32 4
     %start = load %Stack, ptr %rest_pointer
-    call void @updatePrompts(%Stack %start)
+    call void @revalidate(%Stack %start)
 
     store %Stack %oldStack, ptr %rest_pointer
 
