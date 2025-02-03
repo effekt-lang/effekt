@@ -428,8 +428,7 @@ define private void @invalidate(%Stack %stack, %Stack %end) {
     br i1 %isNull, label %error, label %check
 
 error:
-    ; TODO print error message
-    call void @exit(i64 1)
+    call void @duplicated_prompt()
     ret void
 
 check:
