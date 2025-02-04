@@ -22,3 +22,11 @@ effect_handlers_bench/product_early 262144
 effect_handlers_bench/resume_nontail 65536
 effect_handlers_bench/tree_explore 17
 effect_handlers_bench/triples 512
+input_output/dyck_one 5
+input_output/financial_format 5
+input_output/interleave_promises 5
+input_output/large_file 5
+input_output/number_matrix 5
+input_output/small_files 5
+input_output/word_count_ascii 5
+input_output/word_count_utf8 5
