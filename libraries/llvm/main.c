@@ -12,7 +12,7 @@
 #include "types.c"
 #include "bytearray.c"
 #include "io.c"
-#include "hole.c"
+#include "panic.c"
 #include "ref.c"
 #include "array.c"
 

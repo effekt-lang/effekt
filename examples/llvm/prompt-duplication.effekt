@@ -1,0 +1,16 @@
+
+effect E() : (() => Unit at {io})
+
+
+def main() : Unit = {
+    try {
+      val f = do E()
+      f()
+    } with E { () =>
+        def f() = { () }
+        def g() = {
+          resume(f)
+        }
+        resume(g)
+    }
+}

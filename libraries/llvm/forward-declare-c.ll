@@ -9,6 +9,7 @@ declare void @c_io_println_Double(%Double)
 declare void @c_io_println_String(%Pos)
 
 declare void @hole()
+declare void @duplicated_prompt()
 
 declare %Pos @c_ref_fresh(%Pos)
 declare %Pos @c_ref_get(%Pos)
