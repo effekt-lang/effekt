@@ -135,7 +135,9 @@ namespace internal {
   """
 
   extern llvm """
-    declare void @c_fs_open(%Pos, %Pos, %Stack)
+    declare void @c_fs_open_reading(%Pos, %Stack)
+    declare void @c_fs_open_writing(%Pos, %Stack)
+    declare void @c_fs_open_appending(%Pos, %Stack)
     declare void @c_fs_read(%Int, %Pos, %Int, %Int, %Int, %Stack)
     declare void @c_fs_write(%Int, %Pos, %Int, %Int, %Int, %Stack)
     declare void @c_fs_close(%Int, %Stack)
