@@ -6,35 +6,13 @@ import io
 import io/error
 
 
-/// Represents the file opening modes with their respective flags
-/// Backends rely on the order of these
-type Mode {
-  // Most common modes
-  ReadOnly()            // 'r'  exception if does not exist
-  WriteOnly()           // 'w'  created if does not exist, truncated if exists
-  AppendOnly()          // 'a'  created if does not exist
-
-  // Other modes
-  ReadWrite()           // 'w+' created if does not exist, truncated if exists
-  ReadAppend()          // 'a+' created if does not exist
-  AppendExclusive()     // 'ax' created if does not exist, fails if exists
-  ReadAppendExclusive() // 'ax+' created if does not exist, fails if exists
-  AppendSync()          // 'as' created if does not exist, append in synchronous mode
-  ReadAppendSync()      // 'as+' created if does not exist, append in synchronous mode
-  ReadSync()            // 'rs' exception if does not exist, read in synchronous mode
-  ReadWriteSync()       // 'rs+' exception if does not exist, read/write in synchronous mode
-  WriteExclusive()      // 'wx' created if does not exist, truncated if exists, fails if exists
-  ReadWriteExclusive()  // 'wx+' created if does not exist, truncated if exists, fails if exists
-}
-
-
 /// A file descriptor. Should not be inspected.
 type File = Int
 
 
 /// Reads a file at given path as utf8 encoded string.
 def readFile(path: String): String / Exception[IOError] = {
-  val file = open(path, ReadOnly());
+  val file = openForReading(path);
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
@@ -59,7 +37,7 @@ def readFile(path: String): String / Exception[IOError] = {
 
 /// Writes the (utf8 encoded) string `contents` into the specified file.
 def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
-  val file = open(path, WriteOnly());
+  val file = openForWriting(path);
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
@@ -95,8 +73,14 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
   }
 
 
-def open(path: String, mode: Mode): File / Exception[IOError] =
-  internal::checkResult(internal::open(path, mode))
+def openForReading(path: String): File / Exception[IOError] =
+  internal::checkResult(internal::openForReading(path))
+
+def openForWriting(path: String): File / Exception[IOError] =
+  internal::checkResult(internal::openForWriting(path))
+
+def openForAppending(path: String): File / Exception[IOError] =
+  internal::checkResult(internal::openForAppending(path))
 
 def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
   internal::checkResult(internal::read(file, buffer, offset, size, position))
@@ -111,40 +95,6 @@ def close(file: File): Unit / Exception[IOError] = {
 namespace internal {
 
   extern js """
-    function modeName(mode) {
-      switch (mode.__tag) {
-      case 0: // ReadOnly()
-        return 'r';
-      case 1: // WriteOnly()
-        return 'w';
-      case 2: // AppendOnly()
-        return 'a';
-      case 3: // ReadWrite()
-        return 'w+';
-      case 4: // ReadAppend()
-        return 'a+';
-      case 5: // AppendExclusive()
-        return 'ax';
-      case 6: // ReadAppendExclusive()
-        return 'ax+';
-      case 7: // AppendSync()
-        return 'as';
-      case 8: // ReadAppendSync()
-        return 'as+';
-      case 9: // ReadSync()
-        return 'rs';
-      case 10: // ReadWriteSync()
-        return 'rs+';
-      case 11: // WriteExclusive()
-        return 'wx';
-      case 12: // ReadWriteExclusive()
-        return 'wx+';
-      default:
-        // Invalid tag value
-        return null;
-      }
-    }
-
     /**
      * Nodejs file operations expect buffers, but we represent buffers as typed arrays.
      * This function converts between the two without copying.
@@ -157,8 +107,8 @@ namespace internal {
   extern jsNode """
     const fs = require("fs");
 
-    function open(path, mode, callback) {
-      fs.open(path, modeName(mode), (err, file) => {
+    function open(path, flags, callback) {
+      fs.open(path, flags, (err, file) => {
         if (err) { callback(err.errno) } else { callback(file) }
       })
     }
@@ -191,10 +141,24 @@ namespace internal {
     declare void @c_fs_close(%Int, %Stack)
   """
 
-  extern async def open(path: String, mode: Mode): Int =
-    jsNode "$effekt.capture(callback => open(${path}, ${mode}, callback))"
+  extern async def openForReading(path: String): Int =
+    jsNode "$effekt.capture(callback => open(${path}, 'r', callback))"
     llvm """
-      call void @c_fs_open(%Pos ${path}, %Pos ${mode}, %Stack %stack)
+      call void @c_fs_open_reading(%Pos ${path}, %Stack %stack)
+      ret void
+    """
+
+  extern async def openForWriting(path: String): Int =
+    jsNode "$effekt.capture(callback => open(${path}, 'w', callback))"
+    llvm """
+      call void @c_fs_open_writing(%Pos ${path}, %Stack %stack)
+      ret void
+    """
+
+  extern async def openForAppending(path: String): Int =
+    jsNode "$effekt.capture(callback => open(${path}, 'a', callback))"
+    llvm """
+      call void @c_fs_open_appending(%Pos ${path}, %Stack %stack)
       ret void
     """
 
