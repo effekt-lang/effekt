@@ -1,0 +1,36 @@
+import io
+import io/filesystem
+import io/error
+
+import bytearray
+
+def writeHello(path: String) =  {
+  val file = openForWriting(path)
+  val buffer = fromString("hello!")
+  file.write(buffer, 0, buffer.size, 0)
+  file.close()
+}
+
+def readContents(path: String) = {
+  val file = openForReading(path)
+  val buffer = bytearray::allocate(64)
+  val n = file.read(buffer, 0, buffer.size, 0)
+  file.close()
+  buffer.resize(n).toString
+}
+
+def appendWorld(path: String) =  {
+  val file = openForAppending(path)
+  val buffer = fromString(" world!")
+  file.write(buffer, 0, buffer.size, -1)
+  file.close()
+}
+
+def main() = {
+  with on[IOError].panic;
+  val filename = "/tmp/some_file_to_write.txt"
+  writeHello(filename)
+  println(readContents(filename))
+  appendWorld(filename)
+  println(readContents(filename))
+}
