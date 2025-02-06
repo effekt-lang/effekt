@@ -53,6 +53,23 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
   go()
 }
 
+/// Appends the (utf8 encoded) string `contents` to the specified file.
+def appendFile(path: String, contents: String): Unit / Exception[IOError] = {
+  val file = openForAppending(path);
+  with on[IOError].finalize { close(file) }
+
+  val chunkSize = 1048576 // 1MB
+  val buffer = contents.fromString
+  var offset = 0;
+
+  def go(): Unit = {
+    val n = write(file, buffer, offset, min(buffer.size - offset, chunkSize), -1)
+    offset = offset + n
+    if (offset < buffer.size) { go() }
+  }
+
+  go()
+}
 
 /// An abstract interface applications can program against.
 ///
