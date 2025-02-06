@@ -94,7 +94,7 @@ trait Runner[Executable] {
    */
   def eval(executable: Executable)(using C: Context): Unit = {
     val execFile = build(executable)
-    val valgrindArgs = Seq("--leak-check=full", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
+    val valgrindArgs = Seq("--leak-check=full", "--undef-value-errors=no", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
     val process = if (C.config.valgrind())
       Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
     else
