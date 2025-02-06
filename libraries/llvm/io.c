@@ -71,7 +71,7 @@ void c_fs_open(String path, int flags, Stack stack) {
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0666, c_resume_int_fs);
+    int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0777, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
@@ -157,7 +157,7 @@ void c_fs_mkdir(String path, Stack stack) {
     request->data = stack;
 
     // Perform the mkdir operation
-    int result = uv_fs_mkdir(uv_default_loop(), request, path_str, 0666, c_resume_int_fs);
+    int result = uv_fs_mkdir(uv_default_loop(), request, path_str, 0777, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);

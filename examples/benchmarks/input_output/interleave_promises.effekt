@@ -23,11 +23,11 @@ def run(n: Int) = {
     promise(box {
       with on[IOError].result
       val filename = foldername ++ i.show ++ ".txt"
-      val file = open(filename, WriteOnly())
+      val file = openForWriting(filename)
       val buffer = bytearray(size, 35.toByte)
       repeat(8) {
-        val i = write(file, buffer, 0, size, -1)
-        if (i < size) {
+        val m = write(file, buffer, 0, size, -1)
+        if (m < buffer.size) {
           panic("failed write")
         }
       }
@@ -38,11 +38,11 @@ def run(n: Int) = {
   promises.foreachIndex { (i, p) =>
     p.await().value()
     val filename = foldername ++ i.show ++ ".txt"
-    val file = open(filename, ReadOnly())
+    val file = openForReading(filename)
     val buffer = bytearray::allocate(size)
     repeat(8) {
-      val i = read(file, buffer, 0, size, -1)
-      if (i < size) {
+      val m = read(file, buffer, 0, size, -1)
+      if (m < buffer.size) {
         panic("failed read")
       }
     }
