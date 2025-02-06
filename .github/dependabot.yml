@@ -1,0 +1,15 @@
+# Update schedule for GitHub Actions
+# from https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
+
+version: 2
+updates:
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    open-pull-requests-limit: 2
+    labels:
+      - "github-actions"
+    schedule:
+      # Check for updates to GitHub Actions every month
+      interval: "monthly"
+
