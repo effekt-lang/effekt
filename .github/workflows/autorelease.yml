@@ -174,7 +174,7 @@ jobs:
         run: sbt updateVersions
 
       - name: Upload updated files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: updated-files
           path: |
