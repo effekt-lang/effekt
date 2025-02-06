@@ -263,7 +263,7 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
 
 def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
 
-  val file = open(path, WriteOnly());
+  val file = openForWriting(path);
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
@@ -291,7 +291,7 @@ def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[I
 
 def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IOError] = {
 
-  val file = open(path, ReadOnly());
+  val file = openForReading(path);
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB

@@ -62,49 +62,11 @@ void c_resume_int_fs(uv_fs_t* request) {
     resume_Int(stack, result);
 }
 
-int modeFlags(struct Pos mode) {
-    switch (mode.tag) {
-        case 0: // ReadOnly()
-            return UV_FS_O_RDONLY;
-        case 1: // WriteOnly()
-            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-        case 2: // AppendOnly()
-            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND;
-        case 3: // ReadWrite()
-            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC;
-        case 4: // ReadAppend()
-            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND;
-        case 5: // AppendExclusive()
-            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-        case 6: // ReadAppendExclusive()
-            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_EXCL;
-        case 7: // AppendSync()
-            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-        case 8: // ReadAppendSync()
-            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_APPEND | UV_FS_O_SYNC;
-        case 9: // ReadSync()
-            return UV_FS_O_RDONLY | UV_FS_O_SYNC;
-        case 10: // ReadWriteSync()
-            return UV_FS_O_RDWR | UV_FS_O_SYNC;
-        case 11: // WriteExclusive()
-            return UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-        case 12: // ReadWriteExclusive()
-            return UV_FS_O_RDWR | UV_FS_O_CREAT | UV_FS_O_TRUNC | UV_FS_O_EXCL;
-        default:
-            // Invalid tag value
-            return -1;
-    }
-}
-
-void c_fs_open(String path, struct Pos mode, Stack stack) {
+void c_fs_open(String path, int flags, Stack stack) {
 
     // Convert the Effekt String to a 0-terminated string
     char* path_str = c_bytearray_into_nullterminated_string(path);
     erasePositive((struct Pos) path);
-
-    // Convert the Effekt String representing the opening mode to libuv flags
-    int flags = modeFlags(mode);
-    erasePositive((struct Pos) mode);
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
@@ -121,6 +83,18 @@ void c_fs_open(String path, struct Pos mode, Stack stack) {
     free(path_str);
 
     return;
+}
+
+void c_fs_open_reading(String path, Stack stack) {
+    c_fs_open(path, UV_FS_O_RDONLY, stack);
+}
+
+void c_fs_open_writing(String path, Stack stack) {
+    c_fs_open(path, UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC, stack);
+}
+
+void c_fs_open_appending(String path, Stack stack) {
+    c_fs_open(path, UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_APPEND, stack);
 }
 
 void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
