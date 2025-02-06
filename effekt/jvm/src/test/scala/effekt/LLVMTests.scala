@@ -19,14 +19,6 @@ class LLVMTests extends EffektTests {
     examplesDir / "benchmarks",
   )
 
-  lazy val bugs: List[File] = List(
-    // Jump to the invalid address stated on the next line
-    examplesDir / "benchmarks" / "input_output" / "dyck_one.effekt",
-    examplesDir / "benchmarks" / "input_output" / "number_matrix.effekt",
-    examplesDir / "benchmarks" / "input_output" / "word_count_ascii.effekt",
-    examplesDir / "benchmarks" / "input_output" / "word_count_utf8.effekt",
-  )
-
   /**
    * Documentation of currently failing tests and their reason
    */
@@ -60,5 +52,5 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "issue733.effekt",
   )
 
-  override lazy val ignored: List[File] = bugs ++ missingFeatures
+  override lazy val ignored: List[File] = missingFeatures
 }

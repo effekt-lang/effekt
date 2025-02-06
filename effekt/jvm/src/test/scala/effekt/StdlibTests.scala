@@ -40,13 +40,6 @@ class StdlibLLVMTests extends StdlibTests {
   override def debug = sys.env.get("EFFEKT_DEBUG").nonEmpty
 
   override def ignored: List[File] = List(
-    // Syscall param write(buf) points to uninitialised byte(s)
-    examplesDir / "stdlib" / "io" / "filesystem" / "files.effekt",
-    examplesDir / "stdlib" / "io" / "filesystem" / "async_file_io.effekt",
-
-    // Conditional jump or move depends on uninitialised value(s)
-    examplesDir / "stdlib" / "io" / "filesystem" / "wordcount.effekt",
-
     // String comparison using `<`, `<=`, `>`, `>=` is not implemented yet on LLVM
     examplesDir / "stdlib" / "string" / "compare.effekt",
 
