@@ -7,7 +7,10 @@ import bytearray
 def writeHello(path: String) =  {
   val file = openForWriting(path)
   val buffer = fromString("hello!")
-  file.write(buffer, 0, buffer.size, 0)
+  val n = file.write(buffer, 0, buffer.size, 0)
+  if (n < buffer.size) {
+    panic("write failed")
+  }
   file.close()
 }
 
@@ -22,7 +25,10 @@ def readContents(path: String) = {
 def appendWorld(path: String) =  {
   val file = openForAppending(path)
   val buffer = fromString(" world!")
-  file.write(buffer, 0, buffer.size, -1)
+  val n = file.write(buffer, 0, buffer.size, -1)
+  if (n < buffer.size) {
+    panic("append failed")
+  }
   file.close()
 }
 
