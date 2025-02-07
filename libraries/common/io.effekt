@@ -1,7 +1,6 @@
 module io
 
 import ref
-import queue
 
 // Event Loop
 // ----------
