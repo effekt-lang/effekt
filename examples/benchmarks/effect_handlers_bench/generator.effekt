@@ -1,0 +1,52 @@
+import examples/benchmarks/runner
+
+interface Yield {
+  def yield(x: Int): Unit
+}
+
+type Tree {
+  Leaf();
+  Node(left: Tree, value: Int, right: Tree)
+}
+
+type Generator {
+  Empty();
+  Thunk(value: Int, next: () => Generator at {})
+}
+
+def make(n: Int): Tree =
+  if (n == 0) {
+    Leaf()
+  } else {
+    val t = make(n - 1)
+    Node(t, n, t)
+  }
+
+def iterate(t: Tree): Unit / Yield =
+  t match {
+    case Leaf() => ()
+    case Node(l, v, r) =>
+      iterate(l);
+      do yield(v);
+      iterate(r)
+  }
+
+def generate(program: () => Unit / Yield at {}): Generator =
+  try {
+    program();
+    Empty()
+  } with Yield {
+    def yield(x) = Thunk(x, fun() { resume(()) })
+  }
+
+def sum(a: Int, g: Generator): Int =
+  g match {
+    case Empty() => a
+    case Thunk(v, f) => sum(v + a, f())
+  }
+
+def run(n: Int): Int =
+  sum(0, generate(fun() { iterate(make(n)) }))
+
+def main() = benchmark(5){run}
+
