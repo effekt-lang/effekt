@@ -20,7 +20,8 @@ class LLVMTests extends EffektTests {
   )
 
   /**
-   * Documentation of currently failing tests and their reason
+   * Documentation of currently failing tests because of missing features
+   * and their reason
    */
   lazy val missingFeatures: List[File] = List(
     // Regex
@@ -52,13 +53,14 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "issue733.effekt",
   )
 
-  override lazy val ignored: List[File] = missingFeatures ++ noValgrind
+  override lazy val ignored: List[File] = missingFeatures ++ noValgrind(examplesDir)
 }
 
 /**
- * LLVM tests that fail valgrind for whatever reason go here
+ * Documentation of tests that succeed in running, but fail valgrind
+ * and their reason
  */
-lazy val noValgrind: List[File] = List(
+def noValgrind(examplesDir: File): List[File] = List(
   examplesDir / "llvm" / "prompt-duplication.effekt",
 )
 
@@ -68,5 +70,5 @@ class LLVMNoValgrindTests extends EffektTests {
   override def valgrind = false
   override def debug = false
 
-  override lazy val positives: List[File] = noValgrind
+  override lazy val positives: List[File] = noValgrind(examplesDir)
 }
