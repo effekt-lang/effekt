@@ -3,13 +3,17 @@
 
 #include <stdio.h>
 
+// TODO:
+// this should _morally_ be using `stderr`, but we don't tee it in tests
+// see PR #823 & issue #815 for context
+
 void hole() {
-    fprintf(stderr, "PANIC: Reached a hole in the program\n");
+    printf("PANIC: Reached a hole in the program\n");
     exit(1);
 }
 
 void duplicated_prompt() {
-    fprintf(stderr, "PANIC: Continuation invoked itself\n");
+    printf("PANIC: Continuation invoked itself\n");
     exit(1);
 }
 

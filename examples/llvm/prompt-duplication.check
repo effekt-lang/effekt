@@ -1,2 +1,2 @@
+PANIC: Continuation invoked itself
 [error] Process exited with non-zero exit code 1.
-[error] Valgrind log:
