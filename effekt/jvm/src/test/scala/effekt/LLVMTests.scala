@@ -52,5 +52,21 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "issue733.effekt",
   )
 
-  override lazy val ignored: List[File] = missingFeatures
+  override lazy val ignored: List[File] = missingFeatures ++ noValgrind
+}
+
+/**
+ * LLVM tests that fail valgrind for whatever reason go here
+ */
+lazy val noValgrind: List[File] = List(
+  examplesDir / "llvm" / "prompt-duplication.effekt",
+)
+
+class LLVMNoValgrindTests extends EffektTests {
+  def backendName = "llvm"
+
+  override def valgrind = false
+  override def debug = false
+
+  override lazy val positives: List[File] = noValgrind
 }
