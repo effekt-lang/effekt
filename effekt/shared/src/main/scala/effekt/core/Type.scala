@@ -205,9 +205,9 @@ object Type {
       allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
 
     case Stmt.Alloc(id, init, region, body) => body.tpe
-    case Stmt.Var(id, init, cap, body) => body.tpe
-    case Stmt.Get(id, capt, tpe) => tpe
-    case Stmt.Put(id, capt, value) => TUnit
+    case Stmt.Var(ref, init, cap, body) => body.tpe
+    case Stmt.Get(ref, capt, tpe, id, body) => body.tpe
+    case Stmt.Put(ref, capt, value, body) => body.tpe
     case Stmt.Reset(BlockLit(_, _, _, prompt :: Nil, body)) => prompt.tpe match {
       case TPrompt(tpe) => tpe
       case _ => ???
@@ -236,9 +236,9 @@ object Type {
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.Alloc(id, init, region, body) => Set(region) ++ body.capt
-    case Stmt.Var(id, init, cap, body) => body.capt -- Set(cap)
-    case Stmt.Get(id, capt, tpe) => capt
-    case Stmt.Put(id, capt, value) => capt
+    case Stmt.Var(ref, init, cap, body) => body.capt -- Set(cap)
+    case Stmt.Get(id, tpe, ref, capt, body) => capt
+    case Stmt.Put(ref, capt, value, body) => capt
     case Stmt.Reset(body) => body.capt
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt
     case Stmt.Resume(k, body) => k.capt ++ body.capt

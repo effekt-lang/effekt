@@ -270,9 +270,9 @@ object Transformer {
           }
         }
 
-      case core.Var(id, init, capture, body) =>
+      case core.Var(ref, init, capture, body) =>
         val stateType = transform(init.tpe)
-        val reference = Variable(transform(id), Type.Reference(stateType))
+        val reference = Variable(transform(ref), Type.Reference(stateType))
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
         transform(init).run { value =>
@@ -280,23 +280,20 @@ object Transformer {
             transform(body))
         }
 
-      case core.Get(id, capt, tpe) =>
+      case core.Get(id, tpe, ref, capt, body) =>
         val stateType = transform(tpe)
-        val reference = Variable(transform(id), Type.Reference(stateType))
-        val variable = Variable(freshName("get"), stateType)
+        val reference = Variable(transform(ref), Type.Reference(stateType))
+        val variable = Variable(transform(id), stateType)
 
-        LoadVar(variable, reference,
-            Return(List(variable)))
+        LoadVar(variable, reference, transform(body))
 
-      case core.Put(id, capt, arg) =>
+      case core.Put(ref, capt, arg, body) =>
         val stateType = transform(arg.tpe)
-        val reference = Variable(transform(id), Type.Reference(stateType))
+        val reference = Variable(transform(ref), Type.Reference(stateType))
         val variable = Variable(freshName("put"), Positive())
 
         transform(arg).run { value =>
-          StoreVar(reference, value,
-            Construct(variable, builtins.Unit, List(),
-              Return(List(variable))))
+          StoreVar(reference, value, transform(body))
         }
 
       case core.Hole() => machine.Statement.Hole

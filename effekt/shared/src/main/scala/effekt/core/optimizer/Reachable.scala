@@ -89,11 +89,11 @@ class Reachable(
       process(init)
       process(region)
       process(body)
-    case Stmt.Var(id, init, capture, body) =>
+    case Stmt.Var(ref, init, capture, body) =>
       process(init)
       process(body)
-    case Stmt.Get(id, capt, tpe) => process(id)
-    case Stmt.Put(id, tpe, value) => process(id); process(value)
+    case Stmt.Get(ref, capt, tpe, id, body) => process(ref); process(body)
+    case Stmt.Put(ref, tpe, value, body) => process(ref); process(value); process(body)
     case Stmt.Reset(body) => process(body)
     case Stmt.Shift(prompt, body) => process(prompt); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)

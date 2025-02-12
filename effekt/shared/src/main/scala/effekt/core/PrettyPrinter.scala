@@ -165,7 +165,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc = s match {
     // requires a block to be readable:
-    case _ : (Stmt.Def | Stmt.Let | Stmt.Val | Stmt.Alloc | Stmt.Var) => block(toDocStmts(s))
+    case _ : (Stmt.Def | Stmt.Let | Stmt.Val | Stmt.Alloc | Stmt.Var | Stmt.Get | Stmt.Put) => block(toDocStmts(s))
     case other => toDocStmts(s)
   }
 
@@ -212,18 +212,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "resume" <> parens(toDoc(k)) <+> block(toDocStmts(body))
 
     case Alloc(id, init, region, body) =>
-      "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <+> ";" <> line <>
+      "var" <+> toDoc(id) <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <> ";" <> line <>
         toDocStmts(body)
 
-    case Var(id, init, cap, body) =>
-      "var" <+> toDoc(id) <+> "=" <+> toDoc(init) <+> ";" <> line <>
+    case Var(ref, init, cap, body) =>
+      "var" <+> toDoc(ref) <+> "=" <+> toDoc(init) <> ";" <> line <>
         toDocStmts(body)
 
-    case Get(id, capt, tpe) =>
-      "!" <> toDoc(id)
+    case Get(id, tpe, ref, capt, body) =>
+      "let" <+> toDoc(id) <+> "=" <+> "!" <> toDoc(ref) <> ";" <> line <>
+        toDocStmts(body)
 
-    case Put(id, capt,  value) =>
-      toDoc(id) <+> ":=" <+> toDoc(value)
+    case Put(ref, capt, value, body) =>
+      toDoc(ref) <+> ":=" <+> toDoc(value) <> ";" <> line <>
+        toDocStmts(body)
 
     case Region(body) =>
       "region" <+> toDoc(body)

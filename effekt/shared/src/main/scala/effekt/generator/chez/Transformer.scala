@@ -92,14 +92,8 @@ trait Transformer {
 
     case Hole() => chez.Builtin("hole")
 
-    case Var(id, init, capt, body) =>
-      state(nameDef(id), toChez(init), toChez(body))
-
-    case Get(id, capt, tpe) =>
-      chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(id)))
-
-    case Put(id, capt, value) =>
-      chez.Call(chez.Call(nameRef(symbols.builtins.TState.put), nameRef(id)), toChez(value))
+    case Var(ref, init, capt, body) =>
+      state(nameDef(ref), toChez(init), toChez(body))
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
@@ -118,7 +112,7 @@ trait Transformer {
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
-    case stmt: (Def | Let) =>
+    case stmt: (Def | Let | Get | Put) =>
       chez.Let(Nil, toChez(stmt))
   }
 
@@ -177,6 +171,19 @@ trait Transformer {
       val chez.Block(defs, exprs, result) = toChez(body)
       chez.Block(chez.Constant(nameDef(id), toChez(binding)) :: defs, exprs, result)
 
+    case Stmt.Get(id, tpe, ref, capt, body) =>
+      val reading = chez.Constant(nameDef(id), chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(ref))))
+      val chez.Block(defs, exprs, result) = toChez(body)
+      chez.Block(reading :: defs, exprs, result)
+
+    case Stmt.Put(ref, capt, value, body) =>
+      val writing = chez.Call(chez.Call(nameRef(symbols.builtins.TState.put), nameRef(ref)), toChez(value))
+      toChez(body) match {
+        case chez.Block(Nil, exprs, result) => chez.Block(Nil, writing :: exprs, result)
+        case rest => chez.Block(Nil, writing :: Nil, chez.Let(Nil, rest))
+      }
+
+
     case other => chez.Block(Nil, Nil, toChezExpr(other))
   }
 
@@ -234,10 +241,10 @@ trait Transformer {
     val value = ChezName("value")
 
     val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-      chez.Lambda(Nil, pure(chez.Builtin("unbox", chez.Variable(ref)))))
+      chez.Lambda(Nil, chez.Builtin("unbox", chez.Variable(ref))))
 
     val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-      chez.Lambda(List(value), pure(chez.Builtin("set-box!", chez.Variable(ref), chez.Variable(value)))))
+      chez.Lambda(List(value), chez.Builtin("set-box!", chez.Variable(ref), chez.Variable(value))))
 
     List(getter, setter)
   }

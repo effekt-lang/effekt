@@ -274,9 +274,13 @@ enum Stmt extends Tree {
   // creates a fresh state handler to model local (backtrackable) state.
   // [[capture]] is a binding occurrence.
   // e.g. state(init) { [x]{x: Ref} => ... }
-  case Var(id: Id, init: Pure, capture: Id, body: Stmt)
-  case Get(id: Id, annotatedCapt: Captures, annotatedTpe: ValueType)
-  case Put(id: Id, annotatedCapt: Captures, value: Pure)
+  case Var(ref: Id, init: Pure, capture: Id, body: Stmt)
+
+  // e.g. let x: T = !ref @ r; body
+  case Get(id: Id, annotatedTpe: ValueType, ref: Id, annotatedCapt: Captures, body: Stmt)
+
+  // e.g. ref @ r := value; body
+  case Put(ref: Id, annotatedCapt: Captures, value: Pure, body: Stmt)
 
   // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
   //  Reset({ [cap]{p: Prompt[answer] at cap} => stmt: answer}): answer
@@ -614,11 +618,11 @@ object Variables {
     case Stmt.Region(body) => free(body)
     // are mutable variables now block variables or not?
     case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region, TRegion, Set(region)) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(region)))
-    case Stmt.Var(id, init, capture, body) => free(init) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(capture)))
-    case Stmt.Get(id, annotatedCapt, annotatedTpe) =>
-      Variables.block(id, core.Type.TState(annotatedTpe), annotatedCapt)
-    case Stmt.Put(id, annotatedCapt, value) =>
-      Variables.block(id, core.Type.TState(value.tpe), annotatedCapt) ++ free(value)
+    case Stmt.Var(ref, init, capture, body) => free(init) ++ (free(body) -- Variables.block(ref, TState(init.tpe), Set(capture)))
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
+      Variables.block(ref, core.Type.TState(annotatedTpe), annotatedCapt) ++ (free(body) -- Variables.value(id, annotatedTpe))
+    case Stmt.Put(ref, annotatedCapt, value, body) =>
+      Variables.block(ref, core.Type.TState(value.tpe), annotatedCapt) ++ free(value) ++ free(body)
 
     case Stmt.Reset(body) => free(body)
     case Stmt.Shift(prompt, body) => free(prompt) ++ free(body)
@@ -710,14 +714,14 @@ object substitutions {
         Alloc(id, substitute(init), substituteAsVar(region),
           substitute(body)(using subst shadowBlocks List(id)))
 
-      case Var(id, init, capture, body) =>
-        Var(id, substitute(init), capture, substitute(body)(using subst shadowBlocks List(id)))
+      case Var(ref, init, capture, body) =>
+        Var(ref, substitute(init), capture, substitute(body)(using subst shadowBlocks List(ref)))
 
-      case Get(id, capt, tpe) =>
-        Get(substituteAsVar(id), substitute(capt), substitute(tpe))
+      case Get(id, tpe, ref, capt, body) =>
+        Get(id, substitute(tpe), substituteAsVar(ref), substitute(capt), substitute(body)(using subst shadowBlocks List(id)))
 
-      case Put(id, capt, value) =>
-        Put(substituteAsVar(id), substitute(capt), substitute(value))
+      case Put(ref, capt, value, body) =>
+        Put(substituteAsVar(ref), substitute(capt), substitute(value), substitute(body))
 
       // We annotate the answer type here since it needs to be the union of body.tpe and all shifts
       case Reset(body) =>

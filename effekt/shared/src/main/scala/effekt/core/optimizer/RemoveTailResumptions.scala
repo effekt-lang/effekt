@@ -24,7 +24,7 @@ object RemoveTailResumptions {
       case Stmt.Def(id, block, body) => !freeInBlock(block) && tailResumptive(k, body)
       case Stmt.Let(id, tpe, binding, body) => !freeInExpr(binding) && tailResumptive(k, body)
       case Stmt.Return(expr) => false
-      case Stmt.Val(id, annotatedTpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
+      case Stmt.Val(id, tpe, binding, body) => tailResumptive(k, body) && !freeInStmt(binding)
       case Stmt.App(callee, targs, vargs, bargs) => false
       case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => false
       case Stmt.If(cond, thn, els) => !freeInExpr(cond) && tailResumptive(k, thn) && tailResumptive(k, els)
@@ -34,9 +34,9 @@ object RemoveTailResumptions {
       } && default.forall { stmt => tailResumptive(k, stmt) }
       case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
       case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
-      case Stmt.Put(id, annotatedCapt, value) => false
+      case Stmt.Var(ref, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Get(ref, annotatedCapt, tpe, id, body) => tailResumptive(k, body)
+      case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInExpr(value)
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
       case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
@@ -46,7 +46,7 @@ object RemoveTailResumptions {
   def removeTailResumption(k: Id, stmt: Stmt): Stmt = stmt match {
     case Stmt.Def(id, block, body) => Stmt.Def(id, block, removeTailResumption(k, body))
     case Stmt.Let(id, tpe, binding, body) => Stmt.Let(id, tpe, binding, removeTailResumption(k, body))
-    case Stmt.Val(id, annotatedTpe, binding, body) => Stmt.Val(id, annotatedTpe, binding, removeTailResumption(k, body))
+    case Stmt.Val(id, tpe, binding, body) => Stmt.Val(id, tpe, binding, removeTailResumption(k, body))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, removeTailResumption(k, thn), removeTailResumption(k, els))
     case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(scrutinee, clauses.map {
       case (tag, block) => tag -> removeTailResumption(k, block)
@@ -64,8 +64,8 @@ object RemoveTailResumptions {
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
-    case Stmt.Get(id, annotatedCapt, annotatedTpe) => stmt
-    case Stmt.Put(id, annotatedCapt, value) => stmt
+    case Stmt.Get(id, tpe, ref, annotatedCapt, body) => Stmt.Get(id, tpe, ref, annotatedCapt, removeTailResumption(k, body))
+    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, removeTailResumption(k, body))
   }
 
   def removeTailResumption(k: Id, block: BlockLit): BlockLit = block match {
