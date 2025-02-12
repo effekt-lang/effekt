@@ -237,7 +237,7 @@ object Type {
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.Alloc(id, init, region, body) => Set(region) ++ body.capt
     case Stmt.Var(ref, init, cap, body) => body.capt -- Set(cap)
-    case Stmt.Get(ref, capt, tpe, id, body) => capt
+    case Stmt.Get(id, tpe, ref, capt, body) => capt
     case Stmt.Put(ref, capt, value, body) => capt
     case Stmt.Reset(body) => body.capt
     case Stmt.Shift(prompt, body) => prompt.capt ++ body.capt

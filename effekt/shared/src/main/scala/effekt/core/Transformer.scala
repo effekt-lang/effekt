@@ -330,7 +330,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val stateType = Context.blockTypeOf(sym)
         val tpe = TState.extractType(stateType)
         val stateId = Id("s")
-        Context.bind(Get(sym, transform(Context.captureOf(sym)), transform(tpe), stateId, Return(core.ValueVar(stateId, transform(tpe)))))
+        Context.bind(Get(stateId, transform(tpe), sym, transform(Context.captureOf(sym)), Return(core.ValueVar(stateId, transform(tpe)))))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }

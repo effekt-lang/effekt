@@ -275,7 +275,11 @@ enum Stmt extends Tree {
   // [[capture]] is a binding occurrence.
   // e.g. state(init) { [x]{x: Ref} => ... }
   case Var(ref: Id, init: Pure, capture: Id, body: Stmt)
-  case Get(ref: Id, annotatedCapt: Captures, annotatedTpe: ValueType, id: Id, body: Stmt)
+
+  // e.g. let x: T = !ref @ r; body
+  case Get(id: Id, annotatedTpe: ValueType, ref: Id, annotatedCapt: Captures, body: Stmt)
+
+  // e.g. ref @ r := value; body
   case Put(ref: Id, annotatedCapt: Captures, value: Pure, body: Stmt)
 
   // binds a fresh prompt as [[id]] in [[body]] and delimits the scope of captured continuations
@@ -615,7 +619,7 @@ object Variables {
     // are mutable variables now block variables or not?
     case Stmt.Alloc(id, init, region, body) => free(init) ++ Variables.block(region, TRegion, Set(region)) ++ (free(body) -- Variables.block(id, TState(init.tpe), Set(region)))
     case Stmt.Var(ref, init, capture, body) => free(init) ++ (free(body) -- Variables.block(ref, TState(init.tpe), Set(capture)))
-    case Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) =>
+    case Stmt.Get(id, annotatedTpe, ref, annotatedCapt, body) =>
       Variables.block(ref, core.Type.TState(annotatedTpe), annotatedCapt) ++ (free(body) -- Variables.value(id, annotatedTpe))
     case Stmt.Put(ref, annotatedCapt, value, body) =>
       Variables.block(ref, core.Type.TState(value.tpe), annotatedCapt) ++ free(value) ++ free(body)
@@ -713,8 +717,8 @@ object substitutions {
       case Var(ref, init, capture, body) =>
         Var(ref, substitute(init), capture, substitute(body)(using subst shadowBlocks List(ref)))
 
-      case Get(ref, capt, tpe, id, body) =>
-        Get(substituteAsVar(ref), substitute(capt), substitute(tpe), id, substitute(body)(using subst shadowBlocks List(id)))
+      case Get(id, tpe, ref, capt, body) =>
+        Get(id, substitute(tpe), substituteAsVar(ref), substitute(capt), substitute(body)(using subst shadowBlocks List(id)))
 
       case Put(ref, capt, value, body) =>
         Put(substituteAsVar(ref), substitute(capt), substitute(value), substitute(body))

@@ -70,10 +70,10 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       val resolvedCapt = rewrite(capt)
       withBinding(ref) { core.Var(rewrite(ref), resolvedInit, resolvedCapt, rewrite(body)) }
 
-    case core.Get(ref, capt, tpe, id, body) =>
+    case core.Get(id, tpe, ref, capt, body) =>
       val resolvedRef = rewrite(ref)
       val resolvedCapt = rewrite(capt)
-      withBinding(id) { core.Get(resolvedRef, resolvedCapt, rewrite(tpe), rewrite(id), rewrite(body)) }
+      withBinding(id) { core.Get(rewrite(id), rewrite(tpe), resolvedRef, resolvedCapt, rewrite(body)) }
 
   }
 

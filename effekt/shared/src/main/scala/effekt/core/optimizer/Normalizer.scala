@@ -282,8 +282,8 @@ object Normalizer { normal =>
           Stmt.Alloc(id2, init2, region2, normalizeVal(id, tpe, body2, body))
 
         // TODO comment
-        case Stmt.Get(ref2, capt2, tpe2, id2, body2) =>
-          Stmt.Get(ref2, capt2, tpe2, id2, normalizeVal(id, tpe, body2, body))
+        case Stmt.Get(id2, tpe2, ref2, capt2, body2) =>
+          Stmt.Get(id2, tpe2, ref2, capt2, normalizeVal(id, tpe, body2, body))
 
         // TODO comment
         case Stmt.Put(ref2, capt2, value2, body2) =>
@@ -308,7 +308,7 @@ object Normalizer { normal =>
     case Stmt.Resume(k, body) => Resume(k, normalize(body))
     case Stmt.Region(body) => Region(normalize(body))
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, normalize(init), capture, normalize(body))
-    case Stmt.Get(ref, capt, tpe, id, body) => Stmt.Get(ref, capt, tpe, id, normalize(body))
+    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, normalize(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, normalize(value), normalize(body))
     case Stmt.Hole() => s
   }

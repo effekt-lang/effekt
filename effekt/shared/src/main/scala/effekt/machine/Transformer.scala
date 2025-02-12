@@ -280,7 +280,7 @@ object Transformer {
             transform(body))
         }
 
-      case core.Get(ref, capt, tpe, id, body) =>
+      case core.Get(id, tpe, ref, capt, body) =>
         val stateType = transform(tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
         val variable = Variable(transform(id), stateType)

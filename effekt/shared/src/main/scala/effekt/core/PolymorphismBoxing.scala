@@ -276,7 +276,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => ???
 
-    case Stmt.Get(ref, capt, tpe, id, body) => Stmt.Get(ref, capt, transform(tpe), id, transform(body))
+    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, transform(tpe), ref, capt, transform(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, transform(value), transform(body))
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))

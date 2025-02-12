@@ -243,7 +243,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           val v = eval(expr, env)
           returnWith(v, env, stack, heap)
 
-        case Stmt.Val(id, annotatedTpe, binding, body) =>
+        case Stmt.Val(id, tpe, binding, body) =>
           instrumentation.pushFrame()
           State.Step(binding, env, push(Frame.Val(id, body, env), stack), heap)
 
@@ -360,7 +360,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           val addr = freshAddress()
           State.Step(body, env.bind(ref, Computation.Reference(addr)), push(Frame.Var(addr, eval(init, env)), stack), heap)
 
-        case Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) =>
+        case Stmt.Get(id, tpe, ref, capt, body) =>
           instrumentation.readMutableVariable(ref)
 
           val address = findFirst(env) {
@@ -458,7 +458,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
   }
 
   def eval(b: Block, env: Env): Computation = b match {
-    case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+    case Block.BlockVar(id, tpe, annotatedCapt) =>
       @tailrec
       def go(env: Env): Computation = env match {
         case Env.Top(functions, builtins, toplevel, declarations) => instrumentation.closure(); Computation.Closure(id, env)

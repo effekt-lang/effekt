@@ -150,10 +150,10 @@ object Transformer {
             Dealloc(id, k(x, ks))
           }))
 
-    case core.Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) =>
+    case core.Stmt.Get(id, tpe, ref, capt, body) =>
       cps.Get(ref, id, transform(body, ks, k))
 
-    case core.Stmt.Put(ref, annotatedCapt, value, body) =>
+    case core.Stmt.Put(ref, capt, value, body) =>
       cps.Put(ref, transform(value), transform(body, ks, k))
   }
 

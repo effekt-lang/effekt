@@ -157,7 +157,7 @@ object StaticArguments {
     case Stmt.Resume(k, body) => Resume(k, rewrite(body))
     case Stmt.Region(body) => Region(rewrite(body))
     case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, rewrite(init), capture, rewrite(body))
-    case Stmt.Get(ref, capt, tpe, id, body) => Stmt.Get(ref, capt, tpe, id, rewrite(body))
+    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, tpe, ref, capt, rewrite(body))
     case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, rewrite(value), rewrite(body))
     case Stmt.Hole() => Stmt.Hole()
   }
