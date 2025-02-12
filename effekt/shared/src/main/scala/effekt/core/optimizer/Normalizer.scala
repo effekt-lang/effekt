@@ -277,15 +277,15 @@ object Normalizer { normal =>
         case Stmt.Val(id2, tpe2, binding2, body2) =>
           normalizeVal(id2, tpe2, binding2, Stmt.Val(id, tpe, body2, body))
 
-        // [[ val x = { var y in r = e; stmt1 }; stmt2 ]] = var y in r = e; [[ val x = stmt1; stmt2 ]]
+        // [[ val x = { var y in r = e; stmt2 }; stmt1 ]] = var y in r = e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
           Stmt.Alloc(id2, init2, region2, normalizeVal(id, tpe, body2, body))
 
-        // TODO comment
+        // [[ val x = { let x = !ref; stmt2 }; stmt1 ]] = let x = !ref; [[ val x = stmt2; stmt1 ]]
         case Stmt.Get(id2, tpe2, ref2, capt2, body2) =>
           Stmt.Get(id2, tpe2, ref2, capt2, normalizeVal(id, tpe, body2, body))
 
-        // TODO comment
+        // [[ val x = { ref := e; stmt2 }; stmt1 ]] = ref := e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Put(ref2, capt2, value2, body2) =>
           Stmt.Put(ref2, capt2, value2, normalizeVal(id, tpe, body2, body))
 
