@@ -367,39 +367,38 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Env.Dynamic(other, Computation.Reference(r), rest) if ref == other => r
           }
 
-          // global mutable state...
-          if (heap.isDefinedAt(address)) {
-            return returnWith(heap(address), env, stack, heap)
-          }
+          val isGlobalMutableState = heap.isDefinedAt(address)
 
-          // reigon based mutable state or local variable
-          val value = findFirst(stack) {
+          val value = if (isGlobalMutableState) {
+            heap(address)
+          // region based mutable state or local variable
+          } else findFirst(stack) {
             case Frame.Var(other, value) if other == address => value
             case Frame.Region(_, values) if values.isDefinedAt(address) => values(address)
           } getOrElse ???
 
           State.Step(body, env.bind(id, value), stack, heap)
 
-        case Stmt.Put(ref, annotatedCapt, value, body) =>
+        case Stmt.Put(ref, capt, value, body) =>
           instrumentation.writeMutableVariable(ref)
           val address = findFirst(env) {
             case Env.Dynamic(other, Computation.Reference(r), rest) if ref == other => r
           }
           val newValue = eval(value, env)
 
-          // global mutable state...
-          if (heap.isDefinedAt(address)) {
-            return returnWith(Value.Literal(()), env, stack, heap.updated(address, newValue))
-          }
+          val isGlobalMutableState = heap.isDefinedAt(address)
 
-          val updated = updateOnce(stack) {
-            case Frame.Var(other, value) if other == address =>
-              Frame.Var(other, newValue)
-            case Frame.Region(r, values) if values.isDefinedAt(address) =>
-              Frame.Region(r, values.updated(address, newValue))
+          if (isGlobalMutableState) {
+            State.Step(body, env, stack, heap.updated(address, newValue))
+          } else {
+            val updated = updateOnce(stack) {
+              case Frame.Var(other, value) if other == address =>
+                Frame.Var(other, newValue)
+              case Frame.Region(r, values) if values.isDefinedAt(address) =>
+                Frame.Region(r, values.updated(address, newValue))
+            }
+            State.Step(body, env, updated, heap)
           }
-
-          State.Step(body, env, updated, heap)
 
         case Stmt.Reset(BlockLit(_, _, _, List(prompt), body)) =>
           val freshPrompt = freshAddress()
