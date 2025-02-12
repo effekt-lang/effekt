@@ -329,7 +329,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: RefBinder =>
         val stateType = Context.blockTypeOf(sym)
         val tpe = TState.extractType(stateType)
-        Context.bind(Get(sym, transform(Context.captureOf(sym)), transform(tpe)))
+        val stateId = Id("s")
+        Context.bind(Get(sym, transform(Context.captureOf(sym)), transform(tpe), stateId, Return(core.ValueVar(stateId, transform(tpe)))))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -472,7 +473,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case a @ source.Assign(id, expr) =>
       val sym = a.definition
-      Context.bind(Put(sym, transform(Context.captureOf(sym)), transformAsPure(expr)))
+      Context.bind(Put(sym, transform(Context.captureOf(sym)), transformAsPure(expr), Return(Literal((), core.Type.TUnit))))
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>

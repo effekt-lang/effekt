@@ -92,14 +92,14 @@ trait Transformer {
 
     case Hole() => chez.Builtin("hole")
 
-    case Var(id, init, capt, body) =>
-      state(nameDef(id), toChez(init), toChez(body))
+    case Var(ref, init, capt, body) =>
+      state(nameDef(ref), toChez(init), toChez(body))
 
-    case Get(id, capt, tpe) =>
-      chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(id)))
+    case Get(ref, capt, tpe, id, body) =>
+      chez.Let(List(Binding(nameDef(id), chez.Call(chez.Call(nameRef(symbols.builtins.TState.get), nameRef(ref))))), toChez(body))
 
-    case Put(id, capt, value) =>
-      chez.Call(chez.Call(nameRef(symbols.builtins.TState.put), nameRef(id)), toChez(value))
+    case Put(ref, capt, value, body) =>
+      chez.Let(List(Binding(nameDef(Id("_")), chez.Call(chez.Call(nameRef(symbols.builtins.TState.put), nameRef(ref)), toChez(value)))), toChez(body))
 
     case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))

@@ -150,12 +150,11 @@ object Transformer {
             Dealloc(id, k(x, ks))
           }))
 
-    case core.Stmt.Get(ref, annotatedCapt, annotatedTpe) =>
-      val x = Id("x")
-      cps.Get(ref, x, k(ValueVar(x), ks))
+    case core.Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) =>
+      cps.Get(ref, id, transform(body, ks, k))
 
-    case core.Stmt.Put(ref, annotatedCapt, value) =>
-      cps.Put(ref, transform(value), k(cps.Pure.Literal(()), ks))
+    case core.Stmt.Put(ref, annotatedCapt, value, body) =>
+      cps.Put(ref, transform(value), transform(body, ks, k))
   }
 
   def transformClause(clause: core.Block.BlockLit, ks: Id, k: Continuation)(using C: TransformationContext): Clause =

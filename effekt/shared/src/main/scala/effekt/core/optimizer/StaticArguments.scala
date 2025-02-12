@@ -156,9 +156,9 @@ object StaticArguments {
     case Stmt.Shift(prompt, body) => Shift(prompt, rewrite(body))
     case Stmt.Resume(k, body) => Resume(k, rewrite(body))
     case Stmt.Region(body) => Region(rewrite(body))
-    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, rewrite(init), capture, rewrite(body))
-    case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)
-    case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, rewrite(value))
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, rewrite(init), capture, rewrite(body))
+    case Stmt.Get(ref, capt, tpe, id, body) => Stmt.Get(ref, capt, tpe, id, rewrite(body))
+    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, rewrite(value), rewrite(body))
     case Stmt.Hole() => Stmt.Hole()
   }
   def rewrite(b: BlockLit)(using StaticArgumentsContext): BlockLit =

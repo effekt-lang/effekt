@@ -355,16 +355,16 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           State.Step(body, env.bind(id, Computation.Reference(address)), updated, heap)
 
         // TODO also use addresses for variables
-        case Stmt.Var(id, init, capture, body) =>
-          instrumentation.allocateVariable(id)
+        case Stmt.Var(ref, init, capture, body) =>
+          instrumentation.allocateVariable(ref)
           val addr = freshAddress()
-          State.Step(body, env.bind(id, Computation.Reference(addr)), push(Frame.Var(addr, eval(init, env)), stack), heap)
+          State.Step(body, env.bind(ref, Computation.Reference(addr)), push(Frame.Var(addr, eval(init, env)), stack), heap)
 
-        case Stmt.Get(id, annotatedCapt, annotatedTpe) =>
-          instrumentation.readMutableVariable(id)
+        case Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) =>
+          instrumentation.readMutableVariable(ref)
 
           val address = findFirst(env) {
-            case Env.Dynamic(other, Computation.Reference(r), rest) if id == other => r
+            case Env.Dynamic(other, Computation.Reference(r), rest) if ref == other => r
           }
 
           // global mutable state...
@@ -378,12 +378,12 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             case Frame.Region(_, values) if values.isDefinedAt(address) => values(address)
           } getOrElse ???
 
-          returnWith(value, env, stack, heap)
+          State.Step(body, env.bind(id, value), stack, heap)
 
-        case Stmt.Put(id, annotatedCapt, value) =>
-          instrumentation.writeMutableVariable(id)
+        case Stmt.Put(ref, annotatedCapt, value, body) =>
+          instrumentation.writeMutableVariable(ref)
           val address = findFirst(env) {
-            case Env.Dynamic(other, Computation.Reference(r), rest) if id == other => r
+            case Env.Dynamic(other, Computation.Reference(r), rest) if ref == other => r
           }
           val newValue = eval(value, env)
 
@@ -399,7 +399,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
               Frame.Region(r, values.updated(address, newValue))
           }
 
-          returnWith(Value.Literal(()), env, updated, heap)
+          State.Step(body, env, updated, heap)
 
         case Stmt.Reset(BlockLit(_, _, _, List(prompt), body)) =>
           val freshPrompt = freshAddress()

@@ -34,9 +34,9 @@ object RemoveTailResumptions {
       } && default.forall { stmt => tailResumptive(k, stmt) }
       case Stmt.Region(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body)
       case Stmt.Alloc(id, init, region, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Var(id, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
-      case Stmt.Get(id, annotatedCapt, annotatedTpe) => false
-      case Stmt.Put(id, annotatedCapt, value) => false
+      case Stmt.Var(ref, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
+      case Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) => tailResumptive(k, body)
+      case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInExpr(value)
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
       case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
@@ -64,8 +64,8 @@ object RemoveTailResumptions {
     case Stmt.Return(expr) => stmt
     case Stmt.App(callee, targs, vargs, bargs) => stmt
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => stmt
-    case Stmt.Get(id, annotatedCapt, annotatedTpe) => stmt
-    case Stmt.Put(id, annotatedCapt, value) => stmt
+    case Stmt.Get(ref, annotatedCapt, annotatedTpe, id, body) => Stmt.Get(ref, annotatedCapt, annotatedTpe, id, removeTailResumption(k, body))
+    case Stmt.Put(ref, annotatedCapt, value, body) => Stmt.Put(ref, annotatedCapt, value, removeTailResumption(k, body))
   }
 
   def removeTailResumption(k: Id, block: BlockLit): BlockLit = block match {

@@ -281,6 +281,14 @@ object Normalizer { normal =>
         case Stmt.Alloc(id2, init2, region2, body2) =>
           Stmt.Alloc(id2, init2, region2, normalizeVal(id, tpe, body2, body))
 
+        // TODO comment
+        case Stmt.Get(ref2, capt2, tpe2, id2, body2) =>
+          Stmt.Get(ref2, capt2, tpe2, id2, normalizeVal(id, tpe, body2, body))
+
+        // TODO comment
+        case Stmt.Put(ref2, capt2, value2, body2) =>
+          Stmt.Put(ref2, capt2, value2, normalizeVal(id, tpe, body2, body))
+
         // [[ val x = stmt; return x ]]   =   [[ stmt ]]
         case other => normalize(body) match {
           case Stmt.Return(x: ValueVar) if x.id == id => other
@@ -299,9 +307,9 @@ object Normalizer { normal =>
     case Stmt.Alloc(id, init, region, body) => Alloc(id, normalize(init), region, normalize(body))
     case Stmt.Resume(k, body) => Resume(k, normalize(body))
     case Stmt.Region(body) => Region(normalize(body))
-    case Stmt.Var(id, init, capture, body) => Stmt.Var(id, normalize(init), capture, normalize(body))
-    case Stmt.Get(id, capt, tpe) => Stmt.Get(id, capt, tpe)
-    case Stmt.Put(id, capt, value) => Stmt.Put(id, capt, normalize(value))
+    case Stmt.Var(ref, init, capture, body) => Stmt.Var(ref, normalize(init), capture, normalize(body))
+    case Stmt.Get(ref, capt, tpe, id, body) => Stmt.Get(ref, capt, tpe, id, normalize(body))
+    case Stmt.Put(ref, capt, value, body) => Stmt.Put(ref, capt, normalize(value), normalize(body))
     case Stmt.Hole() => s
   }
   def normalize(b: BlockLit)(using Context): BlockLit =
