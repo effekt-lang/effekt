@@ -282,7 +282,10 @@ def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[I
     push(0, offset)
     return r
   } with emit[Byte] { (byte) =>
-    if (offset >= buffer.size) { push(0, buffer.size) }
+    if (offset >= buffer.size) {
+      push(0, buffer.size)
+      offset = 0
+    }
     buffer.unsafeSet(offset, byte)
     offset = offset + 1
     resume(())
@@ -304,7 +307,6 @@ def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IO
       case 0 =>
         do stop()
       case n =>
-        offset = 0
         length = n
     }
   }
@@ -313,7 +315,10 @@ def readFile[R](path: String) { reader: () => R / read[Byte] }: R / Exception[IO
     reader()
   } with read[Byte] {
     resume {
-      if (offset >= length) { pull() }
+      if (offset >= length) {
+        pull()
+        offset = 0
+      }
       val byte = buffer.unsafeGet(offset)
       offset = offset + 1
       return byte
