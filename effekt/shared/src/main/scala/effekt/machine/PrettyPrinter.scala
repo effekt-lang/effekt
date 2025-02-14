@@ -80,8 +80,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "storeVar" <> parens(List(reference, value) map toDoc) <> ";" <> line <> toDocStmts(rest)
 
     case PushFrame(Clause(parameters, body), rest) =>
-      "val" <+> toDoc(parameters) <+> "=" <+> toDoc(body) <> ";" <> line <>
-        toDocStmts(rest)
+      "val" <+> toDoc(parameters) <+> "=" <+> toDoc(rest) <> ";" <> line <>
+        toDocStmts(body)
 
     case Return(arguments) =>
       "return" <+> hsep(arguments map toDoc, ",")
