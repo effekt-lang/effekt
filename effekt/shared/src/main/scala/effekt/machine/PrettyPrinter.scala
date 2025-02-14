@@ -38,23 +38,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(stmt: Statement): Doc =
     stmt match {
       // terminators that do not require a block to be readable:
-      case _ : (Return | Jump | Invoke | Switch) => toDocStmts(stmt)
+      case _ : (Return | Jump | Invoke | Switch | Reset | Shift) => toDocStmts(stmt)
       case other => block(toDocStmts(stmt))
     }
 
 
   def toDocStmts(stmt: Statement): Doc = stmt match {
     case Def(label, body, rest) =>
-      "def" <+> label <+> "=" <+> block(toDocStmts(body)) <> ";" <> line <> toDocStmts(rest)
+      "def" <+> label.name <> toDoc(label.environment) <+> "=" <+> block(toDocStmts(body)) <> ";" <> line <> toDocStmts(rest)
 
     case Jump(label) =>
       "jump" <+> label
 
-    case Substitute(List((left, right)), rest) =>
-      "let" <+> left <+> "=" <+> right <> ";" <> line <> toDocStmts(rest)
-
     case Substitute(bindings, rest) =>
-      "let" <+> braces(bindings map { case (left, right) => left <+> "=" <+> right }) <> ";" <> line <> toDocStmts(rest)
+      hsep(bindings map { case (left, right) => left <+> ":=" <+> right }, comma) <> ";" <> line <> toDocStmts(rest)
 
     case Construct(name, tag, arguments, rest) =>
       "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
@@ -87,13 +84,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "return" <+> hsep(arguments map toDoc, ",")
 
     case Reset(prompt, frame, rest) =>
-      "let" <+> prompt <+> "=" <+> "reset" <+> toDoc(frame) <> ";" <> line <> toDocStmts(rest)
+      "reset" <+> braces(prompt <+> "=>" <+> nest(line <> toDocStmts(rest)))
 
     case Resume(stack, rest) =>
       "resume" <+> stack <> ";" <> line <> toDocStmts(rest)
 
     case Shift(name, prompt, rest) =>
-      "let" <+> name <+> "=" <+> "shift0p" <+> prompt <> ";" <> line <> toDocStmts(rest)
+      "shift" <+> prompt <+> braces(name <+> "=>" <+> nest(line <> toDocStmts(rest)))
 
     case ForeignCall(name, builtin, arguments, rest) =>
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
