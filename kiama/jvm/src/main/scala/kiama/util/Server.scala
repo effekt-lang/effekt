@@ -12,7 +12,7 @@ package kiama
 package util
 
 import kiama.util.Collections.{ mapToJavaMap, seqToJavaList }
-import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, _ }
+import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, InlayHint => LSPInlayHint, InlayHintKind => LSPInlayHintKind, _ }
 import org.eclipse.lsp4j.jsonrpc.messages. { Either => LSPEither }
 
 import scala.jdk.CollectionConverters._
@@ -495,6 +495,22 @@ trait LanguageService[N] {
 
   case class RelatedInfo(range: Option[Range], message: String)
 
+  enum InlayHintKind {
+    case Type, Parameter
+
+    def toLSP(): LSPInlayHintKind = this match
+      case InlayHintKind.Type => LSPInlayHintKind.Type
+      case InlayHintKind.Parameter => LSPInlayHintKind.Parameter
+  }
+
+  /**
+   * A representation of a simple inlay hint.
+   *
+   * TODO: Support for attached text edit (that must materialize the inlay hint, making it obsolete).
+   * @see LSPInlayHint
+   */
+  case class InlayHint(kind: InlayHintKind, position: Position, label: String, markdownTooltip: Option[String])
+
   /**
    * Return applicable code actions for the given position (if any).
    * Each action is in terms of an old tree node and a new node that
@@ -532,6 +548,31 @@ trait LanguageService[N] {
    */
   def getReferences(position: Position, includeDecl: Boolean): Option[Vector[N]] =
     None
+
+  /**
+   * Return the inlay hints in the range (if any).
+   * Default is to never return anything.
+   *
+   * TODO: Remove debug info :)
+   */
+  def getInlayHints(range: Range): Option[Vector[InlayHint]] =
+    println(s"Getting inlay hints for $range")
+    Option(Vector(
+      // Type hint example - shows type after a variable declaration
+      InlayHint(
+        kind = InlayHintKind.Type,
+        position = Position(1, 1, range.from.source), // after variable name
+        label = ": Int",
+        Some("The inferred type of this variable is Int") // tooltip on hover
+      ),
+
+      // Parameter hint example - shows parameter names at call sites
+      InlayHint(
+        kind = InlayHintKind.Parameter,
+        position = Position(2, 1, range.from.source), // before argument
+        label = "count=",
+        Some("Parameter 'count' of type Int") // tooltip on hover
+      )))
 
   /**
    * Return the symbols frmo a compilation unit. Default is to return
@@ -588,6 +629,7 @@ class Services[N, C <: Config, M <: Message](
       serverCapabilities.setDocumentSymbolProvider(true)
       serverCapabilities.setHoverProvider(true)
       serverCapabilities.setReferencesProvider(true)
+      serverCapabilities.setInlayHintProvider(true)
 
       // This way the full file contents are transferred, instead of diffs.
       serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
@@ -665,10 +707,28 @@ class Services[N, C <: Config, M <: Message](
     server.compileString(uri, text, config)
   }
 
+  def fromLSPPosition(position: LSPPosition, source: Source): Position =
+    Position(position.getLine + 1, position.getCharacter + 1, source)
+
+  def toLSPPosition(position: Position): LSPPosition =
+    LSPPosition(position.line - 1, position.column - 1)
+
+  def fromLSPRange(range: LSPRange, source: Source): Range =
+    Range(
+      fromLSPPosition(range.getStart, source),
+      fromLSPPosition(range.getEnd, source)
+    )
+
+  def toLSPRange(range: Range): LSPRange =
+    LSPRange(
+      toLSPPosition(range.from),
+      toLSPPosition(range.to)
+    )
+
   def positionOfNotification(document: TextDocumentIdentifier, position: LSPPosition): Option[Position] =
-    server.sources.get(document.getUri).map(source => {
-      Position(position.getLine + 1, position.getCharacter + 1, source)
-    })
+    server.sources.get(document.getUri).map { source =>
+      fromLSPPosition(position, source)
+    }
 
   // Notebook services
 
@@ -794,11 +854,14 @@ class Services[N, C <: Config, M <: Message](
         ).orNull
     )
 
-  def hoverMarkup(markdown: String): Hover = {
+  /**
+   * Converts a Markdown String into a `MarkupContent` required by LSP4J
+   */
+  def intoMarkdown(markdown: String): MarkupContent = {
     val markup = new MarkupContent()
     markup.setValue(markdown)
     markup.setKind("markdown")
-    new Hover(markup)
+    markup
   }
 
   @JsonNotification("textDocument/hover")
@@ -809,7 +872,7 @@ class Services[N, C <: Config, M <: Message](
           for (
             position <- positionOfNotification(params.getTextDocument, params.getPosition);
             markdown <- server.getHover(position)
-          ) yield hoverMarkup(markdown)
+          ) yield new Hover(intoMarkdown(markdown))
         ).orNull
     )
 
@@ -823,6 +886,27 @@ class Services[N, C <: Config, M <: Message](
             references <- server.getReferences(position, params.getContext.isIncludeDeclaration);
             locations = references.map(server.locationOfNode)
           ) yield locations.toArray
+        ).orNull
+    )
+
+  @JsonRequest("textDocument/inlayHint")
+  def inlayHint(params: InlayHintParams): CompletableFuture[Array[LSPInlayHint]] =
+    CompletableFutures.computeAsync(
+      (_: CancelChecker) =>
+        (
+          for { // TODO: use existing from/toLSP functions ("convert")
+            source <- server.sources.get(params.getTextDocument.getUri)
+            hints <- server.getInlayHints(fromLSPRange(params.getRange, source))
+            lspHints: Vector[LSPInlayHint] = hints.map {
+              case server.InlayHint(kind, position, label, markdownTooltip) =>
+                val lspHint = new LSPInlayHint(toLSPPosition(position), LSPEither.forLeft(label))
+                lspHint.setKind(kind.toLSP())
+                markdownTooltip.foreach { tooltip =>
+                  lspHint.setTooltip(intoMarkdown(tooltip))
+                }
+                lspHint
+            }
+          } yield lspHints.toArray
         ).orNull
     )
 
