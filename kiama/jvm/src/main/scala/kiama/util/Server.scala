@@ -886,7 +886,7 @@ class Services[N, C <: Config, M <: Message](
     CompletableFutures.computeAsync(
       (_: CancelChecker) =>
         (
-          for { // TODO: use existing from/toLSP functions ("convert")
+          for {
             source <- server.sources.get(params.getTextDocument.getUri)
             hints <- server.getInlayHints(server.fromLSPRange(params.getRange, source))
             lspHints: Vector[LSPInlayHint] = hints.map {
