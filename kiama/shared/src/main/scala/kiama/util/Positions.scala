@@ -228,7 +228,7 @@ class Positions {
     }
 
   /**
-   * Find all of the given nodes whose range contains `position`.
+   * Find all the given nodes whose range contains `position`.
    */
   def findNodesContaining[T](nodes: Vector[T], position: Position): Vector[T] =
     nodes.collect(t =>
@@ -236,6 +236,17 @@ class Positions {
         case (Some(start), Some(finish)) if position.between(start, finish) =>
           t
       })
+
+  /**
+   * Find all the given nodes whose range is in given `range`.
+   */
+  def findNodesInRange[T](nodes: Vector[T], range: Range): Vector[T] =
+    nodes.collect { t =>
+      (getStart(t), getFinish(t)) match {
+        case (Some(start), Some(finish)) if start.between(range.from, range.to) && finish.between(range.from, range.to) =>
+          t
+      }
+    }
 
   /**
    * Indent text to the same nesting level as a value. The required spacing

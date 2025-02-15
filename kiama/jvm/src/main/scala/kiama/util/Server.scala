@@ -515,10 +515,12 @@ trait LanguageService[N] {
   /**
    * A representation of a simple inlay hint.
    *
-   * TODO: Support for attached text edit[s] (that must materialize the inlay hint, making it obsolete).
+   * @param resolveToLabel if set to true, materializes the label into the code, thus making the inlay hint obsolete
    * @see LSPInlayHint
    */
-  case class InlayHint(kind: InlayHintKind, position: Position, label: String, markdownTooltip: Option[String], paddingLeft: Boolean = false, paddingRight: Boolean = false)
+  case class InlayHint(kind: InlayHintKind, position: Position, label: String,
+                       markdownTooltip: String = null, resolveToLabel: Boolean = false,
+                       paddingLeft: Boolean = false, paddingRight: Boolean = false)
 
   /**
    * Return applicable code actions for the given position (if any).
@@ -871,11 +873,16 @@ class Services[N, C <: Config, M <: Message](
             source <- server.sources.get(params.getTextDocument.getUri)
             hints <- server.getInlayHints(server.fromLSPRange(params.getRange, source))
             lspHints: Vector[LSPInlayHint] = hints.map {
-              case server.InlayHint(kind, position, label, markdownTooltip, paddingLeft, paddingRight) =>
+              case server.InlayHint(kind, position, label, markdownTooltip, resolveToLabel, paddingLeft, paddingRight) =>
                 val lspHint = new LSPInlayHint(server.convertPosition(position), /* just a String label */ LSPEither.forLeft(label))
                 lspHint.setKind(kind.toLSP())
-                markdownTooltip.foreach { tooltip =>
-                  lspHint.setTooltip(intoMarkdown(tooltip))
+                if (markdownTooltip != null) {
+                  lspHint.setTooltip(intoMarkdown(markdownTooltip))
+                }
+                if (resolveToLabel) {
+                  val range = Range(position, position)
+                  val textEdit = TextEdit(server.convertRange(range), label)
+                  lspHint.setTextEdits(List(textEdit).asJava)
                 }
                 lspHint.setPaddingLeft(paddingLeft)
                 lspHint.setPaddingRight(paddingRight)
