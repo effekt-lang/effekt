@@ -518,7 +518,7 @@ trait LanguageService[N] {
    * TODO: Support for attached text edit[s] (that must materialize the inlay hint, making it obsolete).
    * @see LSPInlayHint
    */
-  case class InlayHint(kind: InlayHintKind, position: Position, label: String, markdownTooltip: Option[String])
+  case class InlayHint(kind: InlayHintKind, position: Position, label: String, markdownTooltip: Option[String], paddingLeft: Boolean = false, paddingRight: Boolean = false)
 
   /**
    * Return applicable code actions for the given position (if any).
@@ -570,17 +570,18 @@ trait LanguageService[N] {
       // Type hint example - shows type after a variable declaration
       InlayHint(
         kind = InlayHintKind.Type,
-        position = Position(1, 1, range.from.source), // after variable name
+        position = Position(1, 5, range.from.source), // after variable name
         label = ": Int",
-        Some("The inferred type of this variable is Int") // tooltip on hover
+        markdownTooltip = Some("The _inferred type_ of this variable is `Int`"), // tooltip on hover
+        paddingLeft = true
       ),
 
       // Parameter hint example - shows parameter names at call sites
       InlayHint(
         kind = InlayHintKind.Parameter,
-        position = Position(2, 1, range.from.source), // before argument
-        label = "count=",
-        Some("Parameter 'count' of type Int") // tooltip on hover
+        position = Position(4, 4, range.from.source), // before argument
+        label = "x=",
+        Some("Parameter `x` of type `Int`") // tooltip on hover
       )))
 
   /**
@@ -889,12 +890,15 @@ class Services[N, C <: Config, M <: Message](
             source <- server.sources.get(params.getTextDocument.getUri)
             hints <- server.getInlayHints(server.fromLSPRange(params.getRange, source))
             lspHints: Vector[LSPInlayHint] = hints.map {
-              case server.InlayHint(kind, position, label, markdownTooltip) =>
+              case server.InlayHint(kind, position, label, markdownTooltip, paddingLeft, paddingRight) =>
                 val lspHint = new LSPInlayHint(server.convertPosition(position), /* just a String label */ LSPEither.forLeft(label))
                 lspHint.setKind(kind.toLSP())
                 markdownTooltip.foreach { tooltip =>
                   lspHint.setTooltip(intoMarkdown(tooltip))
                 }
+                lspHint.setPaddingLeft(paddingLeft)
+                lspHint.setPaddingRight(paddingRight)
+
                 lspHint
             }
           } yield lspHints.toArray
