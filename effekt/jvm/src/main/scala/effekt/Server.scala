@@ -127,7 +127,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     } yield allRefs.toVector
 
   override def getInlayHints(range: kiama.util.Range): Option[Vector[InlayHint]] =
-    val captures = getInferredCaptures(range.from.source)(using context).map {
+    val captures = getInferredCaptures(range)(using context).map {
       case (p, c) =>
         val prettyCaptures = TypePrinter.show(c)
         InlayHint(InlayHintKind.Type, p, prettyCaptures, Some(s"captures: `${prettyCaptures}`"), paddingRight = true)
