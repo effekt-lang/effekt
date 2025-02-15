@@ -30,7 +30,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     diagnostic(message.range, lspMessaging.formatContent(message), message.severity)
 
   override def getDefinition(position: Position): Option[Tree] =
-    getDefinitionAt(position)(context)
+    getDefinitionAt(position)(using context)
 
   /**
    * Overriding hook to also publish core and target for LSP server
@@ -83,14 +83,14 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     getSymbolHover(position) orElse getHoleHover(position)
 
   def getSymbolHover(position: Position): Option[String] = for {
-    (tree, sym) <- getSymbolAt(position)(context)
-    info <- getInfoOf(sym)(context)
+    (tree, sym) <- getSymbolAt(position)(using context)
+    info <- getInfoOf(sym)(using context)
   } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
 
   def getHoleHover(position: Position): Option[String] = for {
-    trees <- getTreesAt(position)(context)
+    trees <- getTreesAt(position)(using context)
     tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(context)
+    info <- getHoleInfo(tree)(using context)
   } yield info
 
   def positionToLocation(p: Position): Location = {
@@ -115,13 +115,13 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       id <- context.definitionTreeOption(sym)
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
-      detail <- getInfoOf(sym)(context)
+      detail <- getInfoOf(sym)(using context)
     } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header)
     Some(documentSymbols)
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
-      (tree, sym) <- getSymbolAt(position)(context)
+      (tree, sym) <- getSymbolAt(position)(using context)
       refs = context.distinctReferencesTo(sym)
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
@@ -161,11 +161,11 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
     Some(for {
-      trees <- getTreesAt(position)(context).toVector
-      actions <- trees.flatMap { t => action(t)(context) }
+      trees <- getTreesAt(position)(using context).toVector
+      actions <- trees.flatMap { t => action(t)(using context) }
     } yield actions)
 
-  def action(tree: Tree)(implicit C: Context): Option[TreeAction] = tree match {
+  def action(tree: Tree)(using C: Context): Option[TreeAction] = tree match {
     case f: FunDef => inferEffectsAction(f)
     case h: Hole   => closeHoleAction(h)
     case _         => None
