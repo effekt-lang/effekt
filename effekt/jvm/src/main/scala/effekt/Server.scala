@@ -221,20 +221,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     tpe1 != tpe2 || effs1 != effs2
   }
 
-  case class CaptureInfo(location: Location, captureText: String)
-
-  override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
-    None
-    /*
-    if (params.getCommand == "inferredCaptures") {
-      val captures = getInferredCaptures(src)(using context).map {
-        case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
-      }
-      if (captures.isEmpty) None else Some(captures.toArray)
-    } else {
-      None
-    }*/
-
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
   // Class to easily test custom LSP services not (yet) meant to go into kiama.Services
