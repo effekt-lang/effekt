@@ -520,7 +520,8 @@ trait LanguageService[N] {
    */
   case class InlayHint(kind: InlayHintKind, position: Position, label: String,
                        markdownTooltip: String = null, resolveToLabel: Boolean = false,
-                       paddingLeft: Boolean = false, paddingRight: Boolean = false)
+                       paddingLeft: Boolean = false, paddingRight: Boolean = false,
+                       effektKind: String = "")
 
   /**
    * Return applicable code actions for the given position (if any).
@@ -873,7 +874,7 @@ class Services[N, C <: Config, M <: Message](
             source <- server.sources.get(params.getTextDocument.getUri)
             hints <- server.getInlayHints(server.fromLSPRange(params.getRange, source))
             lspHints: Vector[LSPInlayHint] = hints.map {
-              case server.InlayHint(kind, position, label, markdownTooltip, resolveToLabel, paddingLeft, paddingRight) =>
+              case server.InlayHint(kind, position, label, markdownTooltip, resolveToLabel, paddingLeft, paddingRight, effektKind) =>
                 val lspHint = new LSPInlayHint(server.convertPosition(position), /* just a String label */ LSPEither.forLeft(label))
                 lspHint.setKind(kind.toLSP())
                 if (markdownTooltip != null) {
@@ -886,6 +887,7 @@ class Services[N, C <: Config, M <: Message](
                 }
                 lspHint.setPaddingLeft(paddingLeft)
                 lspHint.setPaddingRight(paddingRight)
+                lspHint.setData(effektKind)
 
                 lspHint
             }
