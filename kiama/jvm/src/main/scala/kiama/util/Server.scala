@@ -374,6 +374,15 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
 
   def rangeToLocation(r: Range): Location =
     new Location(r.from.source.name, convertRange(r))
+  
+  def fromLSPPosition(position: LSPPosition, source: Source): Position =
+    Position(position.getLine + 1, position.getCharacter + 1, source)
+
+  def fromLSPRange(range: LSPRange, source: Source): Range =
+    Range(
+      fromLSPPosition(range.getStart, source),
+      fromLSPPosition(range.getEnd, source)
+    )
 
   def convertSeverity(severity: Severity): DiagnosticSeverity =
     severity match {
@@ -707,24 +716,6 @@ class Services[N, C <: Config, M <: Message](
     server.compileString(uri, text, config)
   }
 
-  def fromLSPPosition(position: LSPPosition, source: Source): Position =
-    Position(position.getLine + 1, position.getCharacter + 1, source)
-
-  def toLSPPosition(position: Position): LSPPosition =
-    LSPPosition(position.line - 1, position.column - 1)
-
-  def fromLSPRange(range: LSPRange, source: Source): Range =
-    Range(
-      fromLSPPosition(range.getStart, source),
-      fromLSPPosition(range.getEnd, source)
-    )
-
-  def toLSPRange(range: Range): LSPRange =
-    LSPRange(
-      toLSPPosition(range.from),
-      toLSPPosition(range.to)
-    )
-
   def positionOfNotification(document: TextDocumentIdentifier, position: LSPPosition): Option[Position] =
     server.sources.get(document.getUri).map { source =>
       fromLSPPosition(position, source)
@@ -899,7 +890,8 @@ class Services[N, C <: Config, M <: Message](
             hints <- server.getInlayHints(fromLSPRange(params.getRange, source))
             lspHints: Vector[LSPInlayHint] = hints.map {
               case server.InlayHint(kind, position, label, markdownTooltip) =>
-                val lspHint = new LSPInlayHint(toLSPPosition(position), LSPEither.forLeft(label))
+                val lspLabel = LSPEither.forLeft(label)
+                val lspHint = new LSPInlayHint(convertPosition(position), lspLabel)
                 lspHint.setKind(kind.toLSP())
                 markdownTooltip.foreach { tooltip =>
                   lspHint.setTooltip(intoMarkdown(tooltip))
