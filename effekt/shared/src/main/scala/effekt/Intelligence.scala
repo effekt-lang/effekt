@@ -113,12 +113,14 @@ trait Intelligence {
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
-  // For now we only show captures of function definitions and calls to box
-  def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =
+  // For now, we only show captures of function definitions and calls to box
+  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =
+    val src = range.from.source
     allCaptures(src).filter {
-      case (t, c) =>
-        val p = C.positions.getStart(t)
-        p.isDefined
+      // keep only captures in the current range
+      case (t, c) => C.positions.getStart(t) match
+        case Some(p) => p.between(range.from, range.to)
+        case None => false
     }.collect {
       case (t: source.FunDef, c) => for {
         pos <- C.positions.getStart(t)
