@@ -561,28 +561,9 @@ trait LanguageService[N] {
   /**
    * Return the inlay hints in the range (if any).
    * Default is to never return anything.
-   *
-   * TODO: Remove debug info :)
    */
   def getInlayHints(range: Range): Option[Vector[InlayHint]] =
-    println(s"Getting inlay hints for $range")
-    Option(Vector(
-      // Type hint example - shows type after a variable declaration
-      InlayHint(
-        kind = InlayHintKind.Type,
-        position = Position(1, 5, range.from.source), // after variable name
-        label = ": Int",
-        markdownTooltip = Some("The _inferred type_ of this variable is `Int`"), // tooltip on hover
-        paddingLeft = true
-      ),
-
-      // Parameter hint example - shows parameter names at call sites
-      InlayHint(
-        kind = InlayHintKind.Parameter,
-        position = Position(4, 4, range.from.source), // before argument
-        label = "x=",
-        Some("Parameter `x` of type `Int`") // tooltip on hover
-      )))
+    None
 
   /**
    * Return the symbols frmo a compilation unit. Default is to return
