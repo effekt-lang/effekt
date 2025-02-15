@@ -5,7 +5,7 @@ import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
-import kiama.util.{ Filenames, Notebook, NotebookCell, Position, Services, Source }
+import kiama.util.{ Filenames, Notebook, NotebookCell, Position, Services, Source, Range }
 import kiama.output.PrettyPrinterTypes.Document
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind }
 
@@ -126,6 +126,14 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
 
+  override def getInlayHints(range: kiama.util.Range): Option[Vector[InlayHint]] =
+    val captures = getInferredCaptures(range.from.source)(using context).map {
+      case (p, c) =>
+        val prettyCaptures = TypePrinter.show(c)
+        InlayHint(InlayHintKind.Type, p, prettyCaptures, Some(s"captures: `${prettyCaptures}`"), paddingRight = true)
+    }
+    if (captures.isEmpty) None else Some(captures.toVector)
+
   // settings might be null
   override def setSettings(settings: Object): Unit = {
     import com.google.gson.JsonObject
@@ -216,6 +224,8 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   case class CaptureInfo(location: Location, captureText: String)
 
   override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
+    None
+    /*
     if (params.getCommand == "inferredCaptures") {
       val captures = getInferredCaptures(src)(using context).map {
         case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
@@ -223,7 +233,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       if (captures.isEmpty) None else Some(captures.toArray)
     } else {
       None
-    }
+    }*/
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
