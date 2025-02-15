@@ -130,9 +130,25 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     val captures = getInferredCaptures(range)(using context).map {
       case (p, c) =>
         val prettyCaptures = TypePrinter.show(c)
-        InlayHint(InlayHintKind.Type, p, prettyCaptures, Some(s"captures: `${prettyCaptures}`"), paddingRight = true)
-    }
-    if (captures.isEmpty) None else Some(captures.toVector)
+        InlayHint(InlayHintKind.Type, p, prettyCaptures, markdownTooltip = s"captures: `${prettyCaptures}`", paddingRight = true, effektKind = "capture")
+    }.toVector
+
+    // TODO: Also do this for un-annotated `val`s and `var`s.
+    val unannotated = getTreesInRange(range)(using context).map { trees =>
+      trees.collect {
+        // Functions without an annotated type:
+        case fun: FunDef if fun.ret.isEmpty => for {
+          // TODO(question): `context.inferredTypeAndEffectOption(fun)` didn't work here. Why?
+          sym <- context.symbolOption(fun.id)
+          tpe <- context.functionTypeOption(sym)
+          pos <- positions.getFinish(fun.bparams) // TODO(bug): This position doesn't always work. Ideally, I'd use the position of `fun.ret`, but that doesn't exist!
+          res = InlayHint(InlayHintKind.Type, pos, pp": ${tpe.result} / ${tpe.effects}", resolveToLabel = true, paddingLeft = true, effektKind = "missing-type-annotation")
+        } yield res
+      }.flatten
+    }.getOrElse(Vector())
+
+    val allHints = captures ++ unannotated
+    if allHints.isEmpty then None else Some(allHints)
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
