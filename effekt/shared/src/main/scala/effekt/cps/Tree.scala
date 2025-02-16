@@ -6,7 +6,6 @@ import effekt.source.FeatureFlag
 import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
 
-
 sealed trait Tree extends Product {
   /**
    * The number of nodes of this tree (used by inlining heuristics)
@@ -96,11 +95,8 @@ enum Block extends Tree {
 export Block.*
 
 enum Stmt extends Tree {
-
-  case Jump(k: Id, arg: Pure, ks: MetaCont) // if the continuation is known, we inline and don't jump
-
+  case Jump(k: Id, vargs: List[Pure], ks: MetaCont)
   case App(callee: Block, vargs: List[Pure], bargs: List[Block], ks: MetaCont, k: Cont)
-
   case Invoke(callee: Block, method: Id, vargs: List[Pure], bargs: List[Block], ks: MetaCont, k: Cont)
 
   // Local Control Flow
@@ -145,7 +141,7 @@ case class Clause(vparams: List[Id], body: Stmt) extends Tree
 
 enum Cont extends Tree {
   case ContVar(id: Id)
-  case ContLam(result: Id, ks: Id, body: Stmt)
+  case ContLam(results: List[Id], ks: Id, body: Stmt)
   case Abort
 }
 
@@ -195,8 +191,9 @@ object Variables {
     case Operation(name, vparams, bparams, ks, k, body) =>
       free(body) -- all(vparams, value) -- all(bparams, block) -- meta(ks) -- cont(k)
   }
+
   def free(s: Stmt): Variables = s match {
-    case Stmt.Jump(k, arg, ks) => cont(k) ++ free(arg) ++ free(ks)
+    case Stmt.Jump(k, vargs, ks) => cont(k) ++ all(vargs, free) ++ free(ks)
     case Stmt.App(callee, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
     case Stmt.Invoke(callee, method, vargs, bargs, ks, k) => free(callee) ++ all(vargs, free) ++ all(bargs, free) ++ free(ks) ++ free(k)
     case Stmt.If(cond, thn, els) => free(cond) ++ free(thn) ++ free(els)
@@ -231,7 +228,7 @@ object Variables {
   def free(k: Cont): Variables = k match {
     case Cont.ContVar(id) => cont(id)
     case Cont.Abort => Set()
-    case Cont.ContLam(result, ks, body) => free(body) -- value(result) -- meta(ks)
+    case Cont.ContLam(results, ks, body) => free(body) -- all(results, value) -- meta(ks)
   }
 }
 
@@ -286,10 +283,10 @@ object substitutions {
   }
 
   def substitute(stmt: Stmt)(using subst: Substitution): Stmt = stmt match {
-    case Jump(k, arg, ks) =>
+    case Jump(k, vargs, ks) =>
       Jump(
         substituteAsContVar(k),
-        substitute(arg),
+        vargs.map(substitute),
         substitute(ks))
 
     case App(callee, vargs, bargs, ks, k) =>
@@ -391,10 +388,10 @@ object substitutions {
   }
 
   def substitute(k: Cont.ContLam)(using subst: Substitution): Cont.ContLam = k match {
-    case Cont.ContLam(result, ks, body) =>
-      Cont.ContLam(result, ks,
+    case Cont.ContLam(results, ks, body) =>
+      Cont.ContLam(results, ks,
         substitute(body)(using subst
-          .shadowValues(List(result))
+          .shadowValues(results)
           .shadowMetaconts(List(ks))))
   }
 

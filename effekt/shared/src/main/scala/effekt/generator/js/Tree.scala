@@ -203,6 +203,13 @@ def Const(name: JSName, binding: Expr): Stmt = binding match {
 
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
+def Let(names: List[JSName], binding: Expr): Stmt = names match {
+  //case Nil => ???
+  case name :: Nil => js.Let(Pattern.Variable(name), binding)
+  case names => js.Let(Pattern.Array(names.map(name => Pattern.Variable(name))), binding)
+}
+
+
 def Call(receiver: Expr, args: Expr*): Expr = Call(receiver, args.toList)
 
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
@@ -237,14 +244,14 @@ case class Binding[A](run: (A => List[js.Stmt]) => List[js.Stmt]) {
   }
   def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
 }
-extension (b: Binding[js.Stmt]) {
+extension (b: Binding[List[js.Stmt]]) {
   def block: js.Stmt = js.MaybeBlock(b.stmts)
   def toExpr: js.Expr = b.stmts match {
     case Nil => ???
     case js.Return(e) :: Nil => e
     case stmts => js.Call(js.Lambda(Nil, Block(stmts)), Nil)
   }
-  def stmts: List[js.Stmt] = b.run(x => List(x))
+  def stmts: List[js.Stmt] = b.run(x => x)
 }
 
 def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =

@@ -219,7 +219,7 @@ enum Continuation {
   case Static(hint: Id, k: (Pure, Id) => Stmt)
 
   def apply(arg: Pure, ks: Id): Stmt = this match {
-    case Continuation.Dynamic(id) => Jump(id, arg, MetaCont(ks))
+    case Continuation.Dynamic(id) => Jump(id, arg :: Nil, MetaCont(ks))
     case Continuation.Static(hint, k) => k(arg, ks)
   }
   def reify: Cont =
@@ -227,7 +227,7 @@ enum Continuation {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
       case Continuation.Static(hint, k) =>
         val ks = Id("ks")
-        cps.Cont.ContLam(hint, ks, k(Pure.ValueVar(hint), ks))
+        cps.Cont.ContLam(hint :: Nil, ks, k(Pure.ValueVar(hint), ks))
     }
 
   def reifyAt(tpe: core.ValueType): Cont =
