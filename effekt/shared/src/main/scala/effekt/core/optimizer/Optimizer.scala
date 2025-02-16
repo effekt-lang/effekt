@@ -50,5 +50,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     tree = Context.timed("normalize-2", source.name) { normalize(tree) }
     tree = Context.timed("normalize-3", source.name) { normalize(tree) }
 
+    // (4) perform contification to avoid pushes where possible
+    tree = DirectStyle.rewrite(tree)
+
     tree
 }
