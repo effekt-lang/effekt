@@ -204,7 +204,7 @@ def Const(name: JSName, binding: Expr): Stmt = binding match {
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
 def Let(names: List[JSName], binding: Expr): Stmt = names match {
-  //case Nil => ???
+  case Nil => ExprStmt(binding)
   case name :: Nil => js.Let(Pattern.Variable(name), binding)
   case names => js.Let(Pattern.Array(names.map(name => Pattern.Variable(name))), binding)
 }
@@ -221,9 +221,9 @@ def JsString(scalaString: String): Expr = RawLiteral(s"\"${scalaString}\"")
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
 def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
-  case Nil => sys error "Block should have at least one statement as body"
+  //case Nil => sys error "Block should have at least one statement as body"
   case head :: Nil => head
-  case head :: next => js.Block(stmts)
+  case _ => js.Block(stmts)
 }
 
 val Undefined = RawLiteral("undefined")

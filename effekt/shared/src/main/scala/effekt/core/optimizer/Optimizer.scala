@@ -42,16 +42,14 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, isLLVM)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = RemoveTailResumptions(live)
-      tailRemoved
+      val contified = DirectStyle.rewrite(tailRemoved)
+      contified
     }
 
     // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
     tree = Context.timed("normalize-1", source.name) { normalize(tree) }
     tree = Context.timed("normalize-2", source.name) { normalize(tree) }
     tree = Context.timed("normalize-3", source.name) { normalize(tree) }
-
-    // (4) perform contification to avoid pushes where possible
-    tree = DirectStyle.rewrite(tree)
 
     tree
 }

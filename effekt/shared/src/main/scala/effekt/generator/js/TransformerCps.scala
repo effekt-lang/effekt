@@ -142,21 +142,22 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(id: Id, b: cps.Block)(using TransformerContext): js.Expr = b match {
-    case cps.Block.BlockLit(vparams, bparams, ks, k, body) =>
-      val used = new RecursiveUsage(false)
-      val label = Id(id)
-
-      val translatedBody = toJS(body)(using recursive(id, label, used, b)).stmts
-
-      if used.jumped then
-        js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
-          List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
-      else
-        js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
-          translatedBody)
-
+    case cps.Block.BlockLit(vparams, bparams, ks, k, body) => maybeToLoop(id, vparams, bparams, ks, k, body)
     case other => toJS(other)
   }
+
+  def maybeToLoop(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt)(using TransformerContext) =
+    val used = new RecursiveUsage(false)
+    val label = Id(id)
+
+    val translatedBody = toJS(body)(using recursive(id, vparams, bparams, ks, k, label, used)).stmts
+
+    if used.jumped then
+      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
+        List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
+    else
+      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
+        translatedBody)
 
   def toJS(b: cps.Block)(using TransformerContext): js.Expr = b match {
     case cps.BlockVar(v)  => nameRef(v)
@@ -471,11 +472,8 @@ object TransformerCps extends Transformer {
   private def markDirectStyle(id: Id, params: List[Id], ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(directStyle = Some(ContinuationInfo(id, params, ks)))
 
-  private def recursive(id: Id, label: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
-    case cps.BlockLit(vparams, bparams, ks, k, body) =>
-      C.copy(recursive = Some(RecursiveDefInfo(id, label, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
-    case _ => C
-  }
+  private def recursive(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, label: Id, used: RecursiveUsage)(using C: TransformerContext): TransformerContext =
+    C.copy(recursive = Some(RecursiveDefInfo(id, label, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
 
   private def nonrecursive(ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(recursive = None, directStyle = None, metacont = Some(ks))
