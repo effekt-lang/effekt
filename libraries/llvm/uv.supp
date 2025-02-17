@@ -1,0 +1,20 @@
+{
+   UV uninitialized byte
+   Memcheck:Value8
+   ...
+   fun:resume_Int
+   fun:c_resume_int_fs
+   obj:/usr/lib/x86_64-linux-gnu/libuv.so.1.0.0
+   fun:uv_run
+   fun:main
+}
+{
+   UV uninitialized cond
+   Memcheck:Cond
+   ...
+   fun:resume_Int
+   fun:c_resume_int_fs
+   obj:/usr/lib/x86_64-linux-gnu/libuv.so.1.0.0
+   fun:uv_run
+   fun:main
+}
