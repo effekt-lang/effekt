@@ -90,32 +90,41 @@ def asRGB(hsv: HSV): RGB = {
 }
 
 def asLMS(rgb: RGB): LMS = {
-  val l = 0.3811 * rgb.r + 0.5783 * rgb.g + 0.0402 * rgb.b
-  val m = 0.1967 * rgb.r + 0.7244 * rgb.g + 0.0782 * rgb.b
-  val s = 0.0241 * rgb.r + 0.1288 * rgb.g + 0.8444 * rgb.b
+  val l = 0.31399022 * rgb.r + 0.63951294 * rgb.g + 0.04649755 * rgb.b
+  val m = 0.15537241 * rgb.r + 0.75789446 * rgb.g + 0.08670142 * rgb.b
+  val s = 0.01775239 * rgb.r + 0.10944209 * rgb.g + 0.87256922 * rgb.b
   LMS(l, m, s)
 }
 
 def asRGB(lms: LMS): RGB = {
-  val r = force01(4.4679 * lms.l - 3.5873 * lms.m + 0.1193 * lms.s)
-  val g = force01(-1.2186 * lms.l + 2.3809 * lms.m - 0.1624 * lms.s)
-  val b = force01(0.0497 * lms.l - 0.2439 * lms.m + 1.2045 * lms.s)
+  val r = force01(5.47221206 * lms.l - 4.6419601 * lms.m + 0.16963708 * lms.s)
+  val g = force01(-1.1252419 * lms.l + 2.29317094 * lms.m - 0.1678952 * lms.s)
+  val b = force01(0.02980165 * lms.l - 0.19318073 * lms.m + 1.16364789 * lms.s)
   RGB(r, g, b)
 }
 
 def asProtanopia(rgb: RGB): RGB = {
   val lms = asLMS(rgb)
-  val l = force01(lms.m * 1.05118294 + lms.s * -0.05116099)
+  val l = force01(1.05118294 * lms.m - 0.05116099 * lms.s)
   val m = force01(lms.m)
   val s = force01(lms.s)
-  asRGB(LMS(l, m, s))
+  LMS(l, m, s).asRGB
 }
+
 def asDeuteranopia(rgb: RGB): RGB = {
   val lms = asLMS(rgb)
   val l = force01(lms.l)
-  val m = force01(lms.l * 0.9513092 + lms.s * 0.04866992)
+  val m = force01(0.9513092 * lms.l + 0.04866992 * lms.s)
   val s = force01(lms.s)
-  asRGB(LMS(l, m, s))
+  LMS(l, m, s).asRGB
+}
+
+def asTritanopia(rgb: RGB): RGB = {
+  val lms = asLMS(rgb)
+  val l = force01(lms.l)
+  val m = force01(1.0 * lms.m)
+  val s = force01(-0.86744736 * lms.l + 1.86727089 * lms.m)
+  LMS(l, m, s).asRGB
 }
 
 def relativeLuminance(rgb: RGB): Double = {
@@ -261,6 +270,14 @@ namespace example {
       each(0, 128) { h => 
         val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
         val ansi = toAnsiForeground(rgb.asDeuteranopia) //.tint(0.5))
+        do write(s"${ansi}█")
+      }
+      println(do flush())
+    }
+    stringBuffer { 
+      each(0, 128) { h => 
+        val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
+        val ansi = toAnsiForeground(rgb.asTritanopia) //.tint(0.5))
         do write(s"${ansi}█")
       }
       println(do flush())
