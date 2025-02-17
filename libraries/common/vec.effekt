@@ -1,0 +1,63 @@
+record Vec2D(x: Double, y: Double)
+record Vec3D(x: Double, y: Double, z: Double)
+
+def infixAdd(a: Vec2D, b: Vec2D): Vec2D = Vec2D(a.x + b.x, a.y + b.y)
+def infixSub(a: Vec2D, b: Vec2D): Vec2D = Vec2D(a.x - b.x, a.y - b.y)
+def infixMul(f: Double, b: Vec2D): Vec2D = Vec2D(f * b.x, f * b.y)
+def infixDiv(v: Vec2D, f: Double): Vec2D = Vec2D(v.x / f, v.y / f)
+def infixAdd(a: Vec3D, b: Vec3D): Vec3D = Vec3D(a.x + b.x, a.y + b.y, a.z + b.z)
+def infixSub(a: Vec3D, b: Vec3D): Vec3D = Vec3D(a.x - b.x, a.y - b.y, a.z - b.z)
+def infixMul(f: Double, b: Vec3D): Vec3D = Vec3D(f * b.x, f * b.y, f * b.z)
+def infixDiv(v: Vec3D, f: Double): Vec3D = Vec3D(v.x / f, v.y / f, v.z / f)
+
+def scalarProduct(a: Vec3D, b: Vec3D): Double = a.x * b.x + a.y * b.y + a.z * b.z
+def vectorProduct(a: Vec3D, b: Vec3D): Vec3D = Vec3D(
+  a.y * b.z - a.z * b.y,
+  a.z * b.x - a.x * b.z,
+  a.x * b.y - a.y * b.x
+)
+
+def scalarProduct(a: Vec2D, b: Vec2D): Double = a.x * b.x + a.y * b.y
+def vectorProduct(a: Vec2D, b: Vec2D): Double = a.x * b.y - a.y * b.x
+
+def magnitude(v: Vec2D): Double = sqrt(v.x * v.x + v.y * v.y)
+def magnitude(v: Vec3D): Double = sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+
+def normalize(v: Vec2D): Vec2D = {
+  val mag = magnitude(v)
+  Vec2D(v.x / mag, v.y / mag)
+}
+
+def normalize(v: Vec3D): Vec3D = {
+  val mag = magnitude(v)
+  Vec3D(v.x / mag, v.y / mag, v.z / mag)
+}
+
+def projection(a: Vec2D, b: Vec2D): Vec2D = {
+  val scalar = scalarProduct(a, b) / scalarProduct(b, b)
+  infixMul(scalar, b)
+}
+
+def projection(a: Vec3D, b: Vec3D): Vec3D = {
+  val scalar = scalarProduct(a, b) / scalarProduct(b, b)
+  infixMul(scalar, b)
+}
+
+
+def rotatePoint(p: Vec2D, center: Vec2D, angle: Double): Vec2D = {
+  val s = sin(angle)
+  val c = cos(angle)
+  val translatedX = p.x - center.x
+  val translatedY = p.y - center.y
+  val rotatedX = translatedX * c - translatedY * s
+  val rotatedY = translatedX * s + translatedY * c
+  Vec2D(rotatedX + center.x, rotatedY + center.y)
+}
+
+extern pure def atan2(y: Double, x: Double): Double =
+  js "Math.atan2(${y}, ${x})"
+  chez "(atan ${y} ${x})"
+  vm "effekt::atan2(Double, Double)"
+  llvm "%z = call %Double @atan2(double ${y}, double ${x}) ret %Double %z"
+
+def main() = ()

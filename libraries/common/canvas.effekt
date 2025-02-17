@@ -1,0 +1,140 @@
+import path
+import vec
+import color
+
+extern type DrawingContext2D
+namespace internal {
+  extern io def getDrawingContext(canvasId: String): DrawingContext2D =
+    jsWeb "document.getElementById(${canvasId}).getContext(\"2d\")"
+  extern io def beginPath(ctx: DrawingContext2D): Unit =
+    jsWeb "${ctx}.beginPath()"
+  extern io def moveTo(ctx: DrawingContext2D, x: Double, y: Double): Unit =
+    jsWeb "${ctx}.moveTo(${x}, ${y})"
+  extern io def lineTo(ctx: DrawingContext2D, x: Double, y: Double): Unit =
+    jsWeb "${ctx}.lineTo(${x}, ${y})"
+  extern io def stroke(ctx: DrawingContext2D): Unit =
+    jsWeb "${ctx}.stroke()"
+  extern io def fill(ctx: DrawingContext2D): Unit =
+    jsWeb "${ctx}.fill()"
+  extern io def clearRect(ctx: DrawingContext2D, x: Double, y: Double, width: Double, height: Double): Unit =
+    jsWeb "${ctx}.clearRect(${x}, ${y}, ${width}, ${height})"
+  extern io def fillRect(ctx: DrawingContext2D, x: Double, y: Double, width: Double, height: Double): Unit =
+    jsWeb "${ctx}.fillRect(${x}, ${y}, ${width}, ${height})"
+  extern io def strokeRect(ctx: DrawingContext2D, x: Double, y: Double, width: Double, height: Double): Unit =
+    jsWeb "${ctx}.strokeRect(${x}, ${y}, ${width}, ${height})"
+  extern io def closePath(ctx: DrawingContext2D): Unit =
+    jsWeb "${ctx}.closePath()"
+  extern io def bezierCurveTo(ctx: DrawingContext2D, cp1x: Double, cp1y: Double, cp2x: Double, cp2y: Double, x: Double, y: Double): Unit =
+    jsWeb "${ctx}.bezierCurveTo(${cp1x}, ${cp1y}, ${cp2x}, ${cp2y}, ${x}, ${y})"
+  extern io def quadraticCurveTo(ctx: DrawingContext2D, cpx: Double, cpy: Double, x: Double, y: Double): Unit =
+    jsWeb "${ctx}.quadraticCurveTo(${cpx}, ${cpy}, ${x}, ${y})"
+  extern io def ellipse(ctx: DrawingContext2D, x: Double, y: Double, radiusX: Double, radiusY: Double, rotation: Double, startAngle: Double, endAngle: Double, anticlockwise: Bool): Unit =
+    jsWeb "${ctx}.ellipse(${x}, ${y}, ${radiusX}, ${radiusY}, ${rotation}, ${startAngle}, ${endAngle}, ${anticlockwise})"
+  extern io def setFillStyle(ctx: DrawingContext2D, color: String): Unit =
+    jsWeb "${ctx}.fillStyle = ${color}"
+  extern io def setStrokeStyle(ctx: DrawingContext2D, color: String): Unit =
+    jsWeb "${ctx}.strokeStyle = ${color}"
+  extern io def setLineWidth(ctx: DrawingContext2D, width: Double): Unit =
+    jsWeb "${ctx}.lineWidth = ${width}"
+
+  def svgArcTo(ctx: DrawingContext2D, x1: Double, y1: Double, rx: Double, ry: Double, xAxisRotation: Double, largeArcFlag: Bool, sweepFlag: Bool, x2: Double, y2: Double): Unit = {
+    var rx = rx
+    var ry = ry
+    // Convert rotation from degrees to radians
+    val angleRad = xAxisRotation * PI / 180.0;
+    
+    // Step 2: Transform to origin
+    val dx = (x1 - x2) / 2.0;
+    val dy = (y1 - y2) / 2.0;
+    
+    // Transform point into coordinate space of the ellipse
+    val x1Prime = dx * cos(angleRad) + dy * sin(angleRad);
+    val y1Prime = (1.0 - dx) * sin(angleRad) + dy * cos(angleRad);
+    
+    // Step 3: Ensure radii are large enough
+    val lambda = (x1Prime * x1Prime) / (rx * rx) + (y1Prime * y1Prime) / (ry * ry);
+    if (lambda > 1.0) {
+        rx = rx * sqrt(lambda);
+        ry = ry * sqrt(lambda);
+    }
+    
+    // Step 4: Compute center parameters
+    val sign = if (largeArcFlag == sweepFlag) {-1.0} else {1.0};
+    val sq = ((rx * rx * ry * ry) - (rx * rx * y1Prime * y1Prime) - (ry * ry * x1Prime * x1Prime)) /
+             ((rx * rx * y1Prime * y1Prime) + (ry * ry * x1Prime * x1Prime));
+    val coef = sign * sqrt(max(0.0, sq));
+    
+    val cxPrime = coef * ((rx * y1Prime) / ry);
+    val cyPrime = coef * (0.0 - (ry * x1Prime) / rx);
+    
+    // Step 5: Transform back to original coordinate space
+    val cx = cos(angleRad) * cxPrime - sin(angleRad) * cyPrime + (x1 + x2) / 2.0;
+    val cy = sin(angleRad) * cxPrime + cos(angleRad) * cyPrime + (y1 + y2) / 2.0;
+    
+    // Step 6: Compute start and sweep angles
+    val startAngle = atan2(
+        (y1Prime - cyPrime) / ry,
+        (x1Prime - cxPrime) / rx
+    );
+    
+    var deltaAngle = atan2(
+        (0.0 - y1Prime - cyPrime) / ry,
+        (0.0 - x1Prime - cxPrime) / rx
+    ) - startAngle;
+    
+    // Adjust sweep angle according to flags
+    if (not(sweepFlag) && deltaAngle > 0.0) {
+        deltaAngle = deltaAngle - 2.0 * PI;
+    } else if (sweepFlag && deltaAngle < 0.0) {
+        deltaAngle = deltaAngle + 2.0 * PI;
+    }
+    
+    ctx.internal::ellipse(cx, cy, rx, ry, xAxisRotation, startAngle, startAngle + deltaAngle, sweepFlag)
+}
+ 
+  def asCanvasPath(ctx: DrawingContext2D){ body: => Unit / Path2D }: Unit = {
+    var current = Vec2D(0.0, 0.0)
+    try body() with Path2D {
+      def moveTo(p) = {
+        current = p
+        resume(ctx.internal::moveTo(p.x, p.y))
+      }
+      def lineTo(p) = {
+        current = p
+        resume(ctx.internal::lineTo(p.x, p.y))
+      }
+      def cubicBezierTo(c1, c2, t) = {
+        current = t
+        resume(ctx.internal::bezierCurveTo(c1.x, c1.y, c2.x, c2.y, t.x, t.y))
+      }
+      def quadraticBezierTo(c, t) = {
+        current = t
+        resume(ctx.internal::quadraticCurveTo(c.x, c.y, t.x, t.y))
+      }
+      def arc(rx, ry, rot, largeArc, sweep, to) = {
+        ctx.internal::svgArcTo(current.x, current.y, rx, ry, rot, largeArc, sweep, to.x, to.y)
+        current = to
+        resume(())
+      }
+    }
+  } 
+
+  extern io def mkCanvas(id: String): Unit =
+    jsWeb """document.body.innerHTML += "<canvas id=\"" + ${id} + "\"></canvas>" """
+}
+
+def main() = {
+  internal::mkCanvas("myCanvas")
+  val ctx = internal::getDrawingContext("myCanvas")
+  ctx.internal::setStrokeStyle(ColorNames::red.toHTML)
+  ctx.internal::setFillStyle(ColorNames::yellow.toHTML)
+  ctx.internal::asCanvasPath{
+    rotate(Vec2D(100.0,100.0), 0.05 * PI){
+    translate(Vec2D(100.0,100.0)){
+      circle(Vec2D(0.0,0.0), 50.0)
+      rect(Vec2D(-10.0,-10.0), Vec2D(0.0,0.0))
+    }}
+  }
+  ctx.internal::stroke()
+  ctx.internal::fill()
+}

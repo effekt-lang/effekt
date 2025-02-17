@@ -1,0 +1,92 @@
+import vec
+import stringbuffer
+import stream
+
+interface Path2D {
+  def moveTo(pos: Vec2D): Unit
+  def lineTo(pos: Vec2D): Unit
+  def cubicBezierTo(control1: Vec2D, control2: Vec2D, to: Vec2D): Unit
+  def quadraticBezierTo(control: Vec2D, to: Vec2D): Unit
+  def arc(rx: Double, ry: Double, rot: Double, largeArc: Bool, sweep: Bool, to: Vec2D): Unit
+}
+
+def rect(topleft: Vec2D, bottomright: Vec2D): Unit / Path2D = {
+  do moveTo(topleft)
+  do lineTo(Vec2D(bottomright.x, topleft.y))
+  do lineTo(bottomright)
+  do lineTo(Vec2D(topleft.x, bottomright.y))
+  do lineTo(topleft)
+}
+def circle(center: Vec2D, radius: Double): Unit / Path2D = {
+  val start = Vec2D(center.x + radius, center.y)
+  do moveTo(start)
+  do arc(radius, radius, 0.0, false, true, Vec2D(center.x - radius, center.y))
+  do arc(radius, radius, 0.0, false, true, start)
+}
+def ellipse(center: Vec2D, rx: Double, ry: Double): Unit / Path2D = {
+  val start = Vec2D(center.x + rx, center.y)
+  do moveTo(start)
+  do arc(rx, ry, 0.0, false, true, Vec2D(center.x - rx, center.y))
+  do arc(rx, ry, 0.0, false, true, start)
+}
+
+def show01(b: Bool) = if (b) { "1" } else { "0" }
+
+def translate(by: Vec2D){ body: => Unit / Path2D }: Unit / Path2D = {
+  try body() with Path2D {
+    def moveTo(p) = resume(do moveTo(Vec2D(p.x + by.x, p.y + by.y)))
+    def lineTo(p) = resume(do lineTo(Vec2D(p.x + by.x, p.y + by.y)))
+    def cubicBezierTo(c1, c2, t) =
+      resume(do cubicBezierTo(Vec2D(c1.x + by.x, c1.y + by.y), Vec2D(c2.x + by.x, c2.y + by.y), Vec2D(t.x + by.x, t.y + by.y)))
+    def quadraticBezierTo(c, t) =
+      resume(do quadraticBezierTo(Vec2D(c.x + by.x, c.y + by.y), Vec2D(t.x + by.x, t.y + by.y)))
+    def arc(rx, ry, rot, largeArc, sweep, to) =
+      resume(do arc(rx, ry, rot, largeArc, sweep, Vec2D(to.x + by.x, to.y + by.y)))
+  }
+}
+def rotate(center: Vec2D, angle: Double){ body: => Unit / Path2D }: Unit / Path2D =
+  try body() with Path2D {
+    def moveTo(p) = resume(do moveTo(rotatePoint(p, center, angle)))
+    def lineTo(p) = resume(do lineTo(rotatePoint(p, center, angle)))
+    def cubicBezierTo(c1, c2, t) =
+      resume(do cubicBezierTo(rotatePoint(c1, center, angle), rotatePoint(c2, center, angle), rotatePoint(t, center, angle)))
+    def quadraticBezierTo(c, t) =
+      resume(do quadraticBezierTo(rotatePoint(c, center, angle), rotatePoint(t, center, angle)))
+    def arc(rx, ry, rot, largeArc, sweep, to) =
+      resume(do arc(rx, ry, rot + angle, largeArc, sweep, rotatePoint(to, center, angle)))
+  }
+def scale(factor: Double){ body: => Unit / Path2D }: Unit / Path2D = {
+  try body() with Path2D {
+    def moveTo(p) = resume(do moveTo(Vec2D(p.x * factor, p.y * factor)))
+    def lineTo(p) = resume(do lineTo(Vec2D(p.x * factor, p.y * factor)))
+    def cubicBezierTo(c1, c2, t) =
+      resume(do cubicBezierTo(Vec2D(c1.x * factor, c1.y * factor), Vec2D(c2.x * factor, c2.y * factor), Vec2D(t.x * factor, t.y * factor)))
+    def quadraticBezierTo(c, t) =
+      resume(do quadraticBezierTo(Vec2D(c.x * factor, c.y * factor), Vec2D(t.x * factor, t.y * factor)))
+    def arc(rx, ry, rot, largeArc, sweep, to) =
+      resume(do arc(rx * factor, ry * factor, rot, largeArc, sweep, Vec2D(to.x * factor, to.y * factor)))
+  }
+}
+
+def asSvgPath{ body: => Unit / Path2D }: String = stringBuffer {
+  var first = true
+  try {
+    try body() with Path2D {
+      def moveTo(p) = resume(do emit("M ${p.x.show} ${p.y.show}"))
+      def lineTo(p) = resume(do emit("L ${p.x.show} ${p.y.show}"))
+      def cubicBezierTo(c1, c2, t) =
+        resume(do emit("C ${c1.x.show} ${c1.y.show}, ${c2.x.show} ${c2.y.show}, ${t.x.show} ${t.y.show}"))
+      def quadraticBezierTo(c, t) =
+        resume(do emit("Q ${c.x.show} ${c.y.show}, ${t.x.show} ${t.y.show}"))
+      def arc(rx, ry, rot, largeArc, sweep, to) =
+        resume(do emit("A ${rx.show} ${ry.show} ${rot.show} ${largeArc.show01} ${sweep.show01} ${to.x.show} ${to.y.show}"))
+    }
+  } with emit[String] { s => 
+    if (not(first)) { do write(" ") }
+    do write(s)
+    first = false 
+  }
+  do flush()
+}
+
+def main() = ()

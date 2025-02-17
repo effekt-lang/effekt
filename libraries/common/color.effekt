@@ -1,0 +1,235 @@
+import stringbuffer
+import io/console
+import stream
+
+def max(a: Double, b: Double, c: Double): Double = {
+  if (a >= b && a >= c) a
+  else if (b >= a && b >= c) b
+  else c
+}
+def min(a: Double, b: Double, c: Double): Double = {
+  if (a <= b && a <= c) a
+  else if (b <= a && b <= c) b
+  else c
+}
+def mod(a: Double, b: Double): Double = {
+  a - b * (a / b).floor.toDouble
+}
+
+record RGB(r: Double, g: Double, b: Double)
+record HSV(h: Double, s: Double, v: Double)
+record CMYK(c: Double, m: Double, y: Double, k: Double)
+
+namespace ColorNames {
+  val black = RGB(0.0, 0.0, 0.0)
+  val white = RGB(1.0, 1.0, 1.0)
+  val red = RGB(1.0, 0.0, 0.0)
+  val lime = RGB(0.0, 1.0, 0.0)
+  val blue = RGB(0.0, 0.0, 1.0)
+  val yellow = RGB(1.0, 1.0, 0.0)
+  val cyan = RGB(0.0, 1.0, 1.0)
+  val magenta = RGB(1.0, 0.0, 1.0)
+  val silver = RGB(0.75, 0.75, 0.75)
+  val gray50 = RGB(0.5, 0.5, 0.5)
+  def gray(factor: Double) = RGB(factor, factor, factor)
+  val maroon = RGB(0.5, 0.0, 0.0)
+  val olive = RGB(0.5, 0.5, 0.0)
+  val green = RGB(0.0, 0.5, 0.0)
+  val purple = RGB(0.5, 0.0, 0.5)
+  val teal = RGB(0.0, 0.5, 0.5)
+  val navy = RGB(0.0, 0.0, 0.5)
+}
+
+def asCMYK(rgb: RGB): CMYK = {
+  val k = 1.0 - max(rgb.r, rgb.g, rgb.b)
+  val c = (1.0 - rgb.r - k) / (1.0 - k)
+  val m = (1.0 - rgb.g - k) / (1.0 - k)
+  val y = (1.0 - rgb.b - k) / (1.0 - k)
+  CMYK(c, m, y, k)
+}
+def asRGB(cmyk: CMYK): RGB = {
+  val r = (1.0 - cmyk.c) * (1.0 - cmyk.k)
+  val g = (1.0 - cmyk.m) * (1.0 - cmyk.k)
+  val b = (1.0 - cmyk.y) * (1.0 - cmyk.k)
+  RGB(r, g, b)
+}
+def asHSV(rgb: RGB): HSV = {
+  val maxVal = max(rgb.r, rgb.g, rgb.b)
+  val minVal = min(rgb.r, rgb.g, rgb.b)
+  val delta = maxVal - minVal
+
+  val h = if (delta == 0.0) 0.0
+          else if (maxVal == rgb.r) mod((rgb.g - rgb.b) / delta, 6.0)
+          else if (maxVal == rgb.g) ((rgb.b - rgb.r) / delta) + 2.0
+          else ((rgb.r - rgb.g) / delta) + 4.0
+
+  val hue = mod(h / 6.0 + 1.0, 1.0)
+  val saturation = if (maxVal == 0.0) 0.0 else delta / maxVal
+  val value = maxVal
+
+  HSV(hue, saturation, value)
+}
+
+def asRGB(hsv: HSV): RGB = {
+  val c = hsv.v * hsv.s
+  val x = c * (1.0 - abs(mod(hsv.h * 6.0, 2.0) - 1.0))
+  val m = hsv.v - c
+
+  val (r, g, b) = if (hsv.h < 1.0 / 6.0) (c, x, 0.0)
+                  else if (hsv.h < 2.0 / 6.0) (x, c, 0.0)
+                  else if (hsv.h < 3.0 / 6.0) (0.0, c, x)
+                  else if (hsv.h < 4.0 / 6.0) (0.0, x, c)
+                  else if (hsv.h < 5.0 / 6.0) (x, 0.0, c)
+                  else (c, 0.0, x)
+
+  RGB(r + m, g + m, b + m)
+}
+
+def relativeLuminance(rgb: RGB): Double = {
+  def adjust(c: Double): Double = {
+    if (c <= 0.03928) c / 12.92
+    else ((c + 0.055) / 1.055).pow(2.4)
+  }
+  0.2126 * adjust(rgb.r) + 0.7152 * adjust(rgb.g) + 0.0722 * adjust(rgb.b)
+}
+def contrastRatio(rgb1: RGB, rgb2: RGB): Double = {
+  val lum1 = relativeLuminance(rgb1)
+  val lum2 = relativeLuminance(rgb2)
+  if (lum1 > lum2) (lum1 + 0.05) / (lum2 + 0.05)
+  else (lum2 + 0.05) / (lum1 + 0.05)
+}
+
+def complement(rgb: RGB): RGB = {
+  RGB(1.0 - rgb.r, 1.0 - rgb.g, 1.0 - rgb.b)
+}
+def mix(rgb1: RGB, rgb2: RGB, ratio: Double): RGB = {
+  val r = rgb1.r * ratio + rgb2.r * (1.0 - ratio)
+  val g = rgb1.g * ratio + rgb2.g * (1.0 - ratio)
+  val b = rgb1.b * ratio + rgb2.b * (1.0 - ratio)
+  RGB(r, g, b)
+}
+def mix(rgb1: RGB, rgb2: RGB): RGB = {
+  RGB((rgb1.r + rgb2.r) / 2.0, (rgb1.g + rgb2.g) / 2.0, (rgb1.b + rgb2.b) / 2.0)
+}
+def shade(rgb: RGB, by: Double): RGB = mix(rgb, ColorNames::black, by)
+def tint(rgb: RGB, by: Double): RGB = mix(rgb, ColorNames::white, by)
+
+def tone(rgb: RGB, by: Double): RGB = {
+  val amnt = (rgb.r + rgb.g + rgb.b) / 3.0
+  mix(rgb, ColorNames::gray(amnt), by)
+}
+def rotate(rgb: RGB, angle: Double): RGB = {
+  val hsv = asHSV(rgb)
+  val newHue = mod(hsv.h + angle / 360.0, 1.0)
+  asRGB(HSV(newHue, hsv.s, hsv.v))
+}
+
+def splitComplementary(rgb: RGB, angle: Double): (RGB, RGB) = {
+  val c = rgb.complement
+  (rotate(c, angle), rotate(c, 0.0 - angle))
+}
+def splitComplementary(rgb: RGB): (RGB, RGB) = splitComplementary(rgb, 30.0)
+def analogous(rgb: RGB, angle: Double): (RGB, RGB) = {
+  (rotate(rgb, angle), rotate(rgb, 0.0 - angle))
+}
+def analogous(rgb: RGB): (RGB, RGB) = analogous(rgb, 30.0)
+def triadic(rgb: RGB): (RGB, RGB) = {
+  (rotate(rgb, 120.0), rotate(rgb, 240.0))
+}
+def square(rgb: RGB): (RGB, RGB, RGB) = {
+  (rotate(rgb, 90.0), rotate(rgb, 180.0), rotate(rgb, 270.0))
+}
+def tetradic(rgb: RGB, angle: Double): (RGB, RGB, RGB) = {
+  (rotate(rgb, angle), rotate(rgb, 180.0), rotate(rgb, 180.0 + angle))
+}
+def tetradic(rgb: RGB): (RGB, RGB, RGB) = tetradic(rgb, 30.0)
+
+def binsplit(rgb: RGB): Unit / emit[RGB] = {
+  var a = 0
+  var b = 2
+  while (true) {
+    do emit(rgb.rotate(360.0 * (2 * a + 1).toDouble / b.toDouble))
+    a = a + 1
+    if (a * 2 + 1 > b) {
+      b = b * 2
+      a = 0
+    }
+  }
+}
+def evenlySpaced(rgb: RGB, n: Int): Unit / emit[RGB] = {
+  each(1, n){ i =>
+    do emit(rgb.rotate(i.toDouble * 360.0 / n.toDouble))
+  }
+}
+
+def toANSI(rgb: RGB): String = {
+  val r = (rgb.r * 255.0).toInt
+  val g = (rgb.g * 255.0).toInt
+  val b = (rgb.b * 255.0).toInt
+  "\u001b[38;2;${r.show};${g.show};${b.show}m"
+}
+def toHTML(rgb: RGB): String = {
+  val r = (rgb.r * 255.0).toInt
+  val g = (rgb.g * 255.0).toInt
+  val b = (rgb.b * 255.0).toInt
+  s"rgb(${r.show}, ${g.show}, ${b.show})"
+}
+
+namespace example {
+  def main() = console {
+    with on[WrongFormat].panic()
+    stringBuffer { 
+      each(0, 128) { h => 
+        val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
+        val ansi = toANSI(rgb)
+        do write(s"${ansi}█")
+      }
+      println(do flush())
+    }
+    stringBuffer { 
+      each(0, 128) { h => 
+        val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
+        val ansi = toANSI(rgb.tint(0.5))
+        do write(s"${ansi}█")
+      }
+      println(do flush())
+    }
+
+    val b = HSV(random(), 1.0, 1.0).asRGB
+    println("       ${b.toANSI}█${ColorNames::black.toANSI}")
+    println("shade: ${b.shade(0.5).toANSI}█${ColorNames::black.toANSI}")
+    println("tone:  ${b.tone(0.5).toANSI}█${ColorNames::black.toANSI}")
+    println("tint:  ${b.tint(0.5).toANSI}█${ColorNames::black.toANSI}")
+    println("compl: ${b.complement.toANSI}█${ColorNames::black.toANSI}")
+    val (l, r) = b.splitComplementary
+    println("split: ${l.toANSI}█${b.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    val (l, r) = b.analogous
+    println("analogous: ${l.toANSI}█${b.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    val (l, r) = b.triadic
+    println("triadic: ${l.toANSI}█${b.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    val (l, m, r) = b.square
+    println("square: ${l.toANSI}█${b.toANSI}█${m.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    val (l, m, r) = b.tetradic
+    println("tetradic: ${l.toANSI}█${b.toANSI}█${m.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    stringBuffer {
+      boundary{ 
+        source[RGB]{ do emit(b); binsplit(b) }{
+          each(0, 10){ i =>
+            do write("${do read[RGB]().toANSI}█${ColorNames::black.toANSI}")
+          }
+        }
+      }
+      println("binsplit: ${do flush()}")
+    }
+    stringBuffer {
+      boundary{ 
+        source[RGB]{ do emit(b); evenlySpaced(b, 10) }{
+          each(0, 10){ i =>
+            do write("${do read[RGB]().toANSI}█${ColorNames::black.toANSI}")
+          }
+        }
+      }
+      println("evenly: ${do flush()}")
+    }
+  }
+}
