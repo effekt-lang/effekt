@@ -15,10 +15,14 @@ def min(a: Double, b: Double, c: Double): Double = {
 def mod(a: Double, b: Double): Double = {
   a - b * (a / b).floor.toDouble
 }
+def force01(v: Double): Double = {
+  if (v < 0.0) { 0.0 } else if (v > 1.0) { 1.0 } else v
+}
 
 record RGB(r: Double, g: Double, b: Double)
 record HSV(h: Double, s: Double, v: Double)
 record CMYK(c: Double, m: Double, y: Double, k: Double)
+record LMS(l: Double, m: Double, s: Double)
 
 namespace ColorNames {
   val black = RGB(0.0, 0.0, 0.0)
@@ -83,6 +87,35 @@ def asRGB(hsv: HSV): RGB = {
                   else (c, 0.0, x)
 
   RGB(r + m, g + m, b + m)
+}
+
+def asLMS(rgb: RGB): LMS = {
+  val l = 0.3811 * rgb.r + 0.5783 * rgb.g + 0.0402 * rgb.b
+  val m = 0.1967 * rgb.r + 0.7244 * rgb.g + 0.0782 * rgb.b
+  val s = 0.0241 * rgb.r + 0.1288 * rgb.g + 0.8444 * rgb.b
+  LMS(l, m, s)
+}
+
+def asRGB(lms: LMS): RGB = {
+  val r = force01(4.4679 * lms.l - 3.5873 * lms.m + 0.1193 * lms.s)
+  val g = force01(-1.2186 * lms.l + 2.3809 * lms.m - 0.1624 * lms.s)
+  val b = force01(0.0497 * lms.l - 0.2439 * lms.m + 1.2045 * lms.s)
+  RGB(r, g, b)
+}
+
+def asProtanopia(rgb: RGB): RGB = {
+  val lms = asLMS(rgb)
+  val l = force01(lms.m * 1.05118294 + lms.s * -0.05116099)
+  val m = force01(lms.m)
+  val s = force01(lms.s)
+  asRGB(LMS(l, m, s))
+}
+def asDeuteranopia(rgb: RGB): RGB = {
+  val lms = asLMS(rgb)
+  val l = force01(lms.l)
+  val m = force01(lms.l * 0.9513092 + lms.s * 0.04866992)
+  val s = force01(lms.s)
+  asRGB(LMS(l, m, s))
 }
 
 def relativeLuminance(rgb: RGB): Double = {
@@ -162,11 +195,33 @@ def evenlySpaced(rgb: RGB, n: Int): Unit / emit[RGB] = {
   }
 }
 
-def toANSI(rgb: RGB): String = {
+def toAnsiForeground(rgb: RGB): String = {
   val r = (rgb.r * 255.0).toInt
   val g = (rgb.g * 255.0).toInt
   val b = (rgb.b * 255.0).toInt
   "\u001b[38;2;${r.show};${g.show};${b.show}m"
+}
+
+def toAnsi256Foreground(rgb: RGB): String = {
+  val r = (rgb.r * 5.0).toInt
+  val g = (rgb.g * 5.0).toInt
+  val b = (rgb.b * 5.0).toInt
+  val index = 16 + 36 * r + 6 * g + b;
+  "\u001b[38;5;${index.show}m"
+}
+
+def toAnsiBackground(rgb: RGB): String = {
+  val r = (rgb.r * 255.0).toInt
+  val g = (rgb.g * 255.0).toInt
+  val b = (rgb.b * 255.0).toInt
+  "\u001b[48;2;${r.show};${g.show};${b.show}m"
+}
+def toAnsi256Background(rgb: RGB): String = {
+  val r = (rgb.r * 5.0).toInt
+  val g = (rgb.g * 5.0).toInt
+  val b = (rgb.b * 5.0).toInt
+  val index = 16 + 36 * r + 6 * g + b;
+  "\u001b[48;5;${index.show}m"
 }
 def toHTML(rgb: RGB): String = {
   val r = (rgb.r * 255.0).toInt
@@ -179,9 +234,17 @@ namespace example {
   def main() = console {
     with on[WrongFormat].panic()
     stringBuffer { 
-      each(0, 128) { h => 
+      each(0, 129) { h => 
         val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
-        val ansi = toANSI(rgb)
+        val ansi = toAnsiForeground(rgb)
+        do write(s"${ansi}█")
+      }
+      println(do flush())
+    }
+    stringBuffer { 
+      each(0, 129) { h => 
+        val rgb = asRGB(HSV((h.toDouble * 2.0 + 1.0) / 255.0, 1.0, 1.0))
+        val ansi = toAnsiForeground(rgb)
         do write(s"${ansi}█")
       }
       println(do flush())
@@ -189,33 +252,41 @@ namespace example {
     stringBuffer { 
       each(0, 128) { h => 
         val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
-        val ansi = toANSI(rgb.tint(0.5))
+        val ansi = toAnsiForeground(rgb.asProtanopia) //.tint(0.5))
+        do write(s"${ansi}█")
+      }
+      println(do flush())
+    }
+    stringBuffer { 
+      each(0, 128) { h => 
+        val rgb = asRGB(HSV((h.toDouble * 2.0) / 255.0, 1.0, 1.0))
+        val ansi = toAnsiForeground(rgb.asDeuteranopia) //.tint(0.5))
         do write(s"${ansi}█")
       }
       println(do flush())
     }
 
     val b = HSV(random(), 1.0, 1.0).asRGB
-    println("       ${b.toANSI}█${ColorNames::black.toANSI}")
-    println("shade: ${b.shade(0.5).toANSI}█${ColorNames::black.toANSI}")
-    println("tone:  ${b.tone(0.5).toANSI}█${ColorNames::black.toANSI}")
-    println("tint:  ${b.tint(0.5).toANSI}█${ColorNames::black.toANSI}")
-    println("compl: ${b.complement.toANSI}█${ColorNames::black.toANSI}")
+    println("       ${b.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
+    println("shade: ${b.shade(0.5).toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
+    println("tone:  ${b.tone(0.5).toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
+    println("tint:  ${b.tint(0.5).toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
+    println("compl: ${b.complement.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
     val (l, r) = b.splitComplementary
-    println("split: ${l.toANSI}█${b.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    println("split: ${l.toAnsiForeground}█${b.toAnsiForeground}█${r.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
     val (l, r) = b.analogous
-    println("analogous: ${l.toANSI}█${b.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    println("analogous: ${l.toAnsiForeground}█${b.toAnsiForeground}█${r.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
     val (l, r) = b.triadic
-    println("triadic: ${l.toANSI}█${b.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    println("triadic: ${l.toAnsiForeground}█${b.toAnsiForeground}█${r.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
     val (l, m, r) = b.square
-    println("square: ${l.toANSI}█${b.toANSI}█${m.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    println("square: ${l.toAnsiForeground}█${b.toAnsiForeground}█${m.toAnsiForeground}█${r.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
     val (l, m, r) = b.tetradic
-    println("tetradic: ${l.toANSI}█${b.toANSI}█${m.toANSI}█${r.toANSI}█${ColorNames::black.toANSI}")
+    println("tetradic: ${l.toAnsiForeground}█${b.toAnsiForeground}█${m.toAnsiForeground}█${r.toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
     stringBuffer {
       boundary{ 
         source[RGB]{ do emit(b); binsplit(b) }{
           each(0, 10){ i =>
-            do write("${do read[RGB]().toANSI}█${ColorNames::black.toANSI}")
+            do write("${do read[RGB]().toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
           }
         }
       }
@@ -225,7 +296,7 @@ namespace example {
       boundary{ 
         source[RGB]{ do emit(b); evenlySpaced(b, 10) }{
           each(0, 10){ i =>
-            do write("${do read[RGB]().toANSI}█${ColorNames::black.toANSI}")
+            do write("${do read[RGB]().toAnsiForeground}█${ColorNames::black.toAnsiForeground}")
           }
         }
       }
