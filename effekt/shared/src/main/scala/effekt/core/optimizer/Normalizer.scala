@@ -172,8 +172,14 @@ object Normalizer { normal =>
       Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
 
     case Stmt.Let(id, tpe, expr, body) =>
-      val normalized = active(expr)
-      Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
+      active(expr) match {
+        // [[ val x = ABORT; body ]] = ABORT
+        case abort if !C.preserveBoxing && abort.tpe == Type.TBottom =>
+          Stmt.Let(id, tpe, abort, Return(ValueVar(id, tpe)))
+
+        case normalized =>
+          Stmt.Let(id, tpe, normalized, normalize(body)(using C.bind(id, normalized)))
+      }
 
     // Redexes
     // -------
