@@ -2,6 +2,11 @@ import examples/benchmarks/runner
 
 import list
 
+def append[A](l: List[A], other: List[A]): List[A] = l match {
+  case Nil() => other
+  case Cons(a, rest) => Cons(a, append(rest, other))
+}
+
 def abs(n: Int): Int = if (n < 0) 0 - n else n
 def max(n: Int, m: Int): Int = if (n > m) n else m
 def maximum(l: List[Int]): Int =

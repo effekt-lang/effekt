@@ -311,10 +311,8 @@ def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
 /// ```
 ///
 /// O(N)
-def append[A](l: List[A], other: List[A]): List[A] = l match {
-  case Nil() => other
-  case Cons(a, rest) => Cons(a, append(rest, other))
-}
+def append[A](l: List[A], other: List[A]): List[A] =
+  l.reverse.reverseOnto(other)
 
 /// Flatten a list of lists into a single list.
 ///
