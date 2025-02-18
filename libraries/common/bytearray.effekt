@@ -41,6 +41,15 @@ extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
 
+/// Creates a new ByteArray of size `size` filled with the value `init`
+def bytearray(size: Int, init: Byte): ByteArray = {
+  val arr = allocate(size);
+  each(0, size) { i =>
+    unsafeSet(arr, i, init)
+  };
+  arr
+}
+
 def resize(source: ByteArray, size: Int): ByteArray = {
   val target = allocate(size)
   val n = min(source.size, target.size)

@@ -1,0 +1,46 @@
+import examples/benchmarks/runner
+
+import bytearray
+import io/error
+import io/filesystem
+
+
+def run(n: Int) = {
+
+  val filename = "/tmp/large_file.txt"
+  val size = 4096
+
+  val _ = {
+    val file = internal::openForWriting(filename)
+    if (file < 0) {
+      panic("failed open for writing")
+    }
+    val outputBuffer = bytearray(size, 33.toByte)
+    outputBuffer.unsafeSet(999, 10.toByte)
+    repeat(n) {
+      val m = internal::write(file, outputBuffer, 0, size, -1)
+      if (m < outputBuffer.size) {
+        panic("failed write")
+      }
+    }
+    internal::close(file)
+  }
+
+  val file = internal::openForReading(filename)
+  if (file < 0) {
+    panic("failed open for reading")
+  }
+  val inputBuffer = bytearray::allocate(size)
+  repeat(n) {
+    val m = internal::read(file, inputBuffer, 0, size, -1)
+    if (m < inputBuffer.size) {
+      panic("failed read")
+    }
+  }
+  internal::close(file)
+
+  return 0
+}
+
+def main() = benchmark(5){run}
+

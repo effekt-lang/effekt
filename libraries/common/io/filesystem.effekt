@@ -109,6 +109,10 @@ def close(file: File): Unit / Exception[IOError] = {
   internal::checkResult(internal::close(file)); ()
 }
 
+def mkdir(path: String): Unit / Exception[IOError] = {
+  internal::checkResult(internal::mkdir(path)); ()
+}
+
 namespace internal {
 
   extern js """
@@ -149,6 +153,12 @@ namespace internal {
         if (err) { callback(err.errno) } else { callback(0) }
       })
     }
+
+    function mkdir(path, callback) {
+      fs.mkdir(path, (err) => {
+        if (err) { callback(err.errno) } else { callback(0) }
+      })
+    }
   """
 
   extern llvm """
@@ -158,6 +168,7 @@ namespace internal {
     declare void @c_fs_read(%Int, %Pos, %Int, %Int, %Int, %Stack)
     declare void @c_fs_write(%Int, %Pos, %Int, %Int, %Int, %Stack)
     declare void @c_fs_close(%Int, %Stack)
+    declare void @c_fs_mkdir(%Pos, %Stack)
   """
 
   extern async def openForReading(path: String): Int =
@@ -201,6 +212,13 @@ namespace internal {
     jsNode "$effekt.capture(callback => close(${file}, callback))"
     llvm """
       call void @c_fs_close(%Int ${file}, %Stack %stack)
+      ret void
+    """
+
+  extern async def mkdir(path: String): Int =
+    jsNode "$effekt.capture(callback => mkdir(${path}, callback))"
+    llvm """
+      call void @c_fs_mkdir(%Pos ${path}, %Stack %stack)
       ret void
     """
 

@@ -22,3 +22,11 @@ effect_handlers_bench/product_early 32768
 effect_handlers_bench/resume_nontail 1366
 effect_handlers_bench/tree_explore 14
 effect_handlers_bench/triples 256
+input_output/large_file 6000
+input_output/small_files 2000
+input_output/interleave_promises 100
+input_output/word_count_ascii 8000
+input_output/word_count_utf8 15000
+input_output/dyck_one 800
+input_output/number_matrix 700
+input_output/financial_format 15000 
