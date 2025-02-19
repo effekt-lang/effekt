@@ -593,16 +593,16 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "tree_explore.effekt" -> Some(Summary(
-      staticDispatches = 4427,
+      staticDispatches = 3317,
       dynamicDispatches = 0,
-      patternMatches = 3490,
+      patternMatches = 2380,
       branches = 3167,
-      pushedFrames = 2207,
-      poppedFrames = 3807,
-      allocations = 2556,
+      pushedFrames = 2697,
+      poppedFrames = 4297,
+      allocations = 1446,
       closures = 0,
-      variableReads = 2051,
-      variableWrites = 1430,
+      variableReads = 941,
+      variableWrites = 630,
       resets = 10,
       shifts = 310,
       resumes = 620
