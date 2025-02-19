@@ -24,7 +24,7 @@ object TransformerCps extends Transformer {
 
   class RecursiveUsage(var jumped: Boolean)
   case class RecursiveDefInfo(id: Id, label: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, used: RecursiveUsage)
-  case class ContinuationInfo(k: Id, param: Id, ks: Id)
+  case class ContinuationInfo(k: Id, vparams: List[Id], ks: Id)
 
   case class TransformerContext(
     requiresThunk: Boolean,
@@ -142,21 +142,22 @@ object TransformerCps extends Transformer {
   }
 
   def toJS(id: Id, b: cps.Block)(using TransformerContext): js.Expr = b match {
-    case cps.Block.BlockLit(vparams, bparams, ks, k, body) =>
-      val used = new RecursiveUsage(false)
-      val label = Id(id)
-
-      val translatedBody = toJS(body)(using recursive(id, label, used, b)).stmts
-
-      if used.jumped then
-        js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
-          List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
-      else
-        js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
-          translatedBody)
-
+    case cps.Block.BlockLit(vparams, bparams, ks, k, body) => maybeToLoop(id, vparams, bparams, ks, k, body)
     case other => toJS(other)
   }
+
+  def maybeToLoop(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, body: Stmt)(using TransformerContext) =
+    val used = new RecursiveUsage(false)
+    val label = Id(id)
+
+    val translatedBody = toJS(body)(using recursive(id, vparams, bparams, ks, k, label, used)).stmts
+
+    if used.jumped then
+      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
+        List(js.While(RawExpr("true"), translatedBody, Some(uniqueName(label)))))
+    else
+      js.Lambda(vparams.map(nameDef) ++ bparams.map(nameDef) ++ List(nameDef(ks), nameDef(k)),
+        translatedBody)
 
   def toJS(b: cps.Block)(using TransformerContext): js.Expr = b match {
     case cps.BlockVar(v)  => nameRef(v)
@@ -185,8 +186,8 @@ object TransformerCps extends Transformer {
   def toJS(k: cps.Cont)(using T: TransformerContext): js.Expr = k match {
     case Cont.ContVar(id) =>
       nameRef(id)
-    case Cont.ContLam(result, ks, body) =>
-      js.Lambda(List(nameDef(result), nameDef(ks)), toJS(body)(using nonrecursive(ks)).stmts)
+    case Cont.ContLam(results, ks, body) =>
+      js.Lambda(results.map(nameDef) :+ nameDef(ks), toJS(body)(using nonrecursive(ks)).stmts)
     case Cont.Abort => js.Undefined
   }
 
@@ -202,7 +203,7 @@ object TransformerCps extends Transformer {
     case Pure.Box(b)                 => toJS(b)
   }
 
-  def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[js.Stmt] = s match {
+  def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[List[js.Stmt]] = s match {
 
     case cps.Stmt.LetDef(id, block, body) =>
       Binding { k =>
@@ -210,7 +211,7 @@ object TransformerCps extends Transformer {
       }
 
     case cps.Stmt.If(cond, thn, els) =>
-      pure(js.If(toJS(cond), toJS(thn).block, toJS(els).block))
+      pure(js.If(toJS(cond), toJS(thn).block, toJS(els).block) :: Nil)
 
     case cps.Stmt.LetExpr(id, binding, body) =>
       Binding { k =>
@@ -219,10 +220,10 @@ object TransformerCps extends Transformer {
 
     // [[ let k(x, ks) = ...; if (...) jump k(42, ks2) else jump k(10, ks3) ]] =
     //    let x; if (...) { x = 42; ks = ks2 } else { x = 10; ks = ks3 } ...
-    case cps.Stmt.LetCont(id, Cont.ContLam(param, ks, body), body2) if canBeDirect(id, body2) =>
+    case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if canBeDirect(id, body2) =>
       Binding { k =>
-        js.Let(nameDef(param), js.Undefined) ::
-          toJS(body2)(using markDirectStyle(id, param, ks)).stmts ++
+        params.map { p => js.Let(nameDef(p), js.Undefined)  } :::
+          toJS(body2)(using markDirectStyle(id, params, ks)).stmts ++
           toJS(maintainDirectStyle(ks, body)).run(k)
       }
 
@@ -232,7 +233,7 @@ object TransformerCps extends Transformer {
       }
 
     case cps.Stmt.Match(sc, Nil, None) =>
-      pure(js.Return($effekt.call("emptyMatch")))
+      pure(js.Return($effekt.call("emptyMatch")) :: Nil)
 
     case cps.Stmt.Match(sc, List((tag, clause)), None) =>
       val scrutinee = toJS(sc)
@@ -254,15 +255,17 @@ object TransformerCps extends Transformer {
             case other => (e, stmts :+ js.Break())
           }
         },
-        default.map { s => toJS(s).stmts }))
+        default.map { s => toJS(s).stmts }) :: Nil)
 
-    case cps.Stmt.Jump(k, arg, ks) if D.directStyle.exists(c => c.k == k) => D.directStyle match {
-      case Some(ContinuationInfo(k2, param2, ks2)) => pure(js.Assign(nameRef(param2), toJS(arg)))
+    case cps.Stmt.Jump(k, vargs, ks) if D.directStyle.exists(c => c.k == k) => D.directStyle match {
+      case Some(ContinuationInfo(k2, params2, ks2)) =>
+        pure((params2 zip vargs).map { case (p, a) => js.Assign(nameRef(p), toJS(a)) })
       case None => sys error "Should not happen"
     }
 
-    case cps.Stmt.Jump(k, arg, ks) =>
-      pure(js.Return(maybeThunking(js.Call(nameRef(k), toJS(arg), toJS(ks)))))
+    case cps.Stmt.Jump(k, vargs, ks) =>
+      pure(js.Return(maybeThunking(js.Call(nameRef(k),
+        vargs.map(toJS) ++  List(toJS(ks)))))  :: Nil)
 
 
     case cps.Stmt.App(Recursive(id, label, vparams, bparams, ks1, k1, used), vargs, bargs, MetaCont(ks), k) =>
@@ -343,17 +346,17 @@ object TransformerCps extends Transformer {
         if (needsKsTmp) stmts.append(js.Assign(nameRef(ks1), nameRef(tmp_ks.get)))
 
         val jump = js.Continue(Some(uniqueName(label)))
-        stmts.appendAll(k2(jump))
+        stmts.appendAll(k2(jump :: Nil))
         stmts.toList
       }
 
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
       pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks),
-        requiringThunk { toJS(k) }))))
+        requiringThunk { toJS(k) }))) :: Nil)
 
     case cps.Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
       val args = vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks), toJS(k))
-      pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)))
+      pure(js.Return(MethodCall(toJS(callee), memberNameRef(method), args:_*)) :: Nil)
 
     // const r = ks.arena.newRegion(); body
     case cps.Stmt.Region(id, ks, body) =>
@@ -397,19 +400,19 @@ object TransformerCps extends Transformer {
     }
 
     case cps.Stmt.Reset(prog, ks, k) =>
-      pure(js.Return(Call(RESET, requiringThunk { toJS(prog)(using nonrecursive(prog)) }, toJS(ks), toJS(k))))
+      pure(js.Return(Call(RESET, requiringThunk { toJS(prog)(using nonrecursive(prog)) }, toJS(ks), toJS(k))) :: Nil)
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
-      pure(js.Return(Call(SHIFT, nameRef(prompt), requiringThunk { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))))
+      pure(js.Return(Call(SHIFT, nameRef(prompt), requiringThunk { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))) :: Nil)
 
     case cps.Stmt.Resume(r, b, ks2, k2) =>
-      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })))
+      pure(js.Return(js.Call(RESUME, nameRef(r), toJS(b)(using nonrecursive(b)), toJS(ks2), requiringThunk { toJS(k2) })) :: Nil)
 
     case cps.Stmt.Hole() =>
-      pure(js.Return($effekt.call("hole")))
+      pure(js.Return($effekt.call("hole")) :: Nil)
   }
 
-  def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[js.Stmt]) =
+  def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
     clause match {
       case cps.Clause(vparams, body) =>
         val fields = C.declarations.getConstructor(variant).fields.map(_.id)
@@ -466,14 +469,11 @@ object TransformerCps extends Transformer {
    * Marks continuation `id` to be optimized to direct assignments to `param` instead of return statements.
    * This is only valid in the same metacontinuation scope `ks`.
    */
-  private def markDirectStyle(id: Id, param: Id, ks: Id)(using C: TransformerContext): TransformerContext =
-    C.copy(directStyle = Some(ContinuationInfo(id, param, ks)))
+  private def markDirectStyle(id: Id, params: List[Id], ks: Id)(using C: TransformerContext): TransformerContext =
+    C.copy(directStyle = Some(ContinuationInfo(id, params, ks)))
 
-  private def recursive(id: Id, label: Id, used: RecursiveUsage, block: cps.Block)(using C: TransformerContext): TransformerContext = block match {
-    case cps.BlockLit(vparams, bparams, ks, k, body) =>
-      C.copy(recursive = Some(RecursiveDefInfo(id, label, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
-    case _ => C
-  }
+  private def recursive(id: Id, vparams: List[Id], bparams: List[Id], ks: Id, k: Id, label: Id, used: RecursiveUsage)(using C: TransformerContext): TransformerContext =
+    C.copy(recursive = Some(RecursiveDefInfo(id, label, vparams, bparams, ks, k, used)), directStyle = None, metacont = Some(ks))
 
   private def nonrecursive(ks: Id)(using C: TransformerContext): TransformerContext =
     C.copy(recursive = None, directStyle = None, metacont = Some(ks))
@@ -510,8 +510,8 @@ object TransformerCps extends Transformer {
       }
       !freeVars.contains(k)
     stmt match {
-      case Stmt.Jump(k2, arg, ks2) if k2 == k => notIn(arg) && T.metacont.contains(ks2.id)
-      case Stmt.Jump(k2, arg, ks2) => notIn(arg)
+      case Stmt.Jump(k2, vargs, ks2) if k2 == k => vargs.forall(notIn) && T.metacont.contains(ks2.id)
+      case Stmt.Jump(k2, vargs, ks2) => vargs.forall(notIn)
       // TODO this could be a tailcall!
       case Stmt.App(callee, vargs, bargs, ks, k) => notIn(stmt)
       case Stmt.Invoke(callee, method, vargs, bargs, ks, k2) => notIn(stmt)

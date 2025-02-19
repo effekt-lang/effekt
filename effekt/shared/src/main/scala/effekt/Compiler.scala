@@ -305,8 +305,7 @@ trait Compiler[Executable] {
     case CoreTransformed(source, tree, mod, core) =>
       val main = Context.checkMain(mod)
       val program = machine.Transformer.transform(main, core)
-      val direct = machine.DirectStyle.rewrite(program)
-      (mod, main, direct)
+      (mod, main, program)
   }
 
   // Helpers
