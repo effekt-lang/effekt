@@ -94,24 +94,6 @@ object Contify {
         case _ =>
           Stmt.LetDef(id, BlockLit(vparams, Nil, ks, k, rewrittenBody), rewrittenRest)
       }
-      //
-      //      if (returnsUnique && !isRecursive) {
-      //        continuations.head match {
-      //          case Cont.ContVar(k2) =>
-      //            println(s"Substituting: ${util.show(k)} !-> ${util.show(k2)}")
-      //            given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
-      //            Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)), contify(id, rewrittenRest))
-      //
-      //          case cont: ContLam =>
-      //            val k3 = Id("k")
-      //            given Substitution = Substitution(conts = Map(k -> ContVar(k3)))
-
-      //
-      //          case _ => ???
-      //        }
-      //      } else {
-      //        Stmt.LetDef(id, BlockLit(vparams, Nil, ks, k, rewrittenBody), rewrittenRest)
-      //      }
 
     // Congruences
 
