@@ -221,7 +221,6 @@ def JsString(scalaString: String): Expr = RawLiteral(s"\"${scalaString}\"")
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
 def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
-  //case Nil => sys error "Block should have at least one statement as body"
   case head :: Nil => head
   case _ => js.Block(stmts)
 }

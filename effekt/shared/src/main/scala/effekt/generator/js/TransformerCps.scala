@@ -259,7 +259,7 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.Jump(k, vargs, ks) if D.directStyle.exists(c => c.k == k) => D.directStyle match {
       case Some(ContinuationInfo(k2, params2, ks2)) =>
-        pure(params2.map(param2 => js.Assign(nameRef(param2), toJS(vargs.head))))
+        pure((params2 zip vargs).map { case (p, a) => js.Assign(nameRef(p), toJS(a)) })
       case None => sys error "Should not happen"
     }
 
