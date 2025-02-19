@@ -222,7 +222,7 @@ object TransformerCps extends Transformer {
     //    let x; if (...) { x = 42; ks = ks2 } else { x = 10; ks = ks3 } ...
     case cps.Stmt.LetCont(id, Cont.ContLam(params, ks, body), body2) if canBeDirect(id, body2) =>
       Binding { k =>
-        js.Let(params.map(nameDef), js.Undefined) ::
+        params.map { p => js.Let(nameDef(p), js.Undefined)  } :::
           toJS(body2)(using markDirectStyle(id, params, ks)).stmts ++
           toJS(maintainDirectStyle(ks, body)).run(k)
       }

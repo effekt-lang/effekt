@@ -52,25 +52,6 @@ object Contify {
   }
 
   def rewrite(stmt: Stmt): Stmt = stmt match {
-    case Stmt.Jump(k, vargs, ks) =>
-      Stmt.Jump(k, vargs.map(rewrite), ks)
-
-    case Stmt.App(callee, vargs, bargs, ks, k) =>
-      Stmt.App(rewrite(callee), vargs.map(rewrite), bargs.map(rewrite), ks, rewrite(k))
-
-    case Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
-      Stmt.Invoke(rewrite(callee), method, vargs.map(rewrite), bargs.map(rewrite), ks, rewrite(k))
-
-    case Stmt.If(cond, thn, els) =>
-      Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
-
-    case Stmt.Match(scrutinee, clauses, default) =>
-      Stmt.Match(
-        rewrite(scrutinee),
-        clauses.map { case (id, cl) => (id, rewrite(cl)) },
-        default.map(rewrite))
-
-    //
 
     case Stmt.LetDef(id, b @ BlockLit(vparams, Nil, ks, k, body), rest) =>
       val rewrittenBody = rewrite(body)
@@ -95,13 +76,21 @@ object Contify {
       // This is not a problem in LLVM since there all blocks are toplevel
       //
       // We approximate whether k is in scope by checking whether it is free in `rest`
+      //
+      // In the future we could perform lambda-dropping to discover more cases
       def inScope(k: Id) = Variables.free(rewrittenRest) contains k
 
       continuations.headOption match {
         case Some(Cont.ContVar(k2)) if returnsUnique && !isRecursive && inScope(k2) =>
-          if (util.show(k2) contains "k6354") println(util.show(rewrittenRest))
           given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
           Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)), contify(id, rewrittenRest))
+
+        case Some(cont: ContLam) if returnsUnique && !isRecursive =>
+          val k2 = Id("k")
+          given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
+          LetCont(k2, cont,
+            Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)),
+              contify(id, rewrittenRest)))
         case _ =>
           Stmt.LetDef(id, BlockLit(vparams, Nil, ks, k, rewrittenBody), rewrittenRest)
       }
@@ -116,9 +105,7 @@ object Contify {
       //          case cont: ContLam =>
       //            val k3 = Id("k")
       //            given Substitution = Substitution(conts = Map(k -> ContVar(k3)))
-      //            LetCont(k3, cont,
-      //              Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)),
-      //                contify(id, rewrittenRest)))
+
       //
       //          case _ => ???
       //        }
@@ -126,8 +113,28 @@ object Contify {
       //        Stmt.LetDef(id, BlockLit(vparams, Nil, ks, k, rewrittenBody), rewrittenRest)
       //      }
 
+    // Congruences
+
     case Stmt.LetDef(id, binding, body) =>
       Stmt.LetDef(id, rewrite(binding), rewrite(body))
+
+    case Stmt.Jump(k, vargs, ks) =>
+      Stmt.Jump(k, vargs.map(rewrite), ks)
+
+    case Stmt.App(callee, vargs, bargs, ks, k) =>
+      Stmt.App(rewrite(callee), vargs.map(rewrite), bargs.map(rewrite), ks, rewrite(k))
+
+    case Stmt.Invoke(callee, method, vargs, bargs, ks, k) =>
+      Stmt.Invoke(rewrite(callee), method, vargs.map(rewrite), bargs.map(rewrite), ks, rewrite(k))
+
+    case Stmt.If(cond, thn, els) =>
+      Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
+
+    case Stmt.Match(scrutinee, clauses, default) =>
+      Stmt.Match(
+        rewrite(scrutinee),
+        clauses.map { case (id, cl) => (id, rewrite(cl)) },
+        default.map(rewrite))
 
     case Stmt.LetExpr(id, binding, body) =>
       Stmt.LetExpr(id, rewrite(binding), rewrite(body))
