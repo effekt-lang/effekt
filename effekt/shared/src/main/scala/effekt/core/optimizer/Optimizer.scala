@@ -37,6 +37,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       StaticArguments.transform(mainSymbol, tree)
     }
 
+    tree = EliminateNothing.rewrite(tree)
+
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
       val normalized = Normalizer.normalize(Set(mainSymbol), anfed, Context.config.maxInlineSize().toInt, isLLVM)

@@ -235,6 +235,8 @@ object Normalizer { normal =>
             if !C.preserveBoxing && !Variables.free(body).containsBlock(k.id) =>
           abort
 
+        case Stmt.Match(sc, Nil, None) => Stmt.Match(sc, Nil, None)
+
         // [[ val x = sc match { case id(ps) => body2 }; body ]] = sc match { case id(ps) => val x = body2; body }
         case Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
           Stmt.Match(sc, List((id2, BlockLit(tparams2, cparams2, vparams2, bparams2,
