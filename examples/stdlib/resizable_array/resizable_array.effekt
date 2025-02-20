@@ -27,6 +27,19 @@ def main() = {
       assert(a.popRight(), 1)
       assert(a.popRight(), 1)
     }
+    test("out of bounds check") {
+      def checkOutOfBounds(arr: ResizableArray[Int], index: Int) = {
+        with on[OutOfBounds].default { () }
+        arr.get(index)
+        assertTrue(false, "not out of bounds")
+      }
+      with on[OutOfBounds].default { assertTrue(false, "out of bounds") }
+      val a = resizableArray()
+      a.checkOutOfBounds(-1)
+      a.add(1)
+      a.add(2)
+      a.checkOutOfBounds(2)
+    }
   };
   ()
 }
