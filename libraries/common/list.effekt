@@ -375,10 +375,11 @@ def reverse[A](l: List[A]): List[A] = {
 /// ```
 ///
 /// O(|l|)
-def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
-  case Nil() => other
-  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
-}
+def reverseOnto[A](l: List[A], other: List[A]): List[A] =
+  l match {
+    case Nil() => other
+    case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
+  }
 
 /// Concatenate list `l` with list `other`:
 ///
@@ -425,7 +426,7 @@ def join[A](lists: List[List[A]]): List[A] = {
 /// ```
 ///
 /// O(N)
-def join[A](lists: List[List[A]], between: List[A]): List[A] = {
+def join[A](lists: List[List[A]], between: List[A]): List[A] =
   lists match {
     case Nil() => Nil()
     case Cons(firstList, restOfLists) =>
@@ -433,7 +434,6 @@ def join[A](lists: List[List[A]], between: List[A]): List[A] = {
         restOfLists.flatMap { list => between.append(list)}
       )
   }
-}
 
 /// Take the first `n` elements of a given list.
 ///
