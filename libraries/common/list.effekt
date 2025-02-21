@@ -167,9 +167,52 @@ def foreachIndex[A](list: List[A]){ f: (Int, A) {Control} => Unit }: Unit = {
 /// Map a function `f` over elements in a given list.
 ///
 /// O(N)
-def map[A, B](l: List[A]) { f: A => B } : List[B] = {
-  var acc = Nil[B]()
-  l.foreach { el => acc = Cons(f(el), acc) }
+def map[A, B](l: List[A]) { f: A => B }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreach { el =>
+    acc = Cons(f(el), acc)
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list.
+///
+/// O(N)
+def mapWithIndex[A, B](l: List[A]) { f: (Int, A) => B }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreachIndex { (i, el) =>
+    acc = Cons(f(i, el), acc)
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements in a given list,
+/// keeping only the elements for which the function returned `true`,
+/// discarding the elements for which the function returned `false`.
+///
+/// O(N)
+def filter[A](l: List[A]) { shouldKeep: A => Bool }: List[A] = {
+  var acc: List[A] = Nil()
+  l.foreach { a =>
+    if (shouldKeep(a)) {
+      acc = Cons(a, acc)
+    }
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list,
+/// keeping only the elements for which the function returned `true`,
+/// discarding the elements for which the function returned `false`.
+///
+/// O(N)
+def filterWithIndex[A](l: List[A]) { shouldKeep: (Int, A) => Bool }: List[A] = {
+  var acc: List[A] = Nil()
+  l.foreachIndex { (i, a) =>
+    if (shouldKeep(i, a)) {
+      acc = Cons(a, acc)
+    }
+  }
   acc.reverse
 }
 
@@ -179,12 +222,27 @@ def map[A, B](l: List[A]) { f: A => B } : List[B] = {
 ///
 /// O(N)
 def collect[A, B](l: List[A]) { f : A => Option[B] }: List[B] = {
-  var acc = Nil[B]()
+  var acc: List[B] = Nil()
   l.foreach { a =>
-    val optB = f(a)
-    optB match {
-      case None() => ();
-      case Some(b) => acc = Cons(b, acc);
+    f(a) match {
+      case None() => ()
+      case Some(b) => acc = Cons(b, acc)
+    }
+  }
+  acc.reverse
+}
+
+/// Map a function `f` over elements and their indices in a given list,
+/// keeping only the elements for which the function returned `Some(...)`,
+/// discarding the elements for which the function returned `None()`.
+///
+/// O(N)
+def collectWithIndex[A, B](l: List[A]) { f: (Int, A) => Option[B] }: List[B] = {
+  var acc: List[B] = Nil()
+  l.foreachIndex { (i, a) =>
+    f(i, a) match {
+      case None() => ()
+      case Some(b) => acc = Cons(b, acc)
     }
   }
   acc.reverse
