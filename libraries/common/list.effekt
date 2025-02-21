@@ -285,7 +285,7 @@ def any[A](list: List[A]) { predicate: A => Bool }: Bool =
 def contains[A](list: List[A], element: A) { eq: (A, A) => Bool }: Bool =
   list.any { x => eq(x, element) }
 
-/// Find the index of the given `element`,
+/// Find the first index of the given `element`,
 /// comparing for equality with the given `eq` function.
 ///
 /// O(N)
@@ -295,6 +295,20 @@ def indexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = 
     if (eq(element, a)) {
       result = Some(i)
       label.break()
+    }
+  }
+  result
+}
+
+/// Find the last index of the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def lastIndexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var result = None()
+  list.foreachIndex { (i, a) {label} =>
+    if (eq(element, a)) {
+      result = Some(i)
     }
   }
   result
