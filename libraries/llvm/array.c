@@ -54,4 +54,25 @@ struct Pos c_array_set(const struct Pos arr, const Int index, const struct Pos v
   return Unit;
 }
 
+struct Pos c_array_fill(const struct Pos arr, const struct Pos value) {
+  uint64_t *sizePtr = arr.obj + sizeof(struct Header);
+  uint64_t size = *sizePtr;
+  struct Pos *dataPtr = arr.obj + sizeof(struct Header) + sizeof(uint64_t);
+  
+  // First erase all existing elements
+  for (uint64_t i = 0; i < size; i++) {
+    erasePositive(dataPtr[i]);
+  }
+  
+  // Fill array with shared copies of the value
+  for (uint64_t i = 0; i < size; i++) {
+    dataPtr[i] = value;
+    sharePositive(value);
+  }
+  
+  erasePositive(arr);
+  erasePositive(value);
+  return arr;
+}
+
 #endif

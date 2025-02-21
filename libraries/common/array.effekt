@@ -3,6 +3,7 @@ module array
 import effekt
 import exception
 import list
+import Option
 
 /// A mutable 0-indexed fixed-sized array.
 extern type Array[T]
@@ -81,7 +82,13 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   """
   vm "array::unsafeSet[T](Array[T], Int, T)"
 
-
+extern def fill[T](arr: Array[T], filler: T): Unit = 
+  js "${arr}.fill(${filler})"
+  chez "(vector-fill! ${arr} ${filler})"
+  llvm """
+    %z = call %Pos @c_array_fill(%Pos ${arr}, %Pos ${filler})
+    ret %Pos %z
+  """
 
 // Derived operations:
 
@@ -147,6 +154,9 @@ def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int):
 
 // Utility functions:
 
+/// Converts the given array into a list.
+/// 
+/// O(N)
 def toList[T](arr: Array[T]): List[T] = {
   var i = arr.size - 1;
   var l = Nil[T]()
@@ -157,6 +167,9 @@ def toList[T](arr: Array[T]): List[T] = {
   l
 }
 
+/// Traverse a list, applying the given action on every element.
+///
+/// O(N)
 def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
   each(0, arr.size) { i =>
     action(arr.unsafeGet(i))
@@ -167,22 +180,350 @@ def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
     action(arr.unsafeGet(i)) {label}
   }
 
+
+/// Traverse a list, applying the given action on every element and its (zero-based) index.
+///
+/// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
   each(0, arr.size) { i =>
     action(i, arr.unsafeGet(i))
   }
 
+/// Traverse a list, applying the given action on every element and its (zero-based) index.
+///
+/// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(i, arr.unsafeGet(i)) {label}
   }
 
+/// Sum the elements of the array.
+/// 
+/// O(N)
 def sum(list: Array[Int]): Int = {
   var acc = 0
   list.foreach { x =>
     acc = acc + x
   }
   acc
+}
+
+/// Checks whether two given are equal with respect to an equalty funciton defined on their element.
+/// 
+/// O(N)
+def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
+  if (this.size != other.size) false
+  else {
+    var res = true
+    this.foreachIndex { (idx, elem) =>
+      if (not(eq(elem, other.unsafeGet(idx)))) {
+        res = false
+      }
+    }
+    res
+  }
+}
+
+/// Map a function `f` over the elements in a given array.
+/// Modifies the array in-place.
+///
+/// O(N)
+def map[A](arr: Array[A]) { f: A => A }: Unit = {
+  arr.foreachIndex { (idx, elem) =>
+    arr.unsafeSet(idx, f(arr.unsafeGet(idx)))
+  }
+}
+
+/// Map a function over elements.
+/// Allocates a new array of the same size.
+///
+/// O(N)
+def mapped[A, B](arr: Array[A]) { f: A => B }: Array[B] = {
+  val res = allocate(arr.size)
+  arr.foreachIndex { (idx, elem) =>
+    res.unsafeSet(idx, f(arr.unsafeGet(idx)))
+  }
+  res
+}
+
+/// Reverses the array in-place
+/// 
+/// O(N)
+def reverse[A](arr: Array[A]): Unit = {
+  val size = arr.size()
+  val mid = size / 2
+
+  // Swap elements from start and end, moving towards the middle
+  each(0, mid) { i =>
+    val temp = arr.unsafeGet(i)
+    val j = size - 1 - i
+    val other = arr.unsafeGet(j)
+    arr.unsafeSet(i, other)
+    arr.unsafeSet(j, temp)
+  }
+}
+/// Creates a new array with elements in reverse order.
+/// 
+/// O(N)
+def reversed[A](arr: Array[A]): Array[A] = {
+  val size = arr.size()
+  val result = allocate[A](size)
+  
+  // Copy elements in reverse order to new array
+  each(0, size) { i =>
+    val value = arr.unsafeGet(i)
+    result.unsafeSet(size - 1 - i, value)
+  }
+  result
+}
+
+/// Fold a list using `f`, starting from the left given a starting value.
+///
+/// O(N)
+def foldLeft[A, B](arr: Array[A], init: B) { f: (B, A) => B }: B = {
+  var acc = init;
+  arr.foreach { x => acc = f(acc, x) };
+  acc
+}
+
+/// Fold a list using `f`, starting from the right given a starting value.
+///
+/// O(N)
+def foldRight[A, B](arr: Array[A], init: B) { f: (A, B) => B }: B = {
+  var acc = init;
+  arr.reversed.foreach { x => acc = f(x, acc) };
+  acc
+}
+
+/// Check if predicate is true for all elements.
+///
+/// O(N)
+def all[A](arr: Array[A]) { predicate: A => Bool }: Bool = {
+  var result = true
+  arr.foreach { x =>
+    if (not(predicate(x))) result = false
+  }
+  result
+}
+
+/// Check if predicate is true for at least one element.
+///
+/// O(N)
+def any[A](arr: Array[A]) { predicate: A => Bool }: Bool = {
+  not(arr.all { x => not(predicate(x)) })
+}
+
+/// Count elements satisfying the predicate.
+///
+/// Examples:
+/// ```
+/// > [1, 2, 3, 4, 5].count { x => x % 2 == 0 }
+/// 2
+/// ```
+///
+/// O(N)
+def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
+  var count = 0
+  arr.foreach { x =>
+    if (predicate(x)) count = count + 1
+  }
+  count
+}
+
+/// Take first n elements.
+/// Returns a new array.
+///
+/// Examples:
+/// ```
+/// > [1, 2, 3, 4].take(2)
+/// [1, 2]
+/// ```
+///
+/// O(min(n, size))
+def take[A](arr: Array[A], n: Int): Array[A] = {
+  val len = min(max(0, n), arr.size)
+  val result = allocate[A](len)
+  each(0, len) { i => 
+    result.unsafeSet(i, arr.unsafeGet(i))
+  }
+  result
+}
+
+// Drop first n elements.
+/// Returns a new array.
+///
+/// Examples:
+/// ```
+/// > [1, 2, 3, 4].drop(2)
+/// [3, 4]
+/// ```
+///
+/// O(size - n)
+def drop[A](arr: Array[A], n: Int): Array[A] = {
+  val start = min(max(0, n), arr.size)
+  val len = arr.size - start
+  val result = allocate[A](len)
+  each(0, len) { i =>
+    result.unsafeSet(i, arr.unsafeGet(i + start))
+  }
+  result
+}
+
+/// Return a slice from start (inclusive) to end (exclusive).
+/// Returns a new array.
+///
+/// Examples:
+/// ```
+/// > [1, 2, 3, 4, 5, 6].slice(1, 4)
+/// [2, 3, 4]
+/// ```
+///
+/// O(N)
+def slice[A](arr: Array[A], start: Int, end: Int): Array[A] = {
+  val validStart = min(max(0, start), arr.size)
+  val validEnd = min(max(validStart, end), arr.size)
+  val len = validEnd - validStart
+  val result = allocate[A](len)
+  each(0, len) { i =>
+    result.unsafeSet(i, arr.unsafeGet(i + validStart))
+  }
+  result
+}
+
+/// Zip two arrays into an array of pairs.
+/// Length is minimum of input lengths.
+///
+/// Examples:
+/// ```
+/// > zip([1, 2, 3], [100, 200, 300])
+/// [(1, 100), (2, 200), (3, 300)]
+/// ```
+///
+/// O(min(N, M))
+def zip[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
+  val len = min(this.size, other.size)
+  val result = allocate[(A, B)](len)
+  each(0, len) { i =>
+    result.unsafeSet(i, (this.unsafeGet(i), other.unsafeGet(i)))
+  }
+  result
+}
+
+/// Combine two arrays using given function.
+/// Length is minimum of input lengths.
+///
+/// Examples:
+/// ```
+/// > zipWith([1, 2, 3], [100, 200, 300]) { (a, b) => a + b }
+/// [101, 202, 303]
+/// ```
+///
+/// O(min(N, M))
+def zipWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
+  val len = min(this.size, other.size)
+  val result = allocate[C](len)
+  each(0, len) { i =>
+    result.unsafeSet(i, f(this.unsafeGet(i), other.unsafeGet(i)))
+  }
+  result
+}
+
+/// Get the _first_ index of the last occurance of `elem`, if there is any.
+/// 
+/// O(N)
+def indexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var found = None[Int]()
+  arr.foreachIndex { (idx, elem) =>
+    if (eq(elem, toFind) && found.isEmpty) {
+      found = Some(idx)
+    }
+  }
+  found
+}
+
+/// Get the _last_ index of the last occurance of `elem`, if there is any.
+/// 
+/// O(N)
+def lastIndexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var lastFound = None[Int]()
+  arr.foreachIndex { (idx, elem) =>
+    if (eq(elem, toFind)) {
+      lastFound = Some(idx)
+    }
+  }
+  lastFound
+}
+
+/// Perform binary search to find the index of a given element.
+/// 
+/// O(log N)
+def find[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] = {
+  def binarySearch(lowerIdx: Int, upperIdx: Int): Option[Int] = {
+    if (lowerIdx > upperIdx) None()
+    else {
+      val mid = lowerIdx + (upperIdx - lowerIdx) / 2
+      val current = arr.unsafeGet(mid)
+      ord(current, toFind) match {
+        case Less() => binarySearch(mid + 1, upperIdx)
+        case Greater() => binarySearch(lowerIdx, mid - 1)
+        case Equal() => Some(mid)
+      }
+    }
+  }
+  binarySearch(0, arr.size - 1)
+}
+
+/// Sort array in-place using provided comparison function.
+/// Uses quicksort for O(n log n) average case.
+/// Note: sort is unstable (unlike List.sortBy)
+///
+/// Examples:
+/// ```
+/// > [3, 1, 4, 1, 5].sortBy { (a, b) => a <= b }
+/// [1, 1, 3, 4, 5]
+/// ```
+///
+/// O(N log N) average case
+def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
+  def unsafeSwap[A](arr: Array[A], i: Int, j: Int): Unit = {
+    val tmp = arr.unsafeGet(i)
+    arr.unsafeSet(i, arr.unsafeGet(j))
+    arr.unsafeSet(j, tmp)
+  }
+
+  def partition(low: Int, high: Int): Int = {
+    val pivot = arr.unsafeGet(high)
+    var i = low - 1
+    
+    each(low, high) { j =>
+      ord(arr.unsafeGet(j), pivot) match {
+        case Less() =>
+          i = i + 1
+          unsafeSwap(arr, i, j)
+        case _ => ()
+      }
+    }
+    unsafeSwap(arr, i + 1, high)
+    i + 1
+  }
+  
+  def quickSort(low: Int, high: Int): Unit = {
+    if (low < high) {
+      val par = partition(low, high)
+      quickSort(low, par - 1)
+      quickSort(par + 1, high)
+    }
+  }
+  
+  quickSort(0, arr.size - 1)
+}
+
+/// swap the value at index i with that at index j
+def swap[A](arr: Array[A], i: Int, j: Int): Unit / Exception[OutOfBounds] = {
+  if (i < 0 || i >= arr.size || j < 0 || j >= arr.size) do raise(OutOfBounds(), "Index out of bounds")
+  val tmp = arr.unsafeGet(i)
+  arr.unsafeSet(i, arr.unsafeGet(j))
+  arr.unsafeSet(j, tmp)
 }
 
 // Show Instances
