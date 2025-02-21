@@ -104,3 +104,7 @@ extern global def set[T](ref: Ref[T], value: T): Unit =
     ret %Pos zeroinitializer
   """
   vm "ref::set[T](Ref[T], T)"
+
+/// Modifies the inner contents of the `ref` with a function `f`
+def map[T](ref: Ref[T]) { f: T => T }: Unit =
+  ref.set(f(ref.get))
