@@ -179,12 +179,20 @@ object PatternMatchingCompiler {
 
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
-      def fieldVarsFor(constructor: Id, fieldTypes: List[ValueType]): List[ValueVar] =
-        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue("y"), tpe) })
+      def fieldVarsFor(constructor: Id, fieldPatternsAndTypes: List[(Pattern, ValueType)]): List[ValueVar] =
+        varsFor.getOrElseUpdate(
+          constructor,
+          fieldPatternsAndTypes.map { case (pat, tpe) =>
+            val idHint = pat match
+              case Pattern.Any(id) => id.name.name // if we have a pattern name, use it as a hint!
+              case _ => "y"
+            ValueVar(TmpValue(idHint), tpe)
+          }
+        )
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
-          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.map { case (pat, tpe) => tpe })
+          val fieldVars = fieldVarsFor(constructor, patternsAndTypes)
           val nestedMatches = fieldVars.zip(patternsAndTypes.map { case (pat, tpe) => pat }).toMap
           addClause(constructor,
             // it is important to add nested matches first, since they might include substitutions for the rest.
