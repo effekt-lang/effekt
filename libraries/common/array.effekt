@@ -27,6 +27,7 @@ extern def fill[T](arr: Array[T], filler: T): Unit =
     %z = call %Pos @c_array_fill(%Pos ${arr}, %Pos ${filler})
     ret %Pos %z
   """
+  vm "array::fill[T](Array[T], T)"
 
 /// Creates a new Array of size `size` filled with the value `init`
 def array[T](size: Int, init: T): Array[T] = {

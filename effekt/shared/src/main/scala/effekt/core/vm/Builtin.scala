@@ -260,6 +260,9 @@ lazy val arrays: Builtins = Map(
   builtin("array::unsafeSet[T](Array[T], Int, T)") {
     case As.Array(arr) :: As.Int(index) :: value :: Nil => arr.update(index.toInt, value); Value.Unit()
   },
+  builtin("array::fill[T](Array[T], T)") {
+    case As.Array(arr) :: value :: Nil => arr.mapInPlace(_ => value); Value.Unit()
+  }
 )
 
 lazy val undefined: Builtins = Map(
