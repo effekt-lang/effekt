@@ -383,6 +383,9 @@ def square(x: Double): Double = x * x
 def neg(n: Double): Double =
   0.0 - n
 
+def min(n: Double, m: Double): Double =
+  if (n < m) n else m
+
 def max(n: Double, m: Double): Double =
   if (n > m) n else m
 
