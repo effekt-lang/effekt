@@ -263,21 +263,41 @@ def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
 /// Check if predicate is true for all elements of the given list.
 ///
 /// O(N)
-def all[A](list: List[A]) { predicate: A => Bool }: Bool = {
+def all[A](list: List[A]) { predicate: A => Bool }: Bool =
   list match {
     case Cons(x, xs) => predicate(x) && all(xs) { predicate }
     case Nil() => true
   }
-}
 
 /// Check if predicate is true for at least one element of the given list.
 ///
 /// O(N)
-def any[A](list: List[A]) { predicate: A => Bool }: Bool = {
+def any[A](list: List[A]) { predicate: A => Bool }: Bool =
   list match {
     case Cons(x, xs) => predicate(x) || any(xs) { predicate }
     case Nil() => false
   }
+
+/// Check if the list contains the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def contains[A](list: List[A], element: A) { eq: (A, A) => Bool }: Bool =
+  list.any { x => eq(x, element) }
+
+/// Find the index of the given `element`,
+/// comparing for equality with the given `eq` function.
+///
+/// O(N)
+def indexOf[A](list: List[A], element: A) { eq: (A, A) => Bool }: Option[Int] = {
+  var result = None()
+  list.foreachIndex { (i, a) {label} =>
+    if (eq(element, a)) {
+      result = Some(i)
+      label.break()
+    }
+  }
+  result
 }
 
 /// Count how many elements of a list satisfy the given predicate.
