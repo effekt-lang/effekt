@@ -82,6 +82,7 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   """
   vm "array::unsafeSet[T](Array[T], Int, T)"
 
+/// Fills a given array in-place.
 extern def fill[T](arr: Array[T], filler: T): Unit = 
   js "${arr}.fill(${filler})"
   chez "(vector-fill! ${arr} ${filler})"
@@ -315,12 +316,6 @@ def any[A](arr: Array[A]) { predicate: A => Bool }: Bool = {
 
 /// Count elements satisfying the predicate.
 ///
-/// Examples:
-/// ```
-/// > [1, 2, 3, 4, 5].count { x => x % 2 == 0 }
-/// 2
-/// ```
-///
 /// O(N)
 def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
   var count = 0
@@ -332,12 +327,6 @@ def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
 
 /// Take first n elements.
 /// Returns a new array.
-///
-/// Examples:
-/// ```
-/// > [1, 2, 3, 4].take(2)
-/// [1, 2]
-/// ```
 ///
 /// O(min(n, size))
 def take[A](arr: Array[A], n: Int): Array[A] = {
@@ -351,13 +340,7 @@ def take[A](arr: Array[A], n: Int): Array[A] = {
 
 // Drop first n elements.
 /// Returns a new array.
-///
-/// Examples:
-/// ```
-/// > [1, 2, 3, 4].drop(2)
-/// [3, 4]
-/// ```
-///
+/// 
 /// O(size - n)
 def drop[A](arr: Array[A], n: Int): Array[A] = {
   val start = min(max(0, n), arr.size)
@@ -371,12 +354,6 @@ def drop[A](arr: Array[A], n: Int): Array[A] = {
 
 /// Return a slice from start (inclusive) to end (exclusive).
 /// Returns a new array.
-///
-/// Examples:
-/// ```
-/// > [1, 2, 3, 4, 5, 6].slice(1, 4)
-/// [2, 3, 4]
-/// ```
 ///
 /// O(N)
 def slice[A](arr: Array[A], start: Int, end: Int): Array[A] = {
@@ -393,12 +370,6 @@ def slice[A](arr: Array[A], start: Int, end: Int): Array[A] = {
 /// Zip two arrays into an array of pairs.
 /// Length is minimum of input lengths.
 ///
-/// Examples:
-/// ```
-/// > zip([1, 2, 3], [100, 200, 300])
-/// [(1, 100), (2, 200), (3, 300)]
-/// ```
-///
 /// O(min(N, M))
 def zip[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
   val len = min(this.size, other.size)
@@ -411,12 +382,6 @@ def zip[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
 
 /// Combine two arrays using given function.
 /// Length is minimum of input lengths.
-///
-/// Examples:
-/// ```
-/// > zipWith([1, 2, 3], [100, 200, 300]) { (a, b) => a + b }
-/// [101, 202, 303]
-/// ```
 ///
 /// O(min(N, M))
 def zipWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
@@ -476,12 +441,6 @@ def find[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] =
 /// Sort array in-place using provided comparison function.
 /// Uses quicksort for O(n log n) average case.
 /// Note: sort is unstable (unlike List.sortBy)
-///
-/// Examples:
-/// ```
-/// > [3, 1, 4, 1, 5].sortBy { (a, b) => a <= b }
-/// [1, 1, 3, 4, 5]
-/// ```
 ///
 /// O(N log N) average case
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
