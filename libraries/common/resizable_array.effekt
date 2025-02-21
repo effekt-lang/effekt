@@ -29,7 +29,7 @@ def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
 /// Throw an OutOfBounds exception if index is not a valid index into arr
 def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / Exception[OutOfBounds] = {
-  if (index < 0 && index >= arr.size) {
+  if (index < 0 || index >= arr.size) {
     do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
   }
 }
