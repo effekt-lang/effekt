@@ -19,12 +19,19 @@ extern global def allocate[T](size: Int): Array[T] =
   """
   vm "array::allocate(Int)"
 
+/// Fills a given array in-place.
+extern def fill[T](arr: Array[T], filler: T): Unit = 
+  js "${arr}.fill(${filler})"
+  chez "(vector-fill! ${arr} ${filler})"
+  llvm """
+    %z = call %Pos @c_array_fill(%Pos ${arr}, %Pos ${filler})
+    ret %Pos %z
+  """
+
 /// Creates a new Array of size `size` filled with the value `init`
 def array[T](size: Int, init: T): Array[T] = {
   val arr = allocate[T](size);
-  each(0, size) { i =>
-    unsafeSet(arr, i, init)
-  };
+  arr.fill(init)
   arr
 }
 
@@ -81,15 +88,6 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
     ret %Pos %z
   """
   vm "array::unsafeSet[T](Array[T], Int, T)"
-
-/// Fills a given array in-place.
-extern def fill[T](arr: Array[T], filler: T): Unit = 
-  js "${arr}.fill(${filler})"
-  chez "(vector-fill! ${arr} ${filler})"
-  llvm """
-    %z = call %Pos @c_array_fill(%Pos ${arr}, %Pos ${filler})
-    ret %Pos %z
-  """
 
 // Derived operations:
 
@@ -155,6 +153,24 @@ def copy[T](from: Array[T], start: Int, to: Array[T], offset: Int, length: Int):
 
 // Utility functions:
 
+/// Swap the value at index i with that at index j.
+/// Warning: undefined behaviour if the indices are out bound.
+/// 
+/// O(1)
+def unsafeSwap[A](arr: Array[A], i: Int, j: Int): Unit = {
+  val tmp = arr.unsafeGet(i)
+  arr.unsafeSet(i, arr.unsafeGet(j))
+  arr.unsafeSet(j, tmp)
+}
+
+/// Swap the value at index i with that at index j.
+/// 
+/// O(1)
+def swap[A](arr: Array[A], i: Int, j: Int): Unit / Exception[OutOfBounds] = {
+  if (i < 0 || i >= arr.size || j < 0 || j >= arr.size) do raise(OutOfBounds(), "Index out of bounds")
+  arr.unsafeSwap(i, j)
+}
+
 /// Converts the given array into a list.
 /// 
 /// O(N)
@@ -216,9 +232,10 @@ def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
   if (this.size != other.size) false
   else {
     var res = true
-    this.foreachIndex { (idx, elem) =>
+    this.foreachIndex { (idx, elem) {label} =>
       if (not(eq(elem, other.unsafeGet(idx)))) {
         res = false
+        label.break()
       }
     }
     res
@@ -301,8 +318,11 @@ def foldRight[A, B](arr: Array[A], init: B) { f: (A, B) => B }: B = {
 /// O(N)
 def all[A](arr: Array[A]) { predicate: A => Bool }: Bool = {
   var result = true
-  arr.foreach { x =>
-    if (not(predicate(x))) result = false
+  arr.foreach { (x) {label} =>
+    if (not(predicate(x))) {
+      result = false
+      label.break()
+    }
   }
   result
 }
@@ -341,7 +361,7 @@ def take[A](arr: Array[A], n: Int): Array[A] = {
 // Drop first n elements.
 /// Returns a new array.
 /// 
-/// O(size - n)
+/// O(N)
 def drop[A](arr: Array[A], n: Int): Array[A] = {
   val start = min(max(0, n), arr.size)
   val len = arr.size - start
@@ -356,7 +376,7 @@ def drop[A](arr: Array[A], n: Int): Array[A] = {
 /// Returns a new array.
 ///
 /// O(N)
-def slice[A](arr: Array[A], start: Int, end: Int): Array[A] = {
+def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
   val validStart = min(max(0, start), arr.size)
   val validEnd = min(max(validStart, end), arr.size)
   val len = validEnd - validStart
@@ -398,9 +418,10 @@ def zipWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[
 /// O(N)
 def indexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int] = {
   var found = None[Int]()
-  arr.foreachIndex { (idx, elem) =>
+  arr.foreachIndex { (idx, elem) {label} =>
     if (eq(elem, toFind) && found.isEmpty) {
       found = Some(idx)
+      label.break()
     }
   }
   found
@@ -444,12 +465,6 @@ def find[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] =
 ///
 /// O(N log N) average case
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
-  def unsafeSwap[A](arr: Array[A], i: Int, j: Int): Unit = {
-    val tmp = arr.unsafeGet(i)
-    arr.unsafeSet(i, arr.unsafeGet(j))
-    arr.unsafeSet(j, tmp)
-  }
-
   def partition(low: Int, high: Int): Int = {
     val pivot = arr.unsafeGet(high)
     var i = low - 1
@@ -475,14 +490,6 @@ def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
   }
   
   quickSort(0, arr.size - 1)
-}
-
-/// swap the value at index i with that at index j
-def swap[A](arr: Array[A], i: Int, j: Int): Unit / Exception[OutOfBounds] = {
-  if (i < 0 || i >= arr.size || j < 0 || j >= arr.size) do raise(OutOfBounds(), "Index out of bounds")
-  val tmp = arr.unsafeGet(i)
-  arr.unsafeSet(i, arr.unsafeGet(j))
-  arr.unsafeSet(j, tmp)
 }
 
 // Show Instances

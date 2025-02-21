@@ -72,7 +72,7 @@ struct Pos c_array_fill(const struct Pos arr, const struct Pos value) {
   
   erasePositive(arr);
   erasePositive(value);
-  return arr;
+  return Unit;
 }
 
 #endif
