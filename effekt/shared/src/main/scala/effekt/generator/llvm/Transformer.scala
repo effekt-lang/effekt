@@ -575,16 +575,20 @@ object Transformer {
 
     val newStack = LocalReference(stackType, freshName("stack"))
     emit(Call(newStack.name, Ccc(), stackType, checkLimit, List(stack, ConstantInt(size + 24))));
-    setStack(newStack);
 
     val environmentPointer = LocalReference(stackPointerType, freshName("environmentPointer"));
-    emit(Call(environmentPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(size))));
+    emit(ExtractValue(environmentPointer.name, newStack, 1));
+    val newStack1 = LocalReference(stackType, freshName("stack"));
+    emit(Call(newStack1.name, Ccc(), stackType, stackAllocate, List(newStack, ConstantInt(size))));
 
     storeEnvironmentAt(environmentPointer, environment, StackPointer);
 
     val headerPointer = LocalReference(stackPointerType, freshName("headerPointer"));
-    emit(Call(headerPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(24))));
+    emit(ExtractValue(headerPointer.name, newStack1, 1));
+    val newStack2 = LocalReference(stackType, freshName("stack"));
+    emit(Call(newStack2.name, Ccc(), stackType, stackAllocate, List(newStack1, ConstantInt(24))));
 
+    setStack(newStack2);
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, headerPointer, List(0, 0)));
     val sharerPointer = LocalReference(PointerType(), freshName("sharer_pointer"));
@@ -602,8 +606,11 @@ object Transformer {
       ()
     } else {
       val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
+      val newStack = LocalReference(stackType, freshName("stack"));
       val size = ConstantInt(environmentSize(environment));
-      emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
+      emit(Call(newStack.name, Ccc(), stackType, stackDeallocate, List(stack, size)));
+      setStack(newStack);
+      emit(ExtractValue(stackPointer.name, getStack(), 1));
       loadEnvironmentAt(stackPointer, environment, StackPointer)
     }
   }
@@ -679,7 +686,10 @@ object Transformer {
     val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
     // TODO properly find size
     val size = ConstantInt(24);
-    emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
+    val newStack = LocalReference(stackType, freshName("stack"));
+    emit(Call(newStack.name, Ccc(), stackType, stackDeallocate, List(stack, size)));
+    setStack(newStack);
+    emit(ExtractValue(stackPointer.name, newStack, 1))
 
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
