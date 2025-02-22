@@ -232,9 +232,11 @@ object TransformerCps extends Transformer {
         js.Const(nameDef(id), toJS(binding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k)
       }
 
+    // no clauses
     case cps.Stmt.Match(sc, Nil, None) =>
       pure(js.Return($effekt.call("emptyMatch")) :: Nil)
 
+    // only one match clause
     case cps.Stmt.Match(sc, List((tag, clause)), None) =>
       val scrutinee = toJS(sc)
       val (_, stmts) = toJS(scrutinee, tag, clause)
@@ -250,8 +252,8 @@ object TransformerCps extends Transformer {
 
           val stmts = binding.stmts
 
-          stmts.last match {
-            case terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue) => (e, stmts)
+          stmts.lastOption match {
+            case Some(terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue)) => (e, stmts)
             case other => (e, stmts :+ js.Break())
           }
         },
@@ -521,8 +523,12 @@ object TransformerCps extends Transformer {
       } && default.forall(body => canBeDirect(k, body))
       case Stmt.LetDef(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
-      case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
-        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
+
+      // letcont k1 x = ... k; ... k1
+      //   or
+      // letcont k1 x = ...; ... k ...   and k not free in body of k1
+      case Stmt.LetCont(k1, Cont.ContLam(result, ks2, body), body2) =>
+        def willBeDirectItself = canBeDirect(k, maintainDirectStyle(ks2, body)) && canBeDirect(k1, body2)
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
         willBeDirectItself || notFreeinContinuation
       case Stmt.Region(id, ks, body) => notIn(body)
