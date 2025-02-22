@@ -180,23 +180,22 @@ object PatternMatchingCompiler {
 
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
-      def fieldVarsFor(constructor: Id, fieldPatternsAndTypes: List[(Pattern, ValueType)]): List[ValueVar] = {
-        val fieldNames = constructor match {
-          case c: symbols.Constructor => c.fields.map(_.name.name)
-          case _ => INTERNAL_ERROR(s"Expected constructor in tag pattern when compiling, got: ${constructor.getClass.toString}")
-        }
+      def fieldVarsFor(constructor: Id, fieldInfo: List[((Pattern, ValueType), String)]): List[ValueVar] =
         varsFor.getOrElseUpdate(
           constructor,
-          fieldPatternsAndTypes.zip(fieldNames).map {
+          fieldInfo.map {
             case ((Pattern.Any(id), tpe),         _) => ValueVar(TmpValue(id.name.name), tpe)
             case ((_,               tpe), fieldName) => ValueVar(TmpValue(fieldName),    tpe)
           }
         )
-      }
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
-          val fieldVars = fieldVarsFor(constructor, patternsAndTypes)
+          val fieldNames = constructor match {
+            case c: symbols.Constructor => c.fields.map(_.name.name)
+            case _ => List.fill(patternsAndTypes.size) { "y" } // NOTE: Only reached in PatternMatchingTests
+          }
+          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.zip(fieldNames))
           val nestedMatches = fieldVars.zip(patternsAndTypes.map { case (pat, tpe) => pat }).toMap
           addClause(constructor,
             // it is important to add nested matches first, since they might include substitutions for the rest.
