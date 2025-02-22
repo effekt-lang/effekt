@@ -184,14 +184,16 @@ object PatternMatchingCompiler {
         varsFor.getOrElseUpdate(
           constructor,
           fieldInfo.map {
+            // if it's a pattern named by the user in the program, use the supplied name
             case ((Pattern.Any(id), tpe),         _) => ValueVar(TmpValue(id.name.name), tpe)
+            // otherwise, use the field name of the given field
             case ((_,               tpe), fieldName) => ValueVar(TmpValue(fieldName),    tpe)
           }
         )
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
-          val fieldNames = constructor match {
+          val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
             case _ => List.fill(patternsAndTypes.size) { "y" } // NOTE: Only reached in PatternMatchingTests
           }
