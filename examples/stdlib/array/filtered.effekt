@@ -1,0 +1,7 @@
+def main() = {
+  println(array::build(10) { x => x }.filtered { x => x < 5 })
+  println(array(0, 1).filtered { x => x > 0 })
+  println(array(5, 1).filtered { x => x == 1 })
+  println(array(5, 1).filtered { x => x != 1 })
+  println(array::build(10000) { x => x + 1 }.filtered { x => mod(x, 2) == 0 }.size == 5000)
+}

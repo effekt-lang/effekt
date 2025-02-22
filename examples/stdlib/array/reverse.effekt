@@ -1,0 +1,11 @@
+def main() = {
+  val empty = array(0, 1)
+  empty.reverse
+  println(empty)
+
+  val arr1 = array::build(5) { x => x }
+  arr1.reverse
+  println(arr1)
+  arr1.reverse
+  println(arr1)
+}

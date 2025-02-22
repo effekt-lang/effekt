@@ -1,0 +1,16 @@
+def main() = {
+  val (arr1, arr2) = array(0, "a").zipped(array(0, "a")).unzipped
+  println(arr1.size == 0)
+  println(arr2.size == 0)
+  val (arr3, arr4) = array(0, 1).zipped(array(1, 1)).unzipped
+  println(arr3.size == 0)
+  println(arr4.size == 0)
+  val (arr5, arr6) = array(1, 1).zipped(array(0, 1)).unzipped
+  println(arr5.size == 0)
+  println(arr6.size == 0)
+  val arr7 = array(10, "a")
+  val arr8 = array(10, 1)
+  val (arr9, arr10) = arr7.zipped(arr8).unzipped
+  println(equals(arr7, arr9) { (x, y) => x == y })
+  println(equals(arr8, arr10) { (x, y) => x == y })
+}

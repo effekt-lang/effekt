@@ -1,0 +1,17 @@
+import stringbuffer
+
+def find(arr: Array[Int], elem: Int): Unit = {
+  val optIdx = arr.find(elem) { compareInt }
+  optIdx match {
+    case None() => println("not found")
+    case Some(idx) => println(s"found at ${idx.show}")
+  }
+}
+
+def main() = {
+  find(fromList([]), 1)
+  find(fromList([0]), 1)
+  find(fromList([0]), 0)
+  find(array(1000, 1), 1)
+  find(array::build(1000) { x => x }, 100)
+}
