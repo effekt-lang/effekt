@@ -114,7 +114,7 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
   arr
 }
 
-def resize[T](source: Array[T], size: Int): Array[T] = {
+def resized[T](source: Array[T], size: Int): Array[T] = {
   val target = allocate(size)
   val n = min(source.size, target.size)
   def go(i: Int): Array[T] =
@@ -131,7 +131,7 @@ def resize[T](source: Array[T], size: Int): Array[T] = {
  * Creates a copy of `arr`
  */
 def copy[T](array: Array[T]): Array[T] =
-  array.resize(array.size)
+  array.resized(array.size)
 
 /**
  * Copies `length`-many elements from `from` to `to`
@@ -193,11 +193,13 @@ def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
     action(arr.unsafeGet(i))
   }
 
+/// Traverse a list, applying the given action on every element.
+///
+/// O(N)
 def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
   each(0, arr.size) { (i) {label} =>
     action(arr.unsafeGet(i)) {label}
   }
-
 
 /// Traverse a list, applying the given action on every element and its (zero-based) index.
 ///
@@ -314,6 +316,24 @@ def foldRight[A, B](arr: Array[A], init: B) { f: (A, B) => B }: B = {
   acc
 }
 
+/// Filters a given array with respect to a given predicate such that a
+/// new array containing all the elements for which the predicate
+/// holds is allocated.
+/// 
+/// O(N)
+def filtered[A](arr: Array[A]) { pred: A => Bool }: Array[A] = {
+  val nMatches = arr.count { pred }
+  val res = allocate(nMatches)
+  var idx = 0
+  arr.foreach { x =>
+    if (pred(x)) {
+      res.unsafeSet(idx, x)
+      idx = idx + 1
+    }
+  }
+  res
+}
+
 /// Check if predicate is true for all elements.
 ///
 /// O(N)
@@ -349,7 +369,7 @@ def count[A](arr: Array[A]) { predicate: A => Bool }: Int = {
 /// Take first n elements.
 /// Returns a new array.
 ///
-/// O(min(n, size))
+/// O(N)
 def take[A](arr: Array[A], n: Int): Array[A] = {
   val len = min(max(0, n), arr.size)
   val result = allocate[A](len)
@@ -392,7 +412,7 @@ def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
 /// Length is minimum of input lengths.
 ///
 /// O(min(N, M))
-def zip[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
+def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
   val len = min(this.size, other.size)
   val result = allocate[(A, B)](len)
   each(0, len) { i =>
@@ -405,13 +425,52 @@ def zip[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
 /// Length is minimum of input lengths.
 ///
 /// O(min(N, M))
-def zipWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
+def zippedWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
   val len = min(this.size, other.size)
   val result = allocate[C](len)
   each(0, len) { i =>
     result.unsafeSet(i, f(this.unsafeGet(i), other.unsafeGet(i)))
   }
   result
+}
+
+/// Produce a pair of arrays from an array of pairs.
+/// Allocates two new arrays as a result.
+///
+/// O(N)
+def unzipped[A, B](arr: Array[(A, B)]): (Array[A], Array[B]) = {
+  val arr1 = allocate(arr.size)
+  val arr2 = allocate(arr.size)
+  arr.foreachIndex { (idx, tpl) =>
+    val (x, y) = tpl
+    arr1.unsafeSet(idx, x)
+    arr2.unsafeSet(idx, y)
+  }
+  (arr1, arr2)
+}
+
+/// Partition a given array into two arrays.
+/// The left array contains the elements that satsify the predicate,
+/// the right array contains the elements that do not.
+///
+/// O(N)
+def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
+  val nTcases = arr.count { pred }
+  val nFcases = arr.size - nTcases
+  val tcases = allocate(nTcases)
+  val fcases = allocate(nFcases)
+  var tidx = 0
+  var fidx = 0
+  arr.foreach { x =>
+    if (pred(x)) {
+      tcases.unsafeSet(tidx, x)
+      tidx = tidx + 1
+    } else {
+      fcases.unsafeSet(fidx, x)
+      fidx = fidx + 1
+    }
+  }
+  (tcases, fcases)
 }
 
 /// Get the _first_ index of the last occurance of `elem`, if there is any.
@@ -460,9 +519,8 @@ def find[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] =
   binarySearch(0, arr.size - 1)
 }
 
-/// Sort array in-place using provided comparison function.
-/// Uses quicksort for O(n log n) average case.
-/// Note: sort is unstable (unlike List.sortBy)
+/// Sort an array in-place using provided comparison function.
+/// Note: sort is unstable since it uses QuickSort (unlike list::sortBy)
 ///
 /// O(N log N) average case
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
@@ -491,6 +549,17 @@ def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
   }
   
   quickSort(0, arr.size - 1)
+}
+
+/// Sort an array using provided comparison function.
+/// A newly allocated sorted array is returned as result, i.e., the sorting is not in-place.
+/// Note: sort is unstable since it uses QuickSort (unlike list::sortBy)
+///
+/// O(N log N) average case
+def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
+  val res = arr.copy()
+  res.sort { ord }
+  res
 }
 
 // Show Instances
