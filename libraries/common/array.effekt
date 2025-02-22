@@ -114,7 +114,7 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
   arr
 }
 
-def resized[T](source: Array[T], size: Int): Array[T] = {
+def resize[T](source: Array[T], size: Int): Array[T] = {
   val target = allocate(size)
   val n = min(source.size, target.size)
   def go(i: Int): Array[T] =
@@ -131,7 +131,7 @@ def resized[T](source: Array[T], size: Int): Array[T] = {
  * Creates a copy of `arr`
  */
 def copy[T](array: Array[T]): Array[T] =
-  array.resized(array.size)
+  array.resize(array.size)
 
 /**
  * Copies `length`-many elements from `from` to `to`
