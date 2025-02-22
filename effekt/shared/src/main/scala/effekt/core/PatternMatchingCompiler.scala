@@ -4,6 +4,7 @@ package core
 import effekt.context.Context
 import effekt.core.substitutions.Substitution
 import effekt.symbols.TmpValue
+import effekt.util.messages.INTERNAL_ERROR
 
 import scala.collection.mutable
 
@@ -179,16 +180,19 @@ object PatternMatchingCompiler {
 
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
-      def fieldVarsFor(constructor: Id, fieldPatternsAndTypes: List[(Pattern, ValueType)]): List[ValueVar] =
+      def fieldVarsFor(constructor: Id, fieldPatternsAndTypes: List[(Pattern, ValueType)]): List[ValueVar] = {
+        val fieldNames = constructor match {
+          case c: symbols.Constructor => c.fields.map(_.name.name)
+          case _ => INTERNAL_ERROR(s"Expected constructor in tag pattern when compiling, got: ${constructor.getClass.toString}")
+        }
         varsFor.getOrElseUpdate(
           constructor,
-          fieldPatternsAndTypes.map { case (pat, tpe) =>
-            val idHint = pat match
-              case Pattern.Any(id) => id.name.name // if we have a pattern name, use it as a hint!
-              case _ => "y"
-            ValueVar(TmpValue(idHint), tpe)
+          fieldPatternsAndTypes.zip(fieldNames).map {
+            case ((Pattern.Any(id), tpe),         _) => ValueVar(TmpValue(id.name.name), tpe)
+            case ((_,               tpe), fieldName) => ValueVar(TmpValue(fieldName),    tpe)
           }
         )
+      }
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
