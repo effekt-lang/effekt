@@ -321,17 +321,16 @@ def foldRight[A, B](arr: Array[A], init: B) { f: (A, B) => B }: B = {
 /// holds is allocated.
 /// 
 /// O(N)
-def filtered[A](arr: Array[A]) { pred: A => Bool }: Array[A] = {
-  val nMatches = arr.count { pred }
-  val res = allocate(nMatches)
+def filtered[A](arr: Array[A]) { shouldKeep: A => Bool }: Array[A] = {
+  val res = arr.copy()
   var idx = 0
   arr.foreach { x =>
-    if (pred(x)) {
+    if (shouldKeep(x)) {
       res.unsafeSet(idx, x)
       idx = idx + 1
     }
   }
-  res
+  res.resize(idx + 1)
 }
 
 /// Check if predicate is true for all elements.
@@ -455,10 +454,8 @@ def unzipped[A, B](arr: Array[(A, B)]): (Array[A], Array[B]) = {
 ///
 /// O(N)
 def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
-  val nTcases = arr.count { pred }
-  val nFcases = arr.size - nTcases
-  val tcases = allocate(nTcases)
-  val fcases = allocate(nFcases)
+  val tcases = arr.copy()
+  val fcases = arr.copy()
   var tidx = 0
   var fidx = 0
   arr.foreach { x =>
@@ -470,7 +467,7 @@ def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
       fidx = fidx + 1
     }
   }
-  (tcases, fcases)
+  (tcases.resize(tidx + 1), fcases.resize(fidx + 1))
 }
 
 /// Get the _first_ index of the last occurance of `elem`, if there is any.
