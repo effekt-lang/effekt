@@ -500,7 +500,7 @@ def lastIndexOf[A](arr: Array[A], toFind: A) { eq: (A, A) => Bool }: Option[Int]
 /// Perform binary search to find the index of a given element.
 /// 
 /// O(log N)
-def find[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] = {
+def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Option[Int] = {
   def binarySearch(lowerIdx: Int, upperIdx: Int): Option[Int] = {
     if (lowerIdx > upperIdx) None()
     else {

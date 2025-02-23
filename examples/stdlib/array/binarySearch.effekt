@@ -1,7 +1,7 @@
 import stringbuffer
 
 def find(arr: Array[Int], elem: Int): Unit = {
-  val optIdx = arr.find(elem) { compareInt }
+  val optIdx = arr.binarySearch(elem) { compareInt }
   optIdx match {
     case None() => println("not found")
     case Some(idx) => println(s"found at ${idx.show}")
