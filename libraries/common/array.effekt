@@ -330,7 +330,7 @@ def filtered[A](arr: Array[A]) { shouldKeep: A => Bool }: Array[A] = {
       idx = idx + 1
     }
   }
-  res.resize(idx + 1)
+  res.resize(idx)
 }
 
 /// Check if predicate is true for all elements.
@@ -467,7 +467,7 @@ def partioned[A](arr: Array[A]) { pred: A => Bool }: (Array[A], Array[A]) = {
       fidx = fidx + 1
     }
   }
-  (tcases.resize(tidx + 1), fcases.resize(fidx + 1))
+  (tcases.resize(tidx), fcases.resize(fidx))
 }
 
 /// Get the _first_ index of the last occurance of `elem`, if there is any.
