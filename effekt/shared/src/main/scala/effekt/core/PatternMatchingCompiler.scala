@@ -4,7 +4,6 @@ package core
 import effekt.context.Context
 import effekt.core.substitutions.Substitution
 import effekt.symbols.TmpValue
-import effekt.util.messages.INTERNAL_ERROR
 
 import scala.collection.mutable
 
