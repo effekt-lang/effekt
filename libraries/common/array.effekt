@@ -185,7 +185,7 @@ def toList[T](arr: Array[T]): List[T] = {
   l
 }
 
-/// Traverse a list, applying the given action on every element.
+/// Traverse an array, applying the given action on every element.
 ///
 /// O(N)
 def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
@@ -193,7 +193,7 @@ def foreach[T](arr: Array[T]){ action: T => Unit }: Unit =
     action(arr.unsafeGet(i))
   }
 
-/// Traverse a list, applying the given action on every element.
+/// Traverse an array, applying the given action on every element.
 ///
 /// O(N)
 def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
@@ -201,7 +201,7 @@ def foreach[T](arr: Array[T]){ action: (T) {Control} => Unit }: Unit =
     action(arr.unsafeGet(i)) {label}
   }
 
-/// Traverse a list, applying the given action on every element and its (zero-based) index.
+/// Traverse an array, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
@@ -209,7 +209,7 @@ def foreachIndex[T](arr: Array[T]){ action: (Int, T) => Unit }: Unit =
     action(i, arr.unsafeGet(i))
   }
 
-/// Traverse a list, applying the given action on every element and its (zero-based) index.
+/// Traverse an array, applying the given action on every element and its (zero-based) index.
 ///
 /// O(N)
 def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
@@ -220,15 +220,15 @@ def foreachIndex[T](arr: Array[T]){ action: (Int, T) {Control} => Unit }: Unit =
 /// Sum the elements of the array.
 /// 
 /// O(N)
-def sum(list: Array[Int]): Int = {
+def sum(arr: Array[Int]): Int = {
   var acc = 0
-  list.foreach { x =>
+  arr.foreach { x =>
     acc = acc + x
   }
   acc
 }
 
-/// Checks whether two given are equal with respect to an equalty funciton defined on their element.
+/// Checks whether two given arrays are equal with respect to an equalty funciton defined on their element.
 /// 
 /// O(N)
 def equals[A](this: Array[A], other: Array[A]) { eq: (A, A) => Bool }: Bool = {
@@ -267,7 +267,7 @@ def mapped[A, B](arr: Array[A]) { f: A => B }: Array[B] = {
   res
 }
 
-/// Reverses the array in-place
+/// Reverses an array in-place.
 /// 
 /// O(N)
 def reverse[A](arr: Array[A]): Unit = {
@@ -298,7 +298,7 @@ def reversed[A](arr: Array[A]): Array[A] = {
   result
 }
 
-/// Fold a list using `f`, starting from the left given a starting value.
+/// Fold an array using `f`, starting from the left given a starting value.
 ///
 /// O(N)
 def foldLeft[A, B](arr: Array[A], init: B) { f: (B, A) => B }: B = {
@@ -307,7 +307,7 @@ def foldLeft[A, B](arr: Array[A], init: B) { f: (B, A) => B }: B = {
   acc
 }
 
-/// Fold a list using `f`, starting from the right given a starting value.
+/// Fold an array using `f`, starting from the right given a starting value.
 ///
 /// O(N)
 def foldRight[A, B](arr: Array[A], init: B) { f: (A, B) => B }: B = {
