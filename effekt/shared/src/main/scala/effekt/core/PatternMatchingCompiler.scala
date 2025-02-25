@@ -184,9 +184,9 @@ object PatternMatchingCompiler {
           constructor,
           fieldInfo.map {
             // if it's a pattern named by the user in the program, use the supplied name
-            case ((Pattern.Any(id), tpe),         _) => ValueVar(TmpValue(id.name.name), tpe)
+            case ((Pattern.Any(id), tpe),         _) => ValueVar(Id(id.name.name), tpe)
             // otherwise, use the field name of the given field
-            case ((_,               tpe), fieldName) => ValueVar(TmpValue(fieldName),    tpe)
+            case ((_,               tpe), fieldName) => ValueVar(Id(fieldName),    tpe)
           }
         )
 
