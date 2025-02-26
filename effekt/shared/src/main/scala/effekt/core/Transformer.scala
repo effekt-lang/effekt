@@ -386,8 +386,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(If(c, transform(thn), transform(els)))
 
     case source.If(guards, thn, els) =>
-      val thnClause = preprocess(Nil, guards, transform(thn))
-      val elsClause = preprocess(Nil, Nil, transform(els))
+      val thnClause = preprocess("thn", Nil, guards, transform(thn))
+      val elsClause = preprocess("els", Nil, Nil, transform(els))
       Context.bind(PatternMatchingCompiler.compile(List(thnClause, elsClause)))
 
     //    case i @ source.If(guards, thn, els) =>
@@ -416,8 +416,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           insertBindings { core.If(transformAsPure(cond), thenBranch, elseBranch) }
         case _ =>
           insertBindings {
-            val thenClause = preprocess(Nil, guards, thenBranch)
-            val elseClause = preprocess(Nil, Nil, elseBranch)
+            val thenClause = preprocess("guard_thn", Nil, guards, thenBranch)
+            val elseClause = preprocess("guard_els", Nil, Nil, elseBranch)
             PatternMatchingCompiler.compile(List(thenClause, elseClause))
           }
       }
@@ -434,8 +434,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Match(sc, cs, default) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
-      val clauses = cs.map(c => preprocess(scrutinee, c))
-      val defaultClause = default.map(stmt => preprocess(Nil, Nil, transform(stmt))).toList
+      val clauses = cs.zipWithIndex.map((c, i) => preprocess(s"k${i}", scrutinee, c))
+      val defaultClause = default.map(stmt => preprocess("k_els", Nil, Nil, transform(stmt))).toList
       val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause)
       Context.bind(compiledMatch)
 
@@ -527,10 +527,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    */
   def collectClauses(term: source.Term)(using Context): Option[List[Clause]] = term match {
     case source.If(guards, thn, els) =>
-      val thenClause = preprocess(Nil, guards, transform(thn))
+      val thenClause = preprocess("thn", Nil, guards, transform(thn))
       val elseClauses = collectClauses(els) match {
         case Some(clauses) => clauses
-        case None => List(preprocess(Nil, Nil, transform(els)))
+        case None => List(preprocess("els", Nil, Nil, transform(els)))
       }
       Some(thenClause :: elseClauses)
     case _ => None
@@ -653,10 +653,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     })
   }
 
-  def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause =
-    preprocess(List((sc, clause.pattern)), clause.guards, transform(clause.body))
+  def preprocess(label: String, sc: ValueVar, clause: source.MatchClause)(using Context): Clause =
+    preprocess(label, List((sc, clause.pattern)), clause.guards, transform(clause.body))
 
-  def preprocess(patterns: List[(ValueVar, source.MatchPattern)], guards: List[source.MatchGuard], body: core.Stmt)(using Context): Clause = {
+  def preprocess(label: String, patterns: List[(ValueVar, source.MatchPattern)], guards: List[source.MatchGuard], body: core.Stmt)(using Context): Clause = {
     import PatternMatchingCompiler.*
 
     def boundInPattern(p: source.MatchPattern): List[core.ValueParam] = p match {
@@ -686,7 +686,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // create joinpoint
     val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
-    val joinpoint = Context.bind(TmpBlock("k"), BlockLit(Nil, Nil, params, Nil, body))
+    val joinpoint = Context.bind(TmpBlock(label), BlockLit(Nil, Nil, params, Nil, body))
 
     def transformPattern(p: source.MatchPattern): Pattern = p match {
       case source.AnyPattern(id) =>
