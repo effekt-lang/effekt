@@ -15,10 +15,12 @@ duality_of_compilation/lookup_tree 10000000
 duality_of_compilation/match_options 10000000
 duality_of_compilation/sum_range 10000000
 effect_handlers_bench/countdown 200000000
+effect_handlers_bench/fibonacci_recursive 42
+effect_handlers_bench/generator 25
 effect_handlers_bench/iterator 40000000
 effect_handlers_bench/nqueens 12
 effect_handlers_bench/parsing_dollars 20000
 effect_handlers_bench/product_early 100000
-effect_handlers_bench/resume_nontail 1000
+effect_handlers_bench/resume_nontail 10000
 effect_handlers_bench/tree_explore 16
 effect_handlers_bench/triples 300
