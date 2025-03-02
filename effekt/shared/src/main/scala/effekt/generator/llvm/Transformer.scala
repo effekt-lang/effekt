@@ -687,13 +687,9 @@ object Transformer {
     emit(Load(returnAddressName, returnAddressType, returnAddressPointer));
   }
 
-  val malloc = ConstantGlobal("malloc");
-  val free = ConstantGlobal("free");
-
   val newObject = ConstantGlobal("newObject");
   val objectEnvironment = ConstantGlobal("objectEnvironment");
 
-  val shareObject = ConstantGlobal("shareObject");
   val sharePositive = ConstantGlobal("sharePositive");
   val shareNegative = ConstantGlobal("shareNegative");
   val shareResumption = ConstantGlobal("shareResumption");
@@ -707,9 +703,6 @@ object Transformer {
 
   val freeStack = ConstantGlobal("freeStack")
 
-  val alloc = ConstantGlobal("alloc")
-  val getPointer = ConstantGlobal("getPointer")
-
   val newReference = ConstantGlobal("newReference")
   val getVarPointer = ConstantGlobal("getVarPointer")
 
@@ -718,7 +711,6 @@ object Transformer {
   val shift = ConstantGlobal("shift");
   val currentPrompt = ConstantGlobal("currentPrompt");
   val underflowStack = ConstantGlobal("underflowStack");
-  val uniqueStack = ConstantGlobal("uniqueStack");
   val withEmptyStack = ConstantGlobal("withEmptyStack");
   val checkLimit = ConstantGlobal("checkLimit")
   val stackAllocate = ConstantGlobal("stackAllocate");
