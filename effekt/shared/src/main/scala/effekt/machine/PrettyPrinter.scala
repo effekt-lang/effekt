@@ -10,7 +10,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  def format(stmt: Statement): Document = pretty(toDoc(stmt), 2)
+  def format(definitions: List[Definition]): Document = pretty(vsep(definitions.map(toDoc), line), 2)
 
   implicit def toDoc(v: Variable): Doc = string(v.name)
 
@@ -35,6 +35,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
   }
 
+  def toDoc(defi: Definition): Doc = defi match {
+    case Definition(label, body) =>
+      "def" <+> label.name <> toDoc(label.environment) <+> "=" <+> block(toDocStmts(body))
+  }
+
   def toDoc(stmt: Statement): Doc =
     stmt match {
       // terminators that do not require a block to be readable:
@@ -44,8 +49,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
 
   def toDocStmts(stmt: Statement): Doc = stmt match {
-    case Def(label, body, rest) =>
-      "def" <+> label.name <> toDoc(label.environment) <+> "=" <+> block(toDocStmts(body)) <> ";" <> line <> toDocStmts(rest)
 
     case Jump(label) =>
       "jump" <+> label

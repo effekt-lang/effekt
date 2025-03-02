@@ -14,28 +14,20 @@ object Transformer {
   val llvmFeatureFlags: List[String] = List("llvm")
 
   def transform(program: machine.Program)(using ErrorReporter): List[Definition] = program match {
-    case machine.Program(declarations, statement) =>
-      emit(Comment(s"program, ${declarations.length} declarations"))
+    case machine.Program(declarations, definitions, entry) =>
 
       given MC: ModuleContext = ModuleContext();
-      given FC: FunctionContext = FunctionContext();
-      given BC: BlockContext = BlockContext();
+      definitions.foreach(transform);
 
-      emit(Call("stack", Ccc(), stackType, withEmptyStack, List()));
+      val globals = MC.definitions; MC.definitions = null;
 
-      val terminator = transform(statement);
+      val entryInstructions = List(
+        Call("stack", Ccc(), stackType, withEmptyStack, List()),
+        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
+      val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
+      val entryFunction = Function(Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
 
-      val definitions = MC.definitions; MC.definitions = null;
-      val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-      val instructions = BC.instructions; BC.instructions = null;
-
-      val transitionJump = Call("_", Tailcc(false), VoidType(), ConstantGlobal("effektMainTailcc"), List())
-      val transitionBlock = BasicBlock("transition", List(transitionJump), RetVoid())
-      val transitionFunction = Function(Ccc(), VoidType(), "effektMain", List(), List(transitionBlock))
-
-      val entryBlock = BasicBlock("entry", instructions, terminator)
-      val effektMain = Function(Tailcc(true), VoidType(), "effektMainTailcc", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions :+ transitionFunction :+ effektMain
+      declarations.map(transform) ++ globals :+ entryFunction
   }
 
   // context getters
@@ -70,20 +62,20 @@ object Transformer {
     case machine.Variable(name, tpe) => PrettyPrinter.localName(name)
   }).mkString
 
-  def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
-    statement match {
-
-      case machine.Def(machine.Label(name, environment), body, rest) =>
+  def transform(definition: machine.Definition)(using ModuleContext): Unit = definition match {
+   case machine.Definition(machine.Label(name, environment), body) =>
         val parameters = environment.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         defineLabel(name, parameters) {
           emit(Comment(s"definition $name, environment length ${environment.length}"))
           eraseValues(environment, freeVariables(body))
           transform(body)
         }
+  }
 
-        transform(rest)
+  def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
+    statement match {
 
-      case machine.Jump(label) =>
+     case machine.Jump(label) =>
         emit(Comment(s"jump ${label.name}"))
         shareValues(label.environment, Set())
 
