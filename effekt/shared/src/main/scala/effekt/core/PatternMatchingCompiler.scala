@@ -192,6 +192,7 @@ object PatternMatchingCompiler {
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
+          // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
           val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
             case _ => List.fill(patternsAndTypes.size) { "y" } // NOTE: Only reached in PatternMatchingTests
