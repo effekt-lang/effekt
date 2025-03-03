@@ -222,10 +222,7 @@ object JSWebRunner extends Runner[String] {
          |""".stripMargin
     IO.createFile(htmlFilePath, htmlContent, false)
 
-    // TODO: In ErrorReporter, add a way to terminate the program with a message, but not report a exit failure.
-    // Workaround: print and then 'exit(0)'
-    println(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
-    scala.sys.exit(0)
+    C.abortNonFatal(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
 }
 
 trait ChezRunner extends Runner[String] {
