@@ -53,7 +53,7 @@
 %Base = type %StackPointer
 %Limit = type %StackPointer
 %ReturnAddress = type ptr
-%FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
+%FrameHeader = type { %ReturnAddress }
 
 ; Unique address for each handler.
 %Prompt = type ptr
@@ -506,10 +506,6 @@ define private %Stack @underflowStack(%Stack %stack) {
     ret %Stack %rest
 }
 
-define private void @nop(%Stack %stack) {
-    ret void
-}
-
 define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
@@ -655,16 +651,18 @@ done:
 
 define private void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
-    %stackSharer = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 1
-    %sharer = load %Sharer, ptr %stackSharer
+    %returnAdress = load %ReturnAddress, ptr %newStackPointer
+    %sharer_pointer = getelementptr ptr, ptr %returnAdress, i64 -2
+    %sharer = load %Sharer, ptr %sharer_pointer
     tail call void %sharer(%StackPointer %newStackPointer)
     ret void
 }
 
 define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
-    %stackEraser = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 2
-    %eraser = load %Eraser, ptr %stackEraser
+    %returnAdress = load %ReturnAddress, ptr %newStackPointer
+    %eraser_pointer = getelementptr ptr, ptr %returnAdress, i64 -1
+    %eraser = load %Eraser, ptr %eraser_pointer
     tail call void %eraser(%StackPointer %newStackPointer)
     ret void
 }
@@ -677,14 +675,14 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
+define private tailcc void @topLevel(%Pos %val, %Stack %stack) prefix { %Sharer, %Eraser } { %Sharer @topLevelSharer, %Eraser @topLevelEraser } {
     %rest = call %Stack @underflowStack(%Stack %stack)
     ; rest holds global variables
     call void @resume_Pos(%Stack %rest, %Pos %val)
     ret void
 }
 
-define private tailcc void @globalsReturn(%Pos %val, %Stack %stack) {
+define private tailcc void @globalsReturn(%Pos %val, %Stack %stack) prefix { %Sharer, %Eraser } { %Sharer @topLevelSharer, %Eraser @topLevelEraser } {
     %rest = call %Stack @underflowStack(%Stack %stack)
     ret void
 }
@@ -708,12 +706,8 @@ define private %Stack @withEmptyStack() {
     %globalsStackPointer = load %StackPointer, ptr %globalsStackPointer_pointer
 
     %returnAddressPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 0
-    %sharerPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 1
-    %eraserPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 2
 
     store ptr @globalsReturn, ptr %returnAddressPointer.0
-    store ptr @topLevelSharer, ptr %sharerPointer.0
-    store ptr @topLevelEraser, ptr %eraserPointer.0
 
     %globalsStackPointer_2 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 1
     store %StackPointer %globalsStackPointer_2, ptr %globalsStackPointer_pointer
@@ -727,12 +721,8 @@ define private %Stack @withEmptyStack() {
     %stackPointer = load %StackPointer, ptr %stackStackPointer
 
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %sharerPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
-    %eraserPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
 
     store %ReturnAddress @topLevel, ptr %returnAddressPointer
-    store %Sharer @topLevelSharer, ptr %sharerPointer
-    store %Eraser @topLevelEraser, ptr %eraserPointer
 
     %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
     store %StackPointer %stackPointer_2, ptr %stackStackPointer
