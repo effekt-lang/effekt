@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.util.{ Task, paths }
-import effekt.util.messages.{FatalPhaseError, NonFatalPhaseError}
+import effekt.util.messages.FatalPhaseError
 import kiama.util.Source
 
 /**
@@ -40,9 +40,6 @@ trait Phase[-In, +Out] { curr =>
   def apply(input: In)(using C: Context): Option[Out] = try {
     run(input)
   } catch {
-    case NonFatalPhaseError(msg) =>
-      C.report(msg)
-      None
     case FatalPhaseError(msg) =>
       C.report(msg)
       None
