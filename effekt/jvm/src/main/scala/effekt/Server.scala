@@ -1,5 +1,6 @@
 package effekt
 
+import com.google.gson.JsonObject
 import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
@@ -216,14 +217,56 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
   case class CaptureInfo(location: Location, captureText: String)
 
   override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
-    if (params.getCommand == "inferredCaptures") {
-      val captures = getInferredCaptures(src)(using context).map {
-        case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
-      }
-      if (captures.isEmpty) None else Some(captures.toArray)
-    } else {
-      None
+    params.getCommand match {
+      case "inferredCaptures" =>
+        val captures = getInferredCaptures(src)(using context).map {
+          case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
+        }
+        if (captures.isEmpty) None else Some(captures.toArray)
+      case "compileCell" =>
+        val arg = params.getArguments()
+        val notebook = Notebook(src.toString)
+        try {
+          val firstArg = arg.get(0)
+          firstArg match {
+            case jsonObject: JsonObject =>
+              val notebookCellUri = NotebookCell( if (jsonObject.has("uri")) {
+                jsonObject.get("uri").getAsString
+              } else {
+                "{}"
+              })
+              val content = Server.sources(notebookCellUri.uri).content
+              //val result = compileNotebookContent(content)(using context)
+              //val result = processCell(notebookCellUri, notebook)
+              /*result match {
+                case Some(result) => Some(result)
+                case _ => Some("Compilation failed")
+              }*/
+              None
+            case _ =>
+              Some(s"Unexpected argument type: ${firstArg.getClass.getName}")
+          }
+        } catch
+        {
+          case e: Exception =>
+            Some(s"Error during command execution: ${e.getMessage}")
+        }
+      case _ => None
     }
+
+  override def processCell(notebookCell: NotebookCell, notebook: Notebook, config: EffektConfig): Unit = {
+    val source = sources(notebookCell.uri)
+    context.setup(config)
+    given Context = context
+    clearDiagnostics(notebookCell.uri)
+    context.compiler.runFrontend(source)
+    /*context.compiler.compile(source) match {
+      case Some((output, main)) => println(output)
+      case None =>
+    } */
+    report(source, context.messaging.buffer, config)
+
+  }
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
