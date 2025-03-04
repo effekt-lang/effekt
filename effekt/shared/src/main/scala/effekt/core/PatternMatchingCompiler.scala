@@ -179,12 +179,25 @@ object PatternMatchingCompiler {
 
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
-      def fieldVarsFor(constructor: Id, fieldTypes: List[ValueType]): List[ValueVar] =
-        varsFor.getOrElseUpdate(constructor, fieldTypes.map { tpe => ValueVar(TmpValue("y"), tpe) })
+      def fieldVarsFor(constructor: Id, fieldInfo: List[((Pattern, ValueType), String)]): List[ValueVar] =
+        varsFor.getOrElseUpdate(
+          constructor,
+          fieldInfo.map {
+            // if it's a pattern named by the user in the program, use the supplied name
+            case ((Pattern.Any(id), tpe),         _) => ValueVar(Id(id.name.name), tpe)
+            // otherwise, use the field name of the given field
+            case ((_,               tpe), fieldName) => ValueVar(Id(fieldName),    tpe)
+          }
+        )
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
-          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.map { case (pat, tpe) => tpe })
+          // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
+          val fieldNames: List[String] = constructor match {
+            case c: symbols.Constructor => c.fields.map(_.name.name)
+            case _ => List.fill(patternsAndTypes.size) { "y" } // NOTE: Only reached in PatternMatchingTests
+          }
+          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.zip(fieldNames))
           val nestedMatches = fieldVars.zip(patternsAndTypes.map { case (pat, tpe) => pat }).toMap
           addClause(constructor,
             // it is important to add nested matches first, since they might include substitutions for the rest.
