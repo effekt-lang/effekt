@@ -400,7 +400,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
     case source.While(guards, body, default) =>
-      val loopName = TmpBlock("whileLoop")
+      val loopName = TmpBlock("while")
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
 
       // TODO double check: probably we are forgetting the capture of the guards!
@@ -408,7 +408,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
       val transformedBody = transform(body)
-      val thenBranch = Stmt.Val(TmpValue("whileThen"), transformedBody.tpe, transformedBody, loopCall)
+      val thenBranch = Stmt.Val(TmpValue("while_thn"), transformedBody.tpe, transformedBody, loopCall)
       val elseBranch = default.map(transform).getOrElse(Return(Literal((), core.Type.TUnit)))
 
       val loopBody = guards match {
