@@ -87,13 +87,12 @@ trait Runner[Executable] {
   /**
    * Builds a given executable and returns the resulting path to the executable.
    */
-  def build(executable: Executable)(using Context): String
+  def build(executable: Executable)(using Context): Option[String]
 
   /**
    * Runs the executable (e.g. the main file) by calling the build function.
    */
-  def eval(executable: Executable)(using C: Context): Unit = {
-    val execFile = build(executable)
+  def eval(executable: Executable)(using C: Context): Unit = build(executable).foreach { execFile =>
     val valgrindArgs = Seq("--leak-check=full", "--undef-value-errors=no", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
     val process = if (C.config.valgrind())
       Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
@@ -165,7 +164,7 @@ object JSNodeRunner extends Runner[String] {
    * Creates an executable `.js` file besides the given `.js` file ([[path]])
    * and then returns the absolute path of the created executable.
    */
-  def build(path: String)(using C: Context): String =
+  def build(path: String)(using C: Context): Option[String] =
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).canonicalPath.escape
     val jsFileName = path.unixPath.split("/").last
@@ -177,14 +176,14 @@ object JSNodeRunner extends Runner[String] {
         val shebang = "#!/usr/bin/env node"
         val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
-        jsScriptFilePath
+        Some(jsScriptFilePath)
 
       case OS.Windows =>
         val jsMainFilePath = jsFilePath.stripSuffix(s".$extension") + "__main.js"
         val jsMainFileName = jsFileName.stripSuffix(s".$extension") + "__main.js"
         val exePath = jsFilePath.stripSuffix(s".$extension")
         IO.createFile(jsMainFilePath, jsScript)
-        createScript(exePath, "node", "$SCRIPT_DIR/" + jsMainFileName)
+        Some(createScript(exePath, "node", "$SCRIPT_DIR/" + jsMainFileName))
     }
 }
 object JSWebRunner extends Runner[String] {
@@ -202,7 +201,7 @@ object JSWebRunner extends Runner[String] {
    * Creates an openable `.html` file besides the given `.js` file ([[path]])
    * and then errors out, printing it's path.
    */
-  def build(path: String)(using C: Context): String =
+  def build(path: String)(using C: Context): Option[String] =
     val out = C.config.outputPath().getAbsolutePath
     val jsFilePath = (out / path).unixPath
     val jsFileName = path.unixPath.split("/").last
@@ -222,10 +221,8 @@ object JSWebRunner extends Runner[String] {
          |""".stripMargin
     IO.createFile(htmlFilePath, htmlContent, false)
 
-    // TODO: In ErrorReporter, add a way to terminate the program with a message, but not report a exit failure.
-    // Workaround: print and then 'exit(0)'
-    println(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
-    scala.sys.exit(0)
+    C.info(s"Open file://${htmlFilePath} in your browser or include ${jsFilePath}.")
+    None
 }
 
 trait ChezRunner extends Runner[String] {
@@ -241,12 +238,12 @@ trait ChezRunner extends Runner[String] {
    * Creates an executable bash script besides the given `.ss` file ([[path]])
    * and returns the resulting absolute path.
    */
-  def build(path: String)(using C: Context): String =
+  def build(path: String)(using C: Context): Option[String] =
     val out = C.config.outputPath().getAbsolutePath
     val schemeFilePath = (out / path).canonicalPath.escape
     val exeScriptPath = schemeFilePath.stripSuffix(s".$extension")
     val schemeFileName = ("./" + (path.unixPath.split('/').last)).escape
-    createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName)
+    Some(createScript(exeScriptPath, "scheme", "--script", "$SCRIPT_DIR/" + schemeFileName))
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -310,7 +307,7 @@ object LLVMRunner extends Runner[String] {
    * Requires LLVM and GCC to be installed on the machine.
    * Assumes [[path]] has the format "SOMEPATH.ll".
    */
-  override def build(path: String)(using C: Context): String =
+  override def build(path: String)(using C: Context): Option[String] =
 
     val out = C.config.outputPath()
     val basePath = (out / path.stripSuffix(".ll")).unixPath
@@ -339,5 +336,5 @@ object LLVMRunner extends Runner[String] {
 
     exec(gccArgs: _*)
 
-    executableFile
+    Some(executableFile)
 }
