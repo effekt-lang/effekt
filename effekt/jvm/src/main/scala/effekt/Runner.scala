@@ -92,7 +92,7 @@ trait Runner[Executable] {
   /**
    * Runs the executable (e.g. the main file) by calling the build function.
    */
-  def eval(executable: Executable)(using C: Context): Unit = build(executable).map { execFile =>
+  def eval(executable: Executable)(using C: Context): Unit = build(executable).foreach { execFile =>
     val valgrindArgs = Seq("--leak-check=full", "--undef-value-errors=no", "--quiet", "--log-file=valgrind.log", "--error-exitcode=1")
     val process = if (C.config.valgrind())
       Process("valgrind", valgrindArgs ++ (execFile +: Context.config.runArgs()))
@@ -115,7 +115,7 @@ trait Runner[Executable] {
       C.error(s"Process exited with non-zero exit code ${exitCode}.")
       if (C.config.valgrind()) C.error(s"Valgrind log:\n" ++ scala.io.Source.fromFile("valgrind.log").mkString)
     }
-  }.getOrElse(())
+  }
 
   def canRunExecutable(command: String*): Boolean =
     try {
