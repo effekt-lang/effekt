@@ -20,14 +20,11 @@ extern global def allocate[T](size: Int): Array[T] =
   vm "array::allocate(Int)"
 
 /// Fills a given array in-place.
-extern def fill[T](arr: Array[T], filler: T): Unit = 
-  js "${arr}.fill(${filler})"
-  chez "(vector-fill! ${arr} ${filler})"
-  llvm """
-    %z = call %Pos @c_array_fill(%Pos ${arr}, %Pos ${filler})
-    ret %Pos %z
-  """
-  vm "array::fill[T](Array[T], T)"
+def fill[T](arr: Array[T], filler: T): Unit = {
+  arr.foreachIndex { (idx, _) =>
+    arr.unsafeSet(idx, filler)
+  }
+}
 
 /// Creates a new Array of size `size` filled with the value `init`
 def array[T](size: Int, init: T): Array[T] = {
@@ -114,6 +111,9 @@ def build[T](size: Int) { index: Int => T }: Array[T] = {
   arr
 }
 
+/// Resizes an array to a given size.
+///
+/// O(N + M)
 def resize[T](source: Array[T], size: Int): Array[T] = {
   val target = allocate(size)
   val n = min(source.size, target.size)
