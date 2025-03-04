@@ -1,0 +1,5 @@
+def main() = {
+  println(array(0, 1).take(1))
+  println(array(1, 1).take(2))
+  println(array(10, "a").take(5).size == 5)
+}

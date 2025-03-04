@@ -1,0 +1,12 @@
+def main() = {
+  val arr1 = array(10, 42)
+  println(arr1.all { x => x == 42 })
+
+  val empty = array(0, 42)
+  println(empty.all { x => x == 42 })
+
+  val arr2 = array::build(10) { x => x + 1 }
+  println(arr2.all { x => x < 10 })
+  println(arr2.all { x => x < 0 })
+  println(arr2.all { x => x < 11 } == not(arr2.any { x => x >= 11 }))
+}

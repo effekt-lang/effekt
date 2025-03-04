@@ -1,0 +1,7 @@
+def main() = {
+  println(array(0, "a").zipped(array(0, "a")).size == 0)
+  println(array(0, 1).zipped(array(1, 1)).size == 0)
+  println(array(1, 1).zipped(array(0, 1)).size == 0)
+  val arr1 = array::build(10) { x => x }
+  println(arr1.zipped(arr1.mapped { x => x.show }).size == 10)
+}

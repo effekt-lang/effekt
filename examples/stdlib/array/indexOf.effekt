@@ -1,0 +1,6 @@
+def main() = {
+  println(array(0, 1).indexOf(1) { (x, y) => x == y })
+  println(array(1, 1).indexOf(1) { (x, y) => x == y })
+  println(array(10, 1).indexOf(1) { (x, y) => x == y })
+  println(array::build(10) { x => x }.indexOf(9) { (x, y) => x == y })
+}

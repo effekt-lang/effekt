@@ -1,0 +1,21 @@
+def main() = {
+  val (arr1, arr2) = array::build(10) { x => x }.partioned { x => x < 5 }
+  println(arr1)
+  println(arr2)
+
+  val (arr3, arr4) = array::build(10) { x => x }.reversed.partioned { x => x < 5 }
+  println(arr3)
+  println(arr4)
+
+  val (arr5, arr6) = array::build(5) { x => x }.partioned { x => x > 4 }
+  println(arr5)
+  println(arr6)
+
+  val (arr7, arr8) = array::build(5) { x => x }.partioned { x => x <= 4 }
+  println(arr8.equals(arr5) { (x, y) => x == y })
+  println(arr7.equals(arr6) { (x, y) => x == y })
+
+  val (arr9, arr10) = array(0, 1).partioned { x => x > 0 }
+  println(arr9.size == 0)
+  println(arr10.size == 0)  
+}

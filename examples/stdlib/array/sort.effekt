@@ -1,0 +1,14 @@
+def sort(l: List[Int]): Unit = {
+  val arr = l.array::fromList
+  arr.sort { compareInt }
+  println(arr)
+}
+
+def main() = {
+  sort([])
+  sort([5])
+  sort([1, 3, -1, 5])
+  sort([-2, -1, 0, 1, 2, 3])
+  sort([3, 2, 1, 0, -1, -2])
+  sort([-1, -1, -1])
+}

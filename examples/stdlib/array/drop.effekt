@@ -1,0 +1,6 @@
+def main() = {
+  println(array(0, "a").drop(1))
+  println(array(1, "a").drop(1))
+  println(array(10, 1).drop(5).size == 5)
+  println(array(10, 1).drop(0).size == 10)
+}

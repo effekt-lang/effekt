@@ -1,0 +1,8 @@
+def main() = {
+  println(array(0, "a").zippedWith(array(0, "a")) { (x, y) => x ++ y }.size == 0)
+  println(array(0, 1).zippedWith(array(1, 1)) { (x, y) => x + y }.size == 0)
+  println(array(1, 1).zippedWith(array(0, 1)) { (x, y) => x + y }.size == 0)
+  val arr1 = array::build(10) { x => x + 1 }
+  val arr2 = array::build(10) { x => x + 11 }
+  println(arr1.zippedWith(arr2) { (x, y) => x + y })
+}

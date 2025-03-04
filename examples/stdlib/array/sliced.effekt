@@ -1,0 +1,6 @@
+def main() = {
+  println(array(0, 1).sliced(0, 2))
+  println(array(2, 1).sliced(0, 2))
+  println(array(10, 1).sliced(2, 1))
+  println(array(10, 1).sliced(0, 5).size == 5)
+}

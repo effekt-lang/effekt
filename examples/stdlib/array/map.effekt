@@ -1,0 +1,9 @@
+def main() = {
+  val arr = array(5, 42)
+  arr.map { x => x * 2 }
+  println(arr)
+
+  val arr1 = allocate(0)
+  arr1.map { x => x * 2 }
+  println(arr1)
+}

@@ -1,0 +1,6 @@
+def main() = {
+  val arr1 = array::build(10) { x => x }
+  println(equals(arr1, arr1.mapped { x => x * 2 }.mapped { x => x / 2 }) { (x, y) => x == y })
+  println(array(0, 1).mapped { x => x + 1 })
+  println(arr1.mapped { x => x.show })
+}

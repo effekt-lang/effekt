@@ -1,0 +1,15 @@
+def main() = {
+  println(array(0, 1).reversed)
+  println(array(0, 1).reversed.reversed)
+
+  val arr1 = ["a", "b", "c"].fromList
+  println(arr1.reversed)
+  println(equals(arr1, arr1.reversed.reversed) { (x, y) => x == y })
+
+  val arr2 = ["a", "b"].fromList
+  println(arr2.reversed)
+  println(equals(arr2, arr2.reversed.reversed) { (x, y) => x == y })
+
+  val arr3 = array::build(1000) { x => x }
+  println(equals(arr3, arr3.reversed.reversed) { (x, y) => x == y })
+}

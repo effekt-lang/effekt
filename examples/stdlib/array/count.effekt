@@ -1,0 +1,6 @@
+def main() = {
+  println(array(10, 1).count { x => x == 1 }) 
+  println(array(10, 1).count { x => x != 1 }) 
+  println(array(0, 1).count { x => x == 1 })
+  println(array::build(20) { x => x + 1}.count { x => mod(x, 2) == 0 })
+}

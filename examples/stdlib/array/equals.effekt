@@ -1,0 +1,8 @@
+def main() = {
+  println(equals(array(0, 1), array(1, 1)) { (x, y) => x == y })
+  println(equals(array(100, 1), array(100, 1)) { (x, y) => x == y })
+  println(equals(array(0, 1), array(0, 1)) { (x, y) => x == y })
+  println(equals([1, 2, 3].fromList, [1, 2, 2].fromList) { (x, y) => x == y })
+  println(equals([1, 2, 3].fromList, [2, 2, 3].fromList) { (x, y) => x == y })
+  println(equals(array(0, 1), array(0, 1)) { (x, y) => x == y })
+}
