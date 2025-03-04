@@ -30,13 +30,6 @@ object messages {
   case class FatalPhaseError(message: EffektError) extends Exception(message.toString)
 
   /**
-   * Error that aborts a compilation phase non-fatally
-   *
-   * Messages are part of the reporting pipeline and can be backtracked by Typer
-   */
-  case class NonFatalPhaseError(message: EffektError) extends Exception(message.toString)
-
-  /**
    * Error that aborts the whole compilation and shows a stack trace
    *
    * Should be used for unexpected internal compiler errors
@@ -137,10 +130,6 @@ object messages {
     def abort(msg: EffektError): Nothing = throw FatalPhaseError(msg)
     def abort(msg: String): Nothing = abort(plainMessage(msg, Error))
     def abort(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Error))
-
-    def abortNonFatal(msg: EffektError): Nothing = throw NonFatalPhaseError(msg)
-    def abortNonFatal(msg: String): Nothing = abort(plainMessage(msg, Information))
-    def abortNonFatal(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Information))
 
     def reraise(msg: EffektMessages): Unit = messaging.append(msg)
 
