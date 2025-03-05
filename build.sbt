@@ -139,7 +139,18 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       // prepend shebang to make jar file executable
       val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
-      IO.append(binary, "#! /usr/bin/env java -jar\n")
+
+      // On Windows, the -S flag to env is not supported.
+      // Hence we conditionally change the shebang based on the OS.
+      // See https://github.com/effekt-lang/effekt/issues/16
+      val osName = System.getProperty("os.name").toLowerCase
+      val shebang =
+        if (osName.contains("win"))
+          "#! /usr/bin/env java -jar\n"
+        else
+          "#! /usr/bin/env -S java -jar\n"
+
+      IO.write(binary, shebang)
       IO.append(binary, IO.readBytes(jarfile))
     },
 
