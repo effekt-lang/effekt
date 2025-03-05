@@ -10,6 +10,8 @@ import effekt.util.messages.ErrorMessageReifier
  * All effects inferred by Typer are required to be concrete and dealiased.
  *
  * This way, we can easily compare them for equality.
+ *
+ * This is a _set_ of effects and does not guarantee order!
  */
 class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]) {
 

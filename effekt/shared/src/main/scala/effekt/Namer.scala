@@ -699,7 +699,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
       val effs = resolve(effects).distinct
-      effs.canonical.foreach { eff =>
+      CanonicalOrdering(effs.toList) foreach { eff =>
         val cap = CaptureParam(eff.name)
         cps = cps :+ cap
       }

@@ -188,7 +188,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   /**
    * Instantiate a typescheme with provided type and capture arguments.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): FunctionType = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[BlockType], ValueType, List[InterfaceType]) = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
@@ -196,8 +196,8 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       pp"Type argument and parameter size mismatch: ${targs.size} vs ${tparams.size} ($targs, $tparams)")
     assert(cargs.size == cparams.size,
       pp"Capture arguments and parameter size mismatch: ${cargs.size} vs ${cparams.size} ($cargs, $cparams)")
-    assert(cparams.size == (bparams.size + eff.canonical.size),
-      pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}")
+    assert(cparams.size == (bparams.size + eff.distinct.size),
+      pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.size}.\n  ${tpe}")
 
     given Instantiation = Instantiation((tparams zip targs).toMap, (cparams zip cargs).toMap)
 
@@ -207,7 +207,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
     val substitutedEffects = instantiate(eff)
 
-    FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
+    (substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
   }
 
   /**
@@ -215,7 +215,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    *
    * i.e. `[T1, T2, C] (T1, T1) {sigma} => T2` becomes `(?T1, ?T1){} => ?T2[C !-> ?C]`
    */
-  def instantiateFresh(tpe: FunctionType): (List[ValueType], List[Captures], FunctionType) = {
+  def instantiateFresh(tpe: FunctionType): (List[ValueType], List[Captures], (List[ValueType], List[BlockType], ValueType, List[InterfaceType])) = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
@@ -341,7 +341,7 @@ trait TypeInstantiator { self: Unification =>
       BoxedType(instantiate(tpe), instantiate(capt))
   }
 
-  def instantiate(t: Effects)(using Instantiation): Effects = Effects(t.toList.map(instantiate))
+  def instantiate(t: Effects)(using Instantiation): List[InterfaceType] = t.toList.map(instantiate)
 
   def instantiate(t: BlockType)(using Instantiation): BlockType = t match {
     case e: InterfaceType => instantiate(e)
@@ -362,6 +362,6 @@ trait TypeInstantiator { self: Unification =>
         vps map instantiate,
         bps map instantiate,
         instantiate(ret),
-        instantiate(eff))
+        Effects(instantiate(eff)))
   }
 }

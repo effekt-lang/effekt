@@ -738,7 +738,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         // TODO this is exactly like in [[Callable.toType]] -- TODO repeated here:
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        val cparams = bparams.map(b => b.capture) ++ effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
+        val cparams = bparams.map(b => b.capture) ++ CanonicalOrdering(effects.toList).map { tpe => symbols.CaptureParam(tpe.name) }
         val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.getOrElse {
           INTERNAL_ERROR("Operation value parameters should have an annotated type.")
         }))
@@ -756,7 +756,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def operationAtDeclaration(tparamsInterface: List[Id], op: symbols.Operation)(using Context): core.BlockType = op match {
     case symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>
       // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
-      val capabilities = effects.canonical
+      val capabilities = CanonicalOrdering(effects.toList)
       val tparams = tps.drop(tparamsInterface.size)
       val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
         INTERNAL_ERROR("Interface declarations should have annotated types.")
@@ -817,7 +817,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
 
-      val capabilityTypes = effects.canonical.map(transform)
+      val capabilityTypes = CanonicalOrdering(effects.toList).map(transform)
       val allBlockParams = bparams.map(transform) ++ capabilityTypes
 
       assert(cparams.size == allBlockParams.size,
