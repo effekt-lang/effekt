@@ -122,7 +122,9 @@ class LanguageServer extends Intelligence {
   @JSExport
   def inferredCaptures(path: String): js.Array[lsp.CaptureInfo] = {
     typecheck(path)
-    getInferredCaptures(VirtualFileSource(path)).map {
+    val source = VirtualFileSource(path)
+    val range = kiama.util.Range(source.offsetToPosition(0), source.offsetToPosition(source.charCount))
+    getInferredCaptures(range).map {
       case (p, c) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
     }.toJSArray
   }
