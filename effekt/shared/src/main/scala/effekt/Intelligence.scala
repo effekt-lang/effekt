@@ -36,13 +36,9 @@ trait Intelligence {
     }
   }
 
-  def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
-    decl <- C.compiler.getAST(position.source)
-    tree = new EffektTree(decl)
-    allTrees = tree.nodes.collect { case t: Tree => t }
-    pos = C.positions
-    trees = pos.findNodesContaining(allTrees, position)
-    nodes = trees.sortWith {
+  private def sortByPosition(trees: Vector[Tree])(using C: Context): Vector[Tree] =
+    val pos = C.positions
+    trees.sortWith {
       (t1, t2) =>
         val p1s = pos.getStart(t1).get
         val p2s = pos.getStart(t2).get
@@ -55,14 +51,29 @@ trait Intelligence {
           p2s < p1s
         }
     }
+
+  def getTreesAt(position: Position)(using C: Context): Option[Vector[Tree]] = for {
+    decl <- C.compiler.getAST(position.source)
+    tree = new EffektTree(decl)
+    allTrees = tree.nodes.collect { case t: Tree => t }
+    trees = C.positions.findNodesContaining(allTrees, position)
+    nodes = sortByPosition(trees)
   } yield nodes
 
-  def getIdTreeAt(position: Position)(implicit C: Context): Option[source.Id] = for {
+  def getTreesInRange(range: kiama.util.Range)(using C: Context): Option[Vector[Tree]] =  for {
+    decl <- C.compiler.getAST(range.from.source)
+    tree = new EffektTree(decl)
+    allTrees = tree.nodes.collect { case t: Tree => t }
+    trees = C.positions.findNodesInRange(allTrees, range)
+    nodes = sortByPosition(trees)
+  } yield nodes
+
+  def getIdTreeAt(position: Position)(using C: Context): Option[source.Id] = for {
     trees <- getTreesAt(position)
     id <- trees.collectFirst { case id: source.Id => id }
   } yield id
 
-  def getSymbolAt(position: Position)(implicit C: Context): Option[(Tree, Symbol)] =
+  def getSymbolAt(position: Position)(using C: Context): Option[(Tree, Symbol)] =
     def identifiers = for {
       id <- getIdTreeAt(position)
       sym <- C.symbolOption(id)
@@ -82,12 +93,12 @@ trait Intelligence {
       case _ => None
     }
 
-  def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
+  def getDefinitionAt(position: Position)(using C: Context): Option[Tree] = for {
     (_, sym) <- getSymbolAt(position)
     decl <- getDefinitionOf(resolveCallTarget(sym))
   } yield decl
 
-  def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
+  def getDefinitionOf(s: Symbol)(using C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
     case d: Operation    => C.definitionTreeOption(d.interface)
@@ -102,9 +113,9 @@ trait Intelligence {
     case s             => s
   }
 
-  def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
-    outerTpe <- C.inferredTypeAndEffectOption(hole)
-    innerTpe <- C.inferredTypeAndEffectOption(hole.stmts)
+  def getHoleInfo(hole: source.Hole)(using C: Context): Option[String] = for {
+    (outerTpe, outerEff) <- C.inferredTypeAndEffectOption(hole)
+    (innerTpe, innerEff) <- C.inferredTypeAndEffectOption(hole.stmts)
   } yield pp"""| | Outside       | Inside        |
                | |:------------- |:------------- |
                | | `${outerTpe}` | `${innerTpe}` |
@@ -113,12 +124,14 @@ trait Intelligence {
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
     C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
-  // For now we only show captures of function definitions and calls to box
-  def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =
+  // For now, we only show captures of function definitions and calls to box
+  def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =
+    val src = range.from.source
     allCaptures(src).filter {
-      case (t, c) =>
-        val p = C.positions.getStart(t)
-        p.isDefined
+      // keep only captures in the current range
+      case (t, c) => C.positions.getStart(t) match
+        case Some(p) => p.between(range.from, range.to)
+        case None => false
     }.collect {
       case (t: source.FunDef, c) => for {
         pos <- C.positions.getStart(t)
@@ -132,7 +145,7 @@ trait Intelligence {
       } yield (pos, capt)
     }.flatten
 
-  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
+  def getInfoOf(sym: Symbol)(using C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
     case b: ExternFunction =>
       SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None)
