@@ -152,7 +152,7 @@ trait Callable extends BlockSymbol {
       effects = effs.distinct
       // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
       //   in the future namer needs to annotate the function with the capture parameters it introduced.
-      capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
+      capt = CanonicalOrdering(effects.toList).map { tpe => CaptureParam(tpe.name) }
     } yield toType(ret, effects, capt)
 }
 

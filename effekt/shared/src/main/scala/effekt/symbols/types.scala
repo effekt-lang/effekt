@@ -69,7 +69,7 @@ extension (i: BlockType.InterfaceType) {
 }
 
 /**
- * Represents effect sets on function types.
+ * Represents effect _sets_ (no order, no duplicates) on function types.
  *
  * All effects are dealiased by namer. Effects are inferred via [[typer.ConcreteEffects]] so
  * by construction all entries in the set of effects here should be concrete (no unification variables).
@@ -96,7 +96,7 @@ case class Effects(effects: List[BlockType.InterfaceType]) {
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
-  lazy val canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
+  def size: Int = effects.size
 
   def distinct: Effects = Effects(effects.distinct)
 }
@@ -122,6 +122,8 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
   def compare(tpe1: InterfaceType, tpe2: InterfaceType): Int = compareStructural(tpe1, tpe2)
 
   def compareStructural(tpe1: Any, tpe2: Any): Int = (tpe1, tpe2) match {
+    case (_: UnificationVar, _) | (_, _: UnificationVar) =>
+      effekt.util.messages.INTERNAL_ERROR("Cannot compute canonical ordering, since type still contains unification variables.")
     case (sym1: Symbol, sym2: Symbol) =>
       sym1.id - sym2.id
     case (p1: Product, p2: Product) if p1.getClass == p2.getClass =>
@@ -133,6 +135,15 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
   }
 
   def fallback(tpe1: Any, tpe2: Any): Int = tpe1.hashCode - tpe2.hashCode
+
+  def apply(l: List[InterfaceType]): List[InterfaceType] = l.sorted(using this)
+
+  def apply(f: FunctionType): FunctionType = f match {
+    case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+      val (cparamsBlocks, cparamsEffects) = cparams.splitAt(bparams.size)
+      val (cparams2, effects2) = (cparamsEffects zip effects.toList).sortBy(_._2)(using this).unzip
+      FunctionType(tparams, cparamsBlocks ++ cparams2, vparams, bparams, result, Effects(effects2))
+  }
 }
 
 
