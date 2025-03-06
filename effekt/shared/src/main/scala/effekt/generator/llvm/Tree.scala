@@ -22,13 +22,43 @@ export CallingConvention.*
 
 case class BasicBlock(name: String, instructions: List[Instruction], terminator: Terminator)
 
+enum AliasInfo {
+  case StackBase;
+  case StackPointer;
+  case Object;
+  case Prompt;
+  case VTable;
+
+  def scope = {
+    this match {
+      case StackBase => "!3"
+      case StackPointer => "!8"
+      case Object => "!9"
+      case Prompt => "!4"
+      case VTable => "!11"
+    }
+  }
+  def noalias = {
+    this match {
+      case StackBase => "!13"
+      case StackPointer => "!5"
+      case Object => "!12"
+      case Prompt => "!14"
+      case VTable => "!15"
+    }
+  }
+}
+export AliasInfo.*
+
+
+
 /**
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST-Instruction.html#t:Instruction
  */
 enum Instruction {
   case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand])
-  case Load(result: String, tpe: Type, address: Operand)
-  case Store(address: Operand, value: Operand)
+  case Load(result: String, tpe: Type, address: Operand, alias: AliasInfo)
+  case Store(address: Operand, value: Operand, alias: AliasInfo)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])
   case BitCast(result: String, operand: Operand, typ: Type)
   case Add(result: String, operand0: Operand, operand1: Operand)
