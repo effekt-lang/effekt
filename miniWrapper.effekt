@@ -42,9 +42,9 @@ extern jsNode """
 
 extern llvm """
   declare void @c_test_duckDB(%Stack)
-  declare void @c_get_Instance(%Stack)
-  declare void @c_get_Connection(%Stack, %Pos)
-  declare void @c_run_Query(%Stack, %Pos, %Pos)
+  declare %Pos @c_get_Instance()
+  declare %Pos @c_get_Connection(%Pos)
+  declare void @c_run_Query(%Pos, %Pos)
 """
 
 extern type Database
@@ -59,39 +59,47 @@ extern async def testC(): Int =
       ret void
   """
 
-extern async def createDB(): Database =
+extern async def jsCreateDB(): Database =
   jsNode "$effekt.capture(callback => createDB(callback));"
+
+extern def llvmCreateDB(): Database =
   llvm """
-      call ccc void @c_get_Instance(%Stack %stack)
-      ret void
+      %instance = call ccc %Pos @c_get_Instance()
+      ret %Pos %instance
   """
 
-extern async def createConnection(db: Database): Connection =
-  jsNode "$effekt.capture(callback => createConnection(${db}, callback));"
+// extern async def createDB(): Database = 
+  // jsNode "$effekt.capture(callback => createDB(callback));"
+  // llvm """
+  //     call ccc void @c_get_Instance()
+  //     ret void
+  // """
+
+extern def createConnection(db: Database): Connection =
   llvm """
-      call ccc void @c_get_Connection(%Stack %stack, %Pos ${db})
-      ret void
+      %con = call ccc %Pos @c_get_Connection(%Pos ${db})
+      ret %Pos %con
   """
 
 extern def createTableFromFile(con: Connection, path: String, tableName: String): JSValue =
   jsNode "runQuery(${con}, 'CREATE TABLE ' + ${tableName} + ' AS SELECT * FROM ' + ${path}, x => x);"
 
-extern async def runQuery(con: Connection, query: String): String =
+extern def runQuery(con: Connection, query: String): Int =
   llvm """
-      call ccc void @c_run_Query(%Stack %stack, %Pos ${con}, %Pos ${query})
-      ret void
+      call ccc void @c_run_Query(%Pos ${con}, %Pos ${query})
+      ret %Int 123
   """
 
 extern async def runAndGet(con: Connection, query: String): String =
   jsNode "$effekt.capture(callback => runAndGet(${con}, ${query}, callback));"
 
 def main() = {
-  val db = createDB()
+  val db = llvmCreateDB()
   val con = createConnection(db)
-  con.runQuery("CREATE TABLE test AS SELECT * FROM read_json('sample_database.json');")
-  con.runQuery("CREATE TABLE integers(i INTEGER, j INTEGER);")
-  con.runQuery("INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);")
-  println(con.runQuery("SELECT * from test"))
+  println(con.runQuery("CREATE TABLE test AS SELECT * FROM read_json('sample_database.json');"))
+  // con.runQuery("CREATE TABLE integers(i INTEGER, j INTEGER);")
+  // con.runQuery("INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);")
+  println(con.runQuery("SELECT * from test;"))
 
   // inspect(runAndGet(con, "SELECT id FROM test"))
   // val n = testC()

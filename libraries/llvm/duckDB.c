@@ -3,44 +3,43 @@
 
 #include <duckdb.h>
 
-void c_get_Instance(Stack stack) {
+struct Pos c_get_Instance() {
     duckdb_database* db_ptr = (duckdb_database*)malloc(sizeof(duckdb_database));
 
 	if (duckdb_open(NULL, db_ptr) == DuckDBError) {
 		fprintf(stderr, "Failed to open database\n");
 	}
 	else {
-		resume_Pos(stack, (struct Pos) { .tag = 0, .obj = (void*)db_ptr, });
+		return (struct Pos) { .tag = (Int)db_ptr, .obj = NULL, };
 	}
 }
 
-void c_get_Connection(Stack stack, const struct Pos db) {
-	duckdb_database* db_ptr = (duckdb_database*)db.obj;
+struct Pos c_get_Connection(const struct Pos db) {
+	duckdb_database* db_ptr = (duckdb_database*)db.tag;
 	duckdb_connection* con_ptr = (duckdb_connection*)malloc(sizeof(duckdb_connection));
 
 	if (duckdb_connect(*db_ptr, con_ptr) == DuckDBError) {
-		fprintf(stderr, "Failed to open database\n");
+		fprintf(stderr, "Failed to open connection\n");
 	}
 	else {
-		resume_Pos(stack, (struct Pos) { .tag = 1, .obj = (void*)con_ptr, });
+		return (struct Pos) { .tag = (Int)con_ptr, .obj = NULL, };
 	}
 }
 
-void c_run_Query(Stack stack, const struct Pos con, String query) {
+void c_run_Query(const struct Pos con, String query) {
 	printf("here");
-    duckdb_connection* con_ptr = (duckdb_connection*)con.obj;
+    duckdb_connection* con_ptr = (duckdb_connection*)con.tag;
     duckdb_result result;
     
     // Convert Effekt string to C string
     char* q = c_bytearray_into_nullterminated_string(query);
     
     // Execute query - pass the result pointer to store the result
-    if (duckdb_query(*con_ptr, "CREATE TABLE test AS SELECT * FROM read_json('sample_database.json');", &result) == DuckDBError) {
+    if (duckdb_query(*con_ptr, q, &result) == DuckDBError) {
         fprintf(stderr, "Failed to query database:\n");
         // Free the query string before returning
         free(q);
         // Return an error code
-        resume_Int(stack, 0);
         return;
     }
     
@@ -72,7 +71,7 @@ void c_run_Query(Stack stack, const struct Pos con, String query) {
     free(q);
     
     // Return success code
-    resume_Int(stack, 1);
+	return;
 }
 
 
