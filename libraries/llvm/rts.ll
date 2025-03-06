@@ -764,7 +764,7 @@ define void @run(%Neg %f) {
     %arrayPointer = extractvalue %Neg %f, 0
     %object = extractvalue %Neg %f, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !9
+    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !11
 
     ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack)
@@ -779,7 +779,7 @@ define void @run_Int(%Neg %f, i64 %argument) {
     %arrayPointer = extractvalue %Neg %f, 0
     %object = extractvalue %Neg %f, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !9
+    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !11
 
     ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, i64 %argument, %Stack %stack)
@@ -794,7 +794,7 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
     %arrayPointer = extractvalue %Neg %f, 0
     %object = extractvalue %Neg %f, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
-    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !9
+    %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !11
 
     ; call
     tail call tailcc %Pos %functionPointer(%Object %object, %Evidence 0, %Pos %argument, %Stack %stack)
@@ -810,6 +810,7 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
 !2 = !{!"prompts", !0}
 !6 = !{!"stackPointer", !0}
 !7 = !{!"object", !0}
+!10 = !{!"vtable", !0}
 
 ; Scope lists
 !3 = !{!1} ; stackBase
@@ -817,3 +818,4 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
 !5 = !{!1, !2} ; stackValues & prompts
 !8 = !{!6} ; stackPointer
 !9 = !{!7} ; object
+!11 = !{!10} ; vtable
