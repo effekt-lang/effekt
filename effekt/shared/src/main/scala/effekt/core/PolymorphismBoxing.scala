@@ -27,23 +27,12 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   override val phaseName: String = "polymorphism boxing"
 
   /**
-   * Describes how to box/unbox values
-   */
-  trait Boxer {
-    /** The type of the boxed values */
-    def tpe: ValueType
-    /** Generates a pure expression boxing the parameter */
-    def box(p: Pure): Pure
-    /** Generates a pure expression unboxing the parameter */
-    def unbox(p: Pure): Pure
-  }
-  /**
    * Describes how to box/unbox values using extern functions
    * @param tpe The type of the boxed values
    * @param boxFn The extern function to call to box
    * @param unboxFn The extern function to call to unbox
    */
-  case class ExternFnBoxer(val tpe: ValueType, boxFn: Block.BlockVar, unboxFn: Block.BlockVar) extends Boxer {
+  case class Boxer(val tpe: ValueType, boxFn: Block.BlockVar, unboxFn: Block.BlockVar) {
     def box(p: Pure) = Pure.PureApp(boxFn, Nil, List(p))
     def unbox(p: Pure) = Pure.PureApp(unboxFn, Nil, List(p))
   }
@@ -55,7 +44,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    * @param tpe The [[ValueType]] of the value
    * @return a [[Boxer]] that describes how to box values of that type
    */
-  def box(using PContext): PartialFunction[ValueType, Boxer] = {
+  def boxerOf(using PContext): PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt     => PContext.boxer("Int")
     case core.Type.TChar    => PContext.boxer("Char")
     case core.Type.TByte    => PContext.boxer("Byte")
@@ -109,7 +98,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
             }
           case _ => Context.abort(pp"${unbox} is not of function type.")
         }
-        Some(ExternFnBoxer(boxRet, box, unbox))
+        Some(Boxer(boxRet, box, unbox))
       }
 
       findExternFnBoxer() getOrElse {
@@ -387,7 +376,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transformArg(valueType: ValueType)(using PContext): ValueType = valueType match {
     case ValueType.Var(name) => ValueType.Var(name) // assume vars are always OK
-    case t if box.isDefinedAt(t) => box(t).tpe
+    case t if boxerOf.isDefinedAt(t) => boxerOf(t).tpe
     case ValueType.Data(symbol, targs) => ValueType.Data(symbol, targs map transformArg)
     case ValueType.Boxed(tpe, capt) => ValueType.Boxed(transform(tpe), capt)
   }
@@ -428,12 +417,12 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     def apply(from: ValueType, to: ValueType)(using PContext): ValueCoercer = (from, to) match {
       case (f, t) if f == t => IdentityCoercer(f, t)
       case (_: ValueType.Var, _: ValueType.Var) => IdentityCoercer(from, to) // are always boxed
-      case (unboxed, boxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => BoxCoercer(unboxed)
-      case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-      case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
-      case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
-      case (unboxed, core.Type.TTop) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-      case (core.Type.TBottom, unboxed) if box.isDefinedAt(unboxed) => BottomCoercer(unboxed)
+      case (unboxed, boxed) if boxerOf.isDefinedAt(unboxed) && boxerOf(unboxed).tpe == boxed => BoxCoercer(unboxed)
+      case (unboxed, _: ValueType.Var) if boxerOf.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+      case (boxed, unboxed) if boxerOf.isDefinedAt(unboxed) && boxerOf(unboxed).tpe == boxed => UnboxCoercer(unboxed)
+      case (_: ValueType.Var, unboxed) if boxerOf.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
+      case (unboxed, core.Type.TTop) if boxerOf.isDefinedAt(unboxed) => BoxCoercer(unboxed)
+      case (core.Type.TBottom, unboxed) if boxerOf.isDefinedAt(unboxed) => BottomCoercer(unboxed)
 
       // assert(cs1 == cs2) // FIXME this seems to fail, what would be the correct check for subcapturing (or similar) here?
       case (f @ core.ValueType.Boxed(bt1, cs1), t @ core.ValueType.Boxed(bt2, cs2)) =>
@@ -458,13 +447,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     }
     case class BoxCoercer(tpe: ValueType)(using PContext) extends ValueCoercer {
       override def from = tpe
-      override def to = box(tpe).tpe
-      override def apply(t: Pure): Pure = box(tpe).box(t)
+      override def to = boxerOf(tpe).tpe
+      override def apply(t: Pure): Pure = boxerOf(tpe).box(t)
     }
     case class UnboxCoercer(tpe: ValueType)(using PContext) extends ValueCoercer {
-      override def from = box(tpe).tpe
+      override def from = boxerOf(tpe).tpe
       override def to = tpe
-      override def apply(t: Pure): Pure = box(tpe).unbox(t)
+      override def apply(t: Pure): Pure = boxerOf(tpe).unbox(t)
     }
     case class BottomCoercer(tpe: ValueType)(using PContext) extends ValueCoercer {
       override def from = core.Type.TBottom
@@ -477,7 +466,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
         case core.Type.TString  => Pure.Literal("<?nothing>", core.Type.TString)
         case core.Type.TByte    => Pure.Literal(1337, core.Type.TByte)
         case core.Type.TChar    => Pure.Literal('a', core.Type.TChar)
-        case t if box.isDefinedAt(t) => sys error s"No default value defined for ${t}"
+        case t if boxerOf.isDefinedAt(t) => sys error s"No default value defined for ${t}"
         case _ => sys error s"Trying to unbox Nothing to ${t}"
       }
     }
