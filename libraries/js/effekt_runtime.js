@@ -1,69 +1,16 @@
 
 // Common Runtime
 // --------------
-function Cell(init, region) {
-  const cell = {
-    value: init,
-    backup: function() {
-      const _backup = cell.value;
-      // restore function (has a STRONG reference to `this`)
-      return () => { cell.value = _backup; return cell }
-    }
-  }
-  return cell;
-}
-
-const global = {
-  fresh: Cell
-}
-
-function Arena(_region) {
-  const region = _region;
-  return {
-    fresh: function(init) {
-      const cell = Cell(init);
-      // region keeps track what to backup, but we do not need to backup unreachable cells
-      region.push(cell) // new WeakRef(cell))
-      return cell;
-    },
-    region: _region,
-    newRegion: function() {
-      // a region aggregates weak references
-      const nested = Arena([])
-      // this doesn't work yet, since Arena.backup doesn't return a thunk
-      region.push(nested) //new WeakRef(nested))
-      return nested;
-    },
-    backup: function() {
-      const _backup = []
-      let nextIndex = 0;
-      for (const ref of region) {
-        const cell = ref //.deref()
-        // only backup live cells
-        if (cell) {
-          _backup[nextIndex] = cell.backup()
-          nextIndex++
-        }
-      }
-      function restore() {
-        const region = []
-        let nextIndex = 0;
-        for (const restoreCell of _backup) {
-          region[nextIndex] = restoreCell() // new WeakRef(restoreCell())
-          nextIndex++
-        }
-        return Arena(region)
-      }
-      return restore;
-    }
-  }
-}
-
 
 let _prompt = 1;
 
+const global = {
+  fresh: function(value) { return { value: value } },
+  newRegion: function() { return global }
+}
+
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { prompt: 0, arena: Arena([]), rest: null }
+const TOPLEVEL_KS = { stack: null, arena: global, rest: null }
 
 function THUNK(f) {
   f.thunk = true
@@ -80,56 +27,51 @@ function CAPTURE(body) {
 
 const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
-// const r = ks.arena.newRegion(); body
-// const x = r.alloc(init); body
-
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {
-  const prompt = _prompt++;
-  const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
+  ks.stack = k
+  const prompt = { stack: null, arena: global, rest: ks }
+  return prog(prompt, prompt, RETURN)
 }
 
-function DEALLOC(ks) {
-  const arena = ks.arena
-  if (!!arena) {
-    arena.length = arena.length - 1
-  }
-}
+function DEALLOC(ks) {}
 
 function SHIFT(p, body, ks, k) {
 
-  // TODO avoid constructing this object
-  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  let cont = null
+  ks.stack = k
 
-  while (!!meta && meta.prompt !== p) {
-    cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
-    meta = meta.rest
-  }
-  if (!meta) { throw `Prompt not found ${p}` }
+  const top = p.rest;
 
-  // package the prompt itself
-  cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
-  meta = meta.rest
+  // .----------------------------------.
+  // |                                  |
+  // v                                  |
+  // +--------------+      +----------------------+      +--------------+
+  // | stack | rest |----->| stack | first | rest |      | stack | rest |
+  // +--------------+      +----------------------+      +--------------+
+  //       ks                      p                    top
+  p.first = ks
+  p.rest = null
 
-  const k1 = meta.stack
-  meta.stack = null
-  return body(cont, meta, k1)
+  const top_k = top.stack
+  top.stack = null;
+
+  return body(p, top, top_k)
 }
 
 // Rewind stack `cont` back onto `k` :: `ks` and resume with c
-function RESUME(cont, c, ks, k) {
-  let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  let toRewind = cont
-  while (!!toRewind) {
-    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
-    toRewind = toRewind.rest
-  }
+function RESUME(p, c, ks, k) {
 
-  const k1 = meta.stack // TODO instead copy meta here, like elsewhere?
-  meta.stack = null
-  return () => c(meta, k1)
+  ks.stack = k
+
+  const top = p.first
+
+  if (!top) { throw `Cannot resume a continuation multiple times in this backend!` }
+  p.first = null
+  p.rest = ks
+
+  const top_k = top.stack
+  top.stack = null
+  return () => c(top, top_k)
 }
 
 function RUN_TOPLEVEL(comp) {
