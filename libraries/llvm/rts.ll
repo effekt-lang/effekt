@@ -806,10 +806,14 @@ define void @run_Pos(%Neg %f, %Pos %argument) {
 !0 = !{!"types"}
 
 ; Scopes
-!1 = !{!"stackValues", !0}
+!1 = !{!"stackBase", !0}
 !2 = !{!"prompts", !0}
+!6 = !{!"stackPointer", !0}
+!7 = !{!"object", !0}
 
 ; Scope lists
-!3 = !{!1} ; stackValues
+!3 = !{!1} ; stackBase
 !4 = !{!2} ; prompts
 !5 = !{!1, !2} ; stackValues & prompts
+!8 = !{!6} ; stackPointer
+!9 = !{!7} ; object
