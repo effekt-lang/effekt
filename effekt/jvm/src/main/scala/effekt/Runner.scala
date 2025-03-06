@@ -309,6 +309,32 @@ object LLVMRunner extends Runner[String] {
         Seq()
     }
 
+  def duckDBArgs(using C: Context): Seq[String] =
+    val OS = System.getProperty("os.name").toLowerCase
+    val libraries = C.config.gccLibraries.toOption.map(file).orElse {
+      OS match {
+        case os if os.contains("mac")  => Some(file("/opt/homebrew/lib"))
+        case os if os.contains("win") => None
+        case os if os.contains("linux") => Some(file("/usr/local/lib"))  // or /usr/local/lib
+        case os => None
+      }
+    }
+    val includes = C.config.gccIncludes.toOption.map(file).orElse {
+      OS match {
+        case os if os.contains("mac")  => Some(file("/opt/homebrew/include"))
+        case os if os.contains("win") => None
+        case os if os.contains("linux") => Some(file("/usr/local/include"))  // or /usr/local/include
+        case os => None
+      }
+    }
+    (libraries, includes) match {
+      case (Some(lib), Some(include)) => 
+        Seq(s"-L${lib.unixPath}", "-lduckdb", s"-I${include.unixPath}")
+      case _ =>
+        C.warning(s"Cannot find DuckDB on ${OS}; please use --gcc-libraries and --gcc-includes to configure the paths")
+        Seq()
+    }
+
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -324,8 +350,7 @@ object LLVMRunner extends Runner[String] {
     val objPath = basePath + ".o"
     val linkedLibraries = Seq(
       "-lm", // Math library
-      "-lduckdb", // DuckDB library
-    ) ++ libuvArgs
+    ) ++ libuvArgs ++ duckDBArgs
 
     def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
     val gcc = gccCmd.getOrElse(missing("gcc"))
@@ -337,7 +362,7 @@ object LLVMRunner extends Runner[String] {
 
     val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
+    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath, "/usr/local/lib/libduckdb.so") ++ linkedLibraries
 
     if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
     if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")

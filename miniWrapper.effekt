@@ -42,7 +42,9 @@ extern jsNode """
 
 extern llvm """
   declare void @c_test_duckDB(%Stack)
-  declare %Int @c_simple_inc(%Int)
+  declare void @c_get_Instance(%Stack)
+  declare void @c_get_Connection(%Stack, %Pos)
+  declare void @c_run_Query(%Stack, %Pos, %Pos)
 """
 
 extern type Database
@@ -50,12 +52,6 @@ extern type Database
 extern type Connection
 
 extern type JSValue
-
-extern pure def inc(n: Int): Int =
-  llvm """
-    %res = call ccc %Int @c_simple_inc(%Int ${n})
-    ret %res
-  """
 
 extern async def testC(): Int =
   llvm """
@@ -65,21 +61,40 @@ extern async def testC(): Int =
 
 extern async def createDB(): Database =
   jsNode "$effekt.capture(callback => createDB(callback));"
+  llvm """
+      call ccc void @c_get_Instance(%Stack %stack)
+      ret void
+  """
 
 extern async def createConnection(db: Database): Connection =
   jsNode "$effekt.capture(callback => createConnection(${db}, callback));"
+  llvm """
+      call ccc void @c_get_Connection(%Stack %stack, %Pos ${db})
+      ret void
+  """
 
 extern def createTableFromFile(con: Connection, path: String, tableName: String): JSValue =
   jsNode "runQuery(${con}, 'CREATE TABLE ' + ${tableName} + ' AS SELECT * FROM ' + ${path}, x => x);"
 
-extern async def runAndGet(con: Connection, query: String): JSValue =
+extern async def runQuery(con: Connection, query: String): String =
+  llvm """
+      call ccc void @c_run_Query(%Stack %stack, %Pos ${con}, %Pos ${query})
+      ret void
+  """
+
+extern async def runAndGet(con: Connection, query: String): String =
   jsNode "$effekt.capture(callback => runAndGet(${con}, ${query}, callback));"
 
 def main() = {
-  // val db = createDB()
-  // val con = createConnection(db)
-  // createTableFromFile(con, "sample_database.json", "test")
+  val db = createDB()
+  val con = createConnection(db)
+  con.runQuery("CREATE TABLE test AS SELECT * FROM read_json('sample_database.json');")
+  con.runQuery("CREATE TABLE integers(i INTEGER, j INTEGER);")
+  con.runQuery("INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);")
+  println(con.runQuery("SELECT * from test"))
+
   // inspect(runAndGet(con, "SELECT id FROM test"))
-  val n = testC()
-  println("after: " ++ inc(n).show)
+  // val n = testC()
+  // println(n)
+  println("made it here")
 }
