@@ -1,0 +1,22 @@
+module cap_ordering
+
+// Regression test for capability ordering
+// Fails on 'ffde2091956d25dd3522f316ecb1dfc19a33a93e'
+
+effect flip[A](): A
+
+def subsets[A](list: List[A]): List[A] / {flip[A], flip[Bool]} = list match {
+  case Nil() => Nil()
+  case Cons(head, tail) =>
+    val rest = subsets(tail)
+    if (do flip[Bool]()) { Cons(head, rest) } else { rest }}
+
+def main() = {
+  try {
+    println(subsets([1, 2, 3]))
+  } with flip[Bool] {
+    resume(true); resume(false)
+  } with flip[Int] {
+    println("what")
+  }
+}
