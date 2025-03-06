@@ -31,20 +31,20 @@ enum AliasInfo {
 
   def scope = {
     this match {
-      case StackBase => "!3"
-      case StackPointer => "!8"
-      case Object => "!9"
-      case Prompt => "!4"
-      case VTable => "!11"
+      case StackBase => "!11"
+      case StackPointer => "!12"
+      case Prompt => "!13"
+      case Object => "!14"
+      case VTable => "!15"
     }
   }
   def noalias = {
     this match {
-      case StackBase => "!13"
-      case StackPointer => "!5"
-      case Object => "!12"
-      case Prompt => "!14"
-      case VTable => "!15"
+      case StackBase => "!21"
+      case StackPointer => "!22"
+      case Prompt => "!23"
+      case Object => "!24"
+      case VTable => "!25"
     }
   }
 }
