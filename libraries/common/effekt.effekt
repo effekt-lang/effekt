@@ -784,11 +784,6 @@ effect splice[A](x: A): Unit
 
 namespace internal {
   namespace boxing {
-    // For boxing polymorphic values
-    extern type BoxedUnit
-    extern pure def boxUnit(u: Unit): Unit =
-    extern pure def unboxUnit(u: Unit): Unit =
-
     extern type BoxedInt
     extern pure def boxInt(n: Int): BoxedInt =
       llvm """
@@ -829,10 +824,6 @@ namespace internal {
         %unboxed = extractvalue %Pos ${b}, 0
         ret %Int %unboxed
       """
-
-    extern type BoxedBool
-    extern pure def boxBool(b: Bool): BoxedBool =
-    extern pure def unboxBool(b: BoxedBool): Bool =
 
     extern type BoxedDouble
     extern pure def boxDouble(d: Double): BoxedDouble =
