@@ -360,10 +360,21 @@ object Transformer {
 
       case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
-        val functionType = PointerType();
         shareValues(values, freeVariables(rest));
         emit(Call(resultName, Ccc(), transform(resultType), ConstantGlobal(foreign), values.map(transform)));
         eraseValues(List(variable), freeVariables(rest))
+        transform(rest)
+
+      case machine.Coerce(name, value, rest) =>
+        emit(Comment(s"coerce from ${value.tpe} to ${name.tpe}"));
+        shareValues(List(value), freeVariables(rest));
+        val coerce = (value.tpe, name.tpe) match {
+          case (machine.Type.Positive(), machine.Type.Negative()) => "coercePosNeg"
+          case (machine.Type.Negative(), machine.Type.Positive()) => "coerceNegPos"
+          case (t1, t2) => ???
+        };
+        emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal(coerce), List(transform(value))))
+        eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
       case machine.Statement.Hole =>
