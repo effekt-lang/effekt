@@ -204,7 +204,7 @@ enum Statement {
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 
   /**
-    * let x2 : t2 = x1 : t1; s
+    * let x2 : t2 = coerce x1 : t1; s
     */
   case Coerce(name: Variable, value: Variable, rest: Statement)
 
