@@ -32,9 +32,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    * @param boxFn The extern function to call to box
    * @param unboxFn The extern function to call to unbox
    */
-  case class Boxer(val tpe: ValueType, boxFn: String, unboxFn: String) {
-    def box(p: Pure) = Pure.PureApp(core.BlockVar(Id(boxFn), coercerType(tpe, core.Type.TTop), Set()), Nil, List(p))
-    def unbox(p: Pure) = Pure.PureApp(core.BlockVar(Id(unboxFn), coercerType(core.Type.TTop, tpe), Set()), Nil, List(p))
+  case class Boxer(val tpe: ValueType, other: ValueType, boxFn: String, unboxFn: String) {
+    def box(p: Pure) = Pure.PureApp(core.BlockVar(Id(boxFn), coercerType(other, tpe), Set()), Nil, List(p))
+    def unbox(p: Pure) = Pure.PureApp(core.BlockVar(Id(unboxFn), coercerType(tpe, other), Set()), Nil, List(p))
   }
 
   def coercerType(from: core.ValueType, into: core.ValueType): core.BlockType.Function =
@@ -49,13 +49,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    */
   def boxer: PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt =>
-      Boxer(core.Type.TInt, "@coerceIntPos", "@coercePosInt")
+      Boxer(core.Type.TTop, core.Type.TInt, "@coerceIntPos", "@coercePosInt")
     case core.Type.TChar =>
-      Boxer(core.Type.TChar, "@coerceIntPos", "@coercePosInt")
+      Boxer(core.Type.TTop, core.Type.TChar, "@coerceIntPos", "@coercePosInt")
     case core.Type.TByte =>
-      Boxer(core.Type.TByte, "@coerceBytePos", "@coercePosByte")
+      Boxer(core.Type.TTop, core.Type.TByte, "@coerceBytePos", "@coercePosByte")
     case core.Type.TDouble =>
-      Boxer(core.Type.TDouble, "@coerceDoublePos", "@coercePosDouble")
+      Boxer(core.Type.TTop, core.Type.TDouble, "@coerceDoublePos", "@coercePosDouble")
   }
 
   def DeclarationContext(using ctx: DeclarationContext): DeclarationContext = ctx
