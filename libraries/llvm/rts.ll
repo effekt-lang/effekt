@@ -773,6 +773,16 @@ define ccc %Neg @coercePosNeg(%Pos %input) {
     ret %Neg %neg_result_with_heap
 }
 
+define ccc %Pos @coerceIntPos(%Int %input) {
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %input, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Int @coercePosInt(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    ret %Int %unboxed
+}
 
 
 ; Scope domains

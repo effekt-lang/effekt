@@ -371,6 +371,8 @@ object Transformer {
         val coerce = (value.tpe, name.tpe) match {
           case (machine.Type.Positive(), machine.Type.Negative()) => "coercePosNeg"
           case (machine.Type.Negative(), machine.Type.Positive()) => "coerceNegPos"
+          case (machine.Type.Int(), machine.Type.Positive()) => "coerceIntPos"
+          case (machine.Type.Positive(), machine.Type.Int()) => "coercePosInt"
           case (t1, t2) => ???
         };
         emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal(coerce), List(transform(value))))

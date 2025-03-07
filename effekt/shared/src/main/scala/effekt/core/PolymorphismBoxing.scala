@@ -45,11 +45,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    * @return a [[Boxer]] that describes how to box values of that type
    */
   def boxerOf(using PContext): PartialFunction[ValueType, Boxer] = {
-    case core.Type.TInt     => PContext.boxer("Int")
+    case core.Type.TInt     =>
+      val boxFn: core.BlockVar = core.BlockVar(Id("@coerceIntPos"), coercerType(core.Type.TInt, core.Type.TTop), Set())
+      val unboxFn: core.BlockVar = core.BlockVar(Id("@coercePosInt"), coercerType(core.Type.TTop, core.Type.TInt), Set())
+      Boxer(core.Type.TTop, boxFn, unboxFn)
     case core.Type.TChar    => PContext.boxer("Char")
     case core.Type.TByte    => PContext.boxer("Byte")
     case core.Type.TDouble  => PContext.boxer("Double")
   }
+
+  def coercerType(from: core.ValueType, into: core.ValueType): core.BlockType.Function =
+    core.BlockType.Function(List(), List(), List(from), List(), into)
 
   class PContext(declarations: List[Declaration], externs: List[Extern])(using val Context: Context) extends DeclarationContext(declarations, externs){
     /**
