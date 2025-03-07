@@ -30,6 +30,17 @@ effect stop(): Nothing
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
   returning::for[A, Unit]{stream}{action}
 
+/// Runs the stream as a message queue,
+/// handling each of its elements that can produce new elements ("messages"),
+/// until a fixed point is reached.
+def fix[T] { one: T => Unit / emit[T] } { stream: => Unit / emit[T] }: Unit =
+  try {
+    stream()
+  } with emit[T] { value =>
+    fix[T] {one} { one(value) }
+    resume(())
+  }
+
 /// Turns a `list` into a producer of a push stream
 /// by emitting each contained value left-to-right.
 def each[A](list: List[A]): Unit / emit[A] =

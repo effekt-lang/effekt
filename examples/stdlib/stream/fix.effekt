@@ -1,0 +1,28 @@
+import stream
+
+type Message {
+  Primitive(n: Int)
+  Complex(msgs: List[Message])
+}
+
+def solveOne(m: Message): Unit / { emit[Int], emit[Message] } = m match {
+  case Primitive(n) => do emit[Int](n)
+  case Complex(msgs) => for { msgs.each } { msg => do emit[Message](msg) }
+}
+
+def main() =
+  for[Int] {
+    fix[Message] { msg => solveOne(msg) } {
+      do emit(
+        Complex([
+          Primitive(1),
+          Complex([Primitive(2), Primitive(3), Primitive(4)]),
+          Complex([]),
+          Complex([Complex([Primitive(0)]), Primitive(100)])
+        ])
+      )
+      do emit(Primitive(-10))
+      do emit(Complex([]))
+      do emit(Complex([Complex([]), Primitive(42)]))
+    }
+  } { n => println(n) }
