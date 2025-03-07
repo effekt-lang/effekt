@@ -49,9 +49,18 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val boxFn: core.BlockVar = core.BlockVar(Id("@coerceIntPos"), coercerType(core.Type.TInt, core.Type.TTop), Set())
       val unboxFn: core.BlockVar = core.BlockVar(Id("@coercePosInt"), coercerType(core.Type.TTop, core.Type.TInt), Set())
       Boxer(core.Type.TTop, boxFn, unboxFn)
-    case core.Type.TChar    => PContext.boxer("Char")
-    case core.Type.TByte    => PContext.boxer("Byte")
-    case core.Type.TDouble  => PContext.boxer("Double")
+    case core.Type.TChar    =>
+      val boxFn: core.BlockVar = core.BlockVar(Id("@coerceCharPos"), coercerType(core.Type.TChar, core.Type.TTop), Set())
+      val unboxFn: core.BlockVar = core.BlockVar(Id("@coercePosChar"), coercerType(core.Type.TTop, core.Type.TChar), Set())
+      Boxer(core.Type.TTop, boxFn, unboxFn)
+    case core.Type.TByte    =>
+      val boxFn: core.BlockVar = core.BlockVar(Id("@coerceBytePos"), coercerType(core.Type.TByte, core.Type.TTop), Set())
+      val unboxFn: core.BlockVar = core.BlockVar(Id("@coercePosByte"), coercerType(core.Type.TTop, core.Type.TByte), Set())
+      Boxer(core.Type.TTop, boxFn, unboxFn)
+    case core.Type.TDouble  =>
+      val boxFn: core.BlockVar = core.BlockVar(Id("@coerceDoublePos"), coercerType(core.Type.TDouble, core.Type.TTop), Set())
+      val unboxFn: core.BlockVar = core.BlockVar(Id("@coercePosDouble"), coercerType(core.Type.TTop, core.Type.TDouble), Set())
+      Boxer(core.Type.TTop, boxFn, unboxFn)
   }
 
   def coercerType(from: core.ValueType, into: core.ValueType): core.BlockType.Function =
