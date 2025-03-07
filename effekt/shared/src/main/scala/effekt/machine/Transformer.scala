@@ -95,6 +95,10 @@ object Transformer {
           case core.Variable.Block(id, core.Type.TRegion, capt) =>
             Set(Variable(transform(id), Type.Prompt()))
 
+          // Coercsions are blocks and can be free, but do not have info.
+          case core.Variable.Block(id, _, _) if id.name.name.startsWith("@coerce") =>
+            Set.empty
+
           case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams)) =>
@@ -400,6 +404,18 @@ object Transformer {
       val literal_binding = Variable(freshName("utf8StringLiteral"), builtins.StringType);
       shift { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+      }
+
+    case core.PureApp(core.BlockVar(blockName, tpe: core.BlockType.Function, _), List(), List(arg)) if blockName.name.name.startsWith("@coerce") =>
+      val variable = Variable(freshName("coerceApp"), transform(tpe.result))
+      transform(arg).flatMap { value =>
+        Binding { k =>
+          blockName.name.name match {
+            case "@coerceIntPos" => Coerce(variable, value, k(variable))
+            case "@coercePosInt" => Coerce(variable, value, k(variable))
+            case _ => ???
+          }
+        }
       }
 
     case core.PureApp(core.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function, capt), targs, vargs) =>
