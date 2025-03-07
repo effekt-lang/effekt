@@ -410,11 +410,7 @@ object Transformer {
       val variable = Variable(freshName("coerceApp"), transform(tpe.result))
       transform(arg).flatMap { value =>
         Binding { k =>
-          blockName.name.name match {
-            case "@coerceIntPos" => Coerce(variable, value, k(variable))
-            case "@coercePosInt" => Coerce(variable, value, k(variable))
-            case _ => ???
-          }
+          Coerce(variable, value, k(variable))
         }
       }
 

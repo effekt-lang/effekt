@@ -373,7 +373,11 @@ object Transformer {
           case (machine.Type.Negative(), machine.Type.Positive()) => "coerceNegPos"
           case (machine.Type.Int(), machine.Type.Positive()) => "coerceIntPos"
           case (machine.Type.Positive(), machine.Type.Int()) => "coercePosInt"
-          case (t1, t2) => ???
+          case (machine.Type.Byte(), machine.Type.Positive()) => "coerceBytePos"
+          case (machine.Type.Positive(), machine.Type.Byte()) => "coercePosByte"
+          case (machine.Type.Double(), machine.Type.Positive()) => "coerceDoublePos"
+          case (machine.Type.Positive(), machine.Type.Double()) => "coercePosDouble"
+          case (t1, t2) => ??? // TODO panic with message
         };
         emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal(coerce), List(transform(value))))
         eraseValues(List(name), freeVariables(rest))

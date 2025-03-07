@@ -784,6 +784,32 @@ define ccc %Int @coercePosInt(%Pos %input) {
     ret %Int %unboxed
 }
 
+define ccc %Pos @coerceBytePos(%Byte %input) {
+    %extended = sext i8 %input to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %extended, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Byte @coercePosByte(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %truncated = trunc i64 %unboxed to i8
+    ret i8 %truncated
+}
+
+define ccc %Pos @coerceDoublePos(%Double %input) {
+    %number = bitcast double %input to i64
+    %boxed1 = insertvalue %Pos zeroinitializer, i64 %number, 0
+    %boxed2 = insertvalue %Pos %boxed1, %Object null, 1
+    ret %Pos %boxed2
+}
+
+define ccc %Double @coercePosDouble(%Pos %input) {
+    %unboxed = extractvalue %Pos %input, 0
+    %d = bitcast i64 %unboxed to double
+    ret %Double %d
+}
+
 
 ; Scope domains
 !0 = !{!"types"}
