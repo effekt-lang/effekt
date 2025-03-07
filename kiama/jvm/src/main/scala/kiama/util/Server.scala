@@ -11,6 +11,7 @@
 package kiama
 package util
 
+import java.nio.file.Paths
 import kiama.util.Collections.{ mapToJavaMap, seqToJavaList }
 import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, InlayHint => LSPInlayHint, InlayHintKind => LSPInlayHintKind, _ }
 import org.eclipse.lsp4j.jsonrpc.messages. { Either => LSPEither }
@@ -317,15 +318,18 @@ trait Server[N, C <: Config, M <: Message] extends Compiler[C, M] with LanguageS
     }
   }
 
-  def toURI(filename: String): String = filename match {
-    case _ if filename startsWith "file:" =>
+  def toURI(filename: String): String = {
+    if (filename.startsWith("file:") || filename.startsWith("vscode-notebook-cell:")) {
+      // Already a URI or special scheme
       filename
-    case _ if filename startsWith "vscode-notebook-cell:" =>
-      filename
-    case _ if filename startsWith "./" =>
-      s"file://${Filenames.cwd()}/${Filenames.dropPrefix(filename, ".")}"
-    case _ =>
-      s"file://$filename"
+    } else if (filename.startsWith("./") || filename.startsWith(".\\")) {
+      // Remove the "./" or ".\\" prefix
+      val relativePath = filename.substring(2)
+      val fullPath = Paths.get(Filenames.cwd()).resolve(relativePath).normalize()
+      fullPath.toUri.toString
+    } else {
+      Paths.get(filename).toUri.toString
+    }
   }
 
   def publishDiagnostics(name: String, diagnostics: Vector[Diagnostic]): Unit = {
