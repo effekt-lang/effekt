@@ -136,7 +136,7 @@ object Transformer {
       case core.Def(id, block @ core.Unbox(pure), rest) =>
         noteParameter(id, block.tpe)
         transform(pure).run { boxed =>
-          ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), transform(rest))
+          Coerce(Variable(transform(id), Type.Negative()), boxed, transform(rest))
         }
 
       case core.Let(id, tpe, binding, rest) =>
@@ -177,7 +177,7 @@ object Transformer {
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
 
-                ForeignCall(callee, "unbox", List(boxedCallee),
+                Coerce(callee, boxedCallee,
                   Invoke(callee, builtins.Apply, values ++ blocks))
               }
 
@@ -206,7 +206,7 @@ object Transformer {
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
 
-                ForeignCall(callee, "unbox", List(boxedCallee),
+                Coerce(callee, boxedCallee,
                   Invoke(callee, opTag, values ++ blocks))
               }
 
@@ -438,7 +438,7 @@ object Transformer {
       transformBlockArg(block).flatMap { unboxed =>
         shift { k =>
           val boxed = Variable(freshName(unboxed.name), Type.Positive())
-          ForeignCall(boxed, "box", List(unboxed), k(boxed))
+          Coerce(boxed, unboxed, k(boxed))
         }
       }
 
