@@ -39,7 +39,7 @@ class Deadcode(reachable: Map[Id, Usage]) extends core.Tree.Rewrite {
         declarations.map(rewrite),
         // drop unreachable externs
         m.externs.collect {
-          case e: Extern.Def if used(e.id) || e.id.name.name.startsWith("box") || e.id.name.name.startsWith("unbox") => e
+          case e: Extern.Def if used(e.id) => e
           case e: Extern.Include => e
         },
         // drop unreachable definitions
