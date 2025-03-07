@@ -377,7 +377,8 @@ object Transformer {
           case (machine.Type.Positive(), machine.Type.Byte()) => "coercePosByte"
           case (machine.Type.Double(), machine.Type.Positive()) => "coerceDoublePos"
           case (machine.Type.Positive(), machine.Type.Double()) => "coercePosDouble"
-          case (t1, t2) => ??? // TODO panic with message
+          case (tpe1, tpe2) =>
+            sys.error(s"Should not coerce $tpe1 to $tpe2")
         };
         emit(Call(name.name, Ccc(), transform(name.tpe), ConstantGlobal(coerce), List(transform(value))))
         eraseValues(List(name), freeVariables(rest))
