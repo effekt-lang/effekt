@@ -133,22 +133,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
         InlayHint(InlayHintKind.Type, p, prettyCaptures, markdownTooltip = s"captures: `${prettyCaptures}`", paddingRight = true, effektKind = "capture")
     }.toVector
 
-    // TODO: Also do this for un-annotated `val`s and `var`s.
-    val unannotated = getTreesInRange(range)(using context).map { trees =>
-      trees.collect {
-        // Functions without an annotated type:
-        case fun: FunDef if fun.ret.isEmpty => for {
-          // TODO(question): `context.inferredTypeAndEffectOption(fun)` didn't work here. Why?
-          sym <- context.symbolOption(fun.id)
-          tpe <- context.functionTypeOption(sym)
-          pos <- positions.getFinish(fun.bparams) // TODO(bug): This position doesn't always work. Ideally, I'd use the position of `fun.ret`, but that doesn't exist!
-          res = InlayHint(InlayHintKind.Type, pos, pp": ${tpe.result} / ${tpe.effects}", resolveToLabel = true, paddingLeft = true, effektKind = "missing-type-annotation")
-        } yield res
-      }.flatten
-    }.getOrElse(Vector())
-
-    val allHints = captures ++ unannotated
-    if allHints.isEmpty then None else Some(allHints)
+    if captures.isEmpty then None else Some(captures)
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
