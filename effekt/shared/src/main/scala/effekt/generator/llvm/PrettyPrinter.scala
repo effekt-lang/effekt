@@ -71,13 +71,13 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Call(_, Tailcc(_), tpe, _, _) =>
       C.abort(s"tail call to non-void function returning: $tpe")
 
-    case Load(result, tpe, LocalReference(PointerType(), name)) =>
-      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}, !noalias !5"
-    case Load(_, _, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
+    case Load(result, tpe, LocalReference(PointerType(), name), alias) =>
+      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}, !noalias ${alias.noalias}, !alias.scope ${alias.scope}"
+    case Load(_, _, operand, _) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
 
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
-    case Store(address, value) =>
-      s"store ${show(value)}, ${show(address)}, !noalias !5"
+    case Store(address, value, alias) =>
+      s"store ${show(value)}, ${show(address)}, !noalias ${alias.noalias}, !alias.scope ${alias.scope}"
 
     case GetElementPtr(result, tpe, ptr @ LocalReference(_, name), i :: is) =>
       s"${localName(result)} = getelementptr ${show(tpe)}, ${show(ptr)}, i64 $i" + is.map(", i32 " + _).mkString
