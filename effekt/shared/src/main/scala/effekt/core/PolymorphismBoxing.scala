@@ -40,6 +40,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def coercerType(from: core.ValueType, into: core.ValueType): core.BlockType.Function =
     core.BlockType.Function(List(), List(), List(from), List(), into)
 
+  val TBoxedInt = ValueType.Data(Id("BoxedInt"), Nil)
+  val TBoxedByte = ValueType.Data(Id("BoxedByte"), Nil)
+  val TBoxedDouble = ValueType.Data(Id("BoxedDouble"), Nil)
+
   /**
    * Partial function to describe which values to box and how.
    * Is defined iff values of the given type should be boxed.
@@ -49,13 +53,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
    */
   def boxer: PartialFunction[ValueType, Boxer] = {
     case core.Type.TInt =>
-      Boxer(core.Type.TTop, core.Type.TInt, "@coerceIntPos", "@coercePosInt")
+      Boxer(TBoxedInt, core.Type.TInt, "@coerceIntPos", "@coercePosInt")
     case core.Type.TChar =>
-      Boxer(core.Type.TTop, core.Type.TChar, "@coerceIntPos", "@coercePosInt")
+      Boxer(TBoxedInt, core.Type.TChar, "@coerceIntPos", "@coercePosInt")
     case core.Type.TByte =>
-      Boxer(core.Type.TTop, core.Type.TByte, "@coerceBytePos", "@coercePosByte")
+      Boxer(TBoxedByte, core.Type.TByte, "@coerceBytePos", "@coercePosByte")
     case core.Type.TDouble =>
-      Boxer(core.Type.TTop, core.Type.TDouble, "@coerceDoublePos", "@coercePosDouble")
+      Boxer(TBoxedDouble, core.Type.TDouble, "@coerceDoublePos", "@coercePosDouble")
   }
 
   def DeclarationContext(using ctx: DeclarationContext): DeclarationContext = ctx
