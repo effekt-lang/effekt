@@ -8,7 +8,6 @@ import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
 import effekt.symbols.ErrorMessageInterpolator
 
-
 object Transformer {
 
   private def ErrorReporter(using E: ErrorReporter): ErrorReporter = E
@@ -34,9 +33,9 @@ object Transformer {
 
     val transformedDefinitions = definitions.foldLeft(mainEntry) {
       case (rest, core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body))) =>
-        Def(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body), rest)
+        Def(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body).run(), rest)
       case (rest, core.Toplevel.Val(id, tpe, binding)) =>
-        Def(BC.globals(id), transform(binding), rest)
+        Def(BC.globals(id), transform(binding).run(), rest)
       case (rest, d) =>
         ErrorReporter.abort(s"Toplevel object definitions not yet supported: ${d}")
     }
@@ -66,7 +65,7 @@ object Transformer {
       ExternBody.Unsupported(err)
   }
 
-  def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
+  def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Control[Statement] =
     stmt match {
 
       case core.Def(id, block @ core.BlockLit(tparams, cparams, vparams, bparams, body), rest) =>
@@ -110,117 +109,103 @@ object Transformer {
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 
         // (2) Actually translate the definitions
-        Def(transformLabel(id), transform(body), transform(rest))
+        pure(Def(transformLabel(id), transform(body).run(), transform(rest).run()))
 
       case core.Def(id, block @ core.New(impl), rest) =>
         // this is just a hack...
         noteParameter(id, block.tpe)
-        New(Variable(transform(id), transform(impl.interface)), transform(impl), transform(rest))
+        pure(New(Variable(transform(id), transform(impl.interface)), transform(impl), transform(rest).run()))
 
       case core.Def(id, block @ core.BlockVar(alias, tpe, _), rest) =>
         getDefinition(alias) match {
           case BlockInfo.Definition(free, params) =>
             noteDefinition(id, free, params)
         }
-        Def(transformLabel(id), Jump(transformLabel(alias)), transform(rest))
+        pure(Def(transformLabel(id), Jump(transformLabel(alias)), transform(rest).run()))
 
-      case core.Def(id, block @ core.Unbox(pure), rest) =>
-        noteParameter(id, block.tpe)
-        transform(pure).run { boxed =>
-          ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), transform(rest))
-        }
+    case core.Def(id, block @ core.Unbox(pure), rest) =>
+      noteParameter(id, block.tpe)
+      control.pure(ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(transform(pure).run()), transform(rest).run()))
 
-      case core.Let(id, tpe, binding, rest) =>
-        transform(binding).run { value =>
-          // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-          // TODO it is important that we use the inferred [[binding.tpe]] and not the annotated type [[tpe]], but why?
-          Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), transform(rest))
-        }
+    case core.Let(id, tpe, binding, rest) =>
+      pure(Substitute(List(Variable(transform(id), transform(binding.tpe)) -> transform(binding).run()), transform(rest).run()))
 
       case core.Return(expr) =>
-        transform(expr).run { value => Return(List(value)) }
+        pure(Return(List(transform(expr).run())))
 
       case core.Val(id, annot, binding, rest) =>
-        PushFrame(
-          Clause(List(Variable(transform(id), transform(binding.tpe))), transform(rest)),
-            transform(binding)
-        )
+        pure(PushFrame(
+          Clause(List(Variable(transform(id), transform(binding.tpe))), transform(rest).run()),
+            transform(binding).run()
+        ))
 
       case core.App(callee, targs, vargs, bargs) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.panic(s"Types ${targs} are used as type parameters but would require boxing.") }
-        transform(vargs, bargs).run { (values, blocks) =>
-          callee match {
-            case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
-              BPC.info.getOrElse(id, sys.error(pp"In ${stmt}. Cannot find block info for ${id}: ${annotatedTpe}.\n${BPC.info}")) match {
-                // Unknown Jump to function
-                case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
-                  Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks)
+        val (values, blocks) = transform(vargs, bargs).run()
+        callee match {
+          case Block.BlockVar(id, annotatedTpe, annotatedCapt) =>
+            BPC.info.getOrElse(id, sys.error(pp"In ${stmt}. Cannot find block info for ${id}: ${annotatedTpe}.\n${BPC.info}")) match {
+              // Unknown Jump to function
+              case BlockInfo.Parameter(tpe: core.BlockType.Function) =>
+                pure(Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values ++ blocks))
 
-                // Known Jump
-                case BlockInfo.Definition(freeParams, blockParams) =>
-                  val label = machine.Label(transform(id), blockParams ++ freeParams)
-                  Substitute(label.environment.zip(values ++ blocks), Jump(label))
+              // Known Jump
+              case BlockInfo.Definition(freeParams, blockParams) =>
+                val label = machine.Label(transform(id), blockParams ++ freeParams)
+                pure(Substitute(label.environment.zip(values ++ blocks), Jump(label)))
 
-                case _ => ErrorReporter.panic("Applying an object")
-              }
+              case _ => ErrorReporter.panic("Applying an object")
+            }
 
-            case Block.Unbox(pure) =>
-              transform(pure).run { boxedCallee =>
-                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+          case Block.Unbox(pure) =>
+            val boxedCallee = transform(pure).run()
+            val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+            control.pure(ForeignCall(callee, "unbox", List(boxedCallee),
+              Invoke(callee, builtins.Apply, values ++ blocks)))
 
-                ForeignCall(callee, "unbox", List(boxedCallee),
-                  Invoke(callee, builtins.Apply, values ++ blocks))
-              }
+          case Block.New(impl) =>
+            ErrorReporter.panic("Applying an object")
 
-            case Block.New(impl) =>
-              ErrorReporter.panic("Applying an object")
-
-            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              ErrorReporter.panic(pp"Call to block literal should have been reduced: ${stmt}")
-          }
+          case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+            ErrorReporter.panic(pp"Call to block literal should have been reduced: ${stmt}")
         }
 
       case core.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
         if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
         val opTag = DeclarationContext.getPropertyTag(method)
-        transform(vargs, bargs).run { (values, blocks) =>
-          callee match {
-            case Block.BlockVar(id, tpe, capt) =>
-              Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
+        val (values, blocks) = transform(vargs, bargs).run()
+        callee match {
+          case Block.BlockVar(id, tpe, capt) =>
+            pure(Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks))
 
-            case Block.Unbox(pure) =>
-              transform(pure).run { boxedCallee =>
-                val callee = Variable(freshName(boxedCallee.name), Type.Negative())
+          case Block.Unbox(pure) =>
+            val boxedCallee = transform(pure).run()
+            val callee = Variable(freshName(boxedCallee.name), Type.Negative())
 
-                ForeignCall(callee, "unbox", List(boxedCallee),
-                  Invoke(callee, opTag, values ++ blocks))
-              }
+            control.pure(ForeignCall(callee, "unbox", List(boxedCallee), Invoke(callee, opTag, values ++ blocks)))
 
-            case Block.New(impl) =>
-              ErrorReporter.panic("Method call to known object should have been reduced")
+          case Block.New(impl) =>
+            ErrorReporter.panic("Method call to known object should have been reduced")
 
-            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              ErrorReporter.panic("Invoking a method on a function")
-          }
+          case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+            ErrorReporter.panic("Invoking a method on a function")
         }
 
       case core.If(cond, thenStmt, elseStmt) =>
-        transform(cond).run { value =>
-          Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
-        }
+        val value = transform(cond).run()
+        pure(Switch(value, List(0 -> Clause(List(), transform(elseStmt).run()), 1 -> Clause(List(), transform(thenStmt).run())), None))
 
       case core.Match(scrutinee, clauses, default) =>
         val transformedClauses = clauses.map { case (constr, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
-          DeclarationContext.getConstructorTag(constr) -> Clause(vparams.map(transform), transform(body))
+          DeclarationContext.getConstructorTag(constr) -> Clause(vparams.map(transform), transform(body).run())
         }
         val transformedDefault = default.map { clause =>
-          Clause(List(), transform(clause))
+          Clause(List(), transform(clause).run())
         }
 
-        transform(scrutinee).run { value =>
-          Switch(value, transformedClauses, transformedDefault)
-        }
+        val value = transform(scrutinee).run()
+        pure(Switch(value, transformedClauses, transformedDefault))
 
       case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
         noteParameters(List(prompt))
@@ -229,45 +214,44 @@ object Transformer {
         val variable = Variable(freshName("returned"), transform(answerType))
         val returnClause = Clause(List(variable), Return(List(variable)))
 
-        Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body))
+        pure(Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, transform(body).run()))
 
       case core.Shift(prompt, core.BlockLit(Nil, cparams, Nil, List(k), body)) =>
 
         noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
 
-        Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()),
-          transform(body))
+        pure(Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()),
+          transform(body).run()))
 
       case core.Resume(k, body) =>
-        Resume(Variable(transform(k.id), Type.Stack()), transform(body))
+        pure(Resume(Variable(transform(k.id), Type.Stack()), transform(body).run()))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
 
-        Reset(prompt, returnClause, transform(body))
+        pure(Reset(prompt, returnClause, transform(body).run()))
 
       case core.Alloc(id, init, region, body) =>
-        transform(init).run { value =>
-          val tpe = value.tpe;
-          val name = transform(id)
-          val variable = Variable(name, tpe)
-          val reference = Variable(transform(id), Type.Reference(tpe))
-          val prompt = Variable(transform(region), Type.Prompt())
-          val temporary = Variable(freshName("temporaryStack"), Type.Stack())
+        val value =  transform(init).run()
+        val tpe = value.tpe;
+        val name = transform(id)
+        val variable = Variable(name, tpe)
+        val reference = Variable(transform(id), Type.Reference(tpe))
+        val prompt = Variable(transform(region), Type.Prompt())
+        val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
-          region match {
-            case symbols.builtins.globalRegion =>
-              val globalPrompt = Variable("global", Type.Prompt())
-              Shift(temporary, globalPrompt,
-                Var(reference, value, Type.Positive(),
-                  Resume(temporary, transform(body))))
-            case _ =>
-              Shift(temporary, prompt,
-                Var(reference, value, Type.Positive(),
-                  Resume(temporary, transform(body))))
-          }
+        region match {
+          case symbols.builtins.globalRegion =>
+            val globalPrompt = Variable("global", Type.Prompt())
+            pure(Shift(temporary, globalPrompt,
+              Var(reference, value, Type.Positive(),
+                Resume(temporary, transform(body).run()))))
+          case _ =>
+            pure(Shift(temporary, prompt,
+              Var(reference, value, Type.Positive(),
+                Resume(temporary, transform(body).run()))))
         }
 
       case core.Var(ref, init, capture, body) =>
@@ -275,52 +259,49 @@ object Transformer {
         val reference = Variable(transform(ref), Type.Reference(stateType))
         val prompt = Variable(freshName("prompt"), Type.Prompt())
 
-        transform(init).run { value =>
-          Var(reference, value, transform(body.tpe),
-            transform(body))
-        }
+        val value = transform(init).run()
+        pure(Var(reference, value, transform(body.tpe), transform(body).run()))
 
       case core.Get(id, tpe, ref, capt, body) =>
         val stateType = transform(tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
         val variable = Variable(transform(id), stateType)
 
-        LoadVar(variable, reference, transform(body))
+        pure(LoadVar(variable, reference, transform(body).run()))
 
       case core.Put(ref, capt, arg, body) =>
         val stateType = transform(arg.tpe)
         val reference = Variable(transform(ref), Type.Reference(stateType))
         val variable = Variable(freshName("put"), Positive())
 
-        transform(arg).run { value =>
-          StoreVar(reference, value, transform(body))
-        }
+        val value = transform(arg).run()
+        pure(StoreVar(reference, value, transform(body).run()))
 
-      case core.Hole() => machine.Statement.Hole
+      case core.Hole() => pure(machine.Statement.Hole)
 
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
   // Merely sequences the transformation of the arguments monadically
-  def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[(List[Variable], List[Variable])] =
+  def transform(vargs: List[core.Pure], bargs: List[core.Block])(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Control[(List[Variable], List[Variable])] =
     for {
-      values <- traverse(vargs)(transform)
-      blocks <- traverse(bargs)(transformBlockArg)
+      values <- control.sequence(vargs.map(transform))
+      blocks <- control.sequence(bargs.map(transformBlockArg))
     } yield (values, blocks)
 
-  def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+  def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Control[Variable] = block match {
     case core.BlockVar(id, tpe, capt) => getBlockInfo(id) match {
       case BlockInfo.Definition(_, parameters) =>
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
         // TODO cache the closure somehow to prevent it from being created on every call
         val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
-        Binding { k =>
+        binding(variable, v =>
           New(variable, List(Clause(parameters,
             // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
             Jump(transformLabel(id))
-          )), k(variable))
-        }
+          )), v)
+        )
       case BlockInfo.Parameter(tpe) =>
         pure(Variable(transform(id), transform(tpe)))
     }
@@ -329,78 +310,77 @@ object Transformer {
       noteParameters(bparams)
       val parameters = vparams.map(transform) ++ bparams.map(transform);
       val variable = Variable(freshName("blockLit"), Negative())
-      Binding { k =>
-        New(variable, List(Clause(parameters, transform(body))), k(variable))
-      }
+      binding(variable, v =>
+        New(variable, List(Clause(parameters, transform(body).run())), v)
+      )
 
     case core.New(impl) =>
       val variable = Variable(freshName("new"), Negative())
-      Binding { k =>
-        New(variable, transform(impl), k(variable))
-      }
+      binding(variable, v =>
+        New(variable, transform(impl), v)
+      )
 
     case core.Unbox(pure) =>
       transform(pure)
   }
 
-  def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: core.Expr)(using BC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Control[Variable] = expr match {
 
     case core.ValueVar(id, tpe) if BC.globals contains id =>
       val variable = Variable(freshName("run"), transform(tpe))
-      Binding { k =>
+      binding(variable, v =>
         // TODO this might introduce too many pushes.
-        PushFrame(Clause(List(variable), k(variable)),
-          Substitute(Nil, Jump(BC.globals(id))))
-      }
+        PushFrame(Clause(List(variable), v), Substitute(Nil, Jump(BC.globals(id))))
+      )
 
     case core.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
     case core.Literal((), _) =>
       val variable = Variable(freshName("unitLiteral"), Positive());
-      Binding { k =>
-        Construct(variable, builtins.Unit, List(), k(variable))
-      }
+      binding(variable, v =>
+        Construct(variable, builtins.Unit, List(), v)
+      )
 
     case core.Literal(value: Long, _) =>
       val variable = Variable(freshName("longLiteral"), Type.Int());
-      Binding { k =>
-        LiteralInt(variable, value, k(variable))
-      }
+      binding(variable, v =>
+        LiteralInt(variable, value, v)
+      )
 
     // for characters
     case core.Literal(value: Int, _) =>
       val variable = Variable(freshName("intLiteral"), Type.Int());
-      Binding { k =>
-        LiteralInt(variable, value, k(variable))
-      }
+      binding(variable, v =>
+        LiteralInt(variable, value, v)
+      )
 
     case core.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("booleanLiteral"), Positive())
-      Binding { k =>
-        Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
-      }
+      binding(variable, v =>
+        Construct(variable, if (value) builtins.True else builtins.False, List(), v)
+      )
 
     case core.Literal(v: Double, _) =>
       val literal_binding = Variable(freshName("doubleLiteral"), Type.Double());
-      Binding { k =>
-        LiteralDouble(literal_binding, v, k(literal_binding))
-      }
+      binding(literal_binding, l =>
+        LiteralDouble(literal_binding, v, l)
+      )
 
     case core.Literal(javastring: String, _) =>
       val literal_binding = Variable(freshName("utf8StringLiteral"), builtins.StringType);
-      Binding { k =>
-        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
-      }
+      binding(literal_binding, l =>
+        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), l)
+      )
 
     case core.PureApp(core.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function, capt), targs, vargs) =>
       if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(vargs, Nil).flatMap { (values, blocks) =>
-        Binding { k =>
-          ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
-        }
+        binding(variable, v =>
+          ForeignCall(variable, transform(blockName), values ++ blocks, v)
+        )
       }
 
     case core.DirectApp(core.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function, capt), targs, vargs, bargs) =>
@@ -408,9 +388,9 @@ object Transformer {
 
       val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(vargs, bargs).flatMap { (values, blocks) =>
-        Binding { k =>
-          ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
-        }
+        binding(variable, v =>
+          ForeignCall(variable, transform(blockName), values ++ blocks, v)
+        )
       }
 
     case core.Make(data, constructor, vargs) =>
@@ -418,17 +398,17 @@ object Transformer {
       val tag = DeclarationContext.getConstructorTag(constructor)
 
       transform(vargs, Nil).flatMap { (values, blocks) =>
-        Binding { k =>
-          Construct(variable, tag, values ++ blocks, k(variable))
-        }
+        binding(variable, v =>
+          Construct(variable, tag, values ++ blocks, v)
+        )
       }
 
     case core.Box(block, annot) =>
       transformBlockArg(block).flatMap { unboxed =>
-        Binding { k =>
-          val boxed = Variable(freshName(unboxed.name), Type.Positive())
-          ForeignCall(boxed, "box", List(unboxed), k(boxed))
-        }
+        val boxed = Variable(freshName(unboxed.name), Type.Positive())
+        binding(boxed, b =>
+          ForeignCall(boxed, "box", List(unboxed), b)
+        )
       }
 
     case _ =>
@@ -446,7 +426,7 @@ object Transformer {
       // No continuation, implementation of an object
       case core.Operation(name, tparams, cparams, vparams, bparams, body) =>
         noteParameters(bparams)
-        Clause(vparams.map(transform) ++ bparams.map(transform), transform(body))
+        Clause(vparams.map(transform) ++ bparams.map(transform), transform(body).run())
     }
 
   def transform(param: core.ValueParam)(using BlocksParamsContext, ErrorReporter): Variable =
@@ -551,18 +531,9 @@ object Transformer {
     case BlockInfo.Parameter(tpe) => sys error s"Expected a function getDefinition, but got a block parameter: ${id}"
   }
 
-  case class Binding[A](run: (A => Statement) => Statement) {
-    def flatMap[B](rest: A => Binding[B]): Binding[B] = {
-      Binding(k => run(a => rest(a).run(k)))
+  def binding[A](c: A, run: (Statement => Statement)) = {
+    Computation[A] { k =>
+      Impure(pure(c), ReturnCont(v => run(Result.trampoline(k(v)))))
     }
-    def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
   }
-
-  def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
-    l match {
-      case Nil => pure(Nil)
-      case head :: tail => for { x <- f(head); xs <- traverse(tail)(f) } yield x :: xs
-    }
-
-  def pure[A](a: A): Binding[A] = Binding(k => k(a))
 }
