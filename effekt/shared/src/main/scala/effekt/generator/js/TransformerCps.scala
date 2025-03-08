@@ -250,8 +250,8 @@ object TransformerCps extends Transformer {
 
           val stmts = binding.stmts
 
-          stmts.last match {
-            case terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue) => (e, stmts)
+          stmts.lastOption match {
+            case Some(terminator : (js.Stmt.Return | js.Stmt.Break | js.Stmt.Continue)) => (e, stmts)
             case other => (e, stmts :+ js.Break())
           }
         },
