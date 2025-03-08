@@ -2,6 +2,10 @@ import stringbuffer
 import io/console
 import stream
 
+// Basic color library
+
+// # Helpers
+
 def max(a: Double, b: Double, c: Double): Double = {
   if (a >= b && a >= c) a
   else if (b >= a && b >= c) b
@@ -19,10 +23,20 @@ def force01(v: Double): Double = {
   if (v < 0.0) { 0.0 } else if (v > 1.0) { 1.0 } else v
 }
 
+// # Record types for different color spaces
+
+/// red, greeen, blue
 record RGB(r: Double, g: Double, b: Double)
+/// hue, saturation, value
 record HSV(h: Double, s: Double, v: Double)
+/// cyan, magenta, yellow, key
 record CMYK(c: Double, m: Double, y: Double, k: Double)
+/// simulating human perception
 record LMS(l: Double, m: Double, s: Double)
+/// RGB plus alpha
+record RGBA(r: Double, g: Double, b: Double, a: Double)
+
+// # Standard colors by name
 
 namespace ColorNames {
   val black = RGB(0.0, 0.0, 0.0)
@@ -44,6 +58,8 @@ namespace ColorNames {
   val navy = RGB(0.0, 0.0, 0.5)
 }
 
+// # Conversions between color spaces
+
 def asCMYK(rgb: RGB): CMYK = {
   val k = 1.0 - max(rgb.r, rgb.g, rgb.b)
   val c = (1.0 - rgb.r - k) / (1.0 - k)
@@ -57,6 +73,8 @@ def asRGB(cmyk: CMYK): RGB = {
   val b = (1.0 - cmyk.y) * (1.0 - cmyk.k)
   RGB(r, g, b)
 }
+def withAlpha(rgb: RGB, alpha: Double) = RGBA(rgb.r, rgb.g, rgb.b, alpha)
+
 def asHSV(rgb: RGB): HSV = {
   val maxVal = max(rgb.r, rgb.g, rgb.b)
   val minVal = min(rgb.r, rgb.g, rgb.b)
@@ -90,6 +108,7 @@ def asRGB(hsv: HSV): RGB = {
 }
 
 def asLMS(rgb: RGB): LMS = {
+  // see https://ixora.io/projects/colorblindness/color-blindness-simulation-research/
   val l = 0.31399022 * rgb.r + 0.63951294 * rgb.g + 0.04649755 * rgb.b
   val m = 0.15537241 * rgb.r + 0.75789446 * rgb.g + 0.08670142 * rgb.b
   val s = 0.01775239 * rgb.r + 0.10944209 * rgb.g + 0.87256922 * rgb.b
@@ -97,11 +116,15 @@ def asLMS(rgb: RGB): LMS = {
 }
 
 def asRGB(lms: LMS): RGB = {
+  // see https://ixora.io/projects/colorblindness/color-blindness-simulation-research/
   val r = force01(5.47221206 * lms.l - 4.6419601 * lms.m + 0.16963708 * lms.s)
   val g = force01(-1.1252419 * lms.l + 2.29317094 * lms.m - 0.1678952 * lms.s)
   val b = force01(0.02980165 * lms.l - 0.19318073 * lms.m + 1.16364789 * lms.s)
   RGB(r, g, b)
 }
+
+// # Color blindness simulation
+// see https://ixora.io/projects/colorblindness/color-blindness-simulation-research/
 
 def asProtanopia(rgb: RGB): RGB = {
   val lms = asLMS(rgb)
@@ -127,6 +150,8 @@ def asTritanopia(rgb: RGB): RGB = {
   LMS(l, m, s).asRGB
 }
 
+// # Relative luminance and contrast
+
 def relativeLuminance(rgb: RGB): Double = {
   def adjust(c: Double): Double = {
     if (c <= 0.03928) c / 12.92
@@ -140,6 +165,8 @@ def contrastRatio(rgb1: RGB, rgb2: RGB): Double = {
   if (lum1 > lum2) (lum1 + 0.05) / (lum2 + 0.05)
   else (lum2 + 0.05) / (lum1 + 0.05)
 }
+
+// # Color transformations
 
 def complement(rgb: RGB): RGB = {
   RGB(1.0 - rgb.r, 1.0 - rgb.g, 1.0 - rgb.b)
@@ -165,6 +192,8 @@ def rotate(rgb: RGB, angle: Double): RGB = {
   val newHue = mod(hsv.h + angle / 360.0, 1.0)
   asRGB(HSV(newHue, hsv.s, hsv.v))
 }
+
+// # Generating simple standard palettes
 
 def splitComplementary(rgb: RGB, angle: Double): (RGB, RGB) = {
   val c = rgb.complement
@@ -204,6 +233,8 @@ def evenlySpaced(rgb: RGB, n: Int): Unit / emit[RGB] = {
   }
 }
 
+// # Conversion to output formats
+
 def toAnsiForeground(rgb: RGB): String = {
   val r = (rgb.r * 255.0).toInt
   val g = (rgb.g * 255.0).toInt
@@ -238,6 +269,21 @@ def toHTML(rgb: RGB): String = {
   val b = (rgb.b * 255.0).toInt
   s"rgb(${r.show}, ${g.show}, ${b.show})"
 }
+def toHTML(rgb: RGBA): String = {
+  val r = (rgb.r * 255.0).toInt
+  val g = (rgb.g * 255.0).toInt
+  val b = (rgb.b * 255.0).toInt
+  val a = (rgb.a * 255.0).toInt
+  s"rgba(${r.show}, ${g.show}, ${b.show}, ${a.show})"
+}
+def toTikZ(rgb: RGB): String = {
+  val r = (rgb.r * 255.0).toInt
+  val g = (rgb.g * 255.0).toInt
+  val b = (rgb.b * 255.0).toInt
+  s"{rgb,255:red,${r};green,${g};blue,${b}}"
+}
+
+// # Example
 
 namespace example {
   def main() = console {

@@ -2,6 +2,10 @@ import vec
 import stringbuffer
 import stream
 
+// Library for simple SVG-like paths
+
+// # Basic paths
+
 interface Path2D {
   def moveTo(pos: Vec2D): Unit
   def lineTo(pos: Vec2D): Unit
@@ -9,6 +13,88 @@ interface Path2D {
   def quadraticBezierTo(control: Vec2D, to: Vec2D): Unit
   def arc(rx: Double, ry: Double, rot: Double, largeArc: Bool, sweep: Bool, to: Vec2D): Unit
 }
+
+/// Compute a bounding box for the given path in the format top-left, bottom-right.
+/// Raises MissingValue if no drawing occured.
+def pathBoundingBox{ body: => Unit / Path2D }: (Vec2D, Vec2D) / Exception[MissingValue] = {
+  var top: Option[Double] = None()
+  var left: Option[Double] = None()
+  var bot: Option[Double] = None()
+  var right: Option[Double] = None()
+
+  def seeX(x: Double): Unit = {
+    if (left is None()) { left = Some(x) }
+    else if (left is Some(l) and x < l) {
+      left = Some(x)
+    }
+    if (right is None()) { right = Some(x) }
+    else if (right is Some(r) and x > r) {
+      right = Some(x)
+    }
+  }
+  def seeY(y: Double): Unit = {
+    if (top is None()) { top = Some(y) }
+    else if (top is Some(t) and y < t) {
+      top = Some(y)
+    }
+    if (bot is None()) { bot = Some(y) }
+    else if (bot is Some(b) and y > b) {
+      bot = Some(y)
+    }
+  }
+
+  try body() with Path2D {
+    def moveTo(pos) = {
+      seeX(pos.x); seeY(pos.y); resume(())
+    }
+    def lineTo(pos) = {
+      seeX(pos.x); seeY(pos.y); resume(())
+    }
+    def cubicBezierTo(control1, control2, to) = {
+      seeX(to.x); seeY(to.y) // TODO compute actual extent
+      resume(())
+    }
+    def quadraticBezierTo(control, to) = {
+      seeX(to.x); seeY(to.y) // TODO compute actual extent
+      resume(())
+    }
+    def arc(rx, ry, rot, largeArc, sweep, to) = {
+      seeX(to.x); seeY(to.y) // TODO compute actual extent
+      resume(())
+    }
+  }
+  (Vec2D(left.value, top.value), Vec2D(right.value, bot.value))
+}
+
+/// Simplify the path by removing moveTo and lineTo to the current position
+def simplify(){ body: => Unit / Path2D }: Unit / Path2D = {
+  var pos: Option[Vec2D] = None()
+  try body() with Path2D {
+    def moveTo(p) = {
+      if (pos is Some(c) and p == c) { pos = Some(p); resume(()) } else { pos = Some(p); do moveTo(p); resume(()) }
+    }
+    def lineTo(p) = {
+      if (pos is Some(c) and p == c) { pos = Some(p); resume(()) } else { pos = Some(p); do lineTo(p); resume(()) }
+    }
+    def cubicBezierTo(c1, c2, t) = {
+      pos = Some(t)
+      do cubicBezierTo(c1, c2, t)
+      resume(())
+    }
+    def quadraticBezierTo(c, t) = {
+      pos = Some(t)
+      do quadraticBezierTo(c, t)
+      resume(())
+    }
+    def arc(rx, ry, rot, largeArc, sweep, to) = {
+      pos = Some(to)
+      do arc(rx, ry, rot, largeArc, sweep, to)
+      resume(())
+    }
+  }
+}
+
+// # Standard shapes
 
 def rect(topleft: Vec2D, bottomright: Vec2D): Unit / Path2D = {
   do moveTo(topleft)
@@ -30,7 +116,17 @@ def ellipse(center: Vec2D, rx: Double, ry: Double): Unit / Path2D = {
   do arc(rx, ry, 0.0, false, true, start)
 }
 
+def triangle(p1: Vec2D, p2: Vec2D, p3: Vec2D): Unit / Path2D = {
+  do moveTo(p1)
+  do lineTo(p2)
+  do lineTo(p3)
+  do lineTo(p1)
+}
+
+// helper
 def show01(b: Bool) = if (b) { "1" } else { "0" }
+
+// # Transformations
 
 def translate(by: Vec2D){ body: => Unit / Path2D }: Unit / Path2D = {
   try body() with Path2D {
@@ -68,6 +164,28 @@ def scale(factor: Double){ body: => Unit / Path2D }: Unit / Path2D = {
   }
 }
 
+def noise(by: Double){ body: => Unit / Path2D }: Unit / Path2D = {
+  try body() with Path2D {
+    def moveTo(p) = resume(do moveTo(Vec2D(p.x + by * 2.0 * random() - by, p.y + by * 2.0 * random() - by)))
+    def lineTo(p) = resume(do lineTo(Vec2D(p.x + by * 2.0 * random() - by, p.y + by * 2.0 * random() - by)))
+    def cubicBezierTo(c1, c2, t) =
+      resume(do cubicBezierTo(
+        Vec2D(c1.x + by * 2.0 * random() - by, c1.y + by * 2.0 * random() - by),
+        Vec2D(c2.x + by * 2.0 * random() - by, c2.y + by * 2.0 * random() - by),
+        Vec2D(t.x + by * 2.0 * random() - by, t.y + by * 2.0 * random() - by)
+      ))
+    def quadraticBezierTo(c, t) =
+      resume(do quadraticBezierTo(
+        Vec2D(c.x + by * 2.0 * random() - by, c.y + by * 2.0 * random() - by),
+        Vec2D(t.x + by * 2.0 * random() - by, t.y + by * 2.0 * random() - by)
+      ))
+    def arc(rx, ry, rot, largeArc, sweep, to) =
+      resume(do arc(rx, ry, rot, largeArc, sweep, Vec2D(to.x + by * 2.0 * random() - by, to.y + by * 2.0 * random() - by)))
+  }
+}
+
+// # Rendering
+
 def asSvgPath{ body: => Unit / Path2D }: String = stringBuffer {
   var first = true
   try {
@@ -85,8 +203,108 @@ def asSvgPath{ body: => Unit / Path2D }: String = stringBuffer {
     if (not(first)) { do write(" ") }
     do write(s)
     first = false 
+    resume(())
   }
   do flush()
 }
 
-def main() = ()
+
+
+def asPgfPath{ body: => Unit / Path2D }: String = stringBuffer {
+  var first = true
+  var current = None()
+  try {
+    try body() with Path2D {
+      def moveTo(p) = {
+        current = p
+        resume(do emit("\\pgfpathmoveto{\\pgfpoint{${p.x.show}cm}{${p.y.show}cm}}"))
+      }
+      def lineTo(p) = {
+        current = p
+        resume(do emit("\\pgfpathlineto{\\pgfpoint{${p.x.show}cm}{${p.y.show}cm}}"))
+      }
+      def cubicBezierTo(c1, c2, t) = {
+        current = p
+        resume(do emit("\\pgfpathcurveto{\\pgfpoint{${c1.x.show}cm}{${c1.y.show}cm}}{\\pgfpoint{${c2.x.show}cm}{${c2.y.show}cm}}{\\pgfpoint{${t.x.show}cm}{${t.y.show}cm}}"))
+      }
+      def quadraticBezierTo(c, t) = {
+        current = p
+        resume(do emit("\\pgfpathquadraticcurveto{\\pgfpoint{${c.x.show}cm}{${c.y.show}cm}}{\\pgfpoint{${t.x.show}cm}{${t.y.show}cm}}"))
+      }
+      def arc(rx, ry, xAxisRotation, largeArcFlag, sweepFlag, Vec2D(endX, endY)) = {
+        val startX = current.x
+        val startY = current.y
+
+        // Ensure radii are positive and non-zero
+        val rxPos = if (rx <= 0.0) 0.0001 else rx
+        val ryPos = if (ry <= 0.0) 0.0001 else ry
+        
+        // Convert rotation from degrees to radians
+        val phi = xAxisRotation * math.PI / 180.0
+        
+        // Step 1: Transform to origin
+        val cosPhi = math.cos(phi)
+        val sinPhi = math.sin(phi)
+        
+        // Step 1.1: Compute (x1', y1')
+        val x1p = cosPhi * (startX - endX) / 2.0 + sinPhi * (startY - endY) / 2.0
+        val y1p = -sinPhi * (startX - endX) / 2.0 + cosPhi * (startY - endY) / 2.0
+        
+        // Step 2: Compute center
+        // Correction of radii
+        val lambda = (x1p * x1p) / (rxPos * rxPos) + (y1p * y1p) / (ryPos * ryPos)
+        
+        val rxFinal = if (lambda > 1.0) math.sqrt(lambda) * rxPos else rxPos
+        val ryFinal = if (lambda > 1.0) math.sqrt(lambda) * ryPos else ryPos
+        
+        // Step 2.1: Compute (cx', cy')
+        val sign = if (largeArcFlag == sweepFlag) -1.0 else 1.0
+        val factor = sign * math.sqrt(
+          math.max(0.0, ((rxFinal * rxFinal * ryFinal * ryFinal) - (rxFinal * rxFinal * y1p * y1p) - (ryFinal * ryFinal * x1p * x1p)) /
+          ((rxFinal * rxFinal * y1p * y1p) + (ryFinal * ryFinal * x1p * x1p)))
+        )
+        
+        val cxp = factor * rxFinal * y1p / ryFinal
+        val cyp = -factor * ryFinal * x1p / rxFinal
+        
+        // Step 3: Transform back to original coordinate space
+        val cx = cosPhi * cxp - sinPhi * cyp + (startX + endX) / 2.0
+        val cy = sinPhi * cxp + cosPhi * cyp + (startY + endY) / 2.0
+        
+        // Step 4: Calculate angles
+        // Vector from center to start point in transformed space
+        val startVectorX = (x1p - cxp) / rxFinal
+        val startVectorY = (y1p - cyp) / ryFinal
+        
+        // Vector from center to end point in transformed space
+        val endVectorX = (-x1p - cxp) / rxFinal
+        val endVectorY = (-y1p - cyp) / ryFinal
+        
+        // Calculate start angle
+        var startAngle = angleBetween(Vec2D(1.0, 0.0), Vec2D(startVectorX, startVectorY))
+        
+        // Calculate angle extent
+        var deltaAngle = angleBetween(Vec2D(startVectorX, startVectorY), Vec2D(endVectorX, endVectorY))
+        
+        // Adjust angle extent based on sweep and large arc flags
+        if (!sweepFlag && deltaAngle > 0.0) {
+          deltaAngle -= 2.0 * math.PI
+        } else if (sweepFlag && deltaAngle < 0.0) {
+          deltaAngle += 2.0 * math.PI
+        }
+        
+        // Convert to degrees for PGF
+        val startAngleDeg = (startAngle * 180.0 / math.PI) % 360.0
+        val endAngleDeg = (startAngle + deltaAngle) * 180.0 / math.PI % 360.0
+
+        resume(do emit(s"\\pgfpatharc{${startAngleDeg.show}}{${endAngleDeg.show}}{${rxFinal.show}cm and ${ryFinal.show}cm}"))
+      }
+    }
+  } with emit[String] { s => 
+    if (not(first)) { do write(" ") }
+    do write(s)
+    first = false 
+    resume(())
+  }
+  do flush()
+}

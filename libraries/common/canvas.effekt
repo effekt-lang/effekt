@@ -1,6 +1,13 @@
 import path
 import vec
 import color
+import draw
+import stringbuffer
+import stream
+
+// bindings to use the draw library using a HTML Canvas
+
+// # Internal bindings, implementation
 
 extern type DrawingContext2D
 namespace internal {
@@ -22,6 +29,8 @@ namespace internal {
     jsWeb "${ctx}.fillRect(${x}, ${y}, ${width}, ${height})"
   extern io def strokeRect(ctx: DrawingContext2D, x: Double, y: Double, width: Double, height: Double): Unit =
     jsWeb "${ctx}.strokeRect(${x}, ${y}, ${width}, ${height})"
+  extern io def fillText(ctx: DrawingContext2D, text: String, x: Double, y: Double): Unit =
+    jsWeb "${ctx}.fillText(${text}, ${x}, ${y})"
   extern io def closePath(ctx: DrawingContext2D): Unit =
     jsWeb "${ctx}.closePath()"
   extern io def bezierCurveTo(ctx: DrawingContext2D, cp1x: Double, cp1y: Double, cp2x: Double, cp2y: Double, x: Double, y: Double): Unit =
@@ -32,6 +41,8 @@ namespace internal {
     jsWeb "${ctx}.ellipse(${x}, ${y}, ${radiusX}, ${radiusY}, ${rotation}, ${startAngle}, ${endAngle}, ${anticlockwise})"
   extern io def setFillStyle(ctx: DrawingContext2D, color: String): Unit =
     jsWeb "${ctx}.fillStyle = ${color}"
+  extern io def setFont(ctx: DrawingContext2D, size: Double, family: String): Unit =
+      jsWeb "${ctx}.font = ${size} + 'px ' + ${family}"
   extern io def setStrokeStyle(ctx: DrawingContext2D, color: String): Unit =
     jsWeb "${ctx}.strokeStyle = ${color}"
   extern io def setLineWidth(ctx: DrawingContext2D, width: Double): Unit =
@@ -119,22 +130,81 @@ namespace internal {
     }
   } 
 
-  extern io def mkCanvas(id: String): Unit =
-    jsWeb """document.body.innerHTML += "<canvas id=\"" + ${id} + "\"></canvas>" """
+  extern io def mkCanvas(id: String, w: Int, h: Int): Unit =
+    jsWeb """document.body.innerHTML += "<canvas id=\"" + ${id} + "\" width=\"" + ${w} + "\" height=\"" + ${h} + "\"></canvas>" """
+  extern io def addToBody(str: String): Unit =
+    jsWeb """document.body.innerHTML += ${str} """
 }
 
-def main() = {
-  internal::mkCanvas("myCanvas")
-  val ctx = internal::getDrawingContext("myCanvas")
-  ctx.internal::setStrokeStyle(ColorNames::red.toHTML)
-  ctx.internal::setFillStyle(ColorNames::yellow.toHTML)
-  ctx.internal::asCanvasPath{
-    rotate(Vec2D(100.0,100.0), 0.05 * PI){
-    translate(Vec2D(100.0,100.0)){
-      circle(Vec2D(0.0,0.0), 50.0)
-      rect(Vec2D(-10.0,-10.0), Vec2D(0.0,0.0))
-    }}
+/// Draw into the given 2d drawing context
+def onDrawingContext(ctx: DrawingContext2D){ body: => Unit / Draw }: Unit = {
+  try body() with Draw {
+    def stroke() = resume { {body} => 
+      ctx.internal::setStrokeStyle(do strokeColor().toHTML)
+      ctx.internal::asCanvasPath{ body() }
+      ctx.internal::stroke()
+    }
+    def fill() = resume { {body} => 
+      ctx.internal::setFillStyle(do fillColor().toHTML)
+      ctx.internal::asCanvasPath{ body() }
+      ctx.internal::fill()
+    }
+    def text(pos, text) = resume { 
+      ctx.internal::setFillStyle(do fontColor().toHTML)
+      ctx.internal::setFont(do fontSize(), "serif")
+      ctx.internal::fillText(text, pos.x, pos.y)
+    } 
   }
-  ctx.internal::stroke()
-  ctx.internal::fill()
+}
+/// Draw onto the canvas with the given id
+def onCanvas(id: String){ body: => Unit / Draw }: Unit = {
+  onDrawingContext(internal::getDrawingContext(id)){body}
+}
+
+namespace example {
+  def main() = {
+    with on[MissingValue].panic
+    def snowflake(from: Vec2D, to: Vec2D, d: Int): Unit / Path2D = {
+      if (d == 0) {
+        do moveTo(from); do lineTo(to)
+      } else {
+        val third = (to - from) / 3.0
+        val p1 = from + third
+        val p2 = from + 2.0 * third
+        val peak = p1 + third.rotate(PI / -3.0)
+
+        snowflake(from, p1, d - 1)
+        snowflake(p1, peak, d - 1)
+        snowflake(peak, p2, d - 1)
+        snowflake(p2, to, d - 1)
+      }
+    }
+    def img(): Unit / Path2D = scale(3.5){ translate(Vec2D(0.0, -50.0)){ rotate(Vec2D(0.0, 100.0), 0.2 * PI) { simplify {
+        snowflake(Vec2D(0.0, 100.0), Vec2D(100.0, 100.0), 5)
+        rect(Vec2D(0.0, 0.0), Vec2D(10.0, 10.0))
+        circle(Vec2D(5.0, 5.0), 5.0)
+      }}}}
+
+    pathBoundingBox { img() } match { case (tl, br) =>
+      try {
+        stringBuffer {
+          try { 
+            asSVG{ 
+              do stroke{ img() }
+              do text(Vec2D(0.0, 20.0), "Hallo")
+            } 
+          } with emit[String]{ s => resume(do write(s)) }
+          internal::addToBody(do flush())
+        }
+
+        internal::mkCanvas("myCanvas", (br - tl).x.toInt + 1, (br - tl).y.toInt + 1)
+        onCanvas("myCanvas"){
+          do stroke { translate(-1.0 * tl){img()} }
+          do text(Vec2D(0.0,20.0) - tl,"Hallo")
+        }
+      } with strokeColor { () => resume(ColorNames::red.withAlpha(1.0)) }
+      with fontColor { () => resume(ColorNames::blue.withAlpha(1.0)) }
+      with fontSize { () => resume(20.0) }
+    }
+  }
 }

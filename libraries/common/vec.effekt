@@ -1,3 +1,5 @@
+// Basic 2d and 3d vectors of doubles
+
 record Vec2D(x: Double, y: Double)
 record Vec3D(x: Double, y: Double, z: Double)
 
@@ -9,6 +11,12 @@ def infixAdd(a: Vec3D, b: Vec3D): Vec3D = Vec3D(a.x + b.x, a.y + b.y, a.z + b.z)
 def infixSub(a: Vec3D, b: Vec3D): Vec3D = Vec3D(a.x - b.x, a.y - b.y, a.z - b.z)
 def infixMul(f: Double, b: Vec3D): Vec3D = Vec3D(f * b.x, f * b.y, f * b.z)
 def infixDiv(v: Vec3D, f: Double): Vec3D = Vec3D(v.x / f, v.y / f, v.z / f)
+
+def infixEq(a: Vec2D, b: Vec2D): Bool = a.x == b.x && a.y == b.y
+def infixNeq(a: Vec2D, b: Vec2D): Bool = not(infixEq(a, b))
+
+def infixEq(a: Vec3D, b: Vec3D): Bool = a.x == b.x && a.y == b.y && a.z == b.z
+def infixNeq(a: Vec3D, b: Vec3D): Bool = not(infixEq(a, b))
 
 def scalarProduct(a: Vec3D, b: Vec3D): Double = a.x * b.x + a.y * b.y + a.z * b.z
 def vectorProduct(a: Vec3D, b: Vec3D): Vec3D = Vec3D(
@@ -43,6 +51,19 @@ def projection(a: Vec3D, b: Vec3D): Vec3D = {
   infixMul(scalar, b)
 }
 
+def rotate(v: Vec2D, angle: Double): Vec2D = {
+  val s = sin(angle)
+  val c = cos(angle)
+  Vec2D(v.x * c - v.y * s, v.x * s + v.y * c)
+}
+
+def rotate(v: Vec3D, axis: Vec3D, angle: Double): Vec3D = {
+  val s = sin(angle)
+  val c = cos(angle)
+  val dot = scalarProduct(axis, v)
+  val cross = vectorProduct(axis, v)
+  c * v + s * cross + (dot * (1.0 - c)) * axis
+}
 
 def rotatePoint(p: Vec2D, center: Vec2D, angle: Double): Vec2D = {
   val s = sin(angle)
@@ -54,10 +75,22 @@ def rotatePoint(p: Vec2D, center: Vec2D, angle: Double): Vec2D = {
   Vec2D(rotatedX + center.x, rotatedY + center.y)
 }
 
+def angleBetween(a: Vec2D, b: Vec2D): Double = {
+  val dot = scalarProduct(a, b)
+  val magA = magnitude(a)
+  val magB = magnitude(b)
+  acos(dot / (magA * magB))
+}
+
+def angleBetween(a: Vec3D, b: Vec3D): Double = {
+  val dot = scalarProduct(a, b)
+  val magA = magnitude(a)
+  val magB = magnitude(b)
+  acos(dot / (magA * magB))
+}
+
 extern pure def atan2(y: Double, x: Double): Double =
   js "Math.atan2(${y}, ${x})"
   chez "(atan ${y} ${x})"
   vm "effekt::atan2(Double, Double)"
   llvm "%z = call %Double @atan2(double ${y}, double ${x}) ret %Double %z"
-
-def main() = ()
