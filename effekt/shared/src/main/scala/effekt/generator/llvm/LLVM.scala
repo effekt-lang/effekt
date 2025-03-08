@@ -55,9 +55,9 @@ class LLVM extends Compiler[String] {
     val afterCore = allToCore(Core) andThen Aggregate andThen core.PolymorphismBoxing andThen optimizer.Optimizer
     val afterMachine = afterCore andThen Machine map { case (mod, main, prog) => prog }
     val afterLLVM = afterMachine map {
-      case machine.Program(decls, prog) =>
+      case machine.Program(decls, defns, entry) =>
         // we don't print declarations here.
-        llvm.Transformer.transform(machine.Program(Nil, prog))
+        llvm.Transformer.transform(machine.Program(Nil, defns, entry))
     }
   }
 

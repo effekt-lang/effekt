@@ -28,20 +28,22 @@ object Transformer {
     // collect all information
     val declarations = mod.externs.map(transform)
     val definitions = mod.definitions
-    val mainEntry = Jump(Label(mainName, Nil))
+    val mainEntry = Label(mainName, Nil)
 
     findToplevelBlocksParams(definitions)
 
-    val transformedDefinitions = definitions.foldLeft(mainEntry) {
-      case (rest, core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body))) =>
-        Def(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body), rest)
-      case (rest, core.Toplevel.Val(id, tpe, binding)) =>
-        Def(BC.globals(id), transform(binding), rest)
-      case (rest, d) =>
+    val toplevelDefinitions = definitions.map {
+      case core.Toplevel.Def(id, core.BlockLit(tparams, cparams, vparams, bparams, body)) =>
+        Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body))
+      case core.Toplevel.Val(id, tpe, binding) =>
+        Definition(BC.globals(id), transform(binding))
+      case d =>
         ErrorReporter.abort(s"Toplevel object definitions not yet supported: ${d}")
     }
 
-    Program(declarations, transformedDefinitions)
+    val localDefinitions = BC.definitions
+
+    Program(declarations, toplevelDefinitions ++ localDefinitions, mainEntry)
   }
 
   def transform(extern: core.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
@@ -110,7 +112,8 @@ object Transformer {
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
 
         // (2) Actually translate the definitions
-        Def(transformLabel(id), transform(body), transform(rest))
+        emitDefinition(transformLabel(id), transform(body))
+        transform(rest)
 
       case core.Def(id, block @ core.New(impl), rest) =>
         // this is just a hack...
@@ -122,7 +125,8 @@ object Transformer {
           case BlockInfo.Definition(free, params) =>
             noteDefinition(id, free, params)
         }
-        Def(transformLabel(id), Jump(transformLabel(alias)), transform(rest))
+        emitDefinition(transformLabel(id), Jump(transformLabel(alias)))
+        transform(rest)
 
       case core.Def(id, block @ core.Unbox(pure), rest) =>
         noteParameter(id, block.tpe)
@@ -518,6 +522,7 @@ object Transformer {
   class BlocksParamsContext() {
     var info: Map[Symbol, BlockInfo] = Map.empty
     var globals: Map[Id, Label] = Map.empty
+    var definitions: List[Definition] = List.empty
   }
 
   enum BlockInfo {
@@ -542,6 +547,9 @@ object Transformer {
 
   def noteGlobal(id: Id)(using BPC: BlocksParamsContext): Unit =
     BPC.globals += (id -> Label(transform(id), Nil))
+
+  def emitDefinition(label: Label, statement: Statement)(using BPC: BlocksParamsContext): Unit =
+    BPC.definitions = Definition(label, statement) :: BPC.definitions
 
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
     BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
