@@ -5,7 +5,7 @@ import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
-import kiama.util.{ Filenames, Notebook, NotebookCell, Position, Services, Source }
+import kiama.util.{ Filenames, Notebook, NotebookCell, Position, Services, Source, Range }
 import kiama.output.PrettyPrinterTypes.Document
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind }
 
@@ -30,7 +30,7 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     diagnostic(message.range, lspMessaging.formatContent(message), message.severity)
 
   override def getDefinition(position: Position): Option[Tree] =
-    getDefinitionAt(position)(context)
+    getDefinitionAt(position)(using context)
 
   /**
    * Overriding hook to also publish core and target for LSP server
@@ -83,14 +83,14 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     getSymbolHover(position) orElse getHoleHover(position)
 
   def getSymbolHover(position: Position): Option[String] = for {
-    (tree, sym) <- getSymbolAt(position)(context)
-    info <- getInfoOf(sym)(context)
+    (tree, sym) <- getSymbolAt(position)(using context)
+    info <- getInfoOf(sym)(using context)
   } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
 
   def getHoleHover(position: Position): Option[String] = for {
-    trees <- getTreesAt(position)(context)
+    trees <- getTreesAt(position)(using context)
     tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(context)
+    info <- getHoleInfo(tree)(using context)
   } yield info
 
   def positionToLocation(p: Position): Location = {
@@ -115,16 +115,25 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       id <- context.definitionTreeOption(sym)
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
-      detail <- getInfoOf(sym)(context)
+      detail <- getInfoOf(sym)(using context)
     } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header)
     Some(documentSymbols)
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
-      (tree, sym) <- getSymbolAt(position)(context)
+      (tree, sym) <- getSymbolAt(position)(using context)
       refs = context.distinctReferencesTo(sym)
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
+
+  override def getInlayHints(range: kiama.util.Range): Option[Vector[InlayHint]] =
+    val captures = getInferredCaptures(range)(using context).map {
+      case (p, c) =>
+        val prettyCaptures = TypePrinter.show(c)
+        InlayHint(InlayHintKind.Type, p, prettyCaptures, markdownTooltip = s"captures: `${prettyCaptures}`", paddingRight = true, effektKind = "capture")
+    }.toVector
+
+    if captures.isEmpty then None else Some(captures)
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
@@ -153,11 +162,11 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 
   override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
     Some(for {
-      trees <- getTreesAt(position)(context).toVector
-      actions <- trees.flatMap { t => action(t)(context) }
+      trees <- getTreesAt(position)(using context).toVector
+      actions <- trees.flatMap { t => action(t)(using context) }
     } yield actions)
 
-  def action(tree: Tree)(implicit C: Context): Option[TreeAction] = tree match {
+  def action(tree: Tree)(using C: Context): Option[TreeAction] = tree match {
     case f: FunDef => inferEffectsAction(f)
     case h: Hole   => closeHoleAction(h)
     case _         => None
@@ -212,18 +221,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
     val (tpe2, effs2) = inferred
     tpe1 != tpe2 || effs1 != effs2
   }
-
-  case class CaptureInfo(location: Location, captureText: String)
-
-  override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
-    if (params.getCommand == "inferredCaptures") {
-      val captures = getInferredCaptures(src)(using context).map {
-        case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
-      }
-      if (captures.isEmpty) None else Some(captures.toArray)
-    } else {
-      None
-    }
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
