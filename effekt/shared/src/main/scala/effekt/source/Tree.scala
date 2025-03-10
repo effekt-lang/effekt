@@ -3,6 +3,7 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import kiama.util.Position
 
 import scala.annotation.tailrec
 
@@ -104,6 +105,8 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
+case class Span(source: kiama.util.Source, from: Int, to: Int)
+
 /**
  * Used to mark externs for different backends
  */
@@ -201,7 +204,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], span: Span) extends Tree
 case class Include(path: String) extends Tree
 
 /**

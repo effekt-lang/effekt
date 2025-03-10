@@ -282,7 +282,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
      nonterminal:
        // skip spaces at the start
        spaces()
-       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs())
+       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs(), span())
        if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
 
@@ -1054,7 +1054,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           val blk = BlockLiteral(Nil, Nil, Nil, body)
           Call(IdTarget(target), Nil, Nil, List(blk))
       }
-  
+
   def literal(): Literal =
     nonterminal:
       peek.kind match {
@@ -1455,7 +1455,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // Positions
 
-  inline def nonterminal[T](inline p: => T): T = {
+  // the "span" effect used to compute the positions of nodes
+  inline def span(): Span =
+    val end = previous.end + 1  // since positions by lexer are inclusive, but kiama is exclusive
+    Span(source, _start.value, end)
+
+  // the handler for the "span" effect.
+  private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
+  inline def nonterminal[T](inline p: => T): T = _start.withValue(peek.start) {
     val startToken = peek
     val start = startToken.start
     val res = p
