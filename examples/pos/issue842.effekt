@@ -1,0 +1,14 @@
+type Answer { Yes(); No() }
+
+def println(ans: Answer): Unit = ans match {
+  case Yes() => println("y")
+  case No()  => println("n")
+}
+
+def join(left: Answer, right: Answer): Answer = (left, right) match {
+  case (Yes(), Yes()) => Yes()
+  case (No() ,     _) => No()
+  case (_    , No() ) => No()
+}
+
+def main() = println(join(Yes(), No()))

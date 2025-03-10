@@ -1,0 +1,18 @@
+effect flip(): Bool
+effect choice(): Bool
+
+// this is a reproduction for #861
+def main() = {
+  try {
+    val x = do choice()
+    val y = do choice()
+    println(x.show ++ " " ++ y.show)
+  } with choice {
+    try {
+      resume(do flip())
+    } with flip {
+      resume(true)
+      resume(false)
+    }
+  }
+}
