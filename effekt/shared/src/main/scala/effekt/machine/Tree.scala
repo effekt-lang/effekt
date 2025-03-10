@@ -41,7 +41,7 @@ type Tag = Int
 /**
  * A module declaration
  */
-case class Program(declarations: List[Declaration], program: Statement)
+case class Program(declarations: List[Declaration], program: List[Definition], entry: Label)
 
 /**
  * Toplevel declarations for FFI
@@ -76,6 +76,12 @@ object ExternBody {
  */
 case class Clause(parameters: Environment, body: Statement)
 
+/**
+  * All definitions are on the toplevel
+  * e.g. def l = s, ...
+  */
+case class Definition(label: Label, body: Statement)
+
 
 /**
  * Statements
@@ -83,7 +89,6 @@ case class Clause(parameters: Environment, body: Statement)
  * ----------[[ effekt.machine.Statement ]]----------
  *
  *   ─ [[ Statement ]]
- *     │─ [[ Def ]]
  *     │─ [[ Jump ]]
  *     │─ [[ Substitute ]]
  *     │─ [[ Construct ]]
@@ -107,11 +112,6 @@ case class Clause(parameters: Environment, body: Statement)
  * --------------------------------------------------
  */
 enum Statement {
-
-  /**
-   * e.g. def l = { s1 }; s2
-   */
-  case Def(label: Label, body: Statement, rest: Statement)
 
   /**
    * e.g. jump l
