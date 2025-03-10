@@ -191,7 +191,7 @@ object Transformer {
         emit(ExtractValue(vtableName, transform(value), 0));
         emit(ExtractValue(objectName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), vtableName), List(tag)))
-        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName)))
+        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), VTable))
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
@@ -232,10 +232,10 @@ object Transformer {
 
         // TODO why do we need this?
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, StackPointer))
         shareValue(oldVal)
 
-        emit(Load(name.name, transform(name.tpe), ptrRef))
+        emit(Load(name.name, transform(name.tpe), ptrRef, StackPointer))
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
@@ -247,10 +247,10 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getVarPointer, List(transform(ref), getStack())))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, StackPointer))
         eraseValue(oldVal)
 
-        emit(Store(ptrRef, transform(value)))
+        emit(Store(ptrRef, transform(value), StackPointer))
         shareValues(List(value), freeVariables(rest))
         transform(rest)
 
@@ -471,19 +471,19 @@ object Transformer {
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
-  def loadEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def loadEnvironment(environmentPointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
       ()
     } else {
-      loadEnvironmentAt(environmentPointer, environment);
+      loadEnvironmentAt(environmentPointer, environment, alias);
     }
   }
 
-  def storeEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def storeEnvironment(environmentPointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if (environment.isEmpty) {
       ()
     } else {
-      storeEnvironmentAt(environmentPointer, environment);
+      storeEnvironmentAt(environmentPointer, environment, alias);
     }
   }
 
@@ -501,7 +501,7 @@ object Transformer {
             emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
 
             // TODO avoid unnecessary loads
-            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment);
+            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
             eraseValues(freshEnvironment, Set());
             RetVoid()
           };
@@ -513,7 +513,7 @@ object Transformer {
 
             val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
             emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-            loadEnvironmentAt(nextStackPointer, freshEnvironment);
+            loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer);
 
             eraseValues(freshEnvironment, Set());
             val next = if (kind == StackEraser) freeStack else eraseFrames // TODO: improve this (in RTS?)
@@ -538,7 +538,7 @@ object Transformer {
 
         val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
         emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
-        loadEnvironmentAt(nextStackPointer, freshEnvironment);
+        loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer);
 
         shareValues(freshEnvironment, Set.from(freshEnvironment));
 
@@ -562,7 +562,7 @@ object Transformer {
       emit(Call(objectReference.name, Ccc(), objectType, newObject, List(eraser, size)));
       emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(objectReference)));
       shareValues(environment, freeInBody);
-      storeEnvironment(environmentReference, environment);
+      storeEnvironment(environmentReference, environment, Object);
       objectReference
     }
   }
@@ -573,7 +573,7 @@ object Transformer {
     } else {
       val environmentReference = LocalReference(environmentType, freshName("environment"));
       emit(Call(environmentReference.name, Ccc(), environmentType, objectEnvironment, List(`object`)));
-      loadEnvironment(environmentReference, environment);
+      loadEnvironment(environmentReference, environment, Object);
       shareValues(environment, freeInBody);
       emit(Call("_", Ccc(), VoidType(), eraseObject, List(`object`)));
     }
@@ -589,7 +589,7 @@ object Transformer {
     val environmentPointer = LocalReference(stackPointerType, freshName("environmentPointer"));
     emit(Call(environmentPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(size))));
 
-    storeEnvironmentAt(environmentPointer, environment);
+    storeEnvironmentAt(environmentPointer, environment, StackPointer);
 
     val headerPointer = LocalReference(stackPointerType, freshName("headerPointer"));
     emit(Call(headerPointer.name, Ccc(), stackPointerType, stackAllocate, List(newStack, ConstantInt(24))));
@@ -601,9 +601,9 @@ object Transformer {
     val eraserPointer = LocalReference(PointerType(), freshName("eraser_pointer"));
     emit(GetElementPtr(eraserPointer.name, frameHeaderType, headerPointer, List(0, 2)));
 
-    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName)));
-    emit(Store(sharerPointer, sharer));
-    emit(Store(eraserPointer, eraser));
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName), StackPointer));
+    emit(Store(sharerPointer, sharer, StackPointer));
+    emit(Store(eraserPointer, eraser, StackPointer));
   }
 
   def popEnvironmentFrom(stack: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -613,7 +613,7 @@ object Transformer {
       val stackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
       val size = ConstantInt(environmentSize(environment));
       emit(Call(stackPointer.name, Ccc(), stackPointer.tpe, stackDeallocate, List(stack, size)));
-      loadEnvironmentAt(stackPointer, environment)
+      loadEnvironmentAt(stackPointer, environment, StackPointer)
     }
   }
 
@@ -622,23 +622,23 @@ object Transformer {
       case machine.Variable(_, tpe) => transform(tpe)
     })
 
-  def storeEnvironmentAt(pointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def storeEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Store(field, transform(machine.Variable(name, tpe))))
+        emit(Store(field, transform(machine.Variable(name, tpe)), alias))
     }
   }
 
-  def loadEnvironmentAt(pointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def loadEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Load(name, transform(tpe), field))
+        emit(Load(name, transform(tpe), field, alias))
     }
   }
 
@@ -692,7 +692,7 @@ object Transformer {
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
 
-    emit(Load(returnAddressName, returnAddressType, returnAddressPointer));
+    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, StackPointer));
   }
 
   val malloc = ConstantGlobal("malloc");
