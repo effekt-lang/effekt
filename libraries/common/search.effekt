@@ -1,0 +1,64 @@
+module search
+
+import stream
+
+
+effect fork(): Bool
+effect fail(): Nothing
+
+def select[A] { stream: () => Unit / emit[A] }: A / {fork, fail} = {
+  def body(): A / emit[A] = {
+    stream()
+    do fail()
+  }
+  try {
+    body()
+  } with emit[A] { value =>
+    if (do fork()) {
+      return value
+    } else {
+      resume(())
+    }
+  }
+}
+
+def results[R] { query: () => R / {fork, fail} }: Unit / emit[R] =
+  try {
+    do emit(query())
+  } with fork { () =>
+    resume(true)
+    resume(false)
+  } with fail { () =>
+    ()
+  }
+
+def choose[A](items: List[A]): A / {fork, fail} =
+  select { items.each }
+
+def choice[A] { action1: () => A } { action2: () => A }: A / fork =
+  if (do fork()) { action1() } else { action2() }
+
+def where(condition: Bool): Unit / fail =
+  if (condition) { () } else { do fail() }
+
+
+type Key = String
+type Option = String
+
+type Menu = List[(Key, List[Option])]
+type Meal = List[(Key, Option)]
+
+def allMeals(menu: Menu): Meal / {fork, fail} =
+  menu.map { case (category, options) => (category, options.choose) }
+
+def main() = {
+  val menu = [
+    ("Protein", ["Chicken", "Beef", "Tofu"]),
+    ("Carbs", ["Rice", "Pasta", "French Fries"]),
+    ("Veggie", ["Bell Pepper", "Brocolli"])
+  ]
+  for[Meal] { results { allMeals(menu) } } { meal =>
+    meal.foreach { case (key, option) => println(key ++ "," ++ option ++ " ") }
+    println("")
+  }
+}
