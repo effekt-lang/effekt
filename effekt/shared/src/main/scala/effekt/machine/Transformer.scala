@@ -177,6 +177,12 @@ object Transformer {
                 case _ => ErrorReporter.panic("Applying an object")
               }
 
+            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+              // TODO subsitute targs for tparams
+              val valueNames = vparams.map(transform).zip(values);
+              val blockNames = bparams.map(transform).zip(blocks);
+              Substitute(valueNames ++ blockNames, transform(body))
+
             case Block.Unbox(pure) =>
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
@@ -187,9 +193,6 @@ object Transformer {
 
             case Block.New(impl) =>
               ErrorReporter.panic("Applying an object")
-
-            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              ErrorReporter.panic(pp"Call to block literal should have been reduced: ${stmt}")
           }
         }
 
