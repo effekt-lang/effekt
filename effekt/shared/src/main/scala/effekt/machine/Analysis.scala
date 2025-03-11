@@ -15,8 +15,6 @@ def freeVariables(taggedClause: (Int, Clause)): Set[Variable] = freeVariables(ta
 
 def freeVariables(statement: Statement): Set[Variable] =
   statement match {
-    case Def(_, _, rest) =>
-      freeVariables(rest)
     case Jump(Label(_, environment)) =>
       environment.toSet
     case Substitute(bindings, rest) =>
