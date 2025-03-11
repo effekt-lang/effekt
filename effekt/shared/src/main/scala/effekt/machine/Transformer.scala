@@ -179,8 +179,9 @@ object Transformer {
 
             case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
               // TODO subsitute targs for tparams
-              val valueNames = vparams.map(transform).zip(values);
-              val blockNames = bparams.map(transform).zip(blocks);
+              noteParameters(bparams)
+              val valueNames = vparams.map(transform).zip(values)
+              val blockNames = bparams.map(transform).zip(blocks)
               Substitute(valueNames ++ blockNames, transform(body))
 
             case Block.Unbox(pure) =>
