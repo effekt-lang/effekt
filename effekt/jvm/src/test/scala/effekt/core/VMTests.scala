@@ -803,6 +803,22 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
+
+    examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
+      staticDispatches = 38,
+      dynamicDispatches = 52,
+      patternMatches = 37,
+      branches = 0,
+      pushedFrames = 34,
+      poppedFrames = 34,
+      allocations = 37,
+      closures = 37,
+      variableReads = 10,
+      variableWrites = 9,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
   )
 
   val testFiles: Seq[(File, Option[Summary])] =
