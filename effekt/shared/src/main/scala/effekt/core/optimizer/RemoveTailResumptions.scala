@@ -37,7 +37,7 @@ object RemoveTailResumptions {
       case Stmt.Var(ref, init, capture, body) => tailResumptive(k, body) && !freeInExpr(init)
       case Stmt.Get(ref, annotatedCapt, tpe, id, body) => tailResumptive(k, body)
       case Stmt.Put(ref, annotatedCapt, value, body) => tailResumptive(k, body) && !freeInExpr(value)
-      case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => tailResumptive(k, body) // is this correct?
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, bparams, body)) => false
       case Stmt.Shift(prompt, body) => stmt.tpe == Type.TBottom
       case Stmt.Resume(k2, body) => k2.id == k // what if k is free in body?
       case Stmt.Hole() => true
@@ -55,7 +55,7 @@ object RemoveTailResumptions {
       Stmt.Region(removeTailResumption(k, body))
     case Stmt.Alloc(id, init, region, body) => Stmt.Alloc(id, init, region, removeTailResumption(k, body))
     case Stmt.Var(id, init, capture, body) => Stmt.Var(id, init, capture, removeTailResumption(k, body))
-    case Stmt.Reset(body) => Stmt.Reset(removeTailResumption(k, body))
+    case Stmt.Reset(body) => stmt
     case Stmt.Resume(k2, body) if k2.id == k => body
 
     case Stmt.Resume(k, body) => stmt

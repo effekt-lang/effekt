@@ -85,12 +85,13 @@ object Contify {
           given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
           Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)), contify(id, rewrittenRest))
 
-        case Some(cont: ContLam) if returnsUnique && !isRecursive =>
-          val k2 = Id("k")
-          given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
-          LetCont(k2, cont,
-            Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)),
-              contify(id, rewrittenRest)))
+        // leads to `k_6 is not defined` when disabling optimizations on issue861.effekt
+        //        case Some(cont: ContLam) if returnsUnique && !isRecursive =>
+        //          val k2 = Id("k")
+        //          given Substitution = Substitution(conts = Map(k -> ContVar(k2)))
+        //          LetCont(k2, cont,
+        //            Stmt.LetCont(id, ContLam(vparams, ks, substitute(rewrittenBody)),
+        //              contify(id, rewrittenRest)))
         case _ =>
           Stmt.LetDef(id, BlockLit(vparams, Nil, ks, k, rewrittenBody), rewrittenRest)
       }
