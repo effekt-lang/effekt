@@ -273,13 +273,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
           }
 
-          // [[ f ]] = { (x) => make f(x) }
+          // [[ f ]] = { [A](x) => make f[A](x) }
           def etaExpandConstructor(b: Constructor): BlockLit = {
             assert(bparamtps.isEmpty)
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, vargs)))
+              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, targs, vargs)))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
@@ -785,7 +785,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
-        Make(core.ValueType.Data(r.tpe, targs), r, vargsT)
+        Make(core.ValueType.Data(r.tpe, targs), r, targs, vargsT)
       case f: Operation =>
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
