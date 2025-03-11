@@ -50,7 +50,7 @@ package object control {
 
   private[control] sealed trait ω
 
-  private[control] final case class Computation[+A](body: MetaCont[A, ω] => Result[ω]) extends Control[A] {
+  private[effekt] final case class Computation[+A](body: MetaCont[A, ω] => Result[ω]) extends Control[A] {
     def apply[R](k: MetaCont[A, R]): Result[R] =
       body(k.asInstanceOf[MetaCont[A, ω]]).asInstanceOf[Result[R]]
   }
@@ -90,7 +90,7 @@ package object control {
 
   private[control] case class Pure[A](value: A) extends Result[A] { val isPure = true }
 
-  private[control] case class Impure[A, R](c: Control[R], k: MetaCont[R, A]) extends Result[A] {
+  private[effekt] case class Impure[A, R](c: Control[R], k: MetaCont[R, A]) extends Result[A] {
     val isPure = false
   }
 
@@ -106,7 +106,7 @@ package object control {
     }
   }
 
-  private[control] sealed trait MetaCont[-A, +B] extends Serializable {
+  private[option] sealed trait MetaCont[-A, +B] extends Serializable {
     def apply(a: A): Result[B]
 
     def append[C](s: MetaCont[B, C]): MetaCont[A, C]
@@ -124,7 +124,7 @@ package object control {
     def bind(key: AnyRef, value: Any): MetaCont[A, B] = StateCont(mutable.Map(key -> value), this)
   }
 
-  private[control] case class ReturnCont[-A, +B](f: A => B) extends MetaCont[A, B] {
+  private[effekt] case class ReturnCont[-A, +B](f: A => B) extends MetaCont[A, B] {
     final def apply(a: A): Result[B] = Pure(f(a))
 
     final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = s map f

@@ -8,6 +8,9 @@ import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
 import effekt.symbols.ErrorMessageInterpolator
 
+import util.control.{Control, Computation,  ReturnCont, Impure, Result, pure}
+import util.control
+
 object Transformer {
 
   private def ErrorReporter(using E: ErrorReporter): ErrorReporter = E
@@ -532,7 +535,7 @@ object Transformer {
   }
 
   def binding[A](c: A, run: (Statement => Statement)) = {
-    Computation[A] { k =>
+    Computation { k =>
       Impure(pure(c), ReturnCont(v => run(Result.trampoline(k(v)))))
     }
   }
