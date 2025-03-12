@@ -668,6 +668,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.BooleanGuard(condition) => Nil
       case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
     }
+    def boundTypesInPattern(p: source.MatchPattern): List[Id] = p match {
+      case source.AnyPattern(id) => List()
+      case p @ source.TagPattern(id, patterns) => Context.annotation(Annotations.TypeParameters, p) ++ patterns.flatMap(boundTypesInPattern)
+      case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+    }
+    def boundTypesInGuard(g: source.MatchGuard): List[Id] = g match {
+      case MatchGuard.BooleanGuard(condition) => Nil
+      case MatchGuard.PatternGuard(scrutinee, pattern) => boundTypesInPattern(pattern)
+    }
     def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")
@@ -685,8 +694,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
     // create joinpoint
+    val tparams = patterns.flatMap { case (sc, p) => boundTypesInPattern(p) } ++ guards.flatMap(boundTypesInGuard)
     val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
-    val joinpoint = Context.bind(TmpBlock(label), BlockLit(Nil, Nil, params, Nil, body))
+    val joinpoint = Context.bind(TmpBlock(label), BlockLit(tparams, Nil, params, Nil, body))
 
     def transformPattern(p: source.MatchPattern): Pattern = p match {
       case source.AnyPattern(id) =>
@@ -719,7 +729,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val transformedGuards   = guards.flatMap(transformGuard)
     val conditions = if transformedPatterns.isEmpty then transformedGuards else Condition.Patterns(transformedPatterns) :: guards.flatMap(transformGuard)
 
-    Clause(conditions, joinpoint, params.map(p => core.ValueVar(p.id, p.tpe)))
+    Clause(conditions, joinpoint, tparams.map(x => core.ValueType.Var(x)), params.map(p => core.ValueVar(p.id, p.tpe)))
   }
 
   /**
@@ -785,7 +795,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
-        Make(core.ValueType.Data(r.tpe, targs), r, targs, vargsT)
+        val universals = targs.take(r.tpe.tparams.length)
+        val existentials = targs.drop(r.tpe.tparams.length)
+        Make(core.ValueType.Data(r.tpe, universals), r, existentials, vargsT)
       case f: Operation =>
         Context.panic("Should have been translated to a method call!")
       case f: Field =>

@@ -38,10 +38,10 @@ class PatternMatchingTests extends CoreTests {
         List(
           Condition.Patterns(Map(x -> Pattern.Any(y.id))),
           Condition.Patterns(Map(y -> Pattern.Any(z.id)))),
-        f, List(z)))
+        f, Nil, List(z)))
 
     // case => f(z)
-    val expected = Clause(Nil, f, List(x))
+    val expected = Clause(Nil, f, Nil, List(x))
 
     assertEquals(normalized, expected)
   }
@@ -73,11 +73,11 @@ class PatternMatchingTests extends CoreTests {
           Condition.Patterns(Map(sc -> Pattern.Any(x.id))),
           Condition.Val(p.id, TBoolean, trivalPredicate),
           Condition.Predicate(p)),
-        b1, List(x)),
+        b1, Nil, List(x)),
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Ignore()))),
-        b2, List())))
+        b2, Nil, List())))
 
     val expected =
       Val(p.id, TBoolean, trivalPredicate,
@@ -127,11 +127,11 @@ class PatternMatchingTests extends CoreTests {
           Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(Pattern.Any(v.id) -> TInt)))),
           Condition.Val(p.id, TBoolean, trivalPredicate),
           Condition.Predicate(p)),
-        b1, List(v)),
+        b1, Nil, List(v)),
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Ignore()))),
-        b2, List())))
+        b2, Nil, List())))
 
     // opt match {
     //   case Some(tmp) => val p = return v > 0; if (p) { b1(tmp) } else { b2() }
