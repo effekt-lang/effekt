@@ -200,7 +200,7 @@ object TransformerCps extends Transformer {
     case DirectApp(id, vargs, bargs) => js.Call(nameRef(id), vargs.map(toJS) ++ bargs.map(argumentToJS))
     case Pure.PureApp(id, vargs)     => inlineExtern(id, vargs)
     case Pure.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
-    case Pure.Box(b)                 => toJS(b)
+    case Pure.Box(b)                 => argumentToJS(b)
   }
 
   def toJS(s: cps.Stmt)(using D: TransformerContext): Binding[List[js.Stmt]] = s match {
