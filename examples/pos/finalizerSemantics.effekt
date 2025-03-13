@@ -52,10 +52,38 @@ def nonTailResumptive() =
     x + 3
   }
 
+def nonResumptive() =
+  try {
+    try {
+      do Eff()
+      42
+    } on suspend {
+      println("suspending inner")
+    } on resume { _ =>
+      println("resuming inner")
+    } on return { x =>
+      println("returning inner")
+      x * 2
+    }
+  } with Eff {
+    () => println("Eff"); 1
+  } on suspend {
+    println("suspending outer")
+  } on resume {
+    _ => println("resuming outer")
+  } on return { x =>
+    println("returning outer")
+    x + 3
+  }
+  
+
 def main() = {
   println("tail resumptive handler")
   println(tailResumptive())
   println("")
   println("non tail resumptive handler")
   println(nonTailResumptive())
+  println("")
+  println("non resumptive handler")
+  println(nonResumptive())
 }

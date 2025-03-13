@@ -14,4 +14,10 @@ Eff
 returning inner
 Eff
 returning outer
-1
+4
+
+non resumptive handler
+suspending inner
+Eff
+returning outer
+4

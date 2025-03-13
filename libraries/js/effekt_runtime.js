@@ -82,12 +82,13 @@ const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 // const r = ks.arena.newRegion(); body
 // const x = r.alloc(init); body
 
-// HANDLE(ks, ks, (p, ks, k) => { STMT })
+// HANDLE(ks, k, (p, ks, k) => { STMT })
 function RESET(prog, onSuspend, onResume, onReturn, ks, k) {
   const prompt = _prompt++;
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, onSuspend: ks.onSuspend, onSuspendData: ks.onSuspendData, onResume: ks.onResume, rest: ks.rest }
   const onRet = onReturn ? (x, ks) => onReturn(x, ks.rest, ks.rest.stack) : RETURN
-  return prog(prompt, { prompt, arena: Arena([]), onSuspend: onSuspend, onSuspendData: null, onResume: onResume, rest: rest }, onRet)
+  const finalizer = { stack: onRet, prompt, arena: Arena([]), onSuspend: onSuspend, onSuspendData: null, onResume: onResume, rest: rest }
+  return prog(prompt, { prompt, arena: Arena([]), onSuspend: null, onSuspendData: null, onResume: null, rest: finalizer }, RETURN)
 }
 
 function DEALLOC(ks) {
