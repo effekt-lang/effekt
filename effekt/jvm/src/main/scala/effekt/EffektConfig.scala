@@ -124,6 +124,17 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
   advanced.append(server)
 
 
+  // Language Server Options
+  // -----------------------
+  val experimentalServer: ScallopOption[Boolean] = toggle(
+    "experimental-server",
+    descrYes = "Run the new experimental language server",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
   // Debugging
   // ---------
   private val debugging = group("Compiler Development")
