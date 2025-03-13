@@ -246,6 +246,8 @@ object Transformer {
         Resume(Variable(transform(k.id), Type.Stack()), transform(body))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
+        noteParameters(List(region))
+
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
