@@ -25,5 +25,5 @@ Thanks for considering to contribute to the Effekt compiler! For setting up your
 
 ## License
 
-All contents of the `kiama` directory are based on [Tony Sloane's Kiama](https://github.com/inkytonik/kiama/) and licensed under the MPL 2.0. See [kiama/LICENSE](kiama/LICENSE) for details.
+All contents of the `kiama` directory are based on [Tony Sloane's Kiama](https://github.com/inkytonik/kiama/) and are licensed under the MPL 2.0. See [kiama/LICENSE](kiama/LICENSE) for details.
 The remainder of this project is licensed under the MIT license. See [LICENSE](LICENSE) for details.
