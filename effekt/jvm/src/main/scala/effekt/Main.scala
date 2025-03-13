@@ -21,7 +21,9 @@ object Main {
         return
     }
 
-    if (config.server()) {
+    if (config.experimentalServer()) {
+      ServerNG.launch(config)
+    } else if (config.server()) {
       Server.launch(config)
     } else if (config.repl()) {
       new Repl(Server).run(config)
