@@ -22,3 +22,8 @@ Please navigate to the [getting-started guide](https://effekt-lang.org/docs) on 
 ## Contributing
 
 Thanks for considering to contribute to the Effekt compiler! For setting up your local environment, please check out our [contributing guide](https://effekt-lang.org/contributing.html) on the [website](https://effekt-lang.org).
+
+## License
+
+All contents of the `kiama` directory are based on [Tony Sloane's Kiama](https://github.com/inkytonik/kiama/) and licensed under the MPL 2.0. See [kiama/LICENSE](kiama/LICENSE) for details.
+The remainder of this project is licensed under the MIT license. See [LICENSE](LICENSE) for details.
