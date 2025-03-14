@@ -1,10 +1,9 @@
 package lspTest
 
-import scala.collection.mutable.{HashMap}
+import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Promise, Future}
 import scala.scalajs.js
 import org.scalablytyped.runtime.StObject
-import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
 import typings.vscodeJsonrpc.libCommonMessagesMod.NotificationMessage
 import typings.vscodeLanguageserverProtocol.anon.{Name, Text}
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
@@ -69,7 +68,6 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
       .setWorkDoneTokenUndefined
       // TODO: also test showIR and showTree settings
       .setInitializationOptions(js.JSON.parse("{\"showIR\": \"none\", \"showTree\": false}"))
-
     // (1) send initialization request
     connection.sendRequest("initialize", params).toFuture.flatMap { (result: InitializeResult[js.Any]) =>
       // (2) on success, send initialized notification
@@ -77,6 +75,10 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
         Future.successful(result)
       }
     }
+  }
+
+  def shutdown() = {
+    connection.sendRequest(ShutdownRequest.`type`).toFuture
   }
 
   def exit() = {
