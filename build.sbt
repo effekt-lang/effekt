@@ -114,6 +114,9 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // --------------------------------------------
     assembly / mainClass := Some("effekt.Main"),
 
+    // Without this overwrite, sbt shows both Server and Main as main classes, but we do not use Server as an entrypoint.
+    Compile / discoveredMainClasses := Seq("effekt.Main"),
+
     assembly / assemblyJarName := "effekt.jar",
 
     // there is a conflict between the two transitive dependencies "gson:2.11.0"
