@@ -29,19 +29,31 @@ class ServerNG extends LanguageServer with LanguageClientAware {
   private val textDocumentService = new EffektTextDocumentService
   private val workspaceService = new EffektWorkspaceService
 
+  // Track whether shutdown has been requested
+  private var shutdownRequested: Boolean = false
+
   override def initialize(params: InitializeParams): CompletableFuture[InitializeResult] = {
     val capabilities = new ServerCapabilities()
     capabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
+    capabilities.setHoverProvider(true)
+    capabilities.setDefinitionProvider(true)
+    capabilities.setReferencesProvider(true)
+    capabilities.setDocumentSymbolProvider(true)
+    capabilities.setCodeActionProvider(true)
+    capabilities.setDocumentFormattingProvider(true)
 
     val result = new InitializeResult(capabilities)
     CompletableFuture.completedFuture(result)
   }
 
   override def shutdown(): CompletableFuture[Object] = {
+    shutdownRequested = true
     CompletableFuture.completedFuture(null)
   }
 
-  override def exit(): Unit = {}
+  override def exit(): Unit = {
+    System.exit(if (shutdownRequested) 0 else 1)
+  }
 
   override def getTextDocumentService(): TextDocumentService = textDocumentService
 
