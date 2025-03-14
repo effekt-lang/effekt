@@ -1,0 +1,3527 @@
+{
+	"codeActionRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 71,
+					"character": 14
+				},
+				"end": {
+					"line": 71,
+					"character": 15
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 16
+				},
+				"end": {
+					"line": 7,
+					"character": 17
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 43,
+					"character": 6
+				},
+				"end": {
+					"line": 44,
+					"character": 6
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 73,
+					"character": 7
+				},
+				"end": {
+					"line": 73,
+					"character": 12
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 8
+				},
+				"end": {
+					"line": 6,
+					"character": 9
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 40,
+					"character": 14
+				},
+				"end": {
+					"line": 40,
+					"character": 16
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 23
+				},
+				"end": {
+					"line": 42,
+					"character": 28
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 0
+				},
+				"end": {
+					"line": 64,
+					"character": 1
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 22,
+					"character": 13
+				},
+				"end": {
+					"line": 22,
+					"character": 14
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 7
+				},
+				"end": {
+					"line": 16,
+					"character": 11
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 0
+				},
+				"end": {
+					"line": 22,
+					"character": 0
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 67,
+					"character": 0
+				},
+				"end": {
+					"line": 74,
+					"character": 1
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 8
+				},
+				"end": {
+					"line": 7,
+					"character": 9
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 22
+				},
+				"end": {
+					"line": 16,
+					"character": 23
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 55,
+					"character": 14
+				},
+				"end": {
+					"line": 55,
+					"character": 15
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 21
+				},
+				"end": {
+					"line": 19,
+					"character": 22
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 69,
+					"character": 12
+				},
+				"end": {
+					"line": 69,
+					"character": 13
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 40,
+					"character": 2
+				},
+				"end": {
+					"line": 46,
+					"character": 3
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 9
+				},
+				"end": {
+					"line": 31,
+					"character": 10
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 35,
+					"character": 1
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 11,
+					"character": 6
+				},
+				"end": {
+					"line": 11,
+					"character": 12
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 28
+				},
+				"end": {
+					"line": 16,
+					"character": 33
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 13
+				},
+				"end": {
+					"line": 19,
+					"character": 14
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 12
+				},
+				"end": {
+					"line": 34,
+					"character": 13
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 22,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 26,
+					"character": 4
+				},
+				"end": {
+					"line": 27,
+					"character": 4
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 0
+				},
+				"end": {
+					"line": 10,
+					"character": 0
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 38,
+					"character": 2
+				},
+				"end": {
+					"line": 40,
+					"character": 2
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 15
+				},
+				"end": {
+					"line": 34,
+					"character": 17
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 13
+				},
+				"end": {
+					"line": 37,
+					"character": 17
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 14
+				},
+				"end": {
+					"line": 42,
+					"character": 18
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 0
+				},
+				"end": {
+					"line": 7,
+					"character": 0
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 20
+				},
+				"end": {
+					"line": 42,
+					"character": 21
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 48,
+					"character": 2
+				},
+				"end": {
+					"line": 55,
+					"character": 2
+				}
+			},
+			"result": []
+		},
+		{
+			"context": {
+				"start": {
+					"line": 55,
+					"character": 2
+				},
+				"end": {
+					"line": 63,
+					"character": 2
+				}
+			},
+			"result": []
+		}
+	],
+	"definitionRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 22,
+					"character": 13
+				},
+				"end": {
+					"line": 22,
+					"character": 14
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 22,
+						"character": 13
+					},
+					"end": {
+						"line": 22,
+						"character": 14
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 0
+				},
+				"end": {
+					"line": 64,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 23
+				},
+				"end": {
+					"line": 42,
+					"character": 28
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 42,
+						"character": 23
+					},
+					"end": {
+						"line": 42,
+						"character": 28
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 8
+				},
+				"end": {
+					"line": 6,
+					"character": 9
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 6,
+						"character": 8
+					},
+					"end": {
+						"line": 6,
+						"character": 9
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 43,
+					"character": 6
+				},
+				"end": {
+					"line": 44,
+					"character": 6
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 16
+				},
+				"end": {
+					"line": 7,
+					"character": 17
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 7,
+						"character": 16
+					},
+					"end": {
+						"line": 7,
+						"character": 17
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 69,
+					"character": 12
+				},
+				"end": {
+					"line": 69,
+					"character": 13
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 69,
+						"character": 12
+					},
+					"end": {
+						"line": 69,
+						"character": 13
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 0
+				},
+				"end": {
+					"line": 22,
+					"character": 0
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 7
+				},
+				"end": {
+					"line": 16,
+					"character": 11
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 16,
+						"character": 7
+					},
+					"end": {
+						"line": 16,
+						"character": 11
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 71,
+					"character": 14
+				},
+				"end": {
+					"line": 71,
+					"character": 15
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 71,
+						"character": 14
+					},
+					"end": {
+						"line": 71,
+						"character": 15
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 73,
+					"character": 7
+				},
+				"end": {
+					"line": 73,
+					"character": 12
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 73,
+						"character": 7
+					},
+					"end": {
+						"line": 73,
+						"character": 12
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 40,
+					"character": 2
+				},
+				"end": {
+					"line": 46,
+					"character": 3
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 40,
+					"character": 14
+				},
+				"end": {
+					"line": 40,
+					"character": 16
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 40,
+						"character": 14
+					},
+					"end": {
+						"line": 40,
+						"character": 16
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 8
+				},
+				"end": {
+					"line": 7,
+					"character": 9
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 7,
+						"character": 8
+					},
+					"end": {
+						"line": 7,
+						"character": 9
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 35,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 21
+				},
+				"end": {
+					"line": 19,
+					"character": 22
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 19,
+						"character": 21
+					},
+					"end": {
+						"line": 19,
+						"character": 22
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 12
+				},
+				"end": {
+					"line": 34,
+					"character": 13
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 34,
+						"character": 12
+					},
+					"end": {
+						"line": 34,
+						"character": 13
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 67,
+					"character": 0
+				},
+				"end": {
+					"line": 74,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 33,
+						"character": 12
+					},
+					"end": {
+						"line": 33,
+						"character": 13
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 55,
+					"character": 14
+				},
+				"end": {
+					"line": 55,
+					"character": 15
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 55,
+						"character": 14
+					},
+					"end": {
+						"line": 55,
+						"character": 15
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 9
+				},
+				"end": {
+					"line": 31,
+					"character": 10
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 31,
+						"character": 9
+					},
+					"end": {
+						"line": 31,
+						"character": 10
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 26,
+					"character": 4
+				},
+				"end": {
+					"line": 27,
+					"character": 4
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 11,
+					"character": 6
+				},
+				"end": {
+					"line": 11,
+					"character": 12
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 10,
+						"character": 7
+					},
+					"end": {
+						"line": 10,
+						"character": 13
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 22
+				},
+				"end": {
+					"line": 16,
+					"character": 23
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 16,
+						"character": 22
+					},
+					"end": {
+						"line": 16,
+						"character": 23
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 28
+				},
+				"end": {
+					"line": 16,
+					"character": 33
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 16,
+						"character": 28
+					},
+					"end": {
+						"line": 16,
+						"character": 33
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 13
+				},
+				"end": {
+					"line": 19,
+					"character": 14
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 19,
+						"character": 13
+					},
+					"end": {
+						"line": 19,
+						"character": 14
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 22,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 15
+				},
+				"end": {
+					"line": 34,
+					"character": 17
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 34,
+						"character": 15
+					},
+					"end": {
+						"line": 34,
+						"character": 17
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 38,
+					"character": 2
+				},
+				"end": {
+					"line": 40,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 55,
+					"character": 2
+				},
+				"end": {
+					"line": 63,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 0
+				},
+				"end": {
+					"line": 7,
+					"character": 0
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 20
+				},
+				"end": {
+					"line": 42,
+					"character": 21
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 42,
+						"character": 20
+					},
+					"end": {
+						"line": 42,
+						"character": 21
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 0
+				},
+				"end": {
+					"line": 10,
+					"character": 0
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 14
+				},
+				"end": {
+					"line": 42,
+					"character": 18
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 42,
+						"character": 14
+					},
+					"end": {
+						"line": 42,
+						"character": 18
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 13
+				},
+				"end": {
+					"line": 37,
+					"character": 17
+				}
+			},
+			"result": {
+				"uri": "file:///examples/benchmarks/tree.effekt",
+				"range": {
+					"start": {
+						"line": 37,
+						"character": 13
+					},
+					"end": {
+						"line": 37,
+						"character": 17
+					}
+				}
+			}
+		},
+		{
+			"context": {
+				"start": {
+					"line": 48,
+					"character": 2
+				},
+				"end": {
+					"line": 55,
+					"character": 2
+				}
+			},
+			"result": null
+		}
+	],
+	"referencesRequest": [
+		{
+			"context": {
+				"start": {
+					"line": 43,
+					"character": 6
+				},
+				"end": {
+					"line": 44,
+					"character": 6
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 23
+				},
+				"end": {
+					"line": 42,
+					"character": 28
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 42,
+							"character": 23
+						},
+						"end": {
+							"line": 42,
+							"character": 28
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 43,
+							"character": 44
+						},
+						"end": {
+							"line": 43,
+							"character": 49
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 69,
+					"character": 12
+				},
+				"end": {
+					"line": 69,
+					"character": 13
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 69,
+							"character": 12
+						},
+						"end": {
+							"line": 69,
+							"character": 13
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 70,
+							"character": 62
+						},
+						"end": {
+							"line": 70,
+							"character": 63
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 69,
+							"character": 31
+						},
+						"end": {
+							"line": 69,
+							"character": 32
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 73,
+					"character": 7
+				},
+				"end": {
+					"line": 73,
+					"character": 12
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 73,
+							"character": 7
+						},
+						"end": {
+							"line": 73,
+							"character": 12
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 73,
+							"character": 75
+						},
+						"end": {
+							"line": 73,
+							"character": 80
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 0
+				},
+				"end": {
+					"line": 64,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 22,
+					"character": 13
+				},
+				"end": {
+					"line": 22,
+					"character": 14
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 22,
+							"character": 13
+						},
+						"end": {
+							"line": 22,
+							"character": 14
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 27,
+							"character": 14
+						},
+						"end": {
+							"line": 27,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 26,
+							"character": 23
+						},
+						"end": {
+							"line": 26,
+							"character": 24
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 23,
+							"character": 6
+						},
+						"end": {
+							"line": 23,
+							"character": 7
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 40,
+					"character": 14
+				},
+				"end": {
+					"line": 40,
+					"character": 16
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 40,
+							"character": 14
+						},
+						"end": {
+							"line": 40,
+							"character": 16
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 40,
+							"character": 45
+						},
+						"end": {
+							"line": 40,
+							"character": 47
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 67,
+					"character": 0
+				},
+				"end": {
+					"line": 74,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 21
+				},
+				"end": {
+					"line": 19,
+					"character": 22
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 19,
+							"character": 21
+						},
+						"end": {
+							"line": 19,
+							"character": 22
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 20,
+							"character": 21
+						},
+						"end": {
+							"line": 20,
+							"character": 22
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 8
+				},
+				"end": {
+					"line": 7,
+					"character": 9
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 7,
+							"character": 8
+						},
+						"end": {
+							"line": 7,
+							"character": 9
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 7,
+							"character": 42
+						},
+						"end": {
+							"line": 7,
+							"character": 43
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 7,
+							"character": 35
+						},
+						"end": {
+							"line": 7,
+							"character": 36
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 8
+				},
+				"end": {
+					"line": 6,
+					"character": 9
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 6,
+							"character": 8
+						},
+						"end": {
+							"line": 6,
+							"character": 9
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 6,
+							"character": 45
+						},
+						"end": {
+							"line": 6,
+							"character": 46
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 6,
+							"character": 38
+						},
+						"end": {
+							"line": 6,
+							"character": 39
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 6,
+							"character": 27
+						},
+						"end": {
+							"line": 6,
+							"character": 28
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 71,
+					"character": 14
+				},
+				"end": {
+					"line": 71,
+					"character": 15
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 71,
+							"character": 14
+						},
+						"end": {
+							"line": 71,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 71,
+							"character": 46
+						},
+						"end": {
+							"line": 71,
+							"character": 47
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 35,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 12
+				},
+				"end": {
+					"line": 34,
+					"character": 13
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 34,
+							"character": 12
+						},
+						"end": {
+							"line": 34,
+							"character": 13
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 34,
+							"character": 26
+						},
+						"end": {
+							"line": 34,
+							"character": 27
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 33,
+							"character": 12
+						},
+						"end": {
+							"line": 33,
+							"character": 13
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 33,
+							"character": 25
+						},
+						"end": {
+							"line": 33,
+							"character": 26
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 16
+				},
+				"end": {
+					"line": 7,
+					"character": 17
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 7,
+							"character": 16
+						},
+						"end": {
+							"line": 7,
+							"character": 17
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 7,
+							"character": 49
+						},
+						"end": {
+							"line": 7,
+							"character": 50
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 7,
+							"character": 39
+						},
+						"end": {
+							"line": 7,
+							"character": 40
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 55,
+					"character": 14
+				},
+				"end": {
+					"line": 55,
+					"character": 15
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 55,
+							"character": 14
+						},
+						"end": {
+							"line": 55,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 60,
+							"character": 14
+						},
+						"end": {
+							"line": 60,
+							"character": 15
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 56,
+							"character": 8
+						},
+						"end": {
+							"line": 56,
+							"character": 9
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 22
+				},
+				"end": {
+					"line": 16,
+					"character": 23
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 16,
+							"character": 22
+						},
+						"end": {
+							"line": 16,
+							"character": 23
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 13
+				},
+				"end": {
+					"line": 19,
+					"character": 14
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 19,
+							"character": 13
+						},
+						"end": {
+							"line": 19,
+							"character": 14
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 20,
+							"character": 10
+						},
+						"end": {
+							"line": 20,
+							"character": 11
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 40,
+					"character": 2
+				},
+				"end": {
+					"line": 46,
+					"character": 3
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 7
+				},
+				"end": {
+					"line": 16,
+					"character": 11
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 16,
+							"character": 7
+						},
+						"end": {
+							"line": 16,
+							"character": 11
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 19,
+					"character": 0
+				},
+				"end": {
+					"line": 22,
+					"character": 0
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 11,
+					"character": 6
+				},
+				"end": {
+					"line": 11,
+					"character": 12
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 11,
+							"character": 6
+						},
+						"end": {
+							"line": 11,
+							"character": 12
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 52,
+							"character": 6
+						},
+						"end": {
+							"line": 53,
+							"character": 4
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 43,
+							"character": 21
+						},
+						"end": {
+							"line": 43,
+							"character": 32
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 52,
+							"character": 6
+						},
+						"end": {
+							"line": 53,
+							"character": 4
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 43,
+							"character": 21
+						},
+						"end": {
+							"line": 43,
+							"character": 32
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 26,
+					"character": 4
+				},
+				"end": {
+					"line": 27,
+					"character": 4
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 34,
+					"character": 15
+				},
+				"end": {
+					"line": 34,
+					"character": 17
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 34,
+							"character": 15
+						},
+						"end": {
+							"line": 34,
+							"character": 17
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 34,
+							"character": 34
+						},
+						"end": {
+							"line": 34,
+							"character": 36
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 7,
+					"character": 0
+				},
+				"end": {
+					"line": 10,
+					"character": 0
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 38,
+					"character": 2
+				},
+				"end": {
+					"line": 40,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 22,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 31,
+					"character": 9
+				},
+				"end": {
+					"line": 31,
+					"character": 10
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 31,
+							"character": 9
+						},
+						"end": {
+							"line": 31,
+							"character": 10
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 31,
+							"character": 30
+						},
+						"end": {
+							"line": 31,
+							"character": 31
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 16,
+					"character": 28
+				},
+				"end": {
+					"line": 16,
+					"character": 33
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 16,
+							"character": 28
+						},
+						"end": {
+							"line": 16,
+							"character": 33
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 6,
+					"character": 0
+				},
+				"end": {
+					"line": 7,
+					"character": 0
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 55,
+					"character": 2
+				},
+				"end": {
+					"line": 63,
+					"character": 2
+				}
+			},
+			"result": null
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 20
+				},
+				"end": {
+					"line": 42,
+					"character": 21
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 42,
+							"character": 20
+						},
+						"end": {
+							"line": 42,
+							"character": 21
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 45,
+							"character": 15
+						},
+						"end": {
+							"line": 45,
+							"character": 16
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 44,
+							"character": 30
+						},
+						"end": {
+							"line": 44,
+							"character": 31
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 42,
+					"character": 14
+				},
+				"end": {
+					"line": 42,
+					"character": 18
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 42,
+							"character": 14
+						},
+						"end": {
+							"line": 42,
+							"character": 18
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 43,
+							"character": 34
+						},
+						"end": {
+							"line": 43,
+							"character": 38
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 37,
+					"character": 13
+				},
+				"end": {
+					"line": 37,
+					"character": 17
+				}
+			},
+			"result": [
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 37,
+							"character": 13
+						},
+						"end": {
+							"line": 37,
+							"character": 17
+						}
+					}
+				},
+				{
+					"uri": "file:///examples/benchmarks/tree.effekt",
+					"range": {
+						"start": {
+							"line": 50,
+							"character": 19
+						},
+						"end": {
+							"line": 50,
+							"character": 23
+						}
+					}
+				}
+			]
+		},
+		{
+			"context": {
+				"start": {
+					"line": 48,
+					"character": 2
+				},
+				"end": {
+					"line": 55,
+					"character": 2
+				}
+			},
+			"result": null
+		}
+	],
+	"formattingRequest": [
+		{
+			"context": {
+				"start": {
+					"character": 0,
+					"line": 0
+				},
+				"end": {
+					"character": 0,
+					"line": 0
+				}
+			},
+			"result": null
+		}
+	],
+	"executeCommandInferredCaptures": [
+		{
+			"context": {
+				"start": {
+					"character": 0,
+					"line": 0
+				},
+				"end": {
+					"character": 0,
+					"line": 0
+				}
+			},
+			"result": [
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 67,
+								"character": 0
+							},
+							"end": {
+								"line": 67,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{io}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 37,
+								"character": 0
+							},
+							"end": {
+								"line": 37,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 55,
+								"character": 2
+							},
+							"end": {
+								"line": 55,
+								"character": 2
+							}
+						}
+					},
+					"captureText": "{state}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 48,
+								"character": 2
+							},
+							"end": {
+								"line": 48,
+								"character": 2
+							}
+						}
+					},
+					"captureText": "{state}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 40,
+								"character": 2
+							},
+							"end": {
+								"line": 40,
+								"character": 2
+							}
+						}
+					},
+					"captureText": "{state}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 31,
+								"character": 0
+							},
+							"end": {
+								"line": 31,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 22,
+								"character": 0
+							},
+							"end": {
+								"line": 22,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 19,
+								"character": 0
+							},
+							"end": {
+								"line": 19,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 7,
+								"character": 0
+							},
+							"end": {
+								"line": 7,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				},
+				{
+					"location": {
+						"uri": "file:///examples/benchmarks/tree.effekt",
+						"range": {
+							"start": {
+								"line": 6,
+								"character": 0
+							},
+							"end": {
+								"line": 6,
+								"character": 0
+							}
+						}
+					},
+					"captureText": "{}"
+				}
+			]
+		}
+	],
+	"publishDiagnostics": {
+		"jsonrpc": "2.0",
+		"method": "textDocument/publishDiagnostics",
+		"params": {
+			"uri": "file:///examples/benchmarks/tree.effekt",
+			"diagnostics": []
+		}
+	},
+	"documentSymbolRequest": [
+		{
+			"name": "i",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 71,
+					"character": 14
+				},
+				"end": {
+					"line": 71,
+					"character": 15
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 71,
+					"character": 14
+				},
+				"end": {
+					"line": 71,
+					"character": 15
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "m",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 7,
+					"character": 16
+				},
+				"end": {
+					"line": 7,
+					"character": 17
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 7,
+					"character": 16
+				},
+				"end": {
+					"line": 7,
+					"character": 17
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "right",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 42,
+					"character": 23
+				},
+				"end": {
+					"line": 42,
+					"character": 28
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 42,
+					"character": 23
+				},
+				"end": {
+					"line": 42,
+					"character": 28
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "other",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 73,
+					"character": 7
+				},
+				"end": {
+					"line": 73,
+					"character": 12
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 73,
+					"character": 7
+				},
+				"end": {
+					"line": 73,
+					"character": 12
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "sumPaths",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 37,
+					"character": 0
+				},
+				"end": {
+					"line": 64,
+					"character": 1
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 37,
+					"character": 4
+				},
+				"end": {
+					"line": 37,
+					"character": 12
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "n",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 22,
+					"character": 13
+				},
+				"end": {
+					"line": 22,
+					"character": 14
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 22,
+					"character": 13
+				},
+				"end": {
+					"line": 22,
+					"character": 14
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "n",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 6,
+					"character": 8
+				},
+				"end": {
+					"line": 6,
+					"character": 9
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 6,
+					"character": 8
+				},
+				"end": {
+					"line": 6,
+					"character": 9
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "next",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 43,
+					"character": 6
+				},
+				"end": {
+					"line": 44,
+					"character": 6
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 43,
+					"character": 10
+				},
+				"end": {
+					"line": 43,
+					"character": 14
+				}
+			},
+			"detail": "Value binder"
+		},
+		{
+			"name": "x",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 69,
+					"character": 12
+				},
+				"end": {
+					"line": 69,
+					"character": 13
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 69,
+					"character": 12
+				},
+				"end": {
+					"line": 69,
+					"character": 13
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "operator",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 19,
+					"character": 0
+				},
+				"end": {
+					"line": 22,
+					"character": 0
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 19,
+					"character": 4
+				},
+				"end": {
+					"line": 19,
+					"character": 12
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "tr",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 40,
+					"character": 14
+				},
+				"end": {
+					"line": 40,
+					"character": 16
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 40,
+					"character": 14
+				},
+				"end": {
+					"line": 40,
+					"character": 16
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "left",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 16,
+					"character": 7
+				},
+				"end": {
+					"line": 16,
+					"character": 11
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 16,
+					"character": 7
+				},
+				"end": {
+					"line": 16,
+					"character": 11
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "main",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 67,
+					"character": 0
+				},
+				"end": {
+					"line": 74,
+					"character": 1
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 67,
+					"character": 4
+				},
+				"end": {
+					"line": 67,
+					"character": 8
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "explore",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 40,
+					"character": 2
+				},
+				"end": {
+					"line": 46,
+					"character": 3
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 40,
+					"character": 6
+				},
+				"end": {
+					"line": 40,
+					"character": 13
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "n",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 7,
+					"character": 8
+				},
+				"end": {
+					"line": 7,
+					"character": 9
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 7,
+					"character": 8
+				},
+				"end": {
+					"line": 7,
+					"character": 9
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "maxL",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 31,
+					"character": 0
+				},
+				"end": {
+					"line": 35,
+					"character": 1
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 31,
+					"character": 4
+				},
+				"end": {
+					"line": 31,
+					"character": 8
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "y",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 19,
+					"character": 21
+				},
+				"end": {
+					"line": 19,
+					"character": 22
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 19,
+					"character": 21
+				},
+				"end": {
+					"line": 19,
+					"character": 22
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "x",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 34,
+					"character": 12
+				},
+				"end": {
+					"line": 34,
+					"character": 13
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 34,
+					"character": 12
+				},
+				"end": {
+					"line": 34,
+					"character": 13
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "v",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 16,
+					"character": 22
+				},
+				"end": {
+					"line": 16,
+					"character": 23
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 16,
+					"character": 22
+				},
+				"end": {
+					"line": 16,
+					"character": 23
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "x",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 33,
+					"character": 12
+				},
+				"end": {
+					"line": 33,
+					"character": 13
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "n",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 55,
+					"character": 14
+				},
+				"end": {
+					"line": 55,
+					"character": 15
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 55,
+					"character": 14
+				},
+				"end": {
+					"line": 55,
+					"character": 15
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "l",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 31,
+					"character": 9
+				},
+				"end": {
+					"line": 31,
+					"character": 10
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 31,
+					"character": 9
+				},
+				"end": {
+					"line": 31,
+					"character": 10
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "choose",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 11,
+					"character": 6
+				},
+				"end": {
+					"line": 11,
+					"character": 12
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 11,
+					"character": 6
+				},
+				"end": {
+					"line": 11,
+					"character": 12
+				}
+			},
+			"detail": "Effect operation"
+		},
+		{
+			"name": "sub",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 26,
+					"character": 4
+				},
+				"end": {
+					"line": 27,
+					"character": 4
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 26,
+					"character": 8
+				},
+				"end": {
+					"line": 26,
+					"character": 11
+				}
+			},
+			"detail": "Value binder"
+		},
+		{
+			"name": "right",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 16,
+					"character": 28
+				},
+				"end": {
+					"line": 16,
+					"character": 33
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 16,
+					"character": 28
+				},
+				"end": {
+					"line": 16,
+					"character": 33
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "x",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 19,
+					"character": 13
+				},
+				"end": {
+					"line": 19,
+					"character": 14
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 19,
+					"character": 13
+				},
+				"end": {
+					"line": 19,
+					"character": 14
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "makeTree",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 22,
+					"character": 0
+				},
+				"end": {
+					"line": 29,
+					"character": 1
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 22,
+					"character": 4
+				},
+				"end": {
+					"line": 22,
+					"character": 12
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "xs",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 34,
+					"character": 15
+				},
+				"end": {
+					"line": 34,
+					"character": 17
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 34,
+					"character": 15
+				},
+				"end": {
+					"line": 34,
+					"character": 17
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "v",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 42,
+					"character": 20
+				},
+				"end": {
+					"line": 42,
+					"character": 21
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 42,
+					"character": 20
+				},
+				"end": {
+					"line": 42,
+					"character": 21
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "max",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 7,
+					"character": 0
+				},
+				"end": {
+					"line": 10,
+					"character": 0
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 7,
+					"character": 4
+				},
+				"end": {
+					"line": 7,
+					"character": 7
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "state",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 38,
+					"character": 2
+				},
+				"end": {
+					"line": 40,
+					"character": 2
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 38,
+					"character": 6
+				},
+				"end": {
+					"line": 38,
+					"character": 11
+				}
+			},
+			"detail": "Mutable variable binder"
+		},
+		{
+			"name": "iterate",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 55,
+					"character": 2
+				},
+				"end": {
+					"line": 63,
+					"character": 2
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 55,
+					"character": 6
+				},
+				"end": {
+					"line": 55,
+					"character": 13
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "abs",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 6,
+					"character": 0
+				},
+				"end": {
+					"line": 7,
+					"character": 0
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 6,
+					"character": 4
+				},
+				"end": {
+					"line": 6,
+					"character": 7
+				}
+			},
+			"detail": "Function"
+		},
+		{
+			"name": "left",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 42,
+					"character": 14
+				},
+				"end": {
+					"line": 42,
+					"character": 18
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 42,
+					"character": 14
+				},
+				"end": {
+					"line": 42,
+					"character": 18
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "tree",
+			"kind": 13,
+			"range": {
+				"start": {
+					"line": 37,
+					"character": 13
+				},
+				"end": {
+					"line": 37,
+					"character": 17
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 37,
+					"character": 13
+				},
+				"end": {
+					"line": 37,
+					"character": 17
+				}
+			},
+			"detail": "Value parameter"
+		},
+		{
+			"name": "chooseHandler",
+			"kind": 6,
+			"range": {
+				"start": {
+					"line": 48,
+					"character": 2
+				},
+				"end": {
+					"line": 55,
+					"character": 2
+				}
+			},
+			"selectionRange": {
+				"start": {
+					"line": 48,
+					"character": 6
+				},
+				"end": {
+					"line": 48,
+					"character": 19
+				}
+			},
+			"detail": "Function"
+		}
+	]
+}
