@@ -1,6 +1,7 @@
 import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
+import scalajsbundler.util.JSON.{obj,str}
 import benchmarks._
 import EffektVersion.effektVersion
 
@@ -232,6 +233,21 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
 
+lazy val lspTest = project
+  .in(file("lspTest"))
+  .enablePlugins(ScalablyTypedConverterPlugin)
+  .settings(commonSettings)
+  .settings(
+    Compile / npmDependencies ++= Seq(
+     "@types/node" -> "20.11.5",
+     "vscode-languageserver-protocol" -> "3.17.5",
+    ),
+    Global / stQuiet := true,
+    Test / parallelExecution := false,
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.8.2" % Test,
+    testFrameworks += new TestFramework("utest.runner.Framework"),
+    scalaJSUseMainModuleInitializer := true,
+  )
 
 lazy val platform = Def.task {
   val platformString = System.getProperty("os.name").toLowerCase
