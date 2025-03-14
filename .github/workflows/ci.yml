@@ -98,3 +98,6 @@ jobs:
 
     - name: Run effekt binary
       run: effekt.sh --help
+
+    - name: Run language server tests
+      run: sbt lspTest/test
