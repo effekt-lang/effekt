@@ -71,9 +71,9 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: sudo apt-get install chezscheme
 
-    - name: Install LLVM 15
+    - name: Install LLVM 18
       if: matrix.os != 'windows-latest'
-      run: sudo apt-get install llvm-15
+      run: sudo apt-get install llvm-18
 
     - name: Install Valgrind
       if: matrix.os != 'windows-latest'
