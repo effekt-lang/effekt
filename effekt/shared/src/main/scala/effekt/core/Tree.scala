@@ -191,7 +191,7 @@ enum Pure extends Expr {
    *
    * Note: the structure mirrors interface implementation
    */
-  case Make(data: ValueType.Data, tag: Id, vargs: List[Pure])
+  case Make(data: ValueType.Data, tag: Id, targs: List[ValueType], vargs: List[Pure])
 
   case Box(b: Block, annotatedCapture: Captures)
 }
@@ -578,7 +578,7 @@ object Variables {
     case Pure.ValueVar(id, annotatedType) => Variables.value(id, annotatedType)
     case Pure.Literal(value, annotatedType) => Variables.empty
     case Pure.PureApp(b, targs, vargs) => free(b) ++ all(vargs, free)
-    case Pure.Make(data, tag, vargs) => all(vargs, free)
+    case Pure.Make(data, tag, targs, vargs) => all(vargs, free)
     case Pure.Box(b, annotatedCapture) => free(b)
   }
 
@@ -660,6 +660,7 @@ object substitutions {
   def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
     block match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
+        // TODO assert(tparams.length == targs.length)
         val tSubst = (tparams zip targs).toMap
         val cSubst = (cparams zip bargs.map(_.capt)).toMap
         val vSubst = (vparams.map(_.id) zip vargs).toMap
@@ -772,8 +773,8 @@ object substitutions {
       case Literal(value, annotatedType) =>
         Literal(value, substitute(annotatedType))
 
-      case Make(tpe, tag, vargs) =>
-        Make(substitute(tpe).asInstanceOf, tag, vargs.map(substitute))
+      case Make(tpe, tag, targs, vargs) =>
+        Make(substitute(tpe).asInstanceOf, tag, targs.map(substitute), vargs.map(substitute))
 
       case PureApp(f, targs, vargs) => substitute(f) match {
         case g : Block.BlockVar => PureApp(g, targs.map(substitute), vargs.map(substitute))

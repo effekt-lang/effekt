@@ -252,7 +252,7 @@ object Type {
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
-    case Pure.Make(tpe, tag, args) => tpe
+    case Pure.Make(tpe, tag, targs, args) => tpe // TODO instantiate?
     case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
 

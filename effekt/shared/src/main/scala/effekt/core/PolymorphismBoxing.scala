@@ -349,7 +349,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val vCoerced = (vargs zip tpe.vparams).map { (a, tpe) => coerce(transform(a), tpe) }
       coerce(PureApp(callee, targs.map(transformArg), vCoerced), itpe.result)
 
-    case Pure.Make(data, tag, vargs) =>
+    case Pure.Make(data, tag, targs, vargs) =>
       val dataDecl = PContext.getData(data.name)
       val ctorDecl = dataDecl.constructors.find(_.id == tag).getOrElse {
         Context.panic(pp"No constructor found for tag ${tag} in data type: ${data}")
@@ -357,7 +357,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val paramTypes = ctorDecl.fields.map(_.tpe)
 
       val coercedArgs = (vargs zip paramTypes).map { case (arg, paramTpe) => coerce(transform(arg), paramTpe) }
-      Pure.Make(transform(data), tag, coercedArgs)
+      Pure.Make(transform(data), tag, targs.map(transformArg), coercedArgs)
 
     case Pure.Box(b, annotatedCapture) =>
       Pure.Box(transform(b), annotatedCapture)
