@@ -22,7 +22,11 @@ object Main {
     }
 
     if (config.experimentalServer()) {
-      ServerNG.launch(config)
+      val serverConfig = ServerConfig(
+        debug = config.debug(),
+        debugPort = config.debugPort()
+      )
+      ServerNG.launch(serverConfig)
     } else if (config.server()) {
       Server.launch(config)
     } else if (config.repl()) {
