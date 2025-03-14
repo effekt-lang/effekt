@@ -3,6 +3,7 @@ package effekt
 import java.util.concurrent.CompletableFuture
 import java.util.{List => JList}
 import java.io.{InputStream, OutputStream}
+import java.net.ServerSocket
 
 import org.eclipse.lsp4j.{
   InitializeParams, InitializeResult, ServerCapabilities,
@@ -63,18 +64,35 @@ class EffektWorkspaceService extends WorkspaceService {
   def didChangeWatchedFiles(params: DidChangeWatchedFilesParams): Unit = {}
 }
 
+case class ServerConfig(debug: Boolean = false, debugPort: Int = 5000)
+
 object ServerNG {
-  def launch(config: EffektConfig): Unit = {
+  /*
+   * Launch a language server with a given `ServerConfig`
+   */
+  def launch(config: ServerConfig): Unit = {
     val server = new ServerNG()
-    val launcher = LSPLauncher.createServerLauncher(
-      server,
-      System.in,
-      System.out
-    )
-
-    val client = launcher.getRemoteProxy
-    server.connect(client)
-
-    launcher.startListening()
+    if (config.debug) {
+      val serverSocket = new ServerSocket(config.debugPort)
+      println(s"Starting language server in debug mode on port ${config.debugPort}")
+      val socket = serverSocket.accept()
+      val launcher = LSPLauncher.createServerLauncher(
+        server,
+        socket.getInputStream,
+        socket.getOutputStream
+      )
+      val client = launcher.getRemoteProxy
+      server.connect(client)
+      launcher.startListening()
+    } else {
+      val launcher = LSPLauncher.createServerLauncher(
+        server,
+        System.in,
+        System.out
+      )
+      val client = launcher.getRemoteProxy
+      server.connect(client)
+      launcher.startListening()
+    }
   }
 }
