@@ -229,6 +229,6 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
 }
 
 /**
- * Main entry point for Effekt
+ * Singleton for the language server
  */
 object Server extends LSPServer
