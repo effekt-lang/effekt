@@ -97,7 +97,7 @@ jobs:
       run: sbt install
 
     - name: Run effekt binary
-      run: effekt.sh --help
+      run: effekt --help
 
     - name: Run language server tests
       run: sbt lspTest/test

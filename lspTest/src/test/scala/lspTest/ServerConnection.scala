@@ -20,7 +20,7 @@ class ServerConnection(implicit ec: ExecutionContext) {
   private var client: Client = _
 
   def startServer(): Future[Unit] = {
-    childProcess = childProcessMod.spawn("effekt.sh", js.Array("--experimental-server"))
+    childProcess = childProcessMod.spawn("effekt", js.Array("--experimental-server"))
     jsProcess = childProcess.asInstanceOf[js.Dynamic]
     Future.successful(())
   }
