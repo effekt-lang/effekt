@@ -1,4 +1,3 @@
-# This is a copy-and-paste version of ci.yml but additionally creating a release
 name: Release Artifacts
 
 on:
@@ -9,10 +8,6 @@ on:
     workflows: ["Create Version and Tag"] # 'autorelease.yml'
     types:
       - completed
-
-env:
-  JAVA_VERSION: '11'
-  NODE_VERSION: '16.x'
 
 jobs:
   build-jar:
@@ -30,19 +25,9 @@ jobs:
         fetch-depth: 0
         submodules: 'true'
 
-    - name: Set up JDK ${{ env.JAVA_VERSION }}
-      uses: actions/setup-java@v4
+    - uses: ./.github/actions/setup-effekt
       with:
         java-version: ${{ env.JAVA_VERSION }}
-        distribution: 'zulu'
-        cache: 'sbt'
-
-    - name: Setup SBT
-      uses: sbt/setup-sbt@v1
-
-    - name: Set up NodeJS ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
-      with:
         node-version: ${{ env.NODE_VERSION }}
 
     - name: Get the version

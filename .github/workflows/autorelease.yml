@@ -6,10 +6,6 @@ on:
     - cron: '0 3 * * 1'  # Every Monday at 3am UTC
   workflow_dispatch: # For manual triggering
 
-env:
-  JAVA_VERSION: '11'
-  NODE_VERSION: '16.x'
-
 jobs:
   check-release-needed:
     name: Check if release is needed
@@ -96,7 +92,7 @@ jobs:
           
           echo "All checks passed. Release is needed!"
 
-  run-tests: # redux of usual CI defined in `ci.yml`
+  run-tests:
     name: Run tests
     needs: [check-release-needed]
     runs-on: ubuntu-latest
@@ -106,28 +102,14 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Set up JDK ${{ env.JAVA_VERSION }}
-      uses: actions/setup-java@v4
+    - uses: ./.github/actions/setup-effekt
       with:
-        java-version: ${{ env.JAVA_VERSION }}
-        distribution: 'zulu'
-        cache: 'sbt'
-
-    - name: Setup SBT
-      uses: sbt/setup-sbt@v1
-
-    - name: Set up NodeJS ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-
-    - name: Install Chez Scheme, LLVM & libuv
-      run: sudo apt-get install -y chezscheme llvm-15 libuv1-dev
+        install-dependencies: 'true'
 
     - name: Run tests with retry
       uses: nick-fields/retry@v3
       with:
-        timeout_minutes: 120 # NOTE: This needs _some_ value. As of writing this, 2 hours should be future-proof. :)
+        timeout_minutes: 120
         max_attempts: 3
         retry_on: error
         command: sbt clean test
@@ -145,15 +127,7 @@ jobs:
         with:
           submodules: 'true'
 
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'zulu'
-          cache: 'sbt'
-
-      - name: Setup SBT
-        uses: sbt/setup-sbt@v1
+      - uses: ./.github/actions/setup-effekt
 
       - name: Bump Effekt version using sbt
         id: set-version

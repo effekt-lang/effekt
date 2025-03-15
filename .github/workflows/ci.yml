@@ -1,14 +1,10 @@
-name: Continuous Integration
+name: CI
 
 on:
   push:
     branches:
       - master
   pull_request:
-
-env:
-  JAVA_VERSION: '11'
-  NODE_VERSION: '16.x'
 
 jobs:
   run-hello-world:
@@ -23,23 +19,11 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Set up JDK ${{ env.JAVA_VERSION }}
-      uses: actions/setup-java@v4
+    - uses: ./.github/actions/setup-effekt
+
+    - uses: ./.github/actions/run-effekt-tests
       with:
-        java-version: ${{ env.JAVA_VERSION }}
-        distribution: 'zulu'
-        cache: 'sbt'
-
-    - name: Setup SBT
-      uses: sbt/setup-sbt@v1
-
-    - name: Set up NodeJS ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-
-    - name: Run tests
-      run: sbt "effektJVM/clean; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\\/]*coverage.*"
+        full-test: 'false'
 
   build-jar:
     strategy:
@@ -53,48 +37,12 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Set up JDK ${{ env.JAVA_VERSION }}
-      uses: actions/setup-java@v4
+    - uses: ./.github/actions/setup-effekt
       with:
-        java-version: ${{ env.JAVA_VERSION }}
-        distribution: 'zulu'
-        cache: 'sbt'
+        install-dependencies: 'true'
+        install-valgrind: 'true'
 
-    - name: Setup SBT
-      uses: sbt/setup-sbt@v1
-
-    - name: Update apt database
-      if: matrix.os != 'windows-latest'
-      run: sudo apt-get update
-
-    - name: Install Chez Scheme
-      if: matrix.os != 'windows-latest'
-      run: sudo apt-get install chezscheme
-
-    - name: Install LLVM 15
-      if: matrix.os != 'windows-latest'
-      run: sudo apt-get install llvm-15
-
-    - name: Install Valgrind
-      if: matrix.os != 'windows-latest'
-      run: sudo apt-get install valgrind
-
-    - name: Install libuv
-      run: sudo apt-get install libuv1-dev
-
-    - name: Set up NodeJS ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
+    - uses: ./.github/actions/run-effekt-tests
       with:
-        node-version: ${{ env.NODE_VERSION }}
-
-    - name: Run tests
-      run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
-
-    - name: Assemble fully optimized js file
-      run: sbt effektJS/fullOptJS
-
-    - name: Try installing effekt binary
-      run: sbt install
-
-    - name: Run effekt binary
-      run: effekt.sh --help
+        full-test: 'true'
+        use-retry: 'false'
