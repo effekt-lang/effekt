@@ -1,0 +1,68 @@
+name: 'Setup Effekt Environment'
+description: 'Sets up Java, Node, SBT, and system dependencies for Effekt'
+
+inputs:
+  java-version:
+    description: 'Java version to install'
+    required: false
+    default: '11'
+  node-version:
+    description: 'Node version to install'
+    required: false
+    default: '16.x'
+  llvm-version:
+    description: 'LLVM version to install'
+    required: false
+    default: '15'
+  install-dependencies:
+    description: 'Whether to install system dependencies (Linux only)'
+    required: false
+    default: 'false'
+  install-valgrind:
+    description: 'Whether to install valgrind (Linux only)'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up JDK ${{ inputs.java-version }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: 'zulu'
+        cache: 'sbt'
+
+    - name: Setup SBT
+      uses: sbt/setup-sbt@v1
+
+    - name: Set up NodeJS ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    # Only run the following on Linux-based runners
+    - name: Update apt database
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      run: sudo apt-get update
+      shell: bash
+
+    - name: Install Chez Scheme
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      run: sudo apt-get install -y chezscheme
+      shell: bash
+
+    - name: Install LLVM ${{ inputs.llvm-version }}
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      run: sudo apt-get install -y llvm-${{ inputs.llvm-version }}
+      shell: bash
+
+    - name: Install Valgrind
+      if: ${{ inputs.install-valgrind == 'true' && runner.os == 'Linux' }}
+      run: sudo apt-get install -y valgrind
+      shell: bash
+
+    - name: Install libuv
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'Linux' }}
+      run: sudo apt-get install -y libuv1-dev
+      shell: bash

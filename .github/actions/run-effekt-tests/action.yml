@@ -1,0 +1,58 @@
+name: 'Run Effekt Tests'
+description: 'Runs Effekt tests with configurable options'
+
+inputs:
+  full-test:
+    description: 'Whether to run full test suite'
+    required: false
+    default: 'true'
+  use-retry:
+    description: 'Whether to use retry mechanism for tests'
+    required: false
+    default: 'true'
+  retry-max-attempts:
+    description: 'Maximum number of retry attempts'
+    required: false
+    default: '3'
+  retry-timeout:
+    description: 'Timeout for retry in minutes'
+    required: false
+    default: '120'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run basic tests
+      if: ${{ inputs.full-test != 'true' || runner.os == 'Windows' }}
+      run: sbt "effektJVM/clean; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*pos[\\/]*sideeffects.*; effektJVM/testOnly effekt.JavaScriptTests -- --tests=.*examples[\\/]*neg[\[...]"
+      shell: bash
+
+    - name: Run full test suite with retry
+      if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' && inputs.use-retry == 'true' }}
+      uses: nick-fields/retry@v3
+      with:
+        timeout_minutes: ${{ inputs.retry-timeout }}
+        max_attempts: ${{ inputs.retry-max-attempts }}
+        retry_on: error
+        command: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
+        new_command_on_retry: sbt testQuick
+
+    - name: Run full test suite without retry
+      if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' && inputs.use-retry != 'true' }}
+      run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
+      shell: bash
+
+    - name: Assemble fully optimized js file
+      if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
+      run: sbt effektJS/fullOptJS
+      shell: bash
+
+    - name: Try installing effekt binary
+      if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
+      run: sbt install
+      shell: bash
+
+    - name: Run effekt binary
+      if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
+      run: effekt.sh --help
+      shell: bash
