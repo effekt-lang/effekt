@@ -26,9 +26,6 @@ jobs:
         submodules: 'true'
 
     - uses: ./.github/actions/setup-effekt
-      with:
-        java-version: ${{ env.JAVA_VERSION }}
-        node-version: ${{ env.NODE_VERSION }}
 
     - name: Get the version
       id: get_version
