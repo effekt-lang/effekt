@@ -106,14 +106,10 @@ jobs:
       with:
         install-dependencies: 'true'
 
-    - name: Run tests with retry
-      uses: nick-fields/retry@v3
+    - uses: ./.github/actions/run-effekt-tests
       with:
-        timeout_minutes: 120
-        max_attempts: 3
-        retry_on: error
-        command: sbt clean test
-        new_command_on_retry: sbt testQuick # should only rerun failed tests
+        full-test: 'true'
+        use-retry: 'false'
 
   set-version:
     name: Bump Version
