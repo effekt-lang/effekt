@@ -109,7 +109,9 @@ jobs:
     - uses: ./.github/actions/run-effekt-tests
       with:
         full-test: 'true'
-        use-retry: 'false'
+        use-retry: 'true'
+          # Since we're on 'master', we can assume that the tests already passed.
+          # Therefore retrying is OK (to prevent flaky tests from cancelling the deploy).
 
   set-version:
     name: Bump Version
