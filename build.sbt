@@ -73,6 +73,11 @@ lazy val root = project.in(file("effekt"))
     Compile / run := (effekt.jvm / Compile / run).evaluated
   ))
 
+// Make the effektJVM project the standard project when loading the sbt shell
+onLoad in Global := (onLoad in Global).value.andThen { state =>
+  "project effektJVM" :: state
+}
+
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
