@@ -36,10 +36,12 @@ trait EffektTests extends munit.FunSuite {
 
   def negatives: List[File] = List()
 
+  // Test files that should be run with optimizations disabled
+  def withoutOptimizations: List[File] = List()
+
   def runTestFor(input: File, expected: String): Unit =
     test(input.getPath + s" (${backendName})") {
       assertNoDiff(run(input, true), expected)
-      assertNoDiff(run(input, false), expected)
     }
 
   // one shared driver for all tests in this test runner
@@ -98,6 +100,16 @@ trait EffektTests extends munit.FunSuite {
       case Right(value) =>
         negatives.foreach(runNegativeTestsIn)
         positives.foreach(runPositiveTestsIn)
+        withoutOptimizations.foreach(runWithoutOptimizations)
+    }
+
+  def runWithoutOptimizations(dir: File): Unit =
+    foreachFileIn(dir) {
+      case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
+      case (f, Some(expected)) =>
+        test(s"${f.getPath} (${backendName})") {
+          assertNoDiff(run(f, false), expected)
+        }
     }
 
   def runPositiveTestsIn(dir: File): Unit =
@@ -106,7 +118,6 @@ trait EffektTests extends munit.FunSuite {
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
           assertNoDiff(run(f, true), expected)
-          assertNoDiff(run(f, false), expected)
         }
     }
 
@@ -115,7 +126,6 @@ trait EffektTests extends munit.FunSuite {
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
           assertNoDiff(run(f, true), expected)
-          assertNoDiff(run(f, false), expected)
         }
 
       case (f, None) =>
