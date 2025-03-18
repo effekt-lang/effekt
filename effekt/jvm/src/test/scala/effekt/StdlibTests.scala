@@ -22,21 +22,21 @@ class StdlibJavaScriptTests extends StdlibTests {
   override def withoutOptimizations: List[File] = List(
     examplesDir / "stdlib" / "acme.effekt",
 
-    examplesDir / "stdlib" / "json.effekt",
-    examplesDir / "stdlib" / "exception" / "combinators.effekt",
+    //examplesDir / "stdlib" / "json.effekt",
+    //examplesDir / "stdlib" / "exception" / "combinators.effekt",
 
     // reference error (k is not defined)
-    examplesDir / "stdlib" / "stream" / "fibonacci.effekt",
-    examplesDir / "stdlib" / "list" / "flatmap.effekt",
-    examplesDir / "stdlib" / "list" / "sortBy.effekt",
-    examplesDir / "stdlib" / "stream" / "zip.effekt",
-    examplesDir / "stdlib" / "stream" / "characters.effekt",
+    //examplesDir / "stdlib" / "stream" / "fibonacci.effekt",
+    //examplesDir / "stdlib" / "list" / "flatmap.effekt",
+    //examplesDir / "stdlib" / "list" / "sortBy.effekt",
+    //examplesDir / "stdlib" / "stream" / "zip.effekt",
+    //examplesDir / "stdlib" / "stream" / "characters.effekt",
 
     // oom
-    examplesDir / "stdlib" / "list" / "deleteat.effekt",
+    //examplesDir / "stdlib" / "list" / "deleteat.effekt",
   )
 
-  override def ignored: List[File] = List() ++ withoutOptimizations
+  override def ignored: List[File] = List()
 }
 
 abstract class StdlibChezTests extends StdlibTests {
@@ -70,5 +70,5 @@ class StdlibLLVMTests extends StdlibTests {
     // Wrong codegen for negative types, see #801
     examplesDir / "stdlib" / "json.effekt",
     examplesDir / "stdlib" / "buffer.effekt",
-  ) ++ withoutOptimizations
+  )
 }
