@@ -1,4 +1,0 @@
-[submodule "kiama"]
-	path = kiama
-	url = git@github.com:effekt-lang/kiama.git
-	branch = main
