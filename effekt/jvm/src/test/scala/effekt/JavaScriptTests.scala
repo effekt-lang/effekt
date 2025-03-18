@@ -24,6 +24,18 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "neg"
   )
 
+  override lazy val withoutOptimizations: List[File] = List(
+    // contifying under reset
+    //examplesDir / "pos" / "issue842.effekt",
+    //examplesDir / "pos" / "issue861.effekt",
+
+    // syntax error (multiple declaration)
+    //examplesDir / "char" / "ascii_isalphanumeric.effekt",
+    //examplesDir / "char" / "ascii_iswhitespace.effekt",
+    //examplesDir / "pos" / "parser.effekt",
+    //examplesDir / "pos" / "probabilistic.effekt",
+  )
+
   override def ignored: List[File] = List(
     // unsafe cont
     examplesDir / "pos" / "propagators.effekt"
@@ -58,7 +70,7 @@ object TestUtils {
         val shouldGenerate = regenerateAll || f.lastModified() > checkfile.lastModified()
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
-          val out = run(f)
+          val out = run(f, true)
 
           // Save checkfile in source folder (e.g. examples/)
           // We remove ansi colors to make check files human-readable.
