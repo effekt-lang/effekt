@@ -122,7 +122,7 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
 
     - name: Install Chez Scheme, LLVM & libuv
-      run: sudo apt-get install -y chezscheme llvm-15 libuv1-dev
+      run: sudo apt-get install -y chezscheme llvm-18 libuv1-dev
 
     - name: Run tests with retry
       uses: nick-fields/retry@v3
