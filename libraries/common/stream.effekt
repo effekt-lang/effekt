@@ -510,6 +510,13 @@ def collectString[R] { stream: () => R / emit[Char] }: (R, String) = {
   (result, bytes.toString)
 }
 
+def tap[A] { action: () => A } { reader: () => Unit / read[A] }: Unit =
+  try {
+    reader()
+  } with read[A] { () =>
+    resume { action() }
+  }
+
 def source[A, R] { stream: () => Unit / emit[A] } { reader: () => R / read[A] }: R = {
   var next = box { None() }
   next = box {
