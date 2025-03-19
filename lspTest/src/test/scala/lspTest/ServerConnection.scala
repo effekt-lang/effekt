@@ -2,10 +2,10 @@ package lspTest
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.scalajs.js
-import scala.scalajs.js.timers
+import scala.scalajs.js.{UndefOr, timers}
 import typings.node.childProcessMod
-import typings.node.{nodeStrings, bufferMod}
-import typings.vscodeJsonrpc.libCommonConnectionMod.Logger
+import typings.node.{bufferMod, nodeStrings}
+import typings.vscodeJsonrpc.libCommonConnectionMod.{Logger, Trace, Tracer}
 import typings.vscodeJsonrpc.libCommonMessageReaderMod.MessageReader
 import typings.vscodeJsonrpc.libCommonMessageWriterMod.MessageWriter
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod
@@ -28,33 +28,10 @@ class ServerConnection(implicit ec: ExecutionContext) {
     childProcess = childProcessMod.spawn("effekt", js.Array("--experimental-server"))
     jsProcess = childProcess.asInstanceOf[js.Dynamic]
 
-    jsProcess.stdout.on(nodeStrings.data, { (data: bufferMod.BufferCls) =>
-      if (tracingEnabled) {
-        val output = data.toString()
-        println("[Server -> Client]\n")
-        print(output)
-      }
-    })
-
-    jsProcess.stderr.on(nodeStrings.data, { (data: bufferMod.BufferCls) =>
-      if (tracingEnabled) {
-        val output = data.toString()
-        println(s"[SERVER ERROR] $output")
-      }
-    })
-
     Future.successful(())
   }
 
   def connect(): Future[Client] = {
-    jsProcess.stdin.on(nodeStrings.data, { (data: bufferMod.BufferCls) =>
-      if (tracingEnabled) {
-        val input = data.toString()
-        println("[Client -> Server]\n")
-        print(input)
-      }
-    })
-
     val reader = childProcess.stdout.asInstanceOf[MessageReader]
     val writer = childProcess.stdin.asInstanceOf[MessageWriter]
 
@@ -66,6 +43,11 @@ class ServerConnection(implicit ec: ExecutionContext) {
     )
 
     connection = libCommonConnectionMod.createProtocolConnection(reader, writer, logger)
+
+    if (tracingEnabled) {
+      connection.trace(Trace.Verbose, EffektTracer.create)
+    }
+
     connection.listen()
 
     client = new Client(connection)
@@ -105,5 +87,17 @@ class ServerConnection(implicit ec: ExecutionContext) {
       }
 
     cleanupPromise.future
+  }
+}
+
+object EffektTracer {
+  def create: Tracer = {
+    js.Dynamic.literal(
+      log = { (arg: js.Any, data: UndefOr[String]) =>
+        data.fold(js.Dynamic.global.console.log(arg)) { d =>
+          js.Dynamic.global.console.log(arg, d)
+        }
+      }
+    ).asInstanceOf[Tracer]
   }
 }

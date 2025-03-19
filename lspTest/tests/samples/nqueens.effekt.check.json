@@ -2619,10 +2619,9 @@
 		}
 	],
 	"publishDiagnostics": {
-		"jsonrpc": "2.0",
 		"method": "textDocument/publishDiagnostics",
 		"params": {
-			"uri": "file:///examples/benchmarks/nqueens.effekt",
+			"uri": "file:///examples/benchmarks/effect_handlers_bench/nqueens.effekt",
 			"diagnostics": []
 		}
 	},

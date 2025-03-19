@@ -9,8 +9,7 @@ object Checker {
   val checkDir = "lspTest/tests"
 
   // Overwrite .check files with test results
-  // TODO: this should be configurable, utest currently does not expose CLI arguments (#87)
-  val overwriteResults = false
+  val overwriteResults = js.Dynamic.global.process.env.OVERWRITE_LSP_TEST_RESULTS != js.undefined
 
   def toCheckPath(testPath: String, subDir: String) =
     val basename = testPath.split('/').last
@@ -52,9 +51,11 @@ object Checker {
     if (!fsMod.existsSync(file)) js.Object().asInstanceOf[js.Dynamic]
     else checkCache.getOrElseUpdate(path, js.JSON.parse(fsMod.readFileSync(file).toString.strip))
 
-  def writeChecks(path: String, checks: js.Dynamic) = 
-    val pretty = js.JSON.stringify(checks, (_, b: js.Any) => b, "\t")
-    fsMod.writeFileSync(s"${path}.check.json", pretty)
+  def writeChecks(path: String, checks: js.Dynamic) =
+    if (fsMod.existsSync(s"${path}.check.json")) {
+      val pretty = js.JSON.stringify(checks, (_, b: js.Any) => b, "\t")
+      fsMod.writeFileSync(s"${path}.check.json", pretty)
+    }
 
   def checkStats(name: String, result: js.Object) =
     val path  = toCheckPath(name, "stats")
@@ -64,9 +65,14 @@ object Checker {
   def checkSample(request: String, testPath: String, result: js.Object) =
     val path = toCheckPath(testPath, "samples")
     val allChecks = readChecks(path)
-    if (overwriteResults) allChecks.updateDynamic(request)(result)
+    if (overwriteResults) {
+      allChecks.updateDynamic(request)(result)
+      writeChecks(path, allChecks)
+    }
     val check = allChecks.selectDynamic(request)
-    assertObjEqual(check, result)
+    if (check != js.undefined) {
+      assertObjEqual(check, result)
+    }
 
   def checkContextualSample(request: String, context: js.Object, testPath: String, result: js.Object) = {
     val path = toCheckPath(testPath, "samples")

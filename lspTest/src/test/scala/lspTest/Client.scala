@@ -59,15 +59,22 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
   def initialize() = {
     connection.onUnhandledNotification { notification =>
       notification.method match
-        case "textDocument/publishDiagnostics" => {
-          val uri = notification.params.asInstanceOf[PublishDiagnosticsParams].uri
-          diagnostics.get(uri) match {
-            case Some(promise: Promise[NotificationMessage]) if !promise.isCompleted => promise.success(notification)
-            case _ => diagnostics(uri) = Promise().success(notification)
-          }
-        }
         case _ => assert(false, "unexpected notification")
     }
+    connection.onNotification(PublishDiagnosticsNotification.`type`, (params: PublishDiagnosticsParams) => {
+      val uri = params.uri
+      val notification = js.Dynamic.literal(
+        method = "textDocument/publishDiagnostics",
+        params = params
+      ).asInstanceOf[NotificationMessage]
+
+      diagnostics.get(uri) match {
+        case Some(promise) if !promise.isCompleted =>
+          promise.success(notification); () // force Unit return
+        case _ =>
+          diagnostics(uri) = Promise[NotificationMessage]().success(notification); () // force Unit return
+      }
+    })
 
     val params = _InitializeParams(capabilities)
       .setClientInfo(Name("LSP testing client"))

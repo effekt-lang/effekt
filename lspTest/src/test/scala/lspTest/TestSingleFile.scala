@@ -12,11 +12,10 @@ import typings.vscodeLanguageserverTypes.mod.{DocumentSymbol, SymbolInformation,
 import utest._
 
 class TestSingleFile(val client: Client, val file: String)(implicit ec: ExecutionContext) {
-
   val symbols = HashMap[String, js.Array[DocumentSymbol | SymbolInformation]]()
 
   def tests = Tests {
-    test("Open files and check diagnoses") {
+    test("Open document and check diagnostics") {
       client.openDocument(file, fsMod.readFileSync(file).toString).transformWith { _ =>
         client.waitForDiagnostics(file).flatMap {
           notification => {

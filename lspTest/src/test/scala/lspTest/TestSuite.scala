@@ -15,24 +15,31 @@ object TestSuite extends TestSuite {
     testBody(serverConn).andThen { case _ => serverConn.cleanup() }
   }
 
+  def withServerWithoutCleanup[T](testBody: ServerConnection => Future[T])
+                   (implicit ec: ExecutionContext): Future[T] = {
+    val serverConn = new ServerConnection
+    testBody(serverConn)
+  }
+
   def forEachSample(callback: String => Future[Unit])(implicit ec: ExecutionContext): Future[Unit] = {
     forEachFile(samplesDir, callback)
   }
 
   def forEachFile(path: String, callback: String => Future[Unit])(implicit ec: ExecutionContext): Future[Unit] = {
-    callback("examples/benchmarks/are_we_fast_yet/bounce.effekt")
-    //    linearizeFuture {
-    //      fsMod.readdirSync(path).toSeq.flatMap { sub =>
-    //        val subPath = s"$path/$sub"
-    //        if (fsMod.statSync(subPath).get.isDirectory()) {
-    //          Seq(() => forEachFile(subPath, callback)) // iterate in sub directory
-    //        } else if (subPath.endsWith(".effekt")) {
-    //          Seq(() => callback(subPath))
-    //        } else {
-    //          Seq.empty[() => Future[Unit]]
-    //        }
-    //      }
-    //    }.map(_ => ())
+    // For testing a single test, uncomment:
+    // callback("examples/benchmarks/are_we_fast_yet/bounce.effekt")
+    linearizeFuture {
+      fsMod.readdirSync(path).toSeq.flatMap { sub =>
+        val subPath = s"$path/$sub"
+        if (fsMod.statSync(subPath).get.isDirectory()) {
+          Seq(() => forEachFile(subPath, callback)) // iterate in sub directory
+        } else if (subPath.endsWith(".effekt")) {
+          Seq(() => callback(subPath))
+        } else {
+          Seq.empty[() => Future[Unit]]
+        }
+      }
+    }.map(_ => ())
   }
 
   // compared to Future.sequence, this function will also *start* the futures sequentially and not concurrently
@@ -67,7 +74,7 @@ object TestSuite extends TestSuite {
     }
 
     test("Graceful Shutdown") {
-      withServer { serverConn =>
+      withServerWithoutCleanup { serverConn =>
         for {
           client <- serverConn.setupServerAndConnect()
           _ <- client.shutdown()
@@ -78,12 +85,13 @@ object TestSuite extends TestSuite {
 
     test("Run all client tests") {
       forEachSample { file =>
-        println(s"Running language server tests for $file")
+        val file_stem = file.split("/").last.split("\\.")(0)
         withServer { serverConn =>
           for {
             client <- serverConn.setupServerAndConnect()
+            _ <- client.initialize()
             tests = new TestSingleFile(client, file)
-            results <- TestRunner.runAndPrintAsync(tests.tests, "Tests", executor = SequentialExecutor)
+            results <- TestRunner.runAndPrintAsync(tests.tests, s"[$file_stem]", executor = SequentialExecutor)
           } yield {
             // use Predef to not repeat all previous error messages
             Predef.assert(results.leaves.forall(leaf => leaf.value.isSuccess), "some client tests failed")

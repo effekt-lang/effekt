@@ -2067,10 +2067,9 @@
 		}
 	],
 	"publishDiagnostics": {
-		"jsonrpc": "2.0",
 		"method": "textDocument/publishDiagnostics",
 		"params": {
-			"uri": "file:///examples/benchmarks/triples.effekt",
+			"uri": "file:///examples/benchmarks/effect_handlers_bench/triples.effekt",
 			"diagnostics": []
 		}
 	},
