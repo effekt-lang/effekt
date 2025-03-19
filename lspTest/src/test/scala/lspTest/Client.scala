@@ -1,16 +1,21 @@
 package lspTest
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.{ExecutionContext, Promise, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.duration.*
 import scala.scalajs.js
+import scala.scalajs.js.timers.setTimeout
+import java.util.concurrent.TimeoutException
 import org.scalablytyped.runtime.StObject
 import typings.vscodeJsonrpc.libCommonMessagesMod.NotificationMessage
 import typings.vscodeLanguageserverProtocol.anon.{Name, Text}
 import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConnection
-import typings.vscodeLanguageserverProtocol.libCommonProtocolMod._
-import typings.vscodeLanguageserverProtocol.mod.{TextDocumentItem, TextDocumentIdentifier, VersionedTextDocumentIdentifier, CodeActionContext, Range, FormattingOptions}
+import typings.vscodeLanguageserverProtocol.libCommonProtocolMod.*
+import typings.vscodeLanguageserverProtocol.mod.{CodeActionContext, FormattingOptions, Range, TextDocumentIdentifier, TextDocumentItem, VersionedTextDocumentIdentifier}
 import typings.vscodeLanguageserverTypes.mod.Position
 import typings.vscodeLanguageserverTypes.mod.ReferenceContext
+
+import scala.collection.mutable
 
 class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) {
   def toURI(file: String) = s"file:///$file"
@@ -24,27 +29,32 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
     .setWindowUndefined
     .setWorkspaceUndefined
 
-  val diagnostics = HashMap[String, Promise[NotificationMessage]]()
+  val diagnostics = mutable.HashMap[String, Promise[NotificationMessage]]()
+  val requestTimeout: FiniteDuration = 10.seconds
+
+  def timeoutFuture(waitingFor: String)(implicit ec: ExecutionContext): Future[NotificationMessage] = {
+    val p = Promise[NotificationMessage]()
+    setTimeout(requestTimeout.toMillis.toDouble) {
+      p.failure(new TimeoutException(s"Timed out waiting for $waitingFor"))
+    }
+    p.future
+  }
 
   // this is rather complex logic but is needed to prevent race conditions,
   // since relevant notifications may arrive before or after calling this function
   def waitForDiagnostics(file: String) =
     val uri = toURI(file)
-    diagnostics.get(uri) match
-      case None => {
+    diagnostics.get(uri) match {
+      case None =>
         val promise = Promise[NotificationMessage]()
         diagnostics(uri) = promise
-        promise.future.flatMap { notification =>
-          diagnostics.remove(uri)
-          Future.successful(notification)
+        Future.firstCompletedOf(Seq(promise.future, timeoutFuture("diagnostics"))).andThen {
+          case _ => diagnostics.remove(uri)
         }
-      }
-      case Some(promise) => {
+      case Some(promise) =>
         diagnostics.remove(uri)
-        promise.future.flatMap { notification =>
-          Future.successful(notification)
-        }
-      }
+        Future.firstCompletedOf(Seq(promise.future, timeoutFuture("diagnostics")))
+    }
 
   def initialize() = {
     connection.onUnhandledNotification { notification =>
