@@ -506,7 +506,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
           case other => other.toString
         }.mkString(", ")}" }
     }
-    case Pure.Make(data, tag, vargs) =>
+    case Pure.Make(data, tag, targs, vargs) =>
       val result: Value.Data = Value.Data(data, tag, vargs.map(a => eval(a, env)))
       instrumentation.allocate(result)
       result

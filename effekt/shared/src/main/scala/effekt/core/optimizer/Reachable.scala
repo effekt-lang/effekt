@@ -109,7 +109,7 @@ class Reachable(
     case Pure.ValueVar(id, annotatedType) => process(id)
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, vargs) => process(tag); vargs.foreach(process)
+    case Pure.Make(data, tag, targs, vargs) => process(tag); vargs.foreach(process)
     case Pure.Box(b, annotatedCapture) => process(b)
   }
 
