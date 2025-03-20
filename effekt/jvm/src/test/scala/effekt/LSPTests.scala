@@ -31,7 +31,7 @@ class LSPTests extends FunSuite {
     val serverIn = new PipedInputStream(clientOut)
     val serverOut = new PipedOutputStream(clientIn)
 
-    val server = new MockServer(config)
+    val server = new ServerNG(config)
 
     val mockClient = new MockLanguageClient()
     server.connect(mockClient)
@@ -237,13 +237,6 @@ class MockLanguageClient extends LanguageClient {
 
   override def logMessage(message: MessageParams): Unit = {
     // Not implemented for testing.
-  }
-}
-
-class MockServer(config: EffektConfig) extends ServerNG(config) {
-
-  override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    super.afterCompilation(source, config)
   }
 }
 
