@@ -16,6 +16,7 @@ import typings.vscodeLanguageserverTypes.mod.Position
 import typings.vscodeLanguageserverTypes.mod.ReferenceContext
 
 import scala.collection.mutable
+import scala.util.{Failure, Success}
 
 class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) {
   def toURI(file: String) = s"file:///$file"
@@ -94,8 +95,11 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
     }
   }
 
-  def shutdown() = {
-    connection.sendRequest(ShutdownRequest.`type`).toFuture
+  // FIXME: The future returned by the shutdown request never seems to resolve
+  // As a workaround, for now we don't wait for a response (after 100ms).
+  def shutdown(): Future[Any] = {
+    connection.sendRequest(ShutdownRequest.`type`)
+    Future.successful(null)
   }
 
   def exit() = {

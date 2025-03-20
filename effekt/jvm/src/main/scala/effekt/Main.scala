@@ -17,20 +17,23 @@ object Main {
       parseArgs(args)
     } catch {
       case e: ScallopException =>
-        System.err.println(e.getMessage())
+        System.err.println(e.getMessage)
         return
     }
+
+    val driver = new Driver {};
 
     if (config.experimentalServer()) {
       val serverConfig = ServerConfig(
         debug = config.debug(),
         debugPort = config.debugPort()
       )
-      ServerNG.launch(serverConfig)
+      val server = new ServerNG(driver, config)
+      server.launch(serverConfig)
     } else if (config.server()) {
       Server.launch(config)
     } else if (config.repl()) {
-      new Repl(Server).run(config)
+      new Repl(driver).run(config)
     } else {
       compileFiles(config)
     }

@@ -5,6 +5,8 @@ import typings.node.fsMod
 import scala.concurrent.{ExecutionContext, Future}
 import utest.*
 
+import scala.util.Failure
+
 object TestSuite extends TestSuite {
   def samplesDir = "examples/benchmarks"
 
@@ -12,7 +14,12 @@ object TestSuite extends TestSuite {
   def withServer[T](testBody: ServerConnection => Future[T])
                    (implicit ec: ExecutionContext): Future[T] = {
     val serverConn = new ServerConnection
-    testBody(serverConn).andThen { case _ => serverConn.cleanup() }
+    testBody(serverConn).transformWith { testResult =>
+      serverConn.cleanup(fastExit = true).transform {
+        case Failure(e) => Failure(e)
+        case _ => testResult
+      }
+    }
   }
 
   def withServerWithoutCleanup[T](testBody: ServerConnection => Future[T])
@@ -73,12 +80,13 @@ object TestSuite extends TestSuite {
       }
     }
 
+    // While the other tests use the `fastExit` mode to lower the test suite runtime,
+    // this test actually waits for a clean exit with status code 0
     test("Graceful Shutdown") {
       withServerWithoutCleanup { serverConn =>
         for {
           client <- serverConn.setupServerAndConnect()
-          _ <- client.shutdown()
-          _ <- client.exit()
+          _ <- serverConn.cleanup()
         } yield assert(serverConn.hasExited)
       }
     }

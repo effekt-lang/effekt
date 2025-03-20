@@ -1,29 +1,30 @@
 package effekt
 
 import kiama.util.Collections
-import org.eclipse.lsp4j.jsonrpc.MessageConsumer
 
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
-import java.util.List as JList
-import java.io.{InputStream, OutputStream}
+import java.io.PrintWriter
 import java.net.ServerSocket
 import org.eclipse.lsp4j.{Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult, PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncKind, WorkspaceFolder}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
-import scala.jdk.FunctionConverters._
 
+import scala.jdk.FunctionConverters.*
 import java.nio.file.Paths
 
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
  */
-class ServerNG extends LanguageServer with LanguageClientAware {
+class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with LanguageClientAware {
   private var client: LanguageClient = _
   private val textDocumentService = new EffektTextDocumentService(this)
   private val workspaceService = new EffektWorkspaceService
 
   // Track whether shutdown has been requested
   private var shutdownRequested: Boolean = false
+
+  val getDriver: Driver = driver
+  val getConfig: EffektConfig = config
 
   override def initialize(params: InitializeParams): CompletableFuture[InitializeResult] = {
     val capabilities = new ServerCapabilities()
@@ -79,14 +80,55 @@ class ServerNG extends LanguageServer with LanguageClientAware {
   override def connect(client: LanguageClient): Unit = {
     this.client = client
   }
+
+  /*
+   * Launch a language server with a given `ServerConfig`
+   */
+  def launch(config: ServerConfig): Unit = {
+    // Create a single-threaded executor to serialize all requests.
+    val executor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    if (config.debug) {
+      val serverSocket = new ServerSocket(config.debugPort)
+      println(s"Starting language server in debug mode on port ${config.debugPort}")
+      val socket = serverSocket.accept()
+
+      val launcher =
+        new LSPLauncher.Builder()
+          .setLocalService(this)
+          .setRemoteInterface(classOf[LanguageClient])
+          .setInput(socket.getInputStream)
+          .setOutput(socket.getOutputStream)
+          .setExecutorService(executor)
+          .traceMessages(new PrintWriter(System.err, true))
+          .create()
+      val client = launcher.getRemoteProxy
+      this.connect(client)
+      launcher.startListening()
+    } else {
+      val launcher =
+        new LSPLauncher.Builder()
+          .setLocalService(this)
+          .setRemoteInterface(classOf[LanguageClient])
+          .setInput(System.in)
+          .setOutput(System.out)
+          .setExecutorService(executor)
+          .create()
+
+      val client = launcher.getRemoteProxy
+      this.connect(client)
+      launcher.startListening()
+    }
+  }
 }
 
 class EffektTextDocumentService(server: ServerNG) extends TextDocumentService {
   def didChange(params: DidChangeTextDocumentParams): Unit = {}
   def didClose(params: DidCloseTextDocumentParams): Unit = {}
   def didOpen(params: DidOpenTextDocumentParams): Unit = {
-      val document = params.getTextDocument
-      server.clearDiagnostics(document.getUri)
+    val document = params.getTextDocument
+    server.clearDiagnostics(document.getUri)
+    server.getDriver.compileString(document.getUri, document.getText, server.getConfig)
   }
   def didSave(params: DidSaveTextDocumentParams): Unit = {}
 }
@@ -97,44 +139,3 @@ class EffektWorkspaceService extends WorkspaceService {
 }
 
 case class ServerConfig(debug: Boolean = false, debugPort: Int = 5000)
-
-object ServerNG {
-  /*
-   * Launch a language server with a given `ServerConfig`
-   */
-  def launch(config: ServerConfig): Unit = {
-    val server = new ServerNG()
-
-    // Create a single-threaded executor to serialize all requests.
-    val executor: ExecutorService = Executors.newSingleThreadExecutor()
-    // Define an identity wrapper that returns the provided MessageConsumer unchanged.
-    val wrapper = (consumer: MessageConsumer) => consumer
-
-    if (config.debug) {
-      val serverSocket = new ServerSocket(config.debugPort)
-      println(s"Starting language server in debug mode on port ${config.debugPort}")
-      val socket = serverSocket.accept()
-      val launcher = LSPLauncher.createServerLauncher(
-        server,
-        socket.getInputStream,
-        socket.getOutputStream,
-        executor,
-        wrapper.asJava
-      )
-      val client = launcher.getRemoteProxy
-      server.connect(client)
-      launcher.startListening()
-    } else {
-      val launcher = LSPLauncher.createServerLauncher(
-        server,
-        System.in,
-        System.out,
-        executor,
-        wrapper.asJava
-      )
-      val client = launcher.getRemoteProxy
-      server.connect(client)
-      launcher.startListening()
-    }
-  }
-}

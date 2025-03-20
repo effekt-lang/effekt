@@ -13,7 +13,7 @@ import typings.vscodeLanguageserverProtocol.libCommonConnectionMod.ProtocolConne
 
 class ServerConnection(implicit ec: ExecutionContext) {
   // Delay before killing process after sending the exit notification
-  private val KillDelayMs = 1000
+  private val KillDelayMs = 10000
 
   // Set the TRACE_LSP_TESTS environment variable to enable tracing of LSP messages
   private val tracingEnabled: Boolean =
@@ -34,6 +34,13 @@ class ServerConnection(implicit ec: ExecutionContext) {
   def connect(): Future[Client] = {
     val reader = childProcess.stdout.asInstanceOf[MessageReader]
     val writer = childProcess.stdin.asInstanceOf[MessageWriter]
+
+    jsProcess.stderr.on(nodeStrings.data, { (data: bufferMod.BufferCls) =>
+      if (tracingEnabled) {
+        val output = data.toString()
+        println(s"[SERVER STDERR] $output")
+      }
+    })
 
     val logger = Logger(
       info = message => if (tracingEnabled) println(s"[LSP INFO] $message"),
@@ -58,35 +65,81 @@ class ServerConnection(implicit ec: ExecutionContext) {
     startServer().flatMap(_ => connect())
   }
 
-  def hasExited: Boolean = jsProcess.exitCode == null
+  def hasExited: Boolean = jsProcess.exitCode != null || !js.isUndefined(jsProcess.exitCode)
 
-  def cleanup(): Future[Unit] = {
-    val cleanupPromise = Promise[Unit]()
-
-    // We run the shutdown sequence as specified by the language server protocol:
-    // - Shutdown Request
-    // - Exit Notification
-    // If the server process is still running after `KillDelayMs`,
-    // we kill it and raise an exception to mark the test as failed.
-    client.shutdown()
-      .flatMap(_ => client.exit())
-      .onComplete { result =>
-        timers.setTimeout(KillDelayMs) {
-          if (jsProcess.exitCode == null) {
-            try {
-              jsProcess.kill()
-              cleanupPromise.failure(new Exception("Server did not terminate gracefully and had to be killed"))
-            } catch {
-              case e: Throwable =>
-                cleanupPromise.failure(new Exception(s"Failed to kill server: ${e.getMessage}", e))
-            }
-          } else {
-            cleanupPromise.success(())
-          }
+  // Ensure the server process performs a clean exit
+  // This is very important; if for example the server process doesn't exit,
+  // we will run out of available memory very quickly as the test suite will
+  // start multiple server processes.
+  //
+  // If `fastExit` is set to `true`, we don't wait for the server process to shut down but kill it immediately.
+  // This makes the test suite run through much faster.
+  def cleanup(fastExit: Boolean): Future[Unit] = {
+    if (fastExit) {
+      for {
+        _ <- client.shutdown()
+        _ <- client.exit()
+      } yield {
+        try {
+          jsProcess.kill()
+        } catch {
+          case e: Throwable =>
+            throw new Exception(s"Failed to kill server: ${e.getMessage}", e)
         }
       }
+    } else {
+      cleanup()
+    }
+  }
 
-    cleanupPromise.future
+  // Ensure the server process performs a clean exit
+  // This is very important; if for example the server process doesn't exit,
+  // we will run out of available memory very quickly as the test suite will
+  // start multiple server processes.
+  def cleanup(): Future[Unit] = {
+    // A future that completes when the process exits.
+    val processExitFuture: Future[Unit] = {
+      val p = Promise[Unit]()
+      jsProcess.on("exit", { (code: Int) =>
+        p.success(())
+      })
+      p.future
+    }
+
+    // A future that completes after KillDelayMs.
+    val timeoutFuture: Future[Unit] = delay(KillDelayMs);
+
+    // Wait until either the process exits or the timeout is reached.
+    val waitForExitOrTimeout: Future[Unit] =
+      Future.firstCompletedOf(Seq(processExitFuture, timeoutFuture))
+
+    for {
+      _ <- client.shutdown()
+      _ <- client.exit()
+      _ <- waitForExitOrTimeout
+      result <- {
+        println(s"exit code: ${jsProcess.exitCode}")
+        if (jsProcess.exitCode == null || js.isUndefined(jsProcess.exitCode)) {
+          try {
+            jsProcess.kill()
+            Future.failed(new Exception("Server did not terminate gracefully and had to be killed"))
+          } catch {
+            case e: Throwable =>
+              Future.failed(new Exception(s"Failed to kill server: ${e.getMessage}", e))
+          }
+        } else if (jsProcess.exitCode.asInstanceOf[Int] != 0) {
+          Future.failed(new Exception(s"Server exited with non-zero exit code: ${jsProcess.exitCode}"))
+        } else {
+          Future.successful(())
+        }
+      }
+    } yield result
+  }
+
+  def delay(ms: Int): Future[Unit] = {
+    val p = Promise[Unit]()
+    timers.setTimeout(ms)(p.success(()))
+    p.future
   }
 }
 
