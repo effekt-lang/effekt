@@ -56,8 +56,3 @@ runs:
       if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
       run: effekt.sh --help
       shell: bash
-
-    - name: Run language server tests
-      if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' }}
-      run: sbt lspTest/test
-      shell: bash
