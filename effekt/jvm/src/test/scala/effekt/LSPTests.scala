@@ -168,6 +168,10 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Text document DSL
+  //
+  //
+
   test("Correct cursor position") {
     val (textDoc, cursor) = raw"""
                                 |def main() = { println("Hello, world!") }
