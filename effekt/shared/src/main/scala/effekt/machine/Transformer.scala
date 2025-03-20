@@ -93,6 +93,10 @@ object Transformer {
             then Set.empty
             else Set(Variable(transform(id), Type.Prompt()))
 
+          // Coercsions are blocks and can be free, but do not have info.
+          case core.Variable.Block(id, _, _) if id.name.name.startsWith("@coerce") =>
+            Set.empty
+
           case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams)) =>
@@ -131,7 +135,7 @@ object Transformer {
       case core.Def(id, block @ core.Unbox(pure), rest) =>
         noteParameter(id, block.tpe)
         transform(pure).run { boxed =>
-          ForeignCall(Variable(transform(id), Type.Negative()), "unbox", List(boxed), transform(rest))
+          Coerce(Variable(transform(id), Type.Negative()), boxed, transform(rest))
         }
 
       case core.Let(id, tpe, binding, rest) =>
@@ -168,19 +172,23 @@ object Transformer {
                 case _ => ErrorReporter.panic("Applying an object")
               }
 
+            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+              // TODO subsitute targs for tparams
+              noteParameters(bparams)
+              val valueNames = vparams.map(transform).zip(values)
+              val blockNames = bparams.map(transform).zip(blocks)
+              Substitute(valueNames ++ blockNames, transform(body))
+
             case Block.Unbox(pure) =>
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
 
-                ForeignCall(callee, "unbox", List(boxedCallee),
+                Coerce(callee, boxedCallee,
                   Invoke(callee, builtins.Apply, values ++ blocks))
               }
 
             case Block.New(impl) =>
               ErrorReporter.panic("Applying an object")
-
-            case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
-              ErrorReporter.panic(pp"Call to block literal should have been reduced: ${stmt}")
           }
         }
 
@@ -197,7 +205,7 @@ object Transformer {
               transform(pure).run { boxedCallee =>
                 val callee = Variable(freshName(boxedCallee.name), Type.Negative())
 
-                ForeignCall(callee, "unbox", List(boxedCallee),
+                Coerce(callee, boxedCallee,
                   Invoke(callee, opTag, values ++ blocks))
               }
 
@@ -397,6 +405,14 @@ object Transformer {
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
 
+    case core.PureApp(core.BlockVar(blockName, tpe: core.BlockType.Function, _), List(), List(arg)) if blockName.name.name.startsWith("@coerce") =>
+      val variable = Variable(freshName("coerceApp"), transform(tpe.result))
+      transform(arg).flatMap { value =>
+        Binding { k =>
+          Coerce(variable, value, k(variable))
+        }
+      }
+
     case core.PureApp(core.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function, capt), targs, vargs) =>
       if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
@@ -417,7 +433,9 @@ object Transformer {
         }
       }
 
-    case core.Make(data, constructor, vargs) =>
+    case core.Make(data, constructor, targs, vargs) =>
+      if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+
       val variable = Variable(freshName("make"), transform(data));
       val tag = DeclarationContext.getConstructorTag(constructor)
 
@@ -431,7 +449,7 @@ object Transformer {
       transformBlockArg(block).flatMap { unboxed =>
         Binding { k =>
           val boxed = Variable(freshName(unboxed.name), Type.Positive())
-          ForeignCall(boxed, "box", List(unboxed), k(boxed))
+          Coerce(boxed, unboxed, k(boxed))
         }
       }
 

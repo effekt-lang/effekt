@@ -168,7 +168,7 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     ( literal
     | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
-    | `make` ~> dataType ~ id ~ valueArgs ^^ Pure.Make.apply
+    | `make` ~> dataType ~ id ~ maybeTypeArgs ~ valueArgs ^^ Pure.Make.apply
     | maybeParens(blockVar) ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
     | failure("Expected a pure expression.")
     )
