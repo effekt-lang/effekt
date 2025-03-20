@@ -1,9 +1,10 @@
 package effekt
 
 import kiama.util.Collections
+import org.eclipse.lsp4j.jsonrpc.Launcher
 
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
-import java.io.PrintWriter
+import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
 import org.eclipse.lsp4j.{Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult, PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncKind, WorkspaceFolder}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
@@ -81,6 +82,25 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
     this.client = client
   }
 
+  /**
+   * Launch a language server using provided input/output streams.
+   * This allows tests to connect via in-memory pipes.
+   */
+  def launch(client: LanguageClient, in: InputStream, out: OutputStream): Launcher[LanguageClient] = {
+    val executor = Executors.newSingleThreadExecutor()
+    val launcher =
+      new LSPLauncher.Builder()
+        .setLocalService(this)
+        .setRemoteInterface(classOf[LanguageClient])
+        .setInput(in)
+        .setOutput(out)
+        .setExecutorService(executor)
+        .create()
+    this.connect(client)
+    launcher.startListening()
+    launcher
+  }
+
   /*
    * Launch a language server with a given `ServerConfig`
    */
@@ -90,7 +110,7 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
 
     if (config.debug) {
       val serverSocket = new ServerSocket(config.debugPort)
-      println(s"Starting language server in debug mode on port ${config.debugPort}")
+      System.err.println(s"Starting language server in debug mode on port ${config.debugPort}")
       val socket = serverSocket.accept()
 
       val launcher =
