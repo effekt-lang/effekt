@@ -21,19 +21,17 @@ object Main {
         return
     }
 
-    val driver = new Driver {};
-
     if (config.experimentalServer()) {
       val serverConfig = ServerConfig(
         debug = config.debug(),
         debugPort = config.debugPort()
       )
-      val server = new ServerNG(driver, config)
+      val server = new ServerNG(config)
       server.launch(serverConfig)
     } else if (config.server()) {
       Server.launch(config)
     } else if (config.repl()) {
-      new Repl(driver).run(config)
+      new Repl(new Driver {}).run(config)
     } else {
       compileFiles(config)
     }

@@ -1,12 +1,17 @@
 package effekt
 
-import kiama.util.Collections
+import effekt.context.Context
+import effekt.util.PlainMessaging
+import effekt.util.messages.EffektError
+import kiama.util.Collections.seqToJavaList
+import kiama.util.Severities.{Error, Hint, Information, Severity, Warning}
+import kiama.util.{Collections, Position, Source}
 import org.eclipse.lsp4j.jsonrpc.Launcher
 
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
-import org.eclipse.lsp4j.{Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult, PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncKind, WorkspaceFolder}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult, Location, PublishDiagnosticsParams, Range as LSPRange, ServerCapabilities, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
 
@@ -16,7 +21,7 @@ import java.nio.file.Paths
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
  */
-class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with LanguageClientAware {
+class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientAware with Driver {
   private var client: LanguageClient = _
   private val textDocumentService = new EffektTextDocumentService(this)
   private val workspaceService = new EffektWorkspaceService
@@ -24,8 +29,14 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
   // Track whether shutdown has been requested
   private var shutdownRequested: Boolean = false
 
-  val getDriver: Driver = driver
+  val getDriver: Driver = this
   val getConfig: EffektConfig = config
+
+  object lspMessaging extends PlainMessaging
+
+  // LSP methods
+  //
+  //
 
   override def initialize(params: InitializeParams): CompletableFuture[InitializeResult] = {
     val capabilities = new ServerCapabilities()
@@ -62,6 +73,22 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
     val params = new PublishDiagnosticsParams(toURI(name), Collections.seqToJavaList(diagnostics))
     client.publishDiagnostics(params)
   }
+
+  // Driver methods
+  //
+  //
+
+  override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    val messages = C.messaging.buffer
+    val groups = messages.groupBy(msg => msg.sourceName.getOrElse(""))
+    for ((name, msgs) <- groups) {
+      publishDiagnostics(name, msgs.distinct.map(KiamaUtils.messageToDiagnostic(lspMessaging)))
+    }
+  }
+
+  // Other methods
+  //
+  //
 
   def toURI(filename: String): String = {
     if (filename.startsWith("file:") || filename.startsWith("vscode-notebook-cell:")) {
@@ -101,7 +128,7 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
     launcher
   }
 
-  /*
+  /**
    * Launch a language server with a given `ServerConfig`
    */
   def launch(config: ServerConfig): Unit = {
