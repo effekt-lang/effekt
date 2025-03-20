@@ -113,7 +113,7 @@ class LSPTests extends FunSuite {
     assertEquals(cursor, new org.eclipse.lsp4j.Position(1, 4))
   }
 
-  test("Missing cursor") {
+  test("Missing cursor throws exception") {
     intercept[IllegalArgumentException] {
       raw"""
            |def main() = { println("Hello, world!") }
