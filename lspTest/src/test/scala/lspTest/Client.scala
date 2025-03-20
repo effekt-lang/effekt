@@ -43,26 +43,30 @@ class Client(val connection: ProtocolConnection)(implicit ec: ExecutionContext) 
 
   // this is rather complex logic but is needed to prevent race conditions,
   // since relevant notifications may arrive before or after calling this function
-  def waitForDiagnostics(file: String) =
+  def waitForDiagnostics(file: String): Future[NotificationMessage] =
     val uri = toURI(file)
     diagnostics.get(uri) match {
       case None =>
+        println(s"case None: $uri")
         val promise = Promise[NotificationMessage]()
         diagnostics(uri) = promise
         Future.firstCompletedOf(Seq(promise.future, timeoutFuture("diagnostics"))).andThen {
           case _ => diagnostics.remove(uri)
         }
       case Some(promise) =>
+        println(s"case Some: $uri")
         diagnostics.remove(uri)
         Future.firstCompletedOf(Seq(promise.future, timeoutFuture("diagnostics")))
     }
 
   def initialize() = {
     connection.onUnhandledNotification { notification =>
+      println(s"Received unhandled notification: ${notification.method}")
       notification.method match
         case _ => assert(false, "unexpected notification")
     }
     connection.onNotification(PublishDiagnosticsNotification.`type`, (params: PublishDiagnosticsParams) => {
+      println(s"Received diagnostics for ${params.uri}")
       val uri = params.uri
       val notification = js.Dynamic.literal(
         method = "textDocument/publishDiagnostics",

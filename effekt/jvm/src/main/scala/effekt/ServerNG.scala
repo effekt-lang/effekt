@@ -54,12 +54,15 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
   override def getWorkspaceService(): WorkspaceService = workspaceService
 
   def clearDiagnostics(name: String): Unit = {
+    System.err.println("clearDiagnostics")
     publishDiagnostics(name, Vector())
   }
 
   def publishDiagnostics(name: String, diagnostics: Vector[Diagnostic]): Unit = {
     val params = new PublishDiagnosticsParams(toURI(name), Collections.seqToJavaList(diagnostics))
+    System.err.println("Before client.publishDiagnostics")
     client.publishDiagnostics(params)
+    System.err.println("Published diagnostics")
   }
 
   def toURI(filename: String): String = {
@@ -90,7 +93,7 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
 
     if (config.debug) {
       val serverSocket = new ServerSocket(config.debugPort)
-      println(s"Starting language server in debug mode on port ${config.debugPort}")
+      System.err.println(s"Starting language server in debug mode on port ${config.debugPort}")
       val socket = serverSocket.accept()
 
       val launcher =
@@ -113,6 +116,7 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
           .setInput(System.in)
           .setOutput(System.out)
           .setExecutorService(executor)
+          .traceMessages(new PrintWriter(System.err, true))
           .create()
 
       val client = launcher.getRemoteProxy
@@ -123,7 +127,12 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
 }
 
 class EffektTextDocumentService(server: ServerNG) extends TextDocumentService {
-  def didChange(params: DidChangeTextDocumentParams): Unit = {}
+  def didChange(params: DidChangeTextDocumentParams): Unit = {
+    System.err.println("didChange")
+    val document = params.getTextDocument
+    server.clearDiagnostics(document.getUri)
+    server.getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, server.getConfig)
+  }
   def didClose(params: DidCloseTextDocumentParams): Unit = {}
   def didOpen(params: DidOpenTextDocumentParams): Unit = {
     val document = params.getTextDocument

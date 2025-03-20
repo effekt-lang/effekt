@@ -16,14 +16,24 @@ class TestSingleFile(val client: Client, val file: String)(implicit ec: Executio
 
   def tests = Tests {
     test("Open document and check diagnostics") {
-      client.openDocument(file, fsMod.readFileSync(file).toString).transformWith { _ =>
-        client.waitForDiagnostics(file).flatMap {
-          notification => {
-            Checker.checkSample("publishDiagnostics", file, notification.asInstanceOf[js.Object])
-            Future.successful(())
-          }
-        }
+      for {
+        _ <- client.openDocument(file, fsMod.readFileSync(file).toString)
+        notification <- client.waitForDiagnostics(file)
+        _ <- client.changeDocument(file, "\n" + fsMod.readFileSync(file).toString)
+        notification <- client.waitForDiagnostics(file)
+      } yield {
+//        Checker.checkSample("publishDiagnostics", file, notification.asInstanceOf[js.Object])
+        ()
       }
+      
+//      client.openDocument(file, fsMod.readFileSync(file).toString).transformWith { _ =>
+//        client.waitForDiagnostics(file).flatMap {
+//          notification => {
+//            Checker.checkSample("publishDiagnostics", file, notification.asInstanceOf[js.Object])
+//            Future.successful(())
+//          }
+//        }
+//      }
     }
 
     // test("Request symbols") {
@@ -88,10 +98,15 @@ class TestSingleFile(val client: Client, val file: String)(implicit ec: Executio
     //     })
     //   }
     // }
-
-    // test("Add newline to all files") {
-    //   forEachSample { file => client.changeDocument(file, fsMod.readFileSync(file).toString + "\n") }
-    // }
+//
+//     test("Add newline to the beginning of the file and wait for the new diagnostics") {
+//       for {
+//         _ <- client.changeDocument(file, "\n" + fsMod.readFileSync(file).toString)
+//         notification <- client.waitForDiagnostics(file)
+//       } yield {
+//         Future.successful(())
+//       }
+//     }
 
     // test("Save files") {
     //   forEachSample { file => client.closeDocument(file) }
