@@ -1,21 +1,18 @@
 package effekt
 
-import effekt.context.Context
-import kiama.util.Source
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-
-import java.io.{PipedInputStream, PipedOutputStream}
-import java.util.concurrent.{CompletableFuture, Executors}
 import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 
+import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
+import java.util.concurrent.CompletableFuture
 import scala.collection.mutable
 import scala.collection.mutable.Queue
 
 class LSPTests extends FunSuite {
   // Import the extension method for String
-  import TextDocumentSyntax._
+  import TextDocumentSyntax.*
 
   // Test helpers
   //
@@ -91,7 +88,7 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val (textDoc, range) = raw"""
                        |val x: Int = "String"
-                       |             ⟦      ⟧
+                       |             ↑      ↑
                        |""".textDocumentAndRange
 
       val didOpenParams = new DidOpenTextDocumentParams()
@@ -191,9 +188,9 @@ class LSPTests extends FunSuite {
   test("Correct multiline range") {
     val (textDoc, range) = raw"""
       | There is some content here.
-      |     ⟦
+      |     ↑
       | And here.
-      |     ⟧
+      |     ↑
       |""".textDocumentAndRange
 
     val textWithoutRanges = raw"""
@@ -250,101 +247,46 @@ object TextDocumentSyntax {
       new TextDocumentItem("file://test.effekt", "effekt", 0, content.stripMargin)
 
     def textDocumentAndPosition: (TextDocumentItem, Position) = {
-      val lines = content.stripMargin.split("\n").toBuffer
-      var cursor: Option[Position] = None
-      var lineIdx = 0
+      val (textDocument, positions) = content.textDocumentAndPositions
 
-      while (lineIdx < lines.length && cursor.isEmpty) {
-        val line = lines(lineIdx)
-        val arrowIdx = line.indexOf("↑")
-        if (arrowIdx != -1) {
-          if (line.trim != "↑")
-            throw new IllegalArgumentException("Line with cursor arrow may not contain other characters.")
-          if (lineIdx == 0)
-            throw new IllegalArgumentException("Cursor arrow on first line cannot point to a previous line.")
-          cursor = Some(new Position(lineIdx - 1, arrowIdx))
-          lines.remove(lineIdx)
-        }
-        lineIdx += 1
-      }
+      if (positions.length != 1)
+        throw new IllegalArgumentException("Exactly one marker line (with '" + "↑" + "') is required.")
 
-      if (cursor.isEmpty)
-        throw new IllegalArgumentException("No cursor arrow (↑) found in the string.")
-
-      val newContent = lines.mkString("\n")
-      (newContent.textDocument, cursor.get)
+      (textDocument, positions.head)
     }
 
     def textDocumentAndRange: (TextDocumentItem, Range) = {
+      val (textDocument, positions) = content.textDocumentAndPositions
+      if (positions.length != 2)
+        throw new IllegalArgumentException("Exactly two marker lines (with '" + "↑" + "') are required.")
+      val start = positions(0)
+      val end = positions(1)
+      // The end of the range is exclusive, so we need to increment the character position.
+      val range = new Range(start, new Position(end.getLine, end.getCharacter + 1))
+      (textDocument, range)
+    }
+
+    def textDocumentAndPositions: (TextDocumentItem, Seq[Position]) = {
       val lines = content.stripMargin.split("\n").toBuffer
-
-      var startOpt: Option[(Int, Int)] = None
-      var endOpt: Option[(Int, Int)] = None
-
-      val startMarker = "⟦"
-      val endMarker = "⟧"
-
+      val positions = scala.collection.mutable.ArrayBuffer[Position]()
       var lineIdx = 0
       while (lineIdx < lines.length) {
         val line = lines(lineIdx)
-        val trimmed = line.trim
-        if (trimmed.contains(startMarker) || trimmed.contains(endMarker)) {
-          // The marker line must not contain any other non-whitespace characters.
-          // There are two allowed cases:
-          // 1. The line contains both markers (and nothing else except whitespace).
-          // 2. The line contains exactly one marker.
-          if (trimmed.contains(startMarker) && trimmed.contains(endMarker)) {
-            // Expect the line to match pattern "⟦" followed by whitespace then "⟧"
-            if (!trimmed.matches(s"^$startMarker\\s+$endMarker$$"))
-              throw new IllegalArgumentException("Line with range markers may not contain other characters.")
-            // Markers on the same line refer to the previous line.
-            if (lineIdx == 0)
-              throw new IllegalArgumentException("Range markers on first line cannot refer to a previous line.")
-            val startCol = line.indexOf(startMarker)
-            val endCol = line.indexOf(endMarker) + 1
-            if (startOpt.isDefined || endOpt.isDefined)
-              throw new IllegalArgumentException("Multiple range markers found.")
-            startOpt = Some((lineIdx - 1, startCol))
-            endOpt = Some((lineIdx - 1, endCol))
-            lines.remove(lineIdx)
-            lineIdx -= 1 // adjust since we removed a line
-          } else if (trimmed == startMarker) {
-            if (startOpt.isDefined)
-              throw new IllegalArgumentException("Multiple range start markers found.")
-            if (lineIdx == 0)
-              throw new IllegalArgumentException("Range start marker on first line cannot refer to a previous line.")
-            val startCol = line.indexOf(startMarker)
-            startOpt = Some((lineIdx - 1, startCol))
-            lines.remove(lineIdx)
-            lineIdx -= 1
-          } else if (trimmed == endMarker) {
-            if (endOpt.isDefined)
-              throw new IllegalArgumentException("Multiple range end markers found.")
-            if (lineIdx == 0)
-              throw new IllegalArgumentException("Range end marker on first line cannot refer to a previous line.")
-            val endCol = line.indexOf(endMarker) + 1
-            endOpt = Some((lineIdx - 1, endCol))
-            lines.remove(lineIdx)
-            lineIdx -= 1
-          } else {
-            throw new IllegalArgumentException("Line with range marker may not contain other characters.")
+        if (line.contains("↑")) {
+          if (lineIdx == 0)
+            throw new IllegalArgumentException("Marker on first line cannot refer to a previous line.")
+          // There may be multiple markers on the same line, so we need to record all of them.
+          for (i <- line.indices if line(i) == '↑') {
+            positions += new Position(lineIdx - 1, i)
           }
+          lines.remove(lineIdx)
+          // adjust index because of removal
+          lineIdx -= 1
         }
         lineIdx += 1
       }
-
-      if (startOpt.isEmpty || endOpt.isEmpty)
-        throw new IllegalArgumentException("Both range start and end markers must be provided.")
-
-      val (startLine, startCol) = startOpt.get
-      val (endLine, endCol) = endOpt.get
-
-      if (startLine > endLine || (startLine == endLine && startCol >= endCol))
-        throw new IllegalArgumentException("Range start must come before range end.")
-
       val newContent = lines.mkString("\n")
-      val range = new Range(new Position(startLine, startCol), new Position(endLine, endCol))
-      (newContent.textDocument, range)
+      (newContent.textDocument, positions.toList)
     }
   }
 
