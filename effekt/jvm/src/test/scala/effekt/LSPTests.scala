@@ -141,7 +141,7 @@ class LSPTests extends FunSuite {
   //
   //
 
-  test("Hovering shows type information") {
+  test("Hovering over symbol shows type information") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
                                 |val x: Int = 42
@@ -153,6 +153,30 @@ class LSPTests extends FunSuite {
               |test::x: Int
               |```
               |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  // FIXME: Hovering over holes does not work at the moment.
+  // https://github.com/effekt-lang/effekt/issues/549
+  test("Hovering over hole shows nothing") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |def foo(x: Int) = <>
+                                |                  ↑
+                                |""".textDocumentAndPosition
+      val hoverContents = ""
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
