@@ -5,8 +5,8 @@ import org.eclipse.lsp4j.services.LanguageClient
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.concurrent.{CompletableFuture, Executors}
-import org.eclipse.lsp4j.{DidOpenTextDocumentParams, InitializeParams, InitializeResult, MessageActionItem, MessageParams, PublishDiagnosticsParams, ServerCapabilities, ShowMessageRequestParams, TextDocumentItem, TextDocumentSyncKind}
-import org.eclipse.lsp4j.{Position, TextDocumentItem}
+import org.eclipse.lsp4j.{DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+
 import java.util
 import scala.collection.mutable
 import scala.collection.mutable.Queue
@@ -14,6 +14,10 @@ import scala.collection.mutable.Queue
 class LSPTests extends FunSuite {
   // Import the extension method for String
   import TextDocumentSyntax._
+
+  // Test helpers
+  //
+  //
 
   def withClientAndServer(testBlock: (MockLanguageClient, ServerNG) => Unit): Unit = {
     val driver = new Driver {}
@@ -34,6 +38,18 @@ class LSPTests extends FunSuite {
 
     testBlock(mockClient, server)
   }
+
+  // Fixtures
+  //
+  //
+
+  val helloWorld = raw"""
+                        |def main() = { println("Hello, world!") }
+                        |""".textDocument
+
+  // Tests
+  //
+  //
 
   test("Initialization works") {
     withClientAndServer { (client, server) =>
@@ -59,6 +75,29 @@ class LSPTests extends FunSuite {
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
       server.getTextDocumentService().didOpen(didOpenParams)
+
+      val diagnostics = client.diagnostics()
+      assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
+    }
+  }
+
+  test("didChange yields empty diagnostics") {
+    withClientAndServer { (client, server) =>
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(helloWorld)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      // Pop the diagnostics from the queue before changing the document
+      val _ = client.diagnostics()
+
+      val (textDoc, changeEvent) = helloWorld.changeTo(
+        raw"""
+             |def main() = { println("Hello, Effekt!") }
+             |""")
+
+      val didChangeParams = new DidChangeTextDocumentParams()
+      didChangeParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
+      server.getTextDocumentService().didChange(didChangeParams)
 
       val diagnostics = client.diagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
@@ -119,9 +158,12 @@ class MockLanguageClient extends LanguageClient {
 
 // .textDocument DSL as extension methods for String
 object TextDocumentSyntax {
-  implicit class TextDocumentOps(val content: String) extends AnyVal {
+  implicit class StringOps(val content: String) extends AnyVal {
+    def textDocument(version: Int): TextDocumentItem =
+      new TextDocumentItem("file://test.effekt", "effekt", version, content.stripMargin)
+
     def textDocument: TextDocumentItem =
-      new TextDocumentItem("file://test.effekt", "effekt", 1, content.stripMargin)
+      new TextDocumentItem("file://test.effekt", "effekt", 0, content.stripMargin)
 
     def textDocumentAndCursor: (TextDocumentItem, Position) = {
       // Remove margin formatting
@@ -150,5 +192,16 @@ object TextDocumentSyntax {
       val document = new TextDocumentItem("file://test.effekt", "effekt", 1, newContent)
       (document, cursor.get)
     }
+  }
+
+  implicit class TextDocumentOps(val textDocument: TextDocumentItem) extends AnyVal {
+    def changeTo(newContent: String): (TextDocumentItem, TextDocumentContentChangeEvent) = {
+      val newDoc = new TextDocumentItem(textDocument.getUri, textDocument.getLanguageId, textDocument.getVersion + 1, newContent.stripMargin)
+      val changeEvent = new TextDocumentContentChangeEvent(newDoc.getText)
+      (newDoc, changeEvent)
+    }
+
+    def versionedTextDocumentIdentifier: VersionedTextDocumentIdentifier =
+      new VersionedTextDocumentIdentifier(textDocument.getUri, textDocument.getVersion)
   }
 }

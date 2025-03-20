@@ -143,7 +143,11 @@ class ServerNG(driver: Driver, config: EffektConfig) extends LanguageServer with
 }
 
 class EffektTextDocumentService(server: ServerNG) extends TextDocumentService {
-  def didChange(params: DidChangeTextDocumentParams): Unit = {}
+  def didChange(params: DidChangeTextDocumentParams): Unit = {
+    val document = params.getTextDocument
+    server.clearDiagnostics(document.getUri)
+    server.getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, server.getConfig)
+  }
   def didClose(params: DidCloseTextDocumentParams): Unit = {}
   def didOpen(params: DidOpenTextDocumentParams): Unit = {
     val document = params.getTextDocument
