@@ -149,7 +149,7 @@ class LSPTests extends FunSuite {
       val (textDoc, cursor) = raw"""
                                 |val x: Int = 42
                                 |    ↑
-                                |""".textDocumentAndCursor
+                                |""".textDocumentAndPosition
       val hoverContents =
         raw"""|#### Value binder
               |```effekt
@@ -175,7 +175,7 @@ class LSPTests extends FunSuite {
     val (textDoc, cursor) = raw"""
                                 |def main() = { println("Hello, world!") }
                                 |    ↑
-                                |""".textDocumentAndCursor
+                                |""".textDocumentAndPosition
 
     assertEquals(cursor, new org.eclipse.lsp4j.Position(1, 4))
   }
@@ -184,7 +184,7 @@ class LSPTests extends FunSuite {
     intercept[IllegalArgumentException] {
       raw"""
            |def main() = { println("Hello, world!") }
-           |""".textDocumentAndCursor
+           |""".textDocumentAndPosition
     }
   }
 
@@ -256,7 +256,7 @@ object TextDocumentSyntax {
     def textDocument: TextDocumentItem =
       new TextDocumentItem("file://test.effekt", "effekt", 0, content.stripMargin)
 
-    def textDocumentAndCursor: (TextDocumentItem, Position) = {
+    def textDocumentAndPosition: (TextDocumentItem, Position) = {
       val lines = content.stripMargin.split("\n").toBuffer
       var cursor: Option[Position] = None
       var lineIdx = 0
