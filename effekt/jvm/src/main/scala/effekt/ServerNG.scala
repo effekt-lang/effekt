@@ -1,5 +1,6 @@
 package effekt
 
+import com.google.gson.JsonElement
 import effekt.context.Context
 import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
@@ -11,7 +12,7 @@ import org.eclipse.lsp4j.jsonrpc.Launcher
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult, Location, PublishDiagnosticsParams, Range as LSPRange, ServerCapabilities, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, Location, MarkupContent, PublishDiagnosticsParams, ServerCapabilities, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
 
@@ -21,7 +22,7 @@ import java.nio.file.Paths
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
  */
-class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientAware with Driver {
+class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientAware with Driver with Intelligence {
   private var client: LanguageClient = _
   private val textDocumentService = new EffektTextDocumentService(this)
   private val workspaceService = new EffektWorkspaceService
@@ -34,7 +35,7 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
 
   object lspMessaging extends PlainMessaging
 
-  // LSP methods
+  // LSP Lifecycle
   //
   //
 
@@ -63,7 +64,11 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
 
   override def getTextDocumentService(): TextDocumentService = textDocumentService
 
-  override def getWorkspaceService(): WorkspaceService = workspaceService
+  override def getWorkspaceService(): EffektWorkspaceService = workspaceService
+
+  // LSP Diagnostics
+  //
+  //
 
   def clearDiagnostics(name: String): Unit = {
     publishDiagnostics(name, Vector())
@@ -169,7 +174,7 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
   }
 }
 
-class EffektTextDocumentService(server: ServerNG) extends TextDocumentService {
+class EffektTextDocumentService(server: ServerNG) extends TextDocumentService with Intelligence {
   def didChange(params: DidChangeTextDocumentParams): Unit = {
     val document = params.getTextDocument
     server.clearDiagnostics(document.getUri)
@@ -182,11 +187,62 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService {
     server.getDriver.compileString(document.getUri, document.getText, server.getConfig)
   }
   def didSave(params: DidSaveTextDocumentParams): Unit = {}
+
+  // LSP Hover
+  //
+  //
+
+  override def hover(params: HoverParams): CompletableFuture[Hover] = {
+    val position = server.sources.get(params.getTextDocument.getUri).map { source =>
+      KiamaUtils.fromLSPPosition(params.getPosition, source)
+    }
+    position match
+      case Some(position) => {
+        val hover = getSymbolHover(position) orElse getHoleHover(position)
+        val markup = new MarkupContent("markdown", hover.getOrElse(""))
+        val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
+        CompletableFuture.completedFuture(result)
+      }
+      case None => CompletableFuture.completedFuture(new Hover())
+  }
+
+  def getSymbolHover(position: Position): Option[String] = for {
+    (tree, sym) <- getSymbolAt(position)(using server.context)
+    info <- getInfoOf(sym)(using server.context)
+  } yield if (this.server.getWorkspaceService().settingBool("showExplanations")) info.fullDescription else info.shortDescription
+
+  def getHoleHover(position: Position): Option[String] = for {
+    trees <- getTreesAt(position)(using server.context)
+    tree <- trees.collectFirst { case h: source.Hole => h }
+    info <- getHoleInfo(tree)(using server.context)
+  } yield info
 }
 
 class EffektWorkspaceService extends WorkspaceService {
-  def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {}
+  var settings: JsonElement = null
+
+  // LSP methods
+  //
+  //
+
+  def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {
+    this.settings = params.getSettings.asInstanceOf[JsonElement].getAsJsonObject
+  }
+
   def didChangeWatchedFiles(params: DidChangeWatchedFilesParams): Unit = {}
+
+  // Settings
+  //
+  //
+
+  def settingBool(name: String): Boolean = {
+    if (settings == null) return false
+    val obj = settings.getAsJsonObject
+    if (obj == null) return false
+    val value = obj.get(name)
+    if (value == null) return false
+    value.getAsBoolean
+  }
 }
 
 case class ServerConfig(debug: Boolean = false, debugPort: Int = 5000)

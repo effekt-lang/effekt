@@ -7,7 +7,7 @@ import org.eclipse.lsp4j.services.LanguageClient
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.concurrent.{CompletableFuture, Executors}
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 
 import java.util
 import scala.collection.mutable
@@ -49,7 +49,7 @@ class LSPTests extends FunSuite {
                         |def main() = { println("Hello, world!") }
                         |""".textDocument
 
-  // Tests
+  // LSP: lifecycle events
   //
   //
 
@@ -82,6 +82,10 @@ class LSPTests extends FunSuite {
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
     }
   }
+
+  // LSP: Changes to text documents
+  //
+  //
 
   test("didOpen yields error diagnostics") {
     withClientAndServer { (client, server) =>
@@ -133,6 +137,37 @@ class LSPTests extends FunSuite {
 
       val diagnostics = client.diagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
+    }
+  }
+
+  // LSP: Hovering
+  //
+  //
+
+  test("Hovering shows type information") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |val x: Int = 42
+                                |    ↑
+                                |""".textDocumentAndCursor
+      val hoverContents =
+        raw"""|#### Value binder
+              |```effekt
+              |test::x: Int
+              |```
+              |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
     }
   }
 
