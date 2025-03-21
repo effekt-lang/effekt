@@ -232,7 +232,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
 
-
 lazy val platform = Def.task {
   val platformString = System.getProperty("os.name").toLowerCase
   if (platformString.contains("win")) "windows"
