@@ -1,7 +1,6 @@
 import sbtcrossproject.CrossProject
 
 import scala.sys.process.Process
-import scalajsbundler.util.JSON.{obj,str}
 import benchmarks._
 import EffektVersion.effektVersion
 

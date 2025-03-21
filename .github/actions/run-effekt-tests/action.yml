@@ -39,7 +39,7 @@ runs:
 
     - name: Run full test suite without retry
       if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' && inputs.use-retry != 'true' }}
-      run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean "root/test"
+      run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
       shell: bash
 
     - name: Assemble fully optimized js file
