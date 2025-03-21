@@ -83,13 +83,13 @@ class LSPTests extends FunSuite {
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(helloWorld.getUri, new util.ArrayList())))
     }
   }
-  
+
   test("setTrace is implemented") {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
-      
+
       val params = SetTraceParams("off")
       server.setTrace(params)
     }
@@ -169,6 +169,7 @@ class LSPTests extends FunSuite {
     }
   }
 
+
   test("didClose yields empty diagnostics") {
     withClientAndServer { (client, server) =>
       // We use an erroneous example to show that closing the document clears the diagnostics.
@@ -186,6 +187,23 @@ class LSPTests extends FunSuite {
 
       val diagnostics = client.diagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
+    }
+  }
+
+  test("didSave doesn't throw a NullPointerException when text is null") {
+    withClientAndServer { (client, server) =>
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(helloWorld)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      // Clear any initial diagnostics.
+      val _ = client.diagnostics()
+
+      val didSaveParams = new DidSaveTextDocumentParams()
+      didSaveParams.setTextDocument(helloWorld.versionedTextDocumentIdentifier)
+      // The text is set to null
+      didSaveParams.setText(null)
+
+      server.getTextDocumentService().didSave(didSaveParams)
     }
   }
 
