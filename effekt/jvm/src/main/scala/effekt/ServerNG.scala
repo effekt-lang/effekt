@@ -1,20 +1,7 @@
 package effekt
 
-import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
-import java.io.{InputStream, OutputStream, PrintWriter}
-import java.net.ServerSocket
-import java.nio.file.Paths
-import java.util
-import scala.jdk.FunctionConverters.*
 import com.google.gson.JsonElement
-import effekt.KiamaUtils.{convertPosition, convertRange, fromLSPPosition, fromLSPRange, locationOfNode}
-import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, TextEdit, WorkspaceEdit, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
-import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
-import org.eclipse.lsp4j.launch.LSPLauncher
-import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
-import kiama.util.Severities.{Error, Hint, Information, Severity, Warning}
-import kiama.util.{Collections, Position, Source}
+import effekt.KiamaUtils.*
 import effekt.Server.getSymbolKind
 import effekt.context.Context
 import effekt.source.Def.FunDef
@@ -23,6 +10,19 @@ import effekt.source.Tree
 import effekt.symbols.{Anon, Binder, Effects, TypePrinter, UserFunction, ValueType, isSynthetic}
 import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
+import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
+import kiama.util.{Collections, Position, Source}
+import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
+import org.eclipse.lsp4j.launch.LSPLauncher
+import org.eclipse.lsp4j.services.*
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentSyncKind, TextEdit, WorkspaceEdit, Range as LSPRange}
+
+import java.io.{InputStream, OutputStream, PrintWriter}
+import java.net.ServerSocket
+import java.nio.file.Paths
+import java.util
+import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
+import scala.jdk.FunctionConverters.*
 
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
