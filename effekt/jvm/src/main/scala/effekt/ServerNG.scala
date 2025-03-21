@@ -180,7 +180,9 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService wi
     server.clearDiagnostics(document.getUri)
     server.getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, server.getConfig)
   }
-  def didClose(params: DidCloseTextDocumentParams): Unit = {}
+  def didClose(params: DidCloseTextDocumentParams): Unit = {
+    server.clearDiagnostics(params.getTextDocument.getUri)
+  }
   def didOpen(params: DidOpenTextDocumentParams): Unit = {
     val document = params.getTextDocument
     server.clearDiagnostics(document.getUri)

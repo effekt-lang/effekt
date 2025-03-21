@@ -3,7 +3,7 @@ package effekt
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
@@ -153,6 +153,26 @@ class LSPTests extends FunSuite {
       didSaveParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       didSaveParams.setText(textDoc.getText)
       server.getTextDocumentService().didSave(didSaveParams)
+
+      val diagnostics = client.diagnostics()
+      assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
+    }
+  }
+
+  test("didClose yields empty diagnostics") {
+    withClientAndServer { (client, server) =>
+      // We use an erroneous example to show that closing the document clears the diagnostics.
+      val textDoc = raw"""val x: Int = "String"""".textDocument
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      // Pop the diagnostics from the queue before closing the document
+      val _ = client.diagnostics()
+
+      val didCloseParams = new DidCloseTextDocumentParams()
+      didCloseParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      server.getTextDocumentService().didClose(didCloseParams)
 
       val diagnostics = client.diagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
