@@ -68,6 +68,10 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
     System.exit(if (shutdownRequested) 0 else 1)
   }
 
+  override def setTrace(params: SetTraceParams): Unit = {
+    // Do nothing
+  }
+
   override def getTextDocumentService(): EffektTextDocumentService = textDocumentService
 
   override def getWorkspaceService(): EffektWorkspaceService = workspaceService
