@@ -1,23 +1,27 @@
 package effekt
 
-import com.google.gson.JsonElement
-import effekt.context.Context
-import effekt.util.PlainMessaging
-import effekt.util.messages.EffektError
-import kiama.util.Collections.seqToJavaList
-import kiama.util.Severities.{Error, Hint, Information, Severity, Warning}
-import kiama.util.{Collections, Position, Source}
-import org.eclipse.lsp4j.jsonrpc.Launcher
-
 import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, Location, MarkupContent, PublishDiagnosticsParams, ServerCapabilities, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
+import java.nio.file.Paths
+import java.util
+import scala.jdk.FunctionConverters.*
+import com.google.gson.JsonElement
+import effekt.KiamaUtils.convertRange
+import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, Location, MarkupContent, PublishDiagnosticsParams, ServerCapabilities, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
-
-import scala.jdk.FunctionConverters.*
-import java.nio.file.Paths
+import kiama.util.Collections.seqToJavaList
+import kiama.util.Severities.{Error, Hint, Information, Severity, Warning}
+import kiama.util.{Collections, Position, Source}
+import effekt.Server.getSymbolKind
+import effekt.context.Context
+import effekt.source.Tree
+import effekt.symbols.{Anon, Binder, UserFunction}
+import effekt.util.PlainMessaging
+import effekt.util.messages.EffektError
+import effekt.symbols.isSynthetic
 
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
@@ -175,6 +179,10 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
 }
 
 class EffektTextDocumentService(server: ServerNG) extends TextDocumentService with Intelligence {
+  // LSP Document Lifecycle
+  //
+  //
+
   def didChange(params: DidChangeTextDocumentParams): Unit = {
     val document = params.getTextDocument
     server.clearDiagnostics(document.getUri)
@@ -222,6 +230,40 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService wi
     tree <- trees.collectFirst { case h: source.Hole => h }
     info <- getHoleInfo(tree)(using server.context)
   } yield info
+
+  // LSP Document Symbols
+  //
+  //
+
+  override def documentSymbol(params: DocumentSymbolParams): CompletableFuture[util.List[messages.Either[SymbolInformation, DocumentSymbol]]] = {
+    val source = server.sources.get(params.getTextDocument.getUri)
+    if (source.isEmpty) return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
+
+    server.context.compiler.runFrontend(source.get)(using server.context)
+
+    val documentSymbols = for {
+      sym <- server.context.sourceSymbolsFor(source.get).toVector
+      if !sym.isSynthetic
+      id <- server.context.definitionTreeOption(sym)
+      decl <- getSourceTreeFor(sym)
+      kind <- getSymbolKind(sym)
+      detail <- getInfoOf(sym)(using server.context)
+      declRange = convertRange(server.positions.getStart(decl), server.positions.getFinish(decl))
+      idRange = convertRange(server.positions.getStart(id), server.positions.getFinish(id))
+    } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)
+
+    val result = Collections.seqToJavaList(
+      documentSymbols.map(sym => messages.Either.forRight[SymbolInformation, DocumentSymbol](sym))
+    )
+    CompletableFuture.completedFuture(result)
+  }
+
+  def getSourceTreeFor(sym: effekt.symbols.Symbol): Option[Tree] = sym match {
+    case a: Anon => Some(a.decl)
+    case f: UserFunction => Some(f.decl)
+    case b: Binder => Some(b.decl)
+    case _ => server.context.definitionTreeOption(sym)
+  }
 }
 
 class EffektWorkspaceService extends WorkspaceService {

@@ -3,13 +3,15 @@ package effekt
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.jsonrpc.messages
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
 import java.util.concurrent.CompletableFuture
 import scala.collection.mutable
 import scala.collection.mutable.Queue
+import scala.jdk.CollectionConverters.*
 
 class LSPTests extends FunSuite {
   // Import the extension method for String
@@ -234,13 +236,6 @@ class LSPTests extends FunSuite {
     }
   }
 
-  /*
-  * def main() = {
-    var foo = 1
-    <>
-}
-  * */
-
   test("Hovering over mutable binder without extended description") {
     withClientAndServer { (client, server) =>
       val (textDoc, cursor) = raw"""
@@ -310,6 +305,46 @@ class LSPTests extends FunSuite {
       expectedHover.setRange(new Range(cursor, cursor))
       expectedHover.setContents(new MarkupContent("markdown", hoverContents))
       assertEquals(hover, expectedHover)
+    }
+  }
+
+  // LSP: Document symbols
+  //
+  //
+
+
+  test("documentSymbols returns expected symbols") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |def mySymbol() = <>
+             |↑   ↑       ↑      ↑
+             |""".textDocumentAndPositions
+
+      val expectedSymbols: List[messages.Either[SymbolInformation, DocumentSymbol]] = List(
+        messages.Either.forRight(new DocumentSymbol(
+          "mySymbol",
+          SymbolKind.Method,
+          new Range(positions(0), positions(3)),
+          new Range(positions(1), positions(2)),
+          "Function",
+        ))
+      )
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new DocumentSymbolParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+
+      val documentSymbols = server.getTextDocumentService().documentSymbol(params).get()
+      // FIXME: The server currently returns spurious symbols at position (0, 0) that we need to filter out.
+      val filtered = server.getTextDocumentService().documentSymbol(params).get().asScala.filter {
+        symbol => symbol.getRight.getRange.getStart != new Position(0, 0) && symbol.getRight.getRange.getEnd != new Position(0, 0)
+      }.asJava
+
+      assertEquals(filtered, expectedSymbols.asJava)
     }
   }
 
