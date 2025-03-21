@@ -7,9 +7,9 @@ import java.nio.file.Paths
 import java.util
 import scala.jdk.FunctionConverters.*
 import com.google.gson.JsonElement
-import effekt.KiamaUtils.{convertRange, fromLSPPosition, locationOfNode}
+import effekt.KiamaUtils.{convertPosition, convertRange, fromLSPPosition, fromLSPRange, locationOfNode}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, Location, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import kiama.util.Collections.seqToJavaList
@@ -18,10 +18,9 @@ import kiama.util.{Collections, Position, Source}
 import effekt.Server.getSymbolKind
 import effekt.context.Context
 import effekt.source.Tree
-import effekt.symbols.{Anon, Binder, UserFunction}
+import effekt.symbols.{Anon, Binder, TypePrinter, UserFunction, isSynthetic}
 import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
-import effekt.symbols.isSynthetic
 
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
@@ -52,6 +51,7 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
     capabilities.setDocumentSymbolProvider(true)
     capabilities.setCodeActionProvider(true)
     capabilities.setDocumentFormattingProvider(true)
+    capabilities.setInlayHintProvider(true)
 
     val result = new InitializeResult(capabilities)
     CompletableFuture.completedFuture(result)
@@ -286,6 +286,34 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService wi
     } yield locations
 
     CompletableFuture.completedFuture(Collections.seqToJavaList(locations.getOrElse(Seq[Location]())))
+  }
+
+  // LSP Inlay Hints
+  //
+  //
+
+  override def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
+    val hints = for {
+      source <- server.sources.get(params.getTextDocument.getUri)
+      hints = {
+        val range = fromLSPRange(params.getRange, source)
+        getInferredCaptures(range)(using server.context).map {
+          case (p, c) =>
+            val prettyCaptures = TypePrinter.show(c)
+            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
+            inlayHint.setKind(InlayHintKind.Type)
+            val markup = new MarkupContent()
+            markup.setValue(s"captures: `${prettyCaptures}`")
+            markup.setKind("markdown")
+            inlayHint.setTooltip(markup)
+            inlayHint.setPaddingRight(true)
+            inlayHint.setData("capture")
+            inlayHint
+        }.toVector
+      }
+    } yield hints
+
+    CompletableFuture.completedFuture(Collections.seqToJavaList(hints.getOrElse(Vector())))
   }
 }
 

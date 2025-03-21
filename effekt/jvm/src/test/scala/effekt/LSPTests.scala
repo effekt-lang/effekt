@@ -3,7 +3,7 @@ package effekt
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, ServerCapabilities, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, ServerCapabilities, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 import org.eclipse.lsp4j.jsonrpc.messages
 
 import java.io.{PipedInputStream, PipedOutputStream}
@@ -68,6 +68,7 @@ class LSPTests extends FunSuite {
       expectedCapabilities.setDocumentSymbolProvider(true)
       expectedCapabilities.setCodeActionProvider(true)
       expectedCapabilities.setDocumentFormattingProvider(true)
+      expectedCapabilities.setInlayHintProvider(true)
       assertEquals(initializeResult, new InitializeResult(expectedCapabilities))
     }
   }
@@ -379,6 +380,47 @@ class LSPTests extends FunSuite {
 
       val references = server.getTextDocumentService().references(params).get()
       assertEquals(references.asScala.map(_.getRange).toList, expectedReferences)
+    }
+  }
+
+  // LSP: Inlay hints
+  //
+  //
+
+  test("inlayHints should show the io effect") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) = raw"""
+                                |↑
+                                |def main() = {
+                                |↑
+                                |  println("Hello, world!")
+                                |}
+                                |↑
+                                |""".textDocumentAndPositions
+
+      val inlayHint = new InlayHint()
+      inlayHint.setKind(InlayHintKind.Type)
+      inlayHint.setPosition(positions(1))
+      inlayHint.setLabel("{io}")
+      val markup = new MarkupContent()
+      markup.setKind("markdown")
+      markup.setValue("captures: `{io}`")
+      inlayHint.setTooltip(markup)
+      inlayHint.setPaddingRight(true)
+      inlayHint.setData("capture")
+
+      val expectedInlayHints = List(inlayHint)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new InlayHintParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setRange(new Range(positions(0), positions(2)))
+
+      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      assertEquals(inlayHints, expectedInlayHints.asJava)
     }
   }
 
