@@ -9,7 +9,7 @@ import scala.jdk.FunctionConverters.*
 import com.google.gson.JsonElement
 import effekt.KiamaUtils.{convertPosition, convertRange, fromLSPPosition, fromLSPRange, locationOfNode}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, TextEdit, WorkspaceEdit, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, TextEdit, WorkspaceEdit, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
@@ -277,6 +277,25 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService wi
     case f: UserFunction => Some(f.decl)
     case b: Binder => Some(b.decl)
     case _ => server.context.definitionTreeOption(sym)
+  }
+
+  // LSP Go To Definition
+  //
+  //
+
+  override def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[_ <: Location], util.List[_ <: LocationLink]]] = {
+    val location = for {
+      position <- server.sources.get(params.getTextDocument.getUri).map { source =>
+        fromLSPPosition(params.getPosition, source)
+      };
+      definition <- server.getDefinitionAt(position)(using server.context);
+      location = locationOfNode(server.positions, definition)
+    } yield location
+
+    val result = location.map(l => messages.Either.forLeft[util.List[_ <: Location], util.List[_ <: LocationLink]](Collections.seqToJavaList(List(l))))
+      .getOrElse(messages.Either.forLeft(Collections.seqToJavaList(List())))
+
+    CompletableFuture.completedFuture(result)
   }
 
   // LSP References
