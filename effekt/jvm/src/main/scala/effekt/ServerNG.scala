@@ -186,7 +186,11 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService wi
     server.clearDiagnostics(document.getUri)
     server.getDriver.compileString(document.getUri, document.getText, server.getConfig)
   }
-  def didSave(params: DidSaveTextDocumentParams): Unit = {}
+  def didSave(params: DidSaveTextDocumentParams): Unit = {
+    val document = params.getTextDocument
+    server.clearDiagnostics(document.getUri)
+    server.getDriver.compileString(document.getUri, params.getText, server.getConfig)
+  }
 
   // LSP Hover
   //

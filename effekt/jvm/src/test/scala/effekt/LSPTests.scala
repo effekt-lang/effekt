@@ -3,7 +3,7 @@ package effekt
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
@@ -46,6 +46,10 @@ class LSPTests extends FunSuite {
   val helloWorld = raw"""
                         |def main() = { println("Hello, world!") }
                         |""".textDocument
+
+  val helloEffekt = raw"""
+                        |def main() = { println("Hello, Effekt!") }
+                        |"""
 
   // LSP: lifecycle events
   //
@@ -123,15 +127,32 @@ class LSPTests extends FunSuite {
       // Pop the diagnostics from the queue before changing the document
       val _ = client.diagnostics()
 
-      val (textDoc, changeEvent) = helloWorld.changeTo(
-        raw"""
-             |def main() = { println("Hello, Effekt!") }
-             |""")
+      val (textDoc, changeEvent) = helloWorld.changeTo(helloEffekt)
 
       val didChangeParams = new DidChangeTextDocumentParams()
       didChangeParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
       server.getTextDocumentService().didChange(didChangeParams)
+
+      val diagnostics = client.diagnostics()
+      assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
+    }
+  }
+
+  test("didSave yields empty diagnostics") {
+    withClientAndServer { (client, server) =>
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(helloWorld)
+      server.getTextDocumentService().didOpen(didOpenParams)
+      // Pop the diagnostics from the queue before changing the document
+      val _ = client.diagnostics()
+
+      val (textDoc, changeEvent) = helloWorld.changeTo(helloEffekt)
+
+      val didSaveParams = new DidSaveTextDocumentParams()
+      didSaveParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      didSaveParams.setText(textDoc.getText)
+      server.getTextDocumentService().didSave(didSaveParams)
 
       val diagnostics = client.diagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
