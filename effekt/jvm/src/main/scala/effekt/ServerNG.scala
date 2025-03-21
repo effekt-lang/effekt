@@ -7,9 +7,9 @@ import java.nio.file.Paths
 import java.util
 import scala.jdk.FunctionConverters.*
 import com.google.gson.JsonElement
-import effekt.KiamaUtils.convertRange
+import effekt.KiamaUtils.{convertRange, fromLSPPosition, locationOfNode}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, Location, MarkupContent, PublishDiagnosticsParams, ServerCapabilities, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, Location, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SymbolInformation, TextDocumentIdentifier, TextDocumentSyncKind, WorkspaceFolder, Position as LSPPosition, Range as LSPRange}
 import org.eclipse.lsp4j.services.{LanguageClient, LanguageClientAware, LanguageServer, TextDocumentService, WorkspaceService}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import kiama.util.Collections.seqToJavaList
@@ -66,7 +66,7 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
     System.exit(if (shutdownRequested) 0 else 1)
   }
 
-  override def getTextDocumentService(): TextDocumentService = textDocumentService
+  override def getTextDocumentService(): EffektTextDocumentService = textDocumentService
 
   override def getWorkspaceService(): EffektWorkspaceService = workspaceService
 
@@ -263,6 +263,29 @@ class EffektTextDocumentService(server: ServerNG) extends TextDocumentService wi
     case f: UserFunction => Some(f.decl)
     case b: Binder => Some(b.decl)
     case _ => server.context.definitionTreeOption(sym)
+  }
+
+  // LSP References
+  //
+  //
+
+  override def references(params: ReferenceParams): CompletableFuture[util.List[_ <: Location]] = {
+    val position = server.sources.get(params.getTextDocument.getUri).map { source =>
+      fromLSPPosition(params.getPosition, source)
+    }
+    if (position.isEmpty)
+      return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
+
+    val locations = for {
+      (tree, sym) <- getSymbolAt(position.get)(using server.context)
+      refs = server.context.distinctReferencesTo(sym)
+      // getContext may be null!
+      includeDeclaration = Option(params.getContext).exists(_.isIncludeDeclaration)
+      allRefs = if (includeDeclaration) tree :: refs else refs
+      locations = allRefs.map(ref => locationOfNode(server.positions, ref))
+    } yield locations
+
+    CompletableFuture.completedFuture(Collections.seqToJavaList(locations.getOrElse(Seq[Location]())))
   }
 }
 

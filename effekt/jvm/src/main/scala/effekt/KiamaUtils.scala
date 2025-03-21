@@ -12,9 +12,11 @@ package effekt
 
 import effekt.util.messages.EffektError
 import kiama.util.Severities.{Error, Hint, Information, Severity, Warning}
-import kiama.util.{Messaging, Position, Source}
+import kiama.util.{Messaging, Position, Positions, Source}
 import org.eclipse.lsp4j.Range as LSPRange
 import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, Location, Position as LSPPosition}
+
+import java.nio.file.Paths
 
 object KiamaUtils {
   def messageToDiagnostic(lspMessaging: Messaging[EffektError])(message: EffektError): Diagnostic = {
@@ -63,4 +65,32 @@ object KiamaUtils {
       case Information => DiagnosticSeverity.Information
       case Hint        => DiagnosticSeverity.Hint
     }
+
+  // Support for services
+  def locationOfNode[N](positions: Positions, node: N): Location = {
+    (positions.getStart(node), positions.getFinish(node)) match {
+      case (start@Some(st), finish@Some(_)) =>
+        val s = convertPosition(start)
+        val f = convertPosition(finish)
+        new Location(toURI(st.source.name), new LSPRange(s, f))
+      case _ =>
+        null
+    }
+  }
+
+  // Duplicated here to separate the MPL-licensed code from the MIT-licensed code
+  def toURI(filename: String): String = {
+    if (filename.startsWith("file:") || filename.startsWith("vscode-notebook-cell:")) {
+      // Already a URI or special scheme
+      filename
+    } else if (filename.startsWith("./") || filename.startsWith(".\\")) {
+      // Remove the "./" or ".\\" prefix
+      val relativePath = filename.substring(2)
+      val cwd = System.getProperty("user.dir")
+      val fullPath = Paths.get(cwd).resolve(relativePath).normalize()
+      fullPath.toUri.toString
+    } else {
+      Paths.get(filename).toUri.toString
+    }
+  }
 }

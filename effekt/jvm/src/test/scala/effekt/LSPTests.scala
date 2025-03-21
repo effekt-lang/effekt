@@ -3,7 +3,7 @@ package effekt
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, ServerCapabilities, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 import org.eclipse.lsp4j.jsonrpc.messages
 
 import java.io.{PipedInputStream, PipedOutputStream}
@@ -312,7 +312,6 @@ class LSPTests extends FunSuite {
   //
   //
 
-
   test("documentSymbols returns expected symbols") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) =
@@ -345,6 +344,41 @@ class LSPTests extends FunSuite {
       }.asJava
 
       assertEquals(filtered, expectedSymbols.asJava)
+    }
+  }
+
+  // LSP References
+  //
+  //
+
+  // FIXME: the server doesn't actually return the reference to `foo` in `bar` in this example
+  // It only returns the declaration site.
+  test("references with setIncludeDeclaration returns declaration site") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |def foo() = <>
+             |    ↑  ↑
+             |def bar() = foo()
+           """.textDocumentAndPositions
+
+      val expectedReferences: List[Range] = List(
+        new Range(positions(0), positions(1)),
+      )
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new ReferenceParams()
+      params.setPosition(positions(0))
+      val context = new ReferenceContext()
+      context.setIncludeDeclaration(true)
+      params.setContext(context)
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+
+      val references = server.getTextDocumentService().references(params).get()
+      assertEquals(references.asScala.map(_.getRange).toList, expectedReferences)
     }
   }
 
