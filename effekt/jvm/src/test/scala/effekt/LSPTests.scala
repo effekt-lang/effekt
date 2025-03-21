@@ -1,8 +1,9 @@
 package effekt
 
+import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverParams, InitializeParams, InitializeResult, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ServerCapabilities, ShowMessageRequestParams, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util
@@ -181,6 +182,85 @@ class LSPTests extends FunSuite {
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(textDoc)
       server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  /*
+  * def main() = {
+    var foo = 1
+    <>
+}
+  * */
+
+  test("Hovering over mutable binder without extended description") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |def main() = {
+                                |  var foo = 1
+                                |       ↑
+                                |  <>
+                                |}
+                                |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""#### Mutable variable binder
+             |```effekt
+             |foo: Int
+             |```
+             |""".stripMargin
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
+      val hover = server.getTextDocumentService().hover(hoverParams).get()
+
+      val expectedHover = new Hover()
+      expectedHover.setRange(new Range(cursor, cursor))
+      expectedHover.setContents(new MarkupContent("markdown", hoverContents))
+      assertEquals(hover, expectedHover)
+    }
+  }
+
+  test("Hovering over mutable binder with extended description") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, cursor) = raw"""
+                                |def main() = {
+                                |  var foo = 1
+                                |       ↑
+                                |  <>
+                                |}
+                                |""".textDocumentAndPosition
+      val hoverContents =
+        raw"""#### Mutable variable binder
+             |```effekt
+             |foo: Int
+             |```
+             |Like in other languages, mutable variable binders like `foo`
+             |can be modified (e.g., `foo = VALUE`) by code that has `foo`
+             |in its lexical scope.
+             |
+             |However, as opposed to other languages, variable binders in Effekt
+             |are stack allocated and show the right backtracking behavior in
+             |combination with effect handlers.
+             |""".stripMargin + "         \n"
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val configParams = new DidChangeConfigurationParams()
+      val settings: JsonElement = JsonParser.parseString("""{"showExplanations": true}""")
+      configParams.setSettings(settings)
+      server.getWorkspaceService().didChangeConfiguration(configParams)
 
       val hoverParams = new HoverParams(textDoc.versionedTextDocumentIdentifier, cursor)
       val hover = server.getTextDocumentService().hover(hoverParams).get()
