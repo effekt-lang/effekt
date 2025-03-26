@@ -20,7 +20,7 @@ class LSPTests extends FunSuite {
   //
   //
 
-  def withClientAndServer(testBlock: (MockLanguageClient, ServerNG) => Unit): Unit = {
+  def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     val driver = new Driver {}
     val config = EffektConfig(Seq("--experimental-server"))
     config.verify()
@@ -30,7 +30,7 @@ class LSPTests extends FunSuite {
     val serverIn = new PipedInputStream(clientOut)
     val serverOut = new PipedOutputStream(clientIn)
 
-    val server = new ServerNG(config)
+    val server = new Server(config)
 
     val mockClient = new MockLanguageClient()
     server.connect(mockClient)

@@ -21,15 +21,13 @@ object Main {
         return
     }
 
-    if (config.experimentalServer()) {
+    if (config.server()) {
       val serverConfig = ServerConfig(
         debug = config.debug(),
         debugPort = config.debugPort()
       )
-      val server = new ServerNG(config)
+      val server = new Server(config)
       server.launch(serverConfig)
-    } else if (config.server()) {
-      Server.launch(config)
     } else if (config.repl()) {
       new Repl(new Driver {}).run(config)
     } else {
@@ -50,8 +48,9 @@ object Main {
    * Compile files specified in the configuration.
    */
   private def compileFiles(config: EffektConfig): Unit = {
+    val driver = new Driver {}
     for (filename <- config.filenames()) {
-      Server.compileFile(filename, config)
+      driver.compileFile(filename, config)
     }
   }
 }
