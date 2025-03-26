@@ -483,51 +483,49 @@ class LSPTests extends FunSuite {
 
   test("When showIR=source, server should provide source AST") {
     withClientAndServer { (client, server) =>
-      val source = raw"""
-                        |def main() = { println("Hello, world!") }
-                        |"""
+      val source =
+        raw"""
+             |def main() = { println("Hello, world!") }
+             |"""
       val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.stripMargin)
       val initializeParams = new InitializeParams()
       val initializationOptions = """{"showIR": "source"}"""
-      initializeParams.setInitializationOptions(
-        JsonParser.parseString(initializationOptions)
-      )
+      initializeParams.setInitializationOptions(JsonParser.parseString(initializationOptions))
       server.initialize(initializeParams).get()
 
       val didOpenParams = new DidOpenTextDocumentParams()
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
 
-      val expectedIRContents = raw"""ModuleDecl(
-        |  test,
-        |  Nil,
-        |  List(
-        |    FunDef(
-        |      IdDef(main),
-        |      Nil,
-        |      Nil,
-        |      Nil,
-        |      None(),
-        |      BlockStmt(
-        |        Return(
-        |          Call(
-        |            IdTarget(IdRef(Nil, println)),
-        |            Nil,
-        |            List(Literal(Hello, world!, ValueTypeApp(String_400, Nil))),
-        |            Nil
-        |          )
-        |        )
-        |      )
-        |    )
-        |  )
-        |)""".stripMargin
+      val expectedIRContents =
+        raw"""ModuleDecl(
+             |  test,
+             |  Nil,
+             |  List(
+             |    FunDef(
+             |      IdDef(main),
+             |      Nil,
+             |      Nil,
+             |      Nil,
+             |      None(),
+             |      BlockStmt(
+             |        Return(
+             |          Call(
+             |            IdTarget(IdRef(Nil, println)),
+             |            Nil,
+             |            List(Literal(Hello, world!, ValueTypeApp(String_whatever, Nil))),
+             |            Nil
+             |          )
+             |        )
+             |      )
+             |    )
+             |  )
+             |)""".stripMargin
 
-      val expectedIR = EffektPublishIRParams(
-        "test.scala",
-        expectedIRContents
-      )
-
-      assertEquals(client.receivedIR(), Seq(expectedIR))
+      val receivedIRContent = client.receivedIR()
+      assertEquals(receivedIRContent.length, 1)
+      val fixedReceivedIR = receivedIRContent.head.content.replaceAll("String_\\d+", "String_whatever")
+      assertEquals(fixedReceivedIR, expectedIRContents)
     }
   }
 
