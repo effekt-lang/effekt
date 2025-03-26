@@ -8,14 +8,15 @@ import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
 import effekt.source.Tree
 import effekt.symbols.{Anon, Binder, Effects, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.PlainMessaging
+import effekt.util.{PlainMessaging, PrettyPrinter}
 import effekt.util.messages.EffektError
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.{Collections, Position, Source}
+import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentSyncKind, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, TextDocumentSyncKind, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -27,8 +28,8 @@ import scala.jdk.FunctionConverters.*
 /**
  * Next generation LSP server for Effekt based on lsp4j directly instead of using Kiama
  */
-class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientAware with Driver with Intelligence {
-  private var client: LanguageClient = _
+class ServerNG(config: EffektConfig) extends LanguageServer with Driver with Intelligence {
+  private var client: EffektLanguageClient = _
   private val textDocumentService = new EffektTextDocumentService(this)
   private val workspaceService = new EffektWorkspaceService
 
@@ -54,6 +55,15 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
     capabilities.setCodeActionProvider(true)
     capabilities.setDocumentFormattingProvider(true)
     capabilities.setInlayHintProvider(true)
+
+    // Load the initial settings from client-sent `initializationOptions` (if any)
+    // This is not part of the LSP standard, but seems to be the most reliable way to have the correct initial settings
+    // on first compile.
+    // There is a `workspace/didChangeConfiguration` notification and a `workspace/configuration` request, but we cannot
+    // guarantee that the client will send these before the file is first compiled, leading to either duplicate work
+    // or a bad user experience.
+    if (params.getInitializationOptions != null)
+      workspaceService.didChangeConfiguration(new DidChangeConfigurationParams(params.getInitializationOptions))
 
     val result = new InitializeResult(capabilities)
     CompletableFuture.completedFuture(result)
@@ -89,15 +99,79 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
     client.publishDiagnostics(params)
   }
 
+  // Custom Effekt extensions
+  //
+  //
+
+  /**
+   * Publish Effekt IR for a given source file
+   *
+   * @param source The Kiama source file
+   * @param config The Effekt configuration
+   * @param C The compiler context
+   */
+  def publishIR(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    // Publish Effekt IR
+    val showIR = workspaceService.settingString("showIR").getOrElse("none")
+    val showTree = workspaceService.settingBool("showTree")
+
+    if (showIR == "none") {
+      return;
+    }
+
+    if (showIR == "source") {
+      val tree = C.compiler.getAST(source)
+      if (tree.isEmpty) return
+      client.publishIR(EffektPublishIRParams(
+        basename(source.name) + ".scala",
+        PrettyPrinter.format(tree.get).layout
+      ))
+      return;
+    }
+
+    def unsupported =
+      throw new RuntimeException(s"Combination of '${showIR}' and showTree=${showTree} not supported by backend ${C.config.backend().name}")
+
+    val stage = showIR match {
+      case "core" => Stage.Core
+      case "machine" => Stage.Machine
+      case "target" => Stage.Target
+      case _ => unsupported
+    }
+
+    if (showTree) {
+      client.publishIR(EffektPublishIRParams(
+        basename(source.name) + ".scala",
+        PrettyPrinter.format(C.compiler.treeIR(source, stage).getOrElse(unsupported)).layout
+      ))
+    } else if (showIR == "target") {
+      client.publishIR(EffektPublishIRParams(
+        basename(source.name) + "." + C.runner.extension,
+        C.compiler.prettyIR(source, Stage.Target).getOrElse(unsupported).layout
+      ))
+    } else {
+      client.publishIR(EffektPublishIRParams(
+        basename(source.name) + ".ir",
+        C.compiler.prettyIR(source, stage).getOrElse(unsupported).layout
+      ))
+    }
+  }
+
   // Driver methods
   //
   //
 
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    // Publish LSP diagnostics
     val messages = C.messaging.buffer
     val groups = messages.groupBy(msg => msg.sourceName.getOrElse(""))
     for ((name, msgs) <- groups) {
       publishDiagnostics(name, msgs.distinct.map(KiamaUtils.messageToDiagnostic(lspMessaging)))
+    }
+    try {
+      publishIR(source, config)
+    } catch {
+      case e => client.logMessage(new MessageParams(MessageType.Error, e.toString + ":" + e.getMessage))
     }
   }
 
@@ -120,7 +194,13 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
     }
   }
 
-  override def connect(client: LanguageClient): Unit = {
+  def basename(filename: String): String = {
+    val name = Paths.get(filename).getFileName.toString
+    val dotIndex = name.lastIndexOf('.')
+    if (dotIndex > 0) name.substring(0, dotIndex) else name
+  }
+
+  def connect(client: EffektLanguageClient): Unit = {
     this.client = client
   }
 
@@ -128,12 +208,12 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
    * Launch a language server using provided input/output streams.
    * This allows tests to connect via in-memory pipes.
    */
-  def launch(client: LanguageClient, in: InputStream, out: OutputStream): Launcher[LanguageClient] = {
+  def launch(client: EffektLanguageClient, in: InputStream, out: OutputStream): Launcher[EffektLanguageClient] = {
     val executor = Executors.newSingleThreadExecutor()
     val launcher =
       new LSPLauncher.Builder()
         .setLocalService(this)
-        .setRemoteInterface(classOf[LanguageClient])
+        .setRemoteInterface(classOf[EffektLanguageClient])
         .setInput(in)
         .setOutput(out)
         .setExecutorService(executor)
@@ -158,7 +238,7 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
       val launcher =
         new LSPLauncher.Builder()
           .setLocalService(this)
-          .setRemoteInterface(classOf[LanguageClient])
+          .setRemoteInterface(classOf[EffektLanguageClient])
           .setInput(socket.getInputStream)
           .setOutput(socket.getOutputStream)
           .setExecutorService(executor)
@@ -171,7 +251,7 @@ class ServerNG(config: EffektConfig) extends LanguageServer with LanguageClientA
       val launcher =
         new LSPLauncher.Builder()
           .setLocalService(this)
-          .setRemoteInterface(classOf[LanguageClient])
+          .setRemoteInterface(classOf[EffektLanguageClient])
           .setInput(System.in)
           .setOutput(System.out)
           .setExecutorService(executor)
@@ -463,6 +543,35 @@ class EffektWorkspaceService extends WorkspaceService {
     if (value == null) return false
     value.getAsBoolean
   }
+
+  def settingString(name: String): Option[String] = {
+    if (settings == null) return None
+    val obj = settings.getAsJsonObject
+    if (obj == null) return None
+    val value = obj.get(name)
+    if (value == null) return None
+    Some(value.getAsString)
+  }
 }
 
 case class ServerConfig(debug: Boolean = false, debugPort: Int = 5000)
+
+trait EffektLanguageClient extends LanguageClient {
+  /**
+   * Custom LSP notification to publish Effekt IR
+   *
+   * @param params The parameters for the notification
+   */
+  @JsonNotification("$/effekt/publishIR")
+  def publishIR(params: EffektPublishIRParams): Unit
+}
+
+/**
+ * Custom LSP notification to publish Effekt IR
+ *
+ * @param filename The filename of the resulting IR file
+ * @param content The IR content
+ */
+case class EffektPublishIRParams(filename: String,
+                                 content: String
+)

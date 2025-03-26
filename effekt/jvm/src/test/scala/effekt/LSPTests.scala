@@ -2,7 +2,6 @@ package effekt
 
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
-import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
 import org.eclipse.lsp4j.jsonrpc.messages
 
@@ -79,7 +78,7 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
 
-      val diagnostics = client.diagnostics()
+      val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(helloWorld.getUri, new util.ArrayList())))
     }
   }
@@ -124,7 +123,7 @@ class LSPTests extends FunSuite {
         new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
       )
 
-      val diagnostics = client.diagnostics()
+      val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, expected)
     }
   }
@@ -135,7 +134,7 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
       // Pop the diagnostics from the queue before changing the document
-      val _ = client.diagnostics()
+      val _ = client.receivedDiagnostics()
 
       val (textDoc, changeEvent) = helloWorld.changeTo(helloEffekt)
 
@@ -144,7 +143,7 @@ class LSPTests extends FunSuite {
       didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
       server.getTextDocumentService().didChange(didChangeParams)
 
-      val diagnostics = client.diagnostics()
+      val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
     }
   }
@@ -155,7 +154,7 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
       // Pop the diagnostics from the queue before changing the document
-      val _ = client.diagnostics()
+      val _ = client.receivedDiagnostics()
 
       val (textDoc, changeEvent) = helloWorld.changeTo(helloEffekt)
 
@@ -164,7 +163,7 @@ class LSPTests extends FunSuite {
       didSaveParams.setText(textDoc.getText)
       server.getTextDocumentService().didSave(didSaveParams)
 
-      val diagnostics = client.diagnostics()
+      val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
     }
   }
@@ -179,13 +178,13 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(textDoc)
       server.getTextDocumentService().didOpen(didOpenParams)
       // Pop the diagnostics from the queue before closing the document
-      val _ = client.diagnostics()
+      val _ = client.receivedDiagnostics()
 
       val didCloseParams = new DidCloseTextDocumentParams()
       didCloseParams.setTextDocument(textDoc.versionedTextDocumentIdentifier)
       server.getTextDocumentService().didClose(didCloseParams)
 
-      val diagnostics = client.diagnostics()
+      val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, Seq(new PublishDiagnosticsParams(textDoc.getUri, new util.ArrayList())))
     }
   }
@@ -196,7 +195,7 @@ class LSPTests extends FunSuite {
       didOpenParams.setTextDocument(helloWorld)
       server.getTextDocumentService().didOpen(didOpenParams)
       // Clear any initial diagnostics.
-      val _ = client.diagnostics()
+      val _ = client.receivedDiagnostics()
 
       val didSaveParams = new DidSaveTextDocumentParams()
       didSaveParams.setTextDocument(helloWorld.versionedTextDocumentIdentifier)
@@ -478,6 +477,60 @@ class LSPTests extends FunSuite {
     }
   }
 
+  // Effekt: Publish IR
+  //
+  //
+
+  test("When showIR=source, server should provide source AST") {
+    withClientAndServer { (client, server) =>
+      val source = raw"""
+                        |def main() = { println("Hello, world!") }
+                        |"""
+      val textDoc = new TextDocumentItem("file://path/to/test.effekt", "effekt", 0, source.stripMargin)
+      val initializeParams = new InitializeParams()
+      val initializationOptions = """{"showIR": "source"}"""
+      initializeParams.setInitializationOptions(
+        JsonParser.parseString(initializationOptions)
+      )
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(helloWorld)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val expectedIRContents = raw"""ModuleDecl(
+        |  test,
+        |  Nil,
+        |  List(
+        |    FunDef(
+        |      IdDef(main),
+        |      Nil,
+        |      Nil,
+        |      Nil,
+        |      None(),
+        |      BlockStmt(
+        |        Return(
+        |          Call(
+        |            IdTarget(IdRef(Nil, println)),
+        |            Nil,
+        |            List(Literal(Hello, world!, ValueTypeApp(String_400, Nil))),
+        |            Nil
+        |          )
+        |        )
+        |      )
+        |    )
+        |  )
+        |)""".stripMargin
+
+      val expectedIR = EffektPublishIRParams(
+        "test.scala",
+        expectedIRContents
+      )
+
+      assertEquals(client.receivedIR(), Seq(expectedIR))
+    }
+  }
+
   // Text document DSL
   //
   //
@@ -517,16 +570,26 @@ class LSPTests extends FunSuite {
   }
 }
 
-class MockLanguageClient extends LanguageClient {
+class MockLanguageClient extends EffektLanguageClient {
   private val diagnosticQueue: mutable.Queue[PublishDiagnosticsParams] = mutable.Queue.empty
+  private val publishIRQueue: mutable.Queue[EffektPublishIRParams] = mutable.Queue.empty
 
   /**
-   * Pops all diagnostics currently in the queue.
+   * Pops all diagnostics received since the last call to this method.
    */
-  def diagnostics(): Seq[PublishDiagnosticsParams] = {
+  def receivedDiagnostics(): Seq[PublishDiagnosticsParams] = {
     val diagnostics = diagnosticQueue.toSeq
     diagnosticQueue.clear()
     diagnostics
+  }
+
+  /**
+   * Pops all publishIR events received since the last call to this method.
+   */
+  def receivedIR(): Seq[EffektPublishIRParams] = {
+    val irs = publishIRQueue.toSeq
+    publishIRQueue.clear()
+    irs
   }
 
   override def telemetryEvent(`object`: Any): Unit = {
@@ -548,6 +611,10 @@ class MockLanguageClient extends LanguageClient {
 
   override def logMessage(message: MessageParams): Unit = {
     // Not implemented for testing.
+  }
+
+  override def publishIR(params: EffektPublishIRParams): Unit = {
+    publishIRQueue.enqueue(params)
   }
 }
 
