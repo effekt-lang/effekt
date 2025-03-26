@@ -1,0 +1,166 @@
+import test
+
+def main() = {
+  println(suite("PBT: List Functions and Other Simple Examples") {
+
+    // example unit tests to show that mixed test suites work
+    test("1 + 1 == 2") {
+      assertEqual(1 + 1, 2)
+    }
+
+    test("2 + 2 == 3") {
+      assertEqual(2 + 2, 3)
+    }
+
+    // reverse[x] === [x]
+    with arbitraryInt;
+    forall[Int]("reverse-singleton", 100){ x => 
+      assertEqual(
+        reverse([x]),
+        [x]
+      )
+    }
+
+    // reverse[x] === [x], with explicit passing of the generator
+    with def g = arbitraryInt;
+    forall[Int]("reverse-singleton, explicitely passing the generator", 100){ g }
+      { x => 
+        assertEqual(
+          reverse([x]),
+          [x]
+        )
+    }
+
+    // intented mistake: reverse[x] === [6]
+    forall[Int]("reverse-singleton mistake", 100)
+      { x => 
+        assertEqual(
+          reverse([x]),
+          [6]
+        )
+    }
+    
+    // shows that exists prints tried test cases and found examples correctly
+    exists[Int]("Is the Integer 2 among the generated values?", 100)
+      { x => 
+        assertEqual(
+          x,
+          2
+        )
+    }
+    
+    // reverse(xs ++ ys) === reverse(ys) ++ reverse(xs)
+    with arbitraryList[Int](3) 
+    forall[List[Int], List[Int]]("reverse: distributivity over append", 100)
+      { (xs, ys) => 
+        assertEqual(
+          reverse(xs.append(ys)), 
+          reverse(ys).append(reverse(xs))
+        )
+    }
+
+    // intended mistake: reverse(xs ++ ys) === reverse(xs) ++ reverse(ys)
+    forall[List[Int], List[Int]]("reverse: distributivity mistake - swapped order", 20)
+      { (xs, ys) => 
+        assertEqual(
+          reverse(xs.append(ys)), 
+          reverse(xs).append(reverse(ys))
+        )
+    }
+
+    with arbitraryChar; 
+    with arbitraryList[Char](4);
+    forall[List[Char], List[Int]]("|zip(xs,ys)| === min(|xs|,|ys|)",10)
+      { (xs, ys) =>
+        assertEqual(
+          zip(xs, ys).size,
+          min(xs.size, ys.size)
+        )
+    }
+
+    with arbitraryChar; 
+    with arbitraryList[Char](6);
+    forall[List[Char], List[Int]]("intended mistake: |zip(xs,ys)| != max(|xs|,|ys|)",10)
+      { (xs, ys) =>
+        assertEqual(
+          zip(xs, ys).size,
+          max(xs.size, ys.size)
+        )
+    }
+
+    // unzip(zip(xs,ys)) === (xs.take(m), ys.take(m)) where m = min(|xs|,|ys|)
+    with arbitraryChar;
+    with arbitraryString(4);
+    with arbitraryList[String](2);
+    with arbitraryInt;
+    with arbitraryList[Int](3)
+    forall[List[Int], List[String]]("unzip-zip-take relation", 10)
+      { (xs, ys) =>
+        val m = min(xs.size, ys.size)
+        assertEqual(
+          unzip(zip(xs, ys)),
+          (xs.take(m), ys.take(m))
+        )
+    }
+
+    // Dropping elements from the concatenation of two lists is equivalent to dropping elements from the first list, 
+    // and then (if necessary) dropping the remaining count from the second list.
+    // (xs ++ ys).drop(n) === if n <= len(xs) then (xs.drop(n)) ++ ys else ys.drop(n - len(xs))
+    forall[List[Int], List[Int], Int]("drop: concatenation ", 10)
+      { (xs, ys, n) =>
+        val res = if(n <= xs.size) {
+          xs.drop(n).append(ys) 
+          } 
+          else { ys.drop(n - xs.size) }
+        assertEqual(
+          (xs.append(ys).drop(n)),
+          res
+        )
+    }
+
+    // xs.drop(n) === xs.slice(n, x.size)
+    forall[List[Int], Int]("drop-slice relation", 10)
+      { (xs, n) =>
+        assertEqual(
+          xs.drop(n),
+          xs.slice(n, xs.size)
+        )
+    }
+
+    // reverseOnto(reverse(xs), ys) === append(xs, ys)
+    forall[List[Int], List[Int]]("reverseOnto-reverse-append relation ", 10)
+      { (xs, ys) =>
+        assertEqual(
+          reverseOnto(reverse(xs), ys),
+          append(xs, ys)
+          )
+    }
+    
+    // size(xs) === foldLeft(xs, 0) { (acc, _) => acc + 1 }
+    forall[List[Int]]("size-foldLeft relation", 20)
+      { xs =>
+        assertEqual(
+          size(xs),
+          foldLeft(xs, 0){(acc, _) => acc + 1}
+        )
+    }
+
+    //xs.take(n) ++ xs.drop(n) === xs
+    forall[Int, List[Int]]("take-drop: inversion over concatenation", 20)
+      { (n, xs) =>
+        assertEqual(
+          append(xs.take(n), xs.drop(n)),
+          xs
+        )
+    }
+
+    // example for a property-based test with multiple assertions
+    with evenNumbers;
+    forall[Int]("even numbers are even and smaller than 4", 20)
+      { n =>
+        assertTrue(n.mod(2) == 0)
+        assertTrue(n <= 4)
+    }
+  })
+}
+    
