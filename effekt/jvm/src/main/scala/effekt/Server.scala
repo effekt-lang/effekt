@@ -54,7 +54,6 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
     capabilities.setReferencesProvider(true)
     capabilities.setDocumentSymbolProvider(true)
     capabilities.setCodeActionProvider(true)
-    capabilities.setDocumentFormattingProvider(true)
     capabilities.setInlayHintProvider(true)
 
     // Load the initial settings from client-sent `initializationOptions` (if any)
