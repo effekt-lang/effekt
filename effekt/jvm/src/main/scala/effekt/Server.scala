@@ -1,7 +1,7 @@
 package effekt
 
 import com.google.gson.JsonElement
-import effekt.KiamaUtils.*
+import kiama.util.Convert.*
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
@@ -13,7 +13,7 @@ import effekt.symbols.{Anon, Binder, Callable, Effects, Module, Param, Symbol, T
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import effekt.util.messages.EffektError
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
-import kiama.util.{Collections, Position, Source}
+import kiama.util.{Collections, Convert, Position, Source}
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
@@ -96,7 +96,7 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
   }
 
   def publishDiagnostics(name: String, diagnostics: Vector[Diagnostic]): Unit = {
-    val params = new PublishDiagnosticsParams(toURI(name), Collections.seqToJavaList(diagnostics))
+    val params = new PublishDiagnosticsParams(Convert.toURI(name), Collections.seqToJavaList(diagnostics))
     client.publishDiagnostics(params)
   }
 
@@ -167,7 +167,7 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
     val messages = C.messaging.buffer
     val groups = messages.groupBy(msg => msg.sourceName.getOrElse(""))
     for ((name, msgs) <- groups) {
-      publishDiagnostics(name, msgs.distinct.map(KiamaUtils.messageToDiagnostic(lspMessaging)))
+      publishDiagnostics(name, msgs.distinct.map(Convert.messageToDiagnostic(lspMessaging)))
     }
     try {
       publishIR(source, config)
@@ -179,21 +179,6 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
   // Other methods
   //
   //
-
-  def toURI(filename: String): String = {
-    if (filename.startsWith("file:") || filename.startsWith("vscode-notebook-cell:")) {
-      // Already a URI or special scheme
-      filename
-    } else if (filename.startsWith("./") || filename.startsWith(".\\")) {
-      // Remove the "./" or ".\\" prefix
-      val relativePath = filename.substring(2)
-      val cwd = System.getProperty("user.dir")
-      val fullPath = Paths.get(cwd).resolve(relativePath).normalize()
-      fullPath.toUri.toString
-    } else {
-      Paths.get(filename).toUri.toString
-    }
-  }
 
   def basename(filename: String): String = {
     val name = Paths.get(filename).getFileName.toString
@@ -303,7 +288,7 @@ class EffektTextDocumentService(server: Server) extends TextDocumentService with
 
   override def hover(params: HoverParams): CompletableFuture[Hover] = {
     val position = server.sources.get(params.getTextDocument.getUri).map { source =>
-      KiamaUtils.fromLSPPosition(params.getPosition, source)
+      Convert.fromLSPPosition(params.getPosition, source)
     }
     position match
       case Some(position) => {
