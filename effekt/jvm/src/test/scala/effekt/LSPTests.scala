@@ -22,7 +22,7 @@ class LSPTests extends FunSuite {
 
   def withClientAndServer(testBlock: (MockLanguageClient, Server) => Unit): Unit = {
     val driver = new Driver {}
-    val config = EffektConfig(Seq("--experimental-server"))
+    val config = EffektConfig(Seq("--server"))
     config.verify()
 
     val clientIn = new PipedInputStream()
@@ -66,7 +66,6 @@ class LSPTests extends FunSuite {
       expectedCapabilities.setReferencesProvider(true)
       expectedCapabilities.setDocumentSymbolProvider(true)
       expectedCapabilities.setCodeActionProvider(true)
-      expectedCapabilities.setDocumentFormattingProvider(true)
       expectedCapabilities.setInlayHintProvider(true)
       assertEquals(initializeResult, new InitializeResult(expectedCapabilities))
     }
