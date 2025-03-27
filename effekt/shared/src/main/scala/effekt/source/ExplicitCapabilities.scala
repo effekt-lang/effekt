@@ -30,7 +30,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
-      val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
+      val capabilities = Context.treeAnnotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(definitionFor)
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
     case extDef @ ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
@@ -46,15 +46,15 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val transformedBlockArgs = bargs.map(rewrite)
 
       // the receiver of this effect operation call
-      val receiver = Context.annotation(Annotations.CapabilityReceiver, c)
+      val receiver = Context.treeAnnotation(Annotations.CapabilityReceiver, c)
 
       // for bidirectional effects
-      val others = Context.annotation(Annotations.CapabilityArguments, c)
+      val others = Context.treeAnnotation(Annotations.CapabilityArguments, c)
 
       // the remaining capabilities are provided as arguments
       val capabilityArgs = others.map(referenceToCapability)
 
-      val typeArguments = Context.annotation(Annotations.TypeArguments, c)
+      val typeArguments = Context.treeAnnotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       // construct the member selection on the capability as receiver
@@ -68,10 +68,10 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
 
-      val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
+      val capabilities = Context.treeAnnotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map(referenceToCapability)
 
-      val typeArguments = Context.annotation(Annotations.TypeArguments, c)
+      val typeArguments = Context.treeAnnotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       val recv = rewrite(receiver)
@@ -83,10 +83,10 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
 
-      val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
+      val capabilities = Context.treeAnnotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map(referenceToCapability)
 
-      val typeArguments = Context.annotation(Annotations.TypeArguments, c)
+      val typeArguments = Context.treeAnnotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       Call(receiver, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
@@ -94,7 +94,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     case h @ TryHandle(prog, handlers) =>
       val body = rewrite(prog)
 
-      val capabilities = Context.annotation(Annotations.BoundCapabilities, h)
+      val capabilities = Context.treeAnnotation(Annotations.BoundCapabilities, h)
 
       assert(capabilities.size == handlers.size)
 
@@ -112,7 +112,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     case n @ source.New(impl @ Implementation(interface, clauses)) => {
       val cs = clauses map {
         case op @ OpClause(id, tparams, vparams, bparams, ret, body, resume) => {
-          val capabilities = Context.annotation(Annotations.BoundCapabilities, op)
+          val capabilities = Context.treeAnnotation(Annotations.BoundCapabilities, op)
           val capabilityParams = capabilities.map(definitionFor)
           OpClause(id, tparams, vparams, bparams ++ capabilityParams, ret, rewrite(body), resume)
         }
@@ -124,7 +124,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     }
 
     case b @ source.BlockLiteral(tps, vps, bps, body) =>
-      val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
+      val capabilities = Context.treeAnnotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(definitionFor)
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body))
   }
@@ -147,7 +147,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     val id = IdRef(Nil, capability.name.name)
     C.assignSymbol(id, capability)
     val ref: Var = Var(id)
-    C.annotate(Annotations.InferredBlockType, ref, C.blockTypeOf(capability))
+    C.annotateTree(Annotations.InferredBlockType, ref, C.blockTypeOf(capability))
     ref
 
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =

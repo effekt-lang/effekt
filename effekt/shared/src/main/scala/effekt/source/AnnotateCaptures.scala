@@ -52,7 +52,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       query(term) ++ capt
 
     case t @ source.Do(effect, op, targs, vargs, bargs) =>
-      val cap = Context.annotation(Annotations.CapabilityReceiver, t)
+      val cap = Context.treeAnnotation(Annotations.CapabilityReceiver, t)
       combineAll(vargs.map(query)) ++ combineAll(bargs.map(query)) ++ CaptureSet(cap.capture)
 
     case t @ source.TryHandle(prog, handlers) =>
@@ -101,7 +101,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   }
 
   def boundCapabilities(t: Tree)(using Context): CaptureSet =
-    val bound = Context.annotation(Annotations.BoundCapabilities, t)
+    val bound = Context.treeAnnotation(Annotations.BoundCapabilities, t)
     CaptureSet(bound.map(_.capture))
 
   def captureOf(b: BlockSymbol)(using Context): CaptureSet =
@@ -119,7 +119,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
   override def visit[T <: Tree](t: T)(visitor: T => CaptureSet)(using Context, Unit): CaptureSet =
     val capt = visitor(t)
-    Context.annotate(Annotations.InferredCapture, t, capt)
+    Context.annotateTree(Annotations.InferredCapture, t, capt)
     allCaptures = (t, capt) :: allCaptures
     capt
 }

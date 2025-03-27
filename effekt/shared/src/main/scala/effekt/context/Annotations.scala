@@ -70,7 +70,7 @@ class Annotations private(
         case sym: symbols.Symbol =>
           symbolsDB.annotateSymbol(ann.asInstanceOf[Annotation[symbols.Symbol, V]], sym, f(sym, v))
         case key: source.Tree =>
-          treesDB.annotate(ann.asInstanceOf[Annotation[source.Tree, V]], key, f(key, v))
+          treesDB.annotateTree(ann.asInstanceOf[Annotation[source.Tree, V]], key, f(key, v))
       }
     }
 
@@ -346,7 +346,7 @@ trait TreeAnnotations { self: Context =>
   def copyAnnotations(from: source.Tree, to: source.Tree): Unit = {
     val existing = annotationsAt(to)
     val source   = annotationsAt(from)
-    annotate(to, source ++ existing)
+    annotateTree(to, source ++ existing)
   }
 
   /**
@@ -354,25 +354,25 @@ trait TreeAnnotations { self: Context =>
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB
    */
-  def annotate(key: source.Tree, value: AnnotationsMap): Unit = {
+  def annotateTree(key: source.Tree, value: AnnotationsMap): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns ++ value)
   }
 
-  def annotate[K <: source.Tree, V](ann: Annotation[K, V], key: source.Tree, value: V): Unit = {
+  def annotateTree[K <: source.Tree, V](ann: Annotation[K, V], key: source.Tree, value: V): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns + (ann -> value))
   }
 
-  def annotationOption[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Option[V] =
+  def annotationOptionTree[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Option[V] =
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): V =
-    annotationOption(ann, key).getOrElse {
+  def treeAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): V =
+    annotationOptionTree(ann, key).getOrElse {
       panic(s"Cannot find ${ann.description} for '${key}'")
     }
 
-  def hasAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Boolean =
+  def hasTreeAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Boolean =
     annotationsAt(key).isDefinedAt(ann)
 
   // Customized Accessors
@@ -383,10 +383,10 @@ trait TreeAnnotations { self: Context =>
   // -----
 
   def typeArguments(c: source.CallLike): List[symbols.ValueType] =
-    annotation(Annotations.TypeArguments, c)
+    treeAnnotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[ValueType] =
-    annotationOption(Annotations.InferredValueType, t)
+    annotationOptionTree(Annotations.InferredValueType, t)
 
   def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
@@ -394,7 +394,7 @@ trait TreeAnnotations { self: Context =>
     }
 
   def inferredBlockTypeOption(t: source.Tree): Option[BlockType] =
-    annotationOption(Annotations.InferredBlockType, t)
+    annotationOptionTree(Annotations.InferredBlockType, t)
 
   def inferredBlockTypeOf(t: source.Tree): BlockType =
     inferredBlockTypeOption(t).getOrElse {
@@ -402,7 +402,7 @@ trait TreeAnnotations { self: Context =>
     }
 
   def inferredEffectOption(t: source.Tree): Option[Effects] =
-    annotationOption(Annotations.InferredEffect, t)
+    annotationOptionTree(Annotations.InferredEffect, t)
 
   def inferredEffectOf(t: source.Tree): Effects =
     inferredEffectOption(t).getOrElse {
@@ -421,22 +421,22 @@ trait TreeAnnotations { self: Context =>
     }
 
   def inferredCapture(t: source.Tree): symbols.CaptureSet =
-    annotation(Annotations.InferredCapture, t)
+    treeAnnotation(Annotations.InferredCapture, t)
 
   def inferredCaptureOption(t: source.Tree): Option[symbols.CaptureSet] =
-    annotationOption(Annotations.InferredCapture, t)
+    annotationOptionTree(Annotations.InferredCapture, t)
 
   def annotateResolvedType(tree: source.Type)(tpe: symbols.Type): Unit =
-    annotate(Annotations.Type, tree, tpe)
+    annotateTree(Annotations.Type, tree, tpe)
 
   def resolvedType(tree: source.Type): symbols.Type =
-    annotation(Annotations.Type, tree)
+    treeAnnotation(Annotations.Type, tree)
 
   def annotateResolvedCapture(tree: source.CaptureSet)(capt: symbols.CaptureSet): Unit =
-    annotate(Annotations.Capture, tree, capt)
+    annotateTree(Annotations.Capture, tree, capt)
 
   def resolvedCapture(tree: source.CaptureSet): symbols.CaptureSet =
-    annotation(Annotations.Capture, tree)
+    treeAnnotation(Annotations.Capture, tree)
 
   // Symbols
   // -------
@@ -460,10 +460,10 @@ trait TreeAnnotations { self: Context =>
           annotateSymbol(Annotations.DefinitionTree, s.capture, id)
         case _ =>
       }
-      annotate(Annotations.Symbol, id, sym)
+      annotateTree(Annotations.Symbol, id, sym)
       addDefinedSymbolToSource(sym)
     case _ =>
-      annotate(Annotations.Symbol, id, sym)
+      annotateTree(Annotations.Symbol, id, sym)
       // addDefinedSymbolToSource(sym)
   }
 
@@ -471,7 +471,7 @@ trait TreeAnnotations { self: Context =>
     panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
   }
   def symbolOption(id: source.Id): Option[Symbol] =
-    annotationOption(Annotations.Symbol, id)
+    annotationOptionTree(Annotations.Symbol, id)
 
   /**
    * Searching the definitions for a Reference
