@@ -89,14 +89,14 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.map(_.symbol.capture))
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
-      Context.annotate(Annotations.Captures, tree.symbol, cpt)
+      Context.annotateSymbol(Annotations.Captures, tree.symbol, cpt)
       cpt
 
     // regions
     case tree @ RegDef(id, annot, region, binding) =>
       val regSymbol = region.symbol.asBlockSymbol
       val regCapture = captureOf(regSymbol)
-      Context.annotate(Annotations.Captures, tree.symbol, regCapture)
+      Context.annotateSymbol(Annotations.Captures, tree.symbol, regCapture)
       query(binding) ++ regCapture
   }
 

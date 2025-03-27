@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.symbols.ResumeParam
+import effekt.symbols.{BlockSymbol, BlockType, ResumeParam, Symbol, ValueSymbol}
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
 
@@ -62,9 +62,16 @@ class Annotations private(
   def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
     get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
 
-  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB): Unit =
+  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB, symbolsDB: SymbolAnnotations): Unit =
     val anns = annotationsAt(ann)
-    anns.foreach { case (kk, v) => global.annotate(ann, kk.key, f(kk.key, v)) }
+    anns.foreach { case (kk, v) =>
+      kk.key match {
+        case sym: symbols.Symbol =>
+          symbolsDB.annotateSymbol(ann.asInstanceOf[Annotation[symbols.Symbol, V]], sym, f(sym, v))
+        case key =>
+          global.annotate(ann, key, f(key, v))
+      }
+    }
 
   override def toString = s"Annotations(${annotations})"
 }
@@ -417,45 +424,6 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
-  def functionTypeOf(s: Symbol): FunctionType =
-    functionTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
-
-  def functionTypeOption(s: Symbol): Option[FunctionType] =
-    s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: FunctionType => Some(b)
-        case _               => None
-      }
-      // The callsite should be adjusted, this is NOT the job of annotations...
-      case v: ValueSymbol => ???
-      //        valueTypeOption(v).flatMap { v =>
-      //          v.dealias match {
-      //            case symbols.BoxedType(tpe: FunctionType, _) => Some(tpe)
-      //            case _ => None
-      //          }
-      //        }
-    }
-
-  def blockTypeOf(s: Symbol): BlockType =
-    blockTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
-
-  def blockTypeOption(s: Symbol): Option[BlockType] =
-    s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: BlockType => Some(b)
-      }
-      case _ => panic(s"Trying to find a interface type for non block '${s}'")
-    }
-
-  def valueTypeOf(s: Symbol): ValueType =
-    valueTypeOption(s) getOrElse { panic(s"Cannot find value binder for ${s}") }
-
-  def valueTypeOption(s: Symbol): Option[ValueType] = s match {
-    case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
-    case _              => panic(s"Trying to find a value type for non-value '${s}'")
-  }
-
-
   // Symbols
   // -------
 
@@ -470,12 +438,12 @@ trait AnnotationsDB { self: Context =>
    */
   def assignSymbol(id: source.Id, sym: Symbol): Unit = id match {
     case id: source.IdDef =>
-      annotate(Annotations.DefinitionTree, sym, id)
+      annotateSymbol(Annotations.DefinitionTree, sym, id)
       sym match {
         case _: ResumeParam =>
         case s: symbols.TrackedParam =>
           // for tracked params, also note the id als definition site for the capture.
-          annotate(Annotations.DefinitionTree, s.capture, id)
+          annotateSymbol(Annotations.DefinitionTree, s.capture, id)
         case _ =>
       }
       annotate(Annotations.Symbol, id, sym)
@@ -499,8 +467,8 @@ trait AnnotationsDB { self: Context =>
   def symbolOf(tree: source.Reference): Symbol = {
     val sym = symbolOf(tree.id)
 
-    val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
-    annotate(Annotations.References, sym, tree :: refs)
+    val refs = annotationOptionSymbol(Annotations.References, sym).getOrElse(Nil)
+    annotateSymbol(Annotations.References, sym, tree :: refs)
     sym
   }
 
@@ -511,28 +479,6 @@ trait AnnotationsDB { self: Context =>
    */
   def symbolOf(tree: source.Definition): Symbol =
     symbolOf(tree.id)
-
-  /**
-   * Searching the definition for a symbol
-   */
-  def definitionTreeOption(s: Symbol): Option[source.IdDef] =
-    annotationOption(Annotations.DefinitionTree, s)
-
-  /**
-   * List all references for a symbol
-   *
-   * Used by the LSP server for reverse lookup
-   */
-  def distinctReferencesTo(sym: Symbol): List[source.Reference] =
-    annotationOption(Annotations.References, sym)
-      .getOrElse(Nil)
-      .distinctBy(r => System.identityHashCode(r))
-
-  def captureOf(sym: BlockSymbol): symbols.Captures =
-    annotation(Annotations.Captures, sym)
-
-  def captureOfOption(sym: BlockSymbol): Option[symbols.Captures] =
-    annotationOption(Annotations.Captures, sym)
 }
 
 sealed trait Key[T] {
@@ -603,4 +549,92 @@ trait SourceAnnotations { self: Context =>
       val syms = annotationOptionSource(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
       annotateSource(Annotations.DefinedSymbols, src, syms + s)
     }
+}
+
+trait SymbolAnnotations { self: Context =>
+  import scala.collection.mutable
+
+  // A dedicated map for symbol annotations keyed by symbols.Symbol.
+  private val symbolAnnotationsDB: mutable.Map[symbols.Symbol, Map[Annotation[_, _], Any]] =
+    mutable.Map.empty
+
+  // Retrieve the annotations for a given symbol.
+  private def annotationsAtSymbol(sym: symbols.Symbol): Map[Annotation[_, _], Any] =
+    symbolAnnotationsDB.getOrElse(sym, Map.empty)
+
+  // Annotate a symbol with an annotation and its value.
+  def annotateSymbol[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol, value: A): Unit = {
+    val key = sym
+    val anns = annotationsAtSymbol(sym)
+    symbolAnnotationsDB.update(key, anns + (ann -> value))
+  }
+
+  // Retrieve an optional annotation for a symbol.
+  def annotationOptionSymbol[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol): Option[A] =
+    annotationsAtSymbol(sym).get(ann).asInstanceOf[Option[A]]
+
+  // Retrieve the value type of a value symbol.
+  def valueTypeOption(s: symbols.Symbol): Option[symbols.ValueType] = s match {
+    case vs: symbols.ValueSymbol => annotationOptionSymbol(Annotations.ValueType, vs)
+    case _ => panic(s"Trying to find a value type for non-value '${s}'")
+  }
+
+  def valueTypeOf(s: symbols.Symbol): symbols.ValueType =
+    valueTypeOption(s).getOrElse(panic(s"Cannot find value type for ${s}"))
+
+  def blockTypeOption(s: Symbol): Option[BlockType] =
+    s match {
+      case b: BlockSymbol => annotationOptionSymbol(Annotations.BlockType, b) flatMap {
+        case b: BlockType => Some(b)
+      }
+      case _ => panic(s"Trying to find a interface type for non block '${s}'")
+    }
+
+  def blockTypeOf(s: symbols.Symbol): symbols.BlockType =
+    blockTypeOption(s).getOrElse(panic(s"Cannot find block type for ${s}"))
+
+  // Retrieve the function type of a block symbol.
+  def functionTypeOption(s: symbols.Symbol): Option[symbols.FunctionType] = s match {
+    case bs: symbols.BlockSymbol =>
+      annotationOptionSymbol(Annotations.BlockType, bs) match {
+        case Some(ft: symbols.FunctionType) => Some(ft)
+        case _ => None
+      }
+      // The callsite should be adjusted, this is NOT the job of annotations...
+    case v: ValueSymbol => ???
+      //        valueTypeOption(v).flatMap { v =>
+      //          v.dealias match {
+      //            case symbols.BoxedType(tpe: FunctionType, _) => Some(tpe)
+      //            case _ => None
+      //          }
+      //        }
+    case _ => None
+  }
+
+  def functionTypeOf(s: symbols.Symbol): symbols.FunctionType =
+    functionTypeOption(s).getOrElse(panic(s"Cannot find function type for ${s}"))
+
+  /**
+   * Searching the definition for a symbol
+   */
+  def definitionTreeOption(s: symbols.Symbol): Option[source.IdDef] =
+    annotationOptionSymbol(Annotations.DefinitionTree, s)
+
+  /**
+   * List all references for a symbol
+   *
+   * Used by the LSP server for reverse lookup
+   */
+  def distinctReferencesTo(sym: symbols.Symbol): List[source.Reference] =
+    annotationOptionSymbol(Annotations.References, sym)
+      .getOrElse(Nil)
+      .asInstanceOf[List[source.Reference]]
+      .distinctBy(r => System.identityHashCode(r))
+
+  def captureOf(sym: symbols.BlockSymbol): symbols.Captures =
+    annotationOptionSymbol(Annotations.Captures, sym)
+      .getOrElse(panic(s"Cannot find captures for ${sym}"))
+
+  def captureOfOption(sym: symbols.BlockSymbol): Option[symbols.Captures] =
+    annotationOptionSymbol(Annotations.Captures, sym)
 }
