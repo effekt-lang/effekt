@@ -26,7 +26,7 @@ class Annotations private(
   /**
    * Local Annotations are organized differently to allow simple access.
    */
-  private var annotations: Map[Annotation[_, _], Map[Key[Any], Any]]
+  private var annotations: Map[Annotation[_, _], Map[Annotations.Key[Any], Any]]
 ) {
   import Annotations._
 
@@ -79,6 +79,32 @@ class Annotations private(
 object Annotations {
 
   def empty: Annotations = new Annotations(Map.empty)
+
+  sealed trait Key[T] {
+    def key: T
+  }
+
+  private class HashKey[T](val key: T) extends Key[T] {
+    override val hashCode = System.identityHashCode(key)
+
+    override def equals(o: Any) = o match {
+      case k: HashKey[_] => hashCode == k.hashCode
+      case _ => false
+    }
+  }
+
+  private class IdKey[T](val key: T) extends Key[T] {
+    override val hashCode = key.hashCode()
+
+    override def equals(o: Any) = o match {
+      case k: Key[_] => key == k.key
+      case _ => false
+    }
+  }
+
+  object Key {
+    def unapply[T](k: Key[T]): Option[T] = Some(k.key)
+  }
 
   private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] =
     if (ann.bindToObjectIdentity) new HashKey(k)
@@ -474,32 +500,6 @@ trait AnnotationsDB { self: Context =>
    */
   def symbolOf(tree: source.Definition): Symbol =
     symbolOf(tree.id)
-}
-
-sealed trait Key[T] {
-  def key: T
-}
-
-private class HashKey[T](val key: T) extends Key[T] {
-  override val hashCode = System.identityHashCode(key)
-
-  override def equals(o: Any) = o match {
-    case k: HashKey[_] => hashCode == k.hashCode
-    case _ => false
-  }
-}
-
-private class IdKey[T](val key: T) extends Key[T] {
-  override val hashCode = key.hashCode()
-
-  override def equals(o: Any) = o match {
-    case k: Key[_] => key == k.key
-    case _ => false
-  }
-}
-
-object Key {
-  def unapply[T](k: Key[T]): Option[T] = Some(k.key)
 }
 
 /**
