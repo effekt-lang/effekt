@@ -5,6 +5,7 @@ import effekt.symbols.{BlockSymbol, BlockType, ResumeParam, Symbol, ValueSymbol}
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
 
+import java.util
 import scala.collection.mutable
 
 case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
@@ -297,7 +298,7 @@ object Annotations {
  *
  * This database is mixed into the compiler `Context` and is
  * globally visible across all phases. If you want to hide changes in
- * subsequent phases, consider using an instance of `Annotions`, instead.
+ * subsequent phases, consider using an instance of `Annotations`, instead.
  *
  * Calling `Annotations.commit` transfers all annotations into this global DB.
  *
@@ -307,24 +308,20 @@ object Annotations {
 trait AnnotationsDB { self: Context =>
   private type AnnotationsMap = Map[Annotation[_, _], Any]
 
-  // Instead of a Memoiser, use a mutable map whose keys are wrapped to support the two equality modes.
-  type DB = mutable.Map[Key[_], Map[Annotation[_, _], Any]]
-  var db: DB = mutable.Map.empty
+  private type Annotations = Map[Annotation[_, _], Any]
+  type DB = util.IdentityHashMap[Any, Map[Annotation[_, _], Any]]
+  var db: DB = new util.IdentityHashMap()
 
-  private def wrapKey[K](key: K, identityBased: Boolean = true): Key[K] =
-    if (identityBased) new HashKey(key)
-    else new IdKey(key)
-
-  private def annotationsAt[K](key: K, identityBased: Boolean = true): AnnotationsMap =
-    db.getOrElse(wrapKey(key, identityBased), Map.empty)
+  private def annotationsAt[K](key: K): AnnotationsMap =
+    db.getOrDefault(key, Map.empty)
 
   /**
    * Copies annotations, keeping existing annotations at `to`
    */
-  def copyAnnotations(from: Any, to: Any, identityBased: Boolean = true): Unit = {
-    val existing = annotationsAt(to, identityBased)
-    val source   = annotationsAt(from, identityBased)
-    annotate(to, source ++ existing, identityBased)
+  def copyAnnotations(from: Any, to: Any): Unit = {
+    val existing = annotationsAt(to)
+    val source   = annotationsAt(from)
+    annotate(to, source ++ existing)
   }
 
   /**
@@ -332,22 +329,20 @@ trait AnnotationsDB { self: Context =>
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB
    */
-  def annotate[K](key: K, value: AnnotationsMap, identityBased: Boolean): Unit = {
-    val wrapped = wrapKey(key, identityBased)
-    val anns = db.getOrElse(wrapped, Map.empty)
-    db.put(wrapped, anns ++ value)
+  def annotate[K](key: K, value: AnnotationsMap): Unit = {
+    val anns = db.getOrDefault(key, Map.empty)
+    db.put(key, anns ++ value)
   }
 
-  def annotate[K, V](ann: Annotation[K, V], key: K, value: V, identityBased: Boolean = true): Unit = {
-    val wrapped = wrapKey(key, identityBased)
-    val anns = db.getOrElse(wrapped, Map.empty)
-    db.put(wrapped, anns + (ann -> value))
+  def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
+    val anns = db.getOrDefault(key, Map.empty)
+    db.put(key, anns + (ann -> value))
   }
 
-  def annotationOption[K, V](ann: Annotation[K, V], key: K, identityBased: Boolean = true): Option[V] =
-    annotationsAt(key, identityBased).get(ann).asInstanceOf[Option[V]]
+  def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
+    annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[K, V](ann: Annotation[K, V], key: K, identityBased: Boolean = true): V =
+  def annotation[K, V](ann: Annotation[K, V], key: K): V =
     annotationOption(ann, key).getOrElse {
       panic(s"Cannot find ${ann.description} for '${key}'")
     }
@@ -554,19 +549,18 @@ trait SourceAnnotations { self: Context =>
 trait SymbolAnnotations { self: Context =>
   import scala.collection.mutable
 
-  // A dedicated map for symbol annotations keyed by symbols.Symbol.
-  private val symbolAnnotationsDB: mutable.Map[symbols.Symbol, Map[Annotation[_, _], Any]] =
-    mutable.Map.empty
+  private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[Annotation[_, _], Any]] =
+    new util.IdentityHashMap()
 
   // Retrieve the annotations for a given symbol.
   private def annotationsAtSymbol(sym: symbols.Symbol): Map[Annotation[_, _], Any] =
-    symbolAnnotationsDB.getOrElse(sym, Map.empty)
+    symbolAnnotationsDB.getOrDefault(sym, Map.empty)
 
   // Annotate a symbol with an annotation and its value.
   def annotateSymbol[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol, value: A): Unit = {
     val key = sym
     val anns = annotationsAtSymbol(sym)
-    symbolAnnotationsDB.update(key, anns + (ann -> value))
+    symbolAnnotationsDB.put(key, anns + (ann -> value))
   }
 
   // Retrieve an optional annotation for a symbol.
