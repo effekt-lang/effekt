@@ -5,6 +5,8 @@ import effekt.symbols.ResumeParam
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
 
+import scala.collection.mutable
+
 case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
   override def toString = name
@@ -23,7 +25,7 @@ class Annotations private(
   /**
    * Local Annotations are organized differently to allow simple access.
    */
-  private var annotations: Map[Annotation[_, _], Map[Annotations.Key[Any], Any]]
+  private var annotations: Map[Annotation[_, _], Map[Key[Any], Any]]
 ) {
   import Annotations._
 
@@ -69,28 +71,6 @@ class Annotations private(
 object Annotations {
 
   def empty: Annotations = new Annotations(Map.empty)
-
-  sealed trait Key[T] { def key: T }
-
-  private class HashKey[T](val key: T) extends Key[T] {
-    override val hashCode = System.identityHashCode(key)
-    override def equals(o: Any) = o match {
-      case k: HashKey[_] => hashCode == k.hashCode
-      case _         => false
-    }
-  }
-
-  private class IdKey[T](val key: T) extends Key[T] {
-    override val hashCode = key.hashCode()
-    override def equals(o: Any) = o match {
-      case k: Key[_] => key == k.key
-      case _         => false
-    }
-  }
-
-  object Key {
-    def unapply[T](k: Key[T]): Option[T] = Some(k.key)
-  }
 
   private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] =
     if (ann.bindToObjectIdentity) new HashKey(k)
@@ -318,20 +298,26 @@ object Annotations {
  * It should thus only be used to store a "ground" truth that will not be changed again.
  */
 trait AnnotationsDB { self: Context =>
+  private type AnnotationsMap = Map[Annotation[_, _], Any]
 
-  private type Annotations = Map[Annotation[_, _], Any]
-  type DB = Memoiser[Any, Map[Annotation[_, _], Any]]
-  var db: DB = Memoiser.makeIdMemoiser()
+  // Instead of a Memoiser, use a mutable map whose keys are wrapped to support the two equality modes.
+  type DB = mutable.Map[Key[_], Map[Annotation[_, _], Any]]
+  var db: DB = mutable.Map.empty
 
-  private def annotationsAt(key: Any): Map[Annotation[_, _], Any] = db.getOrDefault(key, Map.empty)
+  private def wrapKey[K](key: K, identityBased: Boolean = true): Key[K] =
+    if (identityBased) new HashKey(key)
+    else new IdKey(key)
+
+  private def annotationsAt[K](key: K, identityBased: Boolean = true): AnnotationsMap =
+    db.getOrElse(wrapKey(key, identityBased), Map.empty)
 
   /**
    * Copies annotations, keeping existing annotations at `to`
    */
-  def copyAnnotations(from: Any, to: Any): Unit = {
-    val existing = annotationsAt(to)
-    val source = annotationsAt(from)
-    annotate(to, source ++ existing)
+  def copyAnnotations(from: Any, to: Any, identityBased: Boolean = true): Unit = {
+    val existing = annotationsAt(to, identityBased)
+    val source   = annotationsAt(from, identityBased)
+    annotate(to, source ++ existing, identityBased)
   }
 
   /**
@@ -339,21 +325,25 @@ trait AnnotationsDB { self: Context =>
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB
    */
-  def annotate[K, V](key: K, value: Map[Annotation[_, _], Any]): Unit = {
-    val anns = annotationsAt(key)
-    db.put(key, anns ++ value)
+  def annotate[K](key: K, value: AnnotationsMap, identityBased: Boolean): Unit = {
+    val wrapped = wrapKey(key, identityBased)
+    val anns = db.getOrElse(wrapped, Map.empty)
+    db.put(wrapped, anns ++ value)
   }
 
-  def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
-    val anns = annotationsAt(key)
-    db.put(key, anns + (ann -> value))
+  def annotate[K, V](ann: Annotation[K, V], key: K, value: V, identityBased: Boolean = true): Unit = {
+    val wrapped = wrapKey(key, identityBased)
+    val anns = db.getOrElse(wrapped, Map.empty)
+    db.put(wrapped, anns + (ann -> value))
   }
 
-  def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
-    annotationsAt(key).get(ann).asInstanceOf[Option[V]]
+  def annotationOption[K, V](ann: Annotation[K, V], key: K, identityBased: Boolean = true): Option[V] =
+    annotationsAt(key, identityBased).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[K, V](ann: Annotation[K, V], key: K): V =
-    annotationOption(ann, key).getOrElse { panic(s"Cannot find ${ann.description} for '${key}'") }
+  def annotation[K, V](ann: Annotation[K, V], key: K, identityBased: Boolean = true): V =
+    annotationOption(ann, key).getOrElse {
+      panic(s"Cannot find ${ann.description} for '${key}'")
+    }
 
   def hasAnnotation[K, V](ann: Annotation[K, V], key: K): Boolean =
     annotationsAt(key).isDefinedAt(ann)
@@ -534,8 +524,8 @@ trait AnnotationsDB { self: Context =>
    */
   def addDefinedSymbolToSource(s: Symbol): Unit =
     if (module != null) {
-      val syms = annotationOption(Annotations.DefinedSymbols, module.source).getOrElse(Set.empty)
-      annotate(Annotations.DefinedSymbols, module.source, syms + s)
+      val syms = annotationOption(Annotations.DefinedSymbols, module.source, identityBased = false).getOrElse(Set.empty)
+      annotate(Annotations.DefinedSymbols, module.source, syms + s, identityBased = false)
     }
 
   /**
@@ -544,7 +534,7 @@ trait AnnotationsDB { self: Context =>
    * Used by the LSP server to generate outline
    */
   def sourceSymbolsFor(src: kiama.util.Source): Set[Symbol] =
-    annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
+    annotationOption(Annotations.DefinedSymbols, src, identityBased = false).getOrElse(Set.empty)
 
   /**
    * List all references for a symbol
@@ -561,4 +551,30 @@ trait AnnotationsDB { self: Context =>
 
   def captureOfOption(sym: BlockSymbol): Option[symbols.Captures] =
     annotationOption(Annotations.Captures, sym)
+}
+
+sealed trait Key[T] {
+  def key: T
+}
+
+private class HashKey[T](val key: T) extends Key[T] {
+  override val hashCode = System.identityHashCode(key)
+
+  override def equals(o: Any) = o match {
+    case k: HashKey[_] => hashCode == k.hashCode
+    case _ => false
+  }
+}
+
+private class IdKey[T](val key: T) extends Key[T] {
+  override val hashCode = key.hashCode()
+
+  override def equals(o: Any) = o match {
+    case k: Key[_] => key == k.key
+    case _ => false
+  }
+}
+
+object Key {
+  def unapply[T](k: Key[T]): Option[T] = Some(k.key)
 }

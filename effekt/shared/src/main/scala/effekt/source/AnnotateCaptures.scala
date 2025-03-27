@@ -115,7 +115,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   def annotate(tree: source.ModuleDecl, src: Source)(using Context): Unit =
     given Unit = ();
     query(tree)
-    Context.annotate(Annotations.CaptureForFile, src, allCaptures)
+    Context.annotate(Annotations.CaptureForFile, src, allCaptures, identityBased = false)
 
   override def visit[T <: Tree](t: T)(visitor: T => CaptureSet)(using Context, Unit): CaptureSet =
     val capt = visitor(t)

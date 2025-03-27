@@ -559,6 +559,91 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("inlayHints work after editing") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, positions) =
+        raw"""
+             |↑
+             |def main() = {
+             |↑
+             |  println("Hello, world!")
+             |}
+             |↑
+             |""".textDocumentAndPositions
+
+      val inlayHint = new InlayHint()
+      inlayHint.setKind(InlayHintKind.Type)
+      inlayHint.setPosition(positions(1))
+      inlayHint.setLabel("{io}")
+      val markup = new MarkupContent()
+      markup.setKind("markdown")
+      markup.setValue("captures: `{io}`")
+      inlayHint.setTooltip(markup)
+      inlayHint.setPaddingRight(true)
+      inlayHint.setData("capture")
+
+      val expectedInlayHints = List(inlayHint)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.getTextDocumentService().didOpen(didOpenParams)
+
+      val params = new InlayHintParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setRange(new Range(positions(0), positions(2)))
+
+      val inlayHints = server.getTextDocumentService().inlayHint(params).get()
+      assertEquals(inlayHints, expectedInlayHints.asJava)
+
+      // First edit: now we add a blank line in front
+      //
+      //
+
+      val (newTextDoc, changeEvent) = textDoc.changeTo(
+        raw"""
+             |
+             |def main() = {
+             |  println("Hello, world!")
+             |}
+             |""".stripMargin
+      )
+      val newPos = new Position(positions(1).getLine + 1, positions(1).getCharacter)
+
+      val didChangeParams = new DidChangeTextDocumentParams()
+      didChangeParams.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
+      didChangeParams.setContentChanges(util.Arrays.asList(changeEvent))
+      server.getTextDocumentService().didChange(didChangeParams)
+
+      val paramsAfterChange = new InlayHintParams()
+      paramsAfterChange.setTextDocument(newTextDoc.versionedTextDocumentIdentifier)
+      paramsAfterChange.setRange(new Range(positions(0), new Position(positions(2).getLine + 1, positions(2).getCharacter)))
+
+      inlayHint.setPosition(newPos)
+      val inlayHintsAfterChange = server.getTextDocumentService().inlayHint(paramsAfterChange).get()
+      assertEquals(inlayHintsAfterChange, expectedInlayHints.asJava)
+
+      // Second edit: we revert the change
+      //
+      //
+
+      val (revertedTextDoc, revertedChangeEvent) = newTextDoc.changeTo(textDoc.getText)
+      inlayHint.setPosition(positions(1))
+
+      val didChangeParamsReverted = new DidChangeTextDocumentParams()
+      didChangeParamsReverted.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
+      didChangeParamsReverted.setContentChanges(util.Arrays.asList(revertedChangeEvent))
+      server.getTextDocumentService().didChange(didChangeParamsReverted)
+
+      val paramsAfterRevert = new InlayHintParams()
+      paramsAfterRevert.setTextDocument(revertedTextDoc.versionedTextDocumentIdentifier)
+      paramsAfterRevert.setRange(new Range(positions(0), positions(2)))
+
+      val inlayHintsAfterRevert = server.getTextDocumentService().inlayHint(paramsAfterRevert).get()
+      assertEquals(inlayHintsAfterRevert, expectedInlayHints.asJava)
+    }
+
+  }
+
   // Effekt: Publish IR
   //
   //
