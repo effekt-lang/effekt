@@ -63,14 +63,14 @@ class Annotations private(
   def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
     get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
 
-  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB, symbolsDB: SymbolAnnotations): Unit =
+  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit treesDB: TreeAnnotations, symbolsDB: SymbolAnnotations): Unit =
     val anns = annotationsAt(ann)
     anns.foreach { case (kk, v) =>
       kk.key match {
         case sym: symbols.Symbol =>
           symbolsDB.annotateSymbol(ann.asInstanceOf[Annotation[symbols.Symbol, V]], sym, f(sym, v))
-        case key =>
-          global.annotate(ann, key, f(key, v))
+        case key: source.Tree =>
+          treesDB.annotate(ann.asInstanceOf[Annotation[source.Tree, V]], key, f(key, v))
       }
     }
 
@@ -318,24 +318,23 @@ object Annotations {
   )
 }
 
-
 /**
- * A global annotations database
+ * Global annotations on syntax trees
  *
  * This database is mixed into the compiler `Context` and is
  * globally visible across all phases. If you want to hide changes in
  * subsequent phases, consider using an instance of `Annotations`, instead.
  *
- * Calling `Annotations.commit` transfers all annotations into this global DB.
+ * Calling `Annotations.commit` transfers all annotations into the global databases.
  *
  * The DB is also "global" in the sense, that modifications cannot be backtracked.
  * It should thus only be used to store a "ground" truth that will not be changed again.
  */
-trait AnnotationsDB { self: Context =>
+trait TreeAnnotations { self: Context =>
   private type AnnotationsMap = Map[Annotation[_, _], Any]
 
   private type Annotations = Map[Annotation[_, _], Any]
-  type DB = util.IdentityHashMap[Any, Map[Annotation[_, _], Any]]
+  type DB = util.IdentityHashMap[source.Tree, Map[Annotation[_, _], Any]]
   var db: DB = new util.IdentityHashMap()
 
   private def annotationsAt[K](key: K): AnnotationsMap =
@@ -344,7 +343,7 @@ trait AnnotationsDB { self: Context =>
   /**
    * Copies annotations, keeping existing annotations at `to`
    */
-  def copyAnnotations(from: Any, to: Any): Unit = {
+  def copyAnnotations(from: source.Tree, to: source.Tree): Unit = {
     val existing = annotationsAt(to)
     val source   = annotationsAt(from)
     annotate(to, source ++ existing)
@@ -355,25 +354,25 @@ trait AnnotationsDB { self: Context =>
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB
    */
-  def annotate[K](key: K, value: AnnotationsMap): Unit = {
+  def annotate(key: source.Tree, value: AnnotationsMap): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns ++ value)
   }
 
-  def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
+  def annotate[K <: source.Tree, V](ann: Annotation[K, V], key: source.Tree, value: V): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns + (ann -> value))
   }
 
-  def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
+  def annotationOption[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Option[V] =
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[K, V](ann: Annotation[K, V], key: K): V =
+  def annotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): V =
     annotationOption(ann, key).getOrElse {
       panic(s"Cannot find ${ann.description} for '${key}'")
     }
 
-  def hasAnnotation[K, V](ann: Annotation[K, V], key: K): Boolean =
+  def hasAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Boolean =
     annotationsAt(key).isDefinedAt(ann)
 
   // Customized Accessors
@@ -438,12 +437,6 @@ trait AnnotationsDB { self: Context =>
 
   def resolvedCapture(tree: source.CaptureSet): symbols.CaptureSet =
     annotation(Annotations.Capture, tree)
-
-  def typeOf(s: Symbol): Type = s match {
-    case s: ValueSymbol => valueTypeOf(s)
-    case s: BlockSymbol => blockTypeOf(s)
-    case _              => panic(s"Cannot find a type for symbol '${s}'")
-  }
 
   // Symbols
   // -------
@@ -546,6 +539,9 @@ trait SourceAnnotations { self: Context =>
     }
 }
 
+/**
+ * Global annotations on symbols
+ */
 trait SymbolAnnotations { self: Context =>
   import scala.collection.mutable
 
@@ -566,6 +562,12 @@ trait SymbolAnnotations { self: Context =>
   // Retrieve an optional annotation for a symbol.
   def annotationOptionSymbol[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol): Option[A] =
     annotationsAtSymbol(sym).get(ann).asInstanceOf[Option[A]]
+
+  def typeOf(s: Symbol): symbols.Type = s match {
+    case s: ValueSymbol => valueTypeOf(s)
+    case s: BlockSymbol => blockTypeOf(s)
+    case _ => panic(s"Cannot find a type for symbol '${s}'")
+  }
 
   // Retrieve the value type of a value symbol.
   def valueTypeOption(s: symbols.Symbol): Option[symbols.ValueType] = s match {

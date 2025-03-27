@@ -18,7 +18,7 @@ import kiama.util.Positions
  */
 trait ContextOps
     extends ErrorReporter
-    with AnnotationsDB
+    with TreeAnnotations
     with SourceAnnotations 
     with SymbolAnnotations { self: Context =>
 
