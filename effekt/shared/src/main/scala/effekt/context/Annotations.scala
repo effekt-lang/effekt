@@ -519,24 +519,6 @@ trait AnnotationsDB { self: Context =>
     annotationOption(Annotations.DefinitionTree, s)
 
   /**
-   * Adds [[s]] to the set of defined symbols for the current module, by writing
-   * it into the [[Annotations.DefinedSymbols]] annotation.
-   */
-  def addDefinedSymbolToSource(s: Symbol): Unit =
-    if (module != null) {
-      val syms = annotationOption(Annotations.DefinedSymbols, module.source, identityBased = false).getOrElse(Set.empty)
-      annotate(Annotations.DefinedSymbols, module.source, syms + s, identityBased = false)
-    }
-
-  /**
-   * List all symbols that have a source module
-   *
-   * Used by the LSP server to generate outline
-   */
-  def sourceSymbolsFor(src: kiama.util.Source): Set[Symbol] =
-    annotationOption(Annotations.DefinedSymbols, src, identityBased = false).getOrElse(Set.empty)
-
-  /**
    * List all references for a symbol
    *
    * Used by the LSP server for reverse lookup
@@ -577,4 +559,52 @@ private class IdKey[T](val key: T) extends Key[T] {
 
 object Key {
   def unapply[T](k: Key[T]): Option[T] = Some(k.key)
+}
+
+/**
+ * Global annotations on entire Source objects
+ *
+ * It is very important that the comparison between keys is based on value rather than object identity:
+ * Even when a separate Source object is crated for the same file contents, it should track the same annotations.
+ * This situation frequently occurs in the language server where sources are transmitted from the language client (editor).
+ */
+trait SourceAnnotations { self: Context =>
+  import scala.collection.mutable
+
+  private val sourceAnnotationsDB: mutable.Map[Key[kiama.util.Source], Map[Annotation[_, _], Any]] =
+    mutable.Map.empty
+
+  private def wrapSourceKey(source: kiama.util.Source): Key[kiama.util.Source] =
+    new IdKey(source)
+
+  private def annotationsAtSource(source: kiama.util.Source): Map[Annotation[_, _], Any] =
+    sourceAnnotationsDB.getOrElse(wrapSourceKey(source), Map.empty)
+
+  def annotateSource[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source, value: A): Unit = {
+    val key = wrapSourceKey(source)
+    val anns = annotationsAtSource(source)
+    sourceAnnotationsDB.update(key, anns + (ann -> value))
+  }
+
+  def annotationOptionSource[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source): Option[A] =
+    annotationsAtSource(source).get(ann).asInstanceOf[Option[A]]
+
+  /**
+   * List all symbols that have a source module
+   *
+   * Used by the LSP server to generate outline
+   */
+  def sourceSymbolsFor(src: kiama.util.Source): Set[symbols.Symbol] =
+    annotationOptionSource(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
+
+  /**
+   * Adds [[s]] to the set of defined symbols for the current module, by writing
+   * it into the [[Annotations.DefinedSymbols]] annotation.
+   */
+  def addDefinedSymbolToSource(s: symbols.Symbol): Unit =
+    if (module != null) {
+      val src = module.source
+      val syms = annotationOptionSource(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
+      annotateSource(Annotations.DefinedSymbols, src, syms + s)
+    }
 }

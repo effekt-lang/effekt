@@ -122,7 +122,7 @@ trait Intelligence {
                |""".stripMargin
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
-    C.annotationOption(Annotations.CaptureForFile, src, identityBased = false).getOrElse(Nil)
+    C.annotationOptionSource(Annotations.CaptureForFile, src).getOrElse(Nil)
 
   // For now, we only show captures of function definitions and calls to box
   def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =
