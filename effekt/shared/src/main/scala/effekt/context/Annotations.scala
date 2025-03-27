@@ -571,19 +571,15 @@ object Key {
 trait SourceAnnotations { self: Context =>
   import scala.collection.mutable
 
-  private val sourceAnnotationsDB: mutable.Map[Key[kiama.util.Source], Map[Annotation[_, _], Any]] =
+  private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[Annotation[_, _], Any]] =
     mutable.Map.empty
 
-  private def wrapSourceKey(source: kiama.util.Source): Key[kiama.util.Source] =
-    new IdKey(source)
-
   private def annotationsAtSource(source: kiama.util.Source): Map[Annotation[_, _], Any] =
-    sourceAnnotationsDB.getOrElse(wrapSourceKey(source), Map.empty)
+    sourceAnnotationsDB.getOrElse(source, Map.empty)
 
   def annotateSource[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source, value: A): Unit = {
-    val key = wrapSourceKey(source)
     val anns = annotationsAtSource(source)
-    sourceAnnotationsDB.update(key, anns + (ann -> value))
+    sourceAnnotationsDB.update(source, anns + (ann -> value))
   }
 
   def annotationOptionSource[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source): Option[A] =
