@@ -54,21 +54,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context in {
           Context.withUnificationScope {
             flowingInto(builtins.toplevelCaptures) {
-              // bring builtins into scope
-              builtins.rootTerms.values.foreach {
-                case term: BlockParam =>
-                  Context.bind(term, term.tpe.getOrElse {
-                    INTERNAL_ERROR("Builtins should always be annotated with their types.")
-                  })
-                  Context.bind(term, CaptureSet(term.capture))
-                case term: ExternResource =>
-                  Context.bind(term, term.tpe)
-                  Context.bind(term, CaptureSet(term.capture))
-                case term: Callable =>
-                  Context.bind(term, term.toType)
-                case term => Context.panic(s"Cannot bind builtin term: ${term}")
-              }
-
               // We split the type-checking of definitions into "pre-check" and "check"
               // to allow mutually recursive defs
               tree.defs.foreach { d => precheckDef(d) }
@@ -119,7 +104,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           checkStmt(s, expectedType)
         }.getOrElse(Result(TUnit, ConcreteEffects.empty))
 
-        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs)
+        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs ++ guardEffs)
 
       case source.Var(id) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {

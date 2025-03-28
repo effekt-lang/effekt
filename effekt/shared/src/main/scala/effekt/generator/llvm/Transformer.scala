@@ -378,8 +378,6 @@ object Transformer {
 
   def transform(value: machine.Variable)(using FunctionContext): Operand =
     substitute(value) match {
-      // TODO rethink existence of global
-      case machine.Variable("global", machine.Type.Prompt()) => ConstantGlobal("global")
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 

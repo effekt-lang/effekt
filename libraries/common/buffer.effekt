@@ -3,7 +3,6 @@ module buffer
 import array
 
 // TODO (in Effekt compiler)
-// - [ ] fix allocating into actually global region
 // - [ ] fix exceptions on objects
 // - [X] allow omitting braces after `at` for singleton regions
 
@@ -35,12 +34,12 @@ def emptyBuffer[T](capacity: Int): Buffer[T] at {global} = {
 def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
   // TODO allocate buffer (and array) into a region r.
   val contents = array::allocate[T](initialCapacity)
-  var head in global = 0
-  var tail in global = 0
+  val head = ref(0)
+  val tail = ref(0)
 
   def size(): Int =
-    if (tail >= head) { tail - head }
-    else { initialCapacity - head + tail }
+    if (tail.get >= head.get) { tail.get - head.get }
+    else { initialCapacity - head.get + tail.get }
 
   def capacity(): Int = initialCapacity - size()
 
@@ -51,36 +50,36 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at {global} = {
     def read() = {
       if (buffer.empty?) None()
       else {
-        val result: T = contents.unsafeGet(head);
-        head = mod(head + 1, initialCapacity)
+        val result: T = contents.unsafeGet(head.get)
+        head.set(mod(head.get + 1, initialCapacity))
         Some(result)
       }
     }
     def write(el: T) = {
       if (buffer.full?) <> // raise(BufferOverflow())
 
-      contents.unsafeSet(tail, el)
-      tail = mod(tail + 1, initialCapacity)
+      contents.unsafeSet(tail.get, el)
+      tail.set(mod(tail.get + 1, initialCapacity))
     }
   }
   buffer
 }
 def refBuffer[T](): Buffer[T] at {global} = {
-  var content: Option[T] in global = None()
+  val content = ref(None())
   new Buffer[T] {
-    def capacity() = if (content.isEmpty) 1 else 0
-    def full?() = content.isDefined
-    def empty?() = isEmpty(content)
+    def capacity() = if (content.get.isEmpty) 1 else 0
+    def full?() = content.get.isDefined
+    def empty?() = isEmpty(content.get)
     def read() = {
-      val res = content
-      content = None()
+      val res = content.get
+      content.set(None())
       res
     }
-    def write(el: T) = content match {
+    def write(el: T) = content.get match {
       case Some(v) =>
         <> // do raise(BufferOverflow(), "Cannot read element from buffer")
       case None() =>
-        content = Some(el)
+        content.set(Some(el))
     }
   }
 }
@@ -88,24 +87,24 @@ def refBuffer[T](): Buffer[T] at {global} = {
 namespace examples {
   def main() = ignore[BufferOverflow] {
     // Buffer with capacity 1
-    def b = emptyBuffer[Int](1);
-    println(b.capacity);
-    println(b.full?);
+    def b = emptyBuffer[Int](1)
+    println(b.capacity)
+    println(b.full?)
 
-    b.write(17);
-    println(b.read());
+    b.write(17)
+    println(b.read())
 
     // buffer with capacity 3
-    def ringbuffer = emptyBuffer[Int](3);
-    ringbuffer.write(1);
-    ringbuffer.write(2);
-    println(ringbuffer.read());
-    ringbuffer.write(3);
-    println(ringbuffer.read());
-    println(ringbuffer.read());
-    ringbuffer.write(4);
-    ringbuffer.write(5);
-    println(ringbuffer.read());
-    println(ringbuffer.read());
+    def ringbuffer = emptyBuffer[Int](3)
+    ringbuffer.write(1)
+    ringbuffer.write(2)
+    println(ringbuffer.read())
+    ringbuffer.write(3)
+    println(ringbuffer.read())
+    println(ringbuffer.read())
+    ringbuffer.write(4)
+    ringbuffer.write(5)
+    println(ringbuffer.read())
+    println(ringbuffer.read())
   }
 }

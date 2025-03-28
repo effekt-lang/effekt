@@ -1,5 +1,6 @@
 import examples/benchmarks/runner
 
+import ref
 import array
 
 type Tree {
@@ -25,10 +26,10 @@ def withRandom[R]{ program: { Random } => R }: R = {
 }
 
 def run(n: Int) = {
-  var count in global = 0;
+  val count = ref(0);
 
   def buildTreeDepth(depth: Int) { rand: Random }: Tree = {
-    count = count + 1;
+    count.set(count.get + 1);
     if (depth == 1) {
       Leaf(allocate(mod(rand.next, 10) + 1))
     } else {
@@ -44,7 +45,7 @@ def run(n: Int) = {
     withRandom { { rand: Random } => buildTreeDepth(7) {rand}; () }
   }
 
-  count
+  count.get
 }
 
 def main() = benchmark(1){run}
