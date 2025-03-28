@@ -96,7 +96,7 @@ object builtins {
   )
 
   // captures which are allowed on the toplevel
-  val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, globalRegion.capture)
+  val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, GlobalCapability.capture)
 
   lazy val rootBindings: Bindings =
     Bindings(Map.empty, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
