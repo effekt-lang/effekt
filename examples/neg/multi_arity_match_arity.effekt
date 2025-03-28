@@ -1,0 +1,10 @@
+def foo[A, B, C](a: A, b: B){ fn: (A, B) => C }: C = {
+  fn(a, b)
+}
+
+def main() = {
+  foo(1, 2){
+    case _, _ => ()
+    case _, _, _ => () // ERROR Number of patterns
+  }
+}

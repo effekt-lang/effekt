@@ -1,0 +1,7 @@
+def foo[A, B](a: A){ body: A => B }: B = body(a)
+
+def main() = {
+  foo(true){ // ERROR Non-exhaustive
+    case false => ()
+  }
+}

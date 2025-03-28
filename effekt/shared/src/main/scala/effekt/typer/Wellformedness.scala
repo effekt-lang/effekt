@@ -161,12 +161,17 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
             pp"The return type ${tpe} of the region body is not allowed to refer to region ${reg.capture}."
         })
 
-    case tree @ source.Match(scrutinee, clauses, default) => Context.at(tree) {
+    case tree @ source.Match(scrutinees, clauses, default) => Context.at(tree) {
       // TODO copy annotations from default to synthesized defaultClause (in particular positions)
-      val defaultClause = default.toList.map(body => source.MatchClause(source.IgnorePattern(), Nil, body))
-      ExhaustivityChecker.checkExhaustive(scrutinee, clauses ++ defaultClause)
+      val defaultPattern = scrutinees match {
+        case List(_) => source.IgnorePattern()
+        case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern()})
+      }
 
-      query(scrutinee)
+      val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body))
+      ExhaustivityChecker.checkExhaustive(scrutinees, clauses ++ defaultClause)
+
+      scrutinees foreach { query }
       clauses foreach { query }
       default foreach query
 

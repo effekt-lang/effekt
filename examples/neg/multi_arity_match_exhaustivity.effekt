@@ -1,0 +1,9 @@
+def foo[A, B, C](a: A, b: B){ fn: (A, B) => C }: C = {
+  fn(a, b)
+}
+
+def main() = {
+  foo(1, false){ // ERROR Non-exhaustive
+    case _, true => ()
+  }
+}

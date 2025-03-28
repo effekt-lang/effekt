@@ -92,20 +92,28 @@ object ExhaustivityChecker {
 
   // Scrutinees are identified by tracing from the original scrutinee.
   enum Trace {
-    case Root(scrutinee: source.Term)
+    case Root(scrutinees: source.Term)
     case Child(c: Constructor, field: Field, outer: Trace)
   }
 
 
-  def preprocess(root: source.Term, cl: source.MatchClause)(using Context): Clause = cl match {
-    case source.MatchClause(pattern, guards, body) =>
+  def preprocess(roots: List[source.Term], cl: source.MatchClause)(using Context): Clause = (roots, cl) match {
+    case (List(root), source.MatchClause(pattern, guards, body)) =>
       Clause.normalized(Condition.Patterns(Map(Trace.Root(root) -> preprocessPattern(pattern))) :: guards.map(preprocessGuard), cl)
+    case (roots, source.MatchClause(MultiPattern(patterns), guards, body)) =>
+      val rootConds: Map[Trace, Pattern] = (roots zip patterns).map { case (root, pattern) =>
+        Trace.Root(root) -> preprocessPattern(pattern)
+      }.toMap
+      Clause.normalized(Condition.Patterns(rootConds) :: guards.map(preprocessGuard), cl)
+    case (_, _) => Context.abort("Malformed multi-match")
   }
   def preprocessPattern(p: source.MatchPattern)(using Context): Pattern = p match {
     case AnyPattern(id)  => Pattern.Any()
     case IgnorePattern() => Pattern.Any()
     case p @ TagPattern(id, patterns) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
     case LiteralPattern(lit) => Pattern.Literal(lit.value, lit.tpe)
+    case MultiPattern(patterns) =>
+      Context.panic("Multi-pattern should have been split in preprocess already / nested MultiPattern")
   }
   def preprocessGuard(g: source.MatchGuard)(using Context): Condition = g match {
     case MatchGuard.BooleanGuard(condition) =>
@@ -121,7 +129,7 @@ object ExhaustivityChecker {
    * - non exhaustive pattern match should generate a list of patterns, so the IDE can insert them
    * - redundant cases should generate a list of cases that can be deleted.
    */
-  class Exhaustivity(allClauses: List[source.MatchClause]) {
+  class Exhaustivity(allClauses: List[source.MatchClause], originalScrutinees: List[source.Term]) {
 
     // Redundancy Information
     // ----------------------
@@ -152,7 +160,8 @@ object ExhaustivityChecker {
     def reportNonExhaustive()(using C: ErrorReporter): Unit = {
       @tailrec
       def traceToCase(at: Trace, acc: String): String = at match {
-        case Trace.Root(_) => acc
+        case Trace.Root(_) if originalScrutinees.length == 1 => acc
+        case Trace.Root(e) => originalScrutinees.map { f => if e == f then acc else "_" }.mkString(", ")
         case Trace.Child(childCtor, field, outer) =>
           val newAcc = s"${childCtor.name}(${childCtor.fields.map { f => if f == field then acc else "_" }.mkString(", ")})"
           traceToCase(outer, newAcc)
@@ -191,13 +200,23 @@ object ExhaustivityChecker {
     }
   }
 
-  def checkExhaustive(scrutinee: source.Term, cls: List[source.MatchClause])(using C: Context): Unit = {
-    val initialClauses: List[Clause] = cls.map(preprocess(scrutinee, _))
-    given E: Exhaustivity = new Exhaustivity(cls)
-    checkScrutinee(Trace.Root(scrutinee), Context.inferredTypeOf(scrutinee), initialClauses)
+  def checkExhaustive(scrutinees: List[source.Term], cls: List[source.MatchClause])(using C: Context): Unit = {
+    val initialClauses: List[Clause] = cls.map(preprocess(scrutinees, _))
+    given E: Exhaustivity = new Exhaustivity(cls, scrutinees)
+    checkScrutinees(scrutinees.map(Trace.Root(_)), scrutinees.map{ scrutinee => Context.inferredTypeOf(scrutinee) }, initialClauses)
     E.report()
   }
 
+  def checkScrutinees(scrutinees: List[Trace], tpes: List[ValueType], clauses: List[Clause])(using E: Exhaustivity): Unit = {
+    (scrutinees, tpes) match {
+      case (List(scrutinee), List(tpe)) => checkScrutinee(scrutinee, tpe, clauses)
+      case _ =>
+        clauses match {
+          case Nil => E.missingDefault(tpes.head, scrutinees.head)
+          case head :: tail => matchClauses(head, tail)
+        }
+    }
+  }
 
   def checkScrutinee(scrutinee: Trace, tpe: ValueType, clauses: List[Clause])(using E: Exhaustivity): Unit = {
 

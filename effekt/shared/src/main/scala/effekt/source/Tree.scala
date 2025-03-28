@@ -382,7 +382,7 @@ enum Term extends Tree {
   // Control Flow
   case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
   case While(guards: List[MatchGuard], block: Stmt, default: Option[Stmt])
-  case Match(scrutinee: Term, clauses: List[MatchClause], default: Option[Stmt])
+  case Match(scrutinees: List[Term], clauses: List[MatchClause], default: Option[Stmt])
 
   /**
    * Handling effects
@@ -504,6 +504,15 @@ enum MatchPattern extends Tree {
    * A pattern that matches a single literal value
    */
   case LiteralPattern(l: Literal)
+
+  /**
+   * A pattern for multiple values
+   *
+   *   case a, b => ...
+   *
+   * Currently should *only* occur in lambda-cases during Parsing
+   */
+  case MultiPattern(patterns: List[MatchPattern]) extends MatchPattern
 }
 export MatchPattern.*
 

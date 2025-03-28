@@ -1,4 +1,4 @@
-[error] Expected type
+[error] examples/neg/lambdas/inference.effekt:13:8: Expected type
   (Int => Bool at {}) => String
 but got type
   (Int => Unit at {}) => String
@@ -8,6 +8,8 @@ Type mismatch between Bool and Unit.
     (Int => Unit at {}) => String (given)
     (Int => Bool at {}) => String (expected)
   when comparing the return type of the function.
+  hof2(fun(f: (Int) => Unit at {}) { "" })
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 [error] examples/neg/lambdas/inference.effekt:13:8: Expected type
   (Int => Bool at {}) => String at {}
 but got type
