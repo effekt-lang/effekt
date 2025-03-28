@@ -17,14 +17,19 @@ object Main {
       parseArgs(args)
     } catch {
       case e: ScallopException =>
-        System.err.println(e.getMessage())
+        System.err.println(e.getMessage)
         return
     }
 
     if (config.server()) {
-      Server.launch(config)
+      val serverConfig = ServerConfig(
+        debug = config.debug(),
+        debugPort = config.debugPort()
+      )
+      val server = new Server(config)
+      server.launch(serverConfig)
     } else if (config.repl()) {
-      new Repl(Server).run(config)
+      new Repl(new Driver {}).run(config)
     } else {
       compileFiles(config)
     }
@@ -43,8 +48,9 @@ object Main {
    * Compile files specified in the configuration.
    */
   private def compileFiles(config: EffektConfig): Unit = {
+    val driver = new Driver {}
     for (filename <- config.filenames()) {
-      Server.compileFile(filename, config)
+      driver.compileFile(filename, config)
     }
   }
 }
