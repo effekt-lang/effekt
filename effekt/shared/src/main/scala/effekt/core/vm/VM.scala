@@ -331,11 +331,6 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
         // TODO make the type of Region more precise...
         case Stmt.Region(_) => ???
 
-        case Stmt.Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
-          val value = eval(init, env)
-          val address = freshAddress()
-          State.Step(body, env.bind(id, Computation.Reference(address)), stack, heap.updated(address, value))
-
         case Stmt.Alloc(id, init, region, body) =>
           val value = eval(init, env)
 

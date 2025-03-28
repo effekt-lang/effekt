@@ -70,12 +70,7 @@ object TransformerCps extends Transformer {
         val jsDecls   = module.declarations.flatMap(toJS)
         val stmts     = module.definitions.map(toJS)
 
-        val state = js.Const(
-          nameDef(symbols.builtins.globalRegion),
-          js.Variable(JSName("global"))
-        ) :: Nil
-
-        js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ state ++ stmts)
+        js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ stmts)
     }
 
   def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =

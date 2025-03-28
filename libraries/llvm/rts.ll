@@ -678,14 +678,7 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 ; RTS initialization
 
 define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
-    %rest = call %Stack @underflowStack(%Stack %stack)
-    ; rest holds global variables
-    call void @resume_Pos(%Stack %rest, %Pos %val)
-    ret void
-}
-
-define private tailcc void @globalsReturn(%Pos %val, %Stack %stack) {
-    %rest = call %Stack @underflowStack(%Stack %stack)
+    call %Stack @underflowStack(%Stack %stack)
     ret void
 }
 
@@ -699,29 +692,8 @@ define private void @topLevelEraser(%Environment %environment) {
     ret void
 }
 
-@global = private global { i64, %Stack } { i64 0, %Stack null }
-
 define private %Stack @withEmptyStack() {
-    %globals = call %Stack @reset(%Stack null)
-
-    %globalsStackPointer_pointer = getelementptr %StackValue, %Stack %globals, i64 0, i32 1
-    %globalsStackPointer = load %StackPointer, ptr %globalsStackPointer_pointer, !alias.scope !11, !noalias !21
-
-    %returnAddressPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 0
-    %sharerPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 1
-    %eraserPointer.0 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 0, i32 2
-
-    store ptr @globalsReturn, ptr %returnAddressPointer.0, !alias.scope !12, !noalias !22
-    store ptr @topLevelSharer, ptr %sharerPointer.0, !alias.scope !12, !noalias !22
-    store ptr @topLevelEraser, ptr %eraserPointer.0, !alias.scope !12, !noalias !22
-
-    %globalsStackPointer_2 = getelementptr %FrameHeader, %StackPointer %globalsStackPointer, i64 1
-    store %StackPointer %globalsStackPointer_2, ptr %globalsStackPointer_pointer, !alias.scope !11, !noalias !21
-
-    %stack = call %Stack @reset(%Stack %globals)
-
-    %globalStack = getelementptr %PromptValue, %Prompt @global, i64 0, i32 1
-    store %Stack %stack, ptr %globalStack, !alias.scope !13, !noalias !23
+    %stack = call %Stack @reset(%Stack null)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPointer = load %StackPointer, ptr %stackStackPointer, !alias.scope !11, !noalias !21

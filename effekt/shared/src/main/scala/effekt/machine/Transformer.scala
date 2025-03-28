@@ -37,8 +37,11 @@ object Transformer {
         Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body))
       case core.Toplevel.Val(id, tpe, binding) =>
         Definition(BC.globals(id), transform(binding))
+      case core.Toplevel.Def(id, block @ core.New(impl)) =>
+        val variable = Variable(freshName("returned"), transform(block.tpe))
+        Definition(BC.globals(id), New(variable, transform(impl), Return(List(variable))))
       case d =>
-        ErrorReporter.abort(s"Toplevel object definitions not yet supported: ${d}")
+        ErrorReporter.abort(s"Other toplevel definitions not yet supported: ${d}")
     }
 
     val localDefinitions = BC.definitions
@@ -89,9 +92,7 @@ object Transformer {
 
           // Regions are blocks and can be free, but do not have info.
           case core.Variable.Block(id, core.Type.TRegion, capt) =>
-            if id == symbols.builtins.globalRegion
-            then Set.empty
-            else Set(Variable(transform(id), Type.Prompt()))
+            Set(Variable(transform(id), Type.Prompt()))
 
           case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
@@ -120,13 +121,16 @@ object Transformer {
         noteParameter(id, block.tpe)
         New(Variable(transform(id), transform(impl.interface)), transform(impl), transform(rest))
 
-      case core.Def(id, block @ core.BlockVar(alias, tpe, _), rest) =>
-        getDefinition(alias) match {
+      case core.Def(id, core.BlockVar(other, tpe, capt), rest) =>
+        getBlockInfo(other) match {
           case BlockInfo.Definition(free, params) =>
             noteDefinition(id, free, params)
+            emitDefinition(transformLabel(id), Jump(transformLabel(other)))
+            transform(rest)
+          case BlockInfo.Parameter(_) =>
+            noteParameter(id, tpe)
+            Substitute(List(Variable(transform(id), transform(tpe)) -> Variable(transform(other), transform(tpe))), transform(rest))
         }
-        emitDefinition(transformLabel(id), Jump(transformLabel(alias)))
-        transform(rest)
 
       case core.Def(id, block @ core.Unbox(pure), rest) =>
         noteParameter(id, block.tpe)
@@ -190,6 +194,10 @@ object Transformer {
         val opTag = DeclarationContext.getPropertyTag(method)
         transform(vargs, bargs).run { (values, blocks) =>
           callee match {
+            case Block.BlockVar(id, tpe, capt) if BPC.globals contains id =>
+              val variable = Variable(freshName("receiver"), transform(tpe))
+              PushFrame(Clause(List(variable), Invoke(variable, opTag, values ++ blocks)), Jump(BPC.globals(id)))
+
             case Block.BlockVar(id, tpe, capt) =>
               Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
 
@@ -246,6 +254,8 @@ object Transformer {
         Resume(Variable(transform(k.id), Type.Stack()), transform(body))
 
       case core.Region(core.BlockLit(tparams, cparams, vparams, List(region), body)) =>
+        noteParameters(List(region))
+
         val variable = Variable(freshName("returned"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val prompt = transform(region)
@@ -254,24 +264,13 @@ object Transformer {
 
       case core.Alloc(id, init, region, body) =>
         transform(init).run { value =>
-          val tpe = value.tpe;
-          val name = transform(id)
-          val variable = Variable(name, tpe)
-          val reference = Variable(transform(id), Type.Reference(tpe))
+          val reference = Variable(transform(id), Type.Reference(value.tpe))
           val prompt = Variable(transform(region), Type.Prompt())
           val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
-          region match {
-            case symbols.builtins.globalRegion =>
-              val globalPrompt = Variable("global", Type.Prompt())
-              Shift(temporary, globalPrompt,
-                Var(reference, value, Type.Positive(),
-                  Resume(temporary, transform(body))))
-            case _ =>
-              Shift(temporary, prompt,
-                Var(reference, value, Type.Positive(),
-                  Resume(temporary, transform(body))))
-          }
+          Shift(temporary, prompt,
+            Var(reference, value, Type.Positive(),
+              Resume(temporary, transform(body))))
         }
 
       case core.Var(ref, init, capture, body) =>
@@ -314,6 +313,11 @@ object Transformer {
     } yield (values, blocks)
 
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+    case core.BlockVar(id, tpe, _) if BPC.globals contains id =>
+      val variable = Variable(transform(id), transform(tpe))
+      Binding { k =>
+        PushFrame(Clause(List(variable), k(variable)), Jump(BPC.globals(id)))
+      }
     case core.BlockVar(id, tpe, capt) => getBlockInfo(id) match {
       case BlockInfo.Definition(_, parameters) =>
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
@@ -488,8 +492,9 @@ object Transformer {
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
 
-  def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getDefinition(id) match {
+  def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getBlockInfo(id) match {
     case BlockInfo.Definition(freeParams, boundParams) => Label(transform(id), boundParams ++ freeParams)
+    case BlockInfo.Parameter(_) => sys error s"Expected a function definition, but got a block parameter: ${id}"
   }
 
   def transform(id: Id): String =
@@ -512,6 +517,9 @@ object Transformer {
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
       case Toplevel.Val(id, tpe, binding) =>
+        noteDefinition(id, Nil, Nil)
+        noteGlobal(id)
+      case Toplevel.Def(id, core.New(impl)) =>
         noteDefinition(id, Nil, Nil)
         noteGlobal(id)
       case other => ()
@@ -555,11 +563,6 @@ object Transformer {
 
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
     BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
-
-  def getDefinition(id: Id)(using BPC: BlocksParamsContext): BlockInfo.Definition = getBlockInfo(id) match {
-    case d : BlockInfo.Definition => d
-    case BlockInfo.Parameter(tpe) => sys error s"Expected a function getDefinition, but got a block parameter: ${id}"
-  }
 
   case class Binding[A](run: (A => Statement) => Statement) {
     def flatMap[B](rest: A => Binding[B]): Binding[B] = {

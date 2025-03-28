@@ -55,28 +55,23 @@ class LLVMTests extends EffektTests {
 
   override lazy val withoutOptimizations: List[File] = List(
     // contifying under reset
-    //examplesDir / "pos" / "issue842.effekt",
-    //examplesDir / "pos" / "issue861.effekt",
+    examplesDir / "pos" / "issue842.effekt",
+    examplesDir / "pos" / "issue861.effekt",
+
+    examplesDir / "pos" / "capture" / "regions.effekt",
+    examplesDir / "pos" / "capture" / "selfregion.effekt",
+    examplesDir / "benchmarks" / "other" / "generator.effekt",
+    examplesDir / "pos" / "bidirectional" / "typeparametric.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
+    examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
 
     // top-level object definition
-    //examplesDir / "pos" / "object" / "if_control_effect.effekt",
-    //examplesDir / "pos" / "lambdas" / "toplevel_objects.effekt",
-    //examplesDir / "pos" / "type_omission_op.effekt",
-    //examplesDir / "pos" / "bidirectional" / "higherorderobject.effekt",
-    //examplesDir / "pos" / "bidirectional" / "res_obj_boxed.effekt",
-    //examplesDir / "pos" / "bidirectional" / "effectfulobject.effekt",
-
-    // no block info
-    //examplesDir / "pos" / "capture" / "regions.effekt",
-    //examplesDir / "pos" / "capture" / "selfregion.effekt",
-    //examplesDir / "benchmarks" / "other" / "generator.effekt",
-
-    // hole
-    //examplesDir / "pos" / "bidirectional" / "typeparametric.effekt",
-
-    // segfault
-    //examplesDir / "benchmarks" / "are_we_fast_yet" / "permute.effekt",
-    //examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
+    examplesDir / "pos" / "object" / "if_control_effect.effekt",
+    examplesDir / "pos" / "lambdas" / "toplevel_objects.effekt",
+    examplesDir / "pos" / "type_omission_op.effekt",
+    examplesDir / "pos" / "bidirectional" / "higherorderobject.effekt",
+    examplesDir / "pos" / "bidirectional" / "res_obj_boxed.effekt",
+    examplesDir / "pos" / "bidirectional" / "effectfulobject.effekt",
   )
 
   override lazy val ignored: List[File] = missingFeatures ++ noValgrind(examplesDir)

@@ -357,8 +357,8 @@ class VMTests extends munit.FunSuite {
       poppedFrames = 8661,
       allocations = 0,
       closures = 0,
-      variableReads = 32437,
-      variableWrites = 13699,
+      variableReads = 23776,
+      variableWrites = 5039,
       resets = 0,
       shifts = 0,
       resumes = 0
@@ -373,8 +373,8 @@ class VMTests extends munit.FunSuite {
       poppedFrames = 5462,
       allocations = 5461,
       closures = 0,
-      variableReads = 13654,
-      variableWrites = 9557,
+      variableReads = 8192,
+      variableWrites = 4096,
       resets = 0,
       shifts = 0,
       resumes = 0

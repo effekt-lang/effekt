@@ -25,82 +25,82 @@ def emptyQueue[T](): Queue[T] at {global} =
 
 def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
 
-  var contents in global = array[Option[T]](initialCapacity, None())
-  var head in global = 0
-  var tail in global = 0
-  var size in global = 0
-  var capacity in global = initialCapacity
+  val contents = ref(array[Option[T]](initialCapacity, None()))
+  val head = ref(0)
+  val tail = ref(0)
+  val size = ref(0)
+  val capacity = ref(initialCapacity)
 
   def remove(arr: Array[Option[T]], index: Int): Option[T] = {
-    with on[OutOfBounds].default { None() };
-    val value = arr.get(index);
-    arr.set(index, None());
+    with on[OutOfBounds].default { None() }
+    val value = arr.get(index)
+    arr.set(index, None())
     value
   }
 
   def nonEmpty[T] { p: => Option[T] / Exception[OutOfBounds] }: Option[T] =
-    if (size <= 0) None() else on[OutOfBounds].default { None() } { p() }
+    if (size.get <= 0) None() else on[OutOfBounds].default { None() } { p() }
 
   // Exponential back-off
   def resizeTo(requiredSize: Int): Unit =
-    if (requiredSize <= capacity) () else {
+    if (requiredSize <= capacity.get) () else {
       with on[OutOfBounds].ignore // should not happen
 
-      val oldSize = capacity
-      val newSize = capacity * 2
-      val oldContents = contents
+      val oldSize = capacity.get
+      val newSize = capacity.get * 2
+      val oldContents = contents.get
       val newContents = array::allocate[Option[T]](newSize)
 
-      if (head < tail) {
+      if (head.get < tail.get) {
         // The queue does not wrap around; direct copy is possible.
-        copy(oldContents, head, newContents, 0, size) // changed tail to size
-      } else if (size > 0) {
+        copy(oldContents, head.get, newContents, 0, size.get) // changed tail to size
+      } else if (size.get > 0) {
         // The queue wraps around; copy in two segments.
-        copy(oldContents, head, newContents, 0, oldSize - head) // changed oldSize to oldSize - head
-        copy(oldContents, 0, newContents, oldSize - head, tail) // changed oldSize - head to oldSize - head
+        copy(oldContents, head.get, newContents, 0, oldSize - head.get) // changed oldSize to oldSize - head
+        copy(oldContents, 0, newContents, oldSize - head.get, tail.get) // changed oldSize - head to oldSize - head
       }
 
-      contents = newContents
-      capacity = newSize
-      head = 0
-      tail = oldSize
+      contents.set(newContents)
+      capacity.set(newSize)
+      head.set(0)
+      tail.set(oldSize)
     }
 
   def queue = new Queue[T] {
-    def empty?() = size <= 0
+    def empty?() = size.get <= 0
 
     def popFront() =
       nonEmpty {
-        val result = contents.remove(head)
-        head = mod(head + 1, capacity)
-        size = size - 1
+        val result = contents.get.remove(head.get)
+        head.set(mod(head.get + 1, capacity.get))
+        size.set(size.get - 1)
         result
       }
 
     def popBack() =
       nonEmpty {
-        tail = mod(tail - 1 + capacity, capacity)
-        val result = contents.remove(tail)
-        size = size - 1
+        tail.set(mod(tail.get - 1 + capacity.get, capacity.get))
+        val result = contents.get.remove(tail.get)
+        size.set(size.get - 1)
         result
       }
 
-    def peekFront() = nonEmpty { contents.get(head) }
+    def peekFront() = nonEmpty { contents.get.get(head.get) }
 
-    def peekBack() = nonEmpty { contents.get(tail) }
+    def peekBack() = nonEmpty { contents.get.get(tail.get) }
 
     def pushFront(el: T) = {
-      resizeTo(size + 1);
-      head = mod(head - 1 + capacity, capacity);
-      size = size + 1;
-      contents.unsafeSet(head, Some(el))
+      resizeTo(size.get + 1)
+      head.set(mod(head.get - 1 + capacity.get, capacity.get))
+      size.set(size.get + 1)
+      contents.get.unsafeSet(head.get, Some(el))
     }
 
     def pushBack(el: T) = {
-      resizeTo(size + 1);
-      contents.unsafeSet(tail, Some(el));
-      size = size + 1;
-      tail = mod(tail + 1, capacity)
+      resizeTo(size.get + 1)
+      contents.get.unsafeSet(tail.get, Some(el))
+      size.set(size.get + 1)
+      tail.set(mod(tail.get + 1, capacity.get))
     }
   }
   queue
@@ -109,30 +109,30 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at {global} = {
 namespace examples {
   def main() = {
     // queue with initial capacity 4
-    def b = emptyQueue[Int](4);
-    println(b.empty?);
-    b.pushFront(1);
-    b.pushBack(2);
-    b.pushFront(3);
-    b.pushBack(4);
+    def b = emptyQueue[Int](4)
+    println(b.empty?)
+    b.pushFront(1)
+    b.pushBack(2)
+    b.pushFront(3)
+    b.pushBack(4)
     // this will cause resizing:
-    b.pushBack(5);
-    b.pushBack(6);
-    b.pushBack(7);
-    b.pushBack(8);
+    b.pushBack(5)
+    b.pushBack(6)
+    b.pushBack(7)
+    b.pushBack(8)
     // and again:
-    b.pushBack(9);
+    b.pushBack(9)
 
-    println(b.empty?);
-    println(b.popFront()); // Some(3)
-    println(b.popFront()); // Some(1)
-    println(b.popFront()); // Some(2)
-    println(b.popFront()); // Some(4)
-    println(b.popFront()); // Some(5)
-    println(b.popFront()); // Some(6)
-    println(b.popFront()); // Some(7)
-    println(b.popFront()); // Some(8)
-    println(b.popFront()); // Some(9)
-    println(b.popFront()); // None()
+    println(b.empty?)
+    println(b.popFront()) // Some(3)
+    println(b.popFront()) // Some(1)
+    println(b.popFront()) // Some(2)
+    println(b.popFront()) // Some(4)
+    println(b.popFront()) // Some(5)
+    println(b.popFront()) // Some(6)
+    println(b.popFront()) // Some(7)
+    println(b.popFront()) // Some(8)
+    println(b.popFront()) // Some(9)
+    println(b.popFront()) // None()
   }
 }

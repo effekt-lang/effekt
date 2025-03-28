@@ -40,16 +40,6 @@ function Arena() {
   return s
 }
 
-const global = {
-  fresh: (v) => {
-    const r = {
-      value: v,
-      set: (v) => { r.value = v }
-    };
-    return r
-  }
-}
-
 function snapshot(s) {
   const snap = { store: s, root: s.root, generation: s.generation }
   s.generation = s.generation + 1
