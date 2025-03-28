@@ -321,7 +321,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   Context.bind(checkPattern(tpe, p))
                 }
               case p =>
-                val List(Result(tpe, effs)) = results
+                val Result(tpe, effs) = results.head
                 Context.bind(checkPattern(tpe, p))
             }
             // infer types for guards
