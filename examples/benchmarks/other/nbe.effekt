@@ -1,0 +1,156 @@
+/// Demo of an effectful Normalization by Evaluation (NbE) implementation for the pure, untyped lambda calculus.
+/// Uses the Call-by-Value reduction order, same as host.
+
+import io
+import map
+import test
+import stream
+import process
+import stringbuffer
+
+type Name = Int
+
+effect fresh(): Name
+effect lookup(n: Name): Int
+
+/// lambda term
+type Term {
+  Abs(n: Name, t: Term)
+  App(a: Term, b: Term)
+  Var(n: Name)
+}
+
+/// lambda term in normal domain
+type Value {
+  VNeu(neu: Neutral)
+  VClo(n: Name, t: Term, env: Map[Name, Value])
+}
+
+/// lambda term in neutral domain (not yet reducible)
+type Neutral {
+  NVar(n: Name)
+  NApp(a: Neutral, b: Value)
+}
+
+/// evaluate a single term without going into abstractions
+def eval(env: Map[Name, Value], t: Term): Value = t match {
+  case Abs(n, t) => VClo(n, t, env)
+  case App(a, b) => apply(eval(env, a), eval(env, b))
+  case Var(n)    => env.getOrElse(n) { VNeu(NVar(n)) }
+}
+
+/// apply terms in their normal domain
+/// this does the actual substitution via lookup handling (or bubbling up respectively)
+def apply(a: Value, b: Value): Value = a match {
+  case VNeu(neu)       => VNeu(NApp(neu, b))
+  case VClo(n, t, env) => eval(env.put(n, b), t)
+}
+
+/// reflect variable name to the neutral domain
+def reflect(n: Name): Value = VNeu(NVar(n))
+
+/// convert terms to their normal form (in term domain)
+def reify(v: Value): Term / fresh = v match {
+  case VNeu(NVar(n)) => Var(n)
+  case VNeu(NApp(a, b)) => App(reify(VNeu(a)), reify(b))
+  case _ => {
+    val n = do fresh()
+    Abs(n, reify(apply(v, reflect(n))))
+  }
+}
+
+/// strong normalization of the term
+def normalize(t: Term): Term = {
+  var i = 0
+  try reify(eval(empty[Name, Value](compareInt), t))
+  with fresh { i = i + 1; resume(i) }
+}
+
+/// parse named term from BLC stream (de Bruijn)
+def parse(): Term / { read[Bool], stop } = {
+  def go(): Term / { fresh, lookup } =
+    (do read[Bool](), do read[Bool]) match {
+      case (false, false) => {
+        val n = do fresh()
+        Abs(n, try go() with lookup { i =>
+          resume(if (i == 0) n else do lookup(i - 1))
+        })
+      }
+      case (false, true ) => App(go(), go())
+      case (true , false) => Var(do lookup(0))
+      case (true , true ) => {
+        var i = 1
+        while (do read[Bool]()) i = i + 1
+        Var(do lookup(i))
+      }
+    }
+
+  var i = 0
+  try go()
+  with fresh { i = i + 1; resume(i) }
+  with lookup { n =>
+    println("error: free variable " ++ n.show)
+    exit(1)
+  }
+}
+
+/// helper function for pretty string interpolation of terms
+def pretty { s: () => Unit / { literal, splice[Term] } }: String = {
+  with stringBuffer
+
+  try { s(); do flush() }
+  with literal { l => resume(do write(l)) }
+  with splice[Term] { t =>
+    t match {
+      case Abs(n, t) => do write("λ" ++ n.show ++ pretty".${t}")
+      case App(a, b) => do write(pretty"(${a} ${b})")
+      case Var(v)    => do write(v.show)
+    }
+    resume(())
+  }
+}
+
+/// convert char stream to bit stream, skipping non-bit chars
+def bits { p: () => Unit / { read[Bool], stop } }: Unit / read[Char] =
+  try exhaustively { p() }
+  with read[Bool] {
+    with exhaustively
+    val c = do read[Char]()
+    if (c == '0') resume { false }
+    if (c == '1') resume { true  }
+  }
+
+/// evaluate the input BLC string and compare it to its prettified normal form
+def normalizes?(input: String, normal: String) = {
+  with feed(input)
+  with bits
+  assert(pretty"${normalize(parse())}", normal)
+}
+
+def main() = mainSuite("Lambda NbE") {
+  test("S ~> S") {
+    val t = "00000001011110100111010"
+    normalizes?(t, "λ1.λ2.λ3.((1 3) (2 3))")
+  }
+
+  test("(ι (ι (ι (ι ι)))) ~> S") {
+    val t = "010001011000000001011110100111010000011001000101100000000101111010011101000001100100010110000000010111101001110100000110010001011000000001011110100111010000011000010110000000010111101001110100000110"
+    normalizes?(t, "λ1.λ2.λ3.((1 3) (2 3))")
+  }
+
+  test("(2^3)%3 == 2 // using Church numerals") {
+    val t = "010101000000010101100000011100001011100000011100101111011010100100000110110000010000101011110111100101011100000000111100001011110101100010000001101100101011100000110001000100000011100111010000001110011100111010000001110011100111010"
+    normalizes?(t, "λ1.λ2.(1 (1 2))")
+  }
+
+  // TODO: is there an off-by-one in the string buffer?
+  test("5! == 120 // using Church numerals") {
+    val t = "010000010101110000001100111000000101111011001110100011000100000011100111001110011100111010"
+    normalizes?(t, "λ1.λ2.(1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 (1 2))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))")
+  }
+
+  test("(prime? 7) == true // using Church numerals and Wilson's Theorem") {
+    val t = "010001000101100000001000001100101000000000101011111001000001101100000110010111110000101011111000000001011001111001111111011011000110110001100000100100000001110010111101101001000001010111000000110011100000010111101100111010001100010010000000101000001101100010010111100001000001101100110111000110101000000111001110011100111001110011100111010"
+    normalizes?(t, "λ1.λ2.1")
+  }
+}
