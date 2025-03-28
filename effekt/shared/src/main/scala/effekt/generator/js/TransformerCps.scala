@@ -381,10 +381,7 @@ object TransformerCps extends Transformer {
 
     // DEALLOC(ref); body
     case cps.Stmt.Dealloc(ref, body) =>
-      Binding { k =>
-        js.ExprStmt(js.Call(DEALLOC, nameRef(ref))) ::
-          toJS(body).run(k)
-      }
+      toJS(body)
 
     // const id = ref.value; body
     case cps.Stmt.Get(ref, id, body) =>
@@ -393,9 +390,9 @@ object TransformerCps extends Transformer {
           toJS(body).run(k)
       }
 
-    // ref.value = _value; body
+    // ref.set(value); body
     case cps.Stmt.Put(ref, value, body) => Binding { k =>
-      js.Assign(js.Member(nameRef(ref), JSName("value")), toJS(value)) ::
+      js.ExprStmt(js.MethodCall(nameRef(ref), JSName("set"), toJS(value))) ::
         toJS(body).run(k)
     }
 
