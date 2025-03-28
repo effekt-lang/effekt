@@ -618,7 +618,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       bindings
     case source.MultiPattern(patterns) =>
-      Context.panic("Multi-pattern should have been desugared in Parser")
+      Context.panic("Multi-pattern should have been split at the match and not occur nested.")
   } match { case res => Context.annotateInferredType(pattern, sc); res }
 
   def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {
