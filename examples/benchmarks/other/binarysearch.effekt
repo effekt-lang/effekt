@@ -1,0 +1,49 @@
+module binarysearch
+
+// Effectful binary search
+// ... inspired by Jules Jacobs https://julesjacobs.com/notes/binarysearch/binarysearch.pdf
+// ... ... and Brent Yorgey https://byorgey.wordpress.com/2023/01/01/competitive-programming-in-haskell-better-binary-search/
+
+effect breakWith[A](value: A): Nothing
+effect mid[A](l: A, r: A): A / breakWith[(A, A)]
+
+def break2[A, B](x: A, y: B) = 
+  do breakWith((x, y))
+def boundary[A] { prog: => A / breakWith[A] }: A =
+  try prog() with breakWith[A] { a => a }
+
+def search[A](l: A, r: A) { predicate: A => Bool }: (A, A) / mid[A] = boundary[(A, A)] {
+  def go(l: A, r: A): (A, A) = {
+    val m = do mid(l, r)
+    if (predicate(m)) { 
+      go(l, m)
+    } else { 
+      go(m, r)
+    }
+  }
+  go(l, r)
+}
+
+def binary[R] { prog: => R / mid[Int] }: R =
+  try prog() with mid[Int] { (l, r) => 
+    resume {
+      if ((r - l) > 1) {
+        (l + r) / 2
+      } else {
+        break2(l, r)
+      }
+    }
+  }
+
+def main() = binary {
+  def findSqrtUpTo(pow2: Int, max: Int) = {
+    val (l, r) = search(0, max) { x => x * x >= pow2 }
+    println("sqrt of " ++ pow2.show ++ " is between: ")
+    println(l.show ++ " (^2 = " ++ (l * l).show ++ ")")
+    println(r.show ++ " (^2 = " ++ (r * r).show ++ ")")
+  }
+
+  // Uncomment the one easy call below to get much better JS/Core codegen:
+  150.findSqrtUpTo(100)
+  9876543210123.findSqrtUpTo(900000000000000) // NOTE: A much smaller number than 9e14 would work here too.
+}
