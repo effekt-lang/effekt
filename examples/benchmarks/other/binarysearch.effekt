@@ -38,7 +38,7 @@ def binary[R] { prog: => R / mid[Int] }: R =
 def main() = binary {
   def findSqrtUpTo(pow2: Int, max: Int) = {
     val (l, r) = search(0, max) { x => x * x >= pow2 }
-    println("sqrt of " ++ pow2.show ++ " is between: ")
+    println("sqrt of " ++ pow2.show ++ " is between:")
     println(l.show ++ " (^2 = " ++ (l * l).show ++ ")")
     println(r.show ++ " (^2 = " ++ (r * r).show ++ ")")
   }
