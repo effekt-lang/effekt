@@ -125,6 +125,12 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("fun() { foo(()) }")
 
     parseExpr("10.seconds")
+
+    parseExpr("[1,2,3]")
+    parseExpr("[3,2,1,]")
+    parseExpr("[]")
+    parseExpr("[,]")
+    intercept[Throwable] { parseExpr("[,1]") }
   }
 
   test("Boxing") {
