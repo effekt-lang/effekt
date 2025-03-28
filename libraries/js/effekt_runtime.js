@@ -107,8 +107,6 @@ function RESET(prog, ks, k) {
   return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
 }
 
-function DEALLOC(ks) {}
-
 function SHIFT(p, body, ks, k) {
 
   // TODO avoid constructing this object
