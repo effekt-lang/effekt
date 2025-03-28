@@ -1,10 +1,7 @@
 package effekt
 package core
 
-import effekt.context.Context
 import effekt.core.substitutions.Substitution
-import effekt.symbols.TmpValue
-import effekt.symbols.TypeVar.TypeParam
 
 import scala.collection.mutable
 
