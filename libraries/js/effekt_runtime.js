@@ -1,69 +1,89 @@
+// Complexity of state:
+//
+//  get: O(1)
+//  set: O(1)
+//  capture: O(1)
+//  restore: O(|write operations since capture|)
+const Mem = null
 
-// Common Runtime
-// --------------
-function Cell(init, region) {
-  const cell = {
-    value: init,
-    backup: function() {
-      const _backup = cell.value;
-      // restore function (has a STRONG reference to `this`)
-      return () => { cell.value = _backup; return cell }
-    }
-  }
-  return cell;
+function Arena() {
+  const s = {
+    root: { value: Mem },
+    generation: 0,
+    fresh: (v) => {
+      const r = {
+        value: v,
+        generation: s.generation,
+        store: s,
+        set: (v) => {
+          const s = r.store
+          const r_gen = r.generation
+          const s_gen = s.generation
+
+          if (r_gen == s_gen) {
+            r.value = v;
+          } else {
+            const root = { value: Mem }
+            // update store
+            s.root.value = { ref: r, value: r.value, generation: r_gen, root: root }
+            s.root = root
+            r.value = v
+            r.generation = s_gen
+          }
+        }
+      };
+      return r
+    },
+    // not implemented
+    newRegion: () => s
+  };
+  return s
 }
 
 const global = {
-  fresh: Cell
-}
-
-function Arena(_region) {
-  const region = _region;
-  return {
-    fresh: function(init) {
-      const cell = Cell(init);
-      // region keeps track what to backup, but we do not need to backup unreachable cells
-      region.push(cell) // new WeakRef(cell))
-      return cell;
-    },
-    region: _region,
-    newRegion: function() {
-      // a region aggregates weak references
-      const nested = Arena([])
-      // this doesn't work yet, since Arena.backup doesn't return a thunk
-      region.push(nested) //new WeakRef(nested))
-      return nested;
-    },
-    backup: function() {
-      const _backup = []
-      let nextIndex = 0;
-      for (const ref of region) {
-        const cell = ref //.deref()
-        // only backup live cells
-        if (cell) {
-          _backup[nextIndex] = cell.backup()
-          nextIndex++
-        }
-      }
-      function restore() {
-        const region = []
-        let nextIndex = 0;
-        for (const restoreCell of _backup) {
-          region[nextIndex] = restoreCell() // new WeakRef(restoreCell())
-          nextIndex++
-        }
-        return Arena(region)
-      }
-      return restore;
-    }
+  fresh: (v) => {
+    const r = {
+      value: v,
+      set: (v) => { r.value = v }
+    };
+    return r
   }
 }
 
+function snapshot(s) {
+  const snap = { store: s, root: s.root, generation: s.generation }
+  s.generation = s.generation + 1
+  return snap
+}
 
+function reroot(n) {
+  if (n.value === Mem) return;
+
+  const diff = n.value
+  const r = diff.ref
+  const v = diff.value
+  const g = diff.generation
+  const n2 = diff.root
+  reroot(n2)
+  n.value = Mem
+  n2.value = { ref: r, value: r.value, generation: r.generation, root: n}
+  r.value = v
+  r.generation = g
+}
+
+function restore(store, snap) {
+  // linear in the number of modifications...
+  reroot(snap.root)
+  store.root = snap.root
+  store.generation = snap.generation + 1
+}
+
+// Common Runtime
+// --------------
 let _prompt = 1;
 
 const TOPLEVEL_K = (x, ks) => { throw { computationIsDone: true, result: x } }
-const TOPLEVEL_KS = { prompt: 0, arena: Arena([]), rest: null }
+const TOPLEVEL_KS = { prompt: 0, arena: Arena(), rest: null }
 
 function THUNK(f) {
   f.thunk = true
@@ -80,9 +100,6 @@ function CAPTURE(body) {
 
 const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
 
-// const r = ks.arena.newRegion(); body
-// const x = r.alloc(init); body
-
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {
   const prompt = _prompt++;
@@ -90,12 +107,7 @@ function RESET(prog, ks, k) {
   return prog(prompt, { prompt, arena: Arena([]), rest }, RETURN)
 }
 
-function DEALLOC(ks) {
-  const arena = ks.arena
-  if (!!arena) {
-    arena.length = arena.length - 1
-  }
-}
+function DEALLOC(ks) {}
 
 function SHIFT(p, body, ks, k) {
 
@@ -104,13 +116,15 @@ function SHIFT(p, body, ks, k) {
   let cont = null
 
   while (!!meta && meta.prompt !== p) {
-    cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
+    let store = meta.arena
+    cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
     meta = meta.rest
   }
   if (!meta) { throw `Prompt not found ${p}` }
 
   // package the prompt itself
-  cont = { stack: meta.stack, prompt: meta.prompt, backup: meta.arena.backup(), rest: cont }
+  let store = meta.arena
+  cont = { stack: meta.stack, prompt: meta.prompt, arena: store, backup: snapshot(store), rest: cont }
   meta = meta.rest
 
   const k1 = meta.stack
@@ -123,7 +137,8 @@ function RESUME(cont, c, ks, k) {
   let meta = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
   let toRewind = cont
   while (!!toRewind) {
-    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.backup(), rest: meta }
+    restore(toRewind.arena, toRewind.backup)
+    meta = { stack: toRewind.stack, prompt: toRewind.prompt, arena: toRewind.arena, rest: meta }
     toRewind = toRewind.rest
   }
 

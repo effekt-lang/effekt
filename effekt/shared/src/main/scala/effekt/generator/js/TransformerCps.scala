@@ -393,9 +393,9 @@ object TransformerCps extends Transformer {
           toJS(body).run(k)
       }
 
-    // ref.value = _value; body
+    // ref.set(value); body
     case cps.Stmt.Put(ref, value, body) => Binding { k =>
-      js.Assign(js.Member(nameRef(ref), JSName("value")), toJS(value)) ::
+      js.ExprStmt(js.MethodCall(nameRef(ref), JSName("set"), toJS(value))) ::
         toJS(body).run(k)
     }
 
