@@ -204,10 +204,10 @@ object Normalizer { normal =>
       }
 
     case Stmt.Match(scrutinee, clauses, default) => active(scrutinee) match {
-      case Pure.Make(data, tag, vargs) if clauses.exists { case (id, _) => id == tag } =>
+      case Pure.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
-        normalize(reduce(clause, Nil, vargs.map(normalize), Nil))
-      case Pure.Make(data, tag, vargs) if default.isDefined =>
+        normalize(reduce(clause, targs, vargs.map(normalize), Nil))
+      case Pure.Make(data, tag, targs, vargs) if default.isDefined =>
         normalize(default.get)
       case _ =>
         val normalized = normalize(scrutinee)
@@ -355,7 +355,7 @@ object Normalizer { normal =>
 
     // congruences
     case Pure.PureApp(f, targs, vargs) => Pure.PureApp(f, targs, vargs.map(normalize))
-    case Pure.Make(data, tag, vargs) => Pure.Make(data, tag, vargs.map(normalize))
+    case Pure.Make(data, tag, targs, vargs) => Pure.Make(data, tag, targs, vargs.map(normalize))
     case Pure.ValueVar(id, annotatedType) => p
     case Pure.Literal(value, annotatedType) => p
   }

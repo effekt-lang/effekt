@@ -174,7 +174,7 @@ trait Transformer {
           register(publicDependencySymbols(x), x)
         case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
-        case Make(tpe, id, args) if publicDependencySymbols.isDefinedAt(id) =>
+        case Make(tpe, id, targs, args) if publicDependencySymbols.isDefinedAt(id) =>
           register(publicDependencySymbols(id), id)
           args.foreach(go)
       }

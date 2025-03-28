@@ -1,9 +1,7 @@
 package effekt
 package core
 
-import effekt.context.Context
 import effekt.core.substitutions.Substitution
-import effekt.symbols.TmpValue
 
 import scala.collection.mutable
 
@@ -54,9 +52,9 @@ import scala.collection.mutable
 object PatternMatchingCompiler {
 
   /**
-   * The conditions need to be met in sequence before the block at [[label]] can be evaluated with given [[args]].
+   * The conditions need to be met in sequence before the block at [[label]] can be evaluated with given [[targs]] and [[args]].
    */
-  case class Clause(conditions: List[Condition], label: BlockVar, args: List[ValueVar])
+  case class Clause(conditions: List[Condition], label: BlockVar, targs: List[ValueType], args: List[ValueVar])
 
   enum Condition {
     // all of the patterns need to match for this condition to be met
@@ -71,7 +69,7 @@ object PatternMatchingCompiler {
   enum Pattern {
     // sub-patterns are annotated with the inferred type of the scrutinee at this point
     // i.e. Cons(Some(x : TInt): Option[Int], xs: List[Option[Int]])
-    case Tag(id: Id, patterns: List[(Pattern, ValueType)])
+    case Tag(id: Id, tparams: List[Id], patterns: List[(Pattern, ValueType)])
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
@@ -93,21 +91,21 @@ object PatternMatchingCompiler {
     // (1) Check the first clause to be matched (we can immediately handle non-pattern cases)
     val patterns = headClause match {
       // - The top-most clause already matches successfully
-      case Clause(Nil, target, args) =>
-        return core.App(target, Nil, args, Nil)
+      case Clause(Nil, target, targs, args) =>
+        return core.App(target, targs, args, Nil)
       // - We need to perform a computation
-      case Clause(Condition.Val(x, tpe, binding) :: rest, target, args) =>
-        return core.Val(x, tpe, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      case Clause(Condition.Val(x, tpe, binding) :: rest, target, targs, args) =>
+        return core.Val(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
       // - We need to perform a computation
-      case Clause(Condition.Let(x, tpe, binding) :: rest, target, args) =>
-        return core.Let(x, tpe, binding, compile(Clause(rest, target, args) :: remainingClauses))
+      case Clause(Condition.Let(x, tpe, binding) :: rest, target, targs, args) =>
+        return core.Let(x, tpe, binding, compile(Clause(rest, target, targs, args) :: remainingClauses))
       // - We need to check a predicate
-      case Clause(Condition.Predicate(pred) :: rest, target, args) =>
+      case Clause(Condition.Predicate(pred) :: rest, target, targs, args) =>
         return core.If(pred,
-          compile(Clause(rest, target, args) :: remainingClauses),
+          compile(Clause(rest, target, targs, args) :: remainingClauses),
           compile(remainingClauses)
         )
-      case Clause(Condition.Patterns(patterns) :: rest, target, args) =>
+      case Clause(Condition.Patterns(patterns) :: rest, target, targs, args) =>
         patterns
     }
 
@@ -127,7 +125,7 @@ object PatternMatchingCompiler {
     def splitOnLiteral(lit: Literal, equals: (Pure, Pure) => Pure): core.Stmt = {
       // the different literal values that we match on
       val variants: List[core.Literal] = normalized.collect {
-        case Clause(Split(Pattern.Literal(lit, _), _, _), _, _) => lit
+        case Clause(Split(Pattern.Literal(lit, _), _, _), _, _, _) => lit
       }.distinct
 
       // for each literal, we collect the clauses that match it correctly
@@ -141,8 +139,8 @@ object PatternMatchingCompiler {
         defaults = defaults :+ cl
 
       normalized.foreach {
-        case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, args) =>
-          addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, args))
+        case Clause(Split(Pattern.Literal(lit, _), restPatterns, restConds), label, targs, args) =>
+          addClause(lit, Clause(Condition.Patterns(restPatterns) :: restConds, label, targs, args))
         case c =>
           addDefault(c)
           variants.foreach { v => addClause(v, c) }
@@ -164,7 +162,7 @@ object PatternMatchingCompiler {
     def splitOnTag() = {
       // collect all variants that are mentioned in the clauses
       val variants: List[Id] = normalized.collect {
-        case Clause(Split(p: Pattern.Tag, _, _), _, _) => p.id
+        case Clause(Split(p: Pattern.Tag, _, _), _, _, _) => p.id
       }.distinct
 
       // for each tag, we collect the clauses that match it correctly
@@ -179,7 +177,9 @@ object PatternMatchingCompiler {
 
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
-      def fieldVarsFor(constructor: Id, fieldInfo: List[((Pattern, ValueType), String)]): List[ValueVar] =
+      val tvarsFor = mutable.Map.empty[Id, List[Id]]
+      def fieldVarsFor(constructor: Id, tparams: List[Id], fieldInfo: List[((Pattern, ValueType), String)]): List[ValueVar] =
+        tvarsFor.getOrElseUpdate(constructor, tparams)
         varsFor.getOrElseUpdate(
           constructor,
           fieldInfo.map {
@@ -191,17 +191,17 @@ object PatternMatchingCompiler {
         )
 
       normalized.foreach {
-        case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, args) =>
+        case Clause(Split(Pattern.Tag(constructor, tparams, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
           // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
           val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
             case _ => List.fill(patternsAndTypes.size) { "y" } // NOTE: Only reached in PatternMatchingTests
           }
-          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.zip(fieldNames))
+          val fieldVars = fieldVarsFor(constructor, tparams, patternsAndTypes.zip(fieldNames))
           val nestedMatches = fieldVars.zip(patternsAndTypes.map { case (pat, tpe) => pat }).toMap
           addClause(constructor,
             // it is important to add nested matches first, since they might include substitutions for the rest.
-            Clause(Condition.Patterns(nestedMatches) :: Condition.Patterns(restPatterns) :: restConds, label, args))
+            Clause(Condition.Patterns(nestedMatches) :: Condition.Patterns(restPatterns) :: restConds, label, targs, args))
 
         case c =>
           // Clauses that don't match on that var are duplicated.
@@ -214,8 +214,9 @@ object PatternMatchingCompiler {
       // (4) assemble syntax tree for the pattern match
       val branches = variants.map { v =>
         val body = compile(clausesFor.getOrElse(v, Nil))
+        val tparams = tvarsFor(v)
         val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
-        val blockLit: BlockLit = BlockLit(Nil, Nil, params, Nil, body)
+        val blockLit: BlockLit = BlockLit(tparams, Nil, params, Nil, body)
         (v, blockLit)
       }
 
@@ -232,16 +233,17 @@ object PatternMatchingCompiler {
 
   def branchingHeuristic(patterns: Map[ValueVar, Pattern], clauses: List[Clause]): ValueVar =
     patterns.keys.maxBy(v => clauses.count {
-      case Clause(ps, _, _) => ps.contains(v)
+      case Clause(ps, _, _, _) => ps.contains(v)
     })
 
   /**
    * Substitutes AnyPattern and removes wildcards.
    */
   def normalize(clause: Clause): Clause = clause match {
-    case Clause(conditions, label, args) =>
+    case Clause(conditions, label, targs, args) =>
       val (normalized, substitution) = normalize(Map.empty, conditions, Map.empty)
-      Clause(normalized, label, args.map(v => substitution.getOrElse(v.id, v)))
+      // TODO also substitute types?
+      Clause(normalized, label, targs, args.map(v => substitution.getOrElse(v.id, v)))
   }
 
 
@@ -309,8 +311,8 @@ object PatternMatchingCompiler {
   // -----------------------------
 
   def show(cl: Clause): String = cl match {
-    case Clause(conditions, label, args) =>
-      s"case ${conditions.map(show).mkString("; ")} => ${util.show(label.id)}${args.map(x => util.show(x)).mkString("(", ", ", ")")}"
+    case Clause(conditions, label, targs, args) =>
+      s"case ${conditions.map(show).mkString("; ")} => ${util.show(label.id)}${targs.map(x => util.show(x))}${args.map(x => util.show(x)).mkString("(", ", ", ")")}"
   }
 
   def show(c: Condition): String = c match {
@@ -321,7 +323,7 @@ object PatternMatchingCompiler {
   }
 
   def show(p: Pattern): String = p match {
-    case Pattern.Tag(id, patterns) => util.show(id) + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
+    case Pattern.Tag(id, tparams, patterns) => util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
     case Pattern.Ignore() => "_"
     case Pattern.Any(id) => util.show(id)
     case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
