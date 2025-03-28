@@ -39,7 +39,7 @@ def eval(env: Map[Name, Value], t: Term): Value = t match {
 }
 
 /// apply terms in their normal domain
-/// this does the actual substitution via lookup handling (or bubbling up respectively)
+/// this does the actual substitution via environment lookup
 def apply(a: Value, b: Value): Value = a match {
   case VNeu(neu)       => VNeu(NApp(neu, b))
   case VClo(n, t, env) => eval(env.put(n, b), t)
