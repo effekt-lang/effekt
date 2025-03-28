@@ -13,7 +13,7 @@ inputs:
   llvm-version:
     description: 'LLVM version to install'
     required: false
-    default: '15'
+    default: '18'
   install-dependencies:
     description: 'Whether to install system dependencies (Linux only)'
     required: false
