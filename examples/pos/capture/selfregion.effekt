@@ -46,8 +46,8 @@ def ex5() =
 
 
 def ex6() = {
-  var x in global = 42;
-  println(x + x)
+  val x = ref(42);
+  println(x.get + x.get)
 }
 
 def main() = {
