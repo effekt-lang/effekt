@@ -1,0 +1,5 @@
+module cyclic_b
+
+import examples/neg/cyclic_a
+
+def main() = ()
