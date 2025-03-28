@@ -95,9 +95,6 @@ trait Transformer {
     case Var(ref, init, capt, body) =>
       state(nameDef(ref), toChez(init), toChez(body))
 
-    case Alloc(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
-
     case Alloc(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", chez.Variable(nameRef(region)), toChez(init)))), toChez(body))
 
