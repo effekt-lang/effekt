@@ -119,7 +119,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           checkStmt(s, expectedType)
         }.getOrElse(Result(TUnit, ConcreteEffects.empty))
 
-        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs)
+        Result(Context.join(bodyTpe, defaultTpe), defaultEffs ++ bodyEffs ++ guardEffs)
 
       case source.Var(id) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {
