@@ -129,7 +129,7 @@ object ExhaustivityChecker {
    * - non exhaustive pattern match should generate a list of patterns, so the IDE can insert them
    * - redundant cases should generate a list of cases that can be deleted.
    */
-  class Exhaustivity(allClauses: List[source.MatchClause]) {
+  class Exhaustivity(allClauses: List[source.MatchClause], originalScrutinees: List[source.Term]) {
 
     // Redundancy Information
     // ----------------------
@@ -160,7 +160,8 @@ object ExhaustivityChecker {
     def reportNonExhaustive()(using C: ErrorReporter): Unit = {
       @tailrec
       def traceToCase(at: Trace, acc: String): String = at match {
-        case Trace.Root(_) => acc
+        case Trace.Root(_) if originalScrutinees.length == 1 => acc
+        case Trace.Root(e) => originalScrutinees.map { f => if e == f then acc else "_" }.mkString(", ")
         case Trace.Child(childCtor, field, outer) =>
           val newAcc = s"${childCtor.name}(${childCtor.fields.map { f => if f == field then acc else "_" }.mkString(", ")})"
           traceToCase(outer, newAcc)
@@ -201,7 +202,7 @@ object ExhaustivityChecker {
 
   def checkExhaustive(scrutinees: List[source.Term], cls: List[source.MatchClause])(using C: Context): Unit = {
     val initialClauses: List[Clause] = cls.map(preprocess(scrutinees, _))
-    given E: Exhaustivity = new Exhaustivity(cls)
+    given E: Exhaustivity = new Exhaustivity(cls, scrutinees)
     checkScrutinees(scrutinees.map(Trace.Root(_)), scrutinees.map{ scrutinee => Context.inferredTypeOf(scrutinee) }, initialClauses)
     E.report()
   }
