@@ -34,12 +34,12 @@ runs:
         timeout_minutes: ${{ inputs.retry-timeout }}
         max_attempts: ${{ inputs.retry-max-attempts }}
         retry_on: error
-        command: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
+        command: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt clean test
         new_command_on_retry: sbt testQuick
 
     - name: Run full test suite without retry
       if: ${{ inputs.full-test == 'true' && runner.os != 'Windows' && inputs.use-retry != 'true' }}
-      run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt -J-Xss1G clean test
+      run: EFFEKT_VALGRIND=1 EFFEKT_DEBUG=1 sbt clean test
       shell: bash
 
     - name: Assemble fully optimized js file
