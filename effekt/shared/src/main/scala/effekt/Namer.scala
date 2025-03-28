@@ -655,7 +655,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       patterns.flatMap { resolve }
     case source.MultiPattern(patterns) =>
-      Context.panic("Multi-pattern should have been desugared in Parser")
+      patterns.flatMap { resolve }
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {

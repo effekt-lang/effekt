@@ -406,7 +406,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts()
             val clause = MatchClause(p, guards, body).withRangeOf(p, sc)
-            val matching = Match(sc, List(clause), default).withRangeOf(startMarker, sc)
+            val matching = Match(List(sc), List(clause), default).withRangeOf(startMarker, sc)
             Return(matching)
         }
 
@@ -808,7 +808,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       while (peek(`match`)) {
          val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
          val default = when(`else`) { Some(stmt()) } { None }
-         sc = Match(sc, clauses, default)
+         sc = Match(List(sc), clauses, default)
       }
       sc
 
@@ -965,15 +965,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             // TODO positions should be improved here and fresh names should be generated for the scrutinee
             // also mark the temp name as synthesized to prevent it from being listed in VSCode
             val names = List.tabulate(arity){ n => s"__arg${n}" }
-            val argsName = "__args"
             BlockLiteral(
               Nil,
               names.map{ name => ValueParam(IdDef(name), None) },
               Nil,
-              DefStmt(Def.ValDef(IdDef(argsName), None,
-                  Return(Call(IdTarget(IdRef(List("effekt"), s"Tuple${arity}")), Nil,
-                    names.map{ name => Var(IdRef(Nil, name)) }, Nil))),
-                Return(Match(Var(IdRef(Nil, argsName)), gcs, None)))) : BlockLiteral
+              Return(Match(names.map{ name => Var(IdRef(Nil, name)) }, gcs, None))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
