@@ -954,13 +954,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
               case MatchClause(MultiPattern(ps), _, _) :: _ => ps.length
               case _ => 1
             }
-            val gcs = cs.map{
+            cs.foreach{
               case MatchClause(MultiPattern(ps), g, e) =>
-                if(ps.length != arity) fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got ${ps.length}.")
-                MatchClause(TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps), g, e)
+                if(ps.length != arity)
+                  fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got ${ps.length}.")
               case c @ MatchClause(p, _, _) =>
-                if(arity != 1) fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got 1.")
-                c
+                if(arity != 1)
+                  fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got 1.")
             }
             // TODO positions should be improved here and fresh names should be generated for the scrutinee
             // also mark the temp name as synthesized to prevent it from being listed in VSCode
@@ -969,7 +969,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
               Nil,
               names.map{ name => ValueParam(IdDef(name), None) },
               Nil,
-              Return(Match(names.map{ name => Var(IdRef(Nil, name)) }, gcs, None))) : BlockLiteral
+              Return(Match(names.map{ name => Var(IdRef(Nil, name)) }, cs, None))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
