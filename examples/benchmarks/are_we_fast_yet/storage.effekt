@@ -26,7 +26,7 @@ def withRandom[R]{ program: { Random } => R }: R = {
 }
 
 def run(n: Int) = {
-  var count = ref(0);
+  val count = ref(0);
 
   def buildTreeDepth(depth: Int) { rand: Random }: Tree = {
     count.set(count.get + 1);
