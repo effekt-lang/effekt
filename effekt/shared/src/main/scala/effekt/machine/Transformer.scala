@@ -127,6 +127,7 @@ object Transformer {
             emitDefinition(transformLabel(id), Jump(transformLabel(other)))
             transform(rest)
           case BlockInfo.Parameter(_) =>
+            noteParameter(id, tpe)
             Substitute(List(Variable(transform(id), transform(tpe)) -> Variable(transform(other), transform(tpe))), transform(rest))
         }
 
