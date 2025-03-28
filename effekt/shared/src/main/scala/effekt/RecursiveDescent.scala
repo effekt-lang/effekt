@@ -993,7 +993,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
   def listLiteral(): Term =
     nonterminal:
-      many(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
+      manyTrailing(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
     Call(IdTarget(IdRef(List(), "Nil")), Nil, Nil, Nil)
@@ -1402,6 +1402,25 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       while (peek(sep)) {
         consume(sep)
         components += p()
+      }
+      consume(after)
+      components.toList
+    }
+
+  inline def manyTrailing[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
+    consume(before)
+    if (peek(after)) {
+      consume(after)
+      Nil
+    } else {
+      val components: ListBuffer[T] = ListBuffer.empty
+      components += p()
+      while (peek(sep)) {
+        consume(sep)
+
+        if (!peek(after)) {
+          components += p()
+        }
       }
       consume(after)
       components.toList
