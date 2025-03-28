@@ -679,6 +679,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.AnyPattern(id) => List()
       case p @ source.TagPattern(id, patterns) => Context.annotation(Annotations.TypeParameters, p) ++ patterns.flatMap(boundTypesInPattern)
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+      case source.MultiPattern(patterns) => patterns.flatMap(boundTypesInPattern)
     }
     def boundTypesInGuard(g: source.MatchGuard): List[Id] = g match {
       case MatchGuard.BooleanGuard(condition) => Nil
