@@ -500,7 +500,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
             case symbol: ValueSymbol =>
               if !Context.resolveOverloadedFunction(target)
-              then Context.abort(pp"Cannot resolve function ${target}, called on a value receiver.")
+              then Context.resolveFunctionCalltarget(target)
 
             case symbol: RefBinder =>
               if !Context.resolveOverloadedFunction(target)
