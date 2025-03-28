@@ -13,6 +13,8 @@ import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
 import effekt.source.FeatureFlag.supportedByFeatureFlags
 
+import scala.util.DynamicVariable
+
 /**
  * The output of this phase: a mapping from source identifier to symbol
  *
@@ -37,6 +39,24 @@ object Namer extends Phase[Parsed, NameResolved] {
     val mod = Module(tree, source)
     Context.using(module = mod, focus = tree) { resolve(mod) }
     Some(NameResolved(source, tree, mod))
+  }
+
+  /** Shadow stack of modules currently named, for detecction of cyclic imports */
+  private val currentlyNaming: DynamicVariable[List[ModuleDecl]] = DynamicVariable(List())
+  /**
+   * Run body in a context where we are currently naming `mod`.
+   * Produces a cyclic import error when this is already the case
+   */
+  private def recursiveProtect[R](mod: ModuleDecl)(body: => R)(using Context): R = {
+    if (currentlyNaming.value.contains(mod)) {
+      val cycle = mod :: currentlyNaming.value.takeWhile(_ != mod).reverse
+      Context.abort(
+        pretty"""Cyclic import: ${mod.path} depends on itself, via:\n\t${cycle.map(_.path).mkString(" -> ")} -> ${mod.path}""")
+    } else {
+      currentlyNaming.withValue(mod :: currentlyNaming.value) {
+        body
+      }
+    }
   }
 
   def resolve(mod: Module)(using Context): ModuleDecl = {
@@ -72,7 +92,8 @@ object Namer extends Phase[Parsed, NameResolved] {
     // process all includes, updating the terms and types in scope
     val includes = decl.includes collect {
       case im @ source.Include(path) =>
-        val mod = Context.at(im) { importDependency(path) }
+        // [[recursiveProtect]] is called here so the source position is the recursive import
+        val mod = Context.at(im) { recursiveProtect(decl){ importDependency(path) } }
         Context.annotate(Annotations.IncludedSymbols, im, mod)
         mod
     }
