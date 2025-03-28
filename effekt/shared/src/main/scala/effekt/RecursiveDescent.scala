@@ -1462,8 +1462,30 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     //      case _ => ()
     //    }
 
-    positions.setStart(res, source.offsetToPosition(start))
-    positions.setFinish(res, source.offsetToPosition(end))
+    val startPos = source.offsetToPosition(start)
+    val endPos = source.offsetToPosition(end)
+
+    // recursively add positions to subtrees that are not yet annotated
+    // this is better than nothing and means we have positions for desugared stuff
+    def annotatePositions(res: Any): Unit = res match {
+      case t: Tree =>
+        val recurse = positions.getRange(t).isEmpty
+        if(positions.getStart(t).isEmpty) positions.setStart(t, startPos)
+        if(positions.getFinish(t).isEmpty) positions.setFinish(t, endPos)
+        t match {
+          case p: Product if recurse =>
+            p.productIterator.foreach { c =>
+              annotatePositions(c)
+            }
+          case _ => ()
+        }
+      case _ => ()
+    }
+    annotatePositions(res)
+
+    // still annotate, in case it is not Tree
+    positions.setStart(res, startPos)
+    positions.setFinish(res, endPos)
 
     res
   }
