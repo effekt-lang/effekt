@@ -117,19 +117,21 @@ Running it will give us the same result:
 example1Region()
 ```
 
-## Global
+## Global Mutable State
 
-It is also possible to allocate a variable globally by allocating it into the built-in region `global`. With this, it is possible to write a program which is normally not possible:
+It is also possible to allocate a variable globally by using the reference module `ref`. With this, it is possible to write a program which is normally not possible:
 
 ```
+import ref
+
 def example5() = {
-  var x in global = 1
-  val closure = box { () => x }
+  val x = ref(1)
+  val closure = box { () => x.get }
   closure
 }
 ```
 
-We can return a closure that closes over a variable. This is only possible because `x` is allocated into the `global` region and therefore has a static lifetime.
+We can return a closure that closes over a mutable reference. This is only possible because `x` is allocated on the heap and subject to garbage collection.
 
 ## References
 
