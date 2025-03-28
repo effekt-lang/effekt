@@ -192,8 +192,6 @@ object PatternMatchingCompiler {
 
       normalized.foreach {
         case Clause(Split(Pattern.Tag(constructor, tparams, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
-          // TODO Do we need to do something with the tparams here, they are bound by the pattern match.
-
           // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
           val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
