@@ -1,2 +1,3 @@
 GET https://api.effekt-lang.org/users/effekt/resource/42
 Fix point combinator: \ f -> (\ x -> f x x) \ x -> f x x
+12

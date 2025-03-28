@@ -28,6 +28,15 @@ def pretty { prog: () => Unit / {literal, splice[Expr]} }: String = {
   }
 }
 
+def len { prog: () => Unit / {literal} }: Int = {
+  try {
+    prog()
+    0
+  } with literal { s =>
+    s.length
+  }
+}
+
 def main() = {
   val domain = "https://api.effekt-lang.org"
   val user = "effekt"
@@ -36,4 +45,6 @@ def main() = {
 
   val fixpoint = Abs("f", App(Abs("x", App(Var("f"), App(Var("x"), Var("x")))), Abs("x", App(Var("f"), App(Var("x"), Var("x"))))))
   println(pretty"Fix point combinator: ${fixpoint}")
+
+  println(show(len"hello, world"))
 }

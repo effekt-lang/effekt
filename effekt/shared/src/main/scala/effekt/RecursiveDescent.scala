@@ -1030,10 +1030,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def templateString(): Term =
     nonterminal:
       backtrack(idRef()) ~ template() match {
-        // We do not need to apply any transformation if there are no splices
-        case _ ~ Template(str :: Nil, Nil) => StringLit(str)
-        case _ ~ Template(strs, Nil) => fail("Cannot occur")
-        // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y) }
+        // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
+        case None ~ Template(str :: Nil, Nil) => StringLit(str)
+        // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
         case id ~ Template(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s"))
           val doLits = strs.map { s =>
