@@ -66,12 +66,12 @@ class LLVMTests extends EffektTests {
     examplesDir / "benchmarks" / "are_we_fast_yet" / "storage.effekt",
 
     // top-level object definition
-    //examplesDir / "pos" / "object" / "if_control_effect.effekt",
-    //examplesDir / "pos" / "lambdas" / "toplevel_objects.effekt",
-    //examplesDir / "pos" / "type_omission_op.effekt",
-    //examplesDir / "pos" / "bidirectional" / "higherorderobject.effekt",
-    //examplesDir / "pos" / "bidirectional" / "res_obj_boxed.effekt",
-    //examplesDir / "pos" / "bidirectional" / "effectfulobject.effekt",
+    examplesDir / "pos" / "object" / "if_control_effect.effekt",
+    examplesDir / "pos" / "lambdas" / "toplevel_objects.effekt",
+    examplesDir / "pos" / "type_omission_op.effekt",
+    examplesDir / "pos" / "bidirectional" / "higherorderobject.effekt",
+    examplesDir / "pos" / "bidirectional" / "res_obj_boxed.effekt",
+    examplesDir / "pos" / "bidirectional" / "effectfulobject.effekt",
   )
 
   override lazy val ignored: List[File] = missingFeatures ++ noValgrind(examplesDir)
