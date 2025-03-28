@@ -321,6 +321,11 @@ object Transformer {
     } yield (values, blocks)
 
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+    case core.BlockVar(id, tpe, _) if BPC.globals contains id =>
+      val variable = Variable(transform(id), transform(tpe))
+      Binding { k =>
+        PushFrame(Clause(List(variable), k(variable)), Jump(BPC.globals(id)))
+      }
     case core.BlockVar(id, tpe, capt) => getBlockInfo(id) match {
       case BlockInfo.Definition(_, parameters) =>
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
