@@ -126,8 +126,8 @@ object BindSubexpressions {
     case Pure.ValueVar(id, tpe) => pure(ValueVar(transform(id), transform(tpe)))
     case Pure.Literal(value, tpe) => pure(Pure.Literal(value, transform(tpe)))
 
-    case Pure.Make(data, tag, vargs) => transformExprs(vargs) { vs =>
-      bind(Pure.Make(data, tag, vs))
+    case Pure.Make(data, tag, targs, vargs) => transformExprs(vargs) { vs =>
+      bind(Pure.Make(data, tag, targs, vs))
     }
     case DirectApp(f, targs, vargs, bargs) => for {
       vs <- transformExprs(vargs);

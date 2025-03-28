@@ -182,7 +182,7 @@ object Transformer {
       case Block.BlockVar(id) => PureApp(id, vargs.map(transform))
       case _ => sys error "Should not happen"
     }
-    case core.Pure.Make(data, tag, vargs) => Make(data, tag, vargs.map(transform))
+    case core.Pure.Make(data, tag, targs, vargs) => Make(data, tag, vargs.map(transform))
     case core.Pure.Box(b, annotatedCapture) => Box(transform(b))
   }
 

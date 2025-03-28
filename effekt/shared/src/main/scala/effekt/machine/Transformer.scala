@@ -417,7 +417,9 @@ object Transformer {
         }
       }
 
-    case core.Make(data, constructor, vargs) =>
+    case core.Make(data, constructor, targs, vargs) =>
+      if (targs.exists(requiresBoxing)) { ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+
       val variable = Variable(freshName("make"), transform(data));
       val tag = DeclarationContext.getConstructorTag(constructor)
 

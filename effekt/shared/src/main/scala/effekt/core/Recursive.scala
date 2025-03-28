@@ -94,7 +94,7 @@ class Recursive(
     case Pure.ValueVar(id, annotatedType) => ()
     case Pure.Literal(value, annotatedType) => ()
     case Pure.PureApp(b, targs, vargs) => process(b); vargs.foreach(process)
-    case Pure.Make(data, tag, vargs) => vargs.foreach(process)
+    case Pure.Make(data, tag, targs, vargs) => vargs.foreach(process)
     case Pure.Box(b, annotatedCapture) => process(b)
   }
 
