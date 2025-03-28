@@ -66,13 +66,17 @@ object TypePrinter extends ParenPrettyPrinter {
       val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {
         case (Nil, Nil)       => "()"
+        case (List(tpe: BoxedType), Nil) => parens(toDoc(tpe))
         case (List(tpe), Nil) => if (tparams.isEmpty) toDoc(tpe) else parens(toDoc(tpe))
         case (_, _) =>
           val vps = if (vparams.isEmpty) emptyDoc else parens(hsep(vparams.map(toDoc), comma))
           val bps = if (bparams.isEmpty) emptyDoc else hcat(bparams.map(toDoc).map(braces))
           vps <> bps
       }
-      val ret = toDoc(result)
+      val ret = result match {
+        case _: BoxedType => parens(toDoc(result))
+        case _ => toDoc(result)
+      }
       val eff = if (effects.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
       tps <> ps <+> "=>" <+> ret <> eff
 
