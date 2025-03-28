@@ -6,12 +6,7 @@ import effekt.util.messages.ErrorReporter
 
 import java.util
 
-sealed trait Annotation[K, V] {
-  /**
-   * Currently a constant, but could be changed when needed
-   */
-  val bindToObjectIdentity: Boolean = true
-}
+sealed trait Annotation[K, V]
 
 case class SymbolAnnotation[K <: symbols.Symbol, V](name: String, description: String) extends Annotation[K, V] {
   type Value = V
@@ -55,25 +50,25 @@ class Annotations private(
 
   def update[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
     val anns = annotationsAt(ann)
-    val updatedAnns = anns.updated(Annotations.makeKey(ann, key), value)
+    val updatedAnns = anns.updated(Key(key), value)
     annotations = annotations.updated(ann, updatedAnns.asInstanceOf)
   }
 
   def get[K, V](ann: Annotation[K, V], key: K): Option[V] =
-    annotationsAt(ann).get(Annotations.makeKey(ann, key))
+    annotationsAt(ann).get(Key(key))
 
   def getOrElse[K, V](ann: Annotation[K, V], key: K, default: => V): V =
-    annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), default)
+    annotationsAt(ann).getOrElse(Key(key), default)
 
   def getOrElseUpdate[K, V](ann: Annotation[K, V], key: K, default: => V): V =
-    annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), {
+    annotationsAt(ann).getOrElse(Key(key), {
       val value = default
       update(ann, key, value)
       value
     })
 
   def removed[K, V](ann: Annotation[K, V], key: K): Unit =
-    annotations = annotations.updated(ann, annotationsAt(ann).removed(Annotations.makeKey(ann, key)).asInstanceOf)
+    annotations = annotations.updated(ann, annotationsAt(ann).removed(Key(key)).asInstanceOf)
 
   def apply[K, V](ann: Annotation[K, V]): List[(K, V)] =
     annotationsAt(ann).map { case (k, v) => (k.key, v) }.toList
@@ -98,35 +93,14 @@ object Annotations {
 
   def empty: Annotations = new Annotations(Map.empty)
 
-  sealed trait Key[T] {
-    def key: T
-  }
-
-  private class HashKey[T](val key: T) extends Key[T] {
+  class Key[T](val key: T) {
     override val hashCode = System.identityHashCode(key)
 
     override def equals(o: Any) = o match {
-      case k: HashKey[_] => hashCode == k.hashCode
+      case k: Key[_] => hashCode == k.hashCode
       case _ => false
     }
   }
-
-  private class IdKey[T](val key: T) extends Key[T] {
-    override val hashCode = key.hashCode()
-
-    override def equals(o: Any) = o match {
-      case k: Key[_] => key == k.key
-      case _ => false
-    }
-  }
-
-  object Key {
-    def unapply[T](k: Key[T]): Option[T] = Some(k.key)
-  }
-
-  private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] =
-    if (ann.bindToObjectIdentity) new HashKey(k)
-    else new IdKey(k)
 
   /**
    * The as inferred by typer at a given position in the tree
