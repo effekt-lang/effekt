@@ -755,13 +755,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       IdDef("resume")
 
-  def matchClause(allowMulti: Boolean = false): MatchClause =
+  def matchClause(): MatchClause =
     nonterminal:
       val patterns = `case` ~> some(matchPattern, `,`)
       val pattern = patterns match {
         case List(pat) => pat
-        case pats if allowMulti => MultiPattern(pats)
-        case _ => fail(s"Multi-patterns are only allowed in lambda-case / block literals")
+        case pats => MultiPattern(pats)
       }
       MatchClause(
         pattern,
@@ -949,7 +948,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       braces {
         peek.kind match {
           // { case ... => ... }
-          case `case` => someWhile(matchClause(true), `case`) match { case cs =>
+          case `case` => someWhile(matchClause(), `case`) match { case cs =>
             val arity = cs match {
               case MatchClause(MultiPattern(ps), _, _) :: _ => ps.length
               case _ => 1
