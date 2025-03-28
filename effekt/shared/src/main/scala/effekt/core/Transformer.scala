@@ -701,8 +701,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     def transformPattern(p: source.MatchPattern): Pattern = p match {
       case source.AnyPattern(id) =>
         Pattern.Any(id.symbol)
-      case source.TagPattern(id, patterns) =>
-        Pattern.Tag(id.symbol, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
+      case p @ source.TagPattern(id, patterns) =>
+        val tparams = Context.annotation(Annotations.TypeParameters, p)
+        Pattern.Tag(id.symbol, tparams, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
       case source.IgnorePattern() =>
         Pattern.Ignore()
       case source.LiteralPattern(source.Literal(value, tpe)) =>

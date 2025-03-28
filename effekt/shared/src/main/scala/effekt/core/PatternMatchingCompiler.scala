@@ -4,6 +4,7 @@ package core
 import effekt.context.Context
 import effekt.core.substitutions.Substitution
 import effekt.symbols.TmpValue
+import effekt.symbols.TypeVar.TypeParam
 
 import scala.collection.mutable
 
@@ -71,7 +72,7 @@ object PatternMatchingCompiler {
   enum Pattern {
     // sub-patterns are annotated with the inferred type of the scrutinee at this point
     // i.e. Cons(Some(x : TInt): Option[Int], xs: List[Option[Int]])
-    case Tag(id: Id, patterns: List[(Pattern, ValueType)])
+    case Tag(id: Id, tparams: List[Id], patterns: List[(Pattern, ValueType)])
     case Ignore()
     case Any(id: Id)
     case Or(patterns: List[Pattern])
@@ -179,7 +180,9 @@ object PatternMatchingCompiler {
 
       // used to make up new scrutinees
       val varsFor = mutable.Map.empty[Id, List[ValueVar]]
-      def fieldVarsFor(constructor: Id, fieldInfo: List[((Pattern, ValueType), String)]): List[ValueVar] =
+      val tvarsFor = mutable.Map.empty[Id, List[Id]]
+      def fieldVarsFor(constructor: Id, tparams: List[Id], fieldInfo: List[((Pattern, ValueType), String)]): List[ValueVar] =
+        tvarsFor.getOrElseUpdate(constructor, tparams)
         varsFor.getOrElseUpdate(
           constructor,
           fieldInfo.map {
@@ -191,13 +194,15 @@ object PatternMatchingCompiler {
         )
 
       normalized.foreach {
-        case Clause(Split(Pattern.Tag(constructor, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
+        case Clause(Split(Pattern.Tag(constructor, tparams, patternsAndTypes), restPatterns, restConds), label, targs, args) =>
+          // TODO Do we need to do something with the tparams here, they are bound by the pattern match.
+
           // NOTE: Ideally, we would use a `DeclarationContext` here, but we cannot: we're currently in the Source->Core transformer, so we do not have all of the details yet.
           val fieldNames: List[String] = constructor match {
             case c: symbols.Constructor => c.fields.map(_.name.name)
             case _ => List.fill(patternsAndTypes.size) { "y" } // NOTE: Only reached in PatternMatchingTests
           }
-          val fieldVars = fieldVarsFor(constructor, patternsAndTypes.zip(fieldNames))
+          val fieldVars = fieldVarsFor(constructor, tparams, patternsAndTypes.zip(fieldNames))
           val nestedMatches = fieldVars.zip(patternsAndTypes.map { case (pat, tpe) => pat }).toMap
           addClause(constructor,
             // it is important to add nested matches first, since they might include substitutions for the rest.
@@ -214,10 +219,7 @@ object PatternMatchingCompiler {
       // (4) assemble syntax tree for the pattern match
       val branches = variants.map { v =>
         val body = compile(clausesFor.getOrElse(v, Nil))
-        val tparams: List[Id] = v match {
-          case c: symbols.Constructor => c.tparams
-          case _ => Nil // TODO panic here?
-        }
+        val tparams = tvarsFor(v)
         val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
         val blockLit: BlockLit = BlockLit(tparams, Nil, params, Nil, body)
         (v, blockLit)
@@ -326,7 +328,7 @@ object PatternMatchingCompiler {
   }
 
   def show(p: Pattern): String = p match {
-    case Pattern.Tag(id, patterns) => util.show(id) + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
+    case Pattern.Tag(id, tparams, patterns) => util.show(id) + tparams.map(util.show).mkString("[", ",", "]") + patterns.map { case (p, tpe) => show(p) }.mkString("(", ", ", ")")
     case Pattern.Ignore() => "_"
     case Pattern.Any(id) => util.show(id)
     case Pattern.Or(patterns) => patterns.map(show).mkString(" | ")
