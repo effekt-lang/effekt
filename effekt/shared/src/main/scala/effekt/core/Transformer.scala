@@ -427,14 +427,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(loopCall)
 
     // Empty match (matching on Nothing)
-    case source.Match(sc, Nil, None) =>
+    case source.Match(List(sc), Nil, None) =>
       val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
       Context.bind(core.Match(scrutinee, Nil, None))
 
-    case source.Match(sc, cs, default) =>
+    case source.Match(scs, cs, default) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
-      val scrutinee: ValueVar = Context.bind(transformAsPure(sc))
-      val clauses = cs.zipWithIndex.map((c, i) => preprocess(s"k${i}", scrutinee, c))
+      val scrutinees: List[ValueVar] = scs.map{ sc => Context.bind(transformAsPure(sc)) }
+      val clauses = cs.zipWithIndex.map((c, i) => preprocess(s"k${i}", scrutinees, c))
       val defaultClause = default.map(stmt => preprocess("k_els", Nil, Nil, transform(stmt))).toList
       val compiledMatch = PatternMatchingCompiler.compile(clauses ++ defaultClause)
       Context.bind(compiledMatch)
@@ -653,8 +653,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     })
   }
 
-  def preprocess(label: String, sc: ValueVar, clause: source.MatchClause)(using Context): Clause =
-    preprocess(label, List((sc, clause.pattern)), clause.guards, transform(clause.body))
+  def preprocess(label: String, scs: List[ValueVar], clause: source.MatchClause)(using Context): Clause = {
+    val patterns = (clause.pattern, scs) match {
+      case (source.MultiPattern(ps), scs) => scs.zip(ps)
+      case (pattern, List(sc)) => List((sc, clause.pattern))
+      case (_, _) => Context.abort("Malformed multi-match")
+    }
+    preprocess(label, patterns, clause.guards, transform(clause.body))
+  }
 
   def preprocess(label: String, patterns: List[(ValueVar, source.MatchPattern)], guards: List[source.MatchGuard], body: core.Stmt)(using Context): Clause = {
     import PatternMatchingCompiler.*
@@ -663,6 +669,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case p @ source.AnyPattern(id) => List(ValueParam(p.symbol))
       case source.TagPattern(id, patterns) => patterns.flatMap(boundInPattern)
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+      case source.MultiPattern(patterns) => patterns.flatMap(boundInPattern)
     }
     def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
       case MatchGuard.BooleanGuard(condition) => Nil
@@ -672,6 +679,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.AnyPattern(id) => List()
       case p @ source.TagPattern(id, patterns) => Context.annotation(Annotations.TypeParameters, p) ++ patterns.flatMap(boundTypesInPattern)
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+      case source.MultiPattern(patterns) => patterns.flatMap(boundTypesInPattern)
     }
     def boundTypesInGuard(g: source.MatchGuard): List[Id] = g match {
       case MatchGuard.BooleanGuard(condition) => Nil
@@ -708,6 +716,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Ignore()
       case source.LiteralPattern(source.Literal(value, tpe)) =>
         Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
+      case source.MultiPattern(patterns) =>
+        Context.panic("Multi-pattern should have been split on toplevel / nested MultiPattern")
     }
 
     def transformGuard(p: source.MatchGuard): List[Condition] =

@@ -287,18 +287,43 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
-      case tree @ source.Match(sc, clauses, default) =>
+      case tree @ source.Match(scs, clauses, default) =>
 
-        // (1) Check scrutinee
+        // (1) Check scrutinees
         // for example. tpe = List[Int]
-        val Result(tpe, effs) = checkExpr(sc, None)
+        val results = scs.map{ sc => checkExpr(sc, None) }
 
-        var resEff = effs
+        var resEff = ConcreteEffects.union(results.map{ case Result(tpe, effs) => effs })
+
+        // check that number of patterns matches number of scrutinees
+        val arity = scs.length
+        clauses.foreach {
+          case cls @ source.MatchClause(source.MultiPattern(patterns), guards, body) =>
+            if (patterns.length != arity) {
+              Context.at(cls){
+                Context.error(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${arity}).")
+              }
+            }
+          case cls @ source.MatchClause(pattern, guards, body) =>
+            if (arity != 1) {
+              Context.at(cls) {
+                Context.error(pp"Number of patterns (1) does not match number of parameters / scrutinees (${arity}).")
+              }
+            }
+        }
 
         val tpes = clauses.map {
           case source.MatchClause(p, guards, body) =>
-            // (3) infer types for pattern
-            Context.bind(checkPattern(tpe, p))
+            // (3) infer types for pattern(s)
+            p match {
+              case source.MultiPattern(ps) =>
+                (results zip ps).foreach { case (Result(tpe, effs), p) =>
+                  Context.bind(checkPattern(tpe, p))
+                }
+              case p =>
+                val Result(tpe, effs) = results.head
+                Context.bind(checkPattern(tpe, p))
+            }
             // infer types for guards
             val Result((), guardEffs) = checkGuards(guards)
             // check body of the clause
@@ -592,6 +617,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       bindings
+    case source.MultiPattern(patterns) =>
+      Context.panic("Multi-pattern should have been split at the match and not occur nested.")
   } match { case res => Context.annotateInferredType(pattern, sc); res }
 
   def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {

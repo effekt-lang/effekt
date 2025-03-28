@@ -68,8 +68,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
     case While(guards, body, default) =>
       While(guards.map(rewrite), rewrite(body), default.map(rewrite))
 
-    case Match(sc, clauses, default) =>
-      Match(rewriteAsExpr(sc), clauses.map(rewrite), default.map(rewrite))
+    case Match(scs, clauses, default) =>
+      Match(scs.map(rewriteAsExpr), clauses.map(rewrite), default.map(rewrite))
 
     case s @ Select(recv, name) if s.definition.isInstanceOf[Field] =>
       Select(rewriteAsExpr(recv), name)

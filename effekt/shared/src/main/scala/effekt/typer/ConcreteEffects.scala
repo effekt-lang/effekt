@@ -52,6 +52,10 @@ object ConcreteEffects {
   def apply(effs: Effects)(using Context): ConcreteEffects = apply(effs.toList)
 
   def empty: ConcreteEffects = fromList(Nil)
+
+  def union(effs: IterableOnce[ConcreteEffects]): ConcreteEffects = {
+    ConcreteEffects.fromList(effs.iterator.flatMap{ e => e.effects }.toList)
+  }
 }
 
 val Pure = ConcreteEffects.empty

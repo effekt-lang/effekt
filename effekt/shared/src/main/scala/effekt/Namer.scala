@@ -654,6 +654,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       patterns.flatMap { resolve }
+    case source.MultiPattern(patterns) =>
+      patterns.flatMap { resolve }
   }
 
   def resolve(p: source.MatchGuard)(using Context): Unit = p match {

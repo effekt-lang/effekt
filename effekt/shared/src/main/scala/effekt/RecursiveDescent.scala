@@ -406,7 +406,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val default = when(`else`) { Some(stmt()) } { None }
             val body = semi() ~> stmts()
             val clause = MatchClause(p, guards, body).withRangeOf(p, sc)
-            val matching = Match(sc, List(clause), default).withRangeOf(startMarker, sc)
+            val matching = Match(List(sc), List(clause), default).withRangeOf(startMarker, sc)
             Return(matching)
         }
 
@@ -757,8 +757,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def matchClause(): MatchClause =
     nonterminal:
+      val patterns = `case` ~> some(matchPattern, `,`)
+      val pattern = patterns match {
+        case List(pat) => pat
+        case pats => MultiPattern(pats)
+      }
       MatchClause(
-        `case` ~> matchPattern(),
+        pattern,
         manyWhile(`and` ~> matchGuard(), `and`),
         // allow a statement enclosed in braces or without braces
         // both is allowed since match clauses are already delimited by `case`
@@ -802,7 +807,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       while (peek(`match`)) {
          val clauses = `match` ~> braces { manyWhile(matchClause(), `case`) }
          val default = when(`else`) { Some(stmt()) } { None }
-         sc = Match(sc, clauses, default)
+         sc = Match(List(sc), clauses, default)
       }
       sc
 
@@ -944,14 +949,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         peek.kind match {
           // { case ... => ... }
           case `case` => someWhile(matchClause(), `case`) match { case cs =>
+            val arity = cs match {
+              case MatchClause(MultiPattern(ps), _, _) :: _ => ps.length
+              case _ => 1
+            }
             // TODO positions should be improved here and fresh names should be generated for the scrutinee
             // also mark the temp name as synthesized to prevent it from being listed in VSCode
-            val name = "__tmpRes"
+            val names = List.tabulate(arity){ n => s"__arg${n}" }
             BlockLiteral(
               Nil,
-              List(ValueParam(IdDef(name), None)),
+              names.map{ name => ValueParam(IdDef(name), None) },
               Nil,
-              Return(Match(Var(IdRef(Nil, name)), cs, None))) : BlockLiteral
+              Return(Match(names.map{ name => Var(IdRef(Nil, name)) }, cs, None))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
@@ -1453,8 +1462,36 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     //      case _ => ()
     //    }
 
-    positions.setStart(res, source.offsetToPosition(start))
-    positions.setFinish(res, source.offsetToPosition(end))
+    val startPos = source.offsetToPosition(start)
+    val endPos = source.offsetToPosition(end)
+
+    // recursively add positions to subtrees that are not yet annotated
+    // this is better than nothing and means we have positions for desugared stuff
+    def annotatePositions(res: Any): Unit = res match {
+      case l: List[_] =>
+        if (positions.getRange(l).isEmpty) {
+          positions.setStart(l, startPos)
+          positions.setFinish(l, endPos)
+          l.foreach(annotatePositions)
+        }
+      case t: Tree =>
+        val recurse = positions.getRange(t).isEmpty
+        if(positions.getStart(t).isEmpty) positions.setStart(t, startPos)
+        if(positions.getFinish(t).isEmpty) positions.setFinish(t, endPos)
+        t match {
+          case p: Product if recurse =>
+            p.productIterator.foreach { c =>
+              annotatePositions(c)
+            }
+          case _ => ()
+        }
+      case _ => ()
+    }
+    annotatePositions(res)
+
+    // still annotate, in case it is not Tree
+    positions.setStart(res, startPos)
+    positions.setFinish(res, endPos)
 
     res
   }
