@@ -7,6 +7,7 @@ import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
 import effekt.symbols.ErrorMessageInterpolator
+import scala.annotation.tailrec
 
 
 object Transformer {
@@ -315,7 +316,7 @@ object Transformer {
   def transformBlockArg(block: core.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
     case core.BlockVar(id, tpe, _) if BPC.globals contains id =>
       val variable = Variable(transform(id), transform(tpe))
-      Binding { k =>
+      shift { k =>
         PushFrame(Clause(List(variable), k(variable)), Jump(BPC.globals(id)))
       }
     case core.BlockVar(id, tpe, capt) => getBlockInfo(id) match {
@@ -323,7 +324,7 @@ object Transformer {
         // Passing a top-level function directly, so we need to eta-expand turning it into a closure
         // TODO cache the closure somehow to prevent it from being created on every call
         val variable = Variable(freshName(id.name.name ++ "$closure"), Negative())
-        Binding { k =>
+        shift { k =>
           New(variable, List(Clause(parameters,
             // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
             Jump(transformLabel(id))
@@ -337,13 +338,13 @@ object Transformer {
       noteParameters(bparams)
       val parameters = vparams.map(transform) ++ bparams.map(transform);
       val variable = Variable(freshName("blockLit"), Negative())
-      Binding { k =>
+      shift { k =>
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
 
     case core.New(impl) =>
       val variable = Variable(freshName("new"), Negative())
-      Binding { k =>
+      shift { k =>
         New(variable, transform(impl), k(variable))
       }
 
@@ -355,7 +356,7 @@ object Transformer {
 
     case core.ValueVar(id, tpe) if BC.globals contains id =>
       val variable = Variable(freshName("run"), transform(tpe))
-      Binding { k =>
+      shift { k =>
         // TODO this might introduce too many pushes.
         PushFrame(Clause(List(variable), k(variable)),
           Substitute(Nil, Jump(BC.globals(id))))
@@ -366,38 +367,38 @@ object Transformer {
 
     case core.Literal((), _) =>
       val variable = Variable(freshName("unitLiteral"), Positive());
-      Binding { k =>
+      shift { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
     case core.Literal(value: Long, _) =>
       val variable = Variable(freshName("longLiteral"), Type.Int());
-      Binding { k =>
+      shift { k =>
         LiteralInt(variable, value, k(variable))
       }
 
     // for characters
     case core.Literal(value: Int, _) =>
       val variable = Variable(freshName("intLiteral"), Type.Int());
-      Binding { k =>
+      shift { k =>
         LiteralInt(variable, value, k(variable))
       }
 
     case core.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("booleanLiteral"), Positive())
-      Binding { k =>
+      shift { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
     case core.Literal(v: Double, _) =>
       val literal_binding = Variable(freshName("doubleLiteral"), Type.Double());
-      Binding { k =>
+      shift { k =>
         LiteralDouble(literal_binding, v, k(literal_binding))
       }
 
     case core.Literal(javastring: String, _) =>
       val literal_binding = Variable(freshName("utf8StringLiteral"), builtins.StringType);
-      Binding { k =>
+      shift { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
 
@@ -406,7 +407,7 @@ object Transformer {
 
       val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(vargs, Nil).flatMap { (values, blocks) =>
-        Binding { k =>
+        shift { k =>
           ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
         }
       }
@@ -416,7 +417,7 @@ object Transformer {
 
       val variable = Variable(freshName("pureApp"), transform(tpe.result))
       transform(vargs, bargs).flatMap { (values, blocks) =>
-        Binding { k =>
+        shift { k =>
           ForeignCall(variable, transform(blockName), values ++ blocks, k(variable))
         }
       }
@@ -428,14 +429,14 @@ object Transformer {
       val tag = DeclarationContext.getConstructorTag(constructor)
 
       transform(vargs, Nil).flatMap { (values, blocks) =>
-        Binding { k =>
+        shift { k =>
           Construct(variable, tag, values ++ blocks, k(variable))
         }
       }
 
     case core.Box(block, annot) =>
       transformBlockArg(block).flatMap { unboxed =>
-        Binding { k =>
+        shift { k =>
           val boxed = Variable(freshName(unboxed.name), Type.Positive())
           ForeignCall(boxed, "box", List(unboxed), k(boxed))
         }
@@ -564,11 +565,26 @@ object Transformer {
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
     BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
 
-  case class Binding[A](run: (A => Statement) => Statement) {
+  def shift[A](body: (A => Statement) => Statement): Binding[A] =
+    Binding { k => Trampoline.Done(body { x => trampoline(k(x)) }) }
+
+  case class Binding[A](body: (A => Trampoline[Statement]) => Trampoline[Statement]) {
     def flatMap[B](rest: A => Binding[B]): Binding[B] = {
-      Binding(k => run(a => rest(a).run(k)))
+      Binding(k => Trampoline.More { () => body(a => Trampoline.More { () => rest(a).body(k) }) })
     }
+    def run(k: A => Statement): Statement = trampoline(body { x => Trampoline.Done(k(x)) })
     def map[B](f: A => B): Binding[B] = flatMap { a => pure(f(a)) }
+  }
+
+  enum Trampoline[A] {
+    case Done(value: A)
+    case More(thunk: () => Trampoline[A])
+  }
+
+  @tailrec
+  def trampoline[A](body: Trampoline[A]): A = body match {
+    case Trampoline.Done(value) => value
+    case Trampoline.More(thunk) => trampoline(thunk())
   }
 
   def traverse[S, T](l: List[S])(f: S => Binding[T]): Binding[List[T]] =
