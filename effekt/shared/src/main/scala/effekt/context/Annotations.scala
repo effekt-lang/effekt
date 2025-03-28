@@ -3,10 +3,8 @@ package context
 
 import effekt.symbols.{BlockSymbol, BlockType, ResumeParam, Symbol, ValueSymbol}
 import effekt.util.messages.ErrorReporter
-import kiama.util.Memoiser
 
 import java.util
-import scala.collection.mutable
 
 case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
@@ -60,10 +58,10 @@ class Annotations private(
   def apply[K, V](ann: Annotation[K, V]): List[(K, V)] =
     annotationsAt(ann).map { case (k, v) => (k.key, v) }.toList
 
-  def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
+  def apply[K, V](ann: Annotation[K, V], key: K)(using C: ErrorReporter): V =
     get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
 
-  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit treesDB: TreeAnnotations, symbolsDB: SymbolAnnotations): Unit =
+  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(using treesDB: TreeAnnotations, symbolsDB: SymbolAnnotations): Unit =
     val anns = annotationsAt(ann)
     anns.foreach { case (kk, v) =>
       kk.key match {
@@ -543,7 +541,6 @@ trait SourceAnnotations { self: Context =>
  * Global annotations on symbols
  */
 trait SymbolAnnotations { self: Context =>
-  import scala.collection.mutable
 
   private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[Annotation[_, _], Any]] =
     new util.IdentityHashMap()
