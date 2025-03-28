@@ -18,7 +18,7 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSaveRegistrationOptions, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -28,8 +28,12 @@ import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
 
 /**
  * Effekt Language Server
+ *
+ * @param compileOnChange Whether to compile on `didChange` events
+ *                        Currently disabled because references are erased when there are any compiler errors.
+ *                        Therefore, we currently only update on `didSave` until we have working caching for references.
  */
-class Server(config: EffektConfig) extends LanguageServer with Driver with Intelligence with TextDocumentService with WorkspaceService {
+class Server(config: EffektConfig, compileOnChange: Boolean=false) extends LanguageServer with Driver with Intelligence with TextDocumentService with WorkspaceService {
   private var client: EffektLanguageClient = _
   private val textDocumentService = this
   private val workspaceService = this
@@ -57,6 +61,18 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
     capabilities.setDocumentSymbolProvider(true)
     capabilities.setCodeActionProvider(true)
     capabilities.setInlayHintProvider(true)
+
+    // We need to explicitly ask the client to include the text on save events.
+    // Otherwise, when not listening to `didChange`, we have no way to get the text of the file,
+    // when the client decides not to include the text in the `didSave` event.
+    val saveOptions = new SaveOptions()
+    saveOptions.setIncludeText(true)
+
+    val syncOptions = new TextDocumentSyncOptions();
+    syncOptions.setOpenClose(true);
+    syncOptions.setChange(TextDocumentSyncKind.Full);
+    syncOptions.setSave(saveOptions);
+    capabilities.setTextDocumentSync(syncOptions);
 
     // Load the initial settings from client-sent `initializationOptions` (if any)
     // This is not part of the LSP standard, but seems to be the most reliable way to have the correct initial settings
@@ -215,6 +231,7 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
   //
 
   def didChange(params: DidChangeTextDocumentParams): Unit = {
+    if (!compileOnChange) return
     val document = params.getTextDocument
     clearDiagnostics(document.getUri)
     getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, getConfig)

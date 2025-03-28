@@ -2,7 +2,7 @@ package effekt
 
 import com.google.gson.{JsonElement, JsonParser}
 import munit.FunSuite
-import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, VersionedTextDocumentIdentifier}
+import org.eclipse.lsp4j.{DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, VersionedTextDocumentIdentifier}
 import org.eclipse.lsp4j.jsonrpc.messages
 
 import java.io.{PipedInputStream, PipedOutputStream}
@@ -30,7 +30,9 @@ class LSPTests extends FunSuite {
     val serverIn = new PipedInputStream(clientOut)
     val serverOut = new PipedOutputStream(clientIn)
 
-    val server = new Server(config)
+    // The server currently uses `compileOnChange = false` by default, but we set it to `true` for testing
+    // because we would like to switch to `didChange` events once we have working caching for references.
+    val server = new Server(config, compileOnChange = true)
 
     val mockClient = new MockLanguageClient()
     server.connect(mockClient)
@@ -60,13 +62,22 @@ class LSPTests extends FunSuite {
     withClientAndServer { (client, server) =>
       val initializeResult = server.initialize(new InitializeParams()).get()
       val expectedCapabilities = new ServerCapabilities()
-      expectedCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
       expectedCapabilities.setHoverProvider(true)
       expectedCapabilities.setDefinitionProvider(true)
       expectedCapabilities.setReferencesProvider(true)
       expectedCapabilities.setDocumentSymbolProvider(true)
       expectedCapabilities.setCodeActionProvider(true)
       expectedCapabilities.setInlayHintProvider(true)
+
+      val saveOptions = new SaveOptions()
+      saveOptions.setIncludeText(true)
+
+      val syncOptions = new TextDocumentSyncOptions();
+      syncOptions.setOpenClose(true);
+      syncOptions.setChange(TextDocumentSyncKind.Full);
+      syncOptions.setSave(saveOptions);
+      expectedCapabilities.setTextDocumentSync(syncOptions);
+
       assertEquals(initializeResult, new InitializeResult(expectedCapabilities))
     }
   }
