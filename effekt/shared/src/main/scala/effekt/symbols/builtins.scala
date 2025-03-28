@@ -53,6 +53,9 @@ object builtins {
   val AsyncSymbol = Interface(Name.local("Async"), Nil, Nil)
   val AsyncCapability = ExternResource(name("async"), InterfaceType(AsyncSymbol, Nil))
 
+  val GlobalSymbol = Interface(Name.local("Global"), Nil, Nil)
+  val GlobalCapability = ExternResource(name("global"), InterfaceType(GlobalSymbol, Nil))
+
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
     val interface: Interface = Interface(Name.local("Ref"), List(S), Nil)
@@ -86,23 +89,16 @@ object builtins {
     "Region" -> RegionSymbol
   )
 
-  lazy val globalRegion = ExternResource(name("global"), TRegion)
-
-  val rootTerms: Map[String, TermSymbol] = Map(
-    "global" -> globalRegion
-  )
-
   val rootCaptures: Map[String, Capture] = Map(
     "io" -> IOCapability.capture,
     "async" -> AsyncCapability.capture,
-    "global" -> globalRegion.capture
+    "global" -> GlobalCapability.capture
   )
 
   // captures which are allowed on the toplevel
   val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, globalRegion.capture)
 
   lazy val rootBindings: Bindings =
-    Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures,
-      Map("effekt" -> Bindings(rootTerms.map { case (k, v) => (k, Set(v)) }, rootTypes, rootCaptures, Map.empty)))
+    Bindings(Map.empty, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
 
 }

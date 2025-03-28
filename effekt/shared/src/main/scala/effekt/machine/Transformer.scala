@@ -89,9 +89,7 @@ object Transformer {
 
           // Regions are blocks and can be free, but do not have info.
           case core.Variable.Block(id, core.Type.TRegion, capt) =>
-            if id == symbols.builtins.globalRegion
-            then Set.empty
-            else Set(Variable(transform(id), Type.Prompt()))
+            Set(Variable(transform(id), Type.Prompt()))
 
           case core.Variable.Block(pid, tpe, capt) if pid != id => BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
@@ -254,24 +252,13 @@ object Transformer {
 
       case core.Alloc(id, init, region, body) =>
         transform(init).run { value =>
-          val tpe = value.tpe;
-          val name = transform(id)
-          val variable = Variable(name, tpe)
-          val reference = Variable(transform(id), Type.Reference(tpe))
+          val reference = Variable(transform(id), Type.Reference(value.tpe))
           val prompt = Variable(transform(region), Type.Prompt())
           val temporary = Variable(freshName("temporaryStack"), Type.Stack())
 
-          region match {
-            case symbols.builtins.globalRegion =>
-              val globalPrompt = Variable("global", Type.Prompt())
-              Shift(temporary, globalPrompt,
-                Var(reference, value, Type.Positive(),
-                  Resume(temporary, transform(body))))
-            case _ =>
-              Shift(temporary, prompt,
-                Var(reference, value, Type.Positive(),
-                  Resume(temporary, transform(body))))
-          }
+          Shift(temporary, prompt,
+            Var(reference, value, Type.Positive(),
+              Resume(temporary, transform(body))))
         }
 
       case core.Var(ref, init, capture, body) =>

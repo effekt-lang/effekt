@@ -10,7 +10,7 @@ import effekt.PhaseResult.CoreTransformed
  */
 trait CoreTests extends munit.FunSuite {
 
-  protected def defaultNames = symbols.builtins.rootTypes ++ symbols.builtins.rootTerms ++ symbols.builtins.rootCaptures
+  protected def defaultNames: Map[String, _root_.effekt.symbols.Symbol] = symbols.builtins.rootTypes ++ symbols.builtins.rootCaptures
 
   def shouldBeEqual(obtained: ModuleDecl, expected: ModuleDecl, clue: => Any)(using Location) =
     assertEquals(obtained, expected, {
