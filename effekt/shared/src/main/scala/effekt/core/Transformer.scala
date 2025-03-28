@@ -716,7 +716,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case source.LiteralPattern(source.Literal(value, tpe)) =>
         Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
       case source.MultiPattern(patterns) =>
-        Context.panic("Multi-pattern should have been desugared in Parser")
+        Context.panic("Multi-pattern should have been split on toplevel / nested MultiPattern")
     }
 
     def transformGuard(p: source.MatchGuard): List[Condition] =
