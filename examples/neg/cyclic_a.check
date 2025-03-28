@@ -1,0 +1,10 @@
+[error] ./examples/neg/cyclic_a.effekt:3:1: Cyclic import: cyclic_a depends on itself, via:
+	cyclic_a -> cyclic_b -> cyclic_a
+import examples/neg/cyclic_b
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] ./examples/neg/cyclic_a.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_a
+import examples/neg/cyclic_b
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] ./examples/neg/cyclic_a.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_b
+import examples/neg/cyclic_b
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
