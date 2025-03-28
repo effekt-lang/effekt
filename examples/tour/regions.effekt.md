@@ -131,7 +131,8 @@ def example5() = {
 }
 ```
 
-We can return a closure that closes over a mutable reference. This is only possible because `x` is allocated on the heap and subject to garbage collection.
+We can return a closure that closes over a mutable reference. This is only possible because `x` is allocated on the heap and subject to garbage collection. Note that in most cases it does not make sense to define mutable references using `var`.
+
 
 ## References
 
