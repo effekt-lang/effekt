@@ -19,8 +19,8 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
     ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
 
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
-    case ModuleDecl(path, includes, defs) =>
-      ModuleDecl(path, includes, defs.flatMap(rewrite))
+    case ModuleDecl(path, includes, defs, span) =>
+      ModuleDecl(path, includes, defs.flatMap(rewrite), span)
   }
 
   def findPreferred(bodies: List[ExternBody])(using Context): ExternBody = {
