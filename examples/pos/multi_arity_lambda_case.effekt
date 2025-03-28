@@ -1,0 +1,16 @@
+def foo[A, B, C](a: A, b: B){ fn: (A, B) => C }: C = {
+  fn(a, b)
+}
+
+def main() = {
+  foo(12, true){
+    case i, false => println("Case I")
+    case 0, true => println("Case II")
+    case _, true => println("Case III")
+  }
+  foo((1,2), [1,2,3]){
+    case (x, y), Cons(1,Cons(2,Cons(3,Nil()))) => println("OK")
+    case (_, _), _ => println("ERR")
+  }
+  ()
+}
