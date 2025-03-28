@@ -6,8 +6,28 @@ import effekt.util.messages.ErrorReporter
 
 import java.util
 
-case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
+sealed trait Annotation[K, V] {
+  /**
+   * Currently a constant, but could be changed when needed
+   */
+  val bindToObjectIdentity: Boolean = true
+}
+
+case class SymbolAnnotation[K <: symbols.Symbol, V](name: String, description: String) extends Annotation[K, V] {
   type Value = V
+
+  override def toString = name
+}
+
+case class SourceAnnotation[K <: kiama.util.Source, V](name: String, description: String) extends Annotation[K, V] {
+  type Value = V
+
+  override def toString = name
+}
+
+case class TreeAnnotation[K <: source.Tree, V](name: String, description: String) extends Annotation[K, V] {
+  type Value = V
+
   override def toString = name
 }
 
@@ -59,16 +79,16 @@ class Annotations private(
     annotationsAt(ann).map { case (k, v) => (k.key, v) }.toList
 
   def apply[K, V](ann: Annotation[K, V], key: K)(using C: ErrorReporter): V =
-    get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
+    get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.toString} '${key}'") }
 
   def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(using treesDB: TreeAnnotations, symbolsDB: SymbolAnnotations): Unit =
     val anns = annotationsAt(ann)
     anns.foreach { case (kk, v) =>
       kk.key match {
         case sym: symbols.Symbol =>
-          symbolsDB.annotate(ann.asInstanceOf[Annotation[symbols.Symbol, V]], sym, f(sym, v))
+          symbolsDB.annotate(ann.asInstanceOf[SymbolAnnotation[_, V]], sym, f(sym, v))
         case key: source.Tree =>
-          treesDB.annotate(ann.asInstanceOf[Annotation[source.Tree, V]], key, f(key, v))
+          treesDB.annotate(ann.asInstanceOf[TreeAnnotation[_, V]], key, f(key, v))
       }
     }
 
@@ -113,7 +133,7 @@ object Annotations {
    *
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val InferredEffect = Annotation[source.Tree, symbols.Effects](
+  val InferredEffect = TreeAnnotation[source.Tree, symbols.Effects](
     "InferredEffect",
     "the inferred effect of"
   )
@@ -124,7 +144,7 @@ object Annotations {
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val InferredValueType = Annotation[source.Tree, symbols.ValueType](
+  val InferredValueType = TreeAnnotation[source.Tree, symbols.ValueType](
     "InferredValueType",
     "the inferred type of"
   )
@@ -132,7 +152,7 @@ object Annotations {
   /**
    * The type as inferred by typer at a given position in the tree
    */
-  val InferredBlockType = Annotation[source.Tree, symbols.BlockType](
+  val InferredBlockType = TreeAnnotation[source.Tree, symbols.BlockType](
     "InferredBlockType",
     "the inferred block type of"
   )
@@ -140,7 +160,7 @@ object Annotations {
   /**
    * Type arguments of a _function call_ as inferred by typer
    */
-  val TypeArguments = Annotation[source.CallLike, List[symbols.ValueType]](
+  val TypeArguments = TreeAnnotation[source.CallLike, List[symbols.ValueType]](
     "TypeArguments",
     "the inferred or annotated type arguments of"
   )
@@ -148,7 +168,7 @@ object Annotations {
   /**
    * Existential type parameters inferred by the typer when type-checking pattern matches.
    */
-  val TypeParameters = Annotation[source.TagPattern | source.OpClause, List[symbols.TypeVar]](
+  val TypeParameters = TreeAnnotation[source.TagPattern | source.OpClause, List[symbols.TypeVar]](
     "TypeParameters",
     "the existentials of the constructor pattern or operation clause"
   )
@@ -156,7 +176,7 @@ object Annotations {
   /**
    * Value type of symbols like value binders or value parameters
    */
-  val ValueType = Annotation[symbols.ValueSymbol, symbols.ValueType](
+  val ValueType = SymbolAnnotation[symbols.ValueSymbol, symbols.ValueType](
     "ValueType",
     "the type of value symbol"
   )
@@ -164,7 +184,7 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
+  val BlockType = SymbolAnnotation[symbols.BlockSymbol, symbols.BlockType](
     "BlockType",
     "the type of block symbol"
   )
@@ -172,7 +192,7 @@ object Annotations {
   /**
    * Capability set used by a function definition, block parameter, ...
    */
-  val Captures = Annotation[symbols.BlockSymbol, symbols.Captures](
+  val Captures = SymbolAnnotation[symbols.BlockSymbol, symbols.Captures](
     "Captures",
     "the set of used capabilities of a block symbol"
   )
@@ -180,7 +200,7 @@ object Annotations {
   /**
    * Used by LSP to list all captures
    */
-  val CaptureForFile = Annotation[kiama.util.Source, List[(source.Tree, symbols.CaptureSet)]](
+  val CaptureForFile = SourceAnnotation[kiama.util.Source, List[(source.Tree, symbols.CaptureSet)]](
     "CaptureSet",
     "all inferred captures for file"
   )
@@ -190,7 +210,7 @@ object Annotations {
    *
    * @deprecated
    */
-  val SourceModule = Annotation[symbols.Symbol, symbols.Module](
+  val SourceModule = SymbolAnnotation[symbols.Symbol, symbols.Module](
     "SourceModule",
     "the source module of symbol"
   )
@@ -198,7 +218,7 @@ object Annotations {
   /**
    * Used by LSP for jump-to-definition of imports
    */
-  val IncludedSymbols = Annotation[source.Include, symbols.Module](
+  val IncludedSymbols = TreeAnnotation[source.Include, symbols.Module](
     "IncludedSymbols",
     "the symbol for an import / include"
   )
@@ -206,7 +226,7 @@ object Annotations {
   /**
    * All symbols defined in a source file
    */
-  val DefinedSymbols = Annotation[kiama.util.Source, Set[symbols.Symbol]](
+  val DefinedSymbols = SourceAnnotation[kiama.util.Source, Set[symbols.Symbol]](
     "DefinedSymbols",
     "all symbols for source file"
   )
@@ -218,7 +238,7 @@ object Annotations {
    *
    * TODO maybe store the whole definition tree instead of the name, which requries refactoring of assignSymbol
    */
-  val DefinitionTree = Annotation[symbols.Symbol, source.IdDef](
+  val DefinitionTree = SymbolAnnotation[symbols.Symbol, source.IdDef](
     "DefinitionTree",
     "the tree identifying the definition site of symbol"
   )
@@ -228,7 +248,7 @@ object Annotations {
    *
    * Filled by namer and used for reverse lookup in LSP server
    */
-  val References = Annotation[symbols.Symbol, List[source.Reference]](
+  val References = SymbolAnnotation[symbols.Symbol, List[source.Reference]](
     "References",
     "the references referring to symbol"
   )
@@ -239,7 +259,7 @@ object Annotations {
    * Id can be the definition-site (IdDef) or use-site (IdRef) of the
    * specific symbol
    */
-  val Symbol = Annotation[source.Id, symbols.Symbol](
+  val Symbol = TreeAnnotation[source.Id, symbols.Symbol](
     "Symbol",
     "the symbol for identifier"
   )
@@ -249,12 +269,12 @@ object Annotations {
    *
    * Resolved and annotated by namer and used by typer.
    */
-  val Type = Annotation[source.Type, symbols.Type](
+  val Type = TreeAnnotation[source.Type, symbols.Type](
     "Type",
     "the resolved type for"
   )
 
-  val Capture = Annotation[source.CaptureSet, symbols.CaptureSet](
+  val Capture = TreeAnnotation[source.CaptureSet, symbols.CaptureSet](
     "Capture",
     "the resolved capture set for"
   )
@@ -262,7 +282,7 @@ object Annotations {
   /**
    * Similar to TypeAndEffect: the capture set of a program
    */
-  val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
+  val InferredCapture = TreeAnnotation[source.Tree, symbols.CaptureSet](
     "InferredCapture",
     "the inferred capture for source tree"
   )
@@ -273,7 +293,7 @@ object Annotations {
    *
    * Inferred by typer, used by elaboration.
    */
-  val BoundCapabilities = Annotation[source.Tree, List[symbols.BlockParam]](
+  val BoundCapabilities = TreeAnnotation[source.Tree, List[symbols.BlockParam]](
     "BoundCapabilities",
     "capabilities bound by this tree"
   )
@@ -283,12 +303,12 @@ object Annotations {
    *
    * Inferred by typer, used by elaboration.
    */
-  val CapabilityArguments = Annotation[source.CallLike, List[symbols.BlockParam]](
+  val CapabilityArguments = TreeAnnotation[source.CallLike, List[symbols.BlockParam]](
     "CapabilityArguments",
     "capabilities inferred as additional arguments for this call"
   )
 
-  val CapabilityReceiver = Annotation[source.Do, symbols.BlockParam](
+  val CapabilityReceiver = TreeAnnotation[source.Do, symbols.BlockParam](
     "CapabilityReceiver",
     "the receiver as inferred for this effect operation call"
   )
@@ -298,7 +318,7 @@ object Annotations {
    *
    * Used by typer for region checking mutable variables.
    */
-  val SelfRegion = Annotation[source.Tree, symbols.TrackedParam](
+  val SelfRegion = TreeAnnotation[source.Tree, symbols.TrackedParam](
     "SelfRegion",
     "the region corresponding to a lexical scope"
   )
@@ -310,7 +330,7 @@ object Annotations {
    * Introduced by the pretyper.
    * Used by typer in order to display a more precise error message.
    */
-  val UnboxParentDef = Annotation[source.Unbox, source.Def](
+  val UnboxParentDef = TreeAnnotation[source.Unbox, source.Def](
     "UnboxParentDef",
     "the parent definition of an Unbox if it was synthesized"
   )
@@ -329,10 +349,10 @@ object Annotations {
  * It should thus only be used to store a "ground" truth that will not be changed again.
  */
 trait TreeAnnotations { self: Context =>
-  private type AnnotationsMap = Map[Annotation[_, _], Any]
+  private type AnnotationsMap = Map[TreeAnnotation[_, _], Any]
 
-  private type Annotations = Map[Annotation[_, _], Any]
-  type DB = util.IdentityHashMap[source.Tree, Map[Annotation[_, _], Any]]
+  private type Annotations = Map[TreeAnnotation[_, _], Any]
+  type DB = util.IdentityHashMap[source.Tree, Map[TreeAnnotation[_, _], Any]]
   var db: DB = new util.IdentityHashMap()
 
   private def annotationsAt[K](key: K): AnnotationsMap =
@@ -357,20 +377,20 @@ trait TreeAnnotations { self: Context =>
     db.put(key, anns ++ value)
   }
 
-  def annotate[K <: source.Tree, V](ann: Annotation[K, V], key: source.Tree, value: V): Unit = {
+  def annotate[K <: source.Tree, V](ann: TreeAnnotation[K, V], key: source.Tree, value: V): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns + (ann -> value))
   }
 
-  def annotationOption[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Option[V] =
+  def annotationOption[V](ann: TreeAnnotation[_, V], key: source.Tree): Option[V] =
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): V =
+  def annotation[V](ann: TreeAnnotation[_, V], key: source.Tree): V =
     annotationOption(ann, key).getOrElse {
       panic(s"Cannot find ${ann.description} for '${key}'")
     }
 
-  def hasAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Boolean =
+  def hasAnnotation[V](ann: TreeAnnotation[_, V], key: source.Tree): Boolean =
     annotationsAt(key).isDefinedAt(ann)
 
   // Customized Accessors
@@ -503,18 +523,18 @@ trait TreeAnnotations { self: Context =>
 trait SourceAnnotations { self: Context =>
   import scala.collection.mutable
 
-  private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[Annotation[_, _], Any]] =
+  private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[SourceAnnotation[_, _], Any]] =
     mutable.Map.empty
 
-  private def annotationsAt(source: kiama.util.Source): Map[Annotation[_, _], Any] =
+  private def annotationsAt(source: kiama.util.Source): Map[SourceAnnotation[_, _], Any] =
     sourceAnnotationsDB.getOrElse(source, Map.empty)
 
-  def annotate[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source, value: A): Unit = {
+  def annotate[A](ann: SourceAnnotation[_, A], source: kiama.util.Source, value: A): Unit = {
     val anns = annotationsAt(source)
     sourceAnnotationsDB.update(source, anns + (ann -> value))
   }
 
-  def annotationOption[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source): Option[A] =
+  def annotationOption[A](ann: SourceAnnotation[_, A], source: kiama.util.Source): Option[A] =
     annotationsAt(source).get(ann).asInstanceOf[Option[A]]
 
   /**
@@ -542,22 +562,22 @@ trait SourceAnnotations { self: Context =>
  */
 trait SymbolAnnotations { self: Context =>
 
-  private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[Annotation[_, _], Any]] =
+  private val symbolAnnotationsDB: util.IdentityHashMap[symbols.Symbol, Map[SymbolAnnotation[_, _], Any]] =
     new util.IdentityHashMap()
 
   // Retrieve the annotations for a given symbol.
-  private def annotationsAt(sym: symbols.Symbol): Map[Annotation[_, _], Any] =
+  private def annotationsAt(sym: symbols.Symbol): Map[SymbolAnnotation[_, _], Any] =
     symbolAnnotationsDB.getOrDefault(sym, Map.empty)
 
   // Annotate a symbol with an annotation and its value.
-  def annotate[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol, value: A): Unit = {
+  def annotate[A](ann: SymbolAnnotation[_, A], sym: symbols.Symbol, value: A): Unit = {
     val key = sym
     val anns = annotationsAt(sym)
     symbolAnnotationsDB.put(key, anns + (ann -> value))
   }
 
   // Retrieve an optional annotation for a symbol.
-  def annotationOption[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol): Option[A] =
+  def annotationOption[A](ann: SymbolAnnotation[_, A], sym: symbols.Symbol): Option[A] =
     annotationsAt(sym).get(ann).asInstanceOf[Option[A]]
 
   def typeOf(s: Symbol): symbols.Type = s match {
