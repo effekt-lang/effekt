@@ -295,6 +295,23 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         var resEff = ConcreteEffects.union(results.map{ case Result(tpe, effs) => effs })
 
+        // check that number of patterns matches number of scrutinees
+        val arity = scs.length
+        clauses.foreach {
+          case cls @ source.MatchClause(source.MultiPattern(patterns), guards, body) =>
+            if (patterns.length != arity) {
+              Context.at(cls){
+                Context.error(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${arity}).")
+              }
+            }
+          case cls @ source.MatchClause(pattern, guards, body) =>
+            if (arity != 1) {
+              Context.at(cls) {
+                Context.error(pp"Number of patterns (1) does not match number of parameters / scrutinees (${arity}).")
+              }
+            }
+        }
+
         val tpes = clauses.map {
           case source.MatchClause(p, guards, body) =>
             // (3) infer types for pattern(s)
