@@ -9,8 +9,26 @@ extern js """
   }
 """
 
+extern llvm """
+define void @c_ref_erase_field(ptr %0) {
+  %obj_ptr = getelementptr inbounds ptr, ptr %0, i64 8
+  %tag = load i64, ptr %0, align 8
+  %obj = load ptr, ptr %obj_ptr, align 8
+  tail call void @erasePositive(i64 %tag, ptr %obj)
+  ret void
+}
+"""
+
 /// Global, mutable references
 extern type Ref[T]
+
+/** We represent references like positive types in LLVM
+ *  The tag is 0 and the obj points to memory with the following layout:
+ *
+ *   +--[ Header ]--------------+------------+
+ *   | ReferenceCount  | Eraser | Field      |
+ *   +--------------------------+------------+
+ */
 
 /// Allocates a new reference, keeping its value _undefined_.
 /// Prefer using `ref` constructor instead to ensure that the value is defined.
@@ -18,8 +36,20 @@ extern global def allocate[T](): Ref[T] =
   js "{ value: undefined }"
   chez "(box #f)"
   llvm """
-    %z = call %Pos @c_ref_fresh(%Pos zeroinitializer)
-    ret %Pos %z
+    ; sizeof Header + sizeof Pos = 32
+    %alloc = tail call noalias dereferenceable_or_null(32) ptr @malloc(i64 noundef 32)
+    %header_eraser_ptr = getelementptr ptr, ptr %alloc, i64 1
+    %pos_tag_ptr = getelementptr ptr, ptr %alloc, i64 2
+    %pos_obj_ptr = getelementptr ptr, ptr %alloc, i64 3
+
+    store i64 0, ptr %alloc, align 8
+    store ptr @c_ref_erase_field, ptr %header_eraser_ptr, align 8
+    store i64 0, ptr %pos_tag_ptr, align 8
+    store ptr null, ptr %pos_obj_ptr, align 8 
+
+    %pos_ret = insertvalue %Pos { i64 0, ptr poison }, ptr %alloc, 1
+
+    ret %Pos %pos_ret
   """
 
 /// Creates a new reference with the initial value `init`.
@@ -27,8 +57,22 @@ extern global def ref[T](init: T): Ref[T] =
   js "{ value: ${init} }"
   chez "(box ${init})"
   llvm """
-    %z = call %Pos @c_ref_fresh(%Pos ${init})
-    ret %Pos %z
+    %pos_tag = extractvalue %Pos ${init}, 0
+    %pos_obj = extractvalue %Pos ${init}, 1
+    ; sizeof Header + sizeof Pos = 32
+    %alloc = tail call noalias dereferenceable_or_null(32) ptr @malloc(i64 noundef 32)
+    %header_eraser_ptr = getelementptr ptr, ptr %alloc, i64 1
+    %pos_tag_ptr = getelementptr ptr, ptr %alloc, i64 2
+    %pos_obj_ptr = getelementptr ptr, ptr %alloc, i64 3
+
+    store i64 0, ptr %alloc, align 8
+    store ptr @c_ref_erase_field, ptr %header_eraser_ptr, align 8
+    store i64 %pos_tag, ptr %pos_tag_ptr, align 8
+    store ptr %pos_obj, ptr %pos_obj_ptr, align 8 
+
+    %pos_ret = insertvalue %Pos { i64 0, ptr poison }, ptr %alloc, 1
+
+    ret %Pos %pos_ret
   """
   vm "ref::ref[T](T)"
 
@@ -37,8 +81,21 @@ extern global def get[T](ref: Ref[T]): T =
   js "${ref}.value"
   chez "(unbox ${ref})"
   llvm """
-    %z = call %Pos @c_ref_get(%Pos ${ref})
-    ret %Pos %z
+    %ref_tag = extractvalue %Pos ${ref}, 0
+    %ref_obj = extractvalue %Pos ${ref}, 1
+
+    %tag_ptr = getelementptr inbounds ptr, ptr %ref_obj, i64 2
+    %obj_ptr = getelementptr inbounds ptr, ptr %ref_obj, i64 3
+    %tag = load i64, ptr %tag_ptr, align 8
+    %obj = load ptr, ptr %obj_ptr, align 8
+
+    tail call void @sharePositive(i64 %tag, ptr %obj)
+    tail call void @erasePositive(i64 %ref_tag, ptr %ref_obj)
+
+    %pos_ret0 = insertvalue %Pos undef, i64 %tag, 0
+    %pos_ret1 = insertvalue %Pos %pos_ret0, ptr %obj, 1
+
+    ret %Pos %pos_ret1
   """
   vm "ref::get[T](Ref[T])"
 
@@ -47,7 +104,21 @@ extern global def set[T](ref: Ref[T], value: T): Unit =
   js "set$impl(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"
   llvm """
-    %z = call %Pos @c_ref_set(%Pos ${ref}, %Pos ${value})
-    ret %Pos %z
+    %ref_tag = extractvalue %Pos ${ref}, 0
+    %ref_obj = extractvalue %Pos ${ref}, 1
+    %val_tag = extractvalue %Pos ${value}, 0
+    %val_obj = extractvalue %Pos ${value}, 1
+
+    %tag_ptr = getelementptr ptr, ptr %ref_obj, i64 2
+    %tag = load i64, ptr %tag_ptr, align 8
+    %obj_ptr = getelementptr ptr, ptr %ref_obj, i64 3
+    %obj = load ptr, ptr %obj_ptr, align 8
+
+    tail call void @erasePositive(i64 %tag, ptr %obj)
+    store i64 %val_tag, ptr %tag_ptr
+    store ptr %val_obj, ptr %obj_ptr
+    tail call void @erasePositive(i64 %ref_tag, ptr %ref_obj) 
+
+    ret %Pos zeroinitializer
   """
   vm "ref::set[T](Ref[T], T)"
