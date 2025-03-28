@@ -167,6 +167,21 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         case List(_) => source.IgnorePattern()
         case scs => source.MultiPattern(List.fill(scs.length){source.IgnorePattern()})
       }
+
+      // check that all clauses have the correct number of patterns
+      clauses.foreach{
+        case cls @ source.MatchClause(source.MultiPattern(patterns), guards, body) =>
+          if (scrutinees.length != patterns.length) {
+            Context.error(pp"Number of patterns (${patterns.length}) does not match number of parameters / scrutinees (${scrutinees.length}).")
+          }
+        case cls @ source.MatchClause(_, _, _) =>
+          Context.at(cls){
+            if (scrutinees.length != 1) {
+              Context.error(pp"Number of patterns (1) does not match number of parameters / scrutinees (${scrutinees.length}).")
+            }
+          }
+      }
+
       val defaultClause = default.toList.map(body => source.MatchClause(defaultPattern, Nil, body))
       ExhaustivityChecker.checkExhaustive(scrutinees, clauses ++ defaultClause)
 
