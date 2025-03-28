@@ -89,7 +89,7 @@ trait Intelligence {
 
   def getSymbolOf(tree: Tree)(using C: Context): Option[Symbol] =
     tree match {
-      case i @ Include(path) => C.annotationOptionTree(Annotations.IncludedSymbols, i)
+      case i @ Include(path) => C.annotationOption(Annotations.IncludedSymbols, i)
       case _ => None
     }
 
@@ -122,7 +122,7 @@ trait Intelligence {
                |""".stripMargin
 
   def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
-    C.annotationOptionSource(Annotations.CaptureForFile, src).getOrElse(Nil)
+    C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
   // For now, we only show captures of function definitions and calls to box
   def getInferredCaptures(range: kiama.util.Range)(using C: Context): List[(Position, CaptureSet)] =

@@ -73,7 +73,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     val includes = decl.includes collect {
       case im @ source.Include(path) =>
         val mod = Context.at(im) { importDependency(path) }
-        Context.annotateTree(Annotations.IncludedSymbols, im, mod)
+        Context.annotate(Annotations.IncludedSymbols, im, mod)
         mod
     }
 

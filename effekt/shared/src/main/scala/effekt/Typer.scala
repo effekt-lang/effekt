@@ -398,7 +398,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
           val existentials = existentialParams.map(ValueTypeRef.apply)
 
-          Context.annotateTree(Annotations.TypeParameters, d, existentialParams)
+          Context.annotate(Annotations.TypeParameters, d, existentialParams)
 
           // canonical ordering on annotated effects
           val canonical = CanonicalOrdering(declared.effects.toList)
@@ -513,7 +513,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             usingCapture(capt2)
             Result(btpe, eff1)
           case _ =>
-            Context.annotationOptionTree(Annotations.UnboxParentDef, u) match {
+            Context.annotationOption(Annotations.UnboxParentDef, u) match {
               case Some(source.DefDef(id, annot, block)) =>
                 // Since this `unbox` was synthesized by the compiler from `def foo = E`,
                 // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
@@ -569,7 +569,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // create fresh **bound** variables
       val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name) }
 
-      Context.annotateTree(Annotations.TypeParameters, p, freshExistentials)
+      Context.annotate(Annotations.TypeParameters, p, freshExistentials)
 
       val targs = (freshUniversals ++ freshExistentials).map { t => ValueTypeRef(t) }
 

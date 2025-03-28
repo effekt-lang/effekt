@@ -52,7 +52,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       query(term) ++ capt
 
     case t @ source.Do(effect, op, targs, vargs, bargs) =>
-      val cap = Context.treeAnnotation(Annotations.CapabilityReceiver, t)
+      val cap = Context.annotation(Annotations.CapabilityReceiver, t)
       combineAll(vargs.map(query)) ++ combineAll(bargs.map(query)) ++ CaptureSet(cap.capture)
 
     case t @ source.TryHandle(prog, handlers) =>
@@ -89,19 +89,19 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
       val cpt = query(body) -- boundCapabilities(tree) -- CaptureSet(bps.map(_.symbol.capture))
       // TODO Why do we need to update the annotation on the symbol here? Is the inferred capture for recursive functions
       //   wrong? Problematic example: examples/benchmarks/tree.effekt (chooseHandler has the empty set, but should have {this})
-      Context.annotateSymbol(Annotations.Captures, tree.symbol, cpt)
+      Context.annotate(Annotations.Captures, tree.symbol, cpt)
       cpt
 
     // regions
     case tree @ RegDef(id, annot, region, binding) =>
       val regSymbol = region.symbol.asBlockSymbol
       val regCapture = captureOf(regSymbol)
-      Context.annotateSymbol(Annotations.Captures, tree.symbol, regCapture)
+      Context.annotate(Annotations.Captures, tree.symbol, regCapture)
       query(binding) ++ regCapture
   }
 
   def boundCapabilities(t: Tree)(using Context): CaptureSet =
-    val bound = Context.treeAnnotation(Annotations.BoundCapabilities, t)
+    val bound = Context.annotation(Annotations.BoundCapabilities, t)
     CaptureSet(bound.map(_.capture))
 
   def captureOf(b: BlockSymbol)(using Context): CaptureSet =
@@ -115,11 +115,11 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
   def annotate(tree: source.ModuleDecl, src: Source)(using Context): Unit =
     given Unit = ();
     query(tree)
-    Context.annotateSource(Annotations.CaptureForFile, src, allCaptures)
+    Context.annotate(Annotations.CaptureForFile, src, allCaptures)
 
   override def visit[T <: Tree](t: T)(visitor: T => CaptureSet)(using Context, Unit): CaptureSet =
     val capt = visitor(t)
-    Context.annotateTree(Annotations.InferredCapture, t, capt)
+    Context.annotate(Annotations.InferredCapture, t, capt)
     allCaptures = (t, capt) :: allCaptures
     capt
 }

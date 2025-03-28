@@ -66,9 +66,9 @@ class Annotations private(
     anns.foreach { case (kk, v) =>
       kk.key match {
         case sym: symbols.Symbol =>
-          symbolsDB.annotateSymbol(ann.asInstanceOf[Annotation[symbols.Symbol, V]], sym, f(sym, v))
+          symbolsDB.annotate(ann.asInstanceOf[Annotation[symbols.Symbol, V]], sym, f(sym, v))
         case key: source.Tree =>
-          treesDB.annotateTree(ann.asInstanceOf[Annotation[source.Tree, V]], key, f(key, v))
+          treesDB.annotate(ann.asInstanceOf[Annotation[source.Tree, V]], key, f(key, v))
       }
     }
 
@@ -344,7 +344,7 @@ trait TreeAnnotations { self: Context =>
   def copyAnnotations(from: source.Tree, to: source.Tree): Unit = {
     val existing = annotationsAt(to)
     val source   = annotationsAt(from)
-    annotateTree(to, source ++ existing)
+    annotate(to, source ++ existing)
   }
 
   /**
@@ -352,25 +352,25 @@ trait TreeAnnotations { self: Context =>
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB
    */
-  def annotateTree(key: source.Tree, value: AnnotationsMap): Unit = {
+  def annotate(key: source.Tree, value: AnnotationsMap): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns ++ value)
   }
 
-  def annotateTree[K <: source.Tree, V](ann: Annotation[K, V], key: source.Tree, value: V): Unit = {
+  def annotate[K <: source.Tree, V](ann: Annotation[K, V], key: source.Tree, value: V): Unit = {
     val anns = db.getOrDefault(key, Map.empty)
     db.put(key, anns + (ann -> value))
   }
 
-  def annotationOptionTree[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Option[V] =
+  def annotationOption[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Option[V] =
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def treeAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): V =
-    annotationOptionTree(ann, key).getOrElse {
+  def annotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): V =
+    annotationOption(ann, key).getOrElse {
       panic(s"Cannot find ${ann.description} for '${key}'")
     }
 
-  def hasTreeAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Boolean =
+  def hasAnnotation[V](ann: Annotation[_ <: source.Tree, V], key: source.Tree): Boolean =
     annotationsAt(key).isDefinedAt(ann)
 
   // Customized Accessors
@@ -381,10 +381,10 @@ trait TreeAnnotations { self: Context =>
   // -----
 
   def typeArguments(c: source.CallLike): List[symbols.ValueType] =
-    treeAnnotation(Annotations.TypeArguments, c)
+    annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[ValueType] =
-    annotationOptionTree(Annotations.InferredValueType, t)
+    annotationOption(Annotations.InferredValueType, t)
 
   def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
@@ -392,7 +392,7 @@ trait TreeAnnotations { self: Context =>
     }
 
   def inferredBlockTypeOption(t: source.Tree): Option[BlockType] =
-    annotationOptionTree(Annotations.InferredBlockType, t)
+    annotationOption(Annotations.InferredBlockType, t)
 
   def inferredBlockTypeOf(t: source.Tree): BlockType =
     inferredBlockTypeOption(t).getOrElse {
@@ -400,7 +400,7 @@ trait TreeAnnotations { self: Context =>
     }
 
   def inferredEffectOption(t: source.Tree): Option[Effects] =
-    annotationOptionTree(Annotations.InferredEffect, t)
+    annotationOption(Annotations.InferredEffect, t)
 
   def inferredEffectOf(t: source.Tree): Effects =
     inferredEffectOption(t).getOrElse {
@@ -419,22 +419,22 @@ trait TreeAnnotations { self: Context =>
     }
 
   def inferredCapture(t: source.Tree): symbols.CaptureSet =
-    treeAnnotation(Annotations.InferredCapture, t)
+    annotation(Annotations.InferredCapture, t)
 
   def inferredCaptureOption(t: source.Tree): Option[symbols.CaptureSet] =
-    annotationOptionTree(Annotations.InferredCapture, t)
+    annotationOption(Annotations.InferredCapture, t)
 
   def annotateResolvedType(tree: source.Type)(tpe: symbols.Type): Unit =
-    annotateTree(Annotations.Type, tree, tpe)
+    annotate(Annotations.Type, tree, tpe)
 
   def resolvedType(tree: source.Type): symbols.Type =
-    treeAnnotation(Annotations.Type, tree)
+    annotation(Annotations.Type, tree)
 
   def annotateResolvedCapture(tree: source.CaptureSet)(capt: symbols.CaptureSet): Unit =
-    annotateTree(Annotations.Capture, tree, capt)
+    annotate(Annotations.Capture, tree, capt)
 
   def resolvedCapture(tree: source.CaptureSet): symbols.CaptureSet =
-    treeAnnotation(Annotations.Capture, tree)
+    annotation(Annotations.Capture, tree)
 
   // Symbols
   // -------
@@ -450,18 +450,18 @@ trait TreeAnnotations { self: Context =>
    */
   def assignSymbol(id: source.Id, sym: Symbol): Unit = id match {
     case id: source.IdDef =>
-      annotateSymbol(Annotations.DefinitionTree, sym, id)
+      annotate(Annotations.DefinitionTree, sym, id)
       sym match {
         case _: ResumeParam =>
         case s: symbols.TrackedParam =>
           // for tracked params, also note the id als definition site for the capture.
-          annotateSymbol(Annotations.DefinitionTree, s.capture, id)
+          annotate(Annotations.DefinitionTree, s.capture, id)
         case _ =>
       }
-      annotateTree(Annotations.Symbol, id, sym)
+      annotate(Annotations.Symbol, id, sym)
       addDefinedSymbolToSource(sym)
     case _ =>
-      annotateTree(Annotations.Symbol, id, sym)
+      annotate(Annotations.Symbol, id, sym)
       // addDefinedSymbolToSource(sym)
   }
 
@@ -469,7 +469,7 @@ trait TreeAnnotations { self: Context =>
     panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
   }
   def symbolOption(id: source.Id): Option[Symbol] =
-    annotationOptionTree(Annotations.Symbol, id)
+    annotationOption(Annotations.Symbol, id)
 
   /**
    * Searching the definitions for a Reference
@@ -479,8 +479,8 @@ trait TreeAnnotations { self: Context =>
   def symbolOf(tree: source.Reference): Symbol = {
     val sym = symbolOf(tree.id)
 
-    val refs = annotationOptionSymbol(Annotations.References, sym).getOrElse(Nil)
-    annotateSymbol(Annotations.References, sym, tree :: refs)
+    val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
+    annotate(Annotations.References, sym, tree :: refs)
     sym
   }
 
@@ -506,16 +506,16 @@ trait SourceAnnotations { self: Context =>
   private val sourceAnnotationsDB: mutable.Map[kiama.util.Source, Map[Annotation[_, _], Any]] =
     mutable.Map.empty
 
-  private def annotationsAtSource(source: kiama.util.Source): Map[Annotation[_, _], Any] =
+  private def annotationsAt(source: kiama.util.Source): Map[Annotation[_, _], Any] =
     sourceAnnotationsDB.getOrElse(source, Map.empty)
 
-  def annotateSource[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source, value: A): Unit = {
-    val anns = annotationsAtSource(source)
+  def annotate[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source, value: A): Unit = {
+    val anns = annotationsAt(source)
     sourceAnnotationsDB.update(source, anns + (ann -> value))
   }
 
-  def annotationOptionSource[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source): Option[A] =
-    annotationsAtSource(source).get(ann).asInstanceOf[Option[A]]
+  def annotationOption[A](ann: Annotation[kiama.util.Source, A], source: kiama.util.Source): Option[A] =
+    annotationsAt(source).get(ann).asInstanceOf[Option[A]]
 
   /**
    * List all symbols that have a source module
@@ -523,7 +523,7 @@ trait SourceAnnotations { self: Context =>
    * Used by the LSP server to generate outline
    */
   def sourceSymbolsFor(src: kiama.util.Source): Set[symbols.Symbol] =
-    annotationOptionSource(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
+    annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
 
   /**
    * Adds [[s]] to the set of defined symbols for the current module, by writing
@@ -532,8 +532,8 @@ trait SourceAnnotations { self: Context =>
   def addDefinedSymbolToSource(s: symbols.Symbol): Unit =
     if (module != null) {
       val src = module.source
-      val syms = annotationOptionSource(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
-      annotateSource(Annotations.DefinedSymbols, src, syms + s)
+      val syms = annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
+      annotate(Annotations.DefinedSymbols, src, syms + s)
     }
 }
 
@@ -546,19 +546,19 @@ trait SymbolAnnotations { self: Context =>
     new util.IdentityHashMap()
 
   // Retrieve the annotations for a given symbol.
-  private def annotationsAtSymbol(sym: symbols.Symbol): Map[Annotation[_, _], Any] =
+  private def annotationsAt(sym: symbols.Symbol): Map[Annotation[_, _], Any] =
     symbolAnnotationsDB.getOrDefault(sym, Map.empty)
 
   // Annotate a symbol with an annotation and its value.
-  def annotateSymbol[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol, value: A): Unit = {
+  def annotate[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol, value: A): Unit = {
     val key = sym
-    val anns = annotationsAtSymbol(sym)
+    val anns = annotationsAt(sym)
     symbolAnnotationsDB.put(key, anns + (ann -> value))
   }
 
   // Retrieve an optional annotation for a symbol.
-  def annotationOptionSymbol[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol): Option[A] =
-    annotationsAtSymbol(sym).get(ann).asInstanceOf[Option[A]]
+  def annotationOption[A](ann: Annotation[_ <: symbols.Symbol, A], sym: symbols.Symbol): Option[A] =
+    annotationsAt(sym).get(ann).asInstanceOf[Option[A]]
 
   def typeOf(s: Symbol): symbols.Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
@@ -568,7 +568,7 @@ trait SymbolAnnotations { self: Context =>
 
   // Retrieve the value type of a value symbol.
   def valueTypeOption(s: symbols.Symbol): Option[symbols.ValueType] = s match {
-    case vs: symbols.ValueSymbol => annotationOptionSymbol(Annotations.ValueType, vs)
+    case vs: symbols.ValueSymbol => annotationOption(Annotations.ValueType, vs)
     case _ => panic(s"Trying to find a value type for non-value '${s}'")
   }
 
@@ -577,7 +577,7 @@ trait SymbolAnnotations { self: Context =>
 
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
-      case b: BlockSymbol => annotationOptionSymbol(Annotations.BlockType, b) flatMap {
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: BlockType => Some(b)
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")
@@ -589,7 +589,7 @@ trait SymbolAnnotations { self: Context =>
   // Retrieve the function type of a block symbol.
   def functionTypeOption(s: symbols.Symbol): Option[symbols.FunctionType] = s match {
     case bs: symbols.BlockSymbol =>
-      annotationOptionSymbol(Annotations.BlockType, bs) match {
+      annotationOption(Annotations.BlockType, bs) match {
         case Some(ft: symbols.FunctionType) => Some(ft)
         case _ => None
       }
@@ -611,7 +611,7 @@ trait SymbolAnnotations { self: Context =>
    * Searching the definition for a symbol
    */
   def definitionTreeOption(s: symbols.Symbol): Option[source.IdDef] =
-    annotationOptionSymbol(Annotations.DefinitionTree, s)
+    annotationOption(Annotations.DefinitionTree, s)
 
   /**
    * List all references for a symbol
@@ -619,15 +619,15 @@ trait SymbolAnnotations { self: Context =>
    * Used by the LSP server for reverse lookup
    */
   def distinctReferencesTo(sym: symbols.Symbol): List[source.Reference] =
-    annotationOptionSymbol(Annotations.References, sym)
+    annotationOption(Annotations.References, sym)
       .getOrElse(Nil)
       .asInstanceOf[List[source.Reference]]
       .distinctBy(r => System.identityHashCode(r))
 
   def captureOf(sym: symbols.BlockSymbol): symbols.Captures =
-    annotationOptionSymbol(Annotations.Captures, sym)
+    annotationOption(Annotations.Captures, sym)
       .getOrElse(panic(s"Cannot find captures for ${sym}"))
 
   def captureOfOption(sym: symbols.BlockSymbol): Option[symbols.Captures] =
-    annotationOptionSymbol(Annotations.Captures, sym)
+    annotationOption(Annotations.Captures, sym)
 }

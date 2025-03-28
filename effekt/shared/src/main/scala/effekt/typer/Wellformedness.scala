@@ -126,8 +126,8 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
      * For handlers we check that the return type does not mention any bound capabilities
      */
     case tree @ source.TryHandle(prog, handlers) =>
-      val bound = Context.treeAnnotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
-      val usedEffects = Context.treeAnnotation(Annotations.InferredEffect, tree)
+      val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
+      val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
 
       val free = freeCapture(tpe)
@@ -176,7 +176,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
-      val capabilities = Context.treeAnnotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
       binding(types = boundTypes, captures = capabilities ++ blocks) {
         query(body)
@@ -262,10 +262,10 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
   override def query(op: source.OpClause)(using Context, WFContext): Unit = op match {
     case tree @ source.OpClause(id, tps, vps, bps, ret, body, resume) =>
-      val boundTypes = Context.treeAnnotation(Annotations.TypeParameters, op).toSet
+      val boundTypes = Context.annotation(Annotations.TypeParameters, op).toSet
       // bound capabilities are ONLY available on New(Implementation(OpClause ... )))
       // but not TryHandle(Implementation(OpClause) since their they are bound by the resumption
-      val capabilities = Context.annotationOptionTree(Annotations.BoundCapabilities, tree) match {
+      val capabilities = Context.annotationOption(Annotations.BoundCapabilities, tree) match {
         case Some(caps) => caps.map(_.capture).toSet
         case None => Set.empty
       }
@@ -289,14 +289,14 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
   def existentials(p: MatchPattern)(using Context): Set[TypeVar] = p match {
     case p @ MatchPattern.TagPattern(id, patterns) =>
-      Context.treeAnnotation(Annotations.TypeParameters, p).toSet ++ patterns.flatMap(existentials)
+      Context.annotation(Annotations.TypeParameters, p).toSet ++ patterns.flatMap(existentials)
     case _ => Set.empty
   }
 
   override def defn(using C: Context, WF: WFContext) = {
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
-      val capabilities = Context.treeAnnotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val blocks = bps.map(_.id.symbol.asBlockParam.capture).toSet
       binding(types = boundTypes, captures = capabilities ++ blocks) {
 

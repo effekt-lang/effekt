@@ -53,7 +53,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
           case ExternBody.EffektExternBody(featureFlag, body) =>
             val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret), body)
             Context.copyAnnotations(defn, d)
-            Context.annotateTree(Annotations.BoundCapabilities, d, Nil) // TODO ??
+            Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??
             Some(d)
           case u: ExternBody.Unsupported =>
             val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u))
