@@ -14,7 +14,7 @@ def stringBuffer[A] { prog: => A / StringBuffer }: A = {
   var pos = 0
 
   def ensureCapacity(sizeToAdd: Int): Unit = {
-    val cap = buffer.size - pos + 1
+    val cap = buffer.size - pos
     if (sizeToAdd <= cap) ()
     else {
       // Double the capacity while ensuring the required capacity
