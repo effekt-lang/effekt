@@ -340,7 +340,10 @@ class Lexer(source: Source) {
               case None => err("Not a 64bit floating point literal.")
               case Some(n) => TokenKind.Float(n)
             }
-          case _ => TokenKind.Integer(slice().toInt)
+          case _ => slice().toLongOption match {
+            case None => err("Not a 64bit integer literal.")
+            case Some(n) => TokenKind.Integer(n)
+          }
         }
       }
       case _ =>

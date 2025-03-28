@@ -37,8 +37,11 @@ object Transformer {
         Definition(Label(transform(id), vparams.map(transform) ++ bparams.map(transform)), transform(body))
       case core.Toplevel.Val(id, tpe, binding) =>
         Definition(BC.globals(id), transform(binding))
+      case core.Toplevel.Def(id, block @ core.New(impl)) =>
+        val variable = Variable(freshName("returned"), transform(block.tpe))
+        Definition(BC.globals(id), New(variable, transform(impl), Return(List(variable))))
       case d =>
-        ErrorReporter.abort(s"Toplevel object definitions not yet supported: ${d}")
+        ErrorReporter.abort(s"Other toplevel definitions not yet supported: ${d}")
     }
 
     val localDefinitions = BC.definitions
@@ -191,6 +194,10 @@ object Transformer {
         val opTag = DeclarationContext.getPropertyTag(method)
         transform(vargs, bargs).run { (values, blocks) =>
           callee match {
+            case Block.BlockVar(id, tpe, capt) if BPC.globals contains id =>
+              val variable = Variable(freshName("receiver"), transform(tpe))
+              PushFrame(Clause(List(variable), Invoke(variable, opTag, values ++ blocks)), Jump(BPC.globals(id)))
+
             case Block.BlockVar(id, tpe, capt) =>
               Invoke(Variable(transform(id), transform(tpe)), opTag, values ++ blocks)
 
@@ -503,6 +510,9 @@ object Transformer {
         noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), Nil)
         noteParameters(bparams)
       case Toplevel.Val(id, tpe, binding) =>
+        noteDefinition(id, Nil, Nil)
+        noteGlobal(id)
+      case Toplevel.Def(id, core.New(impl)) =>
         noteDefinition(id, Nil, Nil)
         noteGlobal(id)
       case other => ()
