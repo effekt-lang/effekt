@@ -1468,6 +1468,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     // recursively add positions to subtrees that are not yet annotated
     // this is better than nothing and means we have positions for desugared stuff
     def annotatePositions(res: Any): Unit = res match {
+      case l: List[_] =>
+        if (positions.getRange(l).isEmpty) {
+          positions.setStart(l, startPos)
+          positions.setFinish(l, endPos)
+          l.foreach(annotatePositions)
+        }
       case t: Tree =>
         val recurse = positions.getRange(t).isEmpty
         if(positions.getStart(t).isEmpty) positions.setStart(t, startPos)
