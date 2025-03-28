@@ -954,14 +954,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
               case MatchClause(MultiPattern(ps), _, _) :: _ => ps.length
               case _ => 1
             }
-            cs.foreach{
-              case MatchClause(MultiPattern(ps), g, e) =>
-                if(ps.length != arity)
-                  fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got ${ps.length}.")
-              case c @ MatchClause(p, _, _) =>
-                if(arity != 1)
-                  fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got 1.")
-            }
             // TODO positions should be improved here and fresh names should be generated for the scrutinee
             // also mark the temp name as synthesized to prevent it from being listed in VSCode
             val names = List.tabulate(arity){ n => s"__arg${n}" }
