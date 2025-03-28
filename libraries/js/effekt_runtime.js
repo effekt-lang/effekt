@@ -13,10 +13,6 @@ function Cell(init, region) {
   return cell;
 }
 
-const global = {
-  fresh: Cell
-}
-
 function Arena(_region) {
   const region = _region;
   return {
