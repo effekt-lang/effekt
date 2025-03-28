@@ -100,7 +100,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ValueVar(id, _)           => toDoc(id)
 
     case PureApp(b, targs, vargs)  => toDoc(b) <> argsToDoc(targs, vargs, Nil)
-    case Make(data, tag, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(Nil, vargs, Nil)
+    case Make(data, tag, targs, vargs)    => "make" <+> toDoc(data) <+> toDoc(tag) <> argsToDoc(targs, vargs, Nil)
     case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Box(b, capt) => parens("box" <+> toDoc(b))

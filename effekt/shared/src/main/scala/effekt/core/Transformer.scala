@@ -273,13 +273,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
           }
 
-          // [[ f ]] = { (x) => make f(x) }
+          // [[ f ]] = { [A](x) => make f[A](x) }
           def etaExpandConstructor(b: Constructor): BlockLit = {
             assert(bparamtps.isEmpty)
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
             BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, vargs)))
+              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, targs, vargs)))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
@@ -668,6 +668,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case MatchGuard.BooleanGuard(condition) => Nil
       case MatchGuard.PatternGuard(scrutinee, pattern) => boundInPattern(pattern)
     }
+    def boundTypesInPattern(p: source.MatchPattern): List[Id] = p match {
+      case source.AnyPattern(id) => List()
+      case p @ source.TagPattern(id, patterns) => Context.annotation(Annotations.TypeParameters, p) ++ patterns.flatMap(boundTypesInPattern)
+      case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+    }
+    def boundTypesInGuard(g: source.MatchGuard): List[Id] = g match {
+      case MatchGuard.BooleanGuard(condition) => Nil
+      case MatchGuard.PatternGuard(scrutinee, pattern) => boundTypesInPattern(pattern)
+    }
     def equalsFor(tpe: symbols.ValueType): (Pure, Pure) => Pure =
       val prelude = Context.module.findDependency(QualifiedName(Nil, "effekt")).getOrElse {
         Context.panic(pp"${Context.module.name.name}: Cannot find 'effekt' in prelude, which is necessary to compile pattern matching.")
@@ -685,14 +694,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
 
     // create joinpoint
+    val tparams = patterns.flatMap { case (sc, p) => boundTypesInPattern(p) } ++ guards.flatMap(boundTypesInGuard)
     val params = patterns.flatMap { case (sc, p) => boundInPattern(p) } ++ guards.flatMap(boundInGuard)
-    val joinpoint = Context.bind(TmpBlock(label), BlockLit(Nil, Nil, params, Nil, body))
+    val joinpoint = Context.bind(TmpBlock(label), BlockLit(tparams, Nil, params, Nil, body))
 
     def transformPattern(p: source.MatchPattern): Pattern = p match {
       case source.AnyPattern(id) =>
         Pattern.Any(id.symbol)
-      case source.TagPattern(id, patterns) =>
-        Pattern.Tag(id.symbol, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
+      case p @ source.TagPattern(id, patterns) =>
+        val tparams = Context.annotation(Annotations.TypeParameters, p)
+        Pattern.Tag(id.symbol, tparams, patterns.map { p => (transformPattern(p), transform(Context.inferredTypeOf(p))) })
       case source.IgnorePattern() =>
         Pattern.Ignore()
       case source.LiteralPattern(source.Literal(value, tpe)) =>
@@ -719,7 +730,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val transformedGuards   = guards.flatMap(transformGuard)
     val conditions = if transformedPatterns.isEmpty then transformedGuards else Condition.Patterns(transformedPatterns) :: guards.flatMap(transformGuard)
 
-    Clause(conditions, joinpoint, params.map(p => core.ValueVar(p.id, p.tpe)))
+    Clause(conditions, joinpoint, tparams.map(x => core.ValueType.Var(x)), params.map(p => core.ValueVar(p.id, p.tpe)))
   }
 
   /**
@@ -785,7 +796,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         DirectApp(BlockVar(f), targs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
-        Make(core.ValueType.Data(r.tpe, targs), r, vargsT)
+        val universals = targs.take(r.tpe.tparams.length)
+        val existentials = targs.drop(r.tpe.tparams.length)
+        Make(core.ValueType.Data(r.tpe, universals), r, existentials, vargsT)
       case f: Operation =>
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
