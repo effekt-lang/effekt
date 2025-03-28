@@ -663,6 +663,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case p @ source.AnyPattern(id) => List(ValueParam(p.symbol))
       case source.TagPattern(id, patterns) => patterns.flatMap(boundInPattern)
       case _: source.LiteralPattern | _: source.IgnorePattern => Nil
+      case source.MultiPattern(patterns) => patterns.flatMap(boundInPattern)
     }
     def boundInGuard(g: source.MatchGuard): List[core.ValueParam] = g match {
       case MatchGuard.BooleanGuard(condition) => Nil
@@ -708,6 +709,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Pattern.Ignore()
       case source.LiteralPattern(source.Literal(value, tpe)) =>
         Pattern.Literal(Literal(value, transform(tpe)), equalsFor(tpe))
+      case source.MultiPattern(patterns) =>
+        Context.panic("Multi-pattern should have been desugared in Parser")
     }
 
     def transformGuard(p: source.MatchGuard): List[Condition] =

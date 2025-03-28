@@ -106,6 +106,8 @@ object ExhaustivityChecker {
     case IgnorePattern() => Pattern.Any()
     case p @ TagPattern(id, patterns) => Pattern.Tag(p.definition, patterns.map(preprocessPattern))
     case LiteralPattern(lit) => Pattern.Literal(lit.value, lit.tpe)
+    case MultiPattern(patterns) =>
+      Context.panic("Multi-pattern should have been desugared in Parser")
   }
   def preprocessGuard(g: source.MatchGuard)(using Context): Condition = g match {
     case MatchGuard.BooleanGuard(condition) =>

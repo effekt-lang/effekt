@@ -504,6 +504,15 @@ enum MatchPattern extends Tree {
    * A pattern that matches a single literal value
    */
   case LiteralPattern(l: Literal)
+
+  /**
+   * A pattern for multiple values
+   *
+   *   case a, b => ...
+   *
+   * Currently should *only* occur in lambda-cases during Parsing
+   */
+  case MultiPattern(patterns: List[MatchPattern]) extends MatchPattern
 }
 export MatchPattern.*
 

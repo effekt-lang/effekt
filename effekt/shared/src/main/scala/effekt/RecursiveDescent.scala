@@ -755,10 +755,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       IdDef("resume")
 
-  def matchClause(): MatchClause =
+  def matchClause(allowMulti: Boolean = false): MatchClause =
     nonterminal:
+      val patterns = `case` ~> some(matchPattern, `,`)
+      val pattern = patterns match {
+        case List(pat) => pat
+        case pats if allowMulti => MultiPattern(pats)
+        case _ => fail(s"Multi-patterns are only allowed in lambda-case / block literals")
+      }
       MatchClause(
-        `case` ~> matchPattern(),
+        pattern,
         manyWhile(`and` ~> matchGuard(), `and`),
         // allow a statement enclosed in braces or without braces
         // both is allowed since match clauses are already delimited by `case`
@@ -943,15 +949,31 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       braces {
         peek.kind match {
           // { case ... => ... }
-          case `case` => someWhile(matchClause(), `case`) match { case cs =>
+          case `case` => someWhile(matchClause(true), `case`) match { case cs =>
+            val arity = cs match {
+              case MatchClause(MultiPattern(ps), _, _) :: _ => ps.length
+              case _ => 1
+            }
+            val gcs = cs.map{
+              case MatchClause(MultiPattern(ps), g, e) =>
+                if(ps.length != arity) fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got ${ps.length}.")
+                MatchClause(TagPattern(IdRef(List("effekt"), s"Tuple${ps.size}"), ps), g, e)
+              case c @ MatchClause(p, _, _) =>
+                if(arity != 1) fail(s"Number of arguments in multi-match doesn't match up: Expected ${arity}, got 1.")
+                c
+            }
             // TODO positions should be improved here and fresh names should be generated for the scrutinee
             // also mark the temp name as synthesized to prevent it from being listed in VSCode
-            val name = "__tmpRes"
+            val names = List.tabulate(arity){ n => s"__arg${n}" }
+            val argsName = "__args"
             BlockLiteral(
               Nil,
-              List(ValueParam(IdDef(name), None)),
+              names.map{ name => ValueParam(IdDef(name), None) },
               Nil,
-              Return(Match(Var(IdRef(Nil, name)), cs, None))) : BlockLiteral
+              DefStmt(Def.ValDef(IdDef(argsName), None,
+                  Return(Call(IdTarget(IdRef(List("effekt"), s"Tuple${arity}")), Nil,
+                    names.map{ name => Var(IdRef(Nil, name)) }, Nil))),
+                Return(Match(Var(IdRef(Nil, argsName)), gcs, None)))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
