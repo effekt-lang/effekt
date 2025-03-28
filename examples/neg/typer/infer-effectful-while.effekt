@@ -1,0 +1,16 @@
+interface Foo { def foo(): Unit }
+
+def bar(): Bool / Foo = {
+  do foo()
+  false
+}
+
+def fooo() = {
+  while(bar() is true) {
+      ()
+    }
+}
+
+def main() = {
+  fooo()
+}
