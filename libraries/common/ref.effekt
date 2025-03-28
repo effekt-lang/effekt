@@ -11,7 +11,7 @@ extern js """
 
 extern llvm """
 define void @c_ref_erase_field(ptr %0) {
-  %obj_ptr = getelementptr inbounds ptr, ptr %0, i64 8
+  %obj_ptr = getelementptr inbounds ptr, ptr %0, i64 1
   %tag = load i64, ptr %0, align 8
   %obj = load ptr, ptr %obj_ptr, align 8
   tail call void @erasePositive(i64 %tag, ptr %obj)
