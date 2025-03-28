@@ -1412,6 +1412,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     if (peek(after)) {
       consume(after)
       Nil
+    } else if (peek(sep)) {
+      consume(sep)
+      consume(after)
+      Nil
     } else {
       val components: ListBuffer[T] = ListBuffer.empty
       components += p()
