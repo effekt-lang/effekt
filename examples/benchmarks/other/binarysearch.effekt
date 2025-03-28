@@ -45,5 +45,5 @@ def main() = binary {
 
   // Comment out the first call below to get much better JS/Core codegen:
   findSqrtUpTo(150, 100)
-  findSqrtUpTo(9876543210123, 900000000000000) // NOTE: A much smaller number than 9e14 would work here too.
+  findSqrtUpTo(9876543210123, 9000000)
 }
