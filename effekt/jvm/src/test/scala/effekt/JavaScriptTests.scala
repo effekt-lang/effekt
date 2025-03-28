@@ -30,8 +30,6 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "pos" / "issue861.effekt",
 
     // syntax error (multiple declaration)
-    examplesDir / "char" / "ascii_isalphanumeric.effekt",
-    examplesDir / "char" / "ascii_iswhitespace.effekt",
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
   )

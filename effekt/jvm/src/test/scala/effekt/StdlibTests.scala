@@ -29,6 +29,8 @@ class StdlibJavaScriptTests extends StdlibTests {
     examplesDir / "stdlib" / "stream" / "zip.effekt",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
     examplesDir / "stdlib" / "list" / "deleteat.effekt",
+    examplesDir / "stdlib" / "char" / "ascii_isalphanumeric.effekt",
+    examplesDir / "stdlib" / "char" / "ascii_iswhitespace.effekt",
   )
 
   override def ignored: List[File] = List()
