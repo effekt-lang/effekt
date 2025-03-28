@@ -120,13 +120,15 @@ object Transformer {
         noteParameter(id, block.tpe)
         New(Variable(transform(id), transform(impl.interface)), transform(impl), transform(rest))
 
-      case core.Def(id, block @ core.BlockVar(alias, tpe, _), rest) =>
-        getDefinition(alias) match {
+      case core.Def(id, core.BlockVar(other, tpe, capt), rest) =>
+        getBlockInfo(other) match {
           case BlockInfo.Definition(free, params) =>
             noteDefinition(id, free, params)
+            emitDefinition(transformLabel(id), Jump(transformLabel(other)))
+            transform(rest)
+          case BlockInfo.Parameter(_) =>
+            Substitute(List(Variable(transform(id), transform(tpe)) -> Variable(transform(other), transform(tpe))), transform(rest))
         }
-        emitDefinition(transformLabel(id), Jump(transformLabel(alias)))
-        transform(rest)
 
       case core.Def(id, block @ core.Unbox(pure), rest) =>
         noteParameter(id, block.tpe)
@@ -488,8 +490,9 @@ object Transformer {
     case core.BlockType.Interface(symbol, targs) => Negative()
   }
 
-  def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getDefinition(id) match {
+  def transformLabel(id: Id)(using BPC: BlocksParamsContext): Label = getBlockInfo(id) match {
     case BlockInfo.Definition(freeParams, boundParams) => Label(transform(id), boundParams ++ freeParams)
+    case BlockInfo.Parameter(_) => sys error s"Expected a function definition, but got a block parameter: ${id}"
   }
 
   def transform(id: Id): String =
@@ -555,11 +558,6 @@ object Transformer {
 
   def getBlockInfo(id: Id)(using BPC: BlocksParamsContext): BlockInfo =
     BPC.info.getOrElse(id, sys error s"No block info for ${util.show(id)}")
-
-  def getDefinition(id: Id)(using BPC: BlocksParamsContext): BlockInfo.Definition = getBlockInfo(id) match {
-    case d : BlockInfo.Definition => d
-    case BlockInfo.Parameter(tpe) => sys error s"Expected a function getDefinition, but got a block parameter: ${id}"
-  }
 
   case class Binding[A](run: (A => Statement) => Statement) {
     def flatMap[B](rest: A => Binding[B]): Binding[B] = {
