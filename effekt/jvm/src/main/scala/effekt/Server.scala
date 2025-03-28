@@ -29,13 +29,15 @@ import java.util.concurrent.{CompletableFuture, ExecutorService, Executors}
 /**
  * Effekt Language Server
  */
-class Server(config: EffektConfig) extends LanguageServer with Driver with Intelligence {
+class Server(config: EffektConfig) extends LanguageServer with Driver with Intelligence with TextDocumentService with WorkspaceService {
   private var client: EffektLanguageClient = _
-  private val textDocumentService = new EffektTextDocumentService(this)
-  private val workspaceService = new EffektWorkspaceService
+  private val textDocumentService = this
+  private val workspaceService = this
 
   // Track whether shutdown has been requested
   private var shutdownRequested: Boolean = false
+  // Configuration sent by the language client
+  var settings: JsonElement = null
 
   val getDriver: Driver = this
   val getConfig: EffektConfig = config
@@ -82,9 +84,9 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
     // Do nothing
   }
 
-  override def getTextDocumentService(): EffektTextDocumentService = textDocumentService
-
-  override def getWorkspaceService(): EffektWorkspaceService = workspaceService
+  // The LSP services are also implemented by the Server class as they are strongly coupled anyway.
+  override def getTextDocumentService(): TextDocumentService = this
+  override def getWorkspaceService(): WorkspaceService = this
 
   // LSP Diagnostics
   //
@@ -208,6 +210,308 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
     launcher
   }
 
+  // LSP Document Lifecycle
+  //
+  //
+
+  def didChange(params: DidChangeTextDocumentParams): Unit = {
+    val document = params.getTextDocument
+    clearDiagnostics(document.getUri)
+    getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, getConfig)
+  }
+
+  def didClose(params: DidCloseTextDocumentParams): Unit = {
+    clearDiagnostics(params.getTextDocument.getUri)
+  }
+
+  def didOpen(params: DidOpenTextDocumentParams): Unit = {
+    val document = params.getTextDocument
+    clearDiagnostics(document.getUri)
+    getDriver.compileString(document.getUri, document.getText, getConfig)
+  }
+
+  def didSave(params: DidSaveTextDocumentParams): Unit = {
+    val document = params.getTextDocument
+    val text = Option(params.getText) match {
+      case Some(t) => t
+      case None =>
+        return
+    }
+    clearDiagnostics(document.getUri)
+    getDriver.compileString(document.getUri, text, getConfig)
+  }
+
+  // LSP Hover
+  //
+  //
+
+  override def hover(params: HoverParams): CompletableFuture[Hover] = {
+    val position = sources.get(params.getTextDocument.getUri).map { source =>
+      Convert.fromLSPPosition(params.getPosition, source)
+    }
+    position match
+      case Some(position) => {
+        val hover = getSymbolHover(position) orElse getHoleHover(position)
+        val markup = new MarkupContent("markdown", hover.getOrElse(""))
+        val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
+        CompletableFuture.completedFuture(result)
+      }
+      case None => CompletableFuture.completedFuture(new Hover())
+  }
+
+  def getSymbolHover(position: Position): Option[String] = for {
+    (tree, sym) <- getSymbolAt(position)(using context)
+    info <- getInfoOf(sym)(using context)
+  } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
+
+  def getHoleHover(position: Position): Option[String] = for {
+    trees <- getTreesAt(position)(using context)
+    tree <- trees.collectFirst { case h: source.Hole => h }
+    info <- getHoleInfo(tree)(using context)
+  } yield info
+
+  // LSP Document Symbols
+  //
+  //
+
+  override def documentSymbol(params: DocumentSymbolParams): CompletableFuture[util.List[messages.Either[SymbolInformation, DocumentSymbol]]] = {
+    val source = sources.get(params.getTextDocument.getUri)
+    if (source.isEmpty) return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
+
+    context.compiler.runFrontend(source.get)(using context)
+
+    val documentSymbols = for {
+      sym <- context.sourceSymbolsFor(source.get).toVector
+      if !sym.isSynthetic
+      id <- context.definitionTreeOption(sym)
+      decl <- getSourceTreeFor(sym)
+      kind <- getSymbolKind(sym)
+      detail <- getInfoOf(sym)(using context)
+      declRange = convertRange(positions.getStart(decl), positions.getFinish(decl))
+      idRange = convertRange(positions.getStart(id), positions.getFinish(id))
+    } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)
+
+    val result = Collections.seqToJavaList(
+      documentSymbols.map(sym => messages.Either.forRight[SymbolInformation, DocumentSymbol](sym))
+    )
+    CompletableFuture.completedFuture(result)
+  }
+
+  def getSourceTreeFor(sym: effekt.symbols.Symbol): Option[Tree] = sym match {
+    case a: Anon => Some(a.decl)
+    case f: UserFunction => Some(f.decl)
+    case b: Binder => Some(b.decl)
+    case _ => context.definitionTreeOption(sym)
+  }
+
+  def getSymbolKind(sym: Symbol): Option[SymbolKind] =
+    sym match {
+      case _: Module =>
+        Some(SymbolKind.Module)
+      case _: Interface | _: ExternInterface =>
+        Some(SymbolKind.Interface)
+      case _: DataType | _: ExternType | _: TypeAlias =>
+        Some(SymbolKind.Enum)
+      case _: Callable =>
+        Some(SymbolKind.Method)
+      case _: Param | _: ValBinder | _: VarBinder =>
+        Some(SymbolKind.Variable)
+      case _ =>
+        None
+    }
+
+  // LSP Go To Definition
+  //
+  //
+
+  override def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[_ <: Location], util.List[_ <: LocationLink]]] = {
+    val location = for {
+      position <- sources.get(params.getTextDocument.getUri).map { source =>
+        fromLSPPosition(params.getPosition, source)
+      };
+      definition <- getDefinitionAt(position)(using context);
+      location = locationOfNode(positions, definition)
+    } yield location
+
+    val result = location.map(l => messages.Either.forLeft[util.List[_ <: Location], util.List[_ <: LocationLink]](Collections.seqToJavaList(List(l))))
+      .getOrElse(messages.Either.forLeft(Collections.seqToJavaList(List())))
+
+    CompletableFuture.completedFuture(result)
+  }
+
+  // LSP References
+  //
+  //
+
+  override def references(params: ReferenceParams): CompletableFuture[util.List[_ <: Location]] = {
+    val position = sources.get(params.getTextDocument.getUri).map { source =>
+      fromLSPPosition(params.getPosition, source)
+    }
+    if (position.isEmpty)
+      return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
+
+    val locations = for {
+      (tree, sym) <- getSymbolAt(position.get)(using context)
+      refs = context.distinctReferencesTo(sym)
+      // getContext may be null!
+      includeDeclaration = Option(params.getContext).exists(_.isIncludeDeclaration)
+      allRefs = if (includeDeclaration) tree :: refs else refs
+      locations = allRefs.map(ref => locationOfNode(positions, ref))
+    } yield locations
+
+    CompletableFuture.completedFuture(Collections.seqToJavaList(locations.getOrElse(Seq[Location]())))
+  }
+
+  // LSP Inlay Hints
+  //
+  //
+
+  override def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
+    val hints = for {
+      source <- sources.get(params.getTextDocument.getUri)
+      hints = {
+        val range = fromLSPRange(params.getRange, source)
+        getInferredCaptures(range)(using context).map {
+          case (p, c) =>
+            val prettyCaptures = TypePrinter.show(c)
+            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
+            inlayHint.setKind(InlayHintKind.Type)
+            val markup = new MarkupContent()
+            markup.setValue(s"captures: `${prettyCaptures}`")
+            markup.setKind("markdown")
+            inlayHint.setTooltip(markup)
+            inlayHint.setPaddingRight(true)
+            inlayHint.setData("capture")
+            inlayHint
+        }.toVector
+      }
+    } yield hints
+
+    CompletableFuture.completedFuture(Collections.seqToJavaList(hints.getOrElse(Vector())))
+  }
+
+  // LSP Code Actions
+  //
+  //
+
+  // FIXME: This is the code actions code from the previous language server implementation.
+  // It doesn't even work in the previous implementation.
+  override def codeAction(params: CodeActionParams): CompletableFuture[util.List[messages.Either[Command, CodeAction]]] = {
+    val codeActions = for {
+      position <- sources.get(params.getTextDocument.getUri).map { source =>
+        fromLSPPosition(params.getRange.getStart, source)
+      };
+      codeActions = for {
+        trees <- getTreesAt(position)(using context).toVector
+        actions <- trees.flatMap { t => action(t)(using context) }
+      } yield actions
+    } yield codeActions.toList
+
+    val result = codeActions.getOrElse(List[CodeAction]()).map(messages.Either.forRight[Command, CodeAction])
+    CompletableFuture.completedFuture(Collections.seqToJavaList(result))
+  }
+
+  def action(tree: Tree)(using C: Context): Option[CodeAction] = tree match {
+    case f: FunDef => inferEffectsAction(f)
+    case h: Hole => closeHoleAction(h)
+    case _ => None
+  }
+
+  def EffektCodeAction(description: String, oldNode: Any, newText: String): Option[CodeAction] = {
+    for {
+      posFrom <- positions.getStart(oldNode)
+      posTo <- positions.getFinish(oldNode)
+    } yield {
+      val textEdit = new TextEdit(convertRange(Some(posFrom), Some(posTo)), newText)
+      val changes = Map(posFrom.source.name -> seqToJavaList(List(textEdit)))
+      val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
+      val action = new CodeAction(description)
+      action.setKind(CodeActionKind.Refactor)
+      action.setEdit(workspaceEdit)
+      action
+    }
+  }
+
+  /**
+   * FIXME: The following comment was left on the previous Kiama-based implementation and can now be addressed:
+   *
+   * TODO it would be great, if Kiama would allow setting the position of the code action separately
+   * from the node to replace. Here, we replace the annotated return type, but would need the
+   * action on the function (since the return type might not exist in the original program).
+   *
+   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
+   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
+   */
+  def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
+    // the inferred type
+    (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
+    // the annotated type
+    ann = for {
+      result <- fun.symbol.annotatedResult
+      effects <- fun.symbol.annotatedEffects
+    } yield (result, effects)
+    if ann.map {
+      needsUpdate(_, (tpe, eff))
+    }.getOrElse(true)
+    res <- EffektCodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
+  } yield res
+
+  def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
+    holeTpe <- C.inferredTypeOption(hole)
+    contentTpe <- C.inferredTypeOption(hole.stmts)
+    if holeTpe == contentTpe
+    res <- hole match {
+      case Hole(source.Return(exp)) => for {
+        text <- positions.textOf(exp)
+        res <- EffektCodeAction("Close hole", hole, text)
+      } yield res
+
+      // <{ s1 ; s2; ... }>
+      case Hole(stmts) => for {
+        text <- positions.textOf(stmts)
+        res <- EffektCodeAction("Close hole", hole, s"locally { ${text} }")
+      } yield res
+    }
+  } yield res
+
+  def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(using Context): Boolean = {
+    val (tpe1, effs1) = annotated
+    val (tpe2, effs2) = inferred
+    tpe1 != tpe2 || effs1 != effs2
+  }
+
+  // LSP methods
+  //
+  //
+
+  def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {
+    this.settings = params.getSettings.asInstanceOf[JsonElement].getAsJsonObject
+  }
+
+  def didChangeWatchedFiles(params: DidChangeWatchedFilesParams): Unit = {}
+
+  // Settings
+  //
+  //
+
+  def settingBool(name: String): Boolean = {
+    if (settings == null) return false
+    val obj = settings.getAsJsonObject
+    if (obj == null) return false
+    val value = obj.get(name)
+    if (value == null) return false
+    value.getAsBoolean
+  }
+
+  def settingString(name: String): Option[String] = {
+    if (settings == null) return None
+    val obj = settings.getAsJsonObject
+    if (obj == null) return None
+    val value = obj.get(name)
+    if (value == null) return None
+    Some(value.getAsString)
+  }
+
   /**
    * Launch a language server with a given `ServerConfig`
    */
@@ -246,312 +550,6 @@ class Server(config: EffektConfig) extends LanguageServer with Driver with Intel
       this.connect(client)
       launcher.startListening()
     }
-  }
-}
-
-class EffektTextDocumentService(server: Server) extends TextDocumentService with Intelligence {
-  // LSP Document Lifecycle
-  //
-  //
-
-  def didChange(params: DidChangeTextDocumentParams): Unit = {
-    val document = params.getTextDocument
-    server.clearDiagnostics(document.getUri)
-    server.getDriver.compileString(document.getUri, params.getContentChanges.get(0).getText, server.getConfig)
-  }
-
-  def didClose(params: DidCloseTextDocumentParams): Unit = {
-    server.clearDiagnostics(params.getTextDocument.getUri)
-  }
-
-  def didOpen(params: DidOpenTextDocumentParams): Unit = {
-    val document = params.getTextDocument
-    server.clearDiagnostics(document.getUri)
-    server.getDriver.compileString(document.getUri, document.getText, server.getConfig)
-  }
-
-  def didSave(params: DidSaveTextDocumentParams): Unit = {
-    val document = params.getTextDocument
-    val text = Option(params.getText) match {
-      case Some(t) => t
-      case None =>
-        return
-    }
-    server.clearDiagnostics(document.getUri)
-    server.getDriver.compileString(document.getUri, text, server.getConfig)
-  }
-
-  // LSP Hover
-  //
-  //
-
-  override def hover(params: HoverParams): CompletableFuture[Hover] = {
-    val position = server.sources.get(params.getTextDocument.getUri).map { source =>
-      Convert.fromLSPPosition(params.getPosition, source)
-    }
-    position match
-      case Some(position) => {
-        val hover = getSymbolHover(position) orElse getHoleHover(position)
-        val markup = new MarkupContent("markdown", hover.getOrElse(""))
-        val result = new Hover(markup, new LSPRange(params.getPosition, params.getPosition))
-        CompletableFuture.completedFuture(result)
-      }
-      case None => CompletableFuture.completedFuture(new Hover())
-  }
-
-  def getSymbolHover(position: Position): Option[String] = for {
-    (tree, sym) <- getSymbolAt(position)(using server.context)
-    info <- getInfoOf(sym)(using server.context)
-  } yield if (this.server.getWorkspaceService().settingBool("showExplanations")) info.fullDescription else info.shortDescription
-
-  def getHoleHover(position: Position): Option[String] = for {
-    trees <- getTreesAt(position)(using server.context)
-    tree <- trees.collectFirst { case h: source.Hole => h }
-    info <- getHoleInfo(tree)(using server.context)
-  } yield info
-
-  // LSP Document Symbols
-  //
-  //
-
-  override def documentSymbol(params: DocumentSymbolParams): CompletableFuture[util.List[messages.Either[SymbolInformation, DocumentSymbol]]] = {
-    val source = server.sources.get(params.getTextDocument.getUri)
-    if (source.isEmpty) return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
-
-    server.context.compiler.runFrontend(source.get)(using server.context)
-
-    val documentSymbols = for {
-      sym <- server.context.sourceSymbolsFor(source.get).toVector
-      if !sym.isSynthetic
-      id <- server.context.definitionTreeOption(sym)
-      decl <- getSourceTreeFor(sym)
-      kind <- getSymbolKind(sym)
-      detail <- getInfoOf(sym)(using server.context)
-      declRange = convertRange(server.positions.getStart(decl), server.positions.getFinish(decl))
-      idRange = convertRange(server.positions.getStart(id), server.positions.getFinish(id))
-    } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)
-
-    val result = Collections.seqToJavaList(
-      documentSymbols.map(sym => messages.Either.forRight[SymbolInformation, DocumentSymbol](sym))
-    )
-    CompletableFuture.completedFuture(result)
-  }
-
-  def getSourceTreeFor(sym: effekt.symbols.Symbol): Option[Tree] = sym match {
-    case a: Anon => Some(a.decl)
-    case f: UserFunction => Some(f.decl)
-    case b: Binder => Some(b.decl)
-    case _ => server.context.definitionTreeOption(sym)
-  }
-
-  def getSymbolKind(sym: Symbol): Option[SymbolKind] =
-    sym match {
-      case _: Module =>
-        Some(SymbolKind.Module)
-      case _: Interface | _: ExternInterface =>
-        Some(SymbolKind.Interface)
-      case _: DataType | _: ExternType | _: TypeAlias =>
-        Some(SymbolKind.Enum)
-      case _: Callable =>
-        Some(SymbolKind.Method)
-      case _: Param | _: ValBinder | _: VarBinder =>
-        Some(SymbolKind.Variable)
-      case _ =>
-        None
-    }
-
-  // LSP Go To Definition
-  //
-  //
-
-  override def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[_ <: Location], util.List[_ <: LocationLink]]] = {
-    val location = for {
-      position <- server.sources.get(params.getTextDocument.getUri).map { source =>
-        fromLSPPosition(params.getPosition, source)
-      };
-      definition <- server.getDefinitionAt(position)(using server.context);
-      location = locationOfNode(server.positions, definition)
-    } yield location
-
-    val result = location.map(l => messages.Either.forLeft[util.List[_ <: Location], util.List[_ <: LocationLink]](Collections.seqToJavaList(List(l))))
-      .getOrElse(messages.Either.forLeft(Collections.seqToJavaList(List())))
-
-    CompletableFuture.completedFuture(result)
-  }
-
-  // LSP References
-  //
-  //
-
-  override def references(params: ReferenceParams): CompletableFuture[util.List[_ <: Location]] = {
-    val position = server.sources.get(params.getTextDocument.getUri).map { source =>
-      fromLSPPosition(params.getPosition, source)
-    }
-    if (position.isEmpty)
-      return CompletableFuture.completedFuture(Collections.seqToJavaList(Vector()))
-
-    val locations = for {
-      (tree, sym) <- getSymbolAt(position.get)(using server.context)
-      refs = server.context.distinctReferencesTo(sym)
-      // getContext may be null!
-      includeDeclaration = Option(params.getContext).exists(_.isIncludeDeclaration)
-      allRefs = if (includeDeclaration) tree :: refs else refs
-      locations = allRefs.map(ref => locationOfNode(server.positions, ref))
-    } yield locations
-
-    CompletableFuture.completedFuture(Collections.seqToJavaList(locations.getOrElse(Seq[Location]())))
-  }
-
-  // LSP Inlay Hints
-  //
-  //
-
-  override def inlayHint(params: InlayHintParams): CompletableFuture[util.List[InlayHint]] = {
-    val hints = for {
-      source <- server.sources.get(params.getTextDocument.getUri)
-      hints = {
-        val range = fromLSPRange(params.getRange, source)
-        getInferredCaptures(range)(using server.context).map {
-          case (p, c) =>
-            val prettyCaptures = TypePrinter.show(c)
-            val inlayHint = new InlayHint(convertPosition(p), messages.Either.forLeft(prettyCaptures))
-            inlayHint.setKind(InlayHintKind.Type)
-            val markup = new MarkupContent()
-            markup.setValue(s"captures: `${prettyCaptures}`")
-            markup.setKind("markdown")
-            inlayHint.setTooltip(markup)
-            inlayHint.setPaddingRight(true)
-            inlayHint.setData("capture")
-            inlayHint
-        }.toVector
-      }
-    } yield hints
-
-    CompletableFuture.completedFuture(Collections.seqToJavaList(hints.getOrElse(Vector())))
-  }
-
-  // LSP Code Actions
-  //
-  //
-
-  // FIXME: This is the code actions code from the previous language server implementation.
-  // It doesn't even work in the previous implementation.
-  override def codeAction(params: CodeActionParams): CompletableFuture[util.List[messages.Either[Command, CodeAction]]] = {
-    val codeActions = for {
-      position <- server.sources.get(params.getTextDocument.getUri).map { source =>
-        fromLSPPosition(params.getRange.getStart, source)
-      };
-      codeActions = for {
-        trees <- getTreesAt(position)(using server.context).toVector
-        actions <- trees.flatMap { t => action(t)(using server.context) }
-      } yield actions
-    } yield codeActions.toList
-
-    val result = codeActions.getOrElse(List[CodeAction]()).map(messages.Either.forRight[Command, CodeAction])
-    CompletableFuture.completedFuture(Collections.seqToJavaList(result))
-  }
-
-  def action(tree: Tree)(using C: Context): Option[CodeAction] = tree match {
-    case f: FunDef => inferEffectsAction(f)
-    case h: Hole => closeHoleAction(h)
-    case _ => None
-  }
-
-  def EffektCodeAction(description: String, oldNode: Any, newText: String): Option[CodeAction] = {
-    for {
-      posFrom <- server.positions.getStart(oldNode)
-      posTo <- server.positions.getFinish(oldNode)
-    } yield {
-      val textEdit = new TextEdit(convertRange(Some(posFrom), Some(posTo)), newText)
-      val changes = Map(posFrom.source.name -> seqToJavaList(List(textEdit)))
-      val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
-      val action = new CodeAction(description)
-      action.setKind(CodeActionKind.Refactor)
-      action.setEdit(workspaceEdit)
-      action
-    }
-  }
-
-  /**
-   * FIXME: The following comment was left on the previous Kiama-based implementation and can now be addressed:
-   *
-   * TODO it would be great, if Kiama would allow setting the position of the code action separately
-   * from the node to replace. Here, we replace the annotated return type, but would need the
-   * action on the function (since the return type might not exist in the original program).
-   *
-   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
-   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
-   */
-  def inferEffectsAction(fun: FunDef)(using C: Context): Option[CodeAction] = for {
-    // the inferred type
-    (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
-    // the annotated type
-    ann = for {
-      result <- fun.symbol.annotatedResult
-      effects <- fun.symbol.annotatedEffects
-    } yield (result, effects)
-    if ann.map { needsUpdate(_, (tpe, eff)) }.getOrElse(true)
-    res <- EffektCodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
-  } yield res
-
-  def closeHoleAction(hole: Hole)(using C: Context): Option[CodeAction] = for {
-    holeTpe <- C.inferredTypeOption(hole)
-    contentTpe <- C.inferredTypeOption(hole.stmts)
-    if holeTpe == contentTpe
-    res <- hole match {
-      case Hole(source.Return(exp)) => for {
-        text <- server.positions.textOf(exp)
-        res <- EffektCodeAction("Close hole", hole, text)
-      } yield res
-
-      // <{ s1 ; s2; ... }>
-      case Hole(stmts) => for {
-        text <- server.positions.textOf(stmts)
-        res <- EffektCodeAction("Close hole", hole, s"locally { ${text} }")
-      } yield res
-    }
-  } yield res
-
-  def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(using Context): Boolean = {
-    val (tpe1, effs1) = annotated
-    val (tpe2, effs2) = inferred
-    tpe1 != tpe2 || effs1 != effs2
-  }
-}
-
-class EffektWorkspaceService extends WorkspaceService {
-  var settings: JsonElement = null
-
-  // LSP methods
-  //
-  //
-
-  def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {
-    this.settings = params.getSettings.asInstanceOf[JsonElement].getAsJsonObject
-  }
-
-  def didChangeWatchedFiles(params: DidChangeWatchedFilesParams): Unit = {}
-
-  // Settings
-  //
-  //
-
-  def settingBool(name: String): Boolean = {
-    if (settings == null) return false
-    val obj = settings.getAsJsonObject
-    if (obj == null) return false
-    val value = obj.get(name)
-    if (value == null) return false
-    value.getAsBoolean
-  }
-
-  def settingString(name: String): Option[String] = {
-    if (settings == null) return None
-    val obj = settings.getAsJsonObject
-    if (obj == null) return None
-    val value = obj.get(name)
-    if (value == null) return None
-    Some(value.getAsString)
   }
 }
 
