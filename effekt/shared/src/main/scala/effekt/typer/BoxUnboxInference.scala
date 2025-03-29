@@ -87,20 +87,14 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       val vargsTransformed = vargs.map(rewriteAsExpr)
       val bargsTransformed = bargs.map(rewriteAsBlock)
 
-      val syms = m.definition match {
+      val hasMethods = m.definition match {
         // an overloaded call target
-        case symbols.CallTarget(syms) => syms.flatten
-        case s => C.panic(s"Not a valid method or function: ${id.name}")
-      }
-
-      val (funs, methods) = syms.partitionMap {
-        case t: symbols.Operation => Right(t)
-        case t: symbols.Callable => Left(t)
-        case t => C.abort(pp"Not a valid method or function: ${t}")
+        case symbols.CallTarget(syms) => syms.flatten.exists(b => b.isInstanceOf[symbols.Operation])
+        case s => false
       }
 
       // we prefer methods over uniform call syntax
-      if (methods.nonEmpty) {
+      if (hasMethods) {
         MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed)
       } else {
         Call(IdTarget(id).inheritPosition(id), targs, rewriteAsExpr(receiver) :: vargsTransformed, bargsTransformed)
