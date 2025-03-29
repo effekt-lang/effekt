@@ -1,0 +1,6 @@
+def refl[A](a: A) { eq: (A, A) => Bool }: Bool =
+  a.eq(a) && eq(a, a)
+
+def main() = {
+  println(refl(42) { (x, y) => x == y })
+}

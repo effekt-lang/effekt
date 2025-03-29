@@ -192,6 +192,13 @@ object scopes {
         namespace.terms.getOrElse(name, Set.empty).collect { case c: Callable if !c.isInstanceOf[Operation] => c }
       }.filter { namespace => namespace.nonEmpty }
 
+    def lookupFirstBlockParam(path: List[String], name: String)(using ErrorReporter): Set[BlockParam] =
+       first(path, scope) { namespace =>
+        namespace.terms.get(name).map(set => 
+          set.collect { case bp: BlockParam => bp }
+        )
+      }.getOrElse(Set.empty)
+
     // can be a term OR a type symbol
     def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =
       lookupFirstOption(path, name) getOrElse { E.abort(s"Could not resolve ${name}") }
