@@ -409,6 +409,83 @@ def each(string: String): Unit / emit[Char] =
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
 
+effect snapshot(): Unit
+
+/// Use cons to handle prod, but also emit to the outside.
+/// The outside controls iteration, i.e., if cons aborts, the rest of prod will still be emitted.
+/// 
+/// Starts by executing cons.
+/// 
+/// Laws-ish (hopefully):
+/// - hnd{ prd() } === hnd{ teeing{t}{ prd() } } for all hnd and t that calls its argument at most once (and has no other captures)
+def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit / emit[A] = region r {
+  var consDone = false
+  var k in r = box { prod() } // what still needs to run of prod after cons exits
+  try {
+    cons{
+      try {
+        prod()
+        k = box { () }
+      } with emit[A] { v =>
+        do snapshot() // remember that we need to continue here if cons aborts
+        if(not(consDone)) do emit(v)
+        outer.emit(v)
+        resume(())
+      }
+      if(consDone) do stop() // cons already exited, so skip continuing there
+    } // end cons
+    consDone = true
+  }
+  with stop { () => () }
+  with outer: emit[A]{ v => resume(do emit(v)) }
+  with snapshot{ () =>
+    k = box { resume(()) }
+    resume(())
+  }
+  k()
+}
+
+/// Binds a `teeing`-like function in the body, stopping the inner producer once all consumers in tees are done consuming.
+/// 
+/// Example of use, equivalent to `tee[A]{cns1}{cns2}{prd}`:
+/// 
+///     manyTee[A] { {tee} =>
+///       with tee{cns1}
+///       with tee{cns2}
+///       prd()
+///     }
+///
+def manyTee[A]{ body: { { { => Unit / emit[A] } => Unit }{ => Unit / emit[A] } => Unit / emit[A] } => Unit / emit[A] }: Unit = {
+  var running = 0
+  try {
+    body{ {hnd}{prod} =>
+      running = running + 1
+      teeing[A]{ {b} => hnd{b}; running = running - 1 }{prod}
+    }
+  } with emit[A] { _ =>
+    if(running > 0) resume(())
+  }
+}
+
+/// Streams prod to both cons1 and cons2. Stops once both cons1 and cons2 stopped.
+/// Only runs prod once, resuming at most once at each emit.
+def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit = {
+  // var done1 = false
+  // var done2 = false
+  // try {
+  //   with teeing[A]{ {b} => cons1{b}; done1 = true }
+  //   with teeing[A]{ {b} => cons2{b}; done2 = true }
+  //   prod()
+  // } with emit[A] { _ =>
+  //   if(not(done1) || not(done2)) resume(())
+  // }
+  manyTee[A]{ {tee} =>
+    with tee{cons1}
+    with tee{cons2}
+    prod()
+  }
+}
+
 namespace returning {
 
 /// Canonical handler of push streams that performs `action` for every
