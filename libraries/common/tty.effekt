@@ -136,7 +136,8 @@ def applyBackgroundColor(color: Color): String =
 /// See https://iterm2.com/documentation-images.html for protocol description
 /// See [imgcat](https://iterm2.com/utilities/imgcat) for more usage details
 def inlineImage(size: Int, base64Image: String) =
-  escape("1337;File=size=" ++ size.show ++ ";inline=1:" ++ base64Image ++ "\u0007")
+  "\u001b]" ++ ("1337;File=size=" ++ size.show ++ ";inline=1:" ++ base64Image) ++ "\u0007"
+  // TODO: Bug! EscapeOSC does not work here, why?
 
 /// Hyperlinks
 /// https://iterm2.com/documentation-escape-codes.html
