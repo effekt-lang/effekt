@@ -419,6 +419,22 @@ def pow(base: Double, exponent: Int): Double = {
   }
 }
 
+/// Computes n^exp for integers.
+/// 
+/// Precondition: exp >= 0
+def pow(n: Int, exp: Int): Int = {
+  def go(n: Int, exp: Int, acc: Int): Int = {
+    if (exp == 0) {
+      acc 
+    } else if (mod(exp, 2) == 0) {
+      go(n * n, exp / 2, acc)
+    } else {
+      go(n * n, exp / 2, acc * n)
+    }
+  }
+  go(n, exp, 1)
+}
+
 extern pure def pow(base: Double, exponent: Double): Double =
   js "Math.pow(${base}, ${exponent})"
   chez "(expt ${base} ${exponent})"
