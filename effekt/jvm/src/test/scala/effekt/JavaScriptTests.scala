@@ -58,7 +58,7 @@ object TestUtils {
         val shouldGenerate = regenerateAll || f.lastModified() > checkfile.lastModified()
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
-          val out = run(f)
+          val out = run(f, true)
 
           // Save checkfile in source folder (e.g. examples/)
           // We remove ansi colors to make check files human-readable.

@@ -38,7 +38,8 @@ trait EffektTests extends munit.FunSuite {
 
   def runTestFor(input: File, expected: String): Unit =
     test(input.getPath + s" (${backendName})") {
-      assertNoDiff(run(input), expected)
+      assertNoDiff(run(input, true), expected)
+      assertNoDiff(run(input, false), expected)
     }
 
   // one shared driver for all tests in this test runner
@@ -59,7 +60,7 @@ trait EffektTests extends munit.FunSuite {
     compiler.compileFile(input.getPath, configs)
     compiler.context.backup
 
-  def run(input: File): String =
+  def run(input: File, optimizations: Boolean): String =
     val compiler = driver
     var options = Seq(
       "--Koutput", "string",
@@ -68,6 +69,7 @@ trait EffektTests extends munit.FunSuite {
     )
     if (valgrind) options = options :+ "--valgrind"
     if (debug) options = options :+ "--debug"
+    if (!optimizations) options = options :+ "--no-optimize"
     val configs = compiler.createConfig(options)
     configs.verify()
 
@@ -103,7 +105,8 @@ trait EffektTests extends munit.FunSuite {
       case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f), expected)
+          assertNoDiff(run(f, true), expected)
+          assertNoDiff(run(f, false), expected)
         }
     }
 
@@ -111,7 +114,8 @@ trait EffektTests extends munit.FunSuite {
     foreachFileIn(dir) {
       case (f, Some(expected)) =>
         test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f), expected)
+          assertNoDiff(run(f, true), expected)
+          assertNoDiff(run(f, false), expected)
         }
 
       case (f, None) =>
