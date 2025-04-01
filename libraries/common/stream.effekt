@@ -470,15 +470,6 @@ def manyTee[A]{ body: { { { => Unit / emit[A] } => Unit }{ => Unit / emit[A] } =
 /// Streams prod to both cons1 and cons2. Stops once both cons1 and cons2 stopped.
 /// Only runs prod once, resuming at most once at each emit.
 def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit = {
-  // var done1 = false
-  // var done2 = false
-  // try {
-  //   with teeing[A]{ {b} => cons1{b}; done1 = true }
-  //   with teeing[A]{ {b} => cons2{b}; done2 = true }
-  //   prod()
-  // } with emit[A] { _ =>
-  //   if(not(done1) || not(done2)) resume(())
-  // }
   manyTee[A]{ {tee} =>
     with tee{cons1}
     with tee{cons2}
