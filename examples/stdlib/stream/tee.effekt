@@ -1,0 +1,39 @@
+import stream
+
+def main() = {
+  def stream() = {
+    // equivalent: with teeing[Int]{ {b} => for[Int]{b}{ v => println(v) } }
+    for[Int]{
+      [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].each
+    }{ v => 
+      println(v)
+      do emit(v)
+    }
+  }
+  def a{ b: => Unit / emit[Int] }: Unit = {
+    println(collectList[Int]{boundary{limit[Int](5){b}}})
+    println("a done")
+  }
+  def b{ b: => Unit / emit[Int] }: Unit = {
+    println(collectList[Int]{boundary{limit[Int](10){b}}})
+    println("b done")
+  }
+  println("a{ ... }")
+  a{stream}
+  println("b{ ... }")
+  b{stream}
+  println("tee{a}{b}{ ... }")
+  tee[Int]{a}{b}{ stream() }
+  println("tee{b}{a}{ ... }")
+  tee[Int]{b}{a}{ stream() }
+  println("a{ teeing{b}{ ... } }")
+  a{
+    with teeing[Int]{b}
+    stream()
+  }
+  println("b{ teeing{a}{ ... } }")
+  b{
+    with teeing[Int]{a}
+    stream()
+  }
+}
