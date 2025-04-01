@@ -262,8 +262,11 @@ def bitwiseNot(n: Int): Int = {
   }
 }
 
+/// split emitted bytes and emit the individual bits in big-endian bit order
 def ungroupBytes{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
   for[Byte]{body}{ b => bits(b) }
+
+/// streaming negation in 2s-complement for little-endian bitstreams
 def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
   var carry = true
   try body()
@@ -272,6 +275,9 @@ def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
     case B1() => if(carry) { do emit(B1()); carry = false } else { do emit(B0()) }; resume(())
   }
 }  
+
+/// group 8 bits into a byte each, big-endian bit order.
+/// NOTE: The remainder is dropped.
 def groupBytesBE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
   var next = 0
   var p = 128
@@ -288,6 +294,9 @@ def groupBytesBE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
     }
   }
 }
+
+/// group 8 bits into a byte each, little-endian bit order.
+/// NOTE: The remainder is dropped.
 def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
   var next = 0
   var p = 1
@@ -304,9 +313,15 @@ def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
     }
   }
 }
+
+/// group 8 bits into a byte each, big-endian bit order.
+/// NOTE: The remainder is dropped.
 def groupBytes{ body: => Unit / emit[Bit] }: Unit / emit[Byte] =
   groupBytesBE{body}
 
+/// Return just nth element of the given stream.
+/// Raises MissingValue if not enough elements are emitted
+// TODO could be in stream
 def nth[A](n: Int){ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
   var m = n
   try {
@@ -322,6 +337,10 @@ def nth[A](n: Int){ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
     }
   }
 }
+
+/// Return just first element of the given stream.
+/// Raises MissingValue if no elements are emitted
+// TODO could be in stream
 def first[A]{ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
   try {
     body()
@@ -331,7 +350,8 @@ def first[A]{ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
 }
 // Literals/splices
 // ----------------
-effect BinSplices = {
+/// Splices allowed in bit stream literals
+effect BitSplices = {
   splice[Unit], splice[Bit],
   splice[Byte],
   splice[LE[Int]], splice[BE[Int]],
@@ -339,7 +359,9 @@ effect BinSplices = {
   splice[OfWidth[LE[Int]]], splice[OfWidth[BE[Int]]],
   splice[OfWidth[LE[Signed[Int]]]], splice[OfWidth[BE[Signed[Int]]]]
 }
-def bit{ body: => Unit / { literal, BinSplices } }: Unit / emit[Bit] = {
+/// Splicer to emit the bits in binary notation given, plus evenutal splices
+/// Ignores whitespace
+def bit{ body: => Unit / { literal, BitSplices } }: Unit / emit[Bit] = {
   try {
     ungroupBytes{
       try {
@@ -394,6 +416,8 @@ def bit{ body: => Unit / { literal, BinSplices } }: Unit / emit[Bit] = {
   }
 }
 
+// Simple usage examples
+// =====================
 namespace examples {
   def main() = {
     mainSuite("Simple literals"){
