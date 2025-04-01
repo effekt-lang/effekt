@@ -95,29 +95,7 @@ def signedBytesLE(int: Int): Unit / emit[Byte] = signedBytesLE(int, 4)
 /// emit bytes of the given int as 4 bytes (in 2s-complement) in big-endian byte order
 def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
 
-/// emit bits of the given int as 32 Bits in big-endian bit order
-def bitsBE(int: Int): Unit / emit[Bit] = bitsBE(int, 32)
 
-/// collect bits in big-endian bit order into an Int
-def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
-  var res = 0
-  try body() with emit[Bit] { b =>
-    res = b match {
-      case B0() => res * 2
-      case B1() => res * 2 + 1
-    }
-    resume(())
-  }
-  res
-}
-
-/// bitwise not on integers
-def bitwiseNot(n: Int): Int = {
-  // TODO currently implemented in Effekt, should use extern ?
-  collectBitsBE{
-    try bitsBE(n) with emit[Bit]{ b => resume(do emit(not(b))) }
-  }
-}
 
 // Splicers
 // --------
@@ -207,6 +185,7 @@ def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] =
 
 // From/to Bytes
 // -------------
+/// emit bits of the given Byte as 8 Bits in little-endian bit order
 def bitsLE(byte: Byte): Unit / emit[Bit] = {
   val v = byte.toInt
   var mask = 1
@@ -218,6 +197,8 @@ def bitsLE(byte: Byte): Unit / emit[Bit] = {
     mask = mask * 2
   }
 }
+
+/// emit bits of the given Byte as 8 Bits in big-endian bit order
 def bitsBE(byte: Byte): Unit / emit[Bit] = {
   val v = byte.toInt
   var mask = 128
@@ -229,7 +210,11 @@ def bitsBE(byte: Byte): Unit / emit[Bit] = {
     mask = mask / 2
   }
 }
+
+/// emit bits of the given Byte as 8 Bits in big-endian bit order
 def bits(byte: Byte): Unit / emit[Bit] = bitsBE(byte)
+
+/// emit bits of the given Byte as width Bits in little-endian bit order
 def bitsLE(v: Int, width: Int): Unit / emit[Bit] = {
   var mask = 1
   repeat(width){
@@ -240,18 +225,8 @@ def bitsLE(v: Int, width: Int): Unit / emit[Bit] = {
     mask = mask * 2
   }
 }
-def pow(n: Int, exp: Int): Int = {
-  def go(n: Int, exp: Int, acc: Int): Int = {
-    if (exp == 0) {
-      acc 
-    } else if (mod(exp, 2) == 0) {
-      go(n * n, exp / 2, acc)
-    } else {
-      go(n * n, exp / 2, acc * n)
-    }
-  }
-  go(n, exp, 1)
-}
+
+/// emit bits of the given int as width Bits in big-endian bit order
 def bitsBE(v: Int, width: Int): Unit / emit[Bit] = {
   var mask = pow(2, width - 1)
   repeat(width){
@@ -262,6 +237,31 @@ def bitsBE(v: Int, width: Int): Unit / emit[Bit] = {
     mask = mask / 2
   }
 }
+
+/// emit bits of the given int as 32 Bits in big-endian bit order
+def bitsBE(int: Int): Unit / emit[Bit] = bitsBE(int, 32)
+
+/// collect bits in big-endian bit order into an Int
+def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
+  var res = 0
+  try body() with emit[Bit] { b =>
+    res = b match {
+      case B0() => res * 2
+      case B1() => res * 2 + 1
+    }
+    resume(())
+  }
+  res
+}
+
+/// bitwise not on integers
+def bitwiseNot(n: Int): Int = {
+  // TODO currently implemented in Effekt, should use extern ?
+  collectBitsBE{
+    try bitsBE(n) with emit[Bit]{ b => resume(do emit(not(b))) }
+  }
+}
+
 def ungroupBytes{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
   for[Byte]{body}{ b => bits(b) }
 def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
