@@ -24,6 +24,12 @@ record Signed[A](raw: A)
 /// Bits
 type Bit { B0(); B1() }
 
+/// not on Bits
+def not(b: Bit): Bit = b match {
+  case B0() => B1()
+  case B1() => B0()
+}
+
 /// Splices allowed in hex/byte stream literals
 effect HexSplices = {
   splice[Char], splice[String], 
@@ -89,7 +95,10 @@ def signedBytesLE(int: Int): Unit / emit[Byte] = signedBytesLE(int, 4)
 /// emit bytes of the given int as 4 bytes (in 2s-complement) in big-endian byte order
 def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
 
+/// emit bits of the given int as 32 Bits in big-endian bit order
 def bitsBE(int: Int): Unit / emit[Bit] = bitsBE(int, 32)
+
+/// collect bits in big-endian bit order into an Int
 def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
   var res = 0
   try body() with emit[Bit] { b =>
@@ -101,11 +110,10 @@ def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
   }
   res
 }
-def not(b: Bit): Bit = b match {
-  case B0() => B1()
-  case B1() => B0()
-}
+
+/// bitwise not on integers
 def bitwiseNot(n: Int): Int = {
+  // TODO currently implemented in Effekt, should use extern ?
   collectBitsBE{
     try bitsBE(n) with emit[Bit]{ b => resume(do emit(not(b))) }
   }
@@ -114,6 +122,8 @@ def bitwiseNot(n: Int): Int = {
 // Splicers
 // --------
 
+/// Splicer to emit the bytes in hex notation given, plus evenutal splices
+/// Ignores whitespace
 def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
   try {
     try {
@@ -153,6 +163,7 @@ def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
   with splice[OfWidth[BE[Signed[Int]]]] { w => signedBytesBE(w.raw.raw.raw, w.width); resume(()) }
 }
 
+/// convert the given hex notation to an integer (big-endian)
 def x{ body: => Unit / { literal, HexSplices } }: Int = {
   var res = 0
   for[Byte]{ hex{body} }{ v => res = res * 256 + v.toInt }
@@ -161,8 +172,16 @@ def x{ body: => Unit / { literal, HexSplices } }: Int = {
 
 // Counting and padding
 // --------------------
+// TODO could also be part of stream library
+
+/// Request padding to a multiple of fac, by calling gen for each
 effect pad[A](fac: Int){ gen: => A }: Unit
+
+/// get current position in stream
 effect getPos(): Int
+
+/// Track position in stream, starting with init
+/// Handles getPos and pad
 def tracking[A](init: Int){ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] = {
   var n = init
   try body()
@@ -177,6 +196,9 @@ def tracking[A](init: Int){ body: => Unit / { emit[A], getPos, pad[A] } }: Unit 
     }
   }
 }
+
+/// Track how many bytes were emitted
+/// Handles getPos and pad
 def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] =
   tracking[A](0){body}
 
