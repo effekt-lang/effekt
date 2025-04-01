@@ -5,6 +5,7 @@ module acme
 import args
 import array
 import bench
+import binstream
 import buffer
 import bytearray
 import char
