@@ -1,16 +1,18 @@
 package effekt
 
-import effekt.PhaseResult.{ AllTransformed, CoreTransformed }
+import effekt.PhaseResult.{AllTransformed, CoreTransformed}
 import effekt.context.Context
 import effekt.core.Transformer
 import effekt.namer.Namer
-import effekt.source.{ AnnotateCaptures, ExplicitCapabilities, ResolveExternDefs, ModuleDecl }
+import effekt.source.{AnnotateCaptures, ExplicitCapabilities, ModuleDecl, ResolveExternDefs}
 import effekt.symbols.Module
-import effekt.typer.{ BoxUnboxInference, Typer, Wellformedness }
-import effekt.util.messages.{ FatalPhaseError, CompilerPanic }
-import effekt.util.{ SourceTask, Task, VirtualSource, paths }
+import effekt.typer.{BoxUnboxInference, Typer, Wellformedness}
+import effekt.util.messages.{CompilerPanic, FatalPhaseError}
+import effekt.util.{SourceTask, Task, VirtualSource, paths}
 import kiama.output.PrettyPrinterTypes.Document
-import kiama.util.{ Positions, Source }
+import kiama.util.{Positions, Source}
+
+import scala.language.postfixOps
 
 /**
  * Intermediate results produced by the various phases.
@@ -106,7 +108,7 @@ trait Compiler[Executable] {
    * Used by LSP server (Intelligence) to map positions to source trees
    */
   def getAST(source: Source)(using Context): Option[ModuleDecl] =
-    CachedParser(source).map { res => res.tree }
+    ParserUntilTyper(source).map { res => res.tree }
 
   /**
    * This is the second-most important entry-point besides [[Driver.compileSource]].
@@ -179,44 +181,45 @@ trait Compiler[Executable] {
   // the (individual) full compiler pipeline.
 
   /**
-   * @note The result of parsing needs to be cached.
+   * @note The result of the phases Parser until Typer needs to be cached.
    *
    *       [[Intelligence]] uses both the results of [[getAST]] and [[runFrontend]].
    *       Since we associate trees and symbols by the *object identity* of the tree,
-   *       running parser multiple times on the same input results in different trees.
+   *       running these phases multiple times on the same input results in different trees.
    *       In consequence, the symbols can't be found anymore. To avoid this, we
    *       use a separate task for parsing.
    *
-   *       Having access to the parse trees separately is also helpful for programs
-   *       that fail in later phases (for instance type checking). This way some
-   *       editor services can be provided, even in presence of errors.
+   *       Note that it is not sufficient to just cache the Parser phase because BoxUnboxInference
+   *       will rewrite the tree, meaning some nodes change their original object identity.
    */
-  val CachedParser = Phase.cached("cached-parser") { Parser }
+  val ParserUntilTyper: Phase[kiama.util.Source, Typechecked]= Phase.cached[Typechecked]("parser-until-typer") {
+    /**
+     * Parses a file to a syntax tree
+     * [[Source]] --> [[Parsed]]
+     */
+    Parser andThen
+      /**
+       * Performs name analysis and associates Id-trees with symbols
+       * [[Parsed]] --> [[NameResolved]]
+       */
+      Namer andThen
+      /**
+       * Explicit box transformation
+       * [[NameResolved]] --> [[NameResolved]]
+       */
+      BoxUnboxInference andThen
+      /**
+       * Wellformedness checks (exhaustivity, non-escape)
+       * [[Typechecked]] --> [[Typechecked]]
+       */
+      Typer
+  }
 
   /**
    * Frontend
    */
   val Frontend = Phase.cached("frontend") {
-    /**
-     * Parses a file to a syntax tree
-     *   [[Source]] --> [[Parsed]]
-     */
-    CachedParser andThen
-      /**
-       * Performs name analysis and associates Id-trees with symbols
-       *    [[Parsed]] --> [[NameResolved]]
-       */
-      Namer andThen
-      /**
-       * Explicit box transformation
-       *   [[NameResolved]] --> [[NameResolved]]
-       */
-      BoxUnboxInference andThen
-      /**
-       * Type checks and annotates trees with inferred types and effects
-       *   [[NameResolved]] --> [[Typechecked]]
-       */
-      Typer andThen
+    ParserUntilTyper andThen
       /**
        * Wellformedness checks (exhaustivity, non-escape)
        *   [[Typechecked]] --> [[Typechecked]]
