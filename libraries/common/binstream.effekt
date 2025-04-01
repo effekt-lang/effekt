@@ -140,8 +140,8 @@ def x{ body: => Unit / { literal, HexSplices } }: Int = {
 // --------------------
 effect pad[A](fac: Int){ gen: => A }: Unit
 effect getPos(): Int
-def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] = {
-  var n = 0
+def tracking[A](init: Int){ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] = {
+  var n = init
   try body()
   with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
   with getPos{ resume(n) }
@@ -154,6 +154,8 @@ def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] =
     }
   }
 }
+def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] =
+  tracking[A](0){body}
 
 // Sub-Byte
 // ========
