@@ -100,7 +100,7 @@ def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
 // Splicers
 // --------
 
-/// Splicer to emit the bytes in hex notation given, plus evenutal splices
+/// Splicer to emit the bytes in hex notation given, plus eventual splices
 /// Ignores whitespace
 def hex{ body: => Unit / { literal, HexSplices } }: Unit / emit[Byte] = {
   try {
