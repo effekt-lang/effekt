@@ -11,15 +11,20 @@ import bytearray
 
 // Wrappers
 // --------
+/// A with explicit big-endian order
 record BE[A](raw: A)
+/// A with explicit little-endian order
 record LE[A](raw: A)
+/// A with explicit width in current unit
+/// (bits for bitstreams, bytes for bytestreams)
 record OfWidth[A](raw: A, width: Int)
+/// explicitly signed A
 record Signed[A](raw: A)
 
 /// Bits
 type Bit { B0(); B1() }
 
-/// Effect alias
+/// Splices allowed in hex/byte stream literals
 effect HexSplices = {
   splice[Char], splice[String], 
   splice[Unit], 
@@ -33,6 +38,8 @@ effect HexSplices = {
 
 // Splitting
 // ---------
+
+/// emit bytes of the given int as a w bytes in little-endian byte order
 def bytesLE(int: Int, w: Int): Unit / emit[Byte] = {
   var c = int
   repeat(w){
@@ -40,7 +47,11 @@ def bytesLE(int: Int, w: Int): Unit / emit[Byte] = {
     c = c / 256
   }
 }
+
+/// emit bytes of the given int as a 4 bytes in little-endian byte order
 def bytesLE(int: Int): Unit / emit[Byte] = bytesLE(int, 4)
+
+/// emit bytes of the given int as a w bytes in big-endian byte order
 def bytesBE(n: Int, width: Int): Unit / emit[Byte] = {
   var pos = pow(256, width - 1)
   repeat(width){
@@ -48,8 +59,14 @@ def bytesBE(n: Int, width: Int): Unit / emit[Byte] = {
     pos = pos / 256
   }
 }
+
+/// emit bytes of the given int as a 4 bytes in big-endian byte order
 def bytesBE(n: Int): Unit / emit[Byte] = bytesBE(n, 4)
+
+/// emit bytes of the given int as a 4 bytes in big-endian byte order
 def bytes(n: Int): Unit / emit[Byte] = bytesBE(n)
+
+/// emit bytes of the given int as width bytes (in 2s-complement) in little-endian byte order
 def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] = {
   if (int < 0) {
     bytesLE(bitwiseNot(neg(int)) + 1, width)
@@ -57,6 +74,7 @@ def signedBytesLE(int: Int, width: Int): Unit / emit[Byte] = {
     bytesLE(int, width)
   }
 }
+/// emit bytes of the given int as width bytes (in 2s-complement) in big-endian byte order
 def signedBytesBE(int: Int, width: Int): Unit / emit[Byte] = {
   if (int < 0) {
     bytesBE(bitwiseNot(neg(int)) + 1, width)
@@ -64,8 +82,13 @@ def signedBytesBE(int: Int, width: Int): Unit / emit[Byte] = {
     bytesBE(int, width)
   }
 }
+
+/// emit bytes of the given int as 4 bytes (in 2s-complement) in little-endian byte order
 def signedBytesLE(int: Int): Unit / emit[Byte] = signedBytesLE(int, 4)
+
+/// emit bytes of the given int as 4 bytes (in 2s-complement) in big-endian byte order
 def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
+
 def bitsBE(int: Int): Unit / emit[Bit] = bitsBE(int, 32)
 def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
   var res = 0
