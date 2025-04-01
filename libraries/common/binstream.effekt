@@ -254,14 +254,6 @@ def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
   res
 }
 
-/// bitwise not on integers
-def bitwiseNot(n: Int): Int = {
-  // TODO currently implemented in Effekt, should use extern ?
-  collectBitsBE{
-    try bitsBE(n) with emit[Bit]{ b => resume(do emit(not(b))) }
-  }
-}
-
 /// split emitted bytes and emit the individual bits in big-endian bit order
 def ungroupBytes{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
   for[Byte]{body}{ b => bits(b) }
