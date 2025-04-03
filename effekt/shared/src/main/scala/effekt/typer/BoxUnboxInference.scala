@@ -19,8 +19,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
 
   def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
-    case ModuleDecl(path, imports, defs) =>
-      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces))
+    case ModuleDecl(path, imports, defs, span) =>
+      ModuleDecl(path, imports, defs.flatMap(flattenNamespaces), span)
   }
 
   /**
@@ -130,8 +130,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
 
   def rewrite(t: Def)(using C: Context): Def = visit(t) {
 
-    case FunDef(id, tparams, vparams, bparams, ret, body) =>
-      FunDef(id, tparams, vparams, bparams, ret, rewrite(body))
+    case FunDef(id, tparams, vparams, bparams, ret, body, span) =>
+      FunDef(id, tparams, vparams, bparams, ret, rewrite(body), span)
 
     case ValDef(id, annot, binding) =>
       ValDef(id, annot, rewrite(binding))
