@@ -7,6 +7,7 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
+import effekt.source.{Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, SpannedList, Tree}
 import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree, sourceOf }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
@@ -137,7 +138,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DefDef(id, annot, block) =>
       ()
 
-    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body, span) =>
       val uniqueId = Context.nameFor(id)
 
       // we create a new scope, since resolving type params introduces them in this scope
@@ -213,7 +214,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -316,7 +317,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, span) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -326,7 +327,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -725,13 +726,13 @@ object Namer extends Phase[Parsed, NameResolved] {
         case funTpe: source.FunctionType =>
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects) =>
+        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span ) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
-        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
+        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
-        case source.Effectful(innerTpe, eff) =>
+        case source.Effectful(innerTpe, eff, span) =>
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed type `() => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}`?")
         case _ => ()
@@ -752,13 +753,13 @@ object Namer extends Phase[Parsed, NameResolved] {
         case source.BoxedType(innerTpe, eff) =>
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects) =>
+        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects, span) =>
           val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
           // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects} / ${effects}`?")
-        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
+        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects, span) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
-        case source.Effectful(innerTpe, effs) =>
+        case source.Effectful(innerTpe, effs, span) =>
           // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
           Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${effs.sourceOf}?")
         case _ => ()

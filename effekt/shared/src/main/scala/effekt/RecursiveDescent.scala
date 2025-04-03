@@ -432,7 +432,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       else
         // [...](<PARAM>...) {...} `=` <STMT>>
         val (tps, vps, bps) = params()
-        FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmt())
+        FunDef(id, tps, vps, bps, maybeReturnAnnotation(), `=` ~> stmt(), span())
 
 
   // right now: data type definitions (should be renamed to `data`) and type aliases
@@ -441,17 +441,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val id ~ tps = (`type` ~> idDef()) ~ maybeTypeParams()
 
       peek.kind match {
-        case `=` => `=` ~> TypeDef(id, tps, valueType())
-        case _ => braces { DataDef(id, tps, manyWhile({ constructor() <~ semi() }, !peek(`}`))) }
+        case `=` => `=` ~> TypeDef(id, tps.unspan, valueType())
+        case _ => braces { DataDef(id, tps.unspan, manyWhile({ constructor() <~ semi() }, !peek(`}`))) }
       }
 
   def recordDef(): Def =
     nonterminal:
-      RecordDef(`record` ~> idDef(), maybeTypeParams(), valueParams())
+      RecordDef(`record` ~> idDef(), maybeTypeParams().unspan, valueParams().unspan)
 
   def constructor(): Constructor =
     nonterminal:
-      Constructor(idDef(), maybeTypeParams(), valueParams())
+      Constructor(idDef(), maybeTypeParams().unspan, valueParams().unspan)
 
   // On the top-level both
   //    effect Foo = {}
@@ -466,7 +466,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def effectDef(): Def =
     nonterminal:
       // effect <NAME> = <EFFECTS>
-      EffectDef(`effect` ~> idDef(), maybeTypeParams(), `=` ~> effects())
+      EffectDef(`effect` ~> idDef(), maybeTypeParams().unspan, `=` ~> effects())
 
   // effect <NAME>[...](...): ...
   def operationDef(): Def =
@@ -479,12 +479,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def operation(): Operation =
     nonterminal:
       idDef() ~ params() ~ returnAnnotation() match {
-        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret)
+        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps.unspan, vps.unspan, bps.unspan, ret)
       }
 
   def interfaceDef(): InterfaceDef =
     nonterminal:
-      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`)
+      InterfaceDef(`interface` ~> idDef(), maybeTypeParams().unspan, `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`)
 
   def namespaceDef(): Def =
     nonterminal:
@@ -528,10 +528,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def externType(): Def =
     nonterminal:
-      ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams())
+      ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams().unspan)
   def externInterface(): Def =
     nonterminal:
-      ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams())
+      ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams().unspan)
   def externResource(): Def =
     nonterminal:
       ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation())
@@ -553,7 +553,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       ((`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
         case capt ~ id ~ (tps, vps, bps) ~ ret =>
           val bodies = manyWhile(externBody(), isExternBodyStart)
-          ExternDef(capt, id, tps, vps, bps, ret, bodies)
+          ExternDef(capt, id, tps, vps, bps, ret, bodies, span())
       }
 
   def externBody(): ExternBody =
@@ -614,9 +614,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       if peek(`:`) then Some(blockTypeAnnotation()) else None
 
-  def maybeReturnAnnotation(): Option[Effectful] =
+  def maybeReturnAnnotation(): SpannedOption[Effectful] =
     nonterminal:
-      when(`:`) { Some(effectful()) } { None }
+      when(`:`) { Some(effectful()) } { None }.spanned
 
   def returnAnnotation(): Effectful =
     if peek(`:`) then  `:` ~> effectful()
@@ -679,7 +679,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // TODO deprecate
   def funExpr(): Term =
     nonterminal:
-      `fun` ~> Box(None, BlockLiteral(Nil, valueParams(), Nil, braces { stmts() }))
+      `fun` ~> Box(None, BlockLiteral(Nil, valueParams().unspan, Nil, braces { stmts() }))
     // TODO positions
 
   def unboxExpr(): Term =
@@ -748,7 +748,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           }
 
           // TODO the implicitResume needs to have the correct position assigned (maybe move it up again...)
-          OpClause(id, tps, vps, bps, ret, body, implicitResume)
+          OpClause(id, tps, vps, bps, ret.unspan, body, implicitResume)
       }
 
   def implicitResume: IdDef =
@@ -1183,7 +1183,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
 
       if (peek(`/`)) {
-        Effectful(boxed, maybeEffects())
+        Effectful(boxed, maybeEffects(), span())
       } else {
         boxed
       }
@@ -1199,17 +1199,20 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // Somewhat specialized: we parse a normal type, if it's not a ${tpe} / ${effs},
   // then pretend the effect set is empty. This seems to work out fine :)
-  def effectful(): Effectful = boxedType() match
-    case eff: Effectful => eff
-    case tpe => Effectful(tpe, Effects.Pure)
-
-  def maybeTypeParams(): List[Id] =
+  def effectful(): Effectful = {
     nonterminal:
-      if peek(`[`) then typeParams() else Nil
+      boxedType() match
+        case eff: Effectful => eff
+        case tpe => Effectful(tpe, Effects.Pure, span())
+  }
 
-  def typeParams(): List[Id] =
+  def maybeTypeParams(): SpannedList[Id] =
     nonterminal:
-      some(idDef, `[`, `,`, `]`)
+      if peek(`[`) then typeParams() else Nil.spanned
+
+  def typeParams(): SpannedList[Id] =
+    nonterminal:
+      some(idDef, `[`, `,`, `]`).spanned
 
   def maybeBlockTypeParams(): List[(Option[IdDef], Type)] =
     nonterminal:
@@ -1227,7 +1230,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
 
-  def params(): (List[Id], List[ValueParam], List[BlockParam]) =
+  def params(): (SpannedList[Id], SpannedList[ValueParam], SpannedList[BlockParam]) =
     nonterminal:
       maybeTypeParams() ~ maybeValueParams() ~ maybeBlockParams() match {
         case tps ~ vps ~ bps => (tps, vps, bps)
@@ -1238,7 +1241,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       maybeTypeParams() ~ maybeValueParamsOpt() ~ maybeBlockParamsOpt() match {
         case (tps ~ vps ~ bps) =>
           // fail("Expected a parameter list (multiple value parameters or one block parameter; only type annotations of value parameters can be currently omitted)")
-          (tps, vps, bps)
+          (tps.unspan, vps, bps)
       }
 
   def maybeValueParamsOpt(): List[ValueParam] =
@@ -1249,13 +1252,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       many(valueParamOpt, `(`, `,`, `)`)
 
-  def maybeValueParams(): List[ValueParam] =
+  def maybeValueParams(): SpannedList[ValueParam] =
     nonterminal:
-      if peek(`(`) then valueParams() else Nil
+      if peek(`(`) then valueParams() else Nil.spanned
 
-  def valueParams(): List[ValueParam] =
+  def valueParams(): SpannedList[ValueParam] =
     nonterminal:
-      many(valueParam, `(`, `,`, `)`)
+      many(valueParam, `(`, `,`, `)`).spanned
 
   def valueParam(): ValueParam =
     nonterminal:
@@ -1265,9 +1268,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       ValueParam(idDef(), maybeValueTypeAnnotation())
 
-  def maybeBlockParams(): List[BlockParam] =
+  def maybeBlockParams(): SpannedList[BlockParam] =
     nonterminal:
-      manyWhile(`{` ~> blockParam() <~ `}`, `{`)
+      manyWhile(`{` ~> blockParam() <~ `}`, `{`).spanned
 
   def blockParams(): List[BlockParam] =
     nonterminal:
@@ -1515,6 +1518,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     positions.setFinish(res, endPos)
 
     res
+  }
+
+  extension [T](self: Option[T]) {
+    inline def spanned: SpannedOption[T] = SpannedOption(self, span())
+  }
+
+  extension [T](self: List[T]) {
+    inline def spanned: SpannedList[T] = SpannedList(self, span())
   }
 
   extension [T](self: T) {

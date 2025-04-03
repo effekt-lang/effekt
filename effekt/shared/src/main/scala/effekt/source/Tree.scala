@@ -216,6 +216,29 @@ enum Param extends Definition {
 }
 export Param.*
 
+case class SpannedList[T](list: List[T], span: Span) {
+  def unspan: List[T] = list
+}
+object SpannedList {
+  implicit def spannedListToList[T <: Tree](spanned: SpannedList[T]): List[T] = spanned.list
+}
+case class SpannedOption[T](option: Option[T], span: Span) {
+  def unspan: Option[T] = option
+}
+object SpannedOption {
+  implicit def spannedOptionToOption[T](spanned: SpannedOption[T]): Option[T] = spanned.option
+}
+
+object SpannedOps {
+  extension [T](self: Option[T]) {
+    inline def spanned(span: Span): SpannedOption[T] = SpannedOption(self, span)
+  }
+
+  extension [T](self: List[T]) {
+    inline def spanned(span: Span): SpannedList[T] = SpannedList(self, span)
+  }
+}
+export SpannedOps._
 
 /**
  * Global and local definitions
@@ -244,7 +267,7 @@ export Param.*
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
+  case FunDef(id: IdDef, tparams: SpannedList[Id], vparams: SpannedList[ValueParam], bparams: SpannedList[BlockParam], ret: SpannedOption[Effectful], body: Stmt, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
@@ -272,8 +295,8 @@ enum Def extends Definition {
   case ExternType(id: IdDef, tparams: List[Id])
 
   case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody]) extends Def
+                 tparams: SpannedList[Id], vparams: SpannedList[ValueParam], bparams: SpannedList[BlockParam], ret: Effectful,
+                 bodies: List[ExternBody], span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -574,7 +597,7 @@ case class FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: Li
 /**
  * Type-and-effect annotations
  */
-case class Effectful(tpe: ValueType, eff: Effects) extends Type
+case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Type
 
 // These are just type aliases for documentation purposes.
 type BlockType = Type
