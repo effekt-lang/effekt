@@ -3,7 +3,7 @@ package effekt.source
 import effekt.Phase
 import effekt.PhaseResult.Typechecked
 import effekt.context.{ Context, Annotations }
-import effekt.source.Tree.Rewrite
+import effekt.source.SpannedOps._
 
 object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
@@ -39,7 +39,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
   }
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
-      case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) =>
         findPreferred(bodies) match {
           case body@ExternBody.StringExternBody(featureFlag, template) =>
             if (featureFlag.isDefault) {
@@ -47,16 +47,16 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
                 + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
             }
 
-            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body))
+            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body), span)
             Context.copyAnnotations(defn, d)
             Some(d)
           case ExternBody.EffektExternBody(featureFlag, body) =>
-            val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret), body)
+            val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret).spanned(ret.span), body, span)
             Context.copyAnnotations(defn, d)
             Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??
             Some(d)
           case u: ExternBody.Unsupported =>
-            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u))
+            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u), span)
             Context.copyAnnotations(defn, d)
             Some(d)
         }

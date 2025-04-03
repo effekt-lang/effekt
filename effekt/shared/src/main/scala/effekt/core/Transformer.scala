@@ -62,7 +62,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Toplevel | Declaration | Extern] = d match {
-    case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
+    case f @ source.FunDef(id, tps, vps, bps, ret, body, span) =>
       val tparams = tps.map { p => p.symbol }
       val cparams = bps.map { b => b.symbol.capture }
       val vparams = vps map transform
@@ -104,7 +104,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(core.Interface(interface, interface.tparams,
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
-    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies) =>
+    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, span) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
@@ -166,7 +166,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(b)
 
     case source.DefStmt(d, rest) => d match {
-      case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
+      case f @ source.FunDef(id, tps, vps, bps, ret, body, span) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
