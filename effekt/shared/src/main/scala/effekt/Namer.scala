@@ -4,10 +4,10 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
+import effekt.source.{Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, SpannedList, Tree}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
@@ -136,7 +136,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DefDef(id, annot, block) =>
       ()
 
-    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body, span) =>
       val uniqueId = Context.nameFor(id)
 
       // we create a new scope, since resolving type params introduces them in this scope
@@ -212,7 +212,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         ExternInterface(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -315,7 +315,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, span) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -325,7 +325,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, span) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -846,7 +846,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def bindValues(params: List[ValueParam]) =
     params.foreach { p => bind(p) }
-
+  
   private[namer] def bindBlocks(params: List[BlockParam]) =
     // bind the block parameter as a term
     params.foreach { bindBlock }
