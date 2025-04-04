@@ -125,6 +125,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(ff, path, contents, _) =>
       List(Extern.Include(ff, contents.get))
 
+    case e @ source.DocWrapper(_, next, _) => transformToplevel(next)
+
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
@@ -198,6 +200,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         insertBindings {
           Var(sym, Context.bind(transform(binding)), sym.capture, transform(rest))
         }
+
+      case v @ source.DocWrapper(_, next, _) => transform(source.DefStmt(next, rest))
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
       case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")

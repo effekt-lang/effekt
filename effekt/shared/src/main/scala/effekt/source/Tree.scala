@@ -229,6 +229,7 @@ export Param.*
  *     │─ [[ ExternResource ]]
  *     │─ [[ ExternInterface ]]
  *     │─ [[ ExternInclude ]]
+ *     │─ [[ DocWrapper ]]
  *
  * -------------------------------------------
  */
@@ -276,6 +277,8 @@ enum Def extends Definition {
    *   have case specific refinements.
    */
   case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+
+  case DocWrapper(msg: String, next: Def, val id: IdDef = IdDef(""))
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude

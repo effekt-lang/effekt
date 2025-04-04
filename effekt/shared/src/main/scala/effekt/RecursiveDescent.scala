@@ -126,7 +126,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def isSpace(kind: TokenKind): Boolean =
     kind match {
-      case TokenKind.Space | TokenKind.Comment(_) | TokenKind.DocComment(_) | TokenKind.Newline => true
+      case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
       case _ => false
     }
 
@@ -305,7 +305,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def isToplevel: Boolean = peek.kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
-         `extern` | `effect` | `interface` | `type` | `record` => true
+         `extern` | `effect` | `interface` | `type` | `record` | DocComment(_) => true
     case _ => false
   }
 
@@ -321,6 +321,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `effect`    => effectOrOperationDef()
         case `namespace` => namespaceDef()
         case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
+        case DocComment(msg) => docWrapper(msg)
         case _ => fail("Expected a top-level definition")
       }
 
@@ -513,6 +514,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           else externString()
         // extern {...} def ...
         case _ => externFun()
+      }
+
+  def docWrapper(msg: String): DocWrapper =
+    nonterminal:
+      next().kind match {
+        case t if isToplevel => DocWrapper(msg, toplevel())
+        case d => fail("Expected toplevel statement")
       }
 
   def featureFlag(): FeatureFlag =

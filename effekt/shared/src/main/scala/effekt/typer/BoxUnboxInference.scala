@@ -154,6 +154,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
       }
       DefDef(id, annot, block)
 
+    case DocWrapper(_, next, _) => rewrite(next)
+
     case d: InterfaceDef   => d
     case d: DataDef        => d
     case d: RecordDef      => d
