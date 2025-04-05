@@ -184,8 +184,11 @@ def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
 }
 
 
-def sum { stream : () => Unit / emit[Int] }: Int =
+def sum { stream: () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
+
+def product { stream: () => Unit / emit[Int] }: Int =
+  returning::product[Unit]{stream}.second
 
 def collectList[A] { stream: () => Unit / emit[A] }: List[A] =
   returning::collectList[A, Unit]{stream}.second
@@ -471,12 +474,22 @@ def limit[A, R](number: Int) { stream: () => R / emit[A] }: R / { emit[A], stop 
   }
 }
 
-def sum[R] { stream : () => R / emit[Int] }: (R, Int) = {
+def sum[R] { stream: () => R / emit[Int] }: (R, Int) = {
   var s = 0;
   try {
     (stream(), s)
   } with emit[Int] { v =>
     s = s + v;
+    resume(())
+  }
+}
+
+def product[R] { stream: () => R / emit[Int] }: (R, Int) = {
+  var s = 1;
+  try {
+    (stream(), s)
+  } with emit[Int] { v =>
+    s = s * v;
     resume(())
   }
 }
