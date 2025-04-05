@@ -124,6 +124,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     position += 1;
     spaces()
 
+  def isDocComment(kind: TokenKind): Boolean =
+    kind match {
+      case DocComment(_) => true
+      case _ => false
+    }
+
   def isSpace(kind: TokenKind): Boolean =
     kind match {
       case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
@@ -282,7 +288,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
      nonterminal:
        // skip spaces at the start
        spaces()
-       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs())
+       val res = ModuleDecl(maybeDocWrapped(moduleDecl()), manyWhile(includeDecl(), `import`), toplevelDefs())
        if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
 
@@ -303,11 +309,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def moduleName(): String =
     some(ident, `/`).mkString("/")
 
-  def isToplevel: Boolean = peek.kind match {
+  def isToplevel(position: Int): Boolean = peek(position).kind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
-         `extern` | `effect` | `interface` | `type` | `record` | DocComment(_) => true
+         `extern` | `effect` | `interface` | `type` | `record` => true
+    case DocComment(_) => isToplevel(position + 1)
     case _ => false
   }
+
+  def isToplevel: Boolean = isToplevel(0)
 
   def toplevel(): Def =
     nonterminal:
@@ -321,7 +330,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `effect`    => effectOrOperationDef()
         case `namespace` => namespaceDef()
         case `var`       => fail("Mutable variable declarations are currently not supported on the toplevel.")
-        case DocComment(msg) => docWrapper(msg)
+        case DocComment(msg) => docWrapper(msg, isToplevel, toplevel())
         case _ => fail("Expected a top-level definition")
       }
 
@@ -348,13 +357,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       manyWhile(toplevel(), isToplevel)
 
-  def isDefinition: Boolean = peek.kind match {
+  def isDefinition(position: Int): Boolean = peek(position).kind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
+    case DocComment(_) => isDefinition(position + 1)
     case `extern` | `effect` | `interface` | `type` | `record` =>
       val kw = peek.kind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
     case _ => false
   }
+
+  def isDefinition: Boolean = isDefinition(0)
 
   def definition(): Def =
     nonterminal:
@@ -364,6 +376,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `type`      => typeOrAliasDef()
         case `effect`    => effectDef()
         case `namespace` => namespaceDef()
+        case DocComment(msg) => docWrapper(msg, isDefinition, definition())
         // TODO
         //     (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
         //        failure(s"Only supported on the toplevel: ${kw} declaration.")
@@ -485,7 +498,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def interfaceDef(): InterfaceDef =
     nonterminal:
-      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), `def`) <~ `}`)
+      InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(maybeDocWrapped(`def` ~> operation()), peek(`def`) || isDocComment(peek.kind)) <~ `}`)
 
   def namespaceDef(): Def =
     nonterminal:
@@ -516,11 +529,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => externFun()
       }
 
-  def docWrapper(msg: String): DocWrapper =
+  def docWrapper(msg: String, pred: => Boolean, parser: => Def): DocWrapper =
     nonterminal:
       next().kind match {
-        case t if isToplevel => DocWrapper(msg, toplevel())
-        case d => fail("Expected toplevel statement")
+        case t if pred => DocWrapper(msg, parser)
+        case d => fail("Expected definition")
       }
 
   def featureFlag(): FeatureFlag =
@@ -921,6 +934,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
     e
   }
+
+  // TODO: somehow wrap the parser in some DocWrapper
+  def maybeDocWrapped[T](parser: => T): T = peek.kind match
+    case DocComment(msg) =>
+      consume(peek.kind)
+      // recurse until no doc comment is left
+      maybeDocWrapped(parser)
+    case _ => parser
 
   // argument lists cannot follow a linebreak:
   //   foo      ==    foo;

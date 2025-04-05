@@ -148,6 +148,15 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = debugging
   )
 
+  val dumpDocumentation: ScallopOption[Boolean] = toggle(
+    "dump-documentation",
+    descrYes = "Dump all documented statements as a JSON",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
   val time: ScallopOption[String] = choice(
     choices = Seq("text", "json"),
     name = "time",

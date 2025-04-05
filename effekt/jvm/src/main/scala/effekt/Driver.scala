@@ -3,7 +3,7 @@ package effekt
 // Adapted from
 //   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.{ ModuleDecl, Tree, IdDef, Def }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import kiama.output.PrettyPrinterTypes.Document
@@ -90,6 +90,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     outputTimes(source, config)(context)
     showIR(source, config)(context)
     writeIRs(source, config)(context)
+    dumpDocumentation(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
   }
@@ -124,6 +125,47 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         val name = source.name.split("/").last + "-" + stage.toString.toLowerCase + "." + extension
         IO.createFile((out / name).unixPath, s)
       }
+  }
+
+  // TODO: should we move this somewhere more appropriate?
+  def dumpDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    if (!config.dumpDocumentation()) return
+
+    val astOpt = C.compiler.getAST(source)
+    if (astOpt.isEmpty) return
+    val ast = astOpt.get
+
+    val tree = new kiama.relation.Tree[AnyRef & Product, ModuleDecl](ast)
+    val docs = tree.nodes.collect { case t: Def.DocWrapper => t }
+
+    var res = ""
+    for (doc <- docs) {
+      var message = doc.msg.trim
+      var data = "{}"
+
+      // TODO: we should also recurse into interfaces etc.
+      def go(tree: Tree): Unit = {
+        tree match {
+          case Def.DocWrapper(msg, next, _) =>
+            message += "\\n" ++ msg.trim
+            go(next)
+          case Def.FunDef(IdDef(n), _, _, _, _, _) =>
+            data = s"{\"kind\": \"FunDef\", \"id\": \"${n}\"}"
+          case Def.DataDef(IdDef(n), _, _) =>
+            data = s"{\"kind\": \"DataDef\", \"id\": \"${n}\"}"
+          case Def.NamespaceDef(IdDef(n), _) =>
+            data = s"{\"kind\": \"NamespaceDef\", \"id\": \"${n}\"}"
+          case _ => s"{\"kind\": \"unknown\"}"
+        }
+      }
+      go(doc.next)
+
+      res += s"{\"message\": \"${message}\","
+      res += s"\"data\": \"${data}\""
+      res += "\"}\n"
+
+    }
+    println(res)
   }
 
   /**
