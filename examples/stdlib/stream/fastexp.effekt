@@ -43,6 +43,20 @@ def fastexp(n: Int, k: Int) = product {
 }
 
 def main() = {
+  /// Computes n^exp for integers. (from #923!)
+  def pow(n: Int, exp: Int): Int = {
+    def go(n: Int, exp: Int, acc: Int): Int = {
+      if (exp == 0) {
+        acc
+      } else if (mod(exp, 2) == 0) {
+        go(n * n, exp / 2, acc)
+      } else {
+        go(n * n, exp / 2, acc * n)
+      }
+    }
+    go(n, exp, 1)
+  }
+
   def prettyBits(bits: List[Bool]): String =
     "0b" ++ bits.map { b => if (b) "1" else "0"}.join("")
 
@@ -63,7 +77,7 @@ def main() = {
 
   def testExp(n: Int, k: Int) = {
     println(show(n) ++ " ^ " ++ show(k))
-    println(n.toDouble.pow(k))
+    println(n.pow(k))
     println(n.fastexp(k))
   }
 
