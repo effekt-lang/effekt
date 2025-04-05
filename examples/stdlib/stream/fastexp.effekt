@@ -1,0 +1,79 @@
+import stream
+
+/// Least significant bits
+def eachLSB(n: Int): Unit / emit[Bool] = {
+  if (n <= 0) {
+    do emit(false)
+  } else {
+    var tmp = n
+    while (tmp > 0) {
+      do emit(if (tmp.mod(2) == 1) true else false)
+      tmp = tmp / 2
+    }
+  }
+}
+
+/// Most significant bits
+def eachMSB(n: Int): Unit / emit[Bool] = {
+  if (n <= 0) {
+    do emit(false)
+  } else {
+    // First, calculate the highest bit position
+    var highest = 0
+    var m = n
+    while (m > 0) {
+      highest = highest + 1
+      m = m / 2
+    }
+
+    // Then emit from MSB to LSB
+    for[Int] { range(0, highest) } { i =>
+      val index = highest - i
+      val bit = n.bitwiseShr(index - 1).mod(2) == 1
+      do emit(bit)
+    }
+  }
+}
+
+def fastexp(n: Int, k: Int) = product {
+  stream::zip[Int, Bool] {n.iterate { x => x * x }} {k.eachLSB} {
+    case res, true => do emit(res)
+    case res, false => ()
+  }
+}
+
+def main() = {
+  def prettyBits(bits: List[Bool]): String =
+    "0b" ++ bits.map { b => if (b) "1" else "0"}.join("")
+
+  def testBits(n: Int) = {
+    println(n)
+    println(collectList[Bool] {n.eachLSB}.prettyBits)
+    println(collectList[Bool] {n.eachMSB}.prettyBits)
+  }
+
+  testBits(0)
+  testBits(1)
+  testBits(2)
+  testBits(3)
+  testBits(4)
+  testBits(123456789)
+
+  println("")
+
+  def testExp(n: Int, k: Int) = {
+    println(show(n) ++ " ^ " ++ show(k))
+    println(n.toDouble.pow(k))
+    println(n.fastexp(k))
+  }
+
+  testExp(2, 0)
+  testExp(2, 5)
+  testExp(2, 20)
+  testExp(10, 10)
+  testExp(0, 1)
+  testExp(1, 0)
+  testExp(0, 0)
+  testExp(7, 22)
+  testExp(22, 7)
+}
