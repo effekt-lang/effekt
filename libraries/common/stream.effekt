@@ -173,6 +173,16 @@ def replicate[A](number: Int) { action: () => A }: Unit / emit[A] =
     replicate(number - 1) {action}
   }
 
+/// Creates an infinite iterated stream given by an `initial` seed and a `step` function:
+/// iterate(a){f} ~> a, f(a), f(f(a)), f(f(f(a))), ...
+def iterate[A](initial: A) { step: A => A }: Unit / emit[A] = {
+  var current = initial
+  while (true) {
+    do emit(current)
+    current = step(current)
+  }
+}
+
 
 def sum { stream : () => Unit / emit[Int] }: Int =
   returning::sum[Unit]{stream}.second
