@@ -74,6 +74,6 @@ def main() = {
   testExp(0, 1)
   testExp(1, 0)
   testExp(0, 0)
-  testExp(7, 22)
-  testExp(22, 7)
+  testExp(7, 21)
+  testExp(21, 7)
 }
