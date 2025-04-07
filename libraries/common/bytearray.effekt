@@ -12,32 +12,47 @@ extern type ByteArray
 extern global def allocate(size: Int): ByteArray =
   js "(new Uint8Array(${size}))"
   llvm """
-    %arr = call %Pos @c_bytearray_new(%Int ${size})
-    ret %Pos %arr
+    %object_size = add i64 ${size}, 16
+    %object_alloc = tail call noalias ptr @malloc(i64 noundef %object_size)
+    store i64 0, ptr %object_alloc, align 8
+    %object_data_ptr = getelementptr inbounds i8, ptr %object_alloc, i64 8
+    store ptr @c_bytearray_erase_noop, ptr %object_data_ptr, align 8
+    %ret_object1 = insertvalue %Pos poison, i64 ${size}, 0
+    %ret_object2 = insertvalue %Pos %ret_object1, ptr %object_alloc, 1
+    ret %Pos %ret_object2
   """
   chez "(make-bytevector ${size})"
 
 extern pure def size(arr: ByteArray): Int =
   js "${arr}.length"
   llvm """
-    %size = call %Int @c_bytearray_size(%Pos ${arr})
-    ret %Int %size
+    %size = extractvalue %Pos ${arr}, 0
+    tail call void @erasePositive(%Pos ${arr})
+    ret i64 %size
   """
   chez "(bytevector-length ${arr})"
 
 extern global def unsafeGet(arr: ByteArray, index: Int): Byte =
   js "(${arr})[${index}]"
   llvm """
-    %byte = call %Byte @c_bytearray_get(%Pos ${arr}, %Int ${index})
-    ret %Byte %byte
+    %arr_ptr = extractvalue %Pos ${arr}, 1
+    %arr_data_ptr = getelementptr inbounds i8, ptr %arr_ptr, i64 16
+    %element_ptr = getelementptr inbounds i8, ptr %arr_data_ptr, i64 ${index}
+    %element = load i8, ptr %element_ptr, align 1
+    tail call void @erasePositive(%Pos ${arr})
+    ret i8 %element
   """
   chez "(bytevector-u8-ref ${arr} ${index})"
 
 extern global def unsafeSet(arr: ByteArray, index: Int, value: Byte): Unit =
   js "bytearray$set(${arr}, ${index}, ${value})"
   llvm """
-    %z = call %Pos @c_bytearray_set(%Pos ${arr}, %Int ${index}, %Byte ${value})
-    ret %Pos %z
+    %arr_ptr = extractvalue %Pos ${arr}, 1
+    %arr_data_ptr = getelementptr inbounds i8, ptr %arr_ptr, i64 16
+    %element_ptr = getelementptr inbounds i8, ptr %arr_data_ptr, i64 ${index}
+    store i8 ${value}, ptr %element_ptr, align 1
+    tail call void @erasePositive(%Pos ${arr})
+    ret %Pos zeroinitializer
   """
   chez "(bytevector-u8-set! ${arr} ${index} ${value})"
 
@@ -119,6 +134,10 @@ extern js """
       return 0;
     }
   }
+"""
+
+extern llvm """
+declare void @c_bytearray_erase_noop(ptr readnone %0)
 """
 
 extern chez """
