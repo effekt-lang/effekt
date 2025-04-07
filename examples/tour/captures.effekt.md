@@ -131,4 +131,4 @@ An example of a builtin resource is `io`, which is handled by the runtime. Other
 
 ## References
 
-- [Effects, capabilities, and boxes: from scope-based reasoning to type-based reasoning and back](https://dl.acm.org/doi/10.1145/3527320)
+- [Effects, capabilities, and boxes: from scope-based reasoning to type-based reasoning and back](https://doi.org/10.1145/3527320)
