@@ -1,6 +1,7 @@
 ---
 title: FFI
 permalink: tour/ffi
+origin: effekt
 ---
 
 # FFI (Foreign Function Interface)

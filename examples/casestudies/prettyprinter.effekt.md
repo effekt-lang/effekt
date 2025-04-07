@@ -2,6 +2,7 @@
 layout: docs
 title: Pretty Printer
 permalink: docs/casestudies/prettyprinter
+origin: effekt
 ---
 
 # Pretty Printer

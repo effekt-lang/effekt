@@ -1,6 +1,7 @@
 ---
 title: Effects
 permalink: tour/effects
+origin: effekt
 ---
 
 # Effects and handlers

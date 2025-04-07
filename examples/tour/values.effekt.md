@@ -1,6 +1,7 @@
 ---
 title: Values
 permalink: tour/values
+origin: effekt
 ---
 
 # Values

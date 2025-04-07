@@ -1,6 +1,7 @@
 ---
 title: Computation
 permalink: tour/computation
+origin: effekt
 ---
 
 # Computation

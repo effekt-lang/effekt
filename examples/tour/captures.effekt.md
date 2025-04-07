@@ -1,6 +1,7 @@
 ---
 title: Captures
 permalink: tour/captures
+origin: effekt
 ---
 
 # Captures

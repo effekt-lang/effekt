@@ -2,6 +2,7 @@
 layout: docs
 title: Inference
 permalink: docs/casestudies/inference
+origin: effekt
 ---
 
 # Inference

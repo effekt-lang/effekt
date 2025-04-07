@@ -1,6 +1,7 @@
 ---
 title: Namespaces
 permalink: tour/namespaces
+origin: effekt
 ---
 
 # Namespaces

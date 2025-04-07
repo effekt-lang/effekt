@@ -2,6 +2,7 @@
 layout: docs
 title: Lexer
 permalink: docs/casestudies/lexer
+origin: effekt
 ---
 
 # Pull-based Lexing

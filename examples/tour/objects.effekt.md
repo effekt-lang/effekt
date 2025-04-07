@@ -1,6 +1,7 @@
 ---
 title: Objects
 permalink: tour/objects
+origin: effekt
 ---
 
 # Objects

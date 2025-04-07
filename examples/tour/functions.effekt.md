@@ -1,6 +1,7 @@
 ---
 title: Functions
 permalink: tour/functions
+origin: effekt
 ---
 
 # Functions

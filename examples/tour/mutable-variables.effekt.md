@@ -1,6 +1,7 @@
 ---
 title: Variables
 permalink: tour/variables
+origin: effekt
 ---
 
 # Mutable Variables

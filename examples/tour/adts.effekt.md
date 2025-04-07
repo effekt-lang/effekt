@@ -1,6 +1,7 @@
 ---
 title: Datatypes
 permalink: tour/adts
+origin: effekt
 ---
 
 # Algebraic Datatypes

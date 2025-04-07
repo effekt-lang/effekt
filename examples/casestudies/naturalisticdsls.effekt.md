@@ -2,6 +2,7 @@
 layout: docs
 title: Naturalistic DSLs
 permalink: docs/casestudies/naturalisticdsls
+origin: effekt
 ---
 
 # Naturalistic DSLs

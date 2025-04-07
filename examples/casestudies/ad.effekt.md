@@ -2,6 +2,7 @@
 layout: docs
 title: Automatic Differentiation
 permalink: docs/casestudies/ad
+origin: effekt
 ---
 
 # Automatic Differentiation
