@@ -11,10 +11,10 @@ extern js """
 
 extern llvm """
 define void @c_ref_erase_field(ptr %0) {
-  %obj_ptr = getelementptr inbounds ptr, ptr %0, i64 1
+  %field_pointer = getelementptr inbounds ptr, ptr %0, i64 1
   %tag = load i64, ptr %0, align 8
-  %obj = load ptr, ptr %obj_ptr, align 8
-  tail call void @erasePositive(i64 %tag, ptr %obj)
+  %field = load ptr, ptr %field_pointer, align 8
+  tail call void @erasePositive(i64 %tag, ptr %field)
   ret void
 }
 """
@@ -37,19 +37,18 @@ extern global def allocate[T](): Ref[T] =
   chez "(box #f)"
   llvm """
     ; sizeof Header + sizeof Pos = 32
-    %alloc = tail call noalias dereferenceable_or_null(32) ptr @malloc(i64 noundef 32)
-    %header_eraser_ptr = getelementptr ptr, ptr %alloc, i64 1
-    %pos_tag_ptr = getelementptr ptr, ptr %alloc, i64 2
-    %pos_obj_ptr = getelementptr ptr, ptr %alloc, i64 3
+    %ref = tail call noalias ptr @malloc(i64 noundef 32)
+    %refEraser = getelementptr ptr, ptr %ref, i64 1
+    %fieldTag = getelementptr ptr, ptr %ref, i64 2
+    %fieldData_pointer = getelementptr ptr, ptr %ref, i64 3
 
-    store i64 0, ptr %alloc, align 8
-    store ptr @c_ref_erase_field, ptr %header_eraser_ptr, align 8
-    store i64 0, ptr %pos_tag_ptr, align 8
-    store ptr null, ptr %pos_obj_ptr, align 8 
+    store i64 0, ptr %ref, align 8
+    store ptr @c_ref_erase_field, ptr %refEraser, align 8
+    store i64 0, ptr %fieldTag, align 8
+    store ptr null, ptr %fieldData_pointer, align 8 
 
-    %pos_ret = insertvalue %Pos { i64 0, ptr poison }, ptr %alloc, 1
-
-    ret %Pos %pos_ret
+    %refWrap = insertvalue %Pos { i64 0, ptr poison }, ptr %ref, 1
+    ret %Pos %refWrap
   """
 
 /// Creates a new reference with the initial value `init`.
@@ -57,22 +56,22 @@ extern global def ref[T](init: T): Ref[T] =
   js "{ value: ${init} }"
   chez "(box ${init})"
   llvm """
-    %pos_tag = extractvalue %Pos ${init}, 0
-    %pos_obj = extractvalue %Pos ${init}, 1
+    %initTag = extractvalue %Pos ${init}, 0
+    %initObject_pointer = extractvalue %Pos ${init}, 1
     ; sizeof Header + sizeof Pos = 32
-    %alloc = tail call noalias dereferenceable_or_null(32) ptr @malloc(i64 noundef 32)
-    %header_eraser_ptr = getelementptr ptr, ptr %alloc, i64 1
-    %pos_tag_ptr = getelementptr ptr, ptr %alloc, i64 2
-    %pos_obj_ptr = getelementptr ptr, ptr %alloc, i64 3
+    %ref = tail call noalias ptr @malloc(i64 noundef 32)
+    %refEraser = getelementptr ptr, ptr %ref, i64 1
+    %fieldTag = getelementptr ptr, ptr %ref, i64 2
+    %fieldData_pointer = getelementptr ptr, ptr %ref, i64 3
 
-    store i64 0, ptr %alloc, align 8
-    store ptr @c_ref_erase_field, ptr %header_eraser_ptr, align 8
-    store i64 %pos_tag, ptr %pos_tag_ptr, align 8
-    store ptr %pos_obj, ptr %pos_obj_ptr, align 8 
+    store i64 0, ptr %ref, align 8
+    store ptr @c_ref_erase_field, ptr %refEraser, align 8
+    store i64 %initTag, ptr %fieldTag, align 8
+    store ptr %initObject_pointer, ptr %fieldData_pointer, align 8 
 
-    %pos_ret = insertvalue %Pos { i64 0, ptr poison }, ptr %alloc, 1
+    %refWrap = insertvalue %Pos { i64 0, ptr poison }, ptr %ref, 1
 
-    ret %Pos %pos_ret
+    ret %Pos %refWrap
   """
   vm "ref::ref[T](T)"
 
@@ -81,21 +80,21 @@ extern global def get[T](ref: Ref[T]): T =
   js "${ref}.value"
   chez "(unbox ${ref})"
   llvm """
-    %ref_tag = extractvalue %Pos ${ref}, 0
-    %ref_obj = extractvalue %Pos ${ref}, 1
+    %refTag = extractvalue %Po S ${ref}, 0
+    %refField_pointer = extractvalue %Pos ${ref}, 1
 
-    %tag_ptr = getelementptr inbounds ptr, ptr %ref_obj, i64 2
-    %obj_ptr = getelementptr inbounds ptr, ptr %ref_obj, i64 3
-    %tag = load i64, ptr %tag_ptr, align 8
-    %obj = load ptr, ptr %obj_ptr, align 8
+    %fieldTag_pointer = getelementptr inbounds ptr, ptr %refField_pointer, i64 2
+    %fieldData_pointer = getelementptr inbounds ptr, ptr %refField_pointer, i64 3
+    %fieldTag = load i64, ptr %fieldTag_pointer, align 8
+    %fieldData = load ptr, ptr %fieldData_pointer, align 8
 
-    tail call void @sharePositive(i64 %tag, ptr %obj)
-    tail call void @erasePositive(i64 %ref_tag, ptr %ref_obj)
+    tail call void @sharePositive(i64 %fieldTag, ptr %fieldData)
+    tail call void @erasePositive(i64 %refTag, ptr %refField_pointer)
 
-    %pos_ret0 = insertvalue %Pos undef, i64 %tag, 0
-    %pos_ret1 = insertvalue %Pos %pos_ret0, ptr %obj, 1
+    %element0 = insertvalue %Pos undef, i64 %tag, 0
+    %element1 = insertvalue %Pos %element0, ptr %obj, 1
 
-    ret %Pos %pos_ret1
+    ret %Pos %element1
   """
   vm "ref::get[T](Ref[T])"
 
@@ -104,20 +103,20 @@ extern global def set[T](ref: Ref[T], value: T): Unit =
   js "set$impl(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"
   llvm """
-    %ref_tag = extractvalue %Pos ${ref}, 0
-    %ref_obj = extractvalue %Pos ${ref}, 1
-    %val_tag = extractvalue %Pos ${value}, 0
-    %val_obj = extractvalue %Pos ${value}, 1
+    %refTag = extractvalue %Pos ${ref}, 0
+    %refField_pointer = extractvalue %Pos ${ref}, 1
+    %valTag = extractvalue %Pos ${value}, 0
+    %valField_pointer = extractvalue %Pos ${value}, 1
 
-    %tag_ptr = getelementptr ptr, ptr %ref_obj, i64 2
-    %tag = load i64, ptr %tag_ptr, align 8
-    %obj_ptr = getelementptr ptr, ptr %ref_obj, i64 3
-    %obj = load ptr, ptr %obj_ptr, align 8
+    %fieldTag_pointer = getelementptr ptr, ptr %refField_pointer, i64 2
+    %fieldTag = load i64, ptr %fieldTag_pointer, align 8
+    %fieldData_pointer = getelementptr ptr, ptr %refField_pointer, i64 3
+    %fieldData = load ptr, ptr %fieldData_pointer, align 8
 
-    tail call void @erasePositive(i64 %tag, ptr %obj)
-    store i64 %val_tag, ptr %tag_ptr
-    store ptr %val_obj, ptr %obj_ptr
-    tail call void @erasePositive(i64 %ref_tag, ptr %ref_obj) 
+    tail call void @erasePositive(i64 %fieldTag, ptr %fieldData)
+    store i64 %valTag, ptr %fieldTag_pointer
+    store ptr %valField_pointer, ptr %fieldData_pointer
+    tail call void @erasePositive(i64 %refTag, ptr %refField_pointer) 
 
     ret %Pos zeroinitializer
   """
