@@ -91,8 +91,8 @@ extern global def get[T](ref: Ref[T]): T =
     tail call void @sharePositive(i64 %fieldTag, ptr %fieldData)
     tail call void @erasePositive(i64 %refTag, ptr %refField_pointer)
 
-    %element0 = insertvalue %Pos undef, i64 %tag, 0
-    %element1 = insertvalue %Pos %element0, ptr %obj, 1
+    %element0 = insertvalue %Pos undef, i64 %fieldTag, 0
+    %element1 = insertvalue %Pos %element0, ptr %fieldData, 1
 
     ret %Pos %element1
   """
