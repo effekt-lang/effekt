@@ -136,5 +136,5 @@ We can return a closure that closes over a mutable reference. This is only possi
 
 ## References
 
-- [Region-based Resource Management and Lexical Exception Handlers in Continuation-Passing Style](https://link.springer.com/chapter/10.1007/978-3-030-99336-8_18)
-- [Effects, capabilities, and boxes: from scope-based reasoning to type-based reasoning and back](https://dl.acm.org/doi/10.1145/3527320)
+- [Region-based Resource Management and Lexical Exception Handlers in Continuation-Passing Style](https://doi.org/10.1007/978-3-030-99336-8_18)
+- [Effects, capabilities, and boxes: from scope-based reasoning to type-based reasoning and back](https://doi.org/10.1145/3527320)
