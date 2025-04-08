@@ -85,4 +85,4 @@ def counterAsEffect2() = {
 counterAsEffect2()
 ```
 As part of its compilation pipeline, and guided by the type-and-effect system,
-the Effekt compiler performs this translation from implicitly handled effects to explicitly passed capabilities [Brachthäuser et al., 2020](https://dl.acm.org/doi/10.1145/3428194).
+the Effekt compiler performs this translation from implicitly handled effects to explicitly passed capabilities [Brachthäuser et al., 2020](https://doi.org/10.1145/3428194).

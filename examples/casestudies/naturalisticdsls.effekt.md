@@ -234,11 +234,11 @@ def main() = {
 }
 ```
 
-[@hudak96building]: https://dl.acm.org/doi/10.1145/242224.242477
-[@lopes2003beyond]: https://dl.acm.org/doi/abs/10.1145/966051.966058
+[@hudak96building]: https://doi.org/10.1145/242224.242477
+[@lopes2003beyond]: https://doi.org/10.1145/966051.966058
 [@marvsik2016introducing]: https://hal.archives-ouvertes.fr/hal-01079206/
-[@erdweg11sugarj]: https://dl.acm.org/doi/abs/10.1145/2048066.2048099
-[@shan2005linguistic]: http://homes.sice.indiana.edu/ccshan/dissertation/book.pdf
-[@shan2004delimited]: https://arxiv.org/abs/cs/0404006
-[@barker2004continuations]: https://www.nyu.edu/projects/barker/barker-cw.pdf
-[@yallop2017staged]: https://dl.acm.org/doi/abs/10.1145/2847538.2847546
+[@erdweg11sugarj]: https://doi.org/10.1145/2048066.2048099
+[@shan2005linguistic]: https://homes.sice.indiana.edu/ccshan/dissertation/book.pdf
+[@shan2004delimited]: https://doi.org/10.48550/arXiv.cs/0404006
+[@barker2014continuations]: https://archive.org/details/continuationsnat0000bark/
+[@yallop2017staged]: https://doi.org/10.1145/2847538.2847546
