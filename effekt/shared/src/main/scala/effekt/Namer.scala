@@ -248,6 +248,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       } else {
         d.contents = None
       }
+
+    case d @ source.DocWrapper(_, next, _) => preresolve(next)
   }
 
   /**

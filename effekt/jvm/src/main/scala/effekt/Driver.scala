@@ -3,7 +3,7 @@ package effekt
 // Adapted from
 //   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.{ ModuleDecl, Tree, IdDef, Def }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import kiama.output.PrettyPrinterTypes.Document
@@ -90,6 +90,8 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     outputTimes(source, config)(context)
     showIR(source, config)(context)
     writeIRs(source, config)(context)
+    showDocumentation(source, config)(context)
+    writeDocumentation(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
   }
@@ -125,6 +127,58 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
         IO.createFile((out / name).unixPath, s)
       }
   }
+
+  // TODO: should we move this somewhere more appropriate?
+  def generateDocumentation(source: Source)(implicit C: Context): String = {
+    val astOpt = C.compiler.getAST(source)
+    if (astOpt.isEmpty) return ""
+
+    val tree = new kiama.relation.Tree[AnyRef & Product, ModuleDecl](astOpt.get)
+    val wrappers = tree.nodes.collect { case t: Def.DocWrapper => t }
+
+    val res = wrappers.foldLeft("") { (acc, wrapper) =>
+      var docAcc = wrapper.doc.trim
+
+      // TODO: we should also recurse into interfaces etc.
+      // TODO: types, source?
+      // TODO: position!
+      // TODO: some are duplicates!
+      def go(tree: Tree): String = {
+        tree match {
+          case Def.DocWrapper(doc, next, _) =>
+            docAcc += "\\n" ++ doc.trim
+            go(next)
+          case Def.FunDef(IdDef(n), _, _, _, _, _) =>
+            s"{\"kind\": \"FunDef\", \"id\": \"${n}\", \"type\": \"${C.inferredTypeOption(tree)}\"}"
+          case Def.DataDef(IdDef(n), _, _) =>
+            s"{\"kind\": \"DataDef\", \"id\": \"${n}\"}"
+          case Def.InterfaceDef(IdDef(n), _, _) =>
+            s"{\"kind\": \"InterfaceDef\", \"id\": \"${n}\"}"
+          case Def.NamespaceDef(IdDef(n), _) =>
+            s"{\"kind\": \"NamespaceDef\", \"id\": \"${n}\"}"
+          case t => s"{\"kind\": \"unknown\"}" ++ t.toString
+        }
+      }
+      val data = go(wrapper.next)
+
+      s"""${acc},
+      |{
+      |  "doc": "${docAcc.replace("\"", "\\\"")}",
+      |  "data": ${data}
+      |}""".stripMargin
+    }
+    s"{\"source\": \"${source.name}\", \"elements\": [${res.tail}]}"
+  }
+
+  def showDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit =
+    if (!config.showDocumentation()) return
+    println(generateDocumentation(source))
+
+  def writeDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit =
+    if (!config.writeDocumentation()) return
+    val out = config.outputPath().getAbsolutePath
+    val name = source.name.split("/").last + ".json"
+    IO.createFile((out / name).unixPath, generateDocumentation(source))
 
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode

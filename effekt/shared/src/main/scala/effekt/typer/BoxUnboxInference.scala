@@ -124,6 +124,7 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
   }
 
   def flattenNamespaces(t: Def)(using C: Context): List[Def] = t match {
+    case Def.DocWrapper(_, next, _) => flattenNamespaces(next)
     case Def.NamespaceDef(name, defs) => defs.flatMap(flattenNamespaces)
     case d => List(rewrite(d))
   }
@@ -153,6 +154,8 @@ object BoxUnboxInference extends Phase[NameResolved, NameResolved] {
         case (_, _) => ()
       }
       DefDef(id, annot, block)
+
+    case DocWrapper(_, next, _) => rewrite(next)
 
     case d: InterfaceDef   => d
     case d: DataDef        => d
