@@ -148,9 +148,18 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = debugging
   )
 
-  val dumpDocumentation: ScallopOption[Boolean] = toggle(
-    "dump-documentation",
-    descrYes = "Dump all documented statements as a JSON",
+  val showDocumentation: ScallopOption[Boolean] = toggle(
+    "show-documentation",
+    descrYes = "Show all documented statements as a JSON",
+    default = Some(false),
+    noshort = true,
+    prefix = "no-",
+    group = debugging
+  )
+
+  val writeDocumentation: ScallopOption[Boolean] = toggle(
+    "write-documentation",
+    descrYes = "Write all documented statements to a JSON in the output directory",
     default = Some(false),
     noshort = true,
     prefix = "no-",

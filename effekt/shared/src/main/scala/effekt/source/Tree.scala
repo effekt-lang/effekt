@@ -278,7 +278,7 @@ enum Def extends Definition {
    */
   case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
 
-  case DocWrapper(msg: String, next: Def, val id: IdDef = IdDef(""))
+  case DocWrapper(doc: String, next: Def, val id: IdDef = IdDef(""))
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
