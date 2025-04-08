@@ -80,7 +80,7 @@ extern global def get[T](ref: Ref[T]): T =
   js "${ref}.value"
   chez "(unbox ${ref})"
   llvm """
-    %refTag = extractvalue %Po S ${ref}, 0
+    %refTag = extractvalue %Pos ${ref}, 0
     %refField_pointer = extractvalue %Pos ${ref}, 1
 
     %fieldTag_pointer = getelementptr inbounds ptr, ptr %refField_pointer, i64 2
