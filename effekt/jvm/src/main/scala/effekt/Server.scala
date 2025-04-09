@@ -237,12 +237,11 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
               })
               val content = Server.sources(notebookCellUri.uri).content
               //val result = compileNotebookContent(content)(using context)
-              //val result = processCell(notebookCellUri, notebook)
-              /*result match {
+              val result = processCell(notebookCellUri, notebook, context.config)
+              result match {
                 case Some(result) => Some(result)
                 case _ => Some("Compilation failed")
-              }*/
-              None
+              }
             case _ =>
               Some(s"Unexpected argument type: ${firstArg.getClass.getName}")
           }
@@ -254,18 +253,19 @@ trait LSPServer extends kiama.util.Server[Tree, EffektConfig, EffektError] with 
       case _ => None
     }
 
-  override def processCell(notebookCell: NotebookCell, notebook: Notebook, config: EffektConfig): Unit = {
-    val source = sources(notebookCell.uri)
-    context.setup(config)
-    given Context = context
-    clearDiagnostics(notebookCell.uri)
-    context.compiler.runFrontend(source)
-    /*context.compiler.compile(source) match {
-      case Some((output, main)) => println(output)
-      case None =>
-    } */
-    report(source, context.messaging.buffer, config)
+  override def processCell(notebookCell: NotebookCell, notebook: Notebook, config: EffektConfig): Option[Any] = {
+      val source = sources(notebookCell.uri)
+      val content = Server.sources(notebookCell.uri).content
+      context.setup(config)
 
+      given Context = context
+
+      clearDiagnostics(notebookCell.uri)
+      context.compiler.runFrontend(source) //not working
+      report(source, context.messaging.buffer, config)
+      
+      val result = context.compiler.compile(sources(notebookCell.uri))
+      Some(result)
   }
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
