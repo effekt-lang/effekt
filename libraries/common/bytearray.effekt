@@ -2,6 +2,17 @@ module bytearray
 
 /**
  * A memory managed, mutable, fixed-length array of bytes.
+ *
+ * We represent bytearrays like positive types.
+ *
+ *  - The field `tag` contains the size
+ *  - The field `obj` points to memory with the following layout:
+ *
+ *       +--[ Header ]--+--------------+
+ *       | Rc  | Eraser | Contents ... |
+ *       +--------------+--------------+
+ *
+ * The eraser does nothing.
  */
 extern type ByteArray
   // = llvm "%Pos"
@@ -16,7 +27,7 @@ extern global def allocate(size: Int): ByteArray =
     %object_alloc = tail call noalias ptr @malloc(i64 noundef %object_size)
     store i64 0, ptr %object_alloc, align 8
     %object_data_ptr = getelementptr inbounds i8, ptr %object_alloc, i64 8
-    store ptr @c_bytearray_erase_noop, ptr %object_data_ptr, align 8
+    store ptr @bytearray_erase_noop, ptr %object_data_ptr, align 8
     %ret_object1 = insertvalue %Pos poison, i64 ${size}, 0
     %ret_object2 = insertvalue %Pos %ret_object1, ptr %object_alloc, 1
     ret %Pos %ret_object2
@@ -137,7 +148,9 @@ extern js """
 """
 
 extern llvm """
-declare void @c_bytearray_erase_noop(ptr readnone %0)
+define void @bytearray_erase_noop(ptr readnone %0) {
+  ret void
+}
 """
 
 extern chez """

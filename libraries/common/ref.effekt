@@ -11,10 +11,8 @@ extern js """
 
 extern llvm """
 define void @c_ref_erase_field(ptr %0) {
-  %field_pointer = getelementptr inbounds ptr, ptr %0, i64 1
-  %tag = load i64, ptr %0, align 8
-  %field = load ptr, ptr %field_pointer, align 8
-  tail call void @erasePositive(i64 %tag, ptr %field)
+  %field = load %Pos, ptr %0, align 8
+  tail call void @erasePositive(%Pos %field)
   ret void
 }
 """
@@ -61,13 +59,11 @@ extern global def ref[T](init: T): Ref[T] =
     ; sizeof Header + sizeof Pos = 32
     %ref = tail call noalias ptr @malloc(i64 noundef 32)
     %refEraser = getelementptr ptr, ptr %ref, i64 1
-    %fieldTag = getelementptr ptr, ptr %ref, i64 2
-    %fieldData_pointer = getelementptr ptr, ptr %ref, i64 3
+    %refField = getelementptr ptr, ptr %ref, i64 2
 
     store i64 0, ptr %ref, align 8
     store ptr @c_ref_erase_field, ptr %refEraser, align 8
-    store i64 %initTag, ptr %fieldTag, align 8
-    store ptr %initObject_pointer, ptr %fieldData_pointer, align 8 
+    store %Pos ${init}, ptr %refField, align 8
 
     %refWrap = insertvalue %Pos { i64 0, ptr poison }, ptr %ref, 1
 
@@ -79,22 +75,15 @@ extern global def ref[T](init: T): Ref[T] =
 extern global def get[T](ref: Ref[T]): T =
   js "${ref}.value"
   chez "(unbox ${ref})"
-  llvm """
-    %refTag = extractvalue %Pos ${ref}, 0
-    %refField_pointer = extractvalue %Pos ${ref}, 1
+llvm """
+    %ref_pointer = extractvalue %Pos ${ref}, 1
+    %refField_pointer = getelementptr inbounds ptr, ptr %ref_pointer, i64 2
+    %refField = load %Pos, ptr %refField_pointer, align 8
 
-    %fieldTag_pointer = getelementptr inbounds ptr, ptr %refField_pointer, i64 2
-    %fieldData_pointer = getelementptr inbounds ptr, ptr %refField_pointer, i64 3
-    %fieldTag = load i64, ptr %fieldTag_pointer, align 8
-    %fieldData = load ptr, ptr %fieldData_pointer, align 8
+    tail call void @sharePositive(%Pos %refField)
+    tail call void @erasePositive(%Pos ${ref})
 
-    tail call void @sharePositive(i64 %fieldTag, ptr %fieldData)
-    tail call void @erasePositive(i64 %refTag, ptr %refField_pointer)
-
-    %element0 = insertvalue %Pos undef, i64 %fieldTag, 0
-    %element1 = insertvalue %Pos %element0, ptr %fieldData, 1
-
-    ret %Pos %element1
+    ret %Pos %refField
   """
   vm "ref::get[T](Ref[T])"
 
@@ -103,20 +92,14 @@ extern global def set[T](ref: Ref[T], value: T): Unit =
   js "set$impl(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"
   llvm """
-    %refTag = extractvalue %Pos ${ref}, 0
     %refField_pointer = extractvalue %Pos ${ref}, 1
-    %valTag = extractvalue %Pos ${value}, 0
-    %valField_pointer = extractvalue %Pos ${value}, 1
 
-    %fieldTag_pointer = getelementptr ptr, ptr %refField_pointer, i64 2
-    %fieldTag = load i64, ptr %fieldTag_pointer, align 8
-    %fieldData_pointer = getelementptr ptr, ptr %refField_pointer, i64 3
-    %fieldData = load ptr, ptr %fieldData_pointer, align 8
+    %field_pointer = getelementptr ptr, ptr %refField_pointer, i64 2
+    %field = load %Pos, ptr %field_pointer, align 8
 
-    tail call void @erasePositive(i64 %fieldTag, ptr %fieldData)
-    store i64 %valTag, ptr %fieldTag_pointer
-    store ptr %valField_pointer, ptr %fieldData_pointer
-    tail call void @erasePositive(i64 %refTag, ptr %refField_pointer) 
+    tail call void @erasePositive(%Pos %field)
+    store %Pos ${value}, ptr %field_pointer
+    tail call void @erasePositive(%Pos ${ref}) 
 
     ret %Pos zeroinitializer
   """

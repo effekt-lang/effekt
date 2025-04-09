@@ -8,10 +8,18 @@ import option
 /// A mutable 0-indexed fixed-sized array.
 extern type Array[T]
 
+/** We represent arrays like positive types.
+ *  The tag is 0 and the obj points to memory with the following layout:
+ *
+ *   +--[ Header ]--+------+------------+
+ *   | Rc  | Eraser | Size | Fields ... |
+ *   +--------------+------+------------+
+ */
+
 extern llvm """
 declare noalias ptr @calloc(i64, i64)
 
-define void @c_array_erase_fields(ptr %array_pointer) {
+define void @array_erase_fields(ptr %array_pointer) {
 entry:
     %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
     %size = load i64, ptr %array_pointer, align 8
@@ -19,11 +27,11 @@ entry:
     br i1 %size_eq_0, label %exit, label %loop
 loop:
     %loop_phi = phi i64 [ %inc, %loop ], [ 0, %entry ]
+
     %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 %loop_phi
-    %elementTag = load i64, ptr %element_pointer
-    %elementPtr_pointer = getelementptr ptr, ptr %element_pointer, i64 1
-    %elementPtr = load ptr, ptr %elementPtr_pointer
-    tail call void @erasePositive(i64 %elementTag, ptr %elementPtr)
+    %element = load %Pos, ptr %element_pointer
+
+    call void @erasePositive(%Pos %element)
     %inc = add nuw i64 %loop_phi, 1
     %cmp = icmp ult i64 %inc, %size
     br i1 %cmp, label %loop, label %exit
@@ -44,7 +52,7 @@ extern global def allocate[T](size: Int): Array[T] =
     %eraser_pointer = getelementptr ptr, ptr %calloc, i64 1
     %size_pointer = getelementptr ptr, ptr %calloc, i64 2
     store i64 0, ptr %calloc
-    store ptr @c_array_erase_fields, ptr %eraser_pointer
+    store ptr @array_erase_fields, ptr %eraser_pointer
     store i64 ${size}, ptr %size_pointer
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
@@ -81,11 +89,11 @@ extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
   llvm """
-    %pos_tag = extractvalue %Pos ${arr}, 0
     %pos_data = extractvalue %Pos ${arr}, 1
     %size_pointer = getelementptr inbounds i64, ptr %pos_data, i64 2
     %size = load i64, ptr %size_pointer
-    tail call void @erasePositive(i64 %pos_tag, ptr %pos_data)
+
+    tail call void @erasePositive(%Pos ${arr})
     ret i64 %size
   """
   vm "array::size[T](Array[T])"
@@ -98,19 +106,15 @@ extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
   llvm """
-    %pos_tag = extractvalue %Pos ${arr}, 0
     %pos_data = extractvalue %Pos ${arr}, 1
 
     %data_pointer = getelementptr inbounds ptr, ptr %pos_data, i64 3
     %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 ${index}
-    %element_tag = load i64, ptr %element_pointer, align 8
-    %element_data_pointer = getelementptr inbounds ptr, ptr %element_pointer, i64 1
-    %element_data = load ptr, ptr %element_data_pointer, align 8
-    tail call void @sharePositive(i64 %element_tag, ptr %element_data)
-    tail call void @erasePositive(i64 %pos_tag, ptr %pos_data)
-    %ret1 = insertvalue %Pos poison, i64 %element_tag, 0
-    %ret2 = insertvalue %Pos %ret1, ptr %element_data, 1
-    ret %Pos %ret2
+    %element = load %Pos, ptr %element_pointer
+
+    tail call void @sharePositive(%Pos %element)
+    tail call void @erasePositive(%Pos ${arr})
+    ret %Pos %element
   """
   vm "array::unsafeGet[T](Array[T], Int)"
 
@@ -129,20 +133,14 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   llvm """
-    %array_tag = extractvalue %Pos ${arr}, 0
     %array_data = extractvalue %Pos ${arr}, 1
-    %value_tag = extractvalue %Pos ${value}, 0
-    %value_data = extractvalue %Pos ${value}, 1
 
     %data_pointer = getelementptr inbounds i64, ptr %array_data, i64 3
     %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 ${index}
-    %element_tag = load i64, ptr %element_pointer, align 8
-    %element_data_pointer = getelementptr inbounds i8, ptr %element_pointer, i64 8
-    %element_data = load ptr, ptr %element_data_pointer, align 8
-    tail call void @erasePositive(i64 %element_tag, ptr %element_data)
-    store i64 %value_tag, ptr %element_pointer, align 8
-    store ptr %value_data, ptr %element_data_pointer, align 8
-    tail call void @erasePositive(i64 %array_tag, ptr %array_data)
+    %element = load %Pos, ptr %element_pointer, align 8
+    tail call void @erasePositive(%Pos %element)
+    store %Pos ${value}, ptr %element_pointer, align 8
+    tail call void @erasePositive(%Pos ${arr})
     ret %Pos zeroinitializer
   """
   vm "array::unsafeSet[T](Array[T], Int, T)"
