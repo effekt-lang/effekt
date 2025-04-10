@@ -175,14 +175,7 @@ sealed trait Anon extends TermSymbol {
   def decl: source.Tree
 }
 
-case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
-  // Lambdas currently do not have an annotated return type
-  def annotatedResult = Maybe.none(???)
-  def annotatedEffects = Maybe.none(???)
 
-  // Lambdas currently do not take type parameters
-  def tparams = Nil
-}
 
 /**
  * Binders represent local value and variable binders
