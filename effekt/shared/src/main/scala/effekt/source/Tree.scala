@@ -209,26 +209,37 @@ enum Param extends Definition {
 }
 export Param.*
 
-case class SpannedList[T](list: List[T], span: Span) {
+case class Many[T](list: List[T], span: Span) {
   def unspan: List[T] = list
+  export list.*
 }
-object SpannedList {
-  implicit def spannedListToList[T <: Tree](spanned: SpannedList[T]): List[T] = spanned.list
-}
-case class SpannedOption[T](option: Option[T], span: Span) {
+
+case class Maybe[T](option: Option[T], span: Span){
   def unspan: Option[T] = option
+  def map[B](f: T => B): Maybe[B] = Maybe(option.map(f), span)
+  def flatMap[B](f: T => Maybe[B]): Maybe[B] = option match {
+    case None => Maybe(None, span)
+    case Some(x) => f(x)
+  }
+  def getOrElse(default: => T): T =
+    option.getOrElse(default)
+
+  export option.{foreach, get}
 }
-object SpannedOption {
-  implicit def spannedOptionToOption[T](spanned: SpannedOption[T]): Option[T] = spanned.option
+
+object Maybe {
+  def some[T](value: T, span: Span): Maybe[T] = Maybe(Some(value), span)
+
+  def none[T](span: Span): Maybe[T] = Maybe(None, span)
 }
 
 object SpannedOps {
   extension [T](self: Option[T]) {
-    inline def spanned(span: Span): SpannedOption[T] = SpannedOption(self, span)
+    inline def spanned(span: Span): Maybe[T] = Maybe(self, span)
   }
 
   extension [T](self: List[T]) {
-    inline def spanned(span: Span): SpannedList[T] = SpannedList(self, span)
+    inline def spanned(span: Span): Many[T] = Many(self, span)
   }
 }
 export SpannedOps._
@@ -260,7 +271,7 @@ export SpannedOps._
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: SpannedList[Id], vparams: SpannedList[ValueParam], bparams: SpannedList[BlockParam], ret: SpannedOption[Effectful], body: Stmt, span: Span)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
@@ -288,7 +299,7 @@ enum Def extends Definition {
   case ExternType(id: IdDef, tparams: List[Id])
 
   case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: SpannedList[Id], vparams: SpannedList[ValueParam], bparams: SpannedList[BlockParam], ret: Effectful,
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
                  bodies: List[ExternBody], span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)

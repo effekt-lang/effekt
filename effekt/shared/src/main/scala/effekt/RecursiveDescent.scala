@@ -614,7 +614,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       if peek(`:`) then Some(blockTypeAnnotation()) else None
 
-  def maybeReturnAnnotation(): SpannedOption[Effectful] =
+  def maybeReturnAnnotation(): Maybe[Effectful] =
     nonterminal:
       when(`:`) { Some(effectful()) } { None }.spanned
 
@@ -1173,11 +1173,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       BlockTypeRef(idRef(), maybeTypeArgs()): BlockTypeRef
     // TODO error "Expected an interface type"
 
-  def maybeTypeParams(): SpannedList[Id] =
+  def maybeTypeParams(): Many[Id] =
     nonterminal:
       if peek(`[`) then typeParams() else Nil.spanned
 
-  def typeParams(): SpannedList[Id] =
+  def typeParams(): Many[Id] =
     nonterminal:
       some(idDef, `[`, `,`, `]`).spanned
 
@@ -1197,7 +1197,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       if isVariable then (Nil, List(ValueParam(idDef(), None)), Nil)  else paramsOpt()
 
-  def params(): (SpannedList[Id], SpannedList[ValueParam], SpannedList[BlockParam]) =
+  def params(): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     nonterminal:
       maybeTypeParams() ~ maybeValueParams() ~ maybeBlockParams() match {
         case tps ~ vps ~ bps => (tps, vps, bps)
@@ -1219,11 +1219,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       many(valueParamOpt, `(`, `,`, `)`)
 
-  def maybeValueParams(): SpannedList[ValueParam] =
+  def maybeValueParams(): Many[ValueParam] =
     nonterminal:
       if peek(`(`) then valueParams() else Nil.spanned
 
-  def valueParams(): SpannedList[ValueParam] =
+  def valueParams(): Many[ValueParam] =
     nonterminal:
       many(valueParam, `(`, `,`, `)`).spanned
 
@@ -1235,7 +1235,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       ValueParam(idDef(), maybeValueTypeAnnotation())
 
-  def maybeBlockParams(): SpannedList[BlockParam] =
+  def maybeBlockParams(): Many[BlockParam] =
     nonterminal:
       manyWhile(`{` ~> blockParam() <~ `}`, `{`).spanned
 
@@ -1504,11 +1504,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   extension [T](self: Option[T]) {
-    inline def spanned: SpannedOption[T] = SpannedOption(self, span())
+    inline def spanned: Maybe[T] = Maybe(self, span())
   }
 
   extension [T](self: List[T]) {
-    inline def spanned: SpannedList[T] = SpannedList(self, span())
+    inline def spanned: Many[T] = Many(self, span())
   }
 
   extension [T](self: T) {

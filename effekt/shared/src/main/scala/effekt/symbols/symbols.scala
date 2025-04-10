@@ -6,6 +6,7 @@ import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
+import effekt.source.Maybe
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -132,8 +133,8 @@ trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
-  def annotatedResult: Option[ValueType]
-  def annotatedEffects: Option[Effects]
+  def annotatedResult: Maybe[ValueType]
+  def annotatedEffects: Maybe[Effects]
 
    // invariant: only works if ret is defined!
   def toType: FunctionType = annotatedType.get
@@ -145,7 +146,7 @@ trait Callable extends BlockSymbol {
     val bps_ = bps.collect { case Some(bp) => bp }
     FunctionType(tps, bcapt ++ capabilityParams, vps, bps_, ret, effects)
 
-  def annotatedType: Option[FunctionType] =
+  def annotatedType: Maybe[FunctionType] =
     for {
       ret <- annotatedResult;
       effs <- annotatedEffects
@@ -161,8 +162,8 @@ case class UserFunction(
   tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
-  annotatedResult: Option[ValueType],
-  annotatedEffects: Option[Effects],
+  annotatedResult: Maybe[ValueType],
+  annotatedEffects: Maybe[Effects],
   decl: FunDef
 ) extends Callable
 
@@ -176,8 +177,8 @@ sealed trait Anon extends TermSymbol {
 
 case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
   // Lambdas currently do not have an annotated return type
-  def annotatedResult = None
-  def annotatedEffects = None
+  def annotatedResult = Maybe.none(???)
+  def annotatedEffects = Maybe.none(???)
 
   // Lambdas currently do not take type parameters
   def tparams = Nil
@@ -275,8 +276,8 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   val bparams: List[BlockParam] = Nil
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
-  def annotatedResult: Option[ValueType] = Some(appliedDatatype)
-  def annotatedEffects: Option[Effects] = Some(Effects.Pure)
+  def annotatedResult: Maybe[ValueType] = Maybe.some(appliedDatatype,???)
+  def annotatedEffects: Maybe[Effects] = Maybe.some(Effects.Pure,???)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
@@ -286,8 +287,8 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
   val bparams = List.empty[BlockParam]
 
   val returnType = param.tpe.get
-  def annotatedResult = Some(returnType)
-  def annotatedEffects = Some(Effects.Pure)
+  def annotatedResult = Maybe.some(returnType,???)
+  def annotatedEffects = Maybe.some(Effects.Pure,???)
 }
 
 
@@ -301,8 +302,8 @@ export BlockTypeConstructor.*
 
 
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
-  def annotatedResult: Option[ValueType] = Some(resultType)
-  def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
+  def annotatedResult: Maybe[ValueType] = Maybe.some(resultType,???)
+  def annotatedEffects: Maybe[Effects] = Maybe.some(Effects(effects.toList),???)
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
 }
 
@@ -411,8 +412,8 @@ case class ExternFunction(
   capture: CaptureSet,
   bodies: List[source.ExternBody]
 ) extends Callable {
-  def annotatedResult = Some(result)
-  def annotatedEffects = Some(effects)
+  def annotatedResult = Maybe.some(result,???)
+  def annotatedEffects = Maybe.some(effects,???)
 }
 
 /**
