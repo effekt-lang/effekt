@@ -1,8 +1,9 @@
 package effekt
 package typer
 
+import effekt.source.Many
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TTop }
+import effekt.symbols.builtins.{TBottom, TTop}
 import effekt.typer.ErrorContext.FunctionEffects
 
 /**
@@ -101,14 +102,14 @@ trait TypeUnifier {
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
 
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2.unspan zip targs1.unspan, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)
       val substEffs2 = subst.substitute(eff2)
 
-      (vparams1 zip substVParams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
-      (bparams1 zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
+      (vparams1.unspan zip substVParams2.unspan) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
+      (bparams1.unspan zip substBParams2.unspan) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
 
       unifyValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
 
@@ -207,19 +208,19 @@ trait TypeMerger extends TypeUnifier {
       // TODO potentially share code with unifyFunctionTypes and instantiate
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2.unspan zip targs1.unspan, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)
       val substEffs2 = subst.substitute(eff2)
 
-      val mergedVps = (vparams1 zip substVParams2) map { case (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
-      val mergedBps = (bparams1 zip substBParams2) map { case (t1, t2) => mergeBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
+      val mergedVps = (vparams1.unspan zip substVParams2.unspan) map { case (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
+      val mergedBps = (bparams1.unspan zip substBParams2.unspan) map { case (t1, t2) => mergeBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
       val mergedRet = mergeValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
 
       // We compare effects to be equal, since we do not have subtyping on effects
       unifyEffects(eff1, substEffs2, ErrorContext.FunctionEffects(ctx))
 
-      FunctionType(tparams1, cparams1, mergedVps, mergedBps, mergedRet, eff1)
+      FunctionType(tparams1, cparams1, Many(mergedVps, ???), Many(mergedBps, ???), mergedRet, eff1)
   }
 }

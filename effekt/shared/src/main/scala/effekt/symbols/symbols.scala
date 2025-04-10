@@ -1,12 +1,11 @@
 package effekt
 package symbols
 
-import effekt.source.{Def, DefDef, FeatureFlag, FunDef, ModuleDecl, RegDef, ValDef, VarDef}
+import effekt.source.{Def, DefDef, FeatureFlag, FunDef, Many, Maybe, ModuleDecl, RegDef, ValDef, VarDef}
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
-import effekt.source.Maybe
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -130,9 +129,9 @@ export TrackedParam.*
 
 
 trait Callable extends BlockSymbol {
-  def tparams: List[TypeParam]
-  def vparams: List[ValueParam]
-  def bparams: List[BlockParam]
+  def tparams: Many[TypeParam]
+  def vparams: Many[ValueParam]
+  def bparams: Many[BlockParam]
   def annotatedResult: Maybe[ValueType]
   def annotatedEffects: Maybe[Effects]
 
@@ -144,7 +143,7 @@ trait Callable extends BlockSymbol {
     val vps = vparams.map { p => p.tpe.get }
     val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
     val bps_ = bps.collect { case Some(bp) => bp }
-    FunctionType(tps, bcapt ++ capabilityParams, vps, bps_, ret, effects)
+    FunctionType(tps, bcapt.unspan ++ capabilityParams, vps, bps_, ret, effects)
 
   def annotatedType: Maybe[FunctionType] =
     for {
@@ -159,9 +158,9 @@ trait Callable extends BlockSymbol {
 
 case class UserFunction(
   name: Name,
-  tparams: List[TypeParam],
-  vparams: List[ValueParam],
-  bparams: List[BlockParam],
+  tparams: Many[TypeParam],
+  vparams: Many[ValueParam],
+  bparams: Many[BlockParam],
   annotatedResult: Maybe[ValueType],
   annotatedEffects: Maybe[Effects],
   decl: FunDef
@@ -263,10 +262,10 @@ enum TypeConstructor extends TypeSymbol {
 export TypeConstructor.*
 
 
-case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
+case class Constructor(name: Name, tparams: Many[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
-  lazy val vparams: List[ValueParam] = fields.map { f => f.param }
-  val bparams: List[BlockParam] = Nil
+  lazy val vparams: Many[ValueParam] = Many(fields.map { f => f.param } , ???)
+  val bparams: Many[BlockParam] = Many.nil(???)
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
   def annotatedResult: Maybe[ValueType] = Maybe.some(appliedDatatype,???)
@@ -275,9 +274,9 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
-  val tparams: List[TypeParam] = constructor.tparams
-  val vparams = List(ValueParam(constructor.name, Some(constructor.appliedDatatype)))
-  val bparams = List.empty[BlockParam]
+  val tparams: Many[TypeParam] = constructor.tparams
+  val vparams = Many(List(ValueParam(constructor.name, Some(constructor.appliedDatatype))), ???)
+  val bparams = Many(List.empty[BlockParam], ???)
 
   val returnType = param.tpe.get
   def annotatedResult = Maybe.some(returnType,???)
@@ -294,7 +293,7 @@ enum BlockTypeConstructor extends BlockTypeSymbol {
 export BlockTypeConstructor.*
 
 
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
+case class Operation(name: Name, tparams: Many[TypeParam], vparams: Many[ValueParam], bparams: Many[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
   def annotatedResult: Maybe[ValueType] = Maybe.some(resultType,???)
   def annotatedEffects: Maybe[Effects] = Maybe.some(Effects(effects.toList),???)
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
@@ -389,6 +388,7 @@ case class CaptureSet(captures: Set[Capture]) extends Captures {
 object CaptureSet {
   def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
   def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
+  def apply(captures: Many[Capture]): CaptureSet = CaptureSet(captures.unspan.toSet)
   def empty = CaptureSet()
 }
 
@@ -397,9 +397,9 @@ object CaptureSet {
  */
 case class ExternFunction(
   name: Name,
-  tparams: List[TypeParam],
-  vparams: List[ValueParam],
-  bparams: List[BlockParam],
+  tparams: Many[TypeParam],
+  vparams: Many[ValueParam],
+  bparams: Many[BlockParam],
   result: ValueType,
   effects: Effects,
   capture: CaptureSet,

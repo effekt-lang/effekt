@@ -2,15 +2,15 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.core.PatternMatchingCompiler.Clause
-import effekt.source.{ MatchGuard, MatchPattern, ResolveExternDefs }
-import effekt.symbols.Binder.{ RegBinder, VarBinder }
+import effekt.source.{Many, MatchGuard, MatchPattern, ResolveExternDefs}
+import effekt.symbols.Binder.{RegBinder, VarBinder}
 import effekt.typer.Substitutions
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -67,7 +67,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val cparams = bps.map { b => b.symbol.capture }
       val vparams = vps map transform
       val bparams = bps map transform
-      List(Toplevel.Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body))))
+      List(Toplevel.Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan, transform(body))))
 
     case d @ source.DataDef(id, _, ctors) =>
       val datatype = d.symbol
@@ -120,7 +120,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
-      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBody))
+      List(Extern.Def(sym, tps.unspan, cps.unspan, vps.unspan map transform, bps.unspan map transform, transform(ret), transform(capt), tBody))
 
     case e @ source.ExternInclude(ff, path, contents, _) =>
       List(Extern.Include(ff, contents.get))
@@ -171,7 +171,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
         val bparams = bps map transform
-        Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
+        Def(f.symbol, BlockLit(tparams.unspan, cparams.unspan, vparams.unspan, bparams.unspan, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, tpe, binding) =>
         val transformed = transform(binding)
@@ -269,8 +269,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             assert(bparamtps.isEmpty)
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
-            BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
+            BlockLit(tparams.unspan, Nil, vparams.unspan, Nil,
+              Stmt.Return(PureApp(BlockVar(b), targs.unspan, vargs.unspan)))
           }
 
           // [[ f ]] = { [A](x) => make f[A](x) }
@@ -278,8 +278,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             assert(bparamtps.isEmpty)
             assert(effects.isEmpty)
             assert(cparams.isEmpty)
-            BlockLit(tparams, Nil, vparams, Nil,
-              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs), b, targs, vargs)))
+            BlockLit(tparams.unspan, Nil, vparams.unspan, Nil,
+              Stmt.Return(Make(core.ValueType.Data(b.tpe, targs.unspan), b, targs.unspan, vargs.unspan)))
           }
 
           // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
@@ -290,8 +290,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               case core.BlockParam(id, tpe, capt) => Block.BlockVar(id, tpe, capt)
             }
             val result = TmpValue("etaBinding")
-            val resultBinding = DirectApp(BlockVar(f), targs, vargs, bargs)
-            BlockLit(tparams, bparams.map(_.id), vparams, bparams,
+            val resultBinding = DirectApp(BlockVar(f), targs.unspan, vargs.unspan, bargs.unspan)
+            BlockLit(tparams.unspan, bparams.map(_.id).unspan, vparams.unspan, bparams.unspan,
               core.Let(result, resultBinding.tpe, resultBinding,
                 Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
           }
@@ -348,7 +348,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val universals: List[symbols.TypeParam] = dataType.tparams
 
       // allTypeParams = universals ++ existentials
-      val allTypeParams: List[symbols.TypeParam] = constructor.tparams
+      val allTypeParams: List[symbols.TypeParam] = constructor.tparams.unspan
 
       assert(allTypeParams.length == universals.length, "Existentials on record selection not supported, yet.")
 
@@ -574,7 +574,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               // }
               //
               // Function resume123 will hopefully be inlined by the inliner / optimizer
-              case BlockType.FunctionType(_, _, List(result), _, answer, _) =>
+              case BlockType.FunctionType(_, _, Many(List(result), _), _, answer, _) =>
 
                 val resultTpe = transform(result)
                 val answerTpe = transform(answer)
@@ -610,7 +610,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               // }
               //
               // Again the typing is wrong in core now. `g` will be tracked, but resume should subtract it.
-              case BlockType.FunctionType(_, _, _, List(argTpe @ BlockType.FunctionType(_, _, _, _, result, _)), answer, _) =>
+              case BlockType.FunctionType(_, _, _, Many(List(argTpe @ BlockType.FunctionType(_, _, _, _, result, _)), _), answer, _) =>
                 val resultTpe = transform(result)
                 val answerTpe = transform(answer)
 
@@ -693,10 +693,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case sym: Callable => (sym, sym.toType)
       } collectFirst {
         // specialized version
-        case (sym, FunctionType(Nil, Nil, List(`tpe`, `tpe`), Nil, builtins.TBoolean, _)) =>
+        case (sym, FunctionType(Many(Nil, _), Nil, Many(List(`tpe`, `tpe`), _), Many(Nil, _), builtins.TBoolean, _)) =>
           (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), Nil, List(lhs, rhs))
         // generic version
-        case (sym, FunctionType(List(tparam), Nil, List(ValueTypeRef(t1), ValueTypeRef(t2)), Nil, builtins.TBoolean, _))
+        case (sym, FunctionType( Many(List(tparam), _), Nil, Many(List(ValueTypeRef(t1), ValueTypeRef(t2)), _), Many(Nil, _), builtins.TBoolean, _))
             if t1 == tparam && t2 == tparam =>
           (lhs: Pure, rhs: Pure) => core.PureApp(BlockVar(sym), List(transform(tpe)), List(lhs, rhs))
       } getOrElse { Context.panic(pp"Cannot find == for type ${tpe} in prelude!") }
@@ -754,12 +754,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case InterfaceType(i: Interface, targs) => member match {
       // For operations, we substitute the first type parameters by concrete type args.
       case Operation(name, tparams, vparams, bparams, resultType, effects, _) =>
-        val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
-        val remainingTypeParams = tparams.drop(targs.size)
+        val substitution = Substitutions((tparams.unspan zip targs).toMap, Map.empty)
+        val remainingTypeParams = tparams.unspan.drop(targs.size)
         // TODO this is exactly like in [[Callable.toType]] -- TODO repeated here:
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        val cparams = bparams.map(b => b.capture) ++ CanonicalOrdering(effects.toList).map { tpe => symbols.CaptureParam(tpe.name) }
+        val cparams = bparams.unspan.map(b => b.capture) ++ CanonicalOrdering(effects.toList).map { tpe => symbols.CaptureParam(tpe.name) }
         val vparamTpes = vparams.map(t => substitution.substitute(t.tpe.getOrElse {
           INTERNAL_ERROR("Operation value parameters should have an annotated type.")
         }))
@@ -767,7 +767,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           INTERNAL_ERROR("Operation block parameters should have an annotated type.")
         }))
 
-        FunctionType(remainingTypeParams, cparams, vparamTpes, bparamTpes, substitution.substitute(resultType), substitution.substitute(effects))
+        FunctionType(Many(remainingTypeParams, ???), cparams, vparamTpes, bparamTpes, substitution.substitute(resultType), substitution.substitute(effects))
     }
 
     case InterfaceType(i: ExternInterface, targs) =>
@@ -778,17 +778,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case symbols.Operation(name, tps, vps, bps, resultType, effects, interface) =>
       // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
       val capabilities = CanonicalOrdering(effects.toList)
-      val tparams = tps.drop(tparamsInterface.size)
+      val tparams = tps.unspan.drop(tparamsInterface.size)
       val bparamsBlocks = bps.map(b => transform(b.tpe.getOrElse {
         INTERNAL_ERROR("Interface declarations should have annotated types.")
       }))
       val bparamsCapabilities = capabilities.map(transform)
-      val bparams = bparamsBlocks ++ bparamsCapabilities
+      val bparams = bparamsBlocks.unspan ++ bparamsCapabilities
       val vparams = vps.map(p => transform(p.tpe.get))
-      val cparams = bps.map(_.capture) ++ capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
+      val cparams = bps.map(_.capture).unspan ++ capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
 
       // here we reconstruct the block type
-      core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
+      core.BlockType.Function(tparams, cparams, vparams.unspan, bparams, transform(resultType))
     }
 
   def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
@@ -841,7 +841,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
 
       val capabilityTypes = CanonicalOrdering(effects.toList).map(transform)
-      val allBlockParams = bparams.map(transform) ++ capabilityTypes
+      val allBlockParams = bparams.unspan.map(transform) ++ capabilityTypes
 
       assert(cparams.size == allBlockParams.size,
         s"""Internal error: number of block parameters does not match number of capture parameters.
@@ -851,7 +851,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
            |  Captures: ${cparams}
            |""".stripMargin)
 
-      core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, transform(result))
+      core.BlockType.Function(tparams.unspan, cparams, vparams.unspan.map(transform), allBlockParams, transform(result))
     case BlockType.InterfaceType(tc, args) => core.BlockType.Interface(tc, args.map(transform))
   }
 

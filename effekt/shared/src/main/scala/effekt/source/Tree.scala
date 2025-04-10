@@ -211,9 +211,23 @@ export Param.*
 
 case class Many[T](list: List[T], span: Span) {
   def unspan: List[T] = list
-  export list.*
-}
+  def map[B](f: T => B): Many[B] =
+    Many(list.map(f),span)
 
+  def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
+    val (list1 : List[A1], list2 : List[A2]) = list.unzip(asPair)
+    (Many(list1, span), Many(list2, span))
+  }
+
+  def collect[B](pf: PartialFunction[T, B]): Many[B] =
+    Many(list.collect(pf), span)
+    
+  export list.{foreach, toSet, isEmpty, nonEmpty, mkString, size}
+
+}
+object Many {
+   def nil[T](span: Span) = Many[T](Nil, span)
+}
 case class Maybe[T](option: Option[T], span: Span){
   def unspan: Option[T] = option
   def map[B](f: T => B): Maybe[B] = Maybe(option.map(f), span)
@@ -223,6 +237,12 @@ case class Maybe[T](option: Option[T], span: Span){
   }
   def getOrElse(default: => T): T =
     option.getOrElse(default)
+
+  def orElse[B >: T](alternative: => Maybe[B]): Maybe[B] =
+   option match {
+      case Some(x) => Maybe(option, span)
+      case None => alternative
+    }
 
   export option.{foreach, get}
 }
@@ -606,7 +626,7 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
+  case FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
 }
 
