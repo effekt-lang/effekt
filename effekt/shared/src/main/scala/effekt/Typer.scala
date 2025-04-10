@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, symbol}
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, symbol}
 import effekt.source.Term.BlockLiteral
 import effekt.symbols.*
 import effekt.symbols.builtins.*
@@ -751,8 +751,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           flowingInto(inferredCapture) {
 
-            (sym.annotatedType.unspan: @unchecked) match {
-              case Some(annotated) =>
+            (sym.annotatedType: @unchecked) match {
+              case Maybe(Some(annotated),_) =>
                 // the declared effects are considered as bound
                 val bound: ConcreteEffects = annotated.effects
                 val capabilities = bound.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
@@ -772,7 +772,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 Result(annotated, effs -- bound)
 
-              case None =>
+              case Maybe(None,_) =>
                 // all effects are handled by the function itself (since they are inferred)
                 val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
                   Context in { checkStmt(body, None) }
