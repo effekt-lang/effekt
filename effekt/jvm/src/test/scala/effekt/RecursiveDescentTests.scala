@@ -60,7 +60,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseTry(input: String, positions: Positions = new Positions())(using munit.Location): Term =
     parse(input, _.tryExpr())
 
-  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
+  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     parse(input, _.params())
 
   def parseLambdaParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
@@ -342,8 +342,8 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(
       parseBlockType("(Int, String) => Int"),
-      FunctionType(Nil, List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
-        ValueTypeRef(IdRef(Nil,"String"), Nil)), Nil, ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
+      FunctionType(Many.nil(???), Many(List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
+        ValueTypeRef(IdRef(Nil,"String"), Nil)), ???), Many.nil(???), ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
 
     parseBlockType("(Int, String) => Int / Exc")
     parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")

@@ -1,11 +1,10 @@
 package effekt
 package symbols
 
-import effekt.source.ModuleDecl
+import effekt.source.{Many, ModuleDecl}
 import effekt.context.Context
 import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
-
 import kiama.util.StringSource
 
 /**
@@ -15,7 +14,8 @@ object builtins {
 
   // a dummy module for built in types. Can be dropped, once they are
   // defined in the prelude
-  lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
+  val builtinSource = StringSource("", "effekt.effekt")
+  lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil, source.Span(builtinSource, 0, 0)), builtinSource)
 
   private def name(s: String) = QualifiedName(List("effekt"), s)
 
@@ -59,8 +59,8 @@ object builtins {
   object TState {
     val S: TypeParam = TypeParam(Name.local("S"))
     val interface: Interface = Interface(Name.local("Ref"), List(S), Nil)
-    val get = Operation(name("get"), List(S), Nil, Nil, ValueTypeRef(S), Effects.Pure, interface)
-    val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), Nil, TUnit, Effects.Pure, interface)
+    val get = Operation(name("get"), Many(List(S), ???), Many.nil(???), Many.nil(???), ValueTypeRef(S), Effects.Pure, interface)
+    val put = Operation(name("put"), Many(List(S), ???), Many(List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), ???), Many.nil(???), TUnit, Effects.Pure, interface)
     interface.operations = List(get, put)
 
     def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))

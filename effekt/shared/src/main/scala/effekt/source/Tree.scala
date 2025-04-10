@@ -3,6 +3,7 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import kiama.util.Position
 
 /**
  * Data type representing source program trees.
@@ -97,6 +98,8 @@ case object NoSource extends Tree
 
 // only used by the lexer
 case class Comment() extends Tree
+
+case class Span(source: kiama.util.Source, from: Int, to: Int)
 
 /**
  * Used to mark externs for different backends
@@ -194,7 +197,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], span: Span) extends Tree
 case class Include(path: String) extends Tree
 
 /**
@@ -206,6 +209,60 @@ enum Param extends Definition {
 }
 export Param.*
 
+case class Many[T](list: List[T], span: Span) {
+  def unspan: List[T] = list
+  def map[B](f: T => B): Many[B] =
+    Many(list.map(f),span)
+
+  def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
+    val (list1 : List[A1], list2 : List[A2]) = list.unzip(asPair)
+    (Many(list1, span), Many(list2, span))
+  }
+
+  def collect[B](pf: PartialFunction[T, B]): Many[B] =
+    Many(list.collect(pf), span)
+    
+  export list.{foreach, toSet, isEmpty, nonEmpty, mkString, size}
+
+}
+object Many {
+   def nil[T](span: Span) = Many[T](Nil, span)
+}
+case class Maybe[T](option: Option[T], span: Span){
+  def unspan: Option[T] = option
+  def map[B](f: T => B): Maybe[B] = Maybe(option.map(f), span)
+  def flatMap[B](f: T => Maybe[B]): Maybe[B] = option match {
+    case None => Maybe(None, span)
+    case Some(x) => f(x)
+  }
+  def getOrElse(default: => T): T =
+    option.getOrElse(default)
+
+  def orElse[B >: T](alternative: => Maybe[B]): Maybe[B] =
+   option match {
+      case Some(x) => Maybe(option, span)
+      case None => alternative
+    }
+
+  export option.{foreach, get}
+}
+
+object Maybe {
+  def some[T](value: T, span: Span): Maybe[T] = Maybe(Some(value), span)
+
+  def none[T](span: Span): Maybe[T] = Maybe(None, span)
+}
+
+object SpannedOps {
+  extension [T](self: Option[T]) {
+    inline def spanned(span: Span): Maybe[T] = Maybe(self, span)
+  }
+
+  extension [T](self: List[T]) {
+    inline def spanned(span: Span): Many[T] = Many(self, span)
+  }
+}
+export SpannedOps._
 
 /**
  * Global and local definitions
@@ -234,7 +291,7 @@ export Param.*
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
+  case FunDef(id: IdDef, tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Maybe[Effectful], body: Stmt, span: Span)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
@@ -262,8 +319,8 @@ enum Def extends Definition {
   case ExternType(id: IdDef, tparams: List[Id])
 
   case ExternDef(capture: CaptureSet, id: IdDef,
-                 tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody]) extends Def
+                 tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
+                 bodies: List[ExternBody], span: Span) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -569,14 +626,14 @@ enum BlockType extends Type {
    * Trees that represent inferred or synthesized types (not present in the source)
    */
   case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
+  case FunctionType(tparams: Many[Id], vparams: Many[ValueType], bparams: Many[(Maybe[IdDef], BlockType)], result: ValueType, effects: Effects)
   case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
 }
 
 export BlockType.*
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+case class Effectful(tpe: ValueType, eff: Effects, span: Span) extends Tree
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know

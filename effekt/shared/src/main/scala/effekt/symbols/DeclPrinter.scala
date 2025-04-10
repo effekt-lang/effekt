@@ -6,6 +6,7 @@ import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
 import TypePrinter.show
+import effekt.source.Maybe
 
 object DeclPrinter extends ParenPrettyPrinter {
 
@@ -89,5 +90,9 @@ object DeclPrinter extends ParenPrettyPrinter {
     } yield pp": $tpe / $eff"
 
     s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
+  }
+  // TODO remove this once Options are replaced by Maybe
+  def format(kw: String, f: Callable, result: Maybe[ValueType], effects: Maybe[Effects]): Doc = {
+    format(kw,f,result.unspan, effects.unspan)
   }
 }
