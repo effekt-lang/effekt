@@ -92,7 +92,14 @@ private[typer] def assertConcreteEffect(eff: InterfaceType)(using C: Context): U
 private[typer] def assertConcreteFunction(id: source.Id, tpe: BlockType)(using C: Context): Unit =
   unknowns(tpe) match {
     case us if us.nonEmpty =>
-      C.abort(pretty"Cannot fully infer type for ${id}: ${tpe}")
+      val stuckUnificationVars = us.collect {
+        case UnificationVar(underlying, callTree) => pp"${underlying} from ${callTree}" // TODO: get symbol here, ideally print the typevars like `Failure[T, E]`?
+      }.mkString(", ")
+      if (stuckUnificationVars.isEmpty) {
+        C.abort(pretty"Cannot fully infer type for ${id}: ${tpe}")
+      } else {
+        C.abort(pretty"Cannot fully infer type for ${id}: ${tpe}, because the following type variables are ambiguous: ${stuckUnificationVars}")
+      }
     case _ => ()
   }
 
