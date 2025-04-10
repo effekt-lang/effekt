@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{Annotation, Annotations, Context, ContextOps}
 import effekt.context.assertions.*
-import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
+import effekt.source.{AnyPattern, Def, Effectful, IgnorePattern, Many, MatchGuard, MatchPattern, Maybe, ModuleDecl, OpClause, Stmt, TagPattern, Term, Tree, resolve, resolveBlockRef, resolveBlockType, resolveValueType, symbol}
 import effekt.source.Term.BlockLiteral
 import effekt.symbols.*
 import effekt.symbols.builtins.*
@@ -155,7 +155,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (2a) compute substitution for inferred type arguments
         val typeArgs = Context.annotatedTypeArgs(c)
         val operation = c.definition
-        val subst = Substitutions.types(operation.tparams, typeArgs)
+        val subst = Substitutions.types(operation.tparams.unspan, typeArgs)
 
         // (2b) substitute into effect type of operation
         val effect = subst.substitute(operation.appliedInterface)
@@ -400,7 +400,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             tparams.map { tparam => tparam.symbol.asTypeParam }
           } else {
             // using the invariant that the universals are prepended to type parameters of the operation
-            declared.tparams.drop(targs.size).map { tp =>
+            declared.tparams.unspan.drop(targs.size).map { tp =>
               // recreate "fresh" type variables
               val name = tp.name
               TypeVar.TypeParam(name)
@@ -465,7 +465,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
               val cparamsForBlocks = declaredOperation.bparams.map { p => CaptureParam(p.name) } // use the original name
               val cparamsForEffects = canonical.map { tpe => CaptureParam(tpe.name) } // use the type name
-              val cparams = cparamsForBlocks ++ cparamsForEffects
+              val cparams = cparamsForBlocks.unspan ++ cparamsForEffects
 
               val (vps, bps, tpe, effs) =
                 Context.instantiate(declared, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
@@ -481,12 +481,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // (4) synthesize type of continuation
               val resumeType = if (isBidirectional) {
                 // resume { {f} => e }
-                val resumeType = FunctionType(Nil, cparams, Nil, bps, tpe, Effects(effs))
+                val resumeType = FunctionType(Many.nil(???), cparams, Many.nil(???), Many(bps, ???), tpe, Effects(effs))
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
-                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
+                FunctionType(Many.nil(???), List(resumeCapt), Many.nil(???), Many(List(resumeType), ???), ret, Effects.Pure)
               } else {
                 // resume(v)
-                FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
+                FunctionType(Many.nil(???), Nil, Many(List(tpe),???), Many.nil(???), ret, Effects.Pure)
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
@@ -571,8 +571,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // symbol of the constructor we match against
       val sym: Constructor = p.definition
 
-      val universals   = sym.tparams.take(sym.tpe.tparams.size)
-      val existentials = sym.tparams.drop(sym.tpe.tparams.size)
+      val universals   = sym.tparams.unspan.take(sym.tpe.tparams.size)
+      val existentials = sym.tparams.unspan.drop(sym.tpe.tparams.size)
 
       // create fresh unification variables
       val freshUniversals   = universals.map { t => Context.freshTypeVar(t, pattern) }
@@ -788,7 +788,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 // we subtract all capabilities introduced by this function to compute its capture
                 flowsIntoWithout(inferredCapture, functionCapture) {
-                  (sym.bparams ++ capabilities).map(_.capture)
+                  (sym.bparams.unspan ++ capabilities).map(_.capture)
                 }
 
                 // TODO also add capture parameters for inferred capabilities
@@ -914,10 +914,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
-      val typeSubst = Substitutions.types(tps, typeParams.map { p => ValueTypeRef(p) })
+      val typeSubst = Substitutions.types(tps.unspan, typeParams.map { p => ValueTypeRef(p) })
 
       // (4) Check type annotations against declaration
-      val valueTypes = (vparams zip vps) map {
+      val valueTypes = (vparams zip vps.unspan) map {
         case (param, expected) =>
           val adjusted = typeSubst substitute expected
           // check given matches the expected, if given at all
@@ -930,7 +930,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           tpe
       }
 
-      val blockTypes = (bparams zip bps) map {
+      val blockTypes = (bparams zip bps.unspan) map {
         case (param, expTpe) =>
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
@@ -966,7 +966,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       usingCaptureWithout(bodyRegion) { captParams }
 
-      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects.toEffects)
+      val tpe = FunctionType(Many(typeParams, ???), captParams, Many(valueTypes, ???), Many(blockTypes, ???), bodyType, effects.toEffects)
 
       Result(tpe, bodyEffs -- effects)
   }
@@ -1006,7 +1006,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
 
-      val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
+      val funType = FunctionType(Many(tps, ???), cps, Many(vps, ???), Many(bps, ???), tpe, effs.toEffects)
 
       // Like with functions, bound parameters and capabilities are not closed over
       usingCaptureWithout(inferredCapture) {
@@ -1088,7 +1088,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case (Nil, _) => Nil
         }
 
-      val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams, interface.args)
+      val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams.unspan, interface.args)
 
       // TODO maybe type checking all calls should have a similar structure like above:
       //   1. make up and annotate unification variables, if no type arguments are there

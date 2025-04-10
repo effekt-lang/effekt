@@ -660,7 +660,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def tryExpr(): Term =
     nonterminal:
       `try` ~> stmt() ~ someWhile(handler(), `with`) match {
-        case s ~ hs => TryHandle(s, hs)
+        case s ~ hs => TryHandle(s, hs.unspan)
       }
 
   def regionExpr(): Term =
@@ -673,7 +673,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       val expr = if (peek(`{`)) functionArg()
         else if (peek(`new`)) newExpr()
         else callExpr()
-      Box(captures, expr)
+      Box(captures.unspan, expr)
 
 
   // TODO deprecate
@@ -695,7 +695,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       `with` ~> backtrack(idDef() <~ `:`) ~ implementation() match {
         case capabilityName ~ impl =>
           val capability = capabilityName map { name => BlockParam(name, Some(impl.interface)): BlockParam }
-          Handler(capability, impl)
+          Handler(capability.unspan, impl)
       }
 
   // This nonterminal uses limited backtracking: It parses the interface type multiple times.
@@ -787,7 +787,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case `__` => skip(); IgnorePattern()
         case _ if isVariable  =>
           idRef() match {
-            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`))
+            case id if peek(`(`) => TagPattern(id, many(matchPattern, `(`, `,`, `)`).unspan)
             case IdRef(Nil, name) => AnyPattern(IdDef(name)) // TODO positions
             case IdRef(_, name) => fail("Cannot use qualified names to bind a pattern variable")
           }
@@ -930,10 +930,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       some(valueType, `[`, `,`, `]`)
   def valueArgs(): List[Term] =
     nonterminal:
-      many(expr, `(`, `,`, `)`)
+      many(expr, `(`, `,`, `)`).unspan
   def blockArgs(): List[Term] =
     nonterminal:
-      someWhile(blockArg(), `{`)
+      someWhile(blockArg(), `{`).unspan
 
   /**
    * Note: for this nonterminal, we need some backtracking.
@@ -949,7 +949,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           // { case ... => ... }
           case `case` => someWhile(matchClause(), `case`) match { case cs =>
             val arity = cs match {
-              case MatchClause(MultiPattern(ps), _, _) :: _ => ps.length
+              case Many(MatchClause(MultiPattern(ps), _, _) :: _, _) => ps.length
               case _ => 1
             }
             // TODO positions should be improved here and fresh names should be generated for the scrutinee
@@ -959,7 +959,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
               Nil,
               names.map{ name => ValueParam(IdDef(name), None) },
               Nil,
-              Return(Match(names.map{ name => Var(IdRef(Nil, name)) }, cs, None))) : BlockLiteral
+              Return(Match(names.map{ name => Var(IdRef(Nil, name)) }, cs.unspan, None))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
@@ -1039,7 +1039,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       backtrack(idRef()) ~ template() match {
         // We do not need to apply any transformation if there are no splices _and_ no custom handler id is given
-        case None ~ Template(str :: Nil, Nil) => StringLit(str)
+        case Maybe(None, _) ~ Template(str :: Nil, Nil) => StringLit(str)
         // s"a${x}b${y}" ~> s { do literal("a"); do splice(x); do literal("b"); do splice(y); return () }
         case id ~ Template(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s"))
@@ -1119,7 +1119,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   def effects(): Effects =
     nonterminal:
-      if peek(`{`) then Effects(many(refType, `{`, `,`, `}`))
+      if peek(`{`) then Effects(many(refType, `{`, `,`, `}`).unspan)
       else Effects(refType())
 
   def maybeEffects(): Effects = {
@@ -1150,17 +1150,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // Parse function types (middle precedence)
   private def functionType(): Type = {
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
-    def functionTypeComplex = backtrack {
+    def functionTypeComplex: Maybe[Type] = backtrack {
       maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ atomicType() ~ maybeEffects() match {
-        case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams.unspan, vparams, bparams, t, effs)
+        case tparams ~ vparams ~ bparams ~ t ~ effs => FunctionType(tparams, vparams, bparams, t, effs)
       }
     }
 
     // Simple function type: Int => Int
-    def functionTypeSimple = backtrack {
+    def functionTypeSimple: Maybe[Type] = backtrack {
       refType() <~ `=>`
     } map { tpe =>
-      FunctionType(Nil, List(tpe), Nil, atomicType(), maybeEffects())
+      FunctionType(Many.nil(???), Many(List(tpe), ???), Many.nil(???), atomicType(), maybeEffects())
     }
 
     // Try to parse each function type variant, fall back to basic type if none match
@@ -1214,17 +1214,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       some(idDef, `[`, `,`, `]`).spanned
 
-  def maybeBlockTypeParams(): List[(Option[IdDef], Type)] =
+  def maybeBlockTypeParams(): Many[(Maybe[IdDef], Type)] =
     nonterminal:
-      if peek(`{`) then blockTypeParams() else Nil
+      if peek(`{`) then blockTypeParams() else Many.nil(span())
 
-  def blockTypeParams(): List[(Option[IdDef], Type)] =
+  def blockTypeParams(): Many[(Maybe[IdDef], Type)] =
     nonterminal:
       someWhile(blockTypeParam(), `{`)
 
-  def blockTypeParam(): (Option[IdDef], Type) =
+  def blockTypeParam(): (Maybe[IdDef], Type) =
     nonterminal:
       braces { (backtrack { idDef() <~ `:` }, blockType()) }
+
 
   def lambdaParams(): (List[Id], List[ValueParam], List[BlockParam]) =
     nonterminal:
@@ -1250,7 +1251,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def valueParamsOpt(): List[ValueParam] =
     nonterminal:
-      many(valueParamOpt, `(`, `,`, `)`)
+      many(valueParamOpt, `(`, `,`, `)`).unspan
 
   def maybeValueParams(): Many[ValueParam] =
     nonterminal:
@@ -1258,7 +1259,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def valueParams(): Many[ValueParam] =
     nonterminal:
-      many(valueParam, `(`, `,`, `)`).spanned
+      many(valueParam, `(`, `,`, `)`)
 
   def valueParam(): ValueParam =
     nonterminal:
@@ -1274,7 +1275,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def blockParams(): List[BlockParam] =
     nonterminal:
-      someWhile(`{` ~> blockParam() <~ `}`, `{`)
+      someWhile(`{` ~> blockParam() <~ `}`, `{`).unspan
 
   def maybeBlockParamsOpt(): List[BlockParam] =
     nonterminal:
@@ -1282,7 +1283,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def blockParamsOpt(): List[BlockParam] =
     nonterminal:
-      someWhile(`{` ~> blockParamOpt() <~ `}`, `{`)
+      someWhile(`{` ~> blockParamOpt() <~ `}`, `{`).unspan
 
   def blockParam(): BlockParam =
     nonterminal:
@@ -1292,17 +1293,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
 
-  def maybeValueTypes(): List[Type] =
-    nonterminal:
-      if peek(`(`) then valueTypes() else Nil
 
-  def valueTypes(): List[Type] =
+  def maybeValueTypes(): Many[Type] =
+    nonterminal:
+      if peek(`(`) then valueTypes() else Many.nil(span())
+
+  def valueTypes(): Many[Type] =
     nonterminal:
       many(valueType, `(`, `,`, `)`)
 
   def captureSet(): CaptureSet =
     nonterminal:
-      CaptureSet(many(idRef, `{`, `,` , `}`))
+      CaptureSet(many(idRef, `{`, `,` , `}`).unspan)
 
   // Generic utility functions
   // -------------------------
@@ -1323,10 +1325,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   inline def when[T](t: TokenKind)(inline thn: => T)(inline els: => T): T =
     if peek(t) then { consume(t); thn } else els
 
-  inline def backtrack[T](inline p: => T): Option[T] =
+  inline def backtrack[T](inline p: => T): Maybe[T] =
     val before = position
-    try { Some(p) } catch {
-      case Fail(_, _) => position = before; None
+    try { Maybe.some(p, span(before)) } catch {
+      case Fail(_, _) => position = before; Maybe.none(span(before))
     }
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
@@ -1383,16 +1385,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     }
     components.toList
 
-  inline def someWhile[T](p: => T, lookahead: TokenKind): List[T] =
+  inline def someWhile[T](p: => T, lookahead: TokenKind): Many[T] =
     someWhile(p, peek(lookahead))
 
-  inline def someWhile[T](p: => T, predicate: => Boolean): List[T] =
-    val components: ListBuffer[T] = ListBuffer.empty
-    components += p
-    while (predicate) {
+  inline def someWhile[T](p: => T, predicate: => Boolean): Many[T] =
+    nonterminal:
+      val components: ListBuffer[T] = ListBuffer.empty
       components += p
-    }
-    components.toList
+      while (predicate) {
+        components += p
+      }
+      Many(components.toList, span())
 
   inline def manyWhile[T](p: => T, lookahead: TokenKind): List[T] =
     manyWhile(p, peek(lookahead))
@@ -1412,25 +1415,27 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   inline def braces[T](p: => T): T =
     consume(`{`)
-    val res = p
+    val res =  p
     consume(`}`)
     res
 
-  inline def many[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
-    consume(before)
-    if (peek(after)) {
-      consume(after)
-      Nil
-    } else {
-      val components: ListBuffer[T] = ListBuffer.empty
-      components += p()
-      while (peek(sep)) {
-        consume(sep)
+  inline def many[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): Many[T] =
+    nonterminal: // TODO should we use nonterminal here?
+      consume(before)
+      if (peek(after)) {
+        consume(after)
+        Many.nil(span())
+      } else {
+        val components: ListBuffer[T] = ListBuffer.empty
         components += p()
+        while (peek(sep)) {
+          consume(sep)
+          components += p()
+        }
+        consume(after)
+        Many(components.toList,span())
       }
-      consume(after)
-      components.toList
-    }
+
 
   inline def manyTrailing[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): List[T] =
     consume(before)
@@ -1460,8 +1465,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // the "span" effect used to compute the positions of nodes
   inline def span(): Span =
-    val end = previous.end + 1  // since positions by lexer are inclusive, but kiama is exclusive
-    Span(source, _start.value, end)
+    span(_start.value)
+
+  // creates a Span with a given start and the end position of the previous token
+  inline def span(start : Int ): Span =
+    val end = previous.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
+    Span(source, start, end)
+
 
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)

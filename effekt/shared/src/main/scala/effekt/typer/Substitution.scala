@@ -1,7 +1,8 @@
 package effekt
 package typer
 
-import effekt.symbols._
+import effekt.source.Many
+import effekt.symbols.*
 
 
 case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception
@@ -73,7 +74,7 @@ case class Substitutions(
   def substitute(t: FunctionType): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      val substWithout = without(tps, cps)
+      val substWithout = without(tps.unspan, cps)
       FunctionType(
         tps,
         cps,
