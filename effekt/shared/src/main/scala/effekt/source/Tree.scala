@@ -98,6 +98,8 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
+type Doc = Option[String]
+
 /**
  * Used to mark externs for different backends
  */
@@ -229,46 +231,45 @@ export Param.*
  *     │─ [[ ExternResource ]]
  *     │─ [[ ExternInterface ]]
  *     │─ [[ ExternInclude ]]
- *     │─ [[ DocWrapper ]]
  *
  * -------------------------------------------
  */
 enum Def extends Definition {
 
-  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt, doc: Doc)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt, doc: Doc)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, doc: Doc)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term, doc: Doc)
 
-  case NamespaceDef(id: IdDef, definitions: List[Def])
+  case NamespaceDef(id: IdDef, definitions: List[Def], doc: Doc)
 
-  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation])
-  case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
-  case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
+  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], doc: Doc)
+  case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor], doc: Doc)
+  case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam], doc: Doc)
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType, doc: Doc)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
    */
-  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects)
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects, doc: Doc)
 
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: List[Id])
+  case ExternType(id: IdDef, tparams: List[Id], doc: Doc)
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
-                 bodies: List[ExternBody]) extends Def
+                 bodies: List[ExternBody], doc: Doc) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType)
+  case ExternResource(id: IdDef, tpe: BlockType, doc: Doc)
 
-  case ExternInterface(id: IdDef, tparams: List[Id])
+  case ExternInterface(id: IdDef, tparams: List[Id], doc: Doc)
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -276,9 +277,9 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""), doc: Doc)
 
-  case DocWrapper(doc: String, next: Def, val id: IdDef = IdDef(""))
+  def doc: Doc
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude

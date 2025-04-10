@@ -39,7 +39,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
   }
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
-      case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+      case Def.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc) =>
         findPreferred(bodies) match {
           case body@ExternBody.StringExternBody(featureFlag, template) =>
             if (featureFlag.isDefault) {
@@ -47,21 +47,21 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
                 + s"please annotate it with a feature flag (Supported by the current backend: ${Context.compiler.supportedFeatureFlags.mkString(", ")})")
             }
 
-            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body))
+            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(body), doc)
             Context.copyAnnotations(defn, d)
             Some(d)
           case ExternBody.EffektExternBody(featureFlag, body) =>
-            val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret), body)
+            val d = Def.FunDef(id, tparams, vparams, bparams, Some(ret), body, doc)
             Context.copyAnnotations(defn, d)
             Context.annotate(Annotations.BoundCapabilities, d, Nil) // TODO ??
             Some(d)
           case u: ExternBody.Unsupported =>
-            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u))
+            val d = Def.ExternDef(capture, id, tparams, vparams, bparams, ret, List(u), doc)
             Context.copyAnnotations(defn, d)
             Some(d)
         }
 
-      case Def.ExternInclude(featureFlag, path, contents, id) if featureFlag.matches(supported) =>
+      case Def.ExternInclude(featureFlag, path, contents, id, doc) if featureFlag.matches(supported) =>
         if (featureFlag.isDefault) {
           val supported = Context.compiler.supportedFeatureFlags.mkString(", ")
           Context.warning("Found extern include without feature flag. It is likely that this will fail in other backends, "
@@ -69,11 +69,11 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
 
         Some(defn)
-      case Def.ExternInclude(_, _, _, _) => None // Drop, not for this backend
+      case Def.ExternInclude(_, _, _, _, _) => None // Drop, not for this backend
 
       // recurse into namespaces
-      case Def.NamespaceDef(id, defs) =>
-        val d = Def.NamespaceDef(id, defs.flatMap(rewrite))
+      case Def.NamespaceDef(id, defs, doc) =>
+        val d = Def.NamespaceDef(id, defs.flatMap(rewrite), doc)
         Context.copyAnnotations(defn, d)
         Some(d)
       case defn => Some(defn)

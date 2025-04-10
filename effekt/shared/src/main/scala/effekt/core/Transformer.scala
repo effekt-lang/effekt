@@ -62,22 +62,22 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Toplevel | Declaration | Extern] = d match {
-    case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
+    case f @ source.FunDef(id, tps, vps, bps, ret, body, doc) =>
       val tparams = tps.map { p => p.symbol }
       val cparams = bps.map { b => b.symbol.capture }
       val vparams = vps map transform
       val bparams = bps map transform
       List(Toplevel.Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body))))
 
-    case d @ source.DataDef(id, _, ctors) =>
+    case d @ source.DataDef(id, _, ctors, doc) =>
       val datatype = d.symbol
       List(Data(datatype, datatype.tparams, datatype.constructors.map(transform)))
 
-    case d @ source.RecordDef(id, _, _) =>
+    case d @ source.RecordDef(id, _, _, doc) =>
       val rec = d.symbol
       List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
-    case v @ source.ValDef(id, tpe, binding) if pureOrIO(binding) =>
+    case v @ source.ValDef(id, tpe, binding, doc) if pureOrIO(binding) =>
       val transformed = transform(binding)
       val transformedTpe = v.symbol.tpe match {
         case Some(tpe) => transform(tpe)
@@ -85,10 +85,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       List(Toplevel.Val(v.symbol, transformedTpe, transformed))
 
-    case v @ source.ValDef(id, _, binding) =>
+    case v @ source.ValDef(id, _, binding, doc) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
 
-    case v @ source.DefDef(id, annot, binding) =>
+    case v @ source.DefDef(id, annot, binding, doc) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
         Toplevel.Def(sym, transformAsBlock(binding))
@@ -99,12 +99,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _: source.VarDef | _: source.RegDef =>
       Context.at(d) { Context.abort("Mutable variable bindings not allowed on the toplevel") }
 
-    case d @ source.InterfaceDef(id, tparamsInterface, ops) =>
+    case d @ source.InterfaceDef(id, tparamsInterface, ops, doc) =>
       val interface = d.symbol
       List(core.Interface(interface, interface.tparams,
         interface.operations.map { op => core.Property(op, operationAtDeclaration(interface.tparams, op)) }))
 
-    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies) =>
+    case f @ source.ExternDef(pure, id, _, vps, bps, _, bodies, doc) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
       val cps = bps.map(b => b.symbol.capture)
@@ -122,10 +122,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), tBody))
 
-    case e @ source.ExternInclude(ff, path, contents, _) =>
+    case e @ source.ExternInclude(ff, path, contents, _, doc) =>
       List(Extern.Include(ff, contents.get))
-
-    case e @ source.DocWrapper(_, next, _) => transformToplevel(next)
 
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil
@@ -168,14 +166,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(b)
 
     case source.DefStmt(d, rest) => d match {
-      case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
+      case f @ source.FunDef(id, tps, vps, bps, ret, body, doc) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
         val vparams = vps map transform
         val bparams = bps map transform
         Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
 
-      case v @ source.ValDef(id, tpe, binding) =>
+      case v @ source.ValDef(id, tpe, binding, doc) =>
         val transformed = transform(binding)
         val transformedTpe = v.symbol.tpe match {
           case Some(tpe) => transform(tpe)
@@ -183,25 +181,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         }
         Val(v.symbol, transformedTpe, transformed, transform(rest))
 
-      case v @ source.DefDef(id, annot, binding) =>
+      case v @ source.DefDef(id, annot, binding, doc) =>
         val sym = v.symbol
         insertBindings {
           Def(sym, transformAsBlock(binding), transform(rest))
         }
 
-      case v @ source.RegDef(id, _, reg, binding) =>
+      case v @ source.RegDef(id, _, reg, binding, doc) =>
         val sym = v.symbol
         insertBindings {
           Alloc(sym, Context.bind(transform(binding)), sym.region, transform(rest))
         }
 
-      case v @ source.VarDef(id, _, binding) =>
+      case v @ source.VarDef(id, _, binding, doc) =>
         val sym = v.symbol
         insertBindings {
           Var(sym, Context.bind(transform(binding)), sym.capture, transform(rest))
         }
-
-      case v @ source.DocWrapper(_, next, _) => transform(source.DefStmt(next, rest))
 
       case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
       case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")

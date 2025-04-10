@@ -113,30 +113,30 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def preresolve(d: Def)(using Context): Unit = Context.focusing(d) {
 
-    case d @ source.ValDef(id, annot, binding) =>
+    case d @ source.ValDef(id, annot, binding, doc) =>
       ()
 
-    case d @ source.VarDef(id, annot, binding) =>
+    case d @ source.VarDef(id, annot, binding, doc) =>
       ()
 
-    case d @ source.RegDef(id, annot, region, binding) =>
+    case d @ source.RegDef(id, annot, region, binding, doc) =>
       ()
 
-    case source.NamespaceDef(id, definitions) =>
+    case source.NamespaceDef(id, definitions, doc) =>
       Context.namespace(id.name) {
         definitions.foreach(preresolve)
       }
 
     // allow recursive definitions of objects
-    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses))) =>
+    case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses)), doc) =>
       val tpe = Context.at(interface) { resolve(interface) }
       val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
       Context.define(id, sym)
 
-    case d @ source.DefDef(id, annot, block) =>
+    case d @ source.DefDef(id, annot, block, doc) =>
       ()
 
-    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body, doc) =>
       val uniqueId = Context.nameFor(id)
 
       // we create a new scope, since resolving type params introduces them in this scope
@@ -155,7 +155,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.InterfaceDef(id, tparams, ops) =>
+    case source.InterfaceDef(id, tparams, ops, doc) =>
       val effectName = Context.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
@@ -166,7 +166,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, effectSym)
 
-    case source.TypeDef(id, tparams, tpe) =>
+    case source.TypeDef(id, tparams, tpe, doc) =>
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
@@ -174,7 +174,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, alias)
 
-    case source.EffectDef(id, tparams, effs) =>
+    case source.EffectDef(id, tparams, effs, doc) =>
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
@@ -182,7 +182,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, alias)
 
-    case source.DataDef(id, tparams, ctors) =>
+    case source.DataDef(id, tparams, ctors, doc) =>
       val typ = Context scoped {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
@@ -191,7 +191,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, typ)
 
-    case source.RecordDef(id, tparams, fields) =>
+    case source.RecordDef(id, tparams, fields, doc) =>
       lazy val sym: Record = {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
@@ -200,19 +200,19 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.ExternType(id, tparams) =>
+    case source.ExternType(id, tparams, doc) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternType(Context.nameFor(id), tps)
       })
 
-    case source.ExternInterface(id, tparams) =>
+    case source.ExternInterface(id, tparams, doc) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         ExternInterface(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc) => {
       val name = Context.nameFor(id)
       val capt = resolve(capture)
       Context.define(id, Context scoped {
@@ -229,17 +229,17 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
     }
 
-    case source.ExternResource(id, tpe) =>
+    case source.ExternResource(id, tpe, doc) =>
       val name = Context.nameFor(id)
       val btpe = resolve(tpe)
       val sym = ExternResource(name, btpe)
       Context.define(id, sym)
       Context.bindBlock(sym)
 
-    case d @ source.ExternInclude(ff, path, Some(contents), _) =>
+    case d @ source.ExternInclude(ff, path, Some(contents), _, doc) =>
       ()
 
-    case d @ source.ExternInclude(ff, path, None, _) =>
+    case d @ source.ExternInclude(ff, path, None, _, doc) =>
       // only load include if it is required by the backend.
       if (ff matches Context.compiler.supportedFeatureFlags) {
         d.contents = Some(Context.contentsOf(path).getOrElse {
@@ -248,8 +248,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       } else {
         d.contents = None
       }
-
-    case d @ source.DocWrapper(_, next, _) => preresolve(next)
   }
 
   /**
@@ -279,14 +277,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, p)
       Context.bind(p.capture)
 
-    case d @ source.ValDef(id, annot, binding) =>
+    case d @ source.ValDef(id, annot, binding, doc) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
 
     // Local mutable state
-    case d @ source.VarDef(id, annot, binding) =>
+    case d @ source.VarDef(id, annot, binding, doc) =>
       val tpe = annot.map(resolve)
 
       resolveGeneric(binding)
@@ -295,7 +293,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.bind(sym.capture)
 
     // allocation into a region
-    case d @ source.RegDef(id, annot, region, binding) =>
+    case d @ source.RegDef(id, annot, region, binding, doc) =>
       val tpe = annot.map(resolve)
       val reg = Context.resolveTerm(region) match {
         case t: BlockSymbol => t
@@ -308,16 +306,16 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
 
     // already has been preresolved (to enable recursive definitions)
-    case d @ source.DefDef(id, annot, source.New(impl)) =>
+    case d @ source.DefDef(id, annot, source.New(impl), doc) =>
       resolveGeneric(impl)
 
-    case d @ source.DefDef(id, annot, binding) =>
+    case d @ source.DefDef(id, annot, binding, doc) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
     // FunDef and InterfaceDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body, doc) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -327,7 +325,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies) =>
+    case f @ source.ExternDef(capture, id, tparams, vparams, bparams, ret, bodies, doc) =>
       val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
@@ -340,7 +338,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
 
-    case source.InterfaceDef(id, tparams, operations) =>
+    case source.InterfaceDef(id, tparams, operations, doc) =>
       // symbol has already been introduced by the previous traversal
       val interface = Context.symbolOf(id).asInterface
       interface.operations = operations.map {
@@ -371,16 +369,16 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
 
-    case source.NamespaceDef(id, definitions) =>
+    case source.NamespaceDef(id, definitions, doc) =>
       Context.namespace(id.name) {
         definitions.foreach(resolveGeneric)
       }
 
-    case source.TypeDef(id, tparams, tpe) => ()
-    case source.EffectDef(id, tparams, effs)       => ()
+    case source.TypeDef(id, tparams, tpe, doc) => ()
+    case source.EffectDef(id, tparams, effs, doc) => ()
 
     // The type itself has already been resolved, now resolve constructors
-    case d @ source.DataDef(id, tparams, ctors) =>
+    case d @ source.DataDef(id, tparams, ctors, doc) =>
       val data = d.symbol
       data.constructors = ctors map {
         case source.Constructor(id, tparams, ps) =>
@@ -395,7 +393,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     // The record has been resolved as part of the preresolution step
-    case d @ source.RecordDef(id, tparams, fs) =>
+    case d @ source.RecordDef(id, tparams, fs, doc) =>
       val record = d.symbol
       val name = Context.nameFor(id)
       val constructor = Constructor(name, record.tparams, null, record)
@@ -404,10 +402,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       record.constructor = constructor
       constructor.fields = resolveFields(fs, constructor)
 
-    case source.ExternType(id, tparams) => ()
-    case source.ExternInterface(id, tparams) => ()
-    case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(ff, path, _, _) => ()
+    case source.ExternType(id, tparams, doc) => ()
+    case source.ExternInterface(id, tparams, doc) => ()
+    case source.ExternResource(id, tpe, doc) => ()
+    case source.ExternInclude(ff, path, _, _, doc) => ()
 
     case source.If(guards, thn, els) =>
       Context scoped { guards.foreach(resolve); resolveGeneric(thn) }
