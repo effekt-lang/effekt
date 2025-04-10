@@ -60,7 +60,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseTry(input: String, positions: Positions = new Positions())(using munit.Location): Term =
     parse(input, _.tryExpr())
 
-  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =
+  def parseParams(input: String, positions: Positions = new Positions())(using munit.Location): (Many[Id], Many[ValueParam], Many[BlockParam]) =
     parse(input, _.params())
 
   def parseLambdaParams(input: String, positions: Positions = new Positions())(using munit.Location): (List[Id], List[ValueParam], List[BlockParam]) =

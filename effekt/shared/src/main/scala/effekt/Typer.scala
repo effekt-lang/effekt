@@ -751,7 +751,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           flowingInto(inferredCapture) {
 
-            (sym.annotatedType: @unchecked) match {
+            (sym.annotatedType.unspan: @unchecked) match {
               case Some(annotated) =>
                 // the declared effects are considered as bound
                 val bound: ConcreteEffects = annotated.effects
