@@ -8,14 +8,54 @@ import option
 /// A mutable 0-indexed fixed-sized array.
 extern type Array[T]
 
+/** We represent arrays like positive types.
+ *  The tag is 0 and the obj points to memory with the following layout:
+ *
+ *   +--[ Header ]--+------+------------+
+ *   | Rc  | Eraser | Size | Fields ... |
+ *   +--------------+------+------------+
+ */
+
+extern llvm """
+declare noalias ptr @calloc(i64, i64)
+
+define void @array_erase_fields(ptr %array_pointer) {
+entry:
+    %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
+    %size = load i64, ptr %array_pointer, align 8
+    %size_eq_0 = icmp eq i64 %size, 0
+    br i1 %size_eq_0, label %exit, label %loop
+loop:
+    %loop_phi = phi i64 [ %inc, %loop ], [ 0, %entry ]
+
+    %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 %loop_phi
+    %element = load %Pos, ptr %element_pointer
+
+    call void @erasePositive(%Pos %element)
+    %inc = add nuw i64 %loop_phi, 1
+    %cmp = icmp ult i64 %inc, %size
+    br i1 %cmp, label %loop, label %exit
+exit:
+    ret void
+}
+"""
+
 /// Allocates a new array of size `size`, keeping its values _undefined_.
 /// Prefer using `array` constructor instead to ensure that values are defined.
 extern global def allocate[T](size: Int): Array[T] =
   js "(new Array(${size}))"
   chez "(make-vector ${size})" // creates an array filled with 0s on CS
   llvm """
-    %z = call %Pos @c_array_new(%Int ${size})
-    ret %Pos %z
+    %size0 = shl i64 ${size}, 4
+    %size1 = add i64 %size0, 24
+    %calloc = tail call noalias ptr @calloc(i64 %size1, i64 1)
+    %eraser_pointer = getelementptr ptr, ptr %calloc, i64 1
+    %size_pointer = getelementptr ptr, ptr %calloc, i64 2
+    store i64 0, ptr %calloc
+    store ptr @array_erase_fields, ptr %eraser_pointer
+    store i64 ${size}, ptr %size_pointer
+    %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
+    ret %Pos %ret_pos
   """
   vm "array::allocate(Int)"
 
@@ -49,8 +89,12 @@ extern pure def size[T](arr: Array[T]): Int =
   js "${arr}.length"
   chez "(vector-length ${arr})"
   llvm """
-    %z = call %Int @c_array_size(%Pos ${arr})
-    ret %Int %z
+    %pos_data = extractvalue %Pos ${arr}, 1
+    %size_pointer = getelementptr inbounds i64, ptr %pos_data, i64 2
+    %size = load i64, ptr %size_pointer
+
+    tail call void @erasePositive(%Pos ${arr})
+    ret i64 %size
   """
   vm "array::size[T](Array[T])"
 
@@ -62,8 +106,15 @@ extern global def unsafeGet[T](arr: Array[T], index: Int): T =
   js "${arr}[${index}]"
   chez "(vector-ref ${arr} ${index})"
   llvm """
-    %z = call %Pos @c_array_get(%Pos ${arr}, %Int ${index})
-    ret %Pos %z
+    %pos_data = extractvalue %Pos ${arr}, 1
+
+    %data_pointer = getelementptr inbounds ptr, ptr %pos_data, i64 3
+    %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 ${index}
+    %element = load %Pos, ptr %element_pointer
+
+    tail call void @sharePositive(%Pos %element)
+    tail call void @erasePositive(%Pos ${arr})
+    ret %Pos %element
   """
   vm "array::unsafeGet[T](Array[T], Int)"
 
@@ -82,8 +133,15 @@ extern global def unsafeSet[T](arr: Array[T], index: Int, value: T): Unit =
   js "array$set(${arr}, ${index}, ${value})"
   chez "(begin (vector-set! ${arr} ${index} ${value}) #f)"
   llvm """
-    %z = call %Pos @c_array_set(%Pos ${arr}, %Int ${index}, %Pos ${value})
-    ret %Pos %z
+    %array_data = extractvalue %Pos ${arr}, 1
+
+    %data_pointer = getelementptr inbounds i64, ptr %array_data, i64 3
+    %element_pointer = getelementptr inbounds %Pos, ptr %data_pointer, i64 ${index}
+    %element = load %Pos, ptr %element_pointer, align 8
+    tail call void @erasePositive(%Pos %element)
+    store %Pos ${value}, ptr %element_pointer, align 8
+    tail call void @erasePositive(%Pos ${arr})
+    ret %Pos zeroinitializer
   """
   vm "array::unsafeSet[T](Array[T], Int, T)"
 
