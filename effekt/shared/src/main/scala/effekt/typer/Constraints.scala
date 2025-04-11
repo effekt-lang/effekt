@@ -208,7 +208,10 @@ class Constraints(
     types.foreach {
       case x @ UnificationVar(underlying, callTree) =>
         if (!typeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
-          C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+          val callName = callTree match
+            case call: source.Call => pp" of ${call.target}" // TODO: get symbol here, ideally print the typevars like `Failure[T, E]`
+            case _ => ""
+          C.error(pp"Cannot infer type argument ${underlying}${callName}, maybe consider annotating it?")
         }
     }
 
