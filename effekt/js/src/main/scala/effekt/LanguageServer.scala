@@ -98,18 +98,12 @@ class LanguageServer extends Intelligence {
     file(path).lastModified
 
   @JSExport
-  def compileFile(path: String): String = {
-    val mainOutputPath = compileCached(VirtualFileSource(path)).getOrElseAborting {
-      throw js.JavaScriptException(s"Cannot compile ${path}")
+  def compileFile(path: String): String =
+    compileCached(VirtualFileSource(path)).getOrElseAborting {
+      // report all collected error messages
+      val formattedErrors = context.messaging.formatMessages(context.messaging.get)
+      throw js.JavaScriptException(formattedErrors)
     }
-    try {
-      mainOutputPath
-    } catch {
-      case FatalPhaseError(msg) =>
-        val formattedError = context.messaging.formatMessage(msg)
-        throw js.JavaScriptException(formattedError)
-    }
-  }
 
   @JSExport
   def showCore(path: String): String = {
