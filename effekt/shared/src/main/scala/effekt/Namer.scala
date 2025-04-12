@@ -342,7 +342,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       // symbol has already been introduced by the previous traversal
       val interface = Context.symbolOf(id).asInterface
       interface.operations = operations.map {
-        case op @ source.Operation(id, tparams, vparams, bparams, ret) => Context.at(op) {
+        case op @ source.Operation(id, tparams, vparams, bparams, ret, doc) => Context.at(op) {
           val name = Context.nameFor(id)
 
           Context scoped {

@@ -124,6 +124,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     position += 1;
     spaces()
 
+  def isDocComment(kind: TokenKind): Boolean =
+    kind match {
+      case DocComment(_) => true
+      case _ => false
+    }
+
   def isSpace(kind: TokenKind): Boolean =
     kind match {
       case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
@@ -488,21 +494,23 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // effect <NAME>[...](...): ...
   def operationDef(): Def =
     nonterminal:
-      maybeDocumentation() ~ (`effect` ~> operation()) match {
-        case doc ~ (op @ Operation(id, tps, vps, bps, ret)) =>
-          InterfaceDef(IdDef(id.name) withPositionOf op, tps, List(Operation(id, Nil, vps, bps, ret) withPositionOf op), doc)
+      val doc = maybeDocumentation()
+      `effect` ~> operation(doc) match {
+        case op @ Operation(id, tps, vps, bps, ret, doc) => // TODO: should the same `doc` be used here?
+          InterfaceDef(IdDef(id.name) withPositionOf op, tps, List(Operation(id, Nil, vps, bps, ret, doc) withPositionOf op), doc)
       }
 
-  def operation(): Operation =
+  def operation(doc: Doc): Operation =
     nonterminal:
       idDef() ~ params() ~ returnAnnotation() match {
-        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret)
+        case id ~ (tps, vps, bps) ~ ret => Operation(id, tps, vps, bps, ret, doc)
       }
 
   def interfaceDef(): InterfaceDef =
     nonterminal:
       documented { doc =>
-        InterfaceDef(`interface` ~> idDef(), maybeTypeParams(), `{` ~> manyWhile(`def` ~> operation(), peek(`def`)) <~ `}`, doc)
+        InterfaceDef(`interface` ~> idDef(), maybeTypeParams(),
+          `{` ~> manyWhile(documented { opDoc => `def` ~> operation(opDoc) }, documentedKind == `def`) <~ `}`, doc)
       }
 
   def namespaceDef(): Def =
@@ -519,20 +527,22 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def externDef(): Def =
     nonterminal:
-      { peek(`extern`); peek(1).kind } match {
-        case `type`      => externType()
-        case `interface` => externInterface()
-        case `resource`  => externResource()
-        case `include`   => externInclude()
+      val doc = maybeDocumentation()
+      consume(`extern`)
+      peek.kind match {
+        case `type`      => externType(doc)
+        case `interface` => externInterface(doc)
+        case `resource`  => externResource(doc)
+        case `include`   => externInclude(doc)
         // extern """..."""
-        case s: Str      => externString()
+        case s: Str      => externString(doc)
         case Ident(_) | `pure` =>
           // extern IDENT def ...
-          if (peek(2, `def`)) externFun()
+          if (peek(1, `def`)) externFun(doc)
           // extern IDENT """..."""
-          else externString()
+          else externString(doc)
         // extern {...} def ...
-        case _ => externFun()
+        case _ => externFun(doc)
       }
 
   def featureFlag(): FeatureFlag =
@@ -546,41 +556,31 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       backtrack(featureFlag()).getOrElse(FeatureFlag.Default)
 
-  def externType(): Def =
+  def externType(doc: Doc): Def =
     nonterminal:
-      documented { doc =>
-        ExternType(`extern` ~> `type` ~> idDef(), maybeTypeParams(), doc)
-      }
-  def externInterface(): Def =
+      ExternType(`type` ~> idDef(), maybeTypeParams(), doc)
+  def externInterface(doc: Doc): Def =
     nonterminal:
-      documented { doc =>
-        ExternInterface(`extern` ~> `interface` ~> idDef(), maybeTypeParams(), doc)
-      }
-  def externResource(): Def =
+      ExternInterface(`interface` ~> idDef(), maybeTypeParams(), doc)
+  def externResource(doc: Doc): Def =
     nonterminal:
-      documented { doc =>
-        ExternResource(`extern` ~> `resource` ~> idDef(), blockTypeAnnotation(), doc)
-      }
-  def externInclude(): Def =
+      ExternResource(`resource` ~> idDef(), blockTypeAnnotation(), doc)
+  def externInclude(doc: Doc): Def =
     nonterminal:
-      documented { doc =>
-        `extern` ~> `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, doc=doc)
-      }
+      `include` ~> ExternInclude(maybeFeatureFlag(), path().stripPrefix("\"").stripSuffix("\""), None, doc=doc)
 
-  def externString(): Def =
+  def externString(doc: Doc): Def =
     nonterminal:
-      val doc = maybeDocumentation()
-      consume(`extern`)
       val ff = maybeFeatureFlag()
       next().kind match {
         case Str(contents, _) => ExternInclude(ff, "", Some(contents), doc=doc)
         case _ => fail("Expected string literal.")
       }
 
-  def externFun(): Def =
+  def externFun(doc: Doc): Def =
     nonterminal:
-      (maybeDocumentation() ~ (`extern` ~> maybeExternCapture()) ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
-        case doc ~ capt ~ id ~ (tps, vps, bps) ~ ret =>
+      (maybeExternCapture() ~ (`def` ~> idDef()) ~ params() ~ (returnAnnotation() <~ `=`)) match {
+        case capt ~ id ~ (tps, vps, bps) ~ ret =>
           val bodies = manyWhile(externBody(), isExternBodyStart)
           ExternDef(capt, id, tps, vps, bps, ret, bodies, doc)
       }
@@ -618,7 +618,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case DocComment(msg) =>
           consume(peek.kind)
           val next = maybeDocumentation()
-          next.map { d => msg ++ "\n" ++ d }
+          next.map { d => msg ++ "\\n" ++ d }
             .orElse(Some(msg))
         case _ => None
 
