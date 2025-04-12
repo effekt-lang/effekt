@@ -3,7 +3,7 @@ package effekt
 // Adapted from
 //   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ModuleDecl, Tree, Doc, IdDef, Def }
+import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import kiama.output.PrettyPrinterTypes.Document
@@ -11,7 +11,7 @@ import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
 import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
-import effekt.util.{ AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
+import effekt.util.{ DocumentationGenerator, AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
 
 import scala.sys.process.Process
 
@@ -128,39 +128,10 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
       }
   }
 
-  // TODO: should we move this somewhere more appropriate?
-  def generateDocumentation(source: Source)(implicit C: Context): String = {
+  def generateDocumentation(source: Source)(implicit C: Context): String =
     val astOpt = C.compiler.getAST(source)
     if (astOpt.isEmpty) return ""
-
-    val tree = new kiama.relation.Tree[AnyRef & Product, ModuleDecl](astOpt.get)
-    val documentedNodes = tree.nodes.collect { case t: Def if t.doc.isDefined => (t, t.doc.get) }
-
-    val res = documentedNodes.foldLeft("") { case (acc, (node, doc)) =>
-      // TODO: types, source?
-      // TODO: position!
-      // TODO: some are duplicates!
-      // TODO: interfaces etc.
-      val data = node match {
-        case Def.FunDef(IdDef(n), _, _, _, _, _, _) =>
-          s"{\"kind\": \"FunDef\", \"id\": \"${n}\", \"type\": \"${C.inferredTypeOption(node)}\"}"
-        case Def.DataDef(IdDef(n), _, _, _) =>
-          s"{\"kind\": \"DataDef\", \"id\": \"${n}\"}"
-        case Def.InterfaceDef(IdDef(n), _, _, _) =>
-          s"{\"kind\": \"InterfaceDef\", \"id\": \"${n}\"}"
-        case Def.NamespaceDef(IdDef(n), _, _) =>
-          s"{\"kind\": \"NamespaceDef\", \"id\": \"${n}\"}"
-        case t => s"{\"kind\": \"unknown\"}" ++ t.toString
-      }
-
-      s"""${acc},
-      |{
-      |  "doc": "${doc.replace("\n", "\\n").replace("\"", "\\\"")}",
-      |  "data": ${data}
-      |}""".stripMargin
-    }
-    s"{\"source\": \"${source.name}\", \"elements\": [${res.tail}]}"
-  }
+    DocumentationGenerator(astOpt.get, source.name).content
 
   def showDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit =
     if (!config.showDocumentation()) return
