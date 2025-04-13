@@ -258,7 +258,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolveGeneric(tree: Tree)(using Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, includes, definitions) =>
+    case source.ModuleDecl(path, includes, definitions, doc) =>
       definitions foreach { preresolve }
       resolveAll(definitions)
 

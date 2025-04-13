@@ -196,7 +196,7 @@ sealed trait Reference extends Named {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, includes: List[Include], defs: List[Def]) extends Tree
+case class ModuleDecl(path: String, includes: List[Include], defs: List[Def], doc: Doc) extends Tree
 case class Include(path: String) extends Tree
 
 /**

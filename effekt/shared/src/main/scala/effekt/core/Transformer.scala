@@ -44,7 +44,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
-    val source.ModuleDecl(path, imports, defs) = tree
+    val source.ModuleDecl(path, imports, defs, doc) = tree
     val exports = transform(mod.exports)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 

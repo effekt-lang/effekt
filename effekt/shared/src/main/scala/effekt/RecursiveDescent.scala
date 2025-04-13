@@ -288,7 +288,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
      nonterminal:
        // skip spaces at the start
        spaces()
-       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs())
+       val doc = maybeDocumentation()
+       val res = ModuleDecl(moduleDecl(), manyWhile(includeDecl(), `import`), toplevelDefs(), doc)
        if peek(`EOF`) then res else fail("Unexpected end of input")
        // failure("Required at least one top-level function or effect definition")
 
