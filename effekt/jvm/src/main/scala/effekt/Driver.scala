@@ -11,7 +11,7 @@ import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
 import effekt.util.messages.{ BufferedMessaging, CompilerPanic, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
-import effekt.util.{ DocumentationGenerator, AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
+import effekt.util.{ JSONDocumentationGenerator, AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
 
 import scala.sys.process.Process
 
@@ -131,7 +131,7 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
   def generateDocumentation(source: Source)(implicit C: Context): String =
     val astOpt = C.compiler.getAST(source)
     if (astOpt.isEmpty) return ""
-    DocumentationGenerator(astOpt.get, source.name).content
+    JSONDocumentationGenerator(astOpt.get, source.name).content
 
   def showDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit =
     if (!config.showDocumentation()) return

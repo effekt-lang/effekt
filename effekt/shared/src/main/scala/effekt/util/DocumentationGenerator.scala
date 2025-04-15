@@ -5,7 +5,7 @@ import kiama.util.Source
 import scala.collection.immutable.HashMap
 
 // TODO: positions
-case class DocumentationGenerator(ast: ModuleDecl, name: String = "") extends Source {
+trait DocumentationGenerator {
   type Documentation = HashMap[String, DocValue]
   type EffektTree[T <: Tree] = kiama.relation.Tree[AnyRef & Product, T]
 
@@ -217,9 +217,12 @@ case class DocumentationGenerator(ast: ModuleDecl, name: String = "") extends So
   def generate(node: Tree): Documentation = node match {
     case n: Def => generate(n)
     case n: Operation => generate(n)
+    // case n: ModuleDecl => generate(n)
     case _ => HashMap.empty
   }
+}
 
+case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extends Source, DocumentationGenerator {
   def toJSON(values: Vector[DocValue]): String = s"[${values.map(toJSON).mkString(",")}]"
 
   def toJSON(docValue: DocValue): String = docValue match {
@@ -237,9 +240,9 @@ case class DocumentationGenerator(ast: ModuleDecl, name: String = "") extends So
   }
 
   def dfsJSON(node: Tree)(visit: Tree => String): String = {
-    var res = "{\"data\":"
+    var res = "{\"data\": "
     res += visit(node)
-    res += s"${res}, \"children\": ["
+    res += s", \"children\": ["
     var children = List[String]()
     for (child <- kiama.relation.TreeRelation.treeChildren(node).collect { case t: Def => t }) {
       children = dfsJSON(child)(visit) :: children
