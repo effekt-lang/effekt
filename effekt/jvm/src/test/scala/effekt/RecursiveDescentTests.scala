@@ -542,7 +542,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseDefinition(
         """def foo = f
           |""".stripMargin),
-      DefDef(IdDef("foo"), None, Var(IdRef(Nil, "f"))))
+      DefDef(IdDef("foo"), None, Var(IdRef(Nil, "f")), None))
 
     parseDefinition(
         """def foo: Exc = f

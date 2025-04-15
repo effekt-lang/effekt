@@ -105,7 +105,7 @@ trait CorePhaseTests[P <: Phase[CoreTransformed, CoreTransformed]](phase: P) ext
     override def content: String =
       throw NotImplementedError("The original Effekt source is not available in core tests.")
   }
-  protected val theSourceModuleDecl: effekt.source.ModuleDecl = effekt.source.ModuleDecl("(core test)", Nil, Nil) // FIXME sentinel value
+  protected val theSourceModuleDecl: effekt.source.ModuleDecl = effekt.source.ModuleDecl("(core test)", Nil, Nil, None) // FIXME sentinel value
 
   protected val theSourceModule: effekt.symbols.Module = effekt.symbols.Module(theSourceModuleDecl, theSource)
 
