@@ -242,8 +242,6 @@ case class Maybe[T](option: Option[T], span: Span){
     case None => Maybe(None, span)
     case Some(x) => f(x)
   }
-  def getOrElse(default: => T): T =
-    option.getOrElse(default)
 
   def orElse[B >: T](alternative: => Maybe[B]): Maybe[B] =
    option match {
@@ -251,7 +249,7 @@ case class Maybe[T](option: Option[T], span: Span){
       case None => alternative
     }
 
-  export option.{foreach, get}
+  export option.{foreach, get, getOrElse}
 }
 
 object Maybe {
