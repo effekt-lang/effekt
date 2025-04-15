@@ -7,6 +7,7 @@ import scala.collection.immutable.HashMap
 // TODO: positions
 case class DocumentationGenerator(ast: ModuleDecl, name: String = "") extends Source {
   type Documentation = HashMap[String, DocValue]
+  type EffektTree[T <: Tree] = kiama.relation.Tree[AnyRef & Product, T]
 
   // A recursive structure that resembles JSON
   sealed trait DocValue
@@ -211,12 +212,12 @@ case class DocumentationGenerator(ast: ModuleDecl, name: String = "") extends So
     )
   }
 
-  def generate(nodes: Vector[Tree]): Vector[Documentation] = nodes.map { node =>
-    node match {
-      case n: Def => generate(n)
-      case n: Operation => generate(n)
-      case _ => HashMap.empty
-    }
+  def generate(nodes: Vector[Tree]): Vector[Documentation] = nodes.map(generate)
+
+  def generate(node: Tree): Documentation = node match {
+    case n: Def => generate(n)
+    case n: Operation => generate(n)
+    case _ => HashMap.empty
   }
 
   def toJSON(values: Vector[DocValue]): String = s"[${values.map(toJSON).mkString(",")}]"
@@ -235,15 +236,21 @@ case class DocumentationGenerator(ast: ModuleDecl, name: String = "") extends So
     s"{${jsonPairs.mkString(",")}}"
   }
 
-  def accumulateJSON(docs: Vector[Documentation]) = docs.foldLeft("") { (acc, doc) =>
-    s"${acc}, ${toJSON(doc)}"
-  }.tail
+  def dfsJSON(node: Tree)(visit: Tree => String): String = {
+    var res = "{\"data\":"
+    res += visit(node)
+    res += s"${res}, \"children\": ["
+    var children = List[String]()
+    for (child <- kiama.relation.TreeRelation.treeChildren(node).collect { case t: Def => t }) {
+      children = dfsJSON(child)(visit) :: children
+    }
+    res ++ children.mkString(",") ++ "]}"
+  }
 
   lazy val content = {
-    val tree = new kiama.relation.Tree[AnyRef & Product, ModuleDecl](ast)
-    val documentedNodes = tree.nodes.collect { case t: Def if t.doc.isDefined => t }
-    val docs = generate(documentedNodes)
+    val tree = new EffektTree(ast)
+    val docs = dfsJSON(tree.root) { t => toJSON(generate(t)) }
 
-    s"{\"source\": \"${name}\", \"documentation\": [${accumulateJSON(docs)}]}"
+    s"{\"source\": \"${name}\", \"documentation\": [${docs}]}"
   }
 }
