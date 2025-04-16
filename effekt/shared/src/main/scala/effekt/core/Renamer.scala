@@ -21,12 +21,8 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   // Here we track ALL renamings
   var renamed: Map[Id, Id] = Map.empty
 
-  private var suffix: Int = 0
-
   def freshIdFor(id: Id): Id =
-    suffix = suffix + 1
-    val uniqueName = if prefix.isEmpty then id.name.name + "_" + suffix.toString else prefix + suffix.toString
-    names.idFor(uniqueName)
+    if prefix.isEmpty then Id(id) else Id(id.name.rename { _current => prefix })
 
   def withBindings[R](ids: List[Id])(f: => R): R =
     val before = scopes
@@ -98,14 +94,12 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   }
 
   def apply(m: core.ModuleDecl): core.ModuleDecl =
-    suffix = 0
     m match {
       case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
         core.ModuleDecl(path, includes, declarations, externs, definitions map rewrite, exports)
     }
 
   def apply(s: Stmt): Stmt = {
-    suffix = 0
     rewrite(s)
   }
 }
