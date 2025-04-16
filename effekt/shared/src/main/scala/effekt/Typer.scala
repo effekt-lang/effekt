@@ -481,12 +481,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // (4) synthesize type of continuation
               val resumeType = if (isBidirectional) {
                 // resume { {f} => e }
-                val resumeType = FunctionType(Many.Empty(???), cparams, Many.Empty(???), Many(bps, ???), tpe, Effects(effs))
+                val resumeType = FunctionType(Many.empty(???), cparams, Many.empty(???), Many(bps, ???), tpe, Effects(effs))
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
-                FunctionType(Many.Empty(???), List(resumeCapt), Many.Empty(???), Many(List(resumeType), ???), ret, Effects.Pure)
+                FunctionType(Many.empty(???), List(resumeCapt), Many.empty(???), Many(List(resumeType), ???), ret, Effects.Pure)
               } else {
                 // resume(v)
-                FunctionType(Many.Empty(???), Nil, Many(List(tpe),???), Many.Empty(???), ret, Effects.Pure)
+                FunctionType(Many.empty(???), Nil, Many(List(tpe),???), Many.empty(???), ret, Effects.Pure)
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 

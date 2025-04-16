@@ -1150,7 +1150,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       def simpleFunType = backtrack {
         ValueTypeRef(idRef(), maybeTypeArgs()) <~ `=>`
       } map { tpe =>
-        FunctionType(Many.Empty(???), Many(List(tpe),???), Many.Empty(???) , valueType2(boxedAllowed), maybeEffects())
+        FunctionType(Many.empty(???), Many(List(tpe),???), Many.empty(???) , valueType2(boxedAllowed), maybeEffects())
       }
 
       def funType = backtrack {
@@ -1183,7 +1183,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeBlockTypeParams(): Many[(Maybe[IdDef], BlockType)] =
     nonterminal:
-      if peek(`{`) then blockTypeParams() else Many.Empty(span())
+      if peek(`{`) then blockTypeParams() else Many.empty(span())
 
   def blockTypeParams(): Many[(Maybe[IdDef], BlockType)] =
     nonterminal:
@@ -1263,7 +1263,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeValueTypes(): Many[ValueType] =
     nonterminal:
-      if peek(`(`) then valueTypes() else Many.Empty(span())
+      if peek(`(`) then valueTypes() else Many.empty(span())
 
   def valueTypes(): Many[ValueType] =
     nonterminal:
@@ -1406,7 +1406,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       consume(before)
       if (peek(after)) {
         consume(after)
-        Many.Empty(span())
+        Many.empty(span())
       } else {
         val components: ListBuffer[T] = ListBuffer.empty
         components += p()
