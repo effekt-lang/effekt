@@ -99,7 +99,7 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
-case class Span(source: kiama.util.Source, from: Int, to: Int)
+case class Span(source: kiama.util.Source, from: Int, to: Int, isFake: Boolean = false)
 
 /**
  * Used to mark externs for different backends
@@ -484,7 +484,7 @@ export CallTarget.*
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: List[Id], params: List[ValueParam]) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: List[ValueParam]) extends Definition
 case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
 
 // Implementations
