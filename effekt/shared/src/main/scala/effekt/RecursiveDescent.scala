@@ -451,7 +451,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def constructor(): Constructor =
     nonterminal:
-      Constructor(idDef(), maybeTypeParams().unspan, valueParams().unspan)
+      Constructor(idDef(), maybeTypeParams(), valueParams().unspan)
 
   // On the top-level both
   //    effect Foo = {}

@@ -386,7 +386,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val constructor = Context scoped {
             val name = Context.nameFor(id)
             val tps = tparams map resolve
-            Constructor(name, Many(data.tparams ++ tps, ???), null, data)
+            Constructor(name, Many(data.tparams ++ tps.unspan, tps.span), null, data)
           }
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
