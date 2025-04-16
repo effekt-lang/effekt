@@ -741,7 +741,24 @@ class RecursiveDescentTests extends munit.FunSuite {
     }
     assertEquals(funDef.bparams.span, Span(StringSource(snippet), positions(0), positions(1)))
     assertEquals(funDef.ret.span, Span(StringSource(snippet), positions(1), positions(2)))
-}
+  }
+
+  test("Function definition with whitespaces instead of return type") {
+    val (snippet, positions) =
+      raw"""def foo{b: => Unit / bar}      = <>
+           |       ↑                 ↑     ↑
+           |""".snippetAndPositions
+
+    val definition = parseDefinition(snippet)
+
+    val funDef = definition match {
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case other =>
+        throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
+    }
+    assertEquals(funDef.bparams.span, Span(StringSource(snippet), positions(0), positions(1)))
+    assertEquals(funDef.ret.span, Span(StringSource(snippet), positions(1), positions(2)))
+  }
 
   test("Toplevel definitions") {
     parseToplevel("def foo() = ()")
