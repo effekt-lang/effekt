@@ -4,6 +4,7 @@ package source
 import effekt.context.Context
 import effekt.symbols.Symbol
 import kiama.util.Position
+import scala.{Some => OptionSome , None => OptionNone }
 
 import scala.annotation.tailrec
 
@@ -233,7 +234,7 @@ case class Many[T](list: List[T], span: Span) {
 
 }
 object Many {
-   def nil[T](span: Span) = Many[T](Nil, span)
+   def Empty[T](span: Span) = Many[T](Nil, span)
 }
 case class Maybe[T](option: Option[T], span: Span){
   def unspan: Option[T] = option
@@ -253,9 +254,9 @@ case class Maybe[T](option: Option[T], span: Span){
 }
 
 object Maybe {
-  def some[T](value: T, span: Span): Maybe[T] = Maybe(Some(value), span)
+  def Some[T](value: T, span: Span): Maybe[T] = Maybe(OptionSome(value), span)
 
-  def none[T](span: Span): Maybe[T] = Maybe(None, span)
+  def None[T](span: Span): Maybe[T] = Maybe(OptionNone, span)
 }
 
 object SpannedOps {
