@@ -1150,7 +1150,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       def simpleFunType = backtrack {
         ValueTypeRef(idRef(), maybeTypeArgs()) <~ `=>`
       } map { tpe =>
-        FunctionType(Many.nil(???), Many(List(tpe),???), Many.nil(???) , valueType2(boxedAllowed), maybeEffects())
+        FunctionType(Many.Empty(???), Many(List(tpe),???), Many.Empty(???) , valueType2(boxedAllowed), maybeEffects())
       }
 
       def funType = backtrack {
@@ -1183,7 +1183,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeBlockTypeParams(): Many[(Maybe[IdDef], BlockType)] =
     nonterminal:
-      if peek(`{`) then blockTypeParams() else Many.nil(span())
+      if peek(`{`) then blockTypeParams() else Many.Empty(span())
 
   def blockTypeParams(): Many[(Maybe[IdDef], BlockType)] =
     nonterminal:
@@ -1263,7 +1263,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def maybeValueTypes(): Many[ValueType] =
     nonterminal:
-      if peek(`(`) then valueTypes() else Many.nil(span())
+      if peek(`(`) then valueTypes() else Many.Empty(span())
 
   def valueTypes(): Many[ValueType] =
     nonterminal:
@@ -1309,8 +1309,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   inline def backtrack[T](inline p: => T): Maybe[T] =
     val before = position
-    try { Maybe.some(p, span(before)) } catch {
-      case Fail(_, _) => position = before; Maybe.none(span(before))
+    try { Maybe.Some(p, span(before)) } catch {
+      case Fail(_, _) => position = before; Maybe.None(span(before))
     }
 
   def interleave[A](xs: List[A], ys: List[A]): List[A] = (xs, ys) match {
@@ -1406,7 +1406,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       consume(before)
       if (peek(after)) {
         consume(after)
-        Many.nil(span())
+        Many.Empty(span())
       } else {
         val components: ListBuffer[T] = ListBuffer.empty
         components += p()

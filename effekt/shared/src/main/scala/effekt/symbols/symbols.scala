@@ -265,11 +265,11 @@ export TypeConstructor.*
 case class Constructor(name: Name, tparams: Many[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
   lazy val vparams: Many[ValueParam] = Many(fields.map { f => f.param } , ???)
-  val bparams: Many[BlockParam] = Many.nil(???)
+  val bparams: Many[BlockParam] = Many.Empty(???)
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
-  def annotatedResult: Maybe[ValueType] = Maybe.some(appliedDatatype,???)
-  def annotatedEffects: Maybe[Effects] = Maybe.some(Effects.Pure,???)
+  def annotatedResult: Maybe[ValueType] = Maybe.Some(appliedDatatype,???)
+  def annotatedEffects: Maybe[Effects] = Maybe.Some(Effects.Pure,???)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
@@ -279,8 +279,8 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
   val bparams = Many(List.empty[BlockParam], ???)
 
   val returnType = param.tpe.get
-  def annotatedResult = Maybe.some(returnType,???)
-  def annotatedEffects = Maybe.some(Effects.Pure,???)
+  def annotatedResult = Maybe.Some(returnType,???)
+  def annotatedEffects = Maybe.Some(Effects.Pure,???)
 }
 
 
@@ -294,8 +294,8 @@ export BlockTypeConstructor.*
 
 
 case class Operation(name: Name, tparams: Many[TypeParam], vparams: Many[ValueParam], bparams: Many[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface) extends Callable {
-  def annotatedResult: Maybe[ValueType] = Maybe.some(resultType,???)
-  def annotatedEffects: Maybe[Effects] = Maybe.some(Effects(effects.toList),???)
+  def annotatedResult: Maybe[ValueType] = Maybe.Some(resultType,???)
+  def annotatedEffects: Maybe[Effects] = Maybe.Some(Effects(effects.toList),???)
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
 }
 
@@ -405,8 +405,8 @@ case class ExternFunction(
   capture: CaptureSet,
   bodies: List[source.ExternBody]
 ) extends Callable {
-  def annotatedResult = Maybe.some(result,???)
-  def annotatedEffects = Maybe.some(effects,???)
+  def annotatedResult = Maybe.Some(result,???)
+  def annotatedEffects = Maybe.Some(effects,???)
 }
 
 /**

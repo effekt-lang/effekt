@@ -342,8 +342,8 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(
       parseBlockType("(Int, String) => Int"),
-      FunctionType(Many.nil(???), Many(List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
-        ValueTypeRef(IdRef(Nil,"String"), Nil)), ???), Many.nil(???), ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
+      FunctionType(Many.Empty(???), Many(List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
+        ValueTypeRef(IdRef(Nil,"String"), Nil)), ???), Many.Empty(???), ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
 
     parseBlockType("(Int, String) => Int / Exc")
     parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")
