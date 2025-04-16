@@ -234,7 +234,7 @@ case class Many[T](list: List[T], span: Span) {
 
 }
 object Many {
-   def Empty[T](span: Span) = Many[T](Nil, span)
+   def empty[T](span: Span) = Many[T](Nil, span)
 }
 case class Maybe[T](option: Option[T], span: Span){
   def unspan: Option[T] = option

@@ -267,7 +267,7 @@ export TypeConstructor.*
 case class Constructor(name: Name, tparams: Many[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
   lazy val vparams: Many[ValueParam] = Many(fields.map { f => f.param } , ???)
-  val bparams: Many[BlockParam] = Many.Empty(???)
+  val bparams: Many[BlockParam] = Many.empty(???)
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
   def annotatedResult: Maybe[ValueType] = Maybe.Some(appliedDatatype,???)
