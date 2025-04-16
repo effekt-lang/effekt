@@ -400,7 +400,6 @@ object Normalizer { normal =>
 
     renamedIds.foreach(copyUsage)
 
-    val newUsage = usage.collect { case (id, usage) if util.show(id) contains "foreach" => (id, usage) }
 
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
