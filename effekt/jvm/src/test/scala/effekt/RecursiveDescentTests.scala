@@ -9,6 +9,66 @@ import kiama.util.{ Positions, StringSource }
 
 import munit.Location
 
+// DSL for creating code snippets with span annotations
+object SpanSyntax {
+  implicit class StringOps(val content: String) extends AnyVal {
+
+    def snippetAndPosition: (String, Int) = {
+      val (snippet, positions) = content.snippetAndPositions
+
+      if (positions.length != 1)
+        throw new IllegalArgumentException("Exactly one marker line (with '" + "↑" + "') is required.")
+
+      (snippet, positions.head)
+    }
+
+    def snippetAndSpan: (String, Span) = {
+      val (snippet, positions) = content.snippetAndPositions
+      if (positions.length != 2)
+        throw new IllegalArgumentException("Exactly two marker lines (with '" + "↑" + "') are required.")
+      val start = positions(0)
+      val end = positions(1)
+      // The end of the span is exclusive, so we need to increment the character position.
+      val span = Span(StringSource(snippet), start, end + 1)
+      (snippet, span)
+    }
+
+    def snippetAndPositions: (String, Seq[Int]) = {
+      val lines = content.stripMargin.split("\n").toBuffer
+      val positions = scala.collection.mutable.ArrayBuffer[Int]()
+      var lineIdx = 0
+      var lineBytePos = 0
+      while (lineIdx < lines.length) {
+        val line = lines(lineIdx)
+        if (line.contains("↑")) {
+          if (lineIdx == 0)
+            throw new IllegalArgumentException("Marker on first line cannot refer to a previous line.")
+          // There may be multiple markers on the same line, so we need to record all of them.
+          for (i <- line.indices if line(i) == '↑') {
+
+            // Consider the following example snippet:
+            //┌────────────────┐  = lines(lineIdx - 1).length  + 1
+            //|def foo() ... \n|  = lineBytePos
+            //     ↑
+            positions += (lineBytePos - ( lines(lineIdx - 1).length  + 1 ) + i)
+          }
+          lines.remove(lineIdx)
+          // adjust index because of removal
+          lineIdx -= 1
+        } else {
+          // add the line length incremented by 1 for the new line \n symbol
+          lineBytePos += lines(lineIdx).length + 1
+        }
+        lineIdx += 1
+      }
+      val newContent = lines.mkString("\n")
+      (newContent, positions.toList)
+    }
+  }
+
+}
+
+
 class RecursiveDescentTests extends munit.FunSuite {
 
   def parser(input: String, positions: Positions)(using munit.Location): RecursiveDescent = {
@@ -80,6 +140,58 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   def parseExternDef(input: String, positions: Positions = new Positions())(using munit.Location): Def =
     parse(input, _.externDef())
+
+
+  // Snippet and span DSL
+  //
+  //
+
+  import effekt.SpanSyntax.StringOps
+
+  test("Correct cursor position") {
+    val (snippet, cursor) =
+      raw"""def main() = { println("Hello, world!") }
+           |    ↑
+           |""".snippetAndPosition
+
+    assertEquals(cursor, 4)
+  }
+
+  test("Missing cursor throws exception") {
+    intercept[IllegalArgumentException] {
+      raw"""
+           |def main() = { println("Hello, world!") }
+           |""".snippetAndPosition
+    }
+  }
+
+  test("Correct multiline span") {
+    val (snippet, span) =
+      raw"""There is some content here.
+           |    ↑
+           |And here.
+           |    ↑
+           |""".snippetAndSpan
+
+    val textWithoutSpan =
+      raw"""There is some content here.
+           |And here.""".stripMargin
+
+    assertEquals(span.from, 4)
+    assertEquals(span.to, 33)
+    assertEquals(snippet, textWithoutSpan)
+  }
+
+  test("Correct newline spans") {
+    val (snippet : String, pos : Int) =
+      "\n\n\n\n↑".snippetAndPosition
+
+    assertEquals(pos, 3)
+  }
+
+  // Peek tests
+  //
+  //
 
   test("Peeking") {
     implicit def toToken(t: TokenKind): Token = Token(0, 0, t)
@@ -537,7 +649,7 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
   }
 
-  test("Function definitions") {
+  test("Definitions") {
     assertEquals(
       parseDefinition(
         """def foo = f
@@ -564,6 +676,60 @@ class RecursiveDescentTests extends munit.FunSuite {
         """def foo[T](x: Int): String / {} = e
           |""".stripMargin)
   }
+
+  test("Function definition"){
+    val (snippet, positions) =
+      raw"""def foo[T1, T2](x: T1, y: T2){b: => Unit}: Unit = <>
+           |       ↑       ↑             ↑           ↑     ↑
+           |""".snippetAndPositions
+
+    val definition = parseDefinition(snippet)
+
+    val funDef = definition match {
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case other =>
+        throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
+    }
+    assertEquals(funDef.tparams.span, Span(StringSource(snippet),positions(0),positions(1)))
+    assertEquals(funDef.vparams.span, Span(StringSource(snippet),positions(1),positions(2)))
+    assertEquals(funDef.bparams.span, Span(StringSource(snippet),positions(2),positions(3)))
+    assertEquals(funDef.ret.span, Span(StringSource(snippet),positions(3),positions(4)))
+
+  }
+
+  test("Function definition with effects"){
+    val (snippet, positions) =
+      raw"""def foo{b: => Unit / bar}: Unit / bar = <>
+           |       ↑                 ↑           ↑
+           |""".snippetAndPositions
+
+    val definition = parseDefinition(snippet)
+
+    val funDef = definition match {
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case other =>
+        throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
+    }
+    assertEquals(funDef.bparams.span, Span(StringSource(snippet), positions(0), positions(1)))
+    assertEquals(funDef.ret.span, Span(StringSource(snippet), positions(1), positions(2)))
+  }
+
+  test("Function definition without return type") {
+    val (snippet, positions) =
+      raw"""def foo{b: => Unit / bar} = <>
+           |       ↑                 ↑↑
+           |""".snippetAndPositions
+
+    val definition = parseDefinition(snippet)
+
+    val funDef = definition match {
+      case fd@FunDef(id, tparams, vparams, bparams, ret, body, span) => fd
+      case other =>
+        throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
+    }
+    assertEquals(funDef.bparams.span, Span(StringSource(snippet), positions(0), positions(1)))
+    assertEquals(funDef.ret.span, Span(StringSource(snippet), positions(1), positions(2)))
+}
 
   test("Toplevel definitions") {
     parseToplevel("def foo() = ()")

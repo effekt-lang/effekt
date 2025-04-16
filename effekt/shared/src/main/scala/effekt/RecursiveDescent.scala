@@ -1452,7 +1452,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   // creates a Span with a given start and the end position of the previous token
   inline def span(start : Int ): Span =
     val end = previous.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
-    Span(source, start, end)
+
+    // Consider the following example:
+    //┌──┐ ┌──┐┌┐┌┐
+    // def foo = <>
+    // here the return type is omitted
+    // previous = "foo", peek = "=", _start = peek.start, end = previous.end +1
+    // therefore, in this case start is greater than end. If this is the case, we switch the positions
+
+    if start > end then { Span(source, end, start) } else { Span(source, start, end) }
 
 
   // the handler for the "span" effect.
