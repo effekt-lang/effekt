@@ -312,15 +312,17 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     def make(source: Source, expr: Term): ModuleDecl = {
 
       val body = Return(expr)
-      val fakeSpan = Span(source, 0, 0, isFake = true)
-      val fullSpan = Span(source, 0, source.content.length, isFake = true)
+      val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
+      val fullSpan = Span(source, 0, source.content.length, origin = Origin.Synthesized)
       ModuleDecl("interactive", includes,
-        definitions :+ FunDef(IdDef("main"), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan),
+        definitions :+ FunDef(IdDef("main", fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan),
           body, fakeSpan), fullSpan)
     }
 
-    def makeEval(source: Source, expr: Term): ModuleDecl =
-      make(source, Call(IdTarget(IdRef(List(), "println")), Nil, List(expr), Nil))
+    def makeEval(source: Source, expr: Term): ModuleDecl = {
+      val fakeSpan = Span(source, 0, 0, origin = Origin.Synthesized)
+      make(source, Call(IdTarget(IdRef(List(), "println", fakeSpan)), Nil, List(expr), Nil))
+    }
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

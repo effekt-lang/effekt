@@ -57,7 +57,7 @@ trait TypeUnifier {
       }
 
       // TODO here we assume that the type constructor is covariant
-      (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
+      (args1 zip args2.unspan) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
 
     case (t @ BoxedType(tpe1, capt1), s @ BoxedType(tpe2, capt2), p) =>
       unifyBlockTypes(tpe1, tpe2, ErrorContext.BoxedTypeBlock(t, s, ctx))
@@ -156,7 +156,7 @@ trait TypeMerger extends TypeUnifier {
         if (args1.size != args2.size) abort(pp"Different count of argument to type constructor: $oldBound vs $newBound", ctx)
 
         // TODO Here we assume the constructor is invariant
-        val mergedArgs = (args1 zip args2).map {
+        val mergedArgs = (args1 zip args2.unspan).map {
           case (t1, t2) =>
             mergeValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx))
         }

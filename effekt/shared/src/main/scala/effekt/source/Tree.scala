@@ -3,6 +3,9 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import kiama.util.{Position, StringSource}
+import scala.{Some => OptionSome, None => OptionNone}
+
 import kiama.util.Position
 import scala.{Some => OptionSome , None => OptionNone }
 
@@ -106,7 +109,28 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
-case class Span(source: kiama.util.Source, from: Int, to: Int, isFake: Boolean = false)
+
+enum Origin:
+  case Real, Synthesized, Builtin
+
+case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
+  /**
+   * creates a fake empty Span immediately after this one
+   * Example:
+   * [ - Span - ]
+   *             [] <- emptyAfter
+   */
+  def emptyAfter: Span = Span(source, to + 1,  to + 1, origin = Origin.Synthesized)
+
+  /**
+   * creates a fake copy of this span
+   */
+  def asSynthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
+}
+
+object Span {
+  def builtin = Span(StringSource("", "effekt.effekt"), 0, 0, origin = Origin.Builtin)
+}
 
 /**
  * Used to mark externs for different backends
@@ -170,16 +194,16 @@ sealed trait Id extends Tree {
   def symbol(using C: Context): Symbol = C.symbolOf(this)
   def clone(using C: Context): Id
 }
-case class IdDef(name: String) extends Id {
+case class IdDef(name: String, span: Span) extends Id {
   def clone(using C: Context): IdDef = {
-    val copy = IdDef(name)
+    val copy = IdDef(name, span)
     C.positions.dupPos(this, copy)
     copy
   }
 }
-case class IdRef(path: List[String], name: String) extends Id {
+case class IdRef(path: List[String], name: String, span: Span) extends Id {
   def clone(using C: Context): IdRef = {
-    val copy = IdRef(path, name)
+    val copy = IdRef(path, name, span)
     C.positions.dupPos(this, copy)
     copy
   }
@@ -230,7 +254,12 @@ case class Many[T](list: List[T], span: Span) {
   def collect[B](pf: PartialFunction[T, B]): Many[B] =
     Many(list.collect(pf), span)
 
-  export list.{foreach, toSet, isEmpty, nonEmpty, mkString, size}
+  def zip[B](that: IterableOnce[B]): Many[(T, B)] = Many(list.zip(that), span)
+
+  def flatMap[B](f: T => IterableOnce[B]): Many[B] =
+    Many(list.flatMap(f), span)
+
+  export list.{foreach, toSet, isEmpty, nonEmpty, mkString, size, length, init, last}
 
 }
 object Many {
@@ -305,9 +334,9 @@ enum Def extends Definition {
 
   case NamespaceDef(id: IdDef, definitions: List[Def])
 
-  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation])
-  case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
-  case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
+  case InterfaceDef(id: IdDef, tparams: Many[Id], ops: List[Operation])
+  case DataDef(id: IdDef, tparams: Many[Id], ctors: List[Constructor])
+  case RecordDef(id: IdDef, tparams: Many[Id], fields: Many[ValueParam])
 
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
@@ -322,7 +351,7 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: List[Id])
+  case ExternType(id: IdDef, tparams: Many[Id])
 
   case ExternDef(capture: CaptureSet, id: IdDef,
                  tparams: Many[Id], vparams: Many[ValueParam], bparams: Many[BlockParam], ret: Effectful,
@@ -338,7 +367,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
+  case ExternInclude(featureFlag: FeatureFlag, path: String, var contents: Option[String] = None, val id: IdDef)
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
@@ -492,8 +521,8 @@ export CallTarget.*
 
 // Declarations
 // ------------
-case class Constructor(id: IdDef, tparams: Many[Id], params: List[ValueParam]) extends Definition
-case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
+case class Constructor(id: IdDef, tparams: Many[Id], params: Many[ValueParam]) extends Definition
+case class Operation(id: IdDef, tparams: Many[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful) extends Definition
 
 // Implementations
 // ---------------

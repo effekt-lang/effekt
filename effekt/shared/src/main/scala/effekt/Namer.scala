@@ -163,7 +163,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         val tps = tparams map resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
-        Interface(effectName, tps)
+        Interface(effectName, tps.unspan)
       }
       Context.define(id, effectSym)
 
@@ -363,7 +363,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = Operation(name, Many(interface.tparams ++ tps, ???),Many(resVparams, ???), Many(resBparams, ???), result, effects, interface)
+            val op = Operation(name, Many(interface.tparams ++ tps.unspan, tps.span.asSynthesized),Many(resVparams, ???), Many(resBparams, ???), result, effects, interface)
             Context.define(id, op)
             op
           }
@@ -386,7 +386,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val constructor = Context scoped {
             val name = Context.nameFor(id)
             val tps = tparams map resolve
-            Constructor(name, Many(data.tparams ++ tps.unspan, tps.span), null, data)
+            Constructor(name, Many(data.tparams.unspan ++ tps.unspan, tps.span), Many.empty(tps.span.emptyAfter), data)
           }
           Context.define(id, constructor)
           constructor.fields = resolveFields(ps, constructor)
@@ -397,7 +397,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RecordDef(id, tparams, fs) =>
       val record = d.symbol
       val name = Context.nameFor(id)
-      val constructor = Constructor(name, Many(record.tparams, ???), null, record)
+      val constructor = Constructor(name, record.tparams, Many.empty(tparams.span.emptyAfter), record)
       // we define the constructor on a copy to avoid confusion with symbols
       Context.define(id.clone, constructor)
       record.constructor = constructor
@@ -586,14 +586,14 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   // TODO move away
-  def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
+  def resolveFields(params: Many[source.ValueParam], constructor: Constructor)(using Context): Many[Field] = {
     val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
       params map resolveNonfunctionValueParam
     }
 
-    (vps zip params) map {
+    (vps zip params.unspan) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
@@ -691,7 +691,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolveValueType(tpe: source.ValueType, isParam: Boolean = false)(using Context): ValueType = resolvingType(tpe) {
     case source.TypeRef(id, args) => Context.resolveType(id) match {
-      case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolveValueType))
+      case constructor: TypeConstructor => ValueTypeApp(constructor, Many(args.map(resolveValueType), ???))
       case id: TypeVar =>
         if (args.nonEmpty) {
           Context.abort(pretty"Type variables cannot be applied, but received ${args.size} arguments.")
@@ -712,7 +712,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
 
         // Dummy value type in order to aggregate more errors (see #947)
-        ValueTypeApp(ErrorValueType(), Nil)
+        ValueTypeApp(ErrorValueType(), Many.empty(???))
     }
     case source.ValueTypeTree(tpe) =>
       tpe
@@ -738,7 +738,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
       // Dummy value type in order to aggregate more errors (see #947)
-      ValueTypeApp(ErrorValueType(), Nil)
+      ValueTypeApp(ErrorValueType(), Many.empty(???))
   }
   def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolveValueType(tpe, isParam = false)
 

@@ -254,20 +254,20 @@ case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) exten
  * - [[ErrorValueType]] used solely for symbols coming out of bad surface.Tree.Types, created in [[Namer]]
  */
 enum TypeConstructor extends TypeSymbol {
-  def tparams: List[TypeParam]
+  def tparams: Many[TypeParam]
 
-  case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil)
-  case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor)
-  case ExternType(name: Name, tparams: List[TypeParam])
-  case ErrorValueType(name: Name = NoName, tparams: List[TypeParam] = Nil)
+  case DataType(name: Name, tparams: Many[TypeParam], var constructors: List[Constructor] = Nil)
+  case Record(name: Name, tparams: Many[TypeParam], var constructor: Constructor)
+  case ExternType(name: Name, tparams: Many[TypeParam])
+  case ErrorValueType(name: Name = NoName, tparams: Many[TypeParam] = Many.empty(???))
 }
 export TypeConstructor.*
 
 
-case class Constructor(name: Name, tparams: Many[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
+case class Constructor(name: Name, tparams: Many[TypeParam], var fields: Many[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
-  lazy val vparams: Many[ValueParam] = Many(fields.map { f => f.param } , ???)
-  val bparams: Many[BlockParam] = Many.empty(???)
+  lazy val vparams: Many[ValueParam] = fields.map { f => f.param }
+  val bparams: Many[BlockParam] = Many.empty(vparams.span.emptyAfter)
 
   val appliedDatatype: ValueType = ValueTypeApp(tpe, tpe.tparams map ValueTypeRef.apply)
   def annotatedResult: Maybe[ValueType] = Maybe.Some(appliedDatatype,???)

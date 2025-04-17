@@ -71,11 +71,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case d @ source.DataDef(id, _, ctors) =>
       val datatype = d.symbol
-      List(Data(datatype, datatype.tparams, datatype.constructors.map(transform)))
+      List(Data(datatype, datatype.tparams.unspan, datatype.constructors.map(transform)))
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      List(Data(rec, rec.tparams, List(transform(rec.constructor))))
+      List(Data(rec, rec.tparams.unspan, List(transform(rec.constructor))))
 
     case v @ source.ValDef(id, tpe, binding) if pureOrIO(binding) =>
       val transformed = transform(binding)
@@ -143,7 +143,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }.toList ++ exports.namespaces.values.flatMap(transform)
 
   def transform(c: symbols.Constructor)(using Context): core.Constructor =
-    core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType))))
+    core.Constructor(c, c.fields.unspan.map(f => core.Field(f, transform(f.returnType))))
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
@@ -345,7 +345,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val constructor = field.constructor
       val dataType: symbols.TypeConstructor = constructor.tpe
-      val universals: List[symbols.TypeParam] = dataType.tparams
+      val universals: List[symbols.TypeParam] = dataType.tparams.unspan
 
       // allTypeParams = universals ++ existentials
       val allTypeParams: List[symbols.TypeParam] = constructor.tparams.unspan
@@ -357,7 +357,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Should not happen: selection from non ValueTypeApp")
       }
 
-      val substitution = Substitutions((universals zip scrutineeTypeArgs).toMap, Map.empty)
+      val substitution = Substitutions((universals zip scrutineeTypeArgs.unspan).toMap, Map.empty)
 
       val selected = Id("x")
       val tpe = transform(Context.inferredTypeOf(s))
@@ -367,7 +367,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           core.ValueParam(if f == field then selected else Id("_"), tpe)
       }
       Context.bind(Stmt.Match(transformAsPure(receiver),
-        List((constructor, BlockLit(Nil, Nil, params, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None))
+        List((constructor, BlockLit(Nil, Nil, params.unspan, Nil, Stmt.Return(Pure.ValueVar(selected, tpe))))), None))
 
     case source.Box(capt, block) =>
       transformBox(block)
@@ -837,7 +837,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(tpe: ValueType)(using Context): core.ValueType = tpe match {
     case ValueType.BoxedType(tpe, capture) => core.ValueType.Boxed(transform(tpe), transform(capture))
     case ValueType.ValueTypeRef(tvar)      => core.ValueType.Var(tvar)
-    case ValueType.ValueTypeApp(tc, args)  => core.ValueType.Data(tc, args.map(transform))
+    case ValueType.ValueTypeApp(tc, args)  => core.ValueType.Data(tc, args.unspan.map(transform))
   }
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {

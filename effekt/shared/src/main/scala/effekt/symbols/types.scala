@@ -34,7 +34,7 @@ enum ValueType extends Type {
   /**
    * Reference to a type constructor with optional type arguments
    */
-  case ValueTypeApp(constructor: TypeConstructor, args: List[ValueType])
+  case ValueTypeApp(constructor: TypeConstructor, args: Many[ValueType])
 }
 export ValueType.*
 
