@@ -3,6 +3,7 @@ package util
 
 import java.io.{ File => JFile }
 import java.net.URI
+import scala.annotation.tailrec
 
 object paths extends PathUtils {
 
@@ -42,6 +43,7 @@ object paths extends PathUtils {
 
   implicit def file(underlying: JFile): File = new File(underlying)
   implicit def file(uri: URI): File = file(uri.getPath)
+  @tailrec
   implicit def file(filepath: String) =
     if (filepath.startsWith("file:"))
       file(new URI(filepath).getPath)

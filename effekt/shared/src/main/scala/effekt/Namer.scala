@@ -13,6 +13,7 @@ import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
 import effekt.source.FeatureFlag.supportedByFeatureFlags
 
+import scala.annotation.tailrec
 import scala.util.DynamicVariable
 
 /**
@@ -944,6 +945,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    * 2) If the tighest scope contains blocks, then we will ignore all values
    *    and resolve to an overloaded target.
    */
+  @tailrec
   private def resolveFunctionCalltarget(id: IdRef, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
