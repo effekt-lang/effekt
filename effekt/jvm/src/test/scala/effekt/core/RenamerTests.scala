@@ -19,21 +19,20 @@ class RenamerTests extends CoreTests {
     assertAlphaEquivalent(obtained, pInput, clue)
   }
 
-  def assertRenamingMakesDefsUnique(input: String,
-                                    clue: => Any = "Duplicate definition",
-                                    names: Names = Names(defaultNames))(using munit.Location) = {
-    val pInput = parse(input, "input", names)
-    val renamer = new Renamer(names, "renamed")
-    val obtained = renamer(pInput)
-
+  def assertDefsUnique(in: ModuleDecl,
+                       clue: => Any = "Duplicate definition") = {
     val seen = mutable.HashSet.empty[Id]
+
     def isFresh(id: Id): Unit = {
       assert(!seen.contains(id), clue)
       seen.add(id)
     }
+
     object check extends Tree.Query[Unit, Unit] {
       override def empty = ()
-      override def combine = (_,_) => ()
+
+      override def combine = (_, _) => ()
+
       override def visit[T](t: T)(visitor: Unit ?=> T => Unit)(using Unit): Unit = {
         visitor(t)
         t match {
@@ -62,7 +61,15 @@ class RenamerTests extends CoreTests {
         }
       }
     }
-    check.query(obtained)(using ())
+    check.query(in)(using ())
+  }
+  def assertRenamingMakesDefsUnique(input: String,
+                                    clue: => Any = "Duplicate definition",
+                                    names: Names = Names(defaultNames))(using munit.Location) = {
+    val pInput = parse(input, "input", names)
+    val renamer = new Renamer(names, "renamed")
+    val obtained = renamer(pInput)
+    assertDefsUnique(obtained, clue)
   }
 
   test("No bound local variables"){
