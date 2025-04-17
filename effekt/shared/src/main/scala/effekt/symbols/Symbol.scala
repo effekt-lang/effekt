@@ -38,7 +38,7 @@ trait Symbol {
     case _             => false
   }
 
-  def show: String = name.toString + id
+  def show: String = s"${name}_${id}"
 
   override def toString: String = name.toString
 }
