@@ -790,7 +790,7 @@ class RecursiveDescentTests extends munit.FunSuite {
            |       ↑    ↑  ↑           ↑""".stripMargin
     val (snippet, positions) = rec.snippetAndPositions
 
-    val definition = parseDefinition(snippet)
+    val definition = parseToplevel(snippet)
     val recordDef = definition match {
       case rd@RecordDef(id, tparams, fields) => rd
       case other =>
@@ -799,7 +799,8 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(recordDef.id.span, Span(StringSource(snippet), positions(0), positions(1)))
     assertEquals(recordDef.tparams.span, Span(StringSource(snippet), positions(1), positions(2)))
     assertEquals(recordDef.fields.span, Span(StringSource(snippet), positions(2), positions(3)))
-    }
+  }
+
   test("Programs") {
     // this is from examples/pos/builtins
     parseProgram(

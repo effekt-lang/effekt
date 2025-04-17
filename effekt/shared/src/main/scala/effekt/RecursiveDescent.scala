@@ -1361,10 +1361,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * Repeats [[p]], separated by [[sep]] enclosed by [[before]] and [[after]]
    */
   inline def some[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): Many[T] =
-    consume(before)
-    val res = some(p, sep)
-    consume(after)
-    res
+    nonterminal:
+      consume(before)
+      val res = some(p, sep)
+      consume(after)
+      Many(res.unspan, span())
 
   inline def some[T](p: () => T, sep: TokenKind): Many[T] =
     nonterminal:
