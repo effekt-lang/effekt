@@ -52,8 +52,8 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: ValueType): Doc = tpe match {
     case BoxedType(tpe, capture)    => toDoc(tpe) <+> "at" <+> toDoc(capture)
-    case ValueTypeApp(tpe, Nil)     => tpe.name
-    case ValueTypeApp(tpe, args)    => tpe.name <> brackets(hsep(args.map(toDoc), comma))
+    case ValueTypeApp(tpe, Many(Nil, _))     => tpe.name
+    case ValueTypeApp(tpe, args)    => tpe.name <> brackets(hsep(args.unspan.map(toDoc), comma))
     case ValueTypeRef(x)            => toDoc(x)
   }
 
@@ -91,8 +91,8 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(t: TypeConstructor): Doc = t match {
-    case DataType(name, tparams, constructors)  => name <> typeParams(tparams)
-    case Record(name, tparams, constructor) => name <> typeParams(tparams)
+    case DataType(name, tparams, constructors)  => name <> typeParams(tparams.unspan)
+    case Record(name, tparams, constructor) => name <> typeParams(tparams.unspan)
     case ExternType(name, tparams) => name
   }
 

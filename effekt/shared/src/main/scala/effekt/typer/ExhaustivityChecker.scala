@@ -1,12 +1,12 @@
 package effekt
 package typer
 
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{ Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
-import effekt.source.Tree.{ Query, Visit }
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
+import effekt.source.{Def, ExprTarget, IdTarget, Many, MatchGuard, MatchPattern, Tree}
+import effekt.source.Tree.{Query, Visit}
+import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -170,7 +170,7 @@ object ExhaustivityChecker {
       missingCases.foreach {
         case Missing.Tag(ctor, at) =>
           val missingSubcase = ctor.fields match
-            case Nil => s"${ctor.name}()"
+            case Many(Nil, _) => s"${ctor.name}()"
             case _ => s"${ctor.name}(${ctor.fields.map { _f => "_" }.mkString(", ")})"
           val missingCase = traceToCase(at, missingSubcase)
 
@@ -229,7 +229,7 @@ object ExhaustivityChecker {
         cl.matchesOn(scrutinee) match {
           // keep clauses that match on the same constructor
           case Some(Pattern.Tag(c, patterns)) if c == ctor =>
-            val nestedPatterns  = (ctor.fields zip patterns).map { case (field, pattern) =>
+            val nestedPatterns  = (ctor.fields.unspan zip patterns).map { case (field, pattern) =>
               (Trace.Child(ctor, field, scrutinee) : Trace) -> pattern
             }.toMap
             Some(cl - scrutinee ++ nestedPatterns)

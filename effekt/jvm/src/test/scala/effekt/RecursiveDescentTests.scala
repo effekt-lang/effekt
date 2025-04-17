@@ -216,7 +216,7 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(
       parseExpr("loop { f }"),
-      Call(IdTarget(IdRef(Nil, "loop")), Nil, Nil, List(Var(IdRef(Nil, "f")))))
+      Call(IdTarget(IdRef(Nil, "loop", ???)), Nil, Nil, List(Var(IdRef(Nil, "f", ???)))))
 
     assertNotEquals(
       parseExpr("f.m(a, 42)"),
@@ -229,7 +229,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(
       parseExpr("foo.bar"),
       // At the moment uniform function call syntax is always a method call
-      MethodCall(Var(IdRef(Nil, "foo")), IdRef(Nil, "bar"),Nil, Nil, Nil))
+      MethodCall(Var(IdRef(Nil, "foo", ???)), IdRef(Nil, "bar", ???),Nil, Nil, Nil))
 
     parseExpr("resume(42)")
     parseExpr("in(42)")
@@ -294,9 +294,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   }
 
   test("Qualified names") {
-    assertEquals(parseExpr("map"), Var(IdRef(List(), "map")))
-    assertEquals(parseExpr("list::map"), Var(IdRef(List("list"), "map")))
-    assertEquals(parseExpr("list::internal::test"), Var(IdRef(List("list", "internal"), "test")))
+    assertEquals(parseExpr("map"), Var(IdRef(List(), "map", ???)))
+    assertEquals(parseExpr("list::map"), Var(IdRef(List("list"), "map", ???)))
+    assertEquals(parseExpr("list::internal::test"), Var(IdRef(List("list", "internal"), "test", ???)))
   }
 
   test("Operator precedence") {
@@ -419,9 +419,9 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(
       parseMatchPattern("(left, Cons(x, right))"),
-        TagPattern(IdRef(List("effekt"), "Tuple2"),
-          List(AnyPattern(IdDef("left")),
-          TagPattern(IdRef(List(), "Cons"), List(AnyPattern(IdDef("x")), AnyPattern(IdDef("right")))))))
+        TagPattern(IdRef(List("effekt"), "Tuple2", ???),
+          List(AnyPattern(IdDef("left", ???)),
+          TagPattern(IdRef(List(), "Cons", ???), List(AnyPattern(IdDef("x", ???)), AnyPattern(IdDef("right", ???)))))))
   }
 
   test("Block arguments") {
@@ -437,7 +437,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Value types") {
     assertEquals(
       parseValueType("Int"),
-      ValueTypeRef(IdRef(Nil, "Int"), Nil))
+      ValueTypeRef(IdRef(Nil, "Int", ???), Many.empty(Span.builtin)))
 
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")
@@ -454,8 +454,8 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(
       parseBlockType("(Int, String) => Int"),
-      FunctionType(Many.empty(???), Many(List(ValueTypeRef(IdRef(Nil,"Int"), Nil),
-        ValueTypeRef(IdRef(Nil,"String"), Nil)), ???), Many.empty(???), ValueTypeRef(IdRef(Nil, "Int"), Nil), Effects(Nil)))
+      FunctionType(Many.empty(???), Many(List(ValueTypeRef(IdRef(Nil,"Int", ???), Many.empty(???)),
+        ValueTypeRef(IdRef(Nil,"String", ???), Many.empty(???))), ???), Many.empty(???), ValueTypeRef(IdRef(Nil, "Int", ???), Many.empty(???)), Effects(Nil)))
 
     parseBlockType("(Int, String) => Int / Exc")
     parseBlockType("[T](Int, String) => Int / { Exc, State[T] }")
@@ -525,7 +525,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Implementations") {
     assertEquals(
       parseImplementation("Foo {}"),
-      Implementation(BlockTypeRef(IdRef(Nil, "Foo"), Nil), Nil))
+      Implementation(BlockTypeRef(IdRef(Nil, "Foo", ???), Nil), Nil))
 
     parseImplementation("Foo[T] {}")
     parseImplementation("Foo[T] { def bar() = 42 }")
@@ -543,9 +543,9 @@ class RecursiveDescentTests extends munit.FunSuite {
     assertEquals(
       parseImplementation("Foo { 43 }"),
       Implementation(
-        BlockTypeRef(IdRef(Nil, "Foo"), Nil),
-        List(OpClause(IdRef(Nil, "Foo"), Nil, Nil, Nil, None,
-          Return(Literal(43, symbols.builtins.TInt)), IdDef("resume")))))
+        BlockTypeRef(IdRef(Nil, "Foo", ???), Nil),
+        List(OpClause(IdRef(Nil, "Foo", ???), Nil, Nil, Nil, None,
+          Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", ???)))))
   }
 
   test("Try expressions") {
@@ -654,7 +654,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseDefinition(
         """def foo = f
           |""".stripMargin),
-      DefDef(IdDef("foo"), None, Var(IdRef(Nil, "f"))))
+      DefDef(IdDef("foo", ???), None, Var(IdRef(Nil, "f", ???))))
 
     parseDefinition(
         """def foo: Exc = f
@@ -784,6 +784,22 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
   }
 
+  test("Record definitions") {
+    val rec =
+      raw"""record Vec2d[T](x: T, y: T)
+           |       ↑    ↑  ↑           ↑""".stripMargin
+    val (snippet, positions) = rec.snippetAndPositions
+
+    val definition = parseDefinition(snippet)
+    val recordDef = definition match {
+      case rd@RecordDef(id, tparams, fields) => rd
+      case other =>
+        throw new IllegalArgumentException(s"Expected RecordDef but got ${other.getClass.getSimpleName}")
+    }
+    assertEquals(recordDef.id.span, Span(StringSource(snippet), positions(0), positions(1)))
+    assertEquals(recordDef.tparams.span, Span(StringSource(snippet), positions(1), positions(2)))
+    assertEquals(recordDef.fields.span, Span(StringSource(snippet), positions(2), positions(3)))
+    }
   test("Programs") {
     // this is from examples/pos/builtins
     parseProgram(
