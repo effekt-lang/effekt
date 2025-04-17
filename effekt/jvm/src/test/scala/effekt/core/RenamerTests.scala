@@ -31,7 +31,6 @@ class RenamerTests extends CoreTests {
       assert(!seen.contains(id), clue)
       seen.add(id)
     }
-    given Unit = ()
     object check extends Tree.Query[Unit, Unit] {
       override def empty = ()
       override def combine = (_,_) => ()
@@ -63,7 +62,7 @@ class RenamerTests extends CoreTests {
         }
       }
     }
-    check.query(obtained)
+    check.query(obtained)(using ())
   }
 
   test("No bound local variables"){
