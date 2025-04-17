@@ -176,4 +176,23 @@ class RenamerTests extends CoreTests {
     assertRenamingPreservesAlpha(code)
     assertRenamingMakesDefsUnique(code)
   }
+  test("shadowing let bindings inside a def") {
+    val code =
+      """ module main
+        |
+        | def main = { () =>
+        |   def foo = { () =>
+        |     let x = 1
+        |     return x: Int
+        |   }
+        |   let x = 2
+        |   def bar = { () =>
+        |     let x = 3
+        |     return x: Int
+        |   }
+        |   return x:Int
+        | }
+        |""".stripMargin
+    assertRenamingPreservesAlpha(code)
+  }
 }
