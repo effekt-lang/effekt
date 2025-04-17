@@ -68,12 +68,12 @@ object Phase {
    * also receives the [[Context]] as an implicit argument. Using this smart constructor has the
    * advantage that we can immediately pattern match on `From` in the block.
    */
-  def apply[In, Out](name: String)(impl: Context ?=> In => Out): Phase[In, Out] = new Phase[In, Out] {
+  inline def apply[In, Out](inline name: String)(inline impl: Context ?=> In => Out): Phase[In, Out] = new Phase[In, Out] {
     val phaseName = name
     def run(input: In)(using C: Context): Option[Out] = Some(impl(input))
   }
 
-  def run[A](a: A, phases: List[Phase[A, A]])(using C: Context): Option[A] =
+  inline def run[A](inline a: A, inline phases: List[Phase[A, A]])(using C: Context): Option[A] =
     phases.foldLeft[Option[A]](Some(a)) {
       case (prev, phase) => prev.flatMap { a => phase(a) }
     }
