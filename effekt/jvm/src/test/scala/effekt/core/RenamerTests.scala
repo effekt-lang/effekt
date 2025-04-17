@@ -63,7 +63,7 @@ class RenamerTests extends CoreTests {
         }
       }
     }
-    check.query(pInput)
+    check.query(obtained)
   }
 
   test("No bound local variables"){
