@@ -432,6 +432,7 @@ object Tree {
         case (id, lit) => query(lit)
     }
     def query(b: ExternBody)(using Ctx): Res = structuralQuery(b, externBody)
+    def query(m: ModuleDecl)(using Ctx) = structuralQuery(m, PartialFunction.empty)
   }
 
   class Rewrite extends Structural {
