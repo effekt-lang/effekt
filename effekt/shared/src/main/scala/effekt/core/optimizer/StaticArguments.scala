@@ -91,7 +91,8 @@ object StaticArguments {
     // the worker now closes over the static block arguments (`c` in the example above):
     val newCapture = blockLit.capt ++ selectStatic(staticB, freshCparams).toSet
 
-    val workerVar: Block.BlockVar = BlockVar(Id(id.name.name + "_worker"), workerType, newCapture)
+    val workerId = Id(id.name.rename { original => s"${original}_worker"})
+    val workerVar: Block.BlockVar = BlockVar(workerId, workerType, newCapture)
     ctx.workers(id) = workerVar
 
     BlockLit(
