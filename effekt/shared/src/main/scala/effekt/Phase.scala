@@ -45,15 +45,15 @@ trait Phase[-In, +Out] { curr =>
       None
   }
 
-  def andThen[Out2](next: Phase[Out, Out2]): Phase[In, Out2] =
+  inline def andThen[Out2](inline next: Phase[Out, Out2]): Phase[In, Out2] =
     new Phase[In, Out2] {
       val phaseName = s"${curr.phaseName} -> ${next.phaseName}"
-      inline def run(input: In)(using C: Context) = curr.run(input).flatMap(out => next.run(out))
+      def run(input: In)(using C: Context) = curr.run(input).flatMap(out => next.run(out))
     }
 
-  def map[Out2](f: Context ?=> Out => Out2): Phase[In, Out2] = new Phase[In, Out2] {
+  inline def map[Out2](inline f: Context ?=> Out => Out2): Phase[In, Out2] = new Phase[In, Out2] {
     val phaseName = curr.phaseName
-    inline def run(input: In)(using C: Context) = curr.run(input).map(f)
+    def run(input: In)(using C: Context) = curr.run(input).map(f)
   }
 }
 
