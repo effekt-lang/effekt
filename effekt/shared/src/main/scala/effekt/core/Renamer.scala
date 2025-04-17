@@ -27,13 +27,16 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
     if prefix.isEmpty then Id(id) else Id(id.name.rename { _current => prefix })
 
   def withBindings[R](ids: List[Id])(f: => R): R =
-    val before = scope
+    val scopeBefore = scope
     try {
-      val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
-      scope = scope ++ newScope
-      renamed.addAll(newScope)
+      ids.foreach { x =>
+        val fresh = freshIdFor(x)
+        scope = scope + (x -> fresh)
+        renamed.put(x, fresh)
+      }
+
       f
-    } finally { scope = before }
+    } finally { scope = scopeBefore }
 
   /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
