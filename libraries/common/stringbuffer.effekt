@@ -35,10 +35,11 @@ def stringBuffer[A] { prog: => A / StringBuffer }: A = {
       resume(())
     }
     def flush() = {
-      // resize buffer to strip trailing zeros that otherwise would be converted into 0x00 characters
+      // resize (& copy) buffer to strip trailing zeros that otherwise would be converted into 0x00 characters
       val str = bytearray::resize(buffer, pos).toString()
-      // after flushing, the stringbuffer should be empty again
-      buffer = bytearray::allocate(initialCapacity)
+      // NOTE: Keep the `buffer` as-is (no wipe, no realloc),
+      //       just reset the `pos` in case we want to use it again.
+      pos = 0
       resume(str)
     }
   }
