@@ -1,9 +1,9 @@
 package effekt.core
 
 /**
- * This is testing the test/core.TestRenamer, not the main/core.Renamer :)
+ * This is testing the main/core.Renamer using the test/core.TestRenamer.
  */
-class TestRenamerTests extends CoreTests {
+class RenamerTests extends CoreTests {
 
   def assertRenamedTo(input: String,
                       renamed: String,
@@ -11,9 +11,9 @@ class TestRenamerTests extends CoreTests {
                       names: Names = Names(defaultNames))(using munit.Location) = {
     val pInput = parse(input, "input", names)
     val pExpected = parse(renamed, "expected", names)
-    val renamer = new TestRenamer(names, "renamed") // use "renamed" as prefix so we can refer to it
+    val renamer = new Renamer(names, "renamed")
     val obtained = renamer(pInput)
-    shouldBeEqual(obtained, pExpected, clue)
+    assertAlphaEquivalent(obtained, pExpected, clue)
   }
 
   test("No bound local variables"){
