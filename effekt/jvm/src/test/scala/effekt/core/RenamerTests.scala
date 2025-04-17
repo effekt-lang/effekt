@@ -1,5 +1,7 @@
 package effekt.core
 
+import scala.collection.mutable
+
 /**
  * This is testing the main/core.Renamer using the test/core.TestRenamer.
  */
@@ -15,6 +17,53 @@ class RenamerTests extends CoreTests {
     val renamer = new Renamer(names, "renamed")
     val obtained = renamer(pInput)
     assertAlphaEquivalent(obtained, pInput, clue)
+  }
+
+  def assertRenamingMakesDefsUnique(input: String,
+                                    clue: => Any = "Duplicate definition",
+                                    names: Names = Names(defaultNames))(using munit.Location) = {
+    val pInput = parse(input, "input", names)
+    val renamer = new Renamer(names, "renamed")
+    val obtained = renamer(pInput)
+
+    val seen = mutable.HashSet.empty[Id]
+    def isFresh(id: Id): Unit = {
+      assert(!seen.contains(id), clue)
+      seen.add(id)
+    }
+    given Unit = ()
+    object check extends Tree.Query[Unit, Unit] {
+      override def empty = ()
+      override def combine = (_,_) => ()
+      override def visit[T](t: T)(visitor: Unit ?=> T => Unit)(using Unit): Unit = {
+        visitor(t)
+        t match {
+          case m: ModuleDecl =>
+            m.definitions.foreach { d => isFresh(d.id) }
+          case d: Def => isFresh(d.id)
+          case v: Val => isFresh(v.id)
+          case l: Let => isFresh(l.id)
+          case d: Declaration => isFresh(d.id)
+          case e: Extern.Def =>
+            isFresh(e.id)
+            e.tparams.foreach(isFresh);
+            e.vparams.foreach { p => isFresh(p.id) }
+            e.bparams.foreach { p => isFresh(p.id) };
+            e.cparams.foreach { p => isFresh(p) }
+          case b: BlockLit =>
+            b.tparams.foreach(isFresh);
+            b.cparams.foreach(isFresh)
+            b.vparams.foreach { p => isFresh(p.id) };
+            b.bparams.foreach { p => isFresh(p.id) }
+          case i: Implementation =>
+            i.operations.foreach { o =>
+              o.vparams.foreach { p => isFresh(p.id) }; o.bparams.foreach { p => isFresh(p.id) }
+            }
+          case _ => ()
+        }
+      }
+    }
+    check.query(pInput)
   }
 
   test("No bound local variables"){
@@ -112,5 +161,6 @@ class RenamerTests extends CoreTests {
         | }
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 }
