@@ -1,7 +1,8 @@
 package effekt.core
 
+import scala.collection.mutable
+
 import effekt.{ core, symbols }
-import effekt.context.Context
 
 /**
  * Freshens bound names in a given Core term.
@@ -20,7 +21,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   private var scope: Map[Id, Id] = Map.empty
 
   // All renamings: map of bound symbols to their renamed variants, globally!
-  var renamed: Map[Id, Id] = Map.empty
+  val renamed: mutable.HashMap[Id, Id] = mutable.HashMap.empty
 
   def freshIdFor(id: Id): Id =
     if prefix.isEmpty then Id(id) else Id(id.name.rename { _current => prefix })
@@ -30,7 +31,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
     try {
       val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
       scope = scope ++ newScope
-      renamed = renamed ++ newScope
+      renamed.addAll(newScope)
       f
     } finally { scope = before }
 
@@ -105,7 +106,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
 object Renamer {
   def rename(b: Block): Block = Renamer().rewrite(b)
-  def rename(b: BlockLit): (BlockLit, Map[Id, Id]) =
+  def rename(b: BlockLit): (BlockLit, mutable.HashMap[Id, Id]) =
     val renamer = Renamer()
     val res = renamer.rewrite(b)
     (res, renamer.renamed)
