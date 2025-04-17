@@ -4,8 +4,8 @@ import effekt.{ core, symbols }
 import effekt.context.Context
 
 /**
- * Freshens bound names in a given Core term.
- * Do not use for tests! See [[effekt.core.TestRenamer]].
+ * Freshens bound names in a given term for tests.
+ * Please use this _only_ for tests. Otherwise, prefer [[effekt.core.Renamer]].
  *
  * @param names used to look up a reference by name to resolve to the same symbols.
  *              This is only used by tests to deterministically rename terms and check for
@@ -14,7 +14,7 @@ import effekt.context.Context
  *
  * @param C the context is used to copy annotations from old symbols to fresh symbols
  */
-class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
+class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
 
   // list of scopes that map bound symbols to their renamed variants.
   private var scopes: List[Map[Id, Id]] = List.empty
@@ -22,8 +22,12 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   // Here we track ALL renamings
   var renamed: Map[Id, Id] = Map.empty
 
+  private var suffix: Int = 0
+
   def freshIdFor(id: Id): Id =
-    if prefix.isEmpty then Id(id) else Id(id.name.rename { _current => prefix })
+    suffix = suffix + 1
+    val uniqueName = if prefix.isEmpty then id.name.name + "_" + suffix.toString else prefix + suffix.toString
+    names.idFor(uniqueName)
 
   def withBindings[R](ids: List[Id])(f: => R): R =
     val before = scopes
@@ -95,17 +99,19 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
   }
 
   def apply(m: core.ModuleDecl): core.ModuleDecl =
+    suffix = 0
     m match {
       case core.ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
         core.ModuleDecl(path, includes, declarations, externs, definitions map rewrite, exports)
     }
 
   def apply(s: Stmt): Stmt = {
+    suffix = 0
     rewrite(s)
   }
 }
 
-object Renamer {
+object TestRenamer {
   def rename(b: Block): Block = Renamer().rewrite(b)
   def rename(b: BlockLit): (BlockLit, Map[Id, Id]) =
     val renamer = Renamer()
