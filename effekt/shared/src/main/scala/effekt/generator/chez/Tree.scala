@@ -2,7 +2,6 @@ package effekt
 package generator
 package chez
 
-import scala.annotation.tailrec
 import scala.language.implicitConversions
 
 // TODO choose appropriate representation and apply conversions
@@ -70,16 +69,12 @@ enum Def {
 export Def.*
 
 // smart constructors
-@tailrec
 def Call(callee: Expr, args: Expr*): Expr = Call(callee, args.toList)
 
-@tailrec
 def Lambda(params: List[ChezName], body: Expr): Lambda = Lambda(params, Block(Nil, Nil, body))
 
-@tailrec
 def Function(name: ChezName, params: List[ChezName], body: Expr): Function = Function(name, params, Block(Nil, Nil, body))
 
-@tailrec
 def Let(bindings: List[Binding], body: Expr): Expr = Let(bindings, Block(Nil, Nil, body))
 
 def ChezString(chezString: String): Expr = RawExpr(s"\"${chezString}\"")
