@@ -1,0 +1,3 @@
+import stringbuffer
+
+def main() = stringbuffer::examples::main()

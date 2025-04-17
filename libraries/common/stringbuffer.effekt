@@ -56,11 +56,22 @@ def s { prog: () => Unit / { literal, splice[String] } }: String =
 namespace examples {
   def main() = {
     with stringBuffer
+
     do write("hello")
     do write(", world")
     // prints `hello, world`
     println(do flush())
+
     // prints the empty string
+    println(do flush())
+
+    do write("Ef")
+    do write("fe")
+    do write("kt")
+    do write(" = ")
+    do write("")
+    do write("Effekt")
+    // prints `Effekt = Effekt`
     println(do flush())
   }
 }
