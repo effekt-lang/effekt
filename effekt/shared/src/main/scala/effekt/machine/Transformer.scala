@@ -413,7 +413,7 @@ object Transformer {
     case core.PureApp(core.BlockVar(blockName, tpe: core.BlockType.Function, _), List(), List(arg)) if blockName.name.name.startsWith("@coerce") =>
       val variable = Variable(freshName("coerceApp"), transform(tpe.result))
       transform(arg).flatMap { value =>
-        Binding { k =>
+        shift { k =>
           Coerce(variable, value, k(variable))
         }
       }
