@@ -3,7 +3,6 @@ package generator
 package js
 
 import scala.collection.immutable.{ AbstractSeq, LinearSeq }
-import scala.annotation.tailrec
 
 // TODO choose appropriate representation and apply conversions
 case class JSName(name: String)
@@ -196,17 +195,14 @@ export Stmt.*
 // Smart constructors
 // ------------------
 
-@tailrec
 def Const(name: JSName, binding: Expr): Stmt = binding match {
   case Expr.Lambda(params, Block(stmts)) => js.Function(name, params, stmts)
   case Expr.Lambda(params, stmt) => js.Function(name, params, List(stmt))
   case _ => js.Const(Pattern.Variable(name), binding)
 }
 
-@tailrec
 def Let(name: JSName, binding: Expr): Stmt = js.Let(Pattern.Variable(name), binding)
 
-@tailrec
 def Let(names: List[JSName], binding: Expr): Stmt = names match {
   case Nil => ExprStmt(binding)
   case name :: Nil => js.Let(Pattern.Variable(name), binding)
@@ -214,17 +210,14 @@ def Let(names: List[JSName], binding: Expr): Stmt = names match {
 }
 
 
-@tailrec
 def Call(receiver: Expr, args: Expr*): Expr = Call(receiver, args.toList)
 
 def MethodCall(receiver: Expr, method: JSName, args: Expr*): Expr = Call(Member(receiver, method), args.toList)
 
-@tailrec
 def Lambda(params: List[JSName], body: Expr): Expr = Lambda(params, Return(body))
 
 def JsString(scalaString: String): Expr = RawLiteral(s"\"${scalaString}\"")
 
-@tailrec
 def Object(properties: (JSName, Expr)*): Expr = Object(properties.toList)
 
 def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
@@ -234,7 +227,6 @@ def MaybeBlock(stmts: List[Stmt]): Stmt = stmts match {
 
 val Undefined = RawLiteral("undefined")
 
-@tailrec
 def Lambda(params: List[JSName], stmts: List[Stmt]): Expr = stmts match {
   case Nil => sys error "Lambda should have at least one statement as body"
   case js.Return(e) :: Nil => Lambda(params, e)
