@@ -4,7 +4,8 @@ import effekt.{ core, symbols }
 import effekt.context.Context
 
 /**
- * Freshens bound names in a given term
+ * Freshens bound names in a given Core term.
+ * Do not use for tests!
  *
  * @param names used to look up a reference by name to resolve to the same symbols.
  *              This is only used by tests to deterministically rename terms and check for

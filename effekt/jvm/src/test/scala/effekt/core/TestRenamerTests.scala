@@ -1,7 +1,7 @@
 package effekt.core
 import effekt.symbols
 
-class RenamerTests extends CoreTests {
+class TestRenamerTests extends CoreTests {
 
   def assertRenamedTo(input: String,
                       renamed: String,
@@ -9,7 +9,7 @@ class RenamerTests extends CoreTests {
                       names: Names = Names(defaultNames))(using munit.Location) = {
     val pInput = parse(input, "input", names)
     val pExpected = parse(renamed, "expected", names)
-    val renamer = new Renamer(names, "renamed") // use "renamed" as prefix so we can refer to it
+    val renamer = new TestRenamer(names, "renamed") // use "renamed" as prefix so we can refer to it
     val obtained = renamer(pInput)
     shouldBeEqual(obtained, pExpected, clue)
   }
