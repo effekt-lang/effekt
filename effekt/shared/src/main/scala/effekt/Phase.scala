@@ -48,12 +48,12 @@ trait Phase[-In, +Out] { curr =>
   def andThen[Out2](next: Phase[Out, Out2]): Phase[In, Out2] =
     new Phase[In, Out2] {
       val phaseName = s"${curr.phaseName} -> ${next.phaseName}"
-      def run(input: In)(using C: Context) = curr.run(input).flatMap(out => next.run(out))
+      inline def run(input: In)(using C: Context) = curr.run(input).flatMap(out => next.run(out))
     }
 
   def map[Out2](f: Context ?=> Out => Out2): Phase[In, Out2] = new Phase[In, Out2] {
     val phaseName = curr.phaseName
-    def run(input: In)(using C: Context) = curr.run(input).map(f)
+    inline def run(input: In)(using C: Context) = curr.run(input).map(f)
   }
 }
 
