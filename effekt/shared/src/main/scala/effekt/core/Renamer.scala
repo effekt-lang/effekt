@@ -1,7 +1,8 @@
 package effekt.core
 
+import scala.collection.mutable
+
 import effekt.{ core, symbols }
-import effekt.context.Context
 
 /**
  * Freshens bound names in a given Core term.
@@ -16,32 +17,33 @@ import effekt.context.Context
  */
 class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core.Tree.Rewrite {
 
-  // list of scopes that map bound symbols to their renamed variants.
-  private var scopes: List[Map[Id, Id]] = List.empty
+  // Local renamings: map of bound symbols to their renamed variants in a given scope.
+  private var scope: Map[Id, Id] = Map.empty
 
-  // Here we track ALL renamings
-  var renamed: Map[Id, Id] = Map.empty
+  // All renamings: map of bound symbols to their renamed variants, globally!
+  val renamed: mutable.HashMap[Id, Id] = mutable.HashMap.empty
 
   def freshIdFor(id: Id): Id =
     if prefix.isEmpty then Id(id) else Id(id.name.rename { _current => prefix })
 
   def withBindings[R](ids: List[Id])(f: => R): R =
-    val before = scopes
+    val scopeBefore = scope
     try {
-      val newScope = ids.map { x => x -> freshIdFor(x) }.toMap
-      scopes = newScope :: scopes
-      renamed = renamed ++ newScope
+      ids.foreach { x =>
+        val fresh = freshIdFor(x)
+        scope = scope + (x -> fresh)
+        renamed.put(x, fresh)
+      }
+
       f
-    } finally { scopes = before }
+    } finally { scope = scopeBefore }
 
   /** Alias for withBindings(List(id)){...} */
   def withBinding[R](id: Id)(f: => R): R = withBindings(List(id))(f)
 
   // free variables are left untouched
   override def id: PartialFunction[core.Id, core.Id] = {
-    case id => scopes.collectFirst {
-      case bnds if bnds.contains(id) => bnds(id)
-    }.getOrElse(id)
+    id => scope.getOrElse(id, id)
   }
 
   override def stmt: PartialFunction[Stmt, Stmt] = {
@@ -107,7 +109,7 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
 
 object Renamer {
   def rename(b: Block): Block = Renamer().rewrite(b)
-  def rename(b: BlockLit): (BlockLit, Map[Id, Id]) =
+  def rename(b: BlockLit): (BlockLit, mutable.HashMap[Id, Id]) =
     val renamer = Renamer()
     val res = renamer.rewrite(b)
     (res, renamer.renamed)

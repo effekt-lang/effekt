@@ -110,11 +110,3 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "") extends 
     rewrite(s)
   }
 }
-
-object TestRenamer {
-  def rename(b: Block): Block = Renamer().rewrite(b)
-  def rename(b: BlockLit): (BlockLit, Map[Id, Id]) =
-    val renamer = Renamer()
-    val res = renamer.rewrite(b)
-    (res, renamer.renamed)
-}
