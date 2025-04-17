@@ -75,6 +75,7 @@ class RenamerTests extends CoreTests {
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 
   test("val binding"){
@@ -87,6 +88,7 @@ class RenamerTests extends CoreTests {
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 
   test("var binding"){
@@ -99,6 +101,7 @@ class RenamerTests extends CoreTests {
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 
   test("function (value) parameters"){
@@ -110,6 +113,7 @@ class RenamerTests extends CoreTests {
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 
   test("match clauses"){
@@ -124,6 +128,7 @@ class RenamerTests extends CoreTests {
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 
   test("type parameters"){
@@ -135,6 +140,7 @@ class RenamerTests extends CoreTests {
         |}
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
 
   test("pseudo recursive"){
@@ -149,6 +155,7 @@ class RenamerTests extends CoreTests {
         | }
         |""".stripMargin
     assertRenamingPreservesAlpha(code)
+    assertRenamingMakesDefsUnique(code)
   }
   test("shadowing let bindings"){
     val code =
