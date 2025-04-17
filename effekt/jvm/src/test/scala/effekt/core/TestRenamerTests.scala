@@ -2,6 +2,7 @@ package effekt.core
 
 /**
  * This is testing the test/core.TestRenamer, not the main/core.Renamer :)
+ * These tests are important, because we use TestRenamer for deciding test-friendly alpha-equivalence in CoreTests.
  */
 class TestRenamerTests extends CoreTests {
 
