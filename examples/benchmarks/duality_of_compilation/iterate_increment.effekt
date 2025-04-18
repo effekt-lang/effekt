@@ -4,7 +4,7 @@ def iterate(i: Int, a: Int) { f: Int => Int }: Int =
   if (i == 0) {
     a
   } else {
-    iterate(i - 1, f(a)) { f }
+    iterate(mod(i, 1000000007) - 1, f(a)) { f }
   }
 
 def run(n: Int) =
