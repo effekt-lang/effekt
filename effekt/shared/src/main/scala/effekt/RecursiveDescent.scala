@@ -1279,10 +1279,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     recognize(tpe).getOrElse { fail(msg(tpe))}
   }
 
-  def blockTypeRef(): BlockTypeRef = guardedType(ignoreEffectSets = false, _.asBlockTypeRef) { tpe => s"Expected block type ref, but got ${tpe}" }
+  def blockTypeRef(): BlockTypeRef = guardedType(ignoreEffectSets = false, _.asBlockTypeRef) { tpe => s"Expected block type ref, but got ${tpe}." }
   def blockType(): BlockType = guardedType(ignoreEffectSets = false, _.asBlockType) {
-    case MyType.TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}. Did you mean to write just ${tpe} *without* 'at ${captureSet}'?"
-    case tpe                             => s"Expected block type, but got value type ${tpe}."
+    case box @ MyType.TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}. Did you mean to write just ${tpe} *without* at ${captureSet}?"
+    case tpe                                   => s"Expected block type, but got value type ${tpe}."
   }
 
   def valueType(ignoreEffectSets: Boolean): ValueType = guardedType(ignoreEffectSets, _.asValueType) {
