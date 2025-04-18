@@ -1176,8 +1176,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
     def effects(): List[MyType] =
       nonterminal:
-        if peek(`{`) then many(myType, `{`, `,`, `}`)
-        else List(myType())
+        if peek(`{`) then many(functionType, `{`, `,`, `}`)
+        else List(functionType())
 
     def maybeBlockTypeParams(): List[(Option[IdDef], MyType)] =
       nonterminal:
@@ -1256,16 +1256,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def boxedType(): MyType = {
       nonterminal:
         // Parse the function type first
-        val base = functionType()
+        val tpe = functionType()
 
-        // If followed by 'at', create a boxed type
-        if (peek(`at`)) then {
-          // Prevent nested boxed types
-          base match {
-            case TypeBox(_, _) => fail(s"Nested 'at' expressions are not allowed: $base at ...")
-            case _ => TypeBox(base, `at` ~> captureSet())
+        peek.kind match {
+          case `at` => tpe match {
+            case TypeBox(_, _) => fail(s"Nested 'at' expressions are not allowed: $tpe at ...")
+            case _ => TypeBox(tpe, `at` ~> captureSet())
           }
-        } else base
+          // NOT HERE! case `/` => fail(s"Unexpected effect annotation")
+          case _ => tpe
+        }
     }
 
     // Start with the lowest precedence parsing function

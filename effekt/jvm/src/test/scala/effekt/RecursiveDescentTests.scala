@@ -260,6 +260,8 @@ class RecursiveDescentTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseStmts("val (left, right) = list; return left")
+
+    parseStmts("val g: () => Unit / Exc at {exc} = fun() { closure() }; ()")
   }
 
   test("Semicolon insertion") {
@@ -368,6 +370,8 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseValueType("() => (Int at { a, b, c }) at {}")
     parseValueType("(() => Int) at { a, b, c }")
     parseValueType("(() => Int at {}) => Int at { a, b, c }")
+
+    parseValueType("() => Unit / Socket at {io, async, global}")
   }
 
   test("Params") {
