@@ -866,10 +866,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
-  private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    ValueTypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
-    // TODO positions!
-
   /**
    * This is a compound production for
    *  - member selection <EXPR>.<NAME>
@@ -1234,19 +1230,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             TypeRef(idRef(), maybeTypeArgs())
         }
 
-    def noEffectType(): MyType = {
-      val tpe = basicType()
-      if (peek(`/`) && !ignoreEffectSets) {
-        val set = maybeEffects()
-        fail(s"Unexpected effect set ${set} on type ${tpe}!")
-      } else tpe
-    }
-
     // Parse function types (middle precedence)
     def functionType(): MyType = {
       nonterminal:
         // Try to parse each function type variant, fall back to basic type if none match
-        functionTypeSimple() orElse functionTypeComplex() getOrElse noEffectType()
+        val tpe = functionTypeSimple() orElse functionTypeComplex() getOrElse basicType()
+
+        // If 'ignoreEffectSets' flag is on _and_ we detect one, we fail!
+        if (peek(`/`) && !ignoreEffectSets) {
+          val set = maybeEffects()
+          fail(s"Effects not allowed here. Maybe you mean to use a function type `() => ${tpe} / ${set}`?")
+        } else tpe
     }
 
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
@@ -1286,9 +1280,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   def blockTypeRef(): BlockTypeRef = guardedType(ignoreEffectSets = false, _.asBlockTypeRef) { tpe => s"Expected block type ref, but got ${tpe}" }
-  def valueType(ignoreEffectSets: Boolean): ValueType = guardedType(ignoreEffectSets, _.asValueType) { tpe => s"Expected value type, but got ${tpe}" }
-  def blockType(): BlockType = guardedType(ignoreEffectSets = false, _.asBlockType) { tpe => s"Expected block type, but got ${tpe}" }
+  def blockType(): BlockType = guardedType(ignoreEffectSets = false, _.asBlockType) {
+    case MyType.TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}. Did you mean to write just ${tpe} *without* 'at ${captureSet}'?"
+    case tpe                             => s"Expected block type, but got value type ${tpe}."
+  }
 
+  def valueType(ignoreEffectSets: Boolean): ValueType = guardedType(ignoreEffectSets, _.asValueType) {
+    case fun: MyType.TypeFun => s"Expected value type, but got function type ${fun}. Did you mean to box it, i.e., ${fun} at {}?"
+    case tpe => s"Expected value type, but got block type ${tpe}."
+  }
   def valueType(): ValueType = valueType(ignoreEffectSets = false)
 
   def maybeTypeParams(): List[Id] =
