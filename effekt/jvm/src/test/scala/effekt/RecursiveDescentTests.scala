@@ -570,6 +570,11 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseDefinition(
         """def foo[T](x: Int): String / {} = e
           |""".stripMargin)
+
+    parseDefinition(
+        """def op(): Int => Int at {greeter} / Greet = f
+          |""".stripMargin
+    )
   }
 
   test("Toplevel definitions") {

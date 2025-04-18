@@ -1108,6 +1108,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    *
    *       | Type 'at' Id                                                          boxedType
    *       | Type 'at' '{' Id ',' ... '}'
+   *       | Type ('/' SetType)?
    *
    * SetType ::= Type
    *        | '{' (Id ':')? Type ',' ... '}'
@@ -1253,25 +1254,22 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def functionType(): GeneralType = {
       nonterminal:
         // Try to parse each function type variant, fall back to basic type if none match
-        val tpe = functionTypeSimple() orElse functionTypeComplex() getOrElse basicType()
-
-        if peek(`/`)
-          then TypeEff(tpe, maybeEffects())
-          else tpe
+        functionTypeSimple() orElse functionTypeComplex() getOrElse basicType()
     }
 
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
     def functionTypeComplex() = backtrack {
-      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() match {
+      val tpe = maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() match {
         case tparams ~ vparams ~ bparams ~ t => TypeFun(tparams, vparams, bparams, t)
       }
+      TypeEff(tpe, maybeEffects())
     }
 
     // Simple function type: Int => Int
     def functionTypeSimple() = backtrack {
       TypeRef(idRef(), maybeTypeArgs()) <~ `=>`
     } map { tpe =>
-      TypeFun(Nil, List(tpe), Nil, basicType())
+      TypeEff(TypeFun(Nil, List(tpe), Nil, basicType()), maybeEffects())
     }
 
     // Parse boxed types (lowest precedence)
@@ -1280,10 +1278,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         // Parse the function type first
         val tpe = functionType()
 
-        when(`at`) {
+        val boxed = when(`at`) {
           TypeBox(tpe, captureSet())
         } {
           tpe
+        }
+
+        if (peek(`/`)) {
+          TypeEff(boxed, maybeEffects())
+        } else {
+          boxed
         }
     }
 
@@ -1392,7 +1396,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       BlockParam(idDef(), when(`:`)(Some(blockType()))(None))
 
-
   def maybeValueTypes(): List[ValueType] =
     nonterminal:
       if peek(`(`) then valueTypes() else Nil
@@ -1404,10 +1407,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def captureSet(): CaptureSet =
     nonterminal:
       CaptureSet(many(idRef, `{`, `,` , `}`))
-
-  def maybeEffects(): Effects =
-    nonterminal:
-      when(`/`) { effects() } { Effects.Pure }
 
   // TODO error "Expected an effect set"
   def effects(): Effects =
