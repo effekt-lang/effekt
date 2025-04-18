@@ -1126,42 +1126,59 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   enum GeneralType {
     case TypeRef(id: IdRef, args: List[GeneralType])
-    case TypeFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType, effects: List[GeneralType])
+    case TypeFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType)
     case TypeBox(tpe: GeneralType, captureSet: CaptureSet)
+    case TypeEff(tpe: GeneralType, effects: List[GeneralType])
 
     def asValueType: Option[ValueType] = this match
       case TypeRef(id, args) => for {
         vtpes <- traverse(args)(_.asValueType)
       } yield ValueTypeRef(id, vtpes)
-      case TypeFun(tparams, vparams, bparams, result, effects) => None
       case TypeBox(tpe, captureSet) => tpe match {
         case TypeBox(_, _) => None
         case _ => for {
           btpe <- tpe.asBlockType
         } yield BoxedType(btpe, captureSet)
       }
+      case _ => None
 
-    def asBlockType: Option[BlockType] = this match
-      case TypeRef(id, args) => for {
-        vtpes <- traverse(args)(_.asValueType)
-      } yield BlockTypeRef(id, vtpes)
-      case TypeFun(tparams, vparams, bparams, result, effects) => for {
-        vtpes <- traverse(vparams)(_.asValueType)
-        btpes <- traverse(bparams) { case (id, t) => t.asBlockType.map((id, _)) }
-        retpe <- result.asValueType
-        effs <- traverse(effects)(_.asBlockTypeRef)
-      } yield FunctionType(tparams, vtpes, btpes, retpe, Effects(effs))
-      case TypeBox(tpe, captureSet) => None
+    def asBlockType: Option[BlockType] = {
+      def resolveFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType, effects: List[GeneralType]) =
+        for {
+          vtpes <- traverse(vparams)(_.asValueType)
+          btpes <- traverse(bparams) { case (id, t) => t.asBlockType.map((id, _)) }
+          retpe <- result.asValueType
+          effs <- traverse(effects)(_.asBlockTypeRef)
+        } yield FunctionType(tparams, vtpes, btpes, retpe, Effects(effs))
+
+      this match {
+        case TypeRef(id, args) => for {
+          vtpes <- traverse(args)(_.asValueType)
+        } yield BlockTypeRef(id, vtpes)
+        case TypeEff(TypeFun(tparams, vparams, bparams, result), effects) => resolveFun(tparams, vparams, bparams, result, effects)
+        case TypeFun(tparams, vparams, bparams, result) => resolveFun(tparams, vparams, bparams, result, Nil)
+        case _ => None
+      }
+    }
 
     def asBlockTypeRef: Option[BlockType.BlockTypeRef] = this match
       case TypeRef(id, args) => for {
         vtpes <- traverse(args)(_.asValueType)
       } yield BlockTypeRef(id, vtpes)
       case _ => None
+
+    def asEffectful: Option[Effectful] = this match
+      case TypeEff(tpe, effects) => for {
+        vtpe <- tpe.asValueType
+        effs <- traverse(effects)(_.asBlockTypeRef)
+      } yield Effectful(vtpe, Effects(effs))
+      case tpe => for {
+        vtpe <- tpe.asValueType
+      } yield Effectful(vtpe, Effects.Pure)
   }
   export GeneralType.*
 
-  private def generalType(ignoreEffectSets: Boolean = false): GeneralType = {
+  private def generalType(): GeneralType = {
     def TypeTuple(tps: List[GeneralType]): GeneralType =
       TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
 
@@ -1238,17 +1255,15 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         // Try to parse each function type variant, fall back to basic type if none match
         val tpe = functionTypeSimple() orElse functionTypeComplex() getOrElse basicType()
 
-        // If 'ignoreEffectSets' flag is on _and_ we detect one, we fail!
-        if (peek(`/`) && !ignoreEffectSets) {
-          val set = maybeEffects()
-          fail(s"Effects not allowed here. Maybe you mean to use a function type `() => ${tpe} / ${set}`?")
-        } else tpe
+        if peek(`/`)
+          then TypeEff(tpe, maybeEffects())
+          else tpe
     }
 
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
     def functionTypeComplex() = backtrack {
-      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() ~ maybeEffects() match {
-        case tparams ~ vparams ~ bparams ~ t ~ effs => TypeFun(tparams, vparams, bparams, t, effs)
+      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() match {
+        case tparams ~ vparams ~ bparams ~ t => TypeFun(tparams, vparams, bparams, t)
       }
     }
 
@@ -1256,7 +1271,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def functionTypeSimple() = backtrack {
       TypeRef(idRef(), maybeTypeArgs()) <~ `=>`
     } map { tpe =>
-      TypeFun(Nil, List(tpe), Nil, basicType(), maybeEffects())
+      TypeFun(Nil, List(tpe), Nil, basicType())
     }
 
     // Parse boxed types (lowest precedence)
@@ -1276,26 +1291,28 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     boxedType()
   }
 
-  inline def guardedType[T](ignoreEffectSets: Boolean, inline recognize: GeneralType => Option[T])(inline msg: GeneralType => String): T = {
-    val tpe = generalType(ignoreEffectSets)
+  inline def guardedType[T](inline recognize: GeneralType => Option[T])(inline msg: GeneralType => String): T = {
+    val tpe = generalType()
     recognize(tpe).getOrElse { fail(msg(tpe))}
   }
 
   // !!! WARNING !!!
   // The error messages shown here are quite imprecise as they don't know how to blame their components for a failure!
-  def blockTypeRef(): BlockTypeRef = guardedType(ignoreEffectSets = false, _.asBlockTypeRef) {
+  def blockTypeRef(): BlockTypeRef = guardedType(_.asBlockTypeRef) {
     case tpe => s"Expected block type ref, but got ${tpe}."
   }
-  def blockType(): BlockType = guardedType(ignoreEffectSets = false, _.asBlockType) {
+  def blockType(): BlockType = guardedType(_.asBlockType) {
     case box @ GeneralType.TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}. Did you mean to write just ${tpe} *without* at ${captureSet}?"
     case tpe                                        => s"Expected block type, but got value type ${tpe}."
   }
 
-  def valueType(ignoreEffectSets: Boolean): ValueType = guardedType(ignoreEffectSets, _.asValueType) {
+  def valueType(): ValueType = guardedType(_.asValueType) {
     case fun: GeneralType.TypeFun => s"Expected value type, but got function type ${fun}. Did you mean to box it, i.e., ${fun} at {}?"
     case tpe                      => s"Expected value type, but got block type ${tpe}."
   }
-  def valueType(): ValueType = valueType(ignoreEffectSets = false)
+  def effectful(): Effectful = guardedType(_.asEffectful) {
+    case tpe                      => s"Expected a type-and-effect annotation, but got ${tpe}."
+  }
 
   def maybeTypeParams(): List[Id] =
     nonterminal:
@@ -1387,10 +1404,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def captureSet(): CaptureSet =
     nonterminal:
       CaptureSet(many(idRef, `{`, `,` , `}`))
-
-  def effectful(): Effectful =
-    nonterminal:
-      Effectful(valueType(ignoreEffectSets = true), maybeEffects())
 
   def maybeEffects(): Effects =
     nonterminal:
