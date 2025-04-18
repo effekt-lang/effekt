@@ -358,6 +358,9 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseBlockType("[T] => T") // Not sure we want this...
 
     parseValueType("Exc at { a, b, c }")
+    intercept[Throwable] { parseBlockType("Exc / Eff") }
+    intercept[Throwable] { parseBlockType("Exc / {}") }
+
     parseValueType("() => (Exc at {}) / {} at { a, b, c }")
 
     assertEquals(
