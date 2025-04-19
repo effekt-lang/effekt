@@ -1,3 +1,4 @@
-[error] examples/neg/parsing/blockargs.effekt:3:20: Effects not allowed here. Maybe you mean to use a function type `() => T / E`?
+[error] examples/neg/parsing/blockargs.effekt:3:18: Expected block type, but got effectful type TypeEff(TypeRef(IdRef(List(),R),List()),List(TypeRef(IdRef(List(),Exc),List()))).
+Did you mean to write a function type () => TypeEff(TypeRef(IdRef(List(),R),List()),List(TypeRef(IdRef(List(),Exc),List())))?
 def foo[R] { f : R / Exc }: R = <>
-                   ^
+                 ^^^^^^^^
