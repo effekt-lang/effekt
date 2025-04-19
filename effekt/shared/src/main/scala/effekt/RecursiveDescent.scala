@@ -1298,22 +1298,43 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     } withPositionOf tpe
   }
 
+  // XXX HACK(jiribenes, 2025-04-19):
+  // Instead of having to pretty-print the types ourselves,
+  // what if we just throw what the user wrote back at them?
+  // => this little utility either returns the actual code for the given subtree,
+  //    ... or uses a normal standard ugly print of the structure.
+  extension[T] (positioned: T) def s: String = {
+    // XXX this should maybe be a method on `Source`?
+    def slice(start: Int, end: Int): String =
+      source.content.substring(start, end)
+
+    // XXX this should get much easier once we have proper positions
+    val maybePos = for {
+      start <- positions.getStart(positioned).flatMap(_.optOffset)
+      end <- positions.getFinish(positioned).flatMap(_.optOffset)
+    } yield (start, end)
+
+    maybePos match
+      case Some((start, end)) => slice(start, end)
+      case None => s"$positioned"
+  }
+
   // !!! WARNING !!!
   // The error messages shown here are quite imprecise as they don't know how to blame their components for a failure!
   def blockType(): BlockType = guardedType(_.asBlockType) {
-    case box @ TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}.\nDid you mean to write just ${tpe} *without* at ${captureSet}?"
-    case eff: TypeEff                   => s"Expected block type, but got effectful type ${eff}.\nDid you mean to write a function type () => ${eff}?"
-    case tpe                            => s"Expected block type, but got value type ${tpe}."
+    case box @ TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box.s}.\nDid you mean to write just ${tpe.s} *without* at ${captureSet.s}?"
+    case eff: TypeEff                   => s"Expected block type, but got effectful type ${eff.s}.\nDid you mean to write a function type () => ${eff.s}?"
+    case tpe                            => s"Expected block type, but got value type ${tpe.s}."
   }
   def valueType(): ValueType = guardedType(_.asValueType) {
-    case box: TypeBox => s"Expected value type, but got double-boxed type ${box}."
-    case fun: TypeFun => s"Expected value type, but got function type ${fun}.\nDid you mean to box it, i.e., ${fun} at {}?"
-    case eff: TypeEff => s"Expected value type, but got effectful type ${eff}.\nDid you mean to write a first-class (boxed) function type, i.e., () => ${eff} at {},\n\tor a second class function type in braces () => ${eff}?"
-    case tpe          => s"Expected value type, but got block type ${tpe}."
+    case box: TypeBox => s"Expected value type, but got double-boxed type ${box.s}."
+    case fun: TypeFun => s"Expected value type, but got function type ${fun.s}.\nDid you mean to box it, i.e., ${fun.s} at {}?"
+    case eff: TypeEff => s"Expected value type, but got effectful type ${eff.s}.\nDid you mean to write a first-class (boxed) function type, i.e., () => ${eff.s} at {},\nor a second class function type in braces () => ${eff.s}?"
+    case tpe          => s"Expected value type, but got block type ${tpe.s}."
   }
   def effectful(): Effectful = guardedType(_.asEffectful) {
-    case eff: TypeEff => s"Expected a type-and-effect annotation, but got a type with a double effect annotation ${eff}."
-    case tpe          => s"Expected a type-and-effect annotation, but got ${tpe}."
+    case eff: TypeEff => s"Expected a type-and-effect annotation, but got a type with a double effect annotation ${eff.s}."
+    case tpe          => s"Expected a type-and-effect annotation, but got ${tpe.s}."
   }
 
   // Completely specialized for BlockTypeRef: we only parse `refType` here, we don't go through the whole hierarchy
@@ -1322,7 +1343,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val tpe @ TypeRef(id, tpes) = refType()
     val end = position
     val res: BlockTypeRef = tpe.asBlockTypeRef.getOrElse {
-      softFail(s"Expected a type with value type arguments, got ${tpe}", start, end)
+      softFail(s"Expected a type with value type arguments, got ${tpe.s}", start, end)
       BlockTypeRef(IdRef(List("fake"), "err"), Nil)
     }
     res withPositionOf tpe
@@ -1336,7 +1357,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val res = traverse(effs)(_.asBlockTypeRef) match
       case Some(effects) => Effects(effects)
       case None =>
-        softFail(s"Expected a valid effect set, got ${effs}", start, end)
+        softFail(s"Expected a valid effect set, got ${effs.s}", start, end)
         Effects.Pure
 
     res withPositionOf effs

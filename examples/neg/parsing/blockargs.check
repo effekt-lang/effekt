@@ -1,4 +1,4 @@
-[error] examples/neg/parsing/blockargs.effekt:3:18: Expected block type, but got effectful type TypeEff(TypeRef(IdRef(List(),R),List()),List(TypeRef(IdRef(List(),Exc),List()))).
-Did you mean to write a function type () => TypeEff(TypeRef(IdRef(List(),R),List()),List(TypeRef(IdRef(List(),Exc),List())))?
+[error] examples/neg/parsing/blockargs.effekt:3:18: Expected block type, but got effectful type R / Exc.
+Did you mean to write a function type () => R / Exc?
 def foo[R] { f : R / Exc }: R = <>
                  ^^^^^^^^
