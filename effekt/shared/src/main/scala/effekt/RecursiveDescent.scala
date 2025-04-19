@@ -1301,7 +1301,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     recognize(tpe).getOrElse {
       softFail(msg(tpe), start, end)
       recognize(GeneralType.TypeErr).getOrElse { fail(msg(tpe)) }
-    }
+    } withPositionOf tpe
   }
 
   // !!! WARNING !!!
