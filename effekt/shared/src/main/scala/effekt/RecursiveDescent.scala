@@ -1127,7 +1127,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    */
   enum GeneralType {
     case TypeRef(id: IdRef, args: List[GeneralType])
-    case TypeFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType)
+    case TypeFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType, effects: List[GeneralType])
     case TypeBox(tpe: GeneralType, captureSet: CaptureSet)
     case TypeEff(tpe: GeneralType, effects: List[GeneralType])
     case TypeErr
@@ -1145,25 +1145,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       case TypeErr => Some(ValueTypeRef(IdRef(List("fake"), "err"), Nil))
       case _ => None
 
-    def asBlockType: Option[BlockType] = {
-      def resolveFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType, effects: List[GeneralType]) =
-        for {
-          vtpes <- traverse(vparams)(_.asValueType)
-          btpes <- traverse(bparams) { case (id, t) => t.asBlockType.map((id, _)) }
-          retpe <- result.asValueType
-          effs <- traverse(effects)(_.asBlockTypeRef)
-        } yield FunctionType(tparams, vtpes, btpes, retpe, Effects(effs))
-
-      this match {
-        case TypeRef(id, args) => for {
-          vtpes <- traverse(args)(_.asValueType)
-        } yield BlockTypeRef(id, vtpes)
-        case TypeEff(TypeFun(tparams, vparams, bparams, result), effects) => resolveFun(tparams, vparams, bparams, result, effects)
-        case TypeFun(tparams, vparams, bparams, result) => resolveFun(tparams, vparams, bparams, result, Nil)
-        case TypeErr => Some(BlockTypeRef(IdRef(List("fake"), "err"), Nil))
-        case _ => None
-      }
-    }
+    def asBlockType: Option[BlockType] = this match
+      case TypeRef(id, args) => for {
+        vtpes <- traverse(args)(_.asValueType)
+      } yield BlockTypeRef(id, vtpes)
+      case TypeFun(tparams, vparams, bparams, result, effects) => for {
+        vtpes <- traverse(vparams)(_.asValueType)
+        btpes <- traverse(bparams) { case (id, t) => t.asBlockType.map((id, _)) }
+        retpe <- result.asValueType
+        effs <- traverse(effects)(_.asBlockTypeRef)
+      } yield FunctionType(tparams, vtpes, btpes, retpe, Effects(effs))
+      case TypeErr => Some(BlockTypeRef(IdRef(List("fake"), "err"), Nil))
+      case _ => None
 
     def asBlockTypeRef: Option[BlockType.BlockTypeRef] = this match
       case TypeRef(id, args) => for {
@@ -1267,17 +1260,16 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
     def functionTypeComplex() = backtrack {
-      val tpe = maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() match {
-        case tparams ~ vparams ~ bparams ~ t => TypeFun(tparams, vparams, bparams, t)
+      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() ~ maybeEffects() match {
+        case tparams ~ vparams ~ bparams ~ t ~ effs => TypeFun(tparams, vparams, bparams, t, effs)
       }
-      TypeEff(tpe, maybeEffects())
     }
 
     // Simple function type: Int => Int
     def functionTypeSimple() = backtrack {
       TypeRef(idRef(), maybeTypeArgs()) <~ `=>`
     } map { tpe =>
-      TypeEff(TypeFun(Nil, List(tpe), Nil, basicType()), maybeEffects())
+      TypeFun(Nil, List(tpe), Nil, basicType(), maybeEffects())
     }
 
     // Parse boxed types (lowest precedence)
