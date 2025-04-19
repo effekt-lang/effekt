@@ -1137,7 +1137,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         vtpes <- traverse(args)(_.asValueType)
       } yield ValueTypeRef(id, vtpes)
       case TypeBox(tpe, captureSet) => tpe match {
-        case TypeBox(_, _) => None
+        case TypeBox(_, _) => None // no nesting!
         case _ => for {
           btpe <- tpe.asBlockType
         } yield BoxedType(btpe, captureSet)
@@ -1173,10 +1173,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       case _ => None
 
     def asEffectful: Option[Effectful] = this match
-      case TypeEff(tpe, effects) => for {
-        vtpe <- tpe.asValueType
-        effs <- traverse(effects)(_.asBlockTypeRef)
-      } yield Effectful(vtpe, Effects(effs))
+      case TypeEff(tpe, effects) => tpe match {
+        case TypeEff(_, _) => None // no nesting!
+        case _ => for {
+          vtpe <- tpe.asValueType
+          effs <- traverse(effects)(_.asBlockTypeRef)
+        } yield Effectful(vtpe, Effects(effs))
+      }
       case TypeErr => Some(Effectful(ValueTypeRef(IdRef(List("fake"), "err"), Nil), Effects.Pure))
       case tpe => for {
         vtpe <- tpe.asValueType
@@ -1318,15 +1321,18 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
   def blockType(): BlockType = guardedType(_.asBlockType) {
     case box @ GeneralType.TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}.\nDid you mean to write just ${tpe} *without* at ${captureSet}?"
+    case eff: GeneralType.TypeEff                   => s"Expected block type, but got effectful type ${eff}.\nDid you mean to write a function type () => ${eff}?"
     case tpe                                        => s"Expected block type, but got value type ${tpe}."
   }
 
   def valueType(): ValueType = guardedType(_.asValueType) {
+    case box: GeneralType.TypeBox => s"Expected value type, but got double-boxed type ${box}."
     case fun: GeneralType.TypeFun => s"Expected value type, but got function type ${fun}.\nDid you mean to box it, i.e., ${fun} at {}?"
     case eff: GeneralType.TypeEff => s"Expected value type, but got effectful type ${eff}.\nDid you mean to write a first-class (boxed) function type, i.e., () => ${eff} at {},\n\tor a second class function type in braces () => ${eff}?"
     case tpe                      => s"Expected value type, but got block type ${tpe}."
   }
   def effectful(): Effectful = guardedType(_.asEffectful) {
+    case eff: GeneralType.TypeEff => s"Expected a type-and-effect annotation, but got a type with a double effect annotation ${eff}."
     case tpe                      => s"Expected a type-and-effect annotation, but got ${tpe}."
   }
 
