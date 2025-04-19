@@ -125,6 +125,7 @@ object Normalizer { normal =>
    * A good testcase to look at for this is:
    *   examples/pos/capture/regions.effekt
    */
+  @tailrec
   private def active[R](b: Block)(using C: Context): NormalizedBlock =
     normalize(b) match {
       case b: Block.BlockLit   => NormalizedBlock.Known(b, None)
