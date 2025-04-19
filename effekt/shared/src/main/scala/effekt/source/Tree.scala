@@ -556,47 +556,8 @@ enum Type extends Tree {
   case ValueTypeTree(tpe: symbols.ValueType)
 }
 export Type.*
-/*
-sealed trait Type extends Tree
-
-/**
- * Value Types
- */
-enum ValueType extends Type {
-
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case ValueTypeTree(tpe: symbols.ValueType)
-
-  /**
-   * Types of first-class functions
-   */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
-
-  // Bound occurrences (args can be empty)
-  case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
-}
-export ValueType.*
-
-/**
- * Block Types
- */
-enum BlockType extends Type {
-
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
-  case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
-}
-
-export BlockType.*
-*/
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-// case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 type Effectful = Type.TypeEff
 
 /**
@@ -620,10 +581,9 @@ object Named {
   type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
-  type Types = TypeRef
   type Vars = Var | Assign
   type Calls = Do | Select | MethodCall | IdTarget
-  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
+  type References = TypeRef | Vars | Calls | TagPattern | Handler | OpClause | Implementation
 
   type ResolvedDefinitions[T <: Definitions] = T match {
     // Defs
@@ -656,10 +616,7 @@ object Named {
   }
 
   type ResolvedReferences[T <: References] = T match {
-    // Types
     case TypeRef      => symbols.TypeConstructor | symbols.BlockTypeConstructor
-    // case ValueTypeRef => symbols.TypeConstructor
-    // case BlockTypeRef => symbols.BlockTypeConstructor
 
     // Vars
     case Var    => symbols.TermSymbol
@@ -688,44 +645,6 @@ object Named {
 }
 export Named.symbol
 
-// MOVE TO NAMER
-// ^ your wish is my command, dear comment.
-/*
-object Resolvable {
-
-  // Value Types
-  // -----------
-  extension (t: Type) {
-    @targetName("resolveValueType")
-    def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf[symbols.ValueType]
-    @targetName("resolveBlockType")
-    def resolve(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
-  }
-
-  // BLock Types
-  // -----------
-  // we need to avoid widening, so here we define BlockType as a sum without a common parent
-  // (see https://github.com/lampepfl/dotty/issues/16299)
-  /*type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
-
-  type Resolved[T <: BlockTypes] = T match {
-    case BlockTypeTree => symbols.BlockType
-    case FunctionType => symbols.FunctionType
-    case BlockTypeRef => symbols.InterfaceType
-  }
-
-  extension [T <: BlockTypes] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
-  }*/
-
-  // Capture Sets
-  // ------------
-  extension (capt: source.CaptureSet) {
-    def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
-  }
-}
-export Resolvable.resolve
-*/
 
 object Tree {
 
