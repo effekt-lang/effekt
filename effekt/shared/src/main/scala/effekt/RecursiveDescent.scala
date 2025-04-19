@@ -1130,6 +1130,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case TypeFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType)
     case TypeBox(tpe: GeneralType, captureSet: CaptureSet)
     case TypeEff(tpe: GeneralType, effects: List[GeneralType])
+    case TypeErr
 
     def asValueType: Option[ValueType] = this match
       case TypeRef(id, args) => for {
@@ -1141,6 +1142,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
           btpe <- tpe.asBlockType
         } yield BoxedType(btpe, captureSet)
       }
+      case TypeErr => Some(ValueTypeRef(IdRef(List("fake"), "err"), Nil))
       case _ => None
 
     def asBlockType: Option[BlockType] = {
@@ -1158,6 +1160,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         } yield BlockTypeRef(id, vtpes)
         case TypeEff(TypeFun(tparams, vparams, bparams, result), effects) => resolveFun(tparams, vparams, bparams, result, effects)
         case TypeFun(tparams, vparams, bparams, result) => resolveFun(tparams, vparams, bparams, result, Nil)
+        case TypeErr => Some(BlockTypeRef(IdRef(List("fake"), "err"), Nil))
         case _ => None
       }
     }
@@ -1166,6 +1169,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       case TypeRef(id, args) => for {
         vtpes <- traverse(args)(_.asValueType)
       } yield BlockTypeRef(id, vtpes)
+      case TypeErr => Some(BlockTypeRef(IdRef(List("fake"), "err"), Nil))
       case _ => None
 
     def asEffectful: Option[Effectful] = this match
@@ -1173,6 +1177,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         vtpe <- tpe.asValueType
         effs <- traverse(effects)(_.asBlockTypeRef)
       } yield Effectful(vtpe, Effects(effs))
+      case TypeErr => Some(Effectful(ValueTypeRef(IdRef(List("fake"), "err"), Nil), Effects.Pure))
       case tpe => for {
         vtpe <- tpe.asValueType
       } yield Effectful(vtpe, Effects.Pure)
@@ -1296,8 +1301,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   inline def guardedType[T](inline recognize: GeneralType => Option[T])(inline msg: GeneralType => String): T = {
+    val start = position
     val tpe = generalType()
-    recognize(tpe).getOrElse { fail(msg(tpe))}
+    val end = position
+    // aaaaaaa, encoding issues!
+    recognize(tpe).getOrElse {
+      softFail(msg(tpe), start, end)
+      recognize(GeneralType.TypeErr).getOrElse { fail(msg(tpe)) }
+    }
   }
 
   // !!! WARNING !!!
