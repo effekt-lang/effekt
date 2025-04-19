@@ -1131,12 +1131,12 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def asValueType: Option[ValueType] = this match
       case TypeRef(id, args) => for {
         vtpes <- traverse(args)(_.asValueType)
-      } yield ValueTypeRef(id, vtpes)
+      } yield ValueTypeRef(id, vtpes) withPositionOf this
       case TypeBox(tpe, captureSet) => tpe match {
         case TypeBox(_, _) => None // no nesting!
         case _ => for {
           btpe <- tpe.asBlockType
-        } yield BoxedType(btpe, captureSet)
+        } yield BoxedType(btpe, captureSet) withPositionOf this
       }
       case TypeErr => Some(ValueTypeRef(IdRef(List("fake"), "err"), Nil))
       case _ => None
@@ -1144,13 +1144,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     def asBlockType: Option[BlockType] = this match
       case TypeRef(id, args) => for {
         vtpes <- traverse(args)(_.asValueType)
-      } yield BlockTypeRef(id, vtpes)
+      } yield BlockTypeRef(id, vtpes) withPositionOf this
       case TypeFun(tparams, vparams, bparams, result, effects) => for {
         vtpes <- traverse(vparams)(_.asValueType)
         btpes <- traverse(bparams) { case (id, t) => t.asBlockType.map((id, _)) }
         retpe <- result.asValueType
         effs <- traverse(effects)(_.asBlockTypeRef)
-      } yield FunctionType(tparams, vtpes, btpes, retpe, Effects(effs))
+      } yield FunctionType(tparams, vtpes, btpes, retpe, Effects(effs)) withPositionOf this
       case TypeErr => Some(BlockTypeRef(IdRef(List("fake"), "err"), Nil))
       case _ => None
 
@@ -1160,19 +1160,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => for {
           vtpe <- tpe.asValueType
           effs <- traverse(effects)(_.asBlockTypeRef)
-        } yield Effectful(vtpe, Effects(effs))
+        } yield Effectful(vtpe, Effects(effs)) withPositionOf this
       }
       case TypeErr => Some(Effectful(ValueTypeRef(IdRef(List("fake"), "err"), Nil), Effects.Pure))
       case tpe => for {
         vtpe <- tpe.asValueType
-      } yield Effectful(vtpe, Effects.Pure)
+      } yield Effectful(vtpe, Effects.Pure) withPositionOf this
   }
 
   case class TypeRef(id: IdRef, args: List[GeneralType]) extends GeneralType {
     def asBlockTypeRef: Option[BlockTypeRef] =
       for {
         vtpes <- traverse(this.args)(_.asValueType)
-      } yield BlockTypeRef(this.id, vtpes)
+      } yield BlockTypeRef(this.id, vtpes) withPositionOf this
   }
   case class TypeFun(tparams: List[Id], vparams: List[GeneralType], bparams: List[(Option[IdDef], GeneralType)], result: GeneralType, effects: List[TypeRef]) extends GeneralType
   case class TypeBox(tpe: GeneralType, captureSet: CaptureSet) extends GeneralType
@@ -1303,7 +1303,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def blockType(): BlockType = guardedType(_.asBlockType) {
     case box @ TypeBox(tpe, captureSet) => s"Expected block type, but got boxed type ${box}.\nDid you mean to write just ${tpe} *without* at ${captureSet}?"
     case eff: TypeEff                   => s"Expected block type, but got effectful type ${eff}.\nDid you mean to write a function type () => ${eff}?"
-    case tpe                                        => s"Expected block type, but got value type ${tpe}."
+    case tpe                            => s"Expected block type, but got value type ${tpe}."
   }
   def valueType(): ValueType = guardedType(_.asValueType) {
     case box: TypeBox => s"Expected value type, but got double-boxed type ${box}."
@@ -1321,10 +1321,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val start = position
     val tpe @ TypeRef(id, tpes) = refType()
     val end = position
-    tpe.asBlockTypeRef.getOrElse {
+    val res: BlockTypeRef = tpe.asBlockTypeRef.getOrElse {
       softFail(s"Expected a type with value type arguments, got ${tpe}", start, end)
       BlockTypeRef(IdRef(List("fake"), "err"), Nil)
     }
+    res withPositionOf tpe
   }
 
   def effectSet(): Effects = {
@@ -1332,11 +1333,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     val effs = effects()
     val end = position
 
-    traverse(effs)(_.asBlockTypeRef) match
+    val res = traverse(effs)(_.asBlockTypeRef) match
       case Some(effects) => Effects(effects)
       case None =>
         softFail(s"Expected a valid effect set, got ${effs}", start, end)
         Effects.Pure
+
+    res withPositionOf effs
   }
 
   def maybeTypeParams(): List[Id] =
