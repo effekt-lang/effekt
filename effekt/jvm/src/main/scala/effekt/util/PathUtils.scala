@@ -44,7 +44,7 @@ object paths extends PathUtils {
   implicit def file(uri: URI): File = file(uri.getPath)
   implicit def file(filepath: String) =
     if (filepath.startsWith("file:"))
-      file(new URI(filepath).getPath)
+      file(new URI(filepath))
     else
       file(new JFile(filepath))
 }

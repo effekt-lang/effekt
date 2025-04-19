@@ -1,6 +1,7 @@
 package effekt
 package util
 
+import scala.annotation.tailrec
 import scala.quoted.*
 
 /**
@@ -128,6 +129,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   val self = TypeRepr.of[Self].typeSymbol
 
   val rewriteMethod =
+    @tailrec
     def findMethod(sym: Symbol): Symbol =
       if (sym.isDefDef && !sym.isAnonymousFunction) sym else findMethod(sym.owner)
 
@@ -145,6 +147,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   val rewrites: List[RewriteMethod] = self.methodMember(rewriteName).map { m =>
     TypeRepr.of[Self].memberType(m) match {
       case tpe: MethodType =>
+        @tailrec
         def findResult(tpe: TypeRepr): TypeRepr = tpe match {
           case tpe: LambdaType => findResult(tpe.resType)
           case _ => tpe

@@ -205,6 +205,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     stack match {
       case Stack.Empty => ???
       case Stack.Segment(frames, prompt, rest) =>
+        @tailrec
         def go(frames: List[Frame], acc: List[Frame]): Stack =
           frames match {
             case Nil =>

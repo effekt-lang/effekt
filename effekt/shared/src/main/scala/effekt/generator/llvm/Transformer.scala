@@ -7,6 +7,7 @@ import effekt.util.intercalate
 import effekt.util.messages.ErrorReporter
 import effekt.machine.analysis.*
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 object Transformer {
@@ -633,6 +634,7 @@ object Transformer {
   }
 
   def shareValues(values: machine.Environment, freeInBody: Set[machine.Variable])(using FunctionContext, BlockContext): Unit = {
+    @tailrec
     def loop(values: machine.Environment): Unit = {
       values match {
         case Nil => ()
