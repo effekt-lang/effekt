@@ -1099,7 +1099,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   /**
    * Type grammar by precedence:
    *
-   * Type ::= '(' Type ',' ... ')'                                                 simpleType
+   * Type ::= '(' Type ',' ... ')'                                                 atomicType
    *       | '(' Type ')'
    *       | Id ('[' Type ',' ... ']')?
    *
@@ -1236,40 +1236,38 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       nonterminal:
         some(idDef, `[`, `,`, `]`)
 
-    // Parse basic types (highest precedence)
-    def basicType(): GeneralType =
+    // Parse atomic types: Tuples, parenthesized types, type references (highest precedence)
+    def atomicType(): GeneralType =
       nonterminal:
         peek.kind match {
           case `(` =>
-            // Parenthesized expression
             some(boxedType, `(`, `,`, `)`) match {
-              case tpe :: Nil => tpe  // Single type in parentheses
-              case tpes => TypeTuple(tpes)  // Multiple types as tuple
+              case tpe :: Nil => tpe
+              case tpes => TypeTuple(tpes)
             }
           case _ =>
-            // Type reference with optional type args
             TypeRef(idRef(), maybeTypeArgs())
         }
 
     // Parse function types (middle precedence)
     def functionType(): GeneralType = {
-      nonterminal:
-        // Try to parse each function type variant, fall back to basic type if none match
-        functionTypeSimple() orElse functionTypeComplex() getOrElse basicType()
-    }
-
-    // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
-    def functionTypeComplex() = backtrack {
-      maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ basicType() ~ maybeEffects() match {
-        case tparams ~ vparams ~ bparams ~ t ~ effs => TypeFun(tparams, vparams, bparams, t, effs)
+      // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
+      def functionTypeComplex = backtrack {
+        maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ atomicType() ~ maybeEffects() match {
+          case tparams ~ vparams ~ bparams ~ t ~ effs => TypeFun(tparams, vparams, bparams, t, effs)
+        }
       }
-    }
 
-    // Simple function type: Int => Int
-    def functionTypeSimple() = backtrack {
-      TypeRef(idRef(), maybeTypeArgs()) <~ `=>`
-    } map { tpe =>
-      TypeFun(Nil, List(tpe), Nil, basicType(), maybeEffects())
+      // Simple function type: Int => Int
+      def functionTypeSimple = backtrack {
+        TypeRef(idRef(), maybeTypeArgs()) <~ `=>`
+      } map { tpe =>
+        TypeFun(Nil, List(tpe), Nil, atomicType(), maybeEffects())
+      }
+
+      // Try to parse each function type variant, fall back to basic type if none match
+      nonterminal:
+        functionTypeSimple orElse functionTypeComplex getOrElse atomicType()
     }
 
     // Parse boxed types (lowest precedence)
