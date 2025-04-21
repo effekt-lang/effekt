@@ -575,6 +575,18 @@ case class Effectful(tpe: ValueType, eff: Effects) extends Type
 type BlockType = Type
 type ValueType = Type
 
+// TODO(jiribenes, 2024-04-21): reuse pretty-printing machinery for source.Tree from "part 1 PR"
+def describe(t: Type): String = t match {
+  case _: TypeRef => s"a type reference ${t}"
+  case _: BoxedType => s"a boxed type ${t}"
+  case _: FunctionType => s"a second-class function type ${t}"
+  case _: Effectful => s"a type-and-effect annotation ${t}"
+
+  // THESE TWO SHOULD NEVER BE USER-VISIBLE!
+  case ValueTypeTree(tpe) => s"a value type tree ${tpe}"
+  case BlockTypeTree(eff) => s"a block type tree ${eff}"
+}
+
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[TypeRef]]).
