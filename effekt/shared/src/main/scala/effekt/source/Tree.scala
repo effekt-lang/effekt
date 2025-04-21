@@ -201,8 +201,8 @@ case class Include(path: String) extends Tree
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[Type])
-  case BlockParam(id: IdDef, tpe: Option[Type])
+  case ValueParam(id: IdDef, tpe: Option[ValueType])
+  case BlockParam(id: IdDef, tpe: Option[BlockType])
 }
 export Param.*
 
@@ -235,10 +235,10 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: IdDef, annot: Option[Type], binding: Stmt)
-  case RegDef(id: IdDef, annot: Option[Type], region: IdRef, binding: Stmt)
-  case VarDef(id: IdDef, annot: Option[Type], binding: Stmt)
-  case DefDef(id: IdDef, annot: Option[Type], block: Term)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
+  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
+  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
 
   case NamespaceDef(id: IdDef, definitions: List[Def])
 
@@ -249,7 +249,7 @@ enum Def extends Definition {
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: Type)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
@@ -265,7 +265,7 @@ enum Def extends Definition {
                  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
                  bodies: List[ExternBody]) extends Def
 
-  case ExternResource(id: IdDef, tpe: Type)
+  case ExternResource(id: IdDef, tpe: BlockType)
 
   case ExternInterface(id: IdDef, tparams: List[Id])
 
@@ -363,7 +363,7 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[TypeRef], id: IdRef, targs: List[Type], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
@@ -377,7 +377,7 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[Type], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
   case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
@@ -554,22 +554,26 @@ case class BlockTypeTree(eff: symbols.BlockType) extends Type
 /*
  * Reference to a type, potentially with bound occurences in `args`
  */
-case class TypeRef(id: IdRef, args: List[Type]) extends Type, Reference
+case class TypeRef(id: IdRef, args: List[ValueType]) extends Type, Reference
 
 /**
  * Types of first-class computations
  */
-case class BoxedType(tpe: Type, capt: CaptureSet) extends Type
+case class BoxedType(tpe: BlockType, capt: CaptureSet) extends Type
 
 /**
  * Types of (second-class) functions
  */
-case class FunctionType(tparams: List[Id], vparams: List[Type], bparams: List[(Option[IdDef], Type)], result: Type, effects: Effects) extends Type
+case class FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects) extends Type
 
 /**
  * Type-and-effect annotations
  */
-case class Effectful(tpe: Type, eff: Effects) extends Type
+case class Effectful(tpe: ValueType, eff: Effects) extends Type
+
+// These are just type aliases for documentation purposes.
+type BlockType = Type
+type ValueType = Type
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
