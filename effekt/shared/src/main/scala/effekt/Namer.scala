@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree, describe }
+import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree, describe, sourceOf }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
@@ -708,9 +708,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.error(pretty"Expected value type, but got ${describe(other)}.")
       other match
         case funTpe: source.FunctionType =>
-          if isParam then Context.info(pretty"Did you mean to use braces in order to recieve a block type ${funTpe}?")
-          Context.info(pretty"Did you mean to use a first-class, boxed function type ${funTpe} at {}?")
-        case source.Effectful(tpe, eff) => Context.info(pretty"Did you mean to use a first-class, boxed type () => ${tpe} at {} / ${eff}?")
+          if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type ${funTpe.sourceOf}?")
+          Context.info(pretty"Did you mean to use a first-class, boxed function type ${funTpe.sourceOf} at {}?")
+        case source.Effectful(innerTpe, eff) => Context.info(pretty"Did you mean to use a first-class, boxed type () => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}?")
         case _ => ()
       ValueTypeApp(ExternType(Name.local("!fake?err-value"), Nil), Nil)
   }
@@ -724,10 +724,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
       Context.error(pretty"Expected block type, but got ${describe(other)}.")
       other match
-        case source.BoxedType(tpe, eff) =>
-          if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other}?")
-          Context.info(pretty"Did you mean to use the block type ${tpe} without 'at ${eff}'?")
-        case source.Effectful(tpe, eff) => Context.info(pretty"Did you mean to use a function type () => ${tpe} / ${eff}?")
+        case source.BoxedType(innerTpe, eff) =>
+          if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
+          Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
+        case source.Effectful(innerTpe, eff) => Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${eff.sourceOf}?")
         case _ => ()
       InterfaceType(ExternInterface(Name.local("!fake?err-block"), Nil), Nil) // fake!
   }
