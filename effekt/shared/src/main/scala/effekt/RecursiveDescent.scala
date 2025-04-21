@@ -1169,12 +1169,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       functionTypeSimple orElse functionTypeComplex getOrElse atomicType()
   }
 
-  // Parse boxed types (lowest precedence)
+  // Parse boxed types and effectfuls (lowest precedence)
+  // "Top-level" parser for a generic type.
   private def boxedType(): Type = {
     nonterminal:
       // Parse the function type first
       val tpe = functionType()
 
+      // TODO: these should probably be in a loop to parse as many `at`s and `\`s as possible?
       val boxed = when(`at`) {
         BoxedType(tpe, captureSet())
       } {
@@ -1188,18 +1190,19 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
   }
 
-  inline def generalType() = boxedType()
-
-  // !!! WARNING: TEMPORARY(jiribenes, 2024-04-21) !!!
   // NOTE: ValueType, BlockType are just aliases for Type.
-  inline def blockType(): BlockType = generalType()
-  inline def valueType(): ValueType = generalType()
-  inline def effectful(): Effectful = generalType() match
-    case eff: Effectful => eff
-    case tpe            => Effectful(tpe, Effects.Pure)
+  inline def blockType(): BlockType = boxedType()
+  inline def valueType(): ValueType = boxedType()
 
-  // Completely specialized for TypeRef: we only parse `refType` here, we don't go through the whole hierarchy
+  // Completely specialized for TypeRef: we only parse `refType` here, we don't go through the whole hierarchy.
+  // This results in slightly worse errors, but massively simplifies the design.
   inline def blockTypeRef(): TypeRef = refType()
+
+  // Somewhat specialized: we parse a normal type, if it's not a ${tpe} / ${effs},
+  // then pretend the effect set is empty. This seems to work out fine :)
+  def effectful(): Effectful = boxedType() match
+    case eff: Effectful => eff
+    case tpe => Effectful(tpe, Effects.Pure)
 
   def maybeTypeParams(): List[Id] =
     nonterminal:
