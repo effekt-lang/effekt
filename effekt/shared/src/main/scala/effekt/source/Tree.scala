@@ -542,27 +542,27 @@ export MatchPattern.*
 sealed trait Type extends Tree
 
 /**
- * Trees that represent inferred or synthesized value types (not present in the source)
+ * Trees that represent inferred or synthesized *value* types (not present in the source = not parsed)
  */
 case class ValueTypeTree(tpe: symbols.ValueType) extends Type
 
 /**
- * Trees that represent inferred or synthesized block types (not present in the source)
+ * Trees that represent inferred or synthesized *block* types (not present in the source = not parsed)
  */
 case class BlockTypeTree(eff: symbols.BlockType) extends Type
 
 /*
- * Reference to a type, potentially with bound occurences
+ * Reference to a type, potentially with bound occurences in `args`
  */
 case class TypeRef(id: IdRef, args: List[Type]) extends Type, Reference
 
 /**
- * Types of first-class functions
+ * Types of first-class computations
  */
 case class BoxedType(tpe: Type, capt: CaptureSet) extends Type
 
 /**
- * Types of second-class functions
+ * Types of (second-class) functions
  */
 case class FunctionType(tparams: List[Id], vparams: List[Type], bparams: List[(Option[IdDef], Type)], result: Type, effects: Effects) extends Type
 
