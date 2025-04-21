@@ -694,8 +694,9 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
         Substitutions.types(tparams, targs).substitute(tpe)
       case other =>
-        // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type ref in order to aggregate more errors.
+        // TODO(jiribenes, 2024-04-21): Describe `other` a little bit more.
         Context.error(pretty"Expected value type, but got ${other}.")
+        // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type ref in order to aggregate more errors.
         ValueTypeApp(ExternType(Name.local("!fake?err-valueref"), Nil), Nil)
     }
     case source.ValueTypeTree(tpe) =>
@@ -704,14 +705,17 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BoxedType(tpe, capt) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
-      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
       Context.error(pretty"Expected value type, but got ${describe(other)}.")
       other match
         case funTpe: source.FunctionType =>
-          if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type ${funTpe.sourceOf}?")
-          Context.info(pretty"Did you mean to use a first-class, boxed function type ${funTpe.sourceOf} at {}?")
-        case source.Effectful(innerTpe, eff) => Context.info(pretty"Did you mean to use a first-class, boxed type () => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}?")
+          if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
+          Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
+        case source.Effectful(innerTpe, eff) =>
+          if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
+          Context.info(pretty"Did you mean to use a first-class, boxed type `() => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}`?")
         case _ => ()
+
+      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
       ValueTypeApp(ExternType(Name.local("!fake?err-value"), Nil), Nil)
   }
   def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolveValueType(tpe, isParam = false)
@@ -721,14 +725,17 @@ object Namer extends Phase[Parsed, NameResolved] {
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
     case other =>
-      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
       Context.error(pretty"Expected block type, but got ${describe(other)}.")
       other match
         case source.BoxedType(innerTpe, eff) =>
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
-        case source.Effectful(innerTpe, eff) => Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${eff.sourceOf}?")
+        case source.Effectful(innerTpe, eff) =>
+          // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
+          Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${eff.sourceOf}?")
         case _ => ()
+
+      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
       InterfaceType(ExternInterface(Name.local("!fake?err-block"), Nil), Nil) // fake!
   }
   def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolveBlockType(tpe, isParam = false)
@@ -787,8 +794,9 @@ object Namer extends Phase[Parsed, NameResolved] {
           effs.toList.map(subst.substitute)
         case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolveValueType)))
         case other =>
-          // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy interface type in order to aggregate more errors.
+          // TODO(jiribenes, 2024-04-21): Describe `other` a little bit more.
           Context.error(pretty"Expected an interface type, but got ${other}.")
+          // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy interface type in order to aggregate more errors.
           List(InterfaceType(ExternInterface(Name.local("!fake?err-iface"), Nil), Nil)) // fake!
       }
     }
