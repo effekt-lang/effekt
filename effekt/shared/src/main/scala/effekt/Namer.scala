@@ -170,7 +170,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        TypeAlias(Context.nameFor(id), tps, resolve(tpe))
+        TypeAlias(Context.nameFor(id), tps, resolveValueType(tpe))
       }
       Context.define(id, alias)
 
@@ -231,7 +231,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.ExternResource(id, tpe) =>
       val name = Context.nameFor(id)
-      val btpe = resolve(tpe)
+      val btpe = resolveBlockType(tpe)
       val sym = ExternResource(name, btpe)
       Context.define(id, sym)
       Context.bindBlock(sym)
@@ -270,22 +270,22 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(rest)
 
     case source.ValueParam(id, tpe) =>
-      Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
+      Context.define(id, ValueParam(Name.local(id), tpe.map(resolveValueType)))
 
     case source.BlockParam(id, tpe) =>
-      val p = BlockParam(Name.local(id), tpe.map { resolve })
+      val p = BlockParam(Name.local(id), tpe.map { resolveBlockType })
       Context.define(id, p)
       Context.bind(p.capture)
 
     case d @ source.ValDef(id, annot, binding) =>
-      val tpe = annot.map(resolve)
+      val tpe = annot.map(resolveValueType)
       resolveGeneric(binding)
       Context.define(id, ValBinder(Context.nameFor(id), tpe, d))
 
 
     // Local mutable state
     case d @ source.VarDef(id, annot, binding) =>
-      val tpe = annot.map(resolve)
+      val tpe = annot.map(resolveValueType)
 
       resolveGeneric(binding)
       val sym = VarBinder(Context.nameFor(id), tpe, d)
@@ -294,7 +294,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // allocation into a region
     case d @ source.RegDef(id, annot, region, binding) =>
-      val tpe = annot.map(resolve)
+      val tpe = annot.map(resolveValueType)
       val reg = Context.resolveTerm(region) match {
         case t: BlockSymbol => t
         case _ => Context.abort("Region needs to be a block.")
@@ -310,7 +310,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(impl)
 
     case d @ source.DefDef(id, annot, binding) =>
-      val tpe = annot.map(resolve)
+      val tpe = annot.map(resolveBlockType)
       resolveGeneric(binding)
       Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
@@ -492,7 +492,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
       Context scoped {
-        val tps = tparams map resolve
+        val tps = tparams map resolveValueType
         val vps = vparams map resolve
         val bps = bparams map resolve
 
@@ -543,13 +543,13 @@ object Namer extends Phase[Parsed, NameResolved] {
             then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
         }
       }
-      targs foreach resolve
+      targs foreach resolveValueType
       resolveAll(vargs)
       resolveAll(bargs)
 
     case source.Do(effect, target, targs, vargs, bargs) =>
       Context.resolveEffectCall(effect map resolve, target)
-      targs foreach resolve
+      targs foreach resolveValueType
       resolveAll(vargs)
       resolveAll(bargs)
 
@@ -558,7 +558,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
         case source.ExprTarget(expr) => resolveGeneric(expr)
       }
-      targs foreach resolve
+      targs foreach resolveValueType
       resolveAll(vargs)
       resolveAll(bargs)
 
@@ -571,7 +571,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }
 
-    case tpe: source.ValueType    => resolve(tpe)
+    // TODO(jiribenes, 2024-04-21): How do we get around this case? How do we know which one is expected? Do we even need to do this?
+    // ... or should we just choose based on the syntax?
+    case tpe: source.Type         => Context.abort(s"Unexpected kindless type: $tpe.")
     case tpe: source.FunctionType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
@@ -624,12 +626,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case p: source.BlockParam => resolve(p)
   }
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(resolve))
+    val sym = ValueParam(Name.local(p.id), p.tpe.map(resolveValueType))
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { resolve })
+    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { resolveBlockType })
     Context.assignSymbol(p.id, sym)
     sym
   }
@@ -675,7 +677,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * We de-alias on-the-fly in Namer so that aliases can never show up again in the remaining compiler.
    * This way error messages might suffer; however it simplifies the compiler a lot.
    */
-  def resolve(tpe: source.ValueType)(using Context): ValueType = resolvingType(tpe) {
+  def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolvingType(tpe) {
     case source.ValueTypeRef(id, args) => Context.resolveType(id) match {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolve))
       case id: TypeVar =>
@@ -698,7 +700,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       BoxedType(resolve(tpe), resolve(capt))
   }
 
-  def resolve(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
+  def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.BlockTypeRef => resolve(t)
@@ -710,7 +712,7 @@ object Namer extends Phase[Parsed, NameResolved] {
      */
     case source.FunctionType(tparams, vparams, bparams, ret, effects) => Context scoped {
       val tps = tparams.map(resolve)
-      val vps = vparams.map(resolve)
+      val vps = vparams.map(resolveValueType)
 
       var cps: List[Capture] = Nil
       val bps = bparams.map {
@@ -718,7 +720,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val name = id.map(Name.local).getOrElse(NoName)
           val cap = CaptureParam(name)
           cps = cps :+ cap
-          resolve(tpe)
+          resolveBlockType(tpe)
       }
 
       val effs = resolve(effects).distinct
@@ -729,13 +731,13 @@ object Namer extends Phase[Parsed, NameResolved] {
 
       cps foreach Context.bind
 
-      val res = resolve(ret)
+      val res = resolveValueType(ret)
 
       FunctionType(tps, cps, vps, bps, res, effs)
     }
   }
 
-  def resolve(tpe: source.BlockTypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
+  def resolve(tpe: source.TypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
     resolveWithAliases(tpe) match {
       case Nil => Context.abort("Expected a single interface type, not an empty effect set.")
       case resolved :: Nil => resolved
@@ -746,17 +748,17 @@ object Namer extends Phase[Parsed, NameResolved] {
   /**
    * Resolves an interface type, potentially with effect aliases on the top level
    */
-  def resolveWithAliases(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
+  def resolveWithAliases(tpe: source.TypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     val resolved: List[InterfaceType] = tpe match {
-      case source.BlockTypeRef(id, args) => Context.resolveType(id) match {
+      case source.TypeRef(id, args) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
           if (tparams.size != args.size) {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got ${args.size}.")
           }
-          val targs = args.map(resolve)
+          val targs = args.map(resolveValueType)
           val subst = Substitutions.types(tparams, targs)
           effs.toList.map(subst.substitute)
-        case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolve)))
+        case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolveValueType)))
         case _ => Context.abort("Expected an interface type.")
       }
     }
@@ -768,7 +770,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     Effects(tpe.effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
-    (resolve(e.tpe), resolve(e.eff))
+    (resolveValueType(e.tpe), resolve(e.eff))
 
   def resolve(capt: source.CaptureSet)(using Context): CaptureSet = Context.at(capt) {
     val captResolved = CaptureSet(capt.captures.map { Context.resolveCapture }.toSet)
