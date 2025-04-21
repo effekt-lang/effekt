@@ -701,7 +701,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           case _ => ()
 
         // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type ref in order to aggregate more errors.
-        ValueTypeApp(ExternType(Name.local("!fake?err-valueref"), Nil), Nil)
+        ValueTypeApp(ExternType(NoName, Nil), Nil)
     }
     case source.ValueTypeTree(tpe) =>
       tpe
@@ -726,7 +726,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case _ => ()
 
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
-      ValueTypeApp(ExternType(Name.local("!fake?err-value"), Nil), Nil)
+      ValueTypeApp(ExternType(NoName, Nil), Nil)
   }
   def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolveValueType(tpe, isParam = false)
 
@@ -754,7 +754,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case _ => ()
 
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
-      InterfaceType(ExternInterface(Name.local("!fake?err-block"), Nil), Nil) // fake!
+      InterfaceType(ExternInterface(NoName, Nil), Nil) // fake!
   }
   def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolveBlockType(tpe, isParam = false)
 
@@ -814,7 +814,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case other =>
           Context.error(pretty"Expected an interface type, but got value type ${other}.")
           // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy interface type in order to aggregate more errors.
-          List(InterfaceType(ExternInterface(Name.local("!fake?err-iface"), Nil), Nil)) // fake!
+          List(InterfaceType(ExternInterface(NoName, Nil), Nil)) // fake!
       }
     }
     resolved.foreach(kinds.wellformed)
