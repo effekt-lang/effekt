@@ -492,7 +492,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
       Context scoped {
-        val tps = tparams map resolveValueType
+        val tps = tparams map resolve
         val vps = vparams map resolve
         val bps = bparams map resolve
 
@@ -548,7 +548,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveAll(bargs)
 
     case source.Do(effect, target, targs, vargs, bargs) =>
-      Context.resolveEffectCall(effect map resolve, target)
+      Context.resolveEffectCall(effect map resolveBlockRef, target)
       targs foreach resolveValueType
       resolveAll(vargs)
       resolveAll(bargs)
@@ -571,10 +571,12 @@ object Namer extends Phase[Parsed, NameResolved] {
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }
 
+    // TODO(jiribenes, 2024-04-21): When does this ever happen?!
+    case tpe: source.FunctionType => resolve(tpe)
+
     // TODO(jiribenes, 2024-04-21): How do we get around this case? How do we know which one is expected? Do we even need to do this?
     // ... or should we just choose based on the syntax?
     case tpe: source.Type         => Context.abort(s"Unexpected kindless type: $tpe.")
-    case tpe: source.FunctionType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
     case id: IdRef                => Context.resolveTerm(id)
