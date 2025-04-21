@@ -368,7 +368,7 @@ enum Term extends Tree {
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
    */
-  case Call(target: CallTarget, targs: List[Type], vargs: List[Term], bargs: List[Term])
+  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term])
 
   /**
    * Models:

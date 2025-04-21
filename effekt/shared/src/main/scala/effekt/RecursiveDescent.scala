@@ -606,11 +606,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       }
 
 
-  def maybeValueTypeAnnotation(): Option[Type] =
+  def maybeValueTypeAnnotation(): Option[ValueType] =
     nonterminal:
       if peek(`:`) then Some(valueTypeAnnotation()) else None
 
-  def maybeBlockTypeAnnotation(): Option[Type] =
+  def maybeBlockTypeAnnotation(): Option[BlockType] =
     nonterminal:
       if peek(`:`) then Some(blockTypeAnnotation()) else None
 
@@ -622,11 +622,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     if peek(`:`) then  `:` ~> effectful()
     else fail("Expected return type annotation")
 
-  def valueTypeAnnotation(): Type =
+  def valueTypeAnnotation(): ValueType =
     if peek(`:`) then  `:` ~> valueType()
     else fail("Expected a type annotation")
 
-  def blockTypeAnnotation(): Type =
+  def blockTypeAnnotation(): BlockType =
     if peek(`:`) then  `:` ~> blockType()
     else fail("Expected a type annotation")
 
@@ -914,17 +914,17 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   //   foo      ==    foo;
   //   ()             ()
   def isArguments: Boolean = lookbehind(1).kind != Newline && (peek(`(`) || peek(`[`) || peek(`{`))
-  def arguments(): (List[Type], List[Term], List[Term]) =
+  def arguments(): (List[ValueType], List[Term], List[Term]) =
     if (!isArguments) fail("Expected at least one argument section (types, values, or blocks)")
     (maybeTypeArgs(), maybeValueArgs(), maybeBlockArgs())
 
-  def maybeTypeArgs(): List[Type] = if peek(`[`) then typeArgs() else Nil
+  def maybeTypeArgs(): List[ValueType] = if peek(`[`) then typeArgs() else Nil
   def maybeValueArgs(): List[Term] = if peek(`(`) then valueArgs() else Nil
   def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
 
-  def typeArgs(): List[Type] =
+  def typeArgs(): List[ValueType] =
     nonterminal:
-      some(() => generalType(), `[`, `,`, `]`) // TODO(jiribenes, 2024-04-21): weird eta?
+      some(() => valueType(), `[`, `,`, `]`) // TODO(jiribenes, 2024-04-21): weird eta?
   def valueArgs(): List[Term] =
     nonterminal:
       many(expr, `(`, `,`, `)`)
@@ -1214,8 +1214,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   inline def generalType() = boxedType()
 
   // !!! WARNING: TEMPORARY(jiribenes, 2024-04-21) !!!
-  inline def blockType(): Type = generalType()
-  inline def valueType(): Type = generalType()
+  // NOTE: ValueType, BlockType are just aliases for Type.
+  inline def blockType(): BlockType = generalType()
+  inline def valueType(): ValueType = generalType()
   inline def effectful(): Effectful = generalType() match
     case eff: Effectful => eff
     case tpe            => Effectful(tpe, Effects.Pure)
