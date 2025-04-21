@@ -671,13 +671,25 @@ object Resolvable {
     def resolve(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
   }
 
+  extension (t: TypeRef) {
+    def resolveBlockRef(using C: Context): symbols.InterfaceType = C.resolvedType(t).asInstanceOf[symbols.InterfaceType]
+  }
+
+  // NOTE(jiribenes, 2024-04-21):
+  // So these are technically unsafe, but we ought to report the errors after Namer anyways,
+  // so they should be "safe" within Typer and other phases, I think?
+  extension (t: Type) {
+    def resolveValueType(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf[symbols.ValueType]
+    def resolveBlockType(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
+  }
+
   // Capture Sets
   // ------------
   extension (capt: source.CaptureSet) {
     def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
   }
 }
-export Resolvable.resolve
+export Resolvable.*
 
 
 object Tree {
