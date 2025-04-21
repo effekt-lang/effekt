@@ -575,12 +575,11 @@ case class Effectful(tpe: ValueType, eff: Effects) extends Type
 type BlockType = Type
 type ValueType = Type
 
-// TODO(jiribenes, 2024-04-21): reuse pretty-printing machinery for source.Tree from "part 1 PR"
-def describe(t: Type): String = t match {
-  case _: TypeRef => s"a type reference ${t}"
-  case _: BoxedType => s"a boxed type ${t}"
-  case _: FunctionType => s"a second-class function type ${t}"
-  case _: Effectful => s"a type-and-effect annotation ${t}"
+def describe(t: Type)(using C: Context): String = t match {
+  case _: TypeRef => s"a type reference ${t.sourceOf}"
+  case _: BoxedType => s"a boxed type ${t.sourceOf}"
+  case _: FunctionType => s"a second-class function type ${t.sourceOf}"
+  case _: Effectful => s"a type-and-effect annotation ${t.sourceOf}"
 
   // THESE TWO SHOULD NEVER BE USER-VISIBLE!
   case ValueTypeTree(tpe) => s"a value type tree ${tpe}"
@@ -703,6 +702,17 @@ object Resolvable {
 }
 export Resolvable.*
 
+extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
+  // XXX this should maybe be a method on `Source`?
+  def slice(range: kiama.util.Range): Option[String] = for {
+    start <- range.from.optOffset
+    end <- range.to.optOffset
+  } yield range.from.source.content.substring(start, end)
+
+  C.positions.getRange(positioned).flatMap(slice)
+}
+extension [T](positioned: T) def sourceOf(using C: Context): String =
+  positioned.sourceOfOpt.getOrElse { s"${positioned}" }
 
 object Tree {
 
