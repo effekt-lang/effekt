@@ -695,7 +695,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Substitutions.types(tparams, targs).substitute(tpe)
       case other =>
         // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type ref in order to aggregate more errors.
-        Context.error(pretty"Expected value type, but got ${describe(other)}.")
+        Context.error(pretty"Expected value type, but got ${other}.")
         ValueTypeApp(ExternType(Name.local("!fake?err-valueref"), Nil), Nil)
     }
     case source.ValueTypeTree(tpe) =>
