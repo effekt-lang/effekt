@@ -201,8 +201,8 @@ case class Include(path: String) extends Tree
  * Parameters and arguments
  */
 enum Param extends Definition {
-  case ValueParam(id: IdDef, tpe: Option[ValueType])
-  case BlockParam(id: IdDef, tpe: Option[BlockType])
+  case ValueParam(id: IdDef, tpe: Option[Type])
+  case BlockParam(id: IdDef, tpe: Option[Type])
 }
 export Param.*
 
@@ -235,10 +235,10 @@ export Param.*
 enum Def extends Definition {
 
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
-  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case RegDef(id: IdDef, annot: Option[ValueType], region: IdRef, binding: Stmt)
-  case VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
-  case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+  case ValDef(id: IdDef, annot: Option[Type], binding: Stmt)
+  case RegDef(id: IdDef, annot: Option[Type], region: IdRef, binding: Stmt)
+  case VarDef(id: IdDef, annot: Option[Type], binding: Stmt)
+  case DefDef(id: IdDef, annot: Option[Type], block: Term)
 
   case NamespaceDef(id: IdDef, definitions: List[Def])
 
@@ -249,7 +249,7 @@ enum Def extends Definition {
   /**
    * Type aliases like `type Matrix[T] = List[List[T]]`
    */
-  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType)
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: Type)
 
   /**
    * Effect aliases like `effect Set = { Get, Put }`
@@ -265,7 +265,7 @@ enum Def extends Definition {
                  tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful,
                  bodies: List[ExternBody]) extends Def
 
-  case ExternResource(id: IdDef, tpe: BlockType)
+  case ExternResource(id: IdDef, tpe: Type)
 
   case ExternInterface(id: IdDef, tparams: List[Id])
 
@@ -363,12 +363,12 @@ enum Term extends Tree {
    * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
    * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
    */
-  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case Do(effect: Option[TypeRef], id: IdRef, targs: List[Type], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
    */
-  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term])
+  case Call(target: CallTarget, targs: List[Type], vargs: List[Term], bargs: List[Term])
 
   /**
    * Models:
@@ -377,7 +377,7 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  case MethodCall(receiver: Term, id: IdRef, targs: List[Type], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
   case If(guards: List[MatchGuard], thn: Stmt, els: Stmt)
@@ -444,7 +444,7 @@ case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bp
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: BlockType.BlockTypeRef, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: TypeRef, clauses: List[OpClause]) extends Reference {
   def id = interface.id
 }
 
@@ -521,6 +521,7 @@ export MatchPattern.*
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
+ * TODO(jiribenes, 2024-04-21): update diagram!
  *
  * ----------[[ effekt.source.Type ]]----------
  *
@@ -541,52 +542,44 @@ export MatchPattern.*
 sealed trait Type extends Tree
 
 /**
- * Value Types
+ * Trees that represent inferred or synthesized value types (not present in the source)
  */
-enum ValueType extends Type {
-
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case ValueTypeTree(tpe: symbols.ValueType)
-
-  /**
-   * Types of first-class functions
-   */
-  case BoxedType(tpe: BlockType, capt: CaptureSet)
-
-  // Bound occurrences (args can be empty)
-  case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
-}
-export ValueType.*
+case class ValueTypeTree(tpe: symbols.ValueType) extends Type
 
 /**
- * Block Types
+ * Trees that represent inferred or synthesized block types (not present in the source)
  */
-enum BlockType extends Type {
+case class BlockTypeTree(eff: symbols.BlockType) extends Type
 
-  /**
-   * Trees that represent inferred or synthesized types (not present in the source)
-   */
-  case BlockTypeTree(eff: symbols.BlockType)
-  case FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], result: ValueType, effects: Effects)
-  case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
-}
+/*
+ * Reference to a type, potentially with bound occurences
+ */
+case class TypeRef(id: IdRef, args: List[Type]) extends Type, Reference
 
-export BlockType.*
+/**
+ * Types of first-class functions
+ */
+case class BoxedType(tpe: Type, capt: CaptureSet) extends Type
 
-// We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+/**
+ * Types of second-class functions
+ */
+case class FunctionType(tparams: List[Id], vparams: List[Type], bparams: List[(Option[IdDef], Type)], result: Type, effects: Effects) extends Type
+
+/**
+ * Type-and-effect annotations
+ */
+case class Effectful(tpe: Type, eff: Effects) extends Type
 
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
- * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
+ * the concrete nature of its elements (so it is generic [[TypeRef]]).
  */
-case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
+case class Effects(effs: List[TypeRef]) extends Tree
 object Effects {
   val Pure: Effects = Effects()
-  def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
+  def apply(effs: TypeRef*): Effects = Effects(effs.toSet)
+  def apply(effs: Set[TypeRef]): Effects = Effects(effs.toList)
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Tree
@@ -599,10 +592,9 @@ object Named {
   type Defs = FunDef | ValDef | VarDef | DefDef | RegDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
   type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
 
-  type Types = ValueTypeRef | BlockTypeRef
   type Vars = Var | Assign
   type Calls = Do | Select | MethodCall | IdTarget
-  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
+  type References = Vars | Calls | TagPattern | Handler | OpClause | Implementation
 
   type ResolvedDefinitions[T <: Definitions] = T match {
     // Defs
@@ -635,9 +627,7 @@ object Named {
   }
 
   type ResolvedReferences[T <: References] = T match {
-    // Types
-    case ValueTypeRef => symbols.TypeConstructor
-    case BlockTypeRef => symbols.BlockTypeConstructor
+    case TypeRef => symbols.TypeConstructor | symbols.BlockTypeConstructor
 
     // Vars
     case Var    => symbols.TermSymbol
@@ -666,29 +656,15 @@ object Named {
 }
 export Named.symbol
 
+// TODO(jiribenes, 2024-04-21): Which of these do we need?
+// Can we actually move this to namer?
+
 // MOVE TO NAMER
 object Resolvable {
-
-  // Value Types
+  // Block Types
   // -----------
-  extension (t: ValueType) {
-    def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf
-  }
-
-  // BLock Types
-  // -----------
-  // we need to avoid widening, so here we define BlockType as a sum without a common parent
-  // (see https://github.com/lampepfl/dotty/issues/16299)
-  type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
-
-  type Resolved[T <: BlockTypes] = T match {
-    case BlockTypeTree => symbols.BlockType
-    case FunctionType => symbols.FunctionType
-    case BlockTypeRef => symbols.InterfaceType
-  }
-
-  extension [T <: BlockTypes] (t: T) {
-    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
+  extension (t: BlockTypeTree) {
+    def resolve(using C: Context): symbols.BlockType = C.resolvedType(t).asInstanceOf[symbols.BlockType]
   }
 
   // Capture Sets
