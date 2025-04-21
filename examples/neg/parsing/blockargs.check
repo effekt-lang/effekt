@@ -1,4 +1,6 @@
-[error] examples/neg/parsing/blockargs.effekt:3:18: Expected block type, but got effectful type R / Exc.
-Did you mean to write a function type () => R / Exc?
+[error] examples/neg/parsing/blockargs.effekt:3:18: Expected block type, but got a type-and-effect annotation R / Exc.
 def foo[R] { f : R / Exc }: R = <>
-                 ^^^^^^^^
+                 ^^^^^^^
+[info] examples/neg/parsing/blockargs.effekt:3:18: Did you mean to use a function type () => R / Exc?
+def foo[R] { f : R / Exc }: R = <>
+                 ^^^^^^^
