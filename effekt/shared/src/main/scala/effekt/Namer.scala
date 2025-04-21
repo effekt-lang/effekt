@@ -129,7 +129,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // allow recursive definitions of objects
     case d @ source.DefDef(id, annot, source.New(source.Implementation(interface, clauses))) =>
-      val tpe = Context.at(interface) { resolve(interface) }
+      val tpe = Context.at(interface) { resolveBlockRef(interface) }
       val sym = Binder.DefBinder(Context.nameFor(id), Some(tpe), d)
       Context.define(id, sym)
 
@@ -442,7 +442,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case source.Implementation(interface, clauses) =>
-      val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
+      val eff: Interface = Context.at(interface) { resolveBlockRef(interface).typeConstructor.asInterface }
 
       clauses.foreach {
         case clause @ source.OpClause(op, tparams, vparams, bparams, ret, body, resumeId) => Context.at(clause) {
@@ -678,15 +678,15 @@ object Namer extends Phase[Parsed, NameResolved] {
    * This way error messages might suffer; however it simplifies the compiler a lot.
    */
   def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolvingType(tpe) {
-    case source.ValueTypeRef(id, args) => Context.resolveType(id) match {
-      case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolve))
+    case source.TypeRef(id, args) => Context.resolveType(id) match {
+      case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolveValueType))
       case id: TypeVar =>
         if (args.nonEmpty) {
           Context.abort(pretty"Type variables cannot be applied, but receieved ${args.size} arguments.")
         }
         ValueTypeRef(id)
       case TypeAlias(name, tparams, tpe) =>
-        val targs = args.map(resolve)
+        val targs = args.map(resolveValueType)
         if (tparams.size != targs.size) {
           Context.abort(pretty"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")
         }
@@ -697,13 +697,15 @@ object Namer extends Phase[Parsed, NameResolved] {
       tpe
     // TODO reconsider reusing the same set for terms and types...
     case source.BoxedType(tpe, capt) =>
-      BoxedType(resolve(tpe), resolve(capt))
+      BoxedType(resolveBlockType(tpe), resolve(capt))
+    case other => Context.abort(pretty"Expected value type, but got ${other}.")
   }
 
   def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
-    case t: source.BlockTypeRef => resolve(t)
+    case t: source.TypeRef => resolveBlockRef(t)
+    case other => Context.abort(pretty"Expected block type, but got ${other}.")
   }
 
   def resolve(funTpe: source.FunctionType)(using Context): FunctionType = resolvingType(funTpe) {
@@ -737,7 +739,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolve(tpe: source.TypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
+  def resolveBlockRef(tpe: source.TypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
     resolveWithAliases(tpe) match {
       case Nil => Context.abort("Expected a single interface type, not an empty effect set.")
       case resolved :: Nil => resolved
@@ -746,7 +748,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   /**
-   * Resolves an interface type, potentially with effect aliases on the top level
+   * Resolves a block reference into an interface type, potentially with effect aliases on the top level
    */
   def resolveWithAliases(tpe: source.TypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     val resolved: List[InterfaceType] = tpe match {
