@@ -628,12 +628,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case p: source.BlockParam => resolve(p)
   }
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(resolveValueType))
+    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)))
     Context.assignSymbol(p.id, sym)
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { resolveBlockType })
+    val sym: BlockParam = BlockParam(Name.local(p.id), p.tpe.map { tpe => resolveBlockType(tpe, isParam = true) })
     Context.assignSymbol(p.id, sym)
     sym
   }
@@ -679,7 +679,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * We de-alias on-the-fly in Namer so that aliases can never show up again in the remaining compiler.
    * This way error messages might suffer; however it simplifies the compiler a lot.
    */
-  def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolvingType(tpe) {
+  def resolveValueType(tpe: source.ValueType, isParam: Boolean = false)(using Context): ValueType = resolvingType(tpe) {
     case source.TypeRef(id, args) => Context.resolveType(id) match {
       case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolveValueType))
       case id: TypeVar =>
@@ -706,18 +706,32 @@ object Namer extends Phase[Parsed, NameResolved] {
     case other =>
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
       Context.error(pretty"Expected value type, but got ${describe(other)}.")
+      other match
+        case funTpe: source.FunctionType =>
+          if isParam then Context.info(pretty"Did you mean to use braces in order to recieve a block type ${funTpe}?")
+          Context.info(pretty"Did you mean to use a first-class, boxed function type ${funTpe} at {}?")
+        case source.Effectful(tpe, eff) => Context.info(pretty"Did you mean to use a first-class, boxed type () => ${tpe} at {} / ${eff}?")
+        case _ => ()
       ValueTypeApp(ExternType(Name.local("!fake?err-value"), Nil), Nil)
   }
+  def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolveValueType(tpe, isParam = false)
 
-  def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
+  def resolveBlockType(tpe: source.BlockType, isParam: Boolean = false)(using Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
     case other =>
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
       Context.error(pretty"Expected block type, but got ${describe(other)}.")
+      other match
+        case source.BoxedType(tpe, eff) =>
+          if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other}?")
+          Context.info(pretty"Did you mean to use the block type ${tpe} without 'at ${eff}'?")
+        case source.Effectful(tpe, eff) => Context.info(pretty"Did you mean to use a function type () => ${tpe} / ${eff}?")
+        case _ => ()
       InterfaceType(ExternInterface(Name.local("!fake?err-block"), Nil), Nil) // fake!
   }
+  def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolveBlockType(tpe, isParam = false)
 
   def resolve(funTpe: source.FunctionType)(using Context): FunctionType = resolvingType(funTpe) {
     /**
