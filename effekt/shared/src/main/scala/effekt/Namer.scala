@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree, describe }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
@@ -693,7 +693,10 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.abort(pretty"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")
         }
         Substitutions.types(tparams, targs).substitute(tpe)
-      case other => Context.abort(pretty"Expected a value type, but got ${other}")
+      case other =>
+        // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type ref in order to aggregate more errors.
+        Context.error(pretty"Expected value type, but got ${describe(other)}.")
+        ValueTypeApp(ExternType(Name.local("!fake?err-valueref"), Nil), Nil)
     }
     case source.ValueTypeTree(tpe) =>
       tpe
@@ -702,7 +705,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
-      Context.error(pretty"Expected value type, but got ${other}.")
+      Context.error(pretty"Expected value type, but got ${describe(other)}.")
       ValueTypeApp(ExternType(Name.local("!fake?err-value"), Nil), Nil)
   }
 
@@ -712,7 +715,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case t: source.TypeRef => resolveBlockRef(t)
     case other =>
       // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
-      Context.error(pretty"Expected block type, but got ${other}.")
+      Context.error(pretty"Expected block type, but got ${describe(other)}.")
       InterfaceType(ExternInterface(Name.local("!fake?err-block"), Nil), Nil) // fake!
   }
 
