@@ -1150,29 +1150,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   // Parse function types (middle precedence)
   private def functionType(): Type = {
-    // temporary:
-    def parenTypes(): List[Type] =
-      nonterminal:
-        many(boxedType, `(`, `,`, `)`)
-
-    def maybeValueTypes(): List[Type] =
-      nonterminal:
-        if peek(`(`) then parenTypes() else Nil
-
-    def maybeBlockTypeParams(): List[(Option[IdDef], Type)] =
-      nonterminal:
-        if peek(`{`) then blockTypeParams() else Nil
-
-    def blockTypeParams(): List[(Option[IdDef], Type)] =
-      nonterminal:
-        someWhile(blockTypeParam(), `{`)
-
-    def blockTypeParam(): (Option[IdDef], Type) =
-      nonterminal:
-        braces {
-          (backtrack { idDef() <~ `:` }, boxedType())
-        }
-
     // Complex function type: [T]*(Int, String)*{Exc} => Int / {Effect}
     def functionTypeComplex = backtrack {
       maybeTypeParams() ~ maybeValueTypes() ~ (maybeBlockTypeParams() <~ `=>`) ~ atomicType() ~ maybeEffects() match {
@@ -1231,6 +1208,14 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def typeParams(): List[Id] =
     nonterminal:
       some(idDef, `[`, `,`, `]`)
+
+  def maybeBlockTypeParams(): List[(Option[IdDef], Type)] =
+    nonterminal:
+      if peek(`{`) then blockTypeParams() else Nil
+
+  def blockTypeParams(): List[(Option[IdDef], Type)] =
+    nonterminal:
+      someWhile(blockTypeParam(), `{`)
 
   def blockTypeParam(): (Option[IdDef], Type) =
     nonterminal:
