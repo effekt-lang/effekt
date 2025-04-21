@@ -700,14 +700,20 @@ object Namer extends Phase[Parsed, NameResolved] {
     // TODO reconsider reusing the same set for terms and types...
     case source.BoxedType(tpe, capt) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
-    case other => Context.abort(pretty"Expected value type, but got ${other}.")
+    case other =>
+      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
+      Context.error(pretty"Expected value type, but got ${other}.")
+      ValueTypeApp(ExternType(Name.local("!fake?err-value"), Nil), Nil)
   }
 
   def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
-    case other => Context.abort(pretty"Expected block type, but got ${other}.")
+    case other =>
+      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
+      Context.error(pretty"Expected block type, but got ${other}.")
+      InterfaceType(ExternInterface(Name.local("!fake?err-block"), Nil), Nil) // fake!
   }
 
   def resolve(funTpe: source.FunctionType)(using Context): FunctionType = resolvingType(funTpe) {
@@ -763,7 +769,10 @@ object Namer extends Phase[Parsed, NameResolved] {
           val subst = Substitutions.types(tparams, targs)
           effs.toList.map(subst.substitute)
         case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolveValueType)))
-        case _ => Context.abort("Expected an interface type.")
+        case other =>
+          // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy interface type in order to aggregate more errors.
+          Context.error(pretty"Expected an interface type, but got ${other}.")
+          List(InterfaceType(ExternInterface(Name.local("!fake?err-iface"), Nil), Nil)) // fake!
       }
     }
     resolved.foreach(kinds.wellformed)
