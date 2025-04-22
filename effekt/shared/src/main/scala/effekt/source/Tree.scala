@@ -574,19 +574,6 @@ case class Effectful(tpe: ValueType, eff: Effects) extends Type
 type BlockType = Type
 type ValueType = Type
 
-// TODO(jiribenes, 2024-04-22): Where should this go?
-//     We only use this in Namer, should it be there as a private def `describeType`?
-def describe(t: Type)(using C: Context): String = t match {
-  case _: TypeRef => s"a type reference ${t.sourceOf}"
-  case _: BoxedType => s"a boxed type ${t.sourceOf}"
-  case _: FunctionType => s"a second-class function type ${t.sourceOf}"
-  case _: Effectful => s"a type-and-effect annotation ${t.sourceOf}"
-
-  // THESE TWO SHOULD NEVER BE USER-VISIBLE!
-  case ValueTypeTree(tpe) => s"a value type tree ${tpe}"
-  case BlockTypeTree(eff) => s"a block type tree ${eff}"
-}
-
 /**
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[TypeRef]]).

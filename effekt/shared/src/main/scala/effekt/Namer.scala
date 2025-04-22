@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree, describe, sourceOf }
+import effekt.source.{ Def, Id, IdDef, IdRef, MatchGuard, ModuleDecl, Tree, sourceOf }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 import effekt.symbols.scopes.*
@@ -571,11 +571,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }
 
-    // TODO(jiribenes, 2024-04-21): When does this ever happen?!
     case tpe: source.FunctionType => resolve(tpe)
 
-    // TODO(jiribenes, 2024-04-21): How do we get around this case? How do we know which one is expected? Do we even need to do this?
-    // ... or should we just choose based on the syntax?
+    // NOTE(jiribenes, 2025-04-21):
+    //   How do we get around this case? How do we know which one is expected? Do we even need to do this?
+    //   ... or should we just choose based on the syntax?
     case tpe: source.Type         => Context.abort(s"Unexpected kindless type: $tpe.")
 
     // THIS COULD ALSO BE A TYPE!
@@ -718,7 +718,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BoxedType(tpe, capt) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
-      Context.error(pretty"Expected value type, but got ${describe(other)}.")
+      Context.error(pretty"Expected value type, but got ${describeType(other)}.")
       other match
         case funTpe: source.FunctionType =>
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
@@ -729,7 +729,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             case List(eff) => eff
             case Nil => "{}"
             case many => many.mkString("{", ", ", "}")
-          // TODO(jiribenes, 2024-04-22): `Effects` seem to have bad position information. Why?!
+          // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
         case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
@@ -748,7 +748,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
     case other =>
-      Context.error(pretty"Expected block type, but got ${describe(other)}.")
+      Context.error(pretty"Expected block type, but got ${describeType(other)}.")
       other match
         case source.BoxedType(innerTpe, eff) =>
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
@@ -759,7 +759,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             case List(eff) => eff
             case Nil => "{}"
             case many => many.mkString("{", ", ", "}")
-          // TODO(jiribenes, 2024-04-22): `Effects` seem to have bad position information. Why?!
+          // TODO(jiribenes, 2025-04-22): `Effects` seem to have bad position information. Why?!
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
         case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
@@ -862,6 +862,18 @@ object Namer extends Phase[Parsed, NameResolved] {
     Context.annotateResolvedType(tpe)(res)
     kinds.wellformed(res)
     res
+  }
+
+  // Used for nice error messages in Namer.resolve{Block,Value}Type.
+  private def describeType(t: source.Type)(using Context): String = t match {
+    case _: source.TypeRef => s"a type reference ${t.sourceOf}"
+    case _: source.BoxedType => s"a boxed type ${t.sourceOf}"
+    case _: source.FunctionType => s"a second-class function type ${t.sourceOf}"
+    case _: source.Effectful => s"a type-and-effect annotation ${t.sourceOf}"
+
+    // THESE TWO SHOULD NEVER BE USER-VISIBLE!
+    case source.ValueTypeTree(tpe) => s"a value type tree ${tpe}"
+    case source.BlockTypeTree(eff) => s"a block type tree ${eff}"
   }
 }
 
