@@ -31,12 +31,6 @@ case class Substitutions(
   }
   def get(x: CaptUnificationVar): Option[Captures] = captures.get(x)
 
-  // amounts to first substituting this, then other
-  def updateWith(other: Substitutions): Substitutions =
-    Substitutions(
-      values.view.mapValues { t => other.substitute(t) }.toMap,
-      captures.view.mapValues { t => other.substitute(t) }.toMap) ++ other
-
   // amounts to parallel substitution
   def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)
 
