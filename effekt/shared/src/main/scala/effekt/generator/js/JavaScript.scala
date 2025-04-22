@@ -21,7 +21,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter.format(res) }
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Machine => None
-    case Stage.Target => CompileLSP(source).map { pretty }
+    case Stage.Target => CompileLSP(source).map { stmts => FastPrinter().pretty(stmts) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
@@ -58,7 +58,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).commonjs)
+      val res = TransformerCps.compile(cps, core, mainSymbol).commonjs
+      val doc = if Context.config.debug() then pretty(res) else FastPrinter().pretty(res)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
@@ -67,7 +68,8 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
    */
   lazy val CompileWeb = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
-      val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).virtual)
+      val res = TransformerCps.compile(cps, core, mainSymbol).virtual
+      val doc = FastPrinter().pretty(res)
       (Map(mainFile -> doc.layout), mainFile)
   }
 
