@@ -752,6 +752,8 @@ object Namer extends Phase[Parsed, NameResolved] {
             case many => many.mkString("{", ", ", "}")
           // TODO(jiribenes, 2024-04-22): `Effects` seem to have bad position information. Why?!
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
+        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
+          Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, effs) =>
           // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
           Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${effs.sourceOf}?")
