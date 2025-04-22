@@ -709,8 +709,8 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.info(pretty"Did you mean to box the interface ${constructor}, i.e. `${other} at {}`?")
           case _ => ()
 
-        // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type ref in order to aggregate more errors.
-        ValueTypeApp(ExternType(NoName, Nil), Nil)
+        // Dummy value type in order to aggregate more errors (see #947)
+        ValueTypeApp(ErrorValueType(), Nil)
     }
     case source.ValueTypeTree(tpe) =>
       tpe
@@ -738,8 +738,8 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.info(pretty"Did you mean to use a first-class, boxed type `() => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}`?")
         case _ => ()
 
-      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy value type in order to aggregate more errors.
-      ValueTypeApp(ExternType(NoName, Nil), Nil)
+      // Dummy value type in order to aggregate more errors (see #947)
+      ValueTypeApp(ErrorValueType(), Nil)
   }
   def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolveValueType(tpe, isParam = false)
 
@@ -768,8 +768,8 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${effs.sourceOf}?")
         case _ => ()
 
-      // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy block type in order to aggregate more errors.
-      InterfaceType(ExternInterface(NoName, Nil), Nil) // fake!
+      // Dummy interface type in order to aggregate more errors (see #947)
+      InterfaceType(ErrorBlockType(), Nil)
   }
   def resolveBlockType(tpe: source.BlockType)(using Context): BlockType = resolveBlockType(tpe, isParam = false)
 
@@ -828,8 +828,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolveValueType)))
         case other =>
           Context.error(pretty"Expected an interface type, but got value type ${other}.")
-          // TODO HACK XXX (jiribenes, 2024-04-21): Creates a dummy interface type in order to aggregate more errors.
-          List(InterfaceType(ExternInterface(NoName, Nil), Nil)) // fake!
+          // Dummy interface type in order to aggregate more errors (see #947)
+          List(InterfaceType(ErrorBlockType(), Nil))
       }
     }
     resolved.foreach(kinds.wellformed)
