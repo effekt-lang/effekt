@@ -123,8 +123,12 @@ class Constraints(
   private var pendingInactive: Set[CNode] = Set.empty
 )(using C: ErrorReporter) {
 
+  /**
+   * Caches type substitutions, which are only invalidated if the mapping from node to typevar changes.
+   *
+   * This significantly improves the performance of Typer (see https://github.com/effekt-lang/effekt/pull/954)
+   */
   private var _typeSubstitution:  Map[TypeVar, ValueType] = _
-
   private def invalidate(): Unit = _typeSubstitution = null
 
   /**
