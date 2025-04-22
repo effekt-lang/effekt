@@ -1103,7 +1103,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    *
    *       | '(' Type ',' ... ')'                                                  atomicType
    *       | '(' Type ')'
-   *       | Id ('[' Type ',' ... ']')?
    *
    *       | Type '=>' Type ('/' SetType)?                                         functionType
    *       | '(' Type ',' ... ')' ('{' Type '}')* '=>' Type ('/' SetType)?
