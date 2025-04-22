@@ -239,15 +239,14 @@ case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extend
     s"{${jsonPairs.mkString(",")}}"
   }
 
-  def dfsJSON(node: Tree)(visit: Tree => String): String = {
-    var res = "{\"data\": "
-    res += visit(node)
-    res += s", \"children\": ["
-    var children = List[String]()
-    for (child <- kiama.relation.TreeRelation.treeChildren(node).collect { case t: Def => t }) {
-      children = dfsJSON(child)(visit) :: children
-    }
-    res ++ children.mkString(",") ++ "]}"
+  def dfsJSON(node: Tree)(visit: Tree => String): StringBuilder = {
+    val res = new StringBuilder(s"{\"data\": ${visit(node)}, \"children\": [")
+    var children = kiama.relation.TreeRelation.treeChildren(node)
+      .collect { case t: Def => t }
+      .map { child => dfsJSON(child)(visit) }
+    res.append(children.map(_.toString).mkString(","))
+    res.append("])")
+    res
   }
 
   lazy val content = {
