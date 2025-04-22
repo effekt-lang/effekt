@@ -70,12 +70,16 @@ import effekt.symbols.Symbol
  *     │  │─ [[ TagPattern ]]
  *     │  │─ [[ IgnorePattern ]]
  *     │  │─ [[ LiteralPattern ]]
+ *     │  │─ [[ MultiPattern ]]
  *     │
  *     │─ [[ Type ]]
- *     │  │─ [[ ValueType ]]
- *     │  │─ [[ BlockType ]]
+ *     │  │─ [[ ValueTypeTree ]]
+ *     │  │─ [[ BlockTypeTree ]]
+ *     │  │─ [[ TypeRef ]]
+ *     │  │─ [[ BoxedType ]]
+ *     │  │─ [[ FunctionType ]]
+ *     │  │─ [[ Effectful ]]
  *     │
- *     │─ [[ Effectful ]]
  *     │─ [[ Effects ]]
  *     │─ [[ CaptureSet ]]
  *
@@ -521,21 +525,16 @@ export MatchPattern.*
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
- * TODO(jiribenes, 2024-04-21): update diagram!
  *
  * ----------[[ effekt.source.Type ]]----------
  *
  *   ─ [[ Type ]]
- *     │─ [[ ValueType ]]
- *     │  │─ [[ ValueTypeTree ]]
- *     │  │─ [[ BoxedType ]]
- *     │  │─ [[ ValueTypeRef ]]
- *     │
- *     │─ [[ BlockType ]]
- *     │  │─ [[ BlockTypeTree ]]
- *     │  │─ [[ FunctionType ]]
- *     │  │─ [[ BlockTypeRef ]]
- *     │
+ *     │─ [[ ValueTypeTree ]]
+ *     │─ [[ BlockTypeTree ]]
+ *     │─ [[ TypeRef ]]
+ *     │─ [[ BoxedType ]]
+ *     │─ [[ FunctionType ]]
+ *     │─ [[ Effectful ]]
  *
  * --------------------------------------------
  */
@@ -575,6 +574,8 @@ case class Effectful(tpe: ValueType, eff: Effects) extends Type
 type BlockType = Type
 type ValueType = Type
 
+// TODO(jiribenes, 2024-04-22): Where should this go?
+//     We only use this in Namer, should it be there as a private def `describeType`?
 def describe(t: Type)(using C: Context): String = t match {
   case _: TypeRef => s"a type reference ${t.sourceOf}"
   case _: BoxedType => s"a boxed type ${t.sourceOf}"
