@@ -589,7 +589,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
-      params map resolve
+      params map resolveNonfunctionValueParam
     }
 
     (vps zip params) map {
@@ -626,6 +626,15 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(param: source.Param)(using Context): Param = param match {
     case p: source.ValueParam => resolve(p)
     case p: source.BlockParam => resolve(p)
+  }
+
+  /**
+   * Used for fields where "please wrap this in braces" is not good advice to be told by [[resolveValueType]].
+   */
+  def resolveNonfunctionValueParam(p: source.ValueParam)(using Context): ValueParam = {
+    val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = false)))
+    Context.assignSymbol(p.id, sym)
+    sym
   }
   def resolve(p: source.ValueParam)(using Context): ValueParam = {
     val sym = ValueParam(Name.local(p.id), p.tpe.map(tpe => resolveValueType(tpe, isParam = true)))
