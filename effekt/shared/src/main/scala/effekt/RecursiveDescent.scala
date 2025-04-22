@@ -866,6 +866,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     case _ => sys.error(s"Internal compiler error: not a valid operator ${op}")
   }
 
+  def TypeTuple(tps: List[Type]): Type =
+    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
+
   /**
    * This is a compound production for
    *  - member selection <EXPR>.<NAME>
@@ -1096,7 +1099,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case _ => fail(s"Expected identifier")
       }
 
-  /**
+  /*
    * Type grammar by precedence:
    *
    * Type ::= Id ('[' Type ',' ... ']')?                                           refType
@@ -1114,9 +1117,6 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
    * SetType ::= Type
    *        | '{' Type ',' ... '}'
    */
-  def TypeTuple(tps: List[Type]): Type =
-    TypeRef(IdRef(List("effekt"), s"Tuple${tps.size}"), tps)
-
   def effects(): Effects =
     nonterminal:
       if peek(`{`) then Effects(many(refType, `{`, `,`, `}`))

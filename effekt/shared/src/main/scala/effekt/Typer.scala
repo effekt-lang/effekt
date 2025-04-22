@@ -420,7 +420,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // block parameters are to be bound by the definition itself instead of by resume when using handlers
               assertArity("block parameters", bparams.size, declared.bparams.size)
 
-              val cparamsForBlocks: List[symbols.Capture] = bparams.map { p => p.symbol.capture }
+              val cparamsForBlocks = bparams.map { p => p.symbol.capture }
               // will be introduced as capabilities in a later phase
               val cparamsForEffects = canonical.map { tpe => CaptureParam(tpe.name) }
               val cparams = cparamsForBlocks ++ cparamsForEffects
@@ -430,15 +430,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.instantiate(declared, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
               (vparams zip vps).foreach {
-                case (param, declaredType: ValueType) =>
+                case (param, declaredType) =>
                   val sym = param.symbol
-                  val annotatedType: Option[ValueType] = sym.tpe
+                  val annotatedType = sym.tpe
                   annotatedType.foreach(matchDeclared(_, declaredType, param))
                   Context.bind(sym, annotatedType.getOrElse(declaredType))
               }
 
               (bparams zip bps zip cparamsForBlocks).foreach {
-                case ((param, declaredType: BlockType), capture) =>
+                case ((param, declaredType), capture) =>
                   val sym = param.symbol
                   val annotatedType = sym.tpe
                   annotatedType.foreach { matchDeclared(_, declaredType, param) }
@@ -467,11 +467,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val cparamsForEffects = canonical.map { tpe => CaptureParam(tpe.name) } // use the type name
               val cparams = cparamsForBlocks ++ cparamsForEffects
 
-              val (vps: List[ValueType], bps: List[BlockType], tpe: ValueType, effs: List[InterfaceType]) =
+              val (vps, bps, tpe, effs) =
                 Context.instantiate(declared, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
               (vparams zip vps).foreach {
-                case (param, declaredType: ValueType) =>
+                case (param, declaredType) =>
                   val sym = param.symbol
                   val annotatedType = sym.tpe
                   annotatedType.foreach(matchDeclared(_, declaredType, param))
@@ -519,7 +519,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // TODO here we also need unification variables for block types!
         // C.unify(tpe, BoxedType())
         Context.unification(vtpe) match {
-          case BoxedType(btpe: BlockType, capt2: Captures) =>
+          case BoxedType(btpe, capt2) =>
             usingCapture(capt2)
             Result(btpe, eff1)
           case _ =>
