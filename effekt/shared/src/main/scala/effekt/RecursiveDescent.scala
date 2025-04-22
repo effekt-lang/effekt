@@ -924,7 +924,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def typeArgs(): List[ValueType] =
     nonterminal:
-      some(() => valueType(), `[`, `,`, `]`) // TODO(jiribenes, 2024-04-21): weird eta?
+      some(valueType, `[`, `,`, `]`)
   def valueArgs(): List[Term] =
     nonterminal:
       many(expr, `(`, `,`, `)`)
@@ -1190,8 +1190,8 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   }
 
   // NOTE: ValueType, BlockType are just aliases for Type.
-  inline def blockType(): BlockType = boxedType()
-  inline def valueType(): ValueType = boxedType()
+  def blockType(): BlockType = boxedType()
+  def valueType(): ValueType = boxedType()
 
   // Completely specialized for TypeRef: we only parse `refType` here, we don't go through the whole hierarchy.
   // This results in slightly worse errors, but massively simplifies the design.
@@ -1295,7 +1295,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
   def valueTypes(): List[Type] =
     nonterminal:
-      many(() => valueType(), `(`, `,`, `)`) // TODO(jiribenes, 2024-04-21): weird eta?
+      many(valueType, `(`, `,`, `)`)
 
   def captureSet(): CaptureSet =
     nonterminal:
