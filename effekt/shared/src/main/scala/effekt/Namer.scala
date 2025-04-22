@@ -721,7 +721,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             case Nil => "{}"
             case many => many.mkString("{", ",", "}")
           Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
-        case source.Effectful(source.BoxedType(tpe @ source.FunctionType, capt), effects) =>
+        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects), capt), effects) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff) =>
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
