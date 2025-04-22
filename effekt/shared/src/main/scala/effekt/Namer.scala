@@ -715,10 +715,13 @@ object Namer extends Phase[Parsed, NameResolved] {
           if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
           Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects) =>
-          // val combinedEffects = source.Effects(funEffects.effs.toSet ++ effs.effs.toSet)
-          // TODO: In the future, it would be nice to pretty-print the effect set.
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use a single combined effect set?")
-        case source.Effectful(source.BoxedType(tpe, capt), effects) =>
+          val combinedEffects = source.Effects(funEffects.effs.toSet ++ effects.effs.toSet)
+          val prettyEffects = combinedEffects.effs.map { _.sourceOf } match
+            case List(eff) => eff
+            case Nil => "{}"
+            case many => many.mkString("{", ",", "}")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
+        case source.Effectful(source.BoxedType(tpe @ source.FunctionType, capt), effects) =>
           Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
         case source.Effectful(innerTpe, eff) =>
           if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
@@ -741,13 +744,12 @@ object Namer extends Phase[Parsed, NameResolved] {
           if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
           Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
         case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects), effects) =>
-          // val combinedEffects = source.Effects(funEffects.effs.toSet ++ effs.effs.toSet)
-          // TODO: In the future, it would be nice to pretty-print the effect set.
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use a single combined effect set?")
-        case source.Effectful(source.BoxedType(tpe, capt), effects) =>
-          // TODO(jiribenes, 2024-04-21): Is this actually helpful in any situation?
-          //      ... we're in a place where we expect a block type anyways ...
-          Context.info(pretty"Did you want to write a first-class boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
+          val combinedEffects = source.Effects(funEffects.effs.toSet ++ effects.effs.toSet)
+          val prettyEffects = combinedEffects.effs.map { _.sourceOf } match
+            case List(eff) => eff
+            case Nil => "{}"
+            case many => many.mkString("{", ",", "}")
+          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${prettyEffects}` instead of `/ ${funEffects} / ${effects}`?")
         case source.Effectful(innerTpe, effs) =>
           // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
           Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${effs.sourceOf}?")
