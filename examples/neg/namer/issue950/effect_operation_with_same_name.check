@@ -2,5 +2,5 @@
   sayHello()
   ^^^^^^^^
 [error] examples/neg/namer/issue950/effect_operation_with_same_name.effekt:4:3: Cannot find a function named `sayHello`.
-  sayHello() 
+  sayHello()
   ^^^^^^^^

@@ -1,9 +1,9 @@
 [info] examples/neg/namer/issue950/ambiguous_interfaces_overload.effekt:5:3: There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it.
-sayHello() 
-^^^^^^^^
+  sayHello() 
+  ^^^^^^^^
 [info] examples/neg/namer/issue950/ambiguous_interfaces_overload.effekt:5:3: There is an equally named effect operation sayHello of interface Welcome. Use syntax `do sayHello()` to call it.
-sayHello() 
-^^^^^^^^
+  sayHello() 
+  ^^^^^^^^
 [error] examples/neg/namer/issue950/ambiguous_interfaces_overload.effekt:5:3: Cannot find a function named `sayHello`.
-sayHello() 
-^^^^^^^^
+  sayHello() 
+  ^^^^^^^^
