@@ -921,14 +921,14 @@ trait NamerOps extends ContextOps { Context: Context =>
         assignSymbol(id, value)
       case Right(blocks) =>
         if (blocks.isEmpty) {
-          val allSyms = scope.lookupOverloaded(id, term => true).flatten
+          val ops = scope.lookupOperation(id.path, id.name).flatten
 
-          if (allSyms.exists { case o: Operation => true; case _ => false })
-            info(pretty"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
+          // Provide specific info messages for operations
+          ops.foreach { op =>
+            info(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
+          }
 
-          if (allSyms.exists { case o: Field => true; case _ => false })
-            info(pretty"There is an equally named field. Use syntax `obj.${id} to access it.`")
-
+          // Always abort with the generic message
           abort(pretty"Cannot find a function named `${id}`.")
         }
         assignSymbol(id, CallTarget(blocks))
