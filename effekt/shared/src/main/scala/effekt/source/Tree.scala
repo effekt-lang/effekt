@@ -690,15 +690,11 @@ object Resolvable {
 }
 export Resolvable.*
 
-extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] = {
-  // XXX this should maybe be a method on `Source`?
-  def slice(range: kiama.util.Range): Option[String] = for {
-    start <- range.from.optOffset
-    end <- range.to.optOffset
-  } yield range.from.source.content.substring(start, end)
+extension [T](positioned: T) def sourceOfOpt(using C: Context): Option[String] =
+  C.positions.getRange(positioned).flatMap { range =>
+    C.positions.substring(range.from, range.to)
+  }
 
-  C.positions.getRange(positioned).flatMap(slice)
-}
 extension [T](positioned: T) def sourceOf(using C: Context): String =
   positioned.sourceOfOpt.getOrElse { s"${positioned}" }
 
