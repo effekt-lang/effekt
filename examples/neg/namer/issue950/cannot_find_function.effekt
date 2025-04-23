@@ -1,0 +1,1 @@
+def main() = doesNotExist() // ERROR Cannot find a function named `doesNotExist`.
