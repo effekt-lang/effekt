@@ -142,6 +142,7 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
 
 object Span {
   def missing(source: Source) = Span(source, 0, 0, origin = Origin.Missing)
+  def missing = Span(StringSource(""), 0, 0, origin = Origin.Missing)
 }
 
 /**

@@ -145,14 +145,14 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     }
 
   def referenceToCapability(capability: BlockParam)(using C: Context): Var =
-    val id = IdRef(Nil, capability.name.name, ???)
+    val id = IdRef(Nil, capability.name.name, Span.missing)
     C.assignSymbol(id, capability)
     val ref: Var = Var(id)
     C.annotate(Annotations.InferredBlockType, ref, C.blockTypeOf(capability))
     ref
 
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
-    val id = IdDef(s.name.name, ???)
+    val id = IdDef(s.name.name, Span.missing)
     C.assignSymbol(id, s)
     val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree.apply })
     tree

@@ -1053,10 +1053,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
         case id ~ Template(strs, args) =>
           val target = id.getOrElse(IdRef(Nil, "s", id.span.asSynthesized))
           val doLits = strs.map { s =>
-            Do(None, IdRef(Nil, "literal", ???), Nil, List(StringLit(s)), Nil)
+            Do(None, IdRef(Nil, "literal", Span.missing(source)), Nil, List(StringLit(s)), Nil)
           }
           val doSplices = args.map { arg =>
-            Do(None, IdRef(Nil, "splice", ???), Nil, List(arg), Nil)
+            Do(None, IdRef(Nil, "splice", Span.missing(source)), Nil, List(arg), Nil)
           }
           val body = interleave(doLits, doSplices)
             .foldRight(Return(UnitLit())) { (term, acc) => ExprStmt(term, acc) }
