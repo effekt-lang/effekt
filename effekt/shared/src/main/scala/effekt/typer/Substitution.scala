@@ -74,7 +74,7 @@ case class Substitutions(
   def substitute(t: FunctionType): FunctionType = t match {
     case FunctionType(tps, cps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      val substWithout = without(tps.unspan, cps)
+      val substWithout = without(tps, cps)
       FunctionType(
         tps,
         cps,

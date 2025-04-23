@@ -52,8 +52,8 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: ValueType): Doc = tpe match {
     case BoxedType(tpe, capture)    => toDoc(tpe) <+> "at" <+> toDoc(capture)
-    case ValueTypeApp(tpe, Many(Nil, _))     => tpe.name
-    case ValueTypeApp(tpe, args)    => tpe.name <> brackets(hsep(args.unspan.map(toDoc), comma))
+    case ValueTypeApp(tpe, Nil)     => tpe.name
+    case ValueTypeApp(tpe, args)    => tpe.name <> brackets(hsep(args.map(toDoc), comma))
     case ValueTypeRef(x)            => toDoc(x)
   }
 
@@ -64,14 +64,14 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: BlockType): Doc = tpe match {
     case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-      val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams.unspan)
+      val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {
-        case (Many(Nil, _), Many(Nil, _))       => "()"
-        case (Many(List(tpe: BoxedType), _), Many(Nil, _)) => parens(toDoc(tpe))
-        case (Many(List(tpe), _), Many(Nil, _)) => if (tparams.isEmpty) toDoc(tpe) else parens(toDoc(tpe))
+        case (Nil, Nil)       => "()"
+        case (List(tpe: BoxedType), Nil) => parens(toDoc(tpe))
+        case (List(tpe), Nil) => if (tparams.isEmpty) toDoc(tpe) else parens(toDoc(tpe))
         case (_, _) =>
-          val vps = if (vparams.isEmpty) emptyDoc else parens(hsep(vparams.unspan.map(toDoc), comma))
-          val bps = if (bparams.isEmpty) emptyDoc else hcat(bparams.unspan.map(toDoc).map(braces))
+          val vps = if (vparams.isEmpty) emptyDoc else parens(hsep(vparams.map(toDoc), comma))
+          val bps = if (bparams.isEmpty) emptyDoc else hcat(bparams.map(toDoc).map(braces))
           vps <> bps
       }
       val ret = result match {
@@ -92,8 +92,8 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(t: TypeConstructor): Doc = t match {
-    case DataType(name, tparams, constructors)  => name <> typeParams(tparams.unspan)
-    case Record(name, tparams, constructor) => name <> typeParams(tparams.unspan)
+    case DataType(name, tparams, constructors)  => name <> typeParams(tparams)
+    case Record(name, tparams, constructor) => name <> typeParams(tparams)
     case ExternType(name, tparams) => name
     case ErrorValueType(name, tparams) => "?"
   }

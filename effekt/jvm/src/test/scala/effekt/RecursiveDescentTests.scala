@@ -439,7 +439,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Value types") {
     assertEquals(
       parseValueType("Int"),
-      TypeRef(IdRef(Nil, "Int", ???), Many.empty(Span.builtin)))
+      TypeRef(IdRef(Nil, "Int", ???), Nil))
 
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")

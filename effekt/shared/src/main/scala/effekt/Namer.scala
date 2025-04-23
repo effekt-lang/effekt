@@ -152,7 +152,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           annot map resolve
         }
-        UserFunction(uniqueId, tps, vps, bps, ret.map { _._1 }, ret.map { _._2 }, f)
+        UserFunction(uniqueId, tps.unspan, vps.unspan, bps.unspan, ret.unspan.map { _._1 }, ret.unspan.map { _._2 }, f)
       }
       Context.define(id, sym)
 
@@ -188,7 +188,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
         // later in the file
-        DataType(Context.nameFor(id), tps)
+        DataType(Context.nameFor(id), tps.unspan)
       }
       Context.define(id, typ)
 
@@ -197,14 +197,14 @@ object Namer extends Phase[Parsed, NameResolved] {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
         // later in the file
-        Record(Context.nameFor(id), tps, null)
+        Record(Context.nameFor(id), tps.unspan, null)
       }
       Context.define(id, sym)
 
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternType(Context.nameFor(id), tps)
+        ExternType(Context.nameFor(id), tps.unspan)
       })
 
     case source.ExternInterface(id, tparams) =>
@@ -226,7 +226,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           resolve(ret)
         }
 
-        ExternFunction(name, tps, vps, bps, tpe, eff, capt, bodies)
+        ExternFunction(name, tps.unspan, vps.unspan, bps.unspan, tpe, eff, capt, bodies)
       })
     }
 
@@ -363,7 +363,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = Operation(name, Many(interface.tparams ++ tps.unspan, tps.span.asSynthesized),Many(resVparams, ???), Many(resBparams, ???), result, effects, interface)
+            val op = Operation(name, interface.tparams ++ tps.unspan, resVparams, resBparams, result, effects, interface)
             Context.define(id, op)
             op
           }
@@ -386,10 +386,10 @@ object Namer extends Phase[Parsed, NameResolved] {
           val constructor = Context scoped {
             val name = Context.nameFor(id)
             val tps = tparams map resolve
-            Constructor(name, Many(data.tparams.unspan ++ tps.unspan, tps.span), Many.empty(tps.span.emptyAfter), data)
+            Constructor(name, data.tparams ++ tps.unspan, Nil, data)
           }
           Context.define(id, constructor)
-          constructor.fields = resolveFields(ps, constructor)
+          constructor.fields = resolveFields(ps.unspan, constructor)
           constructor
       }
 
@@ -397,11 +397,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.RecordDef(id, tparams, fs) =>
       val record = d.symbol
       val name = Context.nameFor(id)
-      val constructor = Constructor(name, record.tparams, Many.empty(tparams.span.emptyAfter), record)
+      val constructor = Constructor(name, record.tparams, Nil, record)
       // we define the constructor on a copy to avoid confusion with symbols
       Context.define(id.clone, constructor)
       record.constructor = constructor
-      constructor.fields = resolveFields(fs, constructor)
+      constructor.fields = resolveFields(fs.unspan, constructor)
 
     case source.ExternType(id, tparams) => ()
     case source.ExternInterface(id, tparams) => ()
@@ -586,14 +586,14 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   // TODO move away
-  def resolveFields(params: Many[source.ValueParam], constructor: Constructor)(using Context): Many[Field] = {
+  def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
     val vps = Context scoped {
       // Bind the type parameters
       constructor.tparams.foreach { t => Context.bind(t) }
       params map resolveNonfunctionValueParam
     }
 
-    (vps zip params.unspan) map {
+    (vps zip params) map {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.nameFor(fieldId)
@@ -691,7 +691,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    */
   def resolveValueType(tpe: source.ValueType, isParam: Boolean = false)(using Context): ValueType = resolvingType(tpe) {
     case source.TypeRef(id, args) => Context.resolveType(id) match {
-      case constructor: TypeConstructor => ValueTypeApp(constructor, Many(args.map(resolveValueType), ???))
+      case constructor: TypeConstructor => ValueTypeApp(constructor, args.map(resolveValueType))
       case id: TypeVar =>
         if (args.nonEmpty) {
           Context.abort(pretty"Type variables cannot be applied, but received ${args.size} arguments.")
@@ -712,7 +712,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
 
         // Dummy value type in order to aggregate more errors (see #947)
-        ValueTypeApp(ErrorValueType(), Many.empty(???))
+        ValueTypeApp(ErrorValueType(), Nil)
     }
     case source.ValueTypeTree(tpe) =>
       tpe
@@ -738,7 +738,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
       // Dummy value type in order to aggregate more errors (see #947)
-      ValueTypeApp(ErrorValueType(), Many.empty(???))
+      ValueTypeApp(ErrorValueType(), Nil)
   }
   def resolveValueType(tpe: source.ValueType)(using Context): ValueType = resolveValueType(tpe, isParam = false)
 
@@ -795,7 +795,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
       val res = resolveValueType(ret)
 
-      FunctionType(tps, cps, vps, bps, res, effs)
+      FunctionType(tps.unspan, cps, vps.unspan, bps.unspan, res, effs)
     }
   }
 

@@ -170,7 +170,7 @@ object ExhaustivityChecker {
       missingCases.foreach {
         case Missing.Tag(ctor, at) =>
           val missingSubcase = ctor.fields match
-            case Many(Nil, _) => s"${ctor.name}()"
+            case Nil => s"${ctor.name}()"
             case _ => s"${ctor.name}(${ctor.fields.map { _f => "_" }.mkString(", ")})"
           val missingCase = traceToCase(at, missingSubcase)
 
@@ -229,7 +229,7 @@ object ExhaustivityChecker {
         cl.matchesOn(scrutinee) match {
           // keep clauses that match on the same constructor
           case Some(Pattern.Tag(c, patterns)) if c == ctor =>
-            val nestedPatterns  = (ctor.fields.unspan zip patterns).map { case (field, pattern) =>
+            val nestedPatterns  = (ctor.fields zip patterns).map { case (field, pattern) =>
               (Trace.Child(ctor, field, scrutinee) : Trace) -> pattern
             }.toMap
             Some(cl - scrutinee ++ nestedPatterns)

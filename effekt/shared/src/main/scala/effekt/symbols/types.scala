@@ -2,7 +2,6 @@ package effekt
 package symbols
 
 import TypeVar.*
-import effekt.source.Many
 
 /**
  * Types
@@ -34,7 +33,7 @@ enum ValueType extends Type {
   /**
    * Reference to a type constructor with optional type arguments
    */
-  case ValueTypeApp(constructor: TypeConstructor, args: Many[ValueType])
+  case ValueTypeApp(constructor: TypeConstructor, args: List[ValueType])
 }
 export ValueType.*
 
@@ -53,10 +52,10 @@ export ValueType.*
 enum BlockType extends Type {
 
   case FunctionType(
-    tparams: Many[TypeParam],
+    tparams: List[TypeParam],
     cparams: List[Capture],
-    vparams: Many[ValueType],
-    bparams: Many[BlockType],
+    vparams: List[ValueType],
+    bparams: List[BlockType],
     result: ValueType,
     effects: Effects
   )
