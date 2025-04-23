@@ -1,11 +1,11 @@
 interface Greet { def sayHello(): Unit }
 
 def helloWorld() = try {
-  sayHello() // info : There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it..
+  sayHello()
 } with Greet {
   def sayHello() = { println("Hello!"); resume(()) }
 }
 
 def main() = {
-  helloWorld() // throws: Cannot find a function named `sayHello`.
+  helloWorld()
 }

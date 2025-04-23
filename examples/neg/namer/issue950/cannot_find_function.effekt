@@ -1,12 +1,1 @@
-interface Greet { def sayHello(): Unit }
-
-def helloWorld() = try {
-  Hello()
-  // [error] Cannot find a function named `Hello`.
-} with Greet {
-  def sayHello() = { println("Hello!"); resume(()) }
-}
-
-def main() = {
-  helloWorld() // throws:  Cannot find a function named `Hello`.
-}
+def main() = doesNotExist() // ERROR Cannot find a function named `doesNotExist`.

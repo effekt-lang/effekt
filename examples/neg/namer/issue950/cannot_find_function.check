@@ -1,3 +1,0 @@
-[error] examples/neg/namer/issue950/cannot_find_function.effekt:4:3: Cannot find a function named `Hello`.
-  Hello()
-  ^^^^^
