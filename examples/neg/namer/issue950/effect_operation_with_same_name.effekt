@@ -7,5 +7,5 @@ def helloWorld() = try {
 }
 
 def main() = {
-  helloWorld() // throws: Cannot typecheck call
+  helloWorld() // throws: Cannot find a function named `sayHello`.
 }

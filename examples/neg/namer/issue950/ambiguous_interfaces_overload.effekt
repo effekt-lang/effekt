@@ -1,0 +1,19 @@
+interface Greet { def sayHello(): Unit }
+interface Welcome { def sayHello(): Unit }
+
+def helloWorld() = try {
+  do sayHello() 
+  //[error] /home/jakub/Code/Effekt/effekt/examples/neg/namer/issue950/two_interfaces.effekt:5:6: Ambiguous overload.
+  //There are multiple overloads, which all would type check:
+  //- two_interfaces::sayHello: () => Unit
+  //- two_interfaces::sayHello: () => Unit
+  //  do sayHello() 
+  //     ^^^^^^^^
+
+  } with Greet {
+  def sayHello() = { println("Hello from Greet!"); resume(()) }
+}
+
+def main() = {
+  helloWorld() // throws: Ambiguous overload
+}
