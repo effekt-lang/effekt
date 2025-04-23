@@ -3,8 +3,9 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
-import kiama.util.{Position, StringSource}
-import scala.{Some => OptionSome, None => OptionNone}
+import kiama.util.{Position, Source, StringSource}
+
+import scala.{None as OptionNone, Some as OptionSome}
 
 import kiama.util.Position
 import scala.{Some => OptionSome , None => OptionNone }
@@ -109,9 +110,19 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
-
+/**
+ * The origin of the span
+ *
+ * Possible values:
+ * - Real: the node has direct representation in the source code and this is its span
+ * - Synthesized: the node does not have a direct representation in the source code, but this is the span
+ *                we would like to point at for any error messages that need to refer to this node.
+ *                If the user can express this node explicitly, it should also point to the place where the
+ *                user could write it out explicitly.
+ * - Missing: this node doesn't or can't have a span yet, but we would like to add one later
+ */
 enum Origin {
-  case Real, Synthesized, Builtin
+  case Real, Synthesized, Missing
 }
 
 case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
@@ -130,7 +141,7 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
 }
 
 object Span {
-  def builtin = Span(StringSource("", "effekt.effekt"), 0, 0, origin = Origin.Builtin)
+  def missing(source: Source) = Span(source, 0, 0, origin = Origin.Missing)
 }
 
 /**

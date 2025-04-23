@@ -966,9 +966,9 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
             val names = List.tabulate(arity){ n => s"__arg${n}" }
             BlockLiteral(
               Nil,
-              names.map{ name => ValueParam(IdDef(name, ???), None) },
+              names.map{ name => ValueParam(IdDef(name, Span.missing(source)), None) },
               Nil,
-              Return(Match(names.map{ name => Var(IdRef(Nil, name, ???)) }, cs.unspan, None))) : BlockLiteral
+              Return(Match(names.map{ name => Var(IdRef(Nil, name, Span.missing(source))) }, cs.unspan, None))) : BlockLiteral
           }
           case _ =>
             // { (x: Int) => ... }
@@ -1013,10 +1013,10 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
       manyTrailing(expr, `[`, `,`, `]`).foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef(List(), "Nil", ???)), Nil, Nil, Nil)
+    Call(IdTarget(IdRef(List(), "Nil", Span.missing(source))), Nil, Nil, Nil)
 
   private def ConsTree(el: Term, rest: Term): Term =
-    Call(IdTarget(IdRef(List(), "Cons", ???)), Nil, List(el, rest), Nil)
+    Call(IdTarget(IdRef(List(), "Cons", Span.missing(source))), Nil, List(el, rest), Nil)
 
   def isTupleOrGroup: Boolean = peek(`(`)
   def tupleOrGroup(): Term =
