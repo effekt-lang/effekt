@@ -925,7 +925,7 @@ trait NamerOps extends ContextOps { Context: Context =>
           val allSyms = scope.lookupOverloaded(id, term => true).flatten
           val ops = scope.lookupOperation(id.path, id.name).flatten
 
-          // Provide specific error messages for operations
+          // Provide specific info messages for operations
           ops.foreach { op =>
             info(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
           }
