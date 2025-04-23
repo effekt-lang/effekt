@@ -921,8 +921,6 @@ trait NamerOps extends ContextOps { Context: Context =>
         assignSymbol(id, value)
       case Right(blocks) =>
         if (blocks.isEmpty) {
-          // Use both lookupOverloaded and lookupOperation to ensure we handle all cases
-          val allSyms = scope.lookupOverloaded(id, term => true).flatten
           val ops = scope.lookupOperation(id.path, id.name).flatten
 
           // Provide specific info messages for operations
@@ -930,10 +928,8 @@ trait NamerOps extends ContextOps { Context: Context =>
             info(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
           }
 
-          // Abort with the generic message if no matches were found
-          if (ops.isEmpty && allSyms.isEmpty) {
-            abort(pretty"Cannot find a function named `${id}`.")
-          }
+          // Always abort with the generic message
+          abort(pretty"Cannot find a function named `${id}`.")
         }
         assignSymbol(id, CallTarget(blocks))
     }
