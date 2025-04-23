@@ -59,7 +59,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   lazy val Compile = CPSTransformed map {
     case (mainSymbol, mainFile, core, cps) =>
       val res = TransformerCps.compile(cps, core, mainSymbol).commonjs
-      val doc = if Context.config.debug() then pretty(res) else FastPrinter().pretty(res)
+      val doc = Context.timed("pretty-js", "out") { if Context.config.debug() then pretty(res) else FastPrinter().pretty(res) }
       (Map(mainFile -> doc.layout), mainFile)
   }
 
