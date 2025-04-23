@@ -2,12 +2,15 @@ interface Greet { def sayHello(): Unit }
 interface Welcome { def sayHello(): Unit }
 
 def helloWorld() = try {
-  do sayHello() 
-  //[error] /home/jakub/Code/Effekt/effekt/examples/neg/namer/issue950/two_interfaces.effekt:5:6: Ambiguous overload.
-  //There are multiple overloads, which all would type check:
-  //- two_interfaces::sayHello: () => Unit
-  //- two_interfaces::sayHello: () => Unit
-  //  do sayHello() 
+  sayHello() 
+  //[info] /home/jakub/Code/Effekt/effekt/examples/neg/namer/issue950/ambiguous_interfaces_overload.effekt:5:5: There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it.
+  //     sayHello() 
+  //     ^^^^^^^^
+  // [info] /home/jakub/Code/Effekt/effekt/examples/neg/namer/issue950/ambiguous_interfaces_overload.effekt:5:5: There is an equally named effect operation sayHello of interface Welcome. Use syntax `do sayHello()` to call it.
+  //     sayHello() 
+  //     ^^^^^^^^
+  // [error] /home/jakub/Code/Effekt/effekt/examples/neg/namer/issue950/ambiguous_interfaces_overload.effekt:5:5: Cannot find a function named `sayHello`.
+  //     sayHello() 
   //     ^^^^^^^^
 
   } with Greet {
@@ -15,5 +18,5 @@ def helloWorld() = try {
 }
 
 def main() = {
-  helloWorld() // throws: Ambiguous overload
+  helloWorld() // throws: Cannot find a function named `sayHello`
 }
