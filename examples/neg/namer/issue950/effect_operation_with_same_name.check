@@ -1,0 +1,6 @@
+[info] examples/neg/namer/issue950/effect_operation_with_same_name.effekt:4:3: There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it.
+  sayHello() // info : There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it..
+  ^^^^^^^^
+[error] examples/neg/namer/issue950/effect_operation_with_same_name.effekt:4:3: Cannot typecheck call.
+  sayHello() // info : There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it..
+  ^^^^^^^^^^
