@@ -3,7 +3,7 @@ interface Greet { def sayHello(): Unit }
 def helloWorld() = try {
   sayHello()
 } with Greet {
-  def sayHello() = { println("Hello!"); resume(()) }
+    def sayHello() = { println("Hello!"); resume(()) }
 }
 
 def main() = {
