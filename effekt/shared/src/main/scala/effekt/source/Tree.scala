@@ -110,8 +110,9 @@ case object NoSource extends Tree
 case class Comment() extends Tree
 
 
-enum Origin:
+enum Origin {
   case Real, Synthesized, Builtin
+}
 
 case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = Origin.Real) {
   /**
