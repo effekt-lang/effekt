@@ -91,8 +91,4 @@ object DeclPrinter extends ParenPrettyPrinter {
 
     s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
   }
-  // TODO remove this once Options are replaced by Maybe
-  def format(kw: String, f: Callable, result: Maybe[ValueType], effects: Maybe[Effects]): Doc = {
-    format(kw,f,result.unspan, effects.unspan)
-  }
 }

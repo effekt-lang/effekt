@@ -1,9 +1,8 @@
 package effekt
 package typer
 
-import effekt.source.Many
 import effekt.symbols.*
-import effekt.symbols.builtins.{TBottom, TTop}
+import effekt.symbols.builtins.{ TBottom, TTop }
 import effekt.typer.ErrorContext.FunctionEffects
 
 /**

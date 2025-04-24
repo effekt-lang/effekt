@@ -1,7 +1,6 @@
 package effekt
 package symbols
 
-import effekt.source.Many
 import effekt.symbols.builtins.*
 import effekt.typer.ConcreteEffects
 import kiama.output.ParenPrettyPrinter

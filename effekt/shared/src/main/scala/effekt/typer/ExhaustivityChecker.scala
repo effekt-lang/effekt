@@ -1,12 +1,12 @@
 package effekt
 package typer
 
-import effekt.context.{Annotations, Context, ContextOps}
+import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{Def, ExprTarget, IdTarget, Many, MatchGuard, MatchPattern, Tree}
-import effekt.source.Tree.{Query, Visit}
-import effekt.util.messages.{ErrorReporter, INTERNAL_ERROR}
+import effekt.source.{ Def, ExprTarget, IdTarget, MatchGuard, MatchPattern, Tree }
+import effekt.source.Tree.{ Query, Visit }
+import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR }
 
 import scala.annotation.tailrec
 import scala.collection.mutable

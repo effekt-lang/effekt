@@ -1431,7 +1431,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     res
 
   inline def many[T](p: () => T, before: TokenKind, sep: TokenKind, after: TokenKind): Many[T] =
-    nonterminal: // TODO should we use nonterminal here?
+    nonterminal:
       consume(before)
       if (peek(after)) {
         consume(after)

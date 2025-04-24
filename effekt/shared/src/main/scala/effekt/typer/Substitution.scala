@@ -1,8 +1,7 @@
 package effekt
 package typer
 
-import effekt.source.Many
-import effekt.symbols.*
+import effekt.symbols._
 
 
 case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception

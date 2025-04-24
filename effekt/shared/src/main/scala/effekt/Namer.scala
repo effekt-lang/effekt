@@ -933,7 +933,6 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def bindValues(params: List[ValueParam]) =
     params.foreach { p => bind(p) }
 
-  // TODO remove this once all lists have been replaced
   private[namer] def bindValues(params: Many[ValueParam]): Unit =
     bindValues(params.unspan)
 
@@ -941,7 +940,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     // bind the block parameter as a term
     params.foreach { bindBlock }
 
-  // TODO remove once all lists ...
   private[namer] def bindBlocks(params: Many[BlockParam]): Unit =
     bindBlocks(params.unspan)
 
