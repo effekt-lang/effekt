@@ -3,13 +3,8 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
-import kiama.util.{Position, Source, StringSource}
-
-import scala.{None as OptionNone, Some as OptionSome}
-
-import kiama.util.Position
-import scala.{Some => OptionSome , None => OptionNone }
-
+import kiama.util.{Source, StringSource}
+import scala.{Some => OptionSome, None => OptionNone}
 import scala.annotation.tailrec
 
 /**
