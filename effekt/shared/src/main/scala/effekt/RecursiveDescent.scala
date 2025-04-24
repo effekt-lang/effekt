@@ -310,14 +310,11 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   def moduleName(): String =
     some(ident, `/`).mkString("/")
 
-  def isToplevel(position: Int): Boolean = peek(position).kind match {
+  def isToplevel: Boolean = documentedKind match {
     case `val` | `fun` | `def` | `type` | `effect` | `namespace` |
          `extern` | `effect` | `interface` | `type` | `record` => true
-    case DocComment(_) => isToplevel(position + 1)
     case _ => false
   }
-
-  def isToplevel: Boolean = isToplevel(0)
 
   def toplevel(): Def =
     nonterminal:
@@ -358,16 +355,13 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       manyWhile(toplevel(), isToplevel)
 
-  def isDefinition(position: Int): Boolean = peek(position).kind match {
+  def isDefinition: Boolean = documentedKind match {
     case `val` | `def` | `type` | `effect` | `namespace` => true
-    case DocComment(_) => isDefinition(position + 1)
     case `extern` | `effect` | `interface` | `type` | `record` =>
-      val kw = peek.kind
+      val kw = documentedKind
       fail(s"Only supported on the toplevel: ${kw.toString} declaration.")
     case _ => false
   }
-
-  def isDefinition: Boolean = isDefinition(0)
 
   def definition(): Def =
     nonterminal:
