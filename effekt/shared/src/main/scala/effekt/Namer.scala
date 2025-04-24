@@ -381,7 +381,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.DataDef(id, tparams, ctors, doc) =>
       val data = d.symbol
       data.constructors = ctors map {
-        case source.Constructor(id, tparams, ps) =>
+        case source.Constructor(id, tparams, ps, doc) =>
           val constructor = Context scoped {
             val name = Context.nameFor(id)
             val tps = tparams map resolve
