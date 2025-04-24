@@ -257,25 +257,24 @@ export Param.*
 /**
  * A `List` (usually of `Tree`s) with a `span` that spans all elements of the list
  */
-case class Many[T](list: List[T], span: Span) {
-  def unspan: List[T] = list
+case class Many[T](unspan: List[T], span: Span) {
   def map[B](f: T => B): Many[B] =
-    Many(list.map(f),span)
+    Many(unspan.map(f),span)
 
   def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
-    val (list1 : List[A1], list2 : List[A2]) = list.unzip(asPair)
+    val (list1 : List[A1], list2 : List[A2]) = unspan.unzip(asPair)
     (Many(list1, span), Many(list2, span))
   }
 
   def collect[B](pf: PartialFunction[T, B]): Many[B] =
-    Many(list.collect(pf), span)
+    Many(unspan.collect(pf), span)
 
-  def zip[B](that: IterableOnce[B]): Many[(T, B)] = Many(list.zip(that), span)
+  def zip[B](that: IterableOnce[B]): Many[(T, B)] = Many(unspan.zip(that), span)
 
   def flatMap[B](f: T => IterableOnce[B]): Many[B] =
-    Many(list.flatMap(f), span)
+    Many(unspan.flatMap(f), span)
 
-  export list.{foreach, toSet, isEmpty, nonEmpty, mkString, size, length, init, last}
+  export unspan.{foreach, toSet, isEmpty, nonEmpty, mkString, size, length, init, last}
 }
 
 object Many {
@@ -288,21 +287,20 @@ object Many {
  * If the `Option` is `Some`, the `span` is the span of the value.
  * If the `Option` is `None`, the `span` is an empty span pointing to where the optional value would be expected.
  */
-case class Maybe[T](option: Option[T], span: Span){
-  def unspan: Option[T] = option
-  def map[B](f: T => B): Maybe[B] = Maybe(option.map(f), span)
-  def flatMap[B](f: T => Maybe[B]): Maybe[B] = option match {
+case class Maybe[T](unspan: Option[T], span: Span) {
+  def map[B](f: T => B): Maybe[B] = Maybe(unspan.map(f), span)
+  def flatMap[B](f: T => Maybe[B]): Maybe[B] = unspan match {
     case None => Maybe(None, span)
     case Some(x) => f(x)
   }
 
   def orElse[B >: T](alternative: => Maybe[B]): Maybe[B] =
-   option match {
-      case Some(x) => Maybe(option, span)
+   unspan match {
+      case Some(x) => Maybe(unspan, span)
       case None => alternative
     }
 
-  export option.{foreach, get, getOrElse}
+  export unspan.{foreach, get, getOrElse}
 }
 
 object Maybe {
