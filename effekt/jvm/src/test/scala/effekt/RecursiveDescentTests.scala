@@ -143,7 +143,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   //
   //
 
-  def equalsModuloSpans(a: Any, b: Any): Boolean = {
+  def equalModuloSpans(a: Any, b: Any): Boolean = {
     def eq(x: Any, y: Any): Boolean = (x, y) match {
       case (_: Span, _: Span) =>
         true
@@ -167,7 +167,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     obtained: A,
     expected: B,
   )(implicit loc: Location, ev: B <:< A): Unit = {
-    if (!equalsModuloSpans(obtained, expected)) {
+    if (!equalModuloSpans(obtained, expected)) {
       failComparison(
         "Trees are not the same modulo spans",
         munitPrint(obtained),
@@ -180,7 +180,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       obtained: A,
       expected: B,
     )(implicit loc: Location, ev: B <:< A): Unit = {
-    if (equalsModuloSpans(obtained, expected)) {
+    if (equalModuloSpans(obtained, expected)) {
       failComparison(
         "Trees are the same modulo spans, but expected them to be different",
         munitPrint(obtained),
