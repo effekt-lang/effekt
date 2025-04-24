@@ -754,11 +754,11 @@ class LSPTests extends FunSuite {
              |      ),
              |      Many(
              |        Nil,
-             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 11, Real())
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
              |      Maybe(
              |        None(),
-             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 11, Real())
+             |        Span(StringSource(def main() = <>, file://test.effekt), 10, 10, Real())
              |      ),
              |      Return(Hole(Return(Literal((), ValueTypeApp(Unit_whatever, Nil))))),
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
