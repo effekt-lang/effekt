@@ -1158,7 +1158,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
 
     // Simple function type: Int => Int
     def functionTypeSimple = backtrack {
-      TypeRef(idRef(), maybeTypeArgs()) <~ `=>`
+      refType() <~ `=>`
     } map { tpe =>
       FunctionType(Nil, List(tpe), Nil, atomicType(), maybeEffects())
     }
