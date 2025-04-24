@@ -254,10 +254,10 @@ export Param.*
  */
 case class Many[T](unspan: List[T], span: Span) {
   def map[B](f: T => B): Many[B] =
-    Many(unspan.map(f),span)
+    Many(unspan.map(f), span)
 
   def unzip [A1, A2](implicit asPair: T => (A1, A2)): (Many[A1], Many[A2]) = {
-    val (list1 : List[A1], list2 : List[A2]) = unspan.unzip(asPair)
+    val (list1: List[A1], list2: List[A2]) = unspan.unzip(asPair)
     (Many(list1, span), Many(list2, span))
   }
 
