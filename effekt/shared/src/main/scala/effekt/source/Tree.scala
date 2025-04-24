@@ -254,6 +254,9 @@ enum Param extends Definition {
 }
 export Param.*
 
+/**
+ * A `List` (usually of `Tree`s) with a `span` that spans all elements of the list
+ */
 case class Many[T](list: List[T], span: Span) {
   def unspan: List[T] = list
   def map[B](f: T => B): Many[B] =
@@ -273,11 +276,18 @@ case class Many[T](list: List[T], span: Span) {
     Many(list.flatMap(f), span)
 
   export list.{foreach, toSet, isEmpty, nonEmpty, mkString, size, length, init, last}
-
 }
+
 object Many {
    def empty[T](span: Span) = Many[T](Nil, span)
 }
+
+/**
+ * An `Option` with a `span`
+ *
+ * If the `Option` is `Some`, the `span` is the span of the value.
+ * If the `Option` is `None`, the `span` is an empty span pointing to where the optional value would be expected.
+ */
 case class Maybe[T](option: Option[T], span: Span){
   def unspan: Option[T] = option
   def map[B](f: T => B): Maybe[B] = Maybe(option.map(f), span)
