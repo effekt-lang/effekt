@@ -475,7 +475,7 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
     nonterminal:
       `effect` ~> operation() match {
         case op @ Operation(id, tps, vps, bps, ret) =>
-          InterfaceDef(id withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.asSynthesized), vps, bps, ret) withPositionOf op))
+          InterfaceDef(IdDef(id.name, id.span) withPositionOf op, tps, List(Operation(id, Many.empty(tps.span.asSynthesized), vps, bps, ret) withPositionOf op))
       }
 
   def operation(): Operation =
