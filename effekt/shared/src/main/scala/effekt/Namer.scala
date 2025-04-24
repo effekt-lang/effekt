@@ -42,7 +42,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     Some(NameResolved(source, tree, mod))
   }
 
-  /** Shadow stack of modules currently named, for detecction of cyclic imports */
+  /** Shadow stack of modules currently named, for detection of cyclic imports */
   private val currentlyNaming: DynamicVariable[List[ModuleDecl]] = DynamicVariable(List())
   /**
    * Run body in a context where we are currently naming `mod`.
