@@ -534,11 +534,11 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, positions) =
         raw"""Int
-             |↑  ↑↑
+             |↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseValueType(source.content),
-        TypeRef(IdRef(Nil, "Int", Span(source, positions(0), positions(1))), Many.empty(Span(source, positions(1), positions(2)))))
+        TypeRef(IdRef(Nil, "Int", Span(source, positions(0), positions(1))), Many.empty(Span(source, positions(1), positions(1)))))
     }
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")
@@ -556,14 +556,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, positions) =
         raw"""(Int, String) => Int
-             |↑↑  ↑ ↑     ↑↑↑  ↑  ↑↑
+             |↑↑  ↑ ↑     ↑↑↑  ↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseBlockType(source.content),
         FunctionType(Many.empty(Span(source, positions(0), positions(1))),
           Many(List(TypeRef(IdRef(Nil, "Int", Span(source, positions(1), positions(2))), Many.empty(Span(source, positions(2), positions(2)))),
             TypeRef(IdRef(Nil, "String", Span(source, positions(3), positions(4))), Many.empty(Span(source, positions(4), positions(4))))), Span(source, positions(0), positions(5))),
-          Many.empty(Span(source, positions(5), positions(6))), TypeRef(IdRef(Nil, "Int", Span(source, positions(7), positions(8))), Many.empty(Span(source, positions(8), positions(9)))), Effects(Nil)))
+          Many.empty(Span(source, positions(5), positions(6))), TypeRef(IdRef(Nil, "Int", Span(source, positions(7), positions(8))), Many.empty(Span(source, positions(8), positions(8)))), Effects(Nil)))
     }
 
     parseBlockType("(Int, String) => Int / Exc")

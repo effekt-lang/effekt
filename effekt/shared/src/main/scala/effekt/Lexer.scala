@@ -314,9 +314,7 @@ class Lexer(source: Source) {
       kind match {
         case TokenKind.EOF =>
           eof = true
-          // EOF has the position of one after the last character
-          // this may be useful for a streaming lexer
-          tokens += Token(current + 1, current + 1, TokenKind.EOF)
+          tokens += Token(current, current, TokenKind.EOF)
         case k =>
           tokens += makeToken(k)
       }
