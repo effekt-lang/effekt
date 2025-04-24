@@ -556,14 +556,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, positions) =
         raw"""(Int, String) => Int
-             |↑↑  ↑ ↑     ↑↑↑  ↑  ↑
+             |↑↑  ↑ ↑     ↑↑   ↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseBlockType(source.content),
         FunctionType(Many.empty(Span(source, positions(0), positions(1))),
           Many(List(TypeRef(IdRef(Nil, "Int", Span(source, positions(1), positions(2))), Many.empty(Span(source, positions(2), positions(2)))),
             TypeRef(IdRef(Nil, "String", Span(source, positions(3), positions(4))), Many.empty(Span(source, positions(4), positions(4))))), Span(source, positions(0), positions(5))),
-          Many.empty(Span(source, positions(5), positions(6))), TypeRef(IdRef(Nil, "Int", Span(source, positions(7), positions(8))), Many.empty(Span(source, positions(8), positions(8)))), Effects(Nil)))
+          Many.empty(Span(source, positions(5), positions(5))), TypeRef(IdRef(Nil, "Int", Span(source, positions(6), positions(7))), Many.empty(Span(source, positions(7), positions(7)))), Effects(Nil)))
     }
 
     parseBlockType("(Int, String) => Int / Exc")
@@ -662,14 +662,14 @@ class RecursiveDescentTests extends munit.FunSuite {
     {
       val (source, positions) =
         raw"""Foo { 43 }
-             |↑  ↑↑
+             |↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseImplementation(source.content),
         Implementation(
           TypeRef(IdRef(Nil, "Foo", Span(source, positions(0), positions(1))), Nil),
           List(OpClause(IdRef(Nil, "Foo", Span(source, positions(0), positions(1))), Nil, Nil, Nil, None,
-            Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, positions(1), positions(2)))))))
+            Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, positions(1), positions(1)))))))
     }
   }
 
@@ -851,7 +851,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   test("Function definition without return type") {
     val (source, positions) =
       raw"""def foo{b: => Unit / bar} = <>
-           |       ↑                 ↑↑
+           |       ↑                 ↑
            |""".sourceAndPositions
 
     val definition = parseDefinition(source.content)
@@ -862,13 +862,13 @@ class RecursiveDescentTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
     assertEquals(funDef.bparams.span, Span(source, positions(0), positions(1)))
-    assertEquals(funDef.ret.span, Span(source, positions(1), positions(2)))
+    assertEquals(funDef.ret.span, Span(source, positions(1), positions(1)))
   }
 
   test("Function definition with whitespaces instead of return type") {
     val (source, positions) =
       raw"""def foo{b: => Unit / bar}      = <>
-           |       ↑                 ↑     ↑
+           |       ↑                 ↑
            |""".sourceAndPositions
 
     val definition = parseDefinition(source.content)
@@ -879,7 +879,7 @@ class RecursiveDescentTests extends munit.FunSuite {
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
     assertEquals(funDef.bparams.span, Span(source, positions(0), positions(1)))
-    assertEquals(funDef.ret.span, Span(source, positions(1), positions(2)))
+    assertEquals(funDef.ret.span, Span(source, positions(1), positions(1)))
   }
 
   test("Toplevel definitions") {

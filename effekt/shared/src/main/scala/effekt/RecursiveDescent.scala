@@ -1482,15 +1482,28 @@ class RecursiveDescent(positions: Positions, tokens: Seq[Token], source: Source)
   inline def span(start : Int ): Span =
     val end = previous.end + 1 // since positions by lexer are inclusive, but kiama is exclusive
 
-    // Consider the following example:
-    //┌──┐ ┌──┐┌┐┌┐
-    // def foo = <>
-    // here the return type is omitted
+    // We need some special handling in the case where we did not consume any tokens.
+    // In this case, we have that start > end.
+    // This can be seen in the following example:
+    //
+    //     previous
+    //        /   peek
+    //       /    /
+    //┌──┐ ┌──┐  ┌┐┌┐
+    // def foo   = <>
+    //        |
+    //      we want to produce an empty span here for the omitted parameters and return type
+    //
+    // When parsing the optional parameters and the optional return type, we get the following values:
     // previous = "foo", peek = "=", _start = peek.start, end = previous.end +1
-    // therefore, in this case start is greater than end. If this is the case, we switch the positions
+    // therefore, in this case start is greater than end.
 
-    if start > end then { Span(source, end, start) } else { Span(source, start, end) }
-
+    if start > end then {
+      // We did not consume anything (except for whitespace), so we generate an empty span just after the previous token
+      Span(source, previous.end + 1, previous.end + 1 )
+    } else {
+      Span(source, start, end)
+    }
 
   // the handler for the "span" effect.
   private val _start: scala.util.DynamicVariable[Int] = scala.util.DynamicVariable(0)
