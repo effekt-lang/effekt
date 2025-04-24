@@ -11,27 +11,27 @@ import munit.Location
 object SpanSyntax {
   implicit class StringOps(val content: String) extends AnyVal {
 
-    def snippetAndPosition: (Source, Int) = {
-      val (snippet, positions) = content.snippetAndPositions
+    def sourceAndPosition: (Source, Int) = {
+      val (source, positions) = content.sourceAndPositions
 
       if (positions.length != 1)
         throw new IllegalArgumentException("Exactly one marker line (with '" + "↑" + "') is required.")
 
-      (snippet, positions.head)
+      (source, positions.head)
     }
 
-    def snippetAndSpan: (Source, Span) = {
-      val (snippet, positions) = content.snippetAndPositions
+    def sourceAndSpan: (Source, Span) = {
+      val (source, positions) = content.sourceAndPositions
       if (positions.length != 2)
         throw new IllegalArgumentException("Exactly two marker lines (with '" + "↑" + "') are required.")
       val start = positions(0)
       val end = positions(1)
       // The end of the span is exclusive, so we need to increment the character position.
-      val span = Span(snippet, start, end + 1)
-      (snippet, span)
+      val span = Span(source, start, end + 1)
+      (source, span)
     }
 
-    def snippetAndPositions: (Source, Seq[Int]) = {
+    def sourceAndPositions: (Source, Seq[Int]) = {
       val lines = content.stripMargin.split("\n").toBuffer
       val positions = scala.collection.mutable.ArrayBuffer[Int]()
       var lineIdx = 0
@@ -196,10 +196,10 @@ class RecursiveDescentTests extends munit.FunSuite {
   import effekt.SpanSyntax.StringOps
 
   test("Correct cursor position") {
-    val (snippet, cursor) =
+    val (_, cursor) =
       raw"""def main() = { println("Hello, world!") }
            |    ↑
-           |""".snippetAndPosition
+           |""".sourceAndPosition
 
     assertEquals(cursor, 4)
   }
@@ -208,17 +208,17 @@ class RecursiveDescentTests extends munit.FunSuite {
     intercept[IllegalArgumentException] {
       raw"""
            |def main() = { println("Hello, world!") }
-           |""".snippetAndPosition
+           |""".sourceAndPosition
     }
   }
 
   test("Correct multiline span") {
-    val (snippet, span) =
+    val (source, span) =
       raw"""There is some content here.
            |    ↑
            |And here.
            |    ↑
-           |""".snippetAndSpan
+           |""".sourceAndSpan
 
     val textWithoutSpan =
       raw"""There is some content here.
@@ -226,12 +226,12 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     assertEquals(span.from, 4)
     assertEquals(span.to, 33)
-    assertEquals(snippet.content, textWithoutSpan)
+    assertEquals(source.content, textWithoutSpan)
   }
 
   test("Correct newline spans") {
     val (_, pos : Int) =
-      "\n\n\n\n↑".snippetAndPosition
+      "\n\n\n\n↑".sourceAndPosition
 
     assertEquals(pos, 3)
   }
@@ -264,7 +264,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""loop { f }
              |↑   ↑  ↑↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
 
       assertEquals(
         parseExpr(source.content),
@@ -283,7 +283,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""foo.bar
              |↑  ↑↑  ↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
       assertEquals(
         parseExpr(source.content),
         // At the moment uniform function call syntax is always a method call
@@ -357,28 +357,28 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, span) =
         raw"""map
              |↑ ↑
-             |""".snippetAndSpan
+             |""".sourceAndSpan
       assertEquals(parseExpr("map"), Var(IdRef(List(), "map", span)))
     }
     {
       val (source, span) =
         raw"""list::map
              |↑       ↑
-             |""".snippetAndSpan
+             |""".sourceAndSpan
       assertEquals(parseExpr("list::map"), Var(IdRef(List("list"), "map", span)))
     }
     {
       val (source, span) =
         raw"""list::internal::map
              |↑                 ↑
-             |""".snippetAndSpan
+             |""".sourceAndSpan
       assertEquals(parseExpr("list::internal::map"), Var(IdRef(List("list", "internal"), "map", span)))
     }
     {
       val (source, span) =
         raw"""list::internal::test
              |↑                  ↑
-             |""".snippetAndSpan
+             |""".sourceAndSpan
       assertEquals(parseExpr("list::internal::test"), Var(IdRef(List("list", "internal"), "test", span)))
     }
   }
@@ -507,7 +507,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""(left, Cons(x, right))
              |↑↑   ↑ ↑   ↑↑↑ ↑    ↑ ↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
       assertEquals(
         parseMatchPattern("(left, Cons(x, right))"),
         TagPattern(IdRef(List("effekt"), "Tuple2", Span(source, positions(0), positions(9), Synthesized)),
@@ -535,7 +535,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""Int
              |↑  ↑↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
       assertEquals(
         parseValueType(source.content),
         TypeRef(IdRef(Nil, "Int", Span(source, positions(0), positions(1))), Many.empty(Span(source, positions(1), positions(2)))))
@@ -557,7 +557,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""(Int, String) => Int
              |↑↑  ↑ ↑     ↑↑↑  ↑  ↑↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
       assertEquals(
         parseBlockType(source.content),
         FunctionType(Many.empty(Span(source, positions(0), positions(1))),
@@ -641,7 +641,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, span) =
         raw"""Foo {}
              |↑ ↑
-             |""".snippetAndSpan
+             |""".sourceAndSpan
       assertEquals(
         parseImplementation(source.content),
         Implementation(TypeRef(IdRef(Nil, "Foo", span), Nil), Nil))
@@ -663,7 +663,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""Foo { 43 }
              |↑  ↑↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
       assertEquals(
         parseImplementation("Foo { 43 }"),
         Implementation(
@@ -779,7 +779,7 @@ class RecursiveDescentTests extends munit.FunSuite {
       val (source, positions) =
         raw"""def foo = f
              |    ↑  ↑  ↑↑
-             |""".snippetAndPositions
+             |""".sourceAndPositions
 
       assertEquals(
         parseDefinition(source.content),
@@ -816,7 +816,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val (source, positions) =
       raw"""def foo[T1, T2](x: T1, y: T2){b: => Unit}: Unit = <>
            |       ↑       ↑             ↑           ↑     ↑
-           |""".snippetAndPositions
+           |""".sourceAndPositions
 
     val definition = parseDefinition(source.content)
 
@@ -835,7 +835,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val (source, positions) =
       raw"""def foo{b: => Unit / bar}: Unit / bar = <>
            |       ↑                 ↑           ↑
-           |""".snippetAndPositions
+           |""".sourceAndPositions
 
     val definition = parseDefinition(source.content)
 
@@ -852,7 +852,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val (source, positions) =
       raw"""def foo{b: => Unit / bar} = <>
            |       ↑                 ↑↑
-           |""".snippetAndPositions
+           |""".sourceAndPositions
 
     val definition = parseDefinition(source.content)
 
@@ -869,7 +869,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val (source, positions) =
       raw"""def foo{b: => Unit / bar}      = <>
            |       ↑                 ↑     ↑
-           |""".snippetAndPositions
+           |""".sourceAndPositions
 
     val definition = parseDefinition(source.content)
 
@@ -922,7 +922,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val rec =
       raw"""record Vec2d[T](x: T, y: T)
            |       ↑    ↑  ↑           ↑""".stripMargin
-    val (source, positions) = rec.snippetAndPositions
+    val (source, positions) = rec.sourceAndPositions
 
     val definition = parseToplevel(source.content)
     val recordDef = definition match {
