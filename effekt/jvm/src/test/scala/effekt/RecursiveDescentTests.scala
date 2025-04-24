@@ -358,28 +358,28 @@ class RecursiveDescentTests extends munit.FunSuite {
         raw"""map
              |↑ ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr("map"), Var(IdRef(List(), "map", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List(), "map", span)))
     }
     {
       val (source, span) =
         raw"""list::map
              |↑       ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr("list::map"), Var(IdRef(List("list"), "map", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List("list"), "map", span)))
     }
     {
       val (source, span) =
         raw"""list::internal::map
              |↑                 ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr("list::internal::map"), Var(IdRef(List("list", "internal"), "map", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List("list", "internal"), "map", span)))
     }
     {
       val (source, span) =
         raw"""list::internal::test
              |↑                  ↑
              |""".sourceAndSpan
-      assertEquals(parseExpr("list::internal::test"), Var(IdRef(List("list", "internal"), "test", span)))
+      assertEquals(parseExpr(source.content), Var(IdRef(List("list", "internal"), "test", span)))
     }
   }
 
@@ -509,7 +509,7 @@ class RecursiveDescentTests extends munit.FunSuite {
              |↑↑   ↑ ↑   ↑↑↑ ↑    ↑ ↑
              |""".sourceAndPositions
       assertEquals(
-        parseMatchPattern("(left, Cons(x, right))"),
+        parseMatchPattern(source.content),
         TagPattern(IdRef(List("effekt"), "Tuple2", Span(source, positions(0), positions(9), Synthesized)),
           List(AnyPattern(IdDef("left", Span(source, positions(1), positions(2)))),
             TagPattern(
@@ -665,7 +665,7 @@ class RecursiveDescentTests extends munit.FunSuite {
              |↑  ↑↑
              |""".sourceAndPositions
       assertEquals(
-        parseImplementation("Foo { 43 }"),
+        parseImplementation(source.content),
         Implementation(
           TypeRef(IdRef(Nil, "Foo", Span(source, positions(0), positions(1))), Nil),
           List(OpClause(IdRef(Nil, "Foo", Span(source, positions(0), positions(1))), Nil, Nil, Nil, None,
