@@ -246,7 +246,7 @@ trait DocumentationGenerator {
   }
 }
 
-case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "")(using C: Context) extends Source, DocumentationGenerator {
+case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extends Source, DocumentationGenerator {
   def toJSON(values: List[DocValue]): String = s"[${values.map(toJSON).mkString(",")}]"
 
   def toJSON(docValue: DocValue): String = docValue match {
