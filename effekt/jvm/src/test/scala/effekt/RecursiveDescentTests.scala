@@ -264,14 +264,14 @@ class RecursiveDescentTests extends munit.FunSuite {
 
     parseExpr("l.foreach { _ => 42 }")
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""loop { f }
              |↑   ↑  ↑↑
              |""".sourceAndPositions
 
       assertEquals(
         parseExpr(source.content),
-        Call(IdTarget(IdRef(Nil, "loop", Span(source, positions(0), positions(1)))), Nil, Nil, List(Var(IdRef(Nil, "f", Span(source, positions(2), positions(3)))))))
+        Call(IdTarget(IdRef(Nil, "loop", Span(source, pos(0), pos(1)))), Nil, Nil, List(Var(IdRef(Nil, "f", Span(source, pos(2), pos(3)))))))
     }
 
     assertNotEqualModuloSpans(
@@ -283,14 +283,14 @@ class RecursiveDescentTests extends munit.FunSuite {
       parseExpr("(f(a, 42))()"))
 
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""foo.bar
              |↑  ↑↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseExpr(source.content),
         // At the moment uniform function call syntax is always a method call
-        MethodCall(Var(IdRef(Nil, "foo", Span(source, positions(0), positions(1)))), IdRef(Nil, "bar", Span(source, positions(2), positions(3))), Nil, Nil, Nil))
+        MethodCall(Var(IdRef(Nil, "foo", Span(source, pos(0), pos(1)))), IdRef(Nil, "bar", Span(source, pos(2), pos(3))), Nil, Nil, Nil))
     }
 
     parseExpr("resume(42)")
@@ -507,18 +507,18 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseMatchPattern("Cons(x, Cons(x, Nil()))")
 
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""(left, Cons(x, right))
              |↑↑   ↑ ↑   ↑↑↑ ↑    ↑ ↑
              |""".sourceAndPositions
       assertEquals(
         parseMatchPattern(source.content),
-        TagPattern(IdRef(List("effekt"), "Tuple2", Span(source, positions(0), positions(9), Synthesized)),
-          List(AnyPattern(IdDef("left", Span(source, positions(1), positions(2)))),
+        TagPattern(IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos(9), Synthesized)),
+          List(AnyPattern(IdDef("left", Span(source, pos(1), pos(2)))),
             TagPattern(
-              IdRef(List(), "Cons", Span(source, positions(3), positions(4))),
-              List(AnyPattern(IdDef("x", Span(source, positions(5), positions(6)))),
-                AnyPattern(IdDef("right", Span(source, positions(7), positions(8)))))
+              IdRef(List(), "Cons", Span(source, pos(3), pos(4))),
+              List(AnyPattern(IdDef("x", Span(source, pos(5), pos(6)))),
+                AnyPattern(IdDef("right", Span(source, pos(7), pos(8)))))
             ))))
     }
   }
@@ -539,7 +539,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseReturnAnnotation(": Int / { Exc }")
     parseReturnAnnotation(": Int / { Exc, State }")
     {
-      val (source, positions) =
+      val (source, pos) =
         raw""": Int / { Exc, State[T] }
              |  ↑  ↑    ↑  ↑ ↑    ↑↑↑  ↑
              |""".sourceAndPositions
@@ -547,25 +547,25 @@ class RecursiveDescentTests extends munit.FunSuite {
         parseReturnAnnotation(source.content),
         Effectful(
           ValueTypeRef(
-            IdRef(Nil, "Int", Span(source, positions(0), positions(1))),
-            Many.empty(Span(source, positions(1), positions(1)))
+            IdRef(Nil, "Int", Span(source, pos(0), pos(1))),
+            Many.empty(Span(source, pos(1), pos(1)))
           ),
           Effects(
             BlockTypeRef(
-              IdRef(Nil, "Exc", Span(source, positions(2), positions(3))),
+              IdRef(Nil, "Exc", Span(source, pos(2), pos(3))),
               Nil
             ),
             BlockTypeRef(
-              IdRef(Nil, "State", Span(source, positions(4), positions(5))),
+              IdRef(Nil, "State", Span(source, pos(4), pos(5))),
               List(
                 ValueTypeRef(
-                  IdRef(Nil, "T", Span(source, positions(6), positions(7))),
-                  Many.empty(Span(source, positions(7), positions(7)))
+                  IdRef(Nil, "T", Span(source, pos(6), pos(7))),
+                  Many.empty(Span(source, pos(7), pos(7)))
                 )
               )
             )
           ),
-          Span(source, positions.head, positions.last)
+          Span(source, pos.head, pos.last)
         )
       )
     }
@@ -573,13 +573,13 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   test("Value types") {
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""Int
              |↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseValueType(source.content),
-        TypeRef(IdRef(Nil, "Int", Span(source, positions(0), positions(1))), Many.empty(Span(source, positions(1), positions(1)))))
+        TypeRef(IdRef(Nil, "Int", Span(source, pos(0), pos(1))), Many.empty(Span(source, pos(1), pos(1)))))
     }
     parseValueType("List[Int]")
     parseValueType("list::List[Int]")
@@ -595,16 +595,16 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseBlockType("Int => Int")
 
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""(Int, String) => Int
              |↑↑  ↑ ↑     ↑↑   ↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseBlockType(source.content),
-        FunctionType(Many.empty(Span(source, positions(0), positions(1))),
-          Many(List(TypeRef(IdRef(Nil, "Int", Span(source, positions(1), positions(2))), Many.empty(Span(source, positions(2), positions(2)))),
-            TypeRef(IdRef(Nil, "String", Span(source, positions(3), positions(4))), Many.empty(Span(source, positions(4), positions(4))))), Span(source, positions(0), positions(5))),
-          Many.empty(Span(source, positions(5), positions(5))), TypeRef(IdRef(Nil, "Int", Span(source, positions(6), positions(7))), Many.empty(Span(source, positions(7), positions(7)))), Effects(Nil)))
+        FunctionType(Many.empty(Span(source, pos(0), pos(1))),
+          Many(List(TypeRef(IdRef(Nil, "Int", Span(source, pos(1), pos(2))), Many.empty(Span(source, pos(2), pos(2)))),
+            TypeRef(IdRef(Nil, "String", Span(source, pos(3), pos(4))), Many.empty(Span(source, pos(4), pos(4))))), Span(source, pos(0), pos(5))),
+          Many.empty(Span(source, pos(5), pos(5))), TypeRef(IdRef(Nil, "Int", Span(source, pos(6), pos(7))), Many.empty(Span(source, pos(7), pos(7)))), Effects(Nil)))
     }
 
     parseBlockType("(Int, String) => Int / Exc")
@@ -701,16 +701,16 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseImplementation("Foo { x => 43 }".stripMargin)
 
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""Foo { 43 }
              |↑  ↑
              |""".sourceAndPositions
       assertEquals(
         parseImplementation(source.content),
         Implementation(
-          TypeRef(IdRef(Nil, "Foo", Span(source, positions(0), positions(1))), Nil),
-          List(OpClause(IdRef(Nil, "Foo", Span(source, positions(0), positions(1))), Nil, Nil, Nil, None,
-            Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, positions(1), positions(1)))))))
+          TypeRef(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Nil),
+          List(OpClause(IdRef(Nil, "Foo", Span(source, pos(0), pos(1))), Nil, Nil, Nil, None,
+            Return(Literal(43, symbols.builtins.TInt)), IdDef("resume", Span(source, pos(1), pos(1)))))))
     }
   }
 
@@ -817,14 +817,14 @@ class RecursiveDescentTests extends munit.FunSuite {
 
   test("Definitions") {
     {
-      val (source, positions) =
+      val (source, pos) =
         raw"""def foo = f
              |    ↑  ↑  ↑↑
              |""".sourceAndPositions
 
       assertEquals(
         parseDefinition(source.content),
-        DefDef(IdDef("foo", Span(source, positions(0), positions(1))), None, Var(IdRef(Nil, "f", Span(source, positions(2), positions(3))))))
+        DefDef(IdDef("foo", Span(source, pos(0), pos(1))), None, Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))))))
     }
 
     parseDefinition(
@@ -854,7 +854,7 @@ class RecursiveDescentTests extends munit.FunSuite {
   }
 
   test("Function definition"){
-    val (source, positions) =
+    val (source, pos) =
       raw"""def foo[T1, T2](x: T1, y: T2){b: => Unit}: Unit = <>
            |       ↑       ↑             ↑           ↑     ↑
            |""".sourceAndPositions
@@ -866,14 +866,14 @@ class RecursiveDescentTests extends munit.FunSuite {
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
-    assertEquals(funDef.tparams.span, Span(source, positions(0), positions(1)))
-    assertEquals(funDef.vparams.span, Span(source, positions(1), positions(2)))
-    assertEquals(funDef.bparams.span, Span(source, positions(2), positions(3)))
-    assertEquals(funDef.ret.span, Span(source, positions(3), positions(4)))
+    assertEquals(funDef.tparams.span, Span(source, pos(0), pos(1)))
+    assertEquals(funDef.vparams.span, Span(source, pos(1), pos(2)))
+    assertEquals(funDef.bparams.span, Span(source, pos(2), pos(3)))
+    assertEquals(funDef.ret.span, Span(source, pos(3), pos(4)))
   }
 
   test("Function definition with effects"){
-    val (source, positions) =
+    val (source, pos) =
       raw"""def foo{b: => Unit / bar}: Unit / bar = <>
            |       ↑                 ↑           ↑
            |""".sourceAndPositions
@@ -885,12 +885,12 @@ class RecursiveDescentTests extends munit.FunSuite {
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
-    assertEquals(funDef.bparams.span, Span(source, positions(0), positions(1)))
-    assertEquals(funDef.ret.span, Span(source, positions(1), positions(2)))
+    assertEquals(funDef.bparams.span, Span(source, pos(0), pos(1)))
+    assertEquals(funDef.ret.span, Span(source, pos(1), pos(2)))
   }
 
   test("Function definition without return type") {
-    val (source, positions) =
+    val (source, pos) =
       raw"""def foo{b: => Unit / bar} = <>
            |       ↑                 ↑
            |""".sourceAndPositions
@@ -902,12 +902,12 @@ class RecursiveDescentTests extends munit.FunSuite {
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
-    assertEquals(funDef.bparams.span, Span(source, positions(0), positions(1)))
-    assertEquals(funDef.ret.span, Span(source, positions(1), positions(1)))
+    assertEquals(funDef.bparams.span, Span(source, pos(0), pos(1)))
+    assertEquals(funDef.ret.span, Span(source, pos(1), pos(1)))
   }
 
   test("Function definition with whitespaces instead of return type") {
-    val (source, positions) =
+    val (source, pos) =
       raw"""def foo{b: => Unit / bar}      = <>
            |       ↑                 ↑
            |""".sourceAndPositions
@@ -919,8 +919,8 @@ class RecursiveDescentTests extends munit.FunSuite {
       case other =>
         throw new IllegalArgumentException(s"Expected FunDef but got ${other.getClass.getSimpleName}")
     }
-    assertEquals(funDef.bparams.span, Span(source, positions(0), positions(1)))
-    assertEquals(funDef.ret.span, Span(source, positions(1), positions(1)))
+    assertEquals(funDef.bparams.span, Span(source, pos(0), pos(1)))
+    assertEquals(funDef.ret.span, Span(source, pos(1), pos(1)))
   }
 
   test("Toplevel definitions") {
@@ -963,7 +963,7 @@ class RecursiveDescentTests extends munit.FunSuite {
     val rec =
       raw"""record Vec2d[T](x: T, y: T)
            |       ↑    ↑  ↑           ↑""".stripMargin
-    val (source, positions) = rec.sourceAndPositions
+    val (source, pos) = rec.sourceAndPositions
 
     val definition = parseToplevel(source.content)
     val recordDef = definition match {
@@ -971,9 +971,9 @@ class RecursiveDescentTests extends munit.FunSuite {
       case other =>
         throw new IllegalArgumentException(s"Expected RecordDef but got ${other.getClass.getSimpleName}")
     }
-    assertEquals(recordDef.id.span, Span(source, positions(0), positions(1)))
-    assertEquals(recordDef.tparams.span, Span(source, positions(1), positions(2)))
-    assertEquals(recordDef.fields.span, Span(source, positions(2), positions(3)))
+    assertEquals(recordDef.id.span, Span(source, pos(0), pos(1)))
+    assertEquals(recordDef.tparams.span, Span(source, pos(1), pos(2)))
+    assertEquals(recordDef.fields.span, Span(source, pos(2), pos(3)))
   }
 
   test("Programs") {
