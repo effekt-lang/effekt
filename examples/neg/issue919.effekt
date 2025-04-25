@@ -2,10 +2,10 @@ effect tick(): Unit
 
 def main() = {
   region r {
-    var k in r = box { () }
+    var k in r = box { () } // ERROR tick escapes
     try {
       k = box { do tick() }
     } with tick { () => () }
-    k() // ERROR tick escapes
+    k()
   } 
 }
