@@ -103,6 +103,9 @@ class RecursiveDescentTests extends munit.FunSuite {
   def parseMatchClause(input: String, positions: Positions = new Positions())(using munit.Location): MatchClause =
     parse(input, _.matchClause())
 
+  def parseReturnAnnotation(input: String, positions: Positions = new Positions())(using munit.Location): Effectful =
+    parse(input, _.returnAnnotation())
+
   def parseValueType(input: String, positions: Positions = new Positions())(using munit.Location): ValueType =
     parse(input, _.valueType())
 
@@ -528,6 +531,44 @@ class RecursiveDescentTests extends munit.FunSuite {
     parseExpr("map(x) { f } { g }")
     parseExpr("map(x) { return 42 }")
     parseExpr("map(x) { map(x) { return 42 } }")
+  }
+
+  test("Return annotations") {
+    parseReturnAnnotation(": Int")
+    parseReturnAnnotation(": Int / Exc")
+    parseReturnAnnotation(": Int / { Exc }")
+    parseReturnAnnotation(": Int / { Exc, State }")
+    {
+      val (source, positions) =
+        raw""": Int / { Exc, State[T] }
+             |  ↑  ↑    ↑  ↑ ↑    ↑↑↑  ↑
+             |""".sourceAndPositions
+      assertEquals(
+        parseReturnAnnotation(source.content),
+        Effectful(
+          ValueTypeRef(
+            IdRef(Nil, "Int", Span(source, positions(0), positions(1))),
+            Many.empty(Span(source, positions(1), positions(1)))
+          ),
+          Effects(
+            BlockTypeRef(
+              IdRef(Nil, "Exc", Span(source, positions(2), positions(3))),
+              Nil
+            ),
+            BlockTypeRef(
+              IdRef(Nil, "State", Span(source, positions(4), positions(5))),
+              List(
+                ValueTypeRef(
+                  IdRef(Nil, "T", Span(source, positions(6), positions(7))),
+                  Many.empty(Span(source, positions(7), positions(7)))
+                )
+              )
+            )
+          ),
+          Span(source, positions.head, positions.last)
+        )
+      )
+    }
   }
 
   test("Value types") {
