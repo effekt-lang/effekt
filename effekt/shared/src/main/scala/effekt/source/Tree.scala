@@ -4,7 +4,6 @@ package source
 import effekt.context.Context
 import effekt.symbols.Symbol
 import kiama.util.{Source, StringSource}
-import scala.{Some => OptionSome, None => OptionNone}
 import scala.annotation.tailrec
 
 /**
@@ -299,9 +298,9 @@ case class Maybe[T](unspan: Option[T], span: Span) {
 }
 
 object Maybe {
-  def Some[T](value: T, span: Span): Maybe[T] = Maybe(OptionSome(value), span)
+  def Some[T](value: T, span: Span): Maybe[T] = Maybe(scala.Some(value), span)
 
-  def None[T](span: Span): Maybe[T] = Maybe(OptionNone, span)
+  def None[T](span: Span): Maybe[T] = Maybe(scala.None, span)
 }
 
 object SpannedOps {
