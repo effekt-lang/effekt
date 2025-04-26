@@ -66,8 +66,9 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
           }
         }
 
-        // we are in one of three exclusive modes: LSPServer, Compile, Run
-        if (config.server()) { compiler.runFrontend(src) }
+        // we are in one of four exclusive modes: Documenter, LSPServer, Compile, Run
+        if (config.documenter()) { documenter(source, config)(context) }
+        else if (config.server()) { compiler.runFrontend(src) }
         else if (config.interpret()) { compile() foreach runner.eval }
         else if (config.build()) { compile() foreach runner.build }
         else if (config.compile()) { compile() }
@@ -90,8 +91,6 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
     outputTimes(source, config)(context)
     showIR(source, config)(context)
     writeIRs(source, config)(context)
-    showDocumentation(source, config)(context)
-    writeDocumentation(source, config)(context)
     // This reports error messages
     afterCompilation(source, config)(context)
   }
@@ -128,20 +127,23 @@ trait Driver extends kiama.util.Compiler[EffektConfig, EffektError] { outer =>
       }
   }
 
-  def generateDocumentation(source: Source)(implicit C: Context): String =
-    val astOpt = C.compiler.getAST(source)
-    if (astOpt.isEmpty) return ""
-    JSONDocumentationGenerator(astOpt.get, source.name).content
+  def generateDocumentation(ast: ModuleDecl, source: Source): String =
+    JSONDocumentationGenerator(ast, source.name).content
 
-  def showDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit =
-    if (!config.showDocumentation()) return
-    println(generateDocumentation(source))
+  def showDocumentation(ast: ModuleDecl, source: Source): Unit =
+    println(generateDocumentation(ast, source))
 
-  def writeDocumentation(source: Source, config: EffektConfig)(implicit C: Context): Unit =
-    if (!config.writeDocumentation()) return
-    val out = config.outputPath().getAbsolutePath
+  def writeDocumentation(ast: ModuleDecl, source: Source, output: String): Unit =
     val name = source.name.split("/").last + ".json"
-    IO.createFile((out / name).unixPath, generateDocumentation(source))
+    IO.createFile((output / name).unixPath, generateDocumentation(ast, source))
+
+  def documenter(source: Source, config: EffektConfig)(implicit C: Context): Unit =
+    val astOpt = C.compiler.getAST(source)
+    if (astOpt.isEmpty) return
+
+    val out = config.outputPath().getAbsolutePath
+    if (config.writeDocumentation()) writeDocumentation(astOpt.get, source, out)
+    if (config.showDocumentation()) showDocumentation(astOpt.get, source)
 
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode
