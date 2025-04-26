@@ -756,9 +756,11 @@ class LSPTests extends FunSuite {
              |            Nil
              |          )
              |        )
-             |      )
+             |      ),
+             |      None()
              |    )
-             |  )
+             |  ),
+             |  None()
              |)""".stripMargin
 
       val receivedIRContent = client.receivedIR()
