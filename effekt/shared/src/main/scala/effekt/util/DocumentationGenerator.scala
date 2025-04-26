@@ -277,6 +277,6 @@ case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extend
 
   lazy val content = {
     val docs = toJSON(generate(ast))
-    s"{\"source\": \"${name}\", \"documentation\": [${docs}]}"
+    s"{\"source\": \"${name}\", \"module\": [${docs}]}"
   }
 }
