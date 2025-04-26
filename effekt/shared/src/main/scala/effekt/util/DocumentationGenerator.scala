@@ -28,7 +28,7 @@ trait DocumentationGenerator {
 
   def generate(effectful: Effectful): DocValue = effectful match {
     case Effectful(tpe, eff) => obj(HashMap(
-      "kind" -> str("operation"),
+      "kind" -> str("Effectful"),
       "tpe" -> generate(tpe),
       "eff" -> generate(eff),
     ))
@@ -39,8 +39,14 @@ trait DocumentationGenerator {
     case FunctionType(tparams, vparams, bparams, result, effects) => obj(HashMap(
       "kind" -> str("FunctionType"),
       "tparams" -> generateTparams(tparams),
-      // "vparams" -> generateVparams(vparams),
-      // "bparams" -> generateBparams(bparams),
+      "vparams" -> arr(vparams.map(generate)),
+      "bparams" -> arr(bparams.map((id, tpe) =>
+        obj(HashMap(
+          "kind" -> str("FunctionBlockParam"),
+          "id" -> id.map(generate).getOrElse(str("")),
+          "tpe" -> generate(tpe),
+        ))
+      )),
       "result" -> generate(result),
       "effects" -> generate(effects),
     ))
@@ -65,7 +71,7 @@ trait DocumentationGenerator {
       "capt" -> generate(capt),
     ))
     case ValueTypeRef(id, args) => obj(HashMap(
-      "kind" -> str("BoxedType"),
+      "kind" -> str("ValueTypeRef"),
       "id" -> generate(id),
       "args" -> arr(args.map(generate))
     ))
@@ -130,30 +136,36 @@ trait DocumentationGenerator {
     case Def.ValDef(id, annot, binding, doc) => obj(HashMap(
       "kind" -> str("ValDef"),
       "id" -> generate(id),
+      "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
     case Def.RegDef(id, annot, region, binding, doc) => obj(HashMap(
       "kind" -> str("RegDef"),
       "id" -> generate(id),
+      "annot" -> annot.map(generate).getOrElse(empty),
+      "region" -> generate(region),
       "doc" -> generate(doc),
     ))
 
     case Def.VarDef(id, annot, binding, doc) => obj(HashMap(
       "kind" -> str("VarDef"),
       "id" -> generate(id),
+      "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
     case Def.DefDef(id, annot, block, doc) => obj(HashMap(
       "kind" -> str("DefDef"),
       "id" -> generate(id),
+      "annot" -> annot.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
     case Def.NamespaceDef(id, definitions, doc) => obj(HashMap(
       "kind" -> str("NamespaceDef"),
       "id" -> generate(id),
+      "definitions" -> arr(definitions.map(generate)),
       "doc" -> generate(doc),
     ))
 
