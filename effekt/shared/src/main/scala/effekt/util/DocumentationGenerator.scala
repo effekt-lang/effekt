@@ -22,7 +22,7 @@ trait DocumentationGenerator {
 
   def generate(doc: Doc): DocString = str(s"${doc.getOrElse("").replace("\"", "\\\"")}")
 
-  def generateTparams(list: List[Id]): DocString = str(s"[${list.map(_.name).mkString(", ")}]")
+  def generateTparams(list: List[Id]): DocValue = arr(list.map(generate))
 
   def generate(effects: Effects): DocValue = arr(effects.effs.map(generate))
 
@@ -57,12 +57,6 @@ trait DocumentationGenerator {
     ))
   }
 
-  // TODO: should we provide more information here?
-  def generate(id: IdDef): DocValue = str(id.name)
-  def generate(id: IdRef): DocValue = str(id.name)
-
-  def generate(capt: CaptureSet): DocValue = arr(capt.captures.map(generate))
-
   def generate(tpe: ValueType): DocValue = tpe match {
     case ValueTypeTree(tpe) => ??? // ignore?
     case BoxedType(tpe, capt) => obj(HashMap(
@@ -76,6 +70,13 @@ trait DocumentationGenerator {
       "args" -> arr(args.map(generate))
     ))
   }
+
+  // TODO: should we provide more information here?
+  def generate(id: IdDef): DocValue = str(id.name)
+  def generate(id: IdRef): DocValue = str(id.name)
+  def generate(id: Id): DocValue = str(id.name)
+
+  def generate(capt: CaptureSet): DocValue = arr(capt.captures.map(generate))
 
   def generateVparams(list: List[ValueParam]): DocValue = arr(list.map {
     case ValueParam(id, tpe) =>
@@ -108,6 +109,7 @@ trait DocumentationGenerator {
   def generate(operation: Operation): DocValue = operation match {
     case Operation(id, tparams, vparams, bparams, ret, doc) => obj(HashMap(
       "kind" -> str("Operation"),
+      "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
       "vparams" -> generateVparams(vparams),
       "bparams" -> generateBparams(bparams),
@@ -130,6 +132,7 @@ trait DocumentationGenerator {
       "tparams" -> generateTparams(tparams),
       "vparams" -> generateVparams(vparams),
       "bparams" -> generateBparams(bparams),
+      "ret" -> ret.map(generate).getOrElse(empty),
       "doc" -> generate(doc),
     ))
 
@@ -170,7 +173,7 @@ trait DocumentationGenerator {
     ))
 
     case Def.InterfaceDef(id, tparams, ops, doc) => obj(HashMap(
-      "kind" -> str("NamespaceDef"),
+      "kind" -> str("InterfaceDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
       "ops" -> arr(ops.map(generate)),
@@ -189,7 +192,7 @@ trait DocumentationGenerator {
       "kind" -> str("RecordDef"),
       "id" -> generate(id),
       "tparams" -> generateTparams(tparams),
-      "fields" -> generateVparams(fields),
+      "vparams" -> generateVparams(fields),
       "doc" -> generate(doc),
     ))
 
@@ -241,6 +244,7 @@ trait DocumentationGenerator {
 
     case Def.ExternInclude(featureFlag, path, contents, id, doc) => obj(HashMap(
       "kind" -> str("ExternInclude"),
+      "featureFlag" -> str(featureFlag.toString),
       "path" -> str(path),
       "id" -> generate(id),
       "doc" -> generate(doc),
@@ -277,6 +281,6 @@ case class JSONDocumentationGenerator(ast: ModuleDecl, name: String = "") extend
 
   lazy val content = {
     val docs = toJSON(generate(ast))
-    s"{\"source\": \"${name}\", \"module\": [${docs}]}"
+    s"{\"source\": \"${name}\", \"module\": ${docs}}"
   }
 }
