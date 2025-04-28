@@ -315,6 +315,10 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
       val boundTypes = tps.map(_.symbol.asTypeParam).toSet[TypeVar]
       val boundCapts = bps.map(_.id.symbol.asBlockParam.capture).toSet
       binding(types = boundTypes, captures = boundCapts) { bodies.foreach(query) }
+
+    case tree @ source.RegDef(id, annot, region, init) =>
+      wellformed(Context.typeOf(id.symbol), tree, pp" inferred as type of region-allocated variable")
+      query(init)
   }
 
   // Can only compute free capture on concrete sets
