@@ -301,6 +301,9 @@ object LLVMRunner extends Runner[String] {
         Seq()
     }
 
+  def useLTO(using C: Context): Boolean =
+    !C.config.debug() && !C.config.valgrind()
+
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -333,6 +336,8 @@ object LLVMRunner extends Runner[String] {
     if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
     if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
     else if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+
+    if (useLTO) gccArgs ++= Seq("-flto", "-O3")
 
     exec(gccArgs: _*)
 
