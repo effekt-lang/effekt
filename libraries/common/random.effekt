@@ -1,0 +1,97 @@
+module random
+
+import stream
+
+/// A streaming source of byte-level randomness.
+def minstd(seed: Int): Unit / emit[Byte] = {
+  // Initialize state with seed, ensuring it's not zero
+  var state = if (seed == 0) 1 else seed
+
+  def nextInt(): Int = {
+    // Park-Miller minimal standard PRNG
+    // Uses only at most 32-bit integers internally
+    val a = 48271
+    val m = 2147483647
+
+    val q = m / a        // 44488
+    val r = m.mod(a)     //  3399
+
+    val div = state / q     // max: M / Q = A = 48,271
+    val rem = state.mod(q)	// max: Q - 1     = 44,487
+
+    val s = rem * a;        // max: 44,487 * 48,271 = 2,147,431,977 = 0x7fff3629
+    val t = div * r;        // max: 48,271 *  3,399 =   164,073,129
+
+    val result = s - t
+    // keep the state positive
+    if (result < 0) result + m else result
+  }
+
+  while (true) {
+    state = nextInt()
+    val b = state.mod(256).toByte
+    do emit(b)
+  }
+}
+
+/// A think wrapper over `minstd` and `stream::source`
+def minstd(seed: Int) { randomnessReader: () => Unit / read[Byte] }: Unit =
+  source[Byte] { minstd(seed) } {randomnessReader}
+
+// randomness functions
+
+def randomBool(): Bool / {read[Byte], stop} = {
+  val b = do read[Byte]()
+  b.toInt.mod(2) == 1
+}
+
+def randomInt32(): Int / {read[Byte], stop} = {
+  var result = 0
+  repeat(4) {
+    val b = do read[Byte]()
+    result = result.bitwiseShl(8).bitwiseOr(b.toInt)
+  }
+  result
+}
+
+def randomInt64(): Int / {read[Byte], stop} = {
+  var result = 0
+  repeat(8) {
+    val b = do read[Byte]()
+    result = result.bitwiseShl(8).bitwiseOr(b.toInt)
+  }
+  result
+}
+
+/// `max` is _inclusive_!
+def randomInt(min: Int, max: Int): Int / {read[Byte], stop} = {
+  if (min > max) {
+    randomInt(max, min)
+  } else {
+    val range = max - min + 1
+    val bytesNeeded = (log(range.toDouble) / log(256.0)).ceil
+
+    var result = 0
+    repeat(bytesNeeded) {
+      val b = do read[Byte]()
+      result = result.bitwiseShl(8).bitwiseOr(b.toInt)
+    }
+
+    min + (abs(result).mod(range))
+  }
+}
+
+namespace examples {
+  def main() = {
+    with boundary;
+    with minstd(1337);
+
+    repeat(10) {
+      val a = randomInt(1, 10)
+      val b = randomInt(1, 100)
+      val c = randomInt(1, 1000)
+      println(a.show ++ " " ++ b.show ++ " " ++ c.show)
+      println(a + b + c)
+    }
+  }
+}
