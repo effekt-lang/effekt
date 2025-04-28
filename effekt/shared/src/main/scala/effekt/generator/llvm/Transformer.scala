@@ -26,7 +26,7 @@ object Transformer {
         Call("stack", Ccc(), stackType, withEmptyStack, List()),
         Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
-      val entryFunction = Function(Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
+      val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
 
       declarations.map(transform) ++ globals :+ entryFunction
   }
@@ -434,7 +434,7 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
+    val function = Function(Private(), Ccc(), VoidType(), name, parameters, entryBlock :: basicBlocks);
 
     emit(function)
   }
@@ -449,7 +449,7 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
+    val function = Function(Private(), Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
 
     emit(function)
   }
