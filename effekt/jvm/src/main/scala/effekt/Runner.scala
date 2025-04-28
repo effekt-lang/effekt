@@ -302,7 +302,7 @@ object LLVMRunner extends Runner[String] {
     }
 
   def useLTO(using C: Context): Boolean =
-    !C.config.debug() && !C.config.valgrind()
+    !C.config.debug() && !C.config.valgrind() && C.config.optimize()
 
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
@@ -316,6 +316,7 @@ object LLVMRunner extends Runner[String] {
     val basePath = (out / path.stripSuffix(".ll")).unixPath
     val llPath  = basePath + ".ll"
     val optPath = basePath + ".opt.ll"
+    val bcPath  = basePath + ".bc"
     val objPath = basePath + ".o"
     val linkedLibraries = Seq(
       "-lm", // Math library
@@ -326,20 +327,52 @@ object LLVMRunner extends Runner[String] {
     val llc = llcCmd.getOrElse(missing("llc"))
     val opt = optCmd.getOrElse(missing("opt"))
 
-    exec(opt, llPath, "-S", "-O2", "-o", optPath)
-    exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
-
     val gccMainFile = (C.config.libPath / ".." / "llvm" / "main.c").unixPath
     val executableFile = basePath
-    var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
 
-    if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
-    if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
-    else if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+    if (useLTO) {
+      // Convert to bitcode with aggressive optimizations
+      exec(opt, llPath, "-O3", "-o", bcPath)
 
-    if (useLTO) gccArgs ++= Seq("-flto", "-O3")
+      var gccArgs = Seq(gcc, gccMainFile, bcPath, "-o", executableFile) ++ linkedLibraries
 
-    exec(gccArgs: _*)
+      //if (isClang) {
+      gccArgs ++= Seq(
+        "-flto=full",                // Explicitly use full LTO
+//        "-fuse-ld=lld",              // Use LLVM's linker when available
+//        "-Wl,--lto-O3",              // Optimization level for LTO
+        "-fwhole-program-vtables",   // Enable whole program devirtualization
+        "-fvisibility=hidden",       // Hide symbols by default
+      )
+      // else GCC LTO flags
+//        gccArgs ++= Seq(
+//          "-flto",                // Enable LTO
+//          "-fno-fat-lto-objects", // Don't create non-LTO object code (smaller intermediate files)
+//          "-fwhole-program",      // Consider the whole program for optimization
+//          "-fuse-linker-plugin"   // Use the GCC linker plugin for LTO
+//        )
+
+      gccArgs ++= Seq(
+        "-O3",                  // Maximum optimization
+        "-march=native",        // Optimize for current CPU
+        "-fomit-frame-pointer", // Remove frame pointers when possible
+        "-ffunction-sections",  // Place each function in its own section
+        "-fdata-sections",      // Place each data item in its own section
+      )
+
+      exec(gccArgs: _*)
+    } else {
+      exec(opt, llPath, "-S", "-O2", "-o", optPath)
+      exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
+
+      var gccArgs = Seq(gcc, gccMainFile, "-o", executableFile, objPath) ++ linkedLibraries
+
+      if (C.config.debug()) gccArgs ++= Seq("-g", "-Wall", "-Wextra", "-Werror")
+      if (C.config.valgrind()) gccArgs ++= Seq("-O0", "-g")
+      else if (C.config.debug()) gccArgs ++= Seq("-fsanitize=address,undefined", "-fstack-protector-all")
+
+      exec(gccArgs: _*)
+    }
 
     Some(executableFile)
 }
