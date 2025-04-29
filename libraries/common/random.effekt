@@ -119,30 +119,18 @@ def randomInt(min: Int, max: Int): Int / random = {
     min + (abs(result).mod(range))
   }
 }
-
 /// `max` is _inclusive_!
 def randomInts(min: Int, max: Int): Unit / {emit[Int], random} =
   while (true) do emit(randomInt(min, max))
 
-def randomIntWidth(bits: Int): Int / random = {
-  def divCeil(n: Int, m: Int) = (n + m - 1) / m
-
-  val max = 1.bitwiseShl(bits)
-
-  val bytesNeeded = bits.divCeil(4)
-  var result = 0
-  repeat(bytesNeeded) {
-    val b = do random()
-    result = result.bitwiseShl(8).bitwiseOr(b.toInt)
-  }
-
-  abs(result).mod(max)
-}
 
 /// Random double between 0.0 and 1.0
 def randomDouble(): Double / random =
   (randomInt32().toDouble / 1.bitwiseShl(31).toDouble).abs
   // This is not perfect, but it will do for now.
+def randomDoubles(): Unit / {emit[Double], random} =
+  while (true) do emit(randomDouble())
+
 
 namespace examples {
 def main() = {
