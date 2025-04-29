@@ -9,15 +9,17 @@ effect random(): Byte
 // ---------------------
 // Sources of randomness
 
-/// A streaming source (push stream) of byte-level randomness.
+/// A streaming source (push stream) of byte-level randomness
+/// based on Park and Miller's MINSTD with revised parameters.
+///
 /// Deterministic: needs a 32bit `seed` -- you can use `bench::timestamp`.
 def minstd(seed: Int): Unit / emit[Byte] = {
   // Initialize state with seed, ensuring it's not zero
   var state = if (seed == 0) 1 else seed
 
   def nextInt(): Int = {
-    // Park-Miller minimal standard PRNG
     // Uses only at most 32-bit integers internally
+    // (Schrage's method: https://en.wikipedia.org/wiki/Lehmer_random_number_generator#Schrage's_method)
     val a = 48271
     val m = 2147483647
 
@@ -43,9 +45,10 @@ def minstd(seed: Int): Unit / emit[Byte] = {
 }
 
 /// A thin wrapper over `minstd`, handling a reader of random bytes.
+///
 /// Deterministic: needs a 32bit `seed` -- you can use `bench::timestamp`.
 ///
-/// Implementation is something like `stream::source`, specialized for bytes and the `random` effect.
+/// Implementation is similar to `stream::source`, specialized for bytes and the `random` effect.
 def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
   var next = box { 255.toByte } // sentinel value
   next = box {
