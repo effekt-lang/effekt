@@ -142,9 +142,6 @@ namespace examples {
 def main() = {
     println("prng")
     prngRandom()
-
-    println("unix")
-    unixRandom()
   }
 
   def prngRandom(): Unit = {
