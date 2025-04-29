@@ -147,16 +147,23 @@ namespace examples {
 def main() = {
     with minstd(1337);
 
+    println("int32s:")
+    repeat(10) {
+      println(randomInt32())
+    }
+
+    println("doubles:")
     repeat(10) {
       println(randomDouble())
     }
 
+    println("randomInt:")
     repeat(10) {
-      val a = randomInt(1, 10)
-      val b = randomInt(1, 100)
-      val c = randomInt(1, 1000)
+      val a = randomInt(0, 9)
+      val b = randomInt(0, 9)
+      val c = randomInt(0, 9)
       println(a.show ++ " " ++ b.show ++ " " ++ c.show)
-      println(a + b + c)
+      println(a*100 + b*10 + c)
     }
   }
 
