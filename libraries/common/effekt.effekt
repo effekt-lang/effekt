@@ -449,7 +449,7 @@ extern pure def toDouble(d: Int): Double =
 
 extern pure def round(d: Double): Int =
   js "Math.round(${d})"
-  chez "(round ${d})"
+  chez "(flonum->fixnum (round ${d}))"
   llvm """
     %i = call %Double @llvm.round.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
