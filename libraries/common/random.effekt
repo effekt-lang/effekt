@@ -94,9 +94,10 @@ def randomInt32(): Int / random = {
   var result = 0
   repeat(4) {
     val b = do random()
-    result = result.bitwiseShl(8).bitwiseOr(b.toInt)
+    result = result * 256 + b.toInt
   }
-  result
+  val signBit = result.bitwiseShr(31).bitwiseAnd(1) == 0
+  result.mod(1.bitwiseShl(31)).abs * if (signBit) 1 else -1
 }
 def randomInt32s(): Unit / {emit[Int], random} =
   while (true) do emit(randomInt32())
@@ -112,7 +113,7 @@ def randomInt(min: Int, max: Int): Int / random = {
     var result = 0
     repeat(bytesNeeded) {
       val b = do random()
-      result = result.bitwiseShl(8).bitwiseOr(b.toInt)
+      result = result * 256 + b.toInt
     }
 
     min + (abs(result).mod(range))
@@ -152,9 +153,15 @@ def main() = {
       println(randomInt32())
     }
 
+    println("int32s, part2:")
+    repeat(10) {
+      println(randomInt(0, 2147483647))
+      println(randomInt(-2147483648, 0))
+    }
+
     println("doubles:")
     repeat(10) {
-      println(randomDouble())
+      println(randomDouble().round(3))
     }
 
     println("randomInt:")
