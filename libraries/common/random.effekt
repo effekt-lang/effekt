@@ -68,12 +68,15 @@ def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
 
 /// CSPRNG from `/dev/urandom`, handling a reader of random bytes.
 /// Only works on Unix-like OSes!
-def devurandom { randomnessReader: () => Unit / random }: Unit / {Exception[IOError], stop} = {
-  with readFile("/dev/urandom")
-  try randomnessReader() with random {
-    resume(do read[Byte]())
+def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOError] =
+  try {
+    with readFile("/dev/urandom")
+    try randomnessReader() with random {
+      resume(do read[Byte]())
+    }
+  } with stop {
+    do raise(io::error::EOF(), "Unexpected EOF when reading /dev/urandom!")
   }
-}
 
 // ------------------------
 // Functions using `random`
@@ -137,6 +140,14 @@ def randomDoubles(): Unit / {emit[Double], random} =
 
 namespace examples {
 def main() = {
+    println("prng")
+    prngRandom()
+
+    println("unix")
+    unixRandom()
+  }
+
+  def prngRandom(): Unit = {
     with minstd(1337);
 
     println("int32s:")
@@ -166,12 +177,13 @@ def main() = {
   }
 
   def unixRandom(): Unit = {
-    with boundary;
     with on[IOError].report;
     with devurandom;
 
-    repeat(2) {
-      println(randomInt32())
-    }
+    val a = randomInt32()
+    val b = randomInt32()
+
+    // This is just to use the generated numbers :)
+    println((a.show ++ b.show).length != 0)
   }
 }
