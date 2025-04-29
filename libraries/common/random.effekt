@@ -1,8 +1,16 @@
 module random
 
 import stream
+import io/error
 
-/// A streaming source of byte-level randomness.
+/// Infinite pull stream of random bytes.
+effect random(): Byte
+
+// ---------------------
+// Sources of randomness
+
+/// A streaming source (push stream) of byte-level randomness.
+/// Deterministic: needs a 32bit `seed` -- you can use `bench::timestamp`.
 def minstd(seed: Int): Unit / emit[Byte] = {
   // Initialize state with seed, ensuring it's not zero
   var state = if (seed == 0) 1 else seed
@@ -13,14 +21,14 @@ def minstd(seed: Int): Unit / emit[Byte] = {
     val a = 48271
     val m = 2147483647
 
-    val q = m / a        // 44488
-    val r = m.mod(a)     //  3399
+    val q = m / a           // 44488
+    val r = m.mod(a)        //  3399
 
-    val div = state / q     // max: M / Q = A = 48,271
-    val rem = state.mod(q)	// max: Q - 1     = 44,487
+    val div = state / q     // max: M / Q = A = 48271
+    val rem = state.mod(q)	// max: Q - 1     = 44487
 
-    val s = rem * a;        // max: 44,487 * 48,271 = 2,147,431,977 = 0x7fff3629
-    val t = div * r;        // max: 48,271 *  3,399 =   164,073,129
+    val s = rem * a;        // max: 44487 * 48271 = 2147431977
+    val t = div * r;        // max: 48271 *  3399 =  164073129
 
     val result = s - t
     // keep the state positive
@@ -34,37 +42,67 @@ def minstd(seed: Int): Unit / emit[Byte] = {
   }
 }
 
-/// A think wrapper over `minstd` and `stream::source`
-def minstd(seed: Int) { randomnessReader: () => Unit / read[Byte] }: Unit =
-  source[Byte] { minstd(seed) } {randomnessReader}
+/// A thin wrapper over `minstd`, handling a reader of random bytes.
+/// Deterministic: needs a 32bit `seed` -- you can use `bench::timestamp`.
+///
+/// Implementation is something like `stream::source`, specialized for bytes and the `random` effect.
+def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
+  var next = box { 255.toByte } // sentinel value
+  next = box {
+    try {
+      minstd(seed)
+      <> // safe: randomness generator cannot run out of numbers...
+    } with emit[Byte] { v =>
+      next = box { resume(()) }
+      v
+    }
+  }
 
-// randomness functions
+  try randomnessReader() with random {
+    resume(next())
+  }
+}
 
-def randomBool(): Bool / {read[Byte], stop} = {
-  val b = do read[Byte]()
+/// CSPRNG from `/dev/urandom`, handling a reader of random bytes.
+/// Only works on Unix-like OSes!
+def devurandom { randomnessReader: () => Unit / random }: Unit / {Exception[IOError], stop} = {
+  with readFile("/dev/urandom")
+  try randomnessReader() with random {
+    resume(do read[Byte]())
+  }
+}
+
+// ------------------------
+// Functions using `random`
+//
+// Always two variants:
+// - readType(): Type / random
+// - readTypes(): Unit / {emit[Type], random}
+
+def randomByte(): Byte / random = do random()
+def randomBytes(): Unit / {emit[Byte], random} =
+  while (true) do emit(do random())
+
+def randomBool(): Bool / random = {
+  val b = do random()
   b.toInt.mod(2) == 1
 }
+def randomBools(): Unit / {emit[Bool], random} =
+  while (true) do emit(randomBool())
 
-def randomInt32(): Int / {read[Byte], stop} = {
+def randomInt32(): Int / random = {
   var result = 0
   repeat(4) {
-    val b = do read[Byte]()
+    val b = do random()
     result = result.bitwiseShl(8).bitwiseOr(b.toInt)
   }
   result
 }
-
-def randomInt64(): Int / {read[Byte], stop} = {
-  var result = 0
-  repeat(8) {
-    val b = do read[Byte]()
-    result = result.bitwiseShl(8).bitwiseOr(b.toInt)
-  }
-  result
-}
+def randomInt32s(): Unit / {emit[Int], random} =
+  while (true) do emit(randomInt32())
 
 /// `max` is _inclusive_!
-def randomInt(min: Int, max: Int): Int / {read[Byte], stop} = {
+def randomInt(min: Int, max: Int): Int / random = {
   if (min > max) {
     randomInt(max, min)
   } else {
@@ -73,7 +111,7 @@ def randomInt(min: Int, max: Int): Int / {read[Byte], stop} = {
 
     var result = 0
     repeat(bytesNeeded) {
-      val b = do read[Byte]()
+      val b = do random()
       result = result.bitwiseShl(8).bitwiseOr(b.toInt)
     }
 
@@ -81,10 +119,37 @@ def randomInt(min: Int, max: Int): Int / {read[Byte], stop} = {
   }
 }
 
+/// `max` is _inclusive_!
+def randomInts(min: Int, max: Int): Unit / {emit[Int], random} =
+  while (true) do emit(randomInt(min, max))
+
+def randomIntWidth(bits: Int): Int / random = {
+  def divCeil(n: Int, m: Int) = (n + m - 1) / m
+
+  val max = 1.bitwiseShl(bits)
+
+  val bytesNeeded = bits.divCeil(4)
+  var result = 0
+  repeat(bytesNeeded) {
+    val b = do random()
+    result = result.bitwiseShl(8).bitwiseOr(b.toInt)
+  }
+
+  abs(result).mod(max)
+}
+
+/// Random double between 0.0 and 1.0
+def randomDouble(): Double / random =
+  (randomInt32().toDouble / 1.bitwiseShl(31).toDouble).abs
+  // This is not perfect, but it will do for now.
+
 namespace examples {
-  def main() = {
-    with boundary;
+def main() = {
     with minstd(1337);
+
+    repeat(10) {
+      println(randomDouble())
+    }
 
     repeat(10) {
       val a = randomInt(1, 10)
@@ -92,6 +157,16 @@ namespace examples {
       val c = randomInt(1, 1000)
       println(a.show ++ " " ++ b.show ++ " " ++ c.show)
       println(a + b + c)
+    }
+  }
+
+  def unixRandom(): Unit = {
+    with boundary;
+    with on[IOError].report;
+    with devurandom;
+
+    repeat(2) {
+      println(randomInt32())
     }
   }
 }
