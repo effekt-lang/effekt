@@ -1,0 +1,186 @@
+module random
+
+import stream
+import io/error
+
+/// Infinite pull stream of random bytes.
+effect random(): Byte
+
+// ---------------------
+// Sources of randomness
+
+/// A streaming source (push stream) of byte-level randomness
+/// based on Park and Miller's MINSTD with revised parameters.
+///
+/// Deterministic: needs a 32bit `seed` -- you can use `bench::timestamp`.
+def minstd(seed: Int): Unit / emit[Byte] = {
+  // Initialize state with seed, ensuring it's not zero
+  var state = if (seed == 0) 1 else seed
+
+  def nextInt(): Int = {
+    // Uses only at most 32-bit integers internally
+    // (Schrage's method: https://en.wikipedia.org/wiki/Lehmer_random_number_generator#Schrage's_method)
+    val a = 48271
+    val m = 2147483647
+
+    val q = m / a           // 44488
+    val r = m.mod(a)        //  3399
+
+    val div = state / q     // max: M / Q = A = 48271
+    val rem = state.mod(q)	// max: Q - 1     = 44487
+
+    val s = rem * a;        // max: 44487 * 48271 = 2147431977
+    val t = div * r;        // max: 48271 *  3399 =  164073129
+
+    val result = s - t
+    // keep the state positive
+    if (result < 0) result + m else result
+  }
+
+  while (true) {
+    state = nextInt()
+    val b = state.mod(256).toByte
+    do emit(b)
+  }
+}
+
+/// A thin wrapper over `minstd`, handling a reader of random bytes.
+///
+/// Deterministic: needs a 32bit `seed` -- you can use `bench::timestamp`.
+///
+/// Implementation is similar to `stream::source`, specialized for bytes and the `random` effect.
+def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
+  var next = box { 255.toByte } // sentinel value
+  next = box {
+    try {
+      minstd(seed)
+      <> // safe: randomness generator cannot run out of numbers...
+    } with emit[Byte] { v =>
+      next = box { resume(()) }
+      v
+    }
+  }
+
+  try randomnessReader() with random {
+    resume(next())
+  }
+}
+
+/// CSPRNG from `/dev/urandom`, handling a reader of random bytes.
+/// Only works on Unix-like OSes!
+def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOError] =
+  try {
+    with readFile("/dev/urandom")
+    try randomnessReader() with random {
+      resume(do read[Byte]())
+    }
+  } with stop {
+    do raise(io::error::EOF(), "Unexpected EOF when reading /dev/urandom!")
+  }
+
+// ------------------------
+// Functions using `random`
+//
+// Always two variants:
+// - readType(): Type / random
+// - readTypes(): Unit / {emit[Type], random}
+
+def randomByte(): Byte / random = do random()
+def randomBytes(): Unit / {emit[Byte], random} =
+  while (true) do emit(do random())
+
+def randomBool(): Bool / random = {
+  val b = do random()
+  b.toInt.mod(2) == 1
+}
+def randomBools(): Unit / {emit[Bool], random} =
+  while (true) do emit(randomBool())
+
+def randomInt32(): Int / random = {
+  var result = 0
+  repeat(4) {
+    val b = do random()
+    result = result * 256 + b.toInt
+  }
+  val signBit = result.bitwiseShr(31).bitwiseAnd(1) == 0
+  result.mod(1.bitwiseShl(31)).abs * if (signBit) 1 else -1
+}
+def randomInt32s(): Unit / {emit[Int], random} =
+  while (true) do emit(randomInt32())
+
+/// `max` is _inclusive_!
+def randomInt(min: Int, max: Int): Int / random = {
+  if (min > max) {
+    randomInt(max, min)
+  } else {
+    val range = max - min + 1
+    val bytesNeeded = (log(range.toDouble) / log(256.0)).ceil
+
+    var result = 0
+    repeat(bytesNeeded) {
+      val b = do random()
+      result = result * 256 + b.toInt
+    }
+
+    min + (abs(result).mod(range))
+  }
+}
+/// `max` is _inclusive_!
+def randomInts(min: Int, max: Int): Unit / {emit[Int], random} =
+  while (true) do emit(randomInt(min, max))
+
+
+/// Random double between 0.0 and 1.0
+def randomDouble(): Double / random =
+  (randomInt32().toDouble / 1.bitwiseShl(31).toDouble).abs
+  // This is not perfect, but it will do for now.
+def randomDoubles(): Unit / {emit[Double], random} =
+  while (true) do emit(randomDouble())
+
+
+namespace examples {
+def main() = {
+    println("prng")
+    prngRandom()
+  }
+
+  def prngRandom(): Unit = {
+    with minstd(1337);
+
+    println("int32s:")
+    repeat(10) {
+      println(randomInt32())
+    }
+
+    println("int32s, part2:")
+    repeat(10) {
+      println(randomInt(0, 2147483647))
+      println(randomInt(-2147483648, 0))
+    }
+
+    println("doubles:")
+    repeat(10) {
+      println(randomDouble().round(3))
+    }
+
+    println("randomInt:")
+    repeat(10) {
+      val a = randomInt(0, 9)
+      val b = randomInt(0, 9)
+      val c = randomInt(0, 9)
+      println(a.show ++ " " ++ b.show ++ " " ++ c.show)
+      println(a*100 + b*10 + c)
+    }
+  }
+
+  def unixRandom(): Unit = {
+    with on[IOError].report;
+    with devurandom;
+
+    val a = randomInt32()
+    val b = randomInt32()
+
+    // This is just to use the generated numbers :)
+    println((a.show ++ b.show).length != 0)
+  }
+}

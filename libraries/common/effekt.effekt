@@ -344,7 +344,7 @@ extern pure def infixSub(x: Double, y: Double): Double =
 
 extern pure def infixDiv(x: Double, y: Double): Double =
   js "(${x} / ${y})"
-  chez "(/ ${x} ${y})"
+  chez "(fl/ ${x} ${y})"
   llvm "%z = fdiv %Double ${x}, ${y} ret %Double %z"
   vm "effekt::infixDiv(Double, Double)"
 
@@ -442,14 +442,14 @@ extern pure def toInt(d: Double): Int =
 
 extern pure def toDouble(d: Int): Double =
   js "${d}"
-  chez "${d}"
+  chez "(fixnum->flonum ${d})"
   llvm "%z = sitofp i64 ${d} to double ret double %z"
   vm "effekt::toDouble(Int)"
 
 
 extern pure def round(d: Double): Int =
   js "Math.round(${d})"
-  chez "(round ${d})"
+  chez "(flonum->fixnum (round ${d}))"
   llvm """
     %i = call %Double @llvm.round.f64(double ${d})
     %z = fptosi double %i to %Int ret %Int %z
