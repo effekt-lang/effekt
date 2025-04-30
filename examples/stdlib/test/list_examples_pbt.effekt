@@ -1,6 +1,10 @@
 import test
+import bench
+import random
 
 def main() = {
+  with minstd(1337);
+  
   println(suite("PBT: List Functions and Other Simple Examples") {
 
     // example unit tests to show that mixed test suites work

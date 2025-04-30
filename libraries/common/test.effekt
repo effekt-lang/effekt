@@ -2,18 +2,7 @@ import tty
 import process
 import bench
 import stream
-
-// FFI for random Integer generation for property testing
-extern js"""
-  function getRandomInt(min, max) {
-    const minCeiled = Math.ceil(min);
-    const maxFloored = Math.floor(max);
-    return Math.floor(Math.random() * (maxFloored - minCeiled) + minCeiled); // The maximum is exclusive and the minimum is inclusive
-  }
-"""
-
-extern def randomInt(minInclusive: Int, maxExclusive: Int): Int =
-  js"getRandomInt(${minInclusive}, ${maxExclusive})"
+import random
 
 interface Assertion {
   def assert(condition: Bool, msg: String): Unit
@@ -78,7 +67,7 @@ interface Generator[T] {
   def shrink(v: T): Unit/emit[T]
 }
 
-def arbitraryInt { body: => Unit / Generator[Int] }: Unit =
+def arbitraryInt { body: => Unit / Generator[Int] }: Unit / random =
   try body() with Generator[Int] {
     def generate() = resume {
       //[0, -1, 1, int.minVal, int.maxVal, -2, 2].each // This can reduce the need for shrinking by emitting common edge cases first
@@ -99,7 +88,7 @@ def arbitraryInt { body: => Unit / Generator[Int] }: Unit =
   }
 
 // same as other arbitraryInt but for quantifier version that explicitely takes the generator as input
-def arbitraryInt { body: {Generator[Int]} => Unit }: Unit = {
+def arbitraryInt { body: {Generator[Int]} => Unit }: Unit /random = {
   try body{g} with g: Generator[Int] {
     def generate() = resume {   
       while (true) {
@@ -119,7 +108,7 @@ def arbitraryInt { body: {Generator[Int]} => Unit }: Unit = {
   }
 }
 
-def chooseInt(minInclusive: Int, maxExclusive: Int) { body: => Unit / Generator[Int] }: Unit =
+def chooseInt(minInclusive: Int, maxExclusive: Int) { body: => Unit / Generator[Int] }: Unit / random=
   try body() with Generator[Int] {
     def generate() = resume {
       while (true) {
@@ -138,11 +127,11 @@ def chooseInt(minInclusive: Int, maxExclusive: Int) { body: => Unit / Generator[
     }
   }
 
-def arbitraryBool { body: => Unit/Generator[Bool] }: Unit = 
+def arbitraryBool { body: => Unit/Generator[Bool] }: Unit / random= 
   try body() with Generator[Bool]{
     def generate() = resume {
       while (true) {
-        do emit(random() > 0.5)
+        do emit(randomBool())
       }
     }
 
@@ -157,13 +146,11 @@ def arbitraryBool { body: => Unit/Generator[Bool] }: Unit =
     }
   }
 
-def arbitraryDouble { body: => Unit/Generator[Double] }: Unit = 
+def arbitraryDouble { body: => Unit/Generator[Double] }: Unit / random = 
   try body() with Generator[Double]{
     def generate() = resume {
-      val min = -1000.0 // TODO use double min value
-      val max = 1000.0  // TODO use double max value
       while (true) {
-        do emit(min + (max - min) * random())
+        do emit(randomDouble())
       }
     }
 
@@ -179,7 +166,7 @@ def arbitraryDouble { body: => Unit/Generator[Double] }: Unit =
   }
 
 
-def arbitraryChar { body: => Unit / Generator[Char] }: Unit =
+def arbitraryChar { body: => Unit / Generator[Char] }: Unit / random =
   try body() with Generator[Char] {
     def generate() = resume {
       // ASCII printable characters range from 32 to 126
@@ -191,7 +178,7 @@ def arbitraryChar { body: => Unit / Generator[Char] }: Unit =
     def shrink(v: Char) = resume { <> }
   }
 
-def arbitraryString { body: => Unit / Generator[String] }: Unit / Generator[Char] = {
+def arbitraryString { body: => Unit / Generator[String] }: Unit / {Generator[Char], random } = {
   try body() with Generator[String] {
     def generate() = resume {
       while (true) {
@@ -208,7 +195,7 @@ def arbitraryString { body: => Unit / Generator[String] }: Unit / Generator[Char
   }
 }
 
-def arbitraryString(len: Int) { body: => Unit / Generator[String] }: Unit / Generator[Char] = {
+def arbitraryString(len: Int) { body: => Unit / Generator[String] }: Unit / { Generator[Char], random } = {
   try body() with Generator[String] {
     def generate() = resume {
       while (true) {
@@ -225,7 +212,7 @@ def arbitraryString(len: Int) { body: => Unit / Generator[String] }: Unit / Gene
   }
 }
 
-def arbitraryList[T] { body: => Unit / Generator[List[T]]} : Unit / Generator[T] = {
+def arbitraryList[T] { body: => Unit / Generator[List[T]]} : Unit / { Generator[T], random } = {
   try body() with Generator[List[T]]{ 
     def generate() = resume {
       while (true) {
@@ -242,7 +229,7 @@ def arbitraryList[T] { body: => Unit / Generator[List[T]]} : Unit / Generator[T]
   }
 }
 
-def arbitraryList[T](len: Int) { body: => Unit/Generator[List[T]]} : Unit / Generator[T] = {
+def arbitraryList[T](len: Int) { body: => Unit/Generator[List[T]]} : Unit / { Generator[T], random } = {
   try body() with Generator[List[T]]{ 
     def generate() = resume {
       while (true) {
@@ -259,7 +246,7 @@ def arbitraryList[T](len: Int) { body: => Unit/Generator[List[T]]} : Unit / Gene
   }
 }
 
-def evenNumbers { body: => Unit / Generator[Int] }: Unit = 
+def evenNumbers { body: => Unit / Generator[Int] }: Unit / random = 
   try body() with Generator[Int] {
     def generate() = resume {
       while(true) {
@@ -280,7 +267,7 @@ def evenNumbers { body: => Unit / Generator[Int] }: Unit =
     }
   }
 
-def alphabeticChar { body: => Unit / Generator[Char] }: Unit = {
+def alphabeticChar { body: => Unit / Generator[Char] }: Unit / random = {
   try body() with Generator[Char] {
     def generate() = resume {
       // ASCII printable characters range from 32 to 126

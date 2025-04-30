@@ -1,10 +1,11 @@
 import map
 import stream
+import random
 
 import test
 
 // user-defined generator for arbitrary, unique Integers in ascending order
-def uniqueInt{body: => Unit / Generator[Int]}: Unit = {
+def uniqueInt{body: => Unit / Generator[Int]}: Unit / random = {
   try body() with Generator[Int]{
     def generate() = resume{
       var next = randomInt(-100, 100)
@@ -51,6 +52,8 @@ def arbitraryBinTree[K, V] (numKeys: Int) { body: => Unit / Generator[internal::
 }
 
 def main()= {
+  with minstd(1337);
+
   with arbitraryChar;
   with arbitraryString(5);
   with uniqueInt; 
@@ -88,7 +91,7 @@ def main()= {
         t.internal::foreach[Int, String] { (k, _v) => keys = Cons(k, keys)}
 
         with on[OutOfBounds].panic
-        val k = keys.get(randomInt(0, keys.size())) // only check the property for key's present in the tree (= non trivial test case)
+        val k = keys.get(randomInt(0, keys.size() - 1)) // only check the property for key's present in the tree (= non trivial test case)
         internal::get(t, compareInt, k) match {
           case Some(v) => {
             val newT = internal::put(t, compareInt, k, v)
