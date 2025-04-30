@@ -416,6 +416,11 @@ effect snapshot(): Unit
 /// 
 /// Starts by executing cons.
 /// 
+/// Example, printing all values consumed by the outside:
+///
+///     with teeing{ s => for{s}{ e => println(e) } }
+///     prod() // some producer
+///
 /// Laws-ish (hopefully):
 /// - hnd{ prd() } === hnd{ teeing{t}{ prd() } } for all hnd and t that calls its argument at most once (and has no other captures)
 def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit / emit[A] = region r {
