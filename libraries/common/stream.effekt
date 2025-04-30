@@ -469,6 +469,13 @@ def manyTee[A]{ body: { { { => Unit / emit[A] } => Unit }{ => Unit / emit[A] } =
 
 /// Streams prod to both cons1 and cons2. Stops once both cons1 and cons2 stopped.
 /// Only runs prod once, resuming at most once at each emit.
+///
+///     var sumRes = 0
+///     var productRes = 0
+///     tee{ s => sumRes = sum{s} }{ s => productRes = product{s} }{ range(0, 10) }
+///     assertEquals(sum{ range(0, 10) }, sumRes)
+///     assertEquals(product{ range(0, 10) }, productRes)
+///
 def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit = {
   manyTee[A]{ {tee} =>
     with tee{cons1}
