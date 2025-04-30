@@ -510,7 +510,6 @@ def exists[A, B](name: String, n: Int)
 /// }
 /// ```
 def suite(name: String, printTimes: Bool) { body: => Unit / { Test, Formatted } }: Bool / {} = {
-  println("here")
   with Formatted::formatting;
 
   def ms(duration: Int): String / Formatted =

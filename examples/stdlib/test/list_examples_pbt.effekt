@@ -4,8 +4,9 @@ import random
 
 def main() = {
   with minstd(1337);
-  
-  println(suite("PBT: List Functions and Other Simple Examples") {
+
+  // Don't print out times in CI.
+  suite("PBT: List Functions and Other Simple Examples", false) {
 
     // example unit tests to show that mixed test suites work
     test("1 + 1 == 2") {
@@ -165,6 +166,8 @@ def main() = {
         assertTrue(n.mod(2) == 0)
         assertTrue(n <= 4)
     }
-  })
+  };
+
+  ()
 }
     

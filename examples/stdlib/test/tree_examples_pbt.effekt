@@ -59,7 +59,8 @@ def main()= {
   with uniqueInt; 
   with arbitraryBinTree[Int, String](8);
 
-  println(suite("PBT: Tree Map Examples") {
+  // Don't print out times in CI.
+  suite("PBT: Tree Map Examples", false) {
 
     // get-put law: get(put(M, K, V), K) = V
     forall[String, internal::Tree[Int, String], Int]("get-put law", 100)
@@ -106,5 +107,7 @@ def main()= {
       val tMap = internal::map(t){ (_k, _v) => ()}
       assertEqual(tForget, tMap)
     }
-  })
+  };
+
+  ()
 }

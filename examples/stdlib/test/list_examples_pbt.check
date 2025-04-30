@@ -1,0 +1,50 @@
+PBT: List Functions and Other Simple Examples
+✓ 1 + 1 == 2 [0.87ms]
+✕ 2 + 2 == 3 [0.14ms]
+  Expected: 3
+  Obtained: 4
+✓ reverse-singleton, passed 100 tests  [3.16ms]
+✓ reverse-singleton, explicitely passing the generator, passed 100 tests  [1.59ms]
+✕ reverse-singleton mistake [0.15ms]
+  ! Falsified after 0 passed tests: [0.15ms]
+  Expected: Cons(6, Nil())
+  Obtained: Cons(47, Nil())
+  failed on input:
+    1. 47
+✓ Is the Integer 2 among the generated values? [0.40ms]
+  Verified after 18 tried inputs
+  example value:
+    1. 2
+✓ reverse: distributivity over append, passed 100 tests  [4.36ms]
+✕ reverse: distributivity mistake - swapped order [0.72ms]
+  ! Falsified after 0 passed tests: [0.72ms]
+  Expected: Cons(-45, Cons(43, Cons(15, Cons(0, Nil()))))
+  Obtained: Cons(15, Cons(0, Cons(-45, Cons(43, Nil()))))
+  failed on inputs:
+    1. Cons(43, Cons(-45, Nil()))
+    2. Cons(0, Cons(15, Nil()))
+✓ |zip(xs,ys)| === min(|xs|,|ys|), passed 10 tests  [0.83ms]
+✕ intended mistake: |zip(xs,ys)| != max(|xs|,|ys|) [0.39ms]
+  ! Falsified after 0 passed tests: [0.39ms]
+  Expected: 5
+  Obtained: 2
+  failed on inputs:
+    1. Cons(102, Cons(97, Cons(41, Cons(123, Cons(122, Nil())))))
+    2. Cons(42, Cons(-46, Nil()))
+✓ unzip-zip-take relation, passed 10 tests  [3.92ms]
+✓ drop: concatenation , passed 10 tests  [1.94ms]
+✓ drop-slice relation, passed 10 tests  [0.64ms]
+✓ reverseOnto-reverse-append relation , passed 10 tests  [0.84ms]
+✓ size-foldLeft relation, passed 20 tests  [1.14ms]
+✓ take-drop: inversion over concatenation, passed 20 tests  [0.77ms]
+✕ even numbers are even and smaller than 4 [0.11ms]
+  ! Falsified after 1 passed test: [0.11ms]
+  Assertion failed
+  failed on input:
+    1. 12
+
+ 12 pass
+ 5 fail
+ 17 test(s) total [41.5ms]
+
+false
