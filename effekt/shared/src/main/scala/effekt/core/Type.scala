@@ -56,7 +56,7 @@ object Type {
   val TInt = ValueType.Data(builtins.IntSymbol, Nil)
   val TChar = ValueType.Data(builtins.CharSymbol, Nil)
   val TByte = ValueType.Data(builtins.ByteSymbol, Nil)
-  val TBoolean = ValueType.Data(builtins.BooleanSymbol, Nil)
+  val TBoolean = ValueType.Data(builtins.BoolSymbol, Nil)
   val TString = ValueType.Data(builtins.StringSymbol, Nil)
   val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
 

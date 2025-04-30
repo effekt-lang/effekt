@@ -390,7 +390,7 @@ object Normalizer { normal =>
         bvars = bvars :+ x
       // introduce a binding
       case (bparam, block) =>
-        val id = symbols.TmpBlock("blockBinding")
+        val id = Id("blockBinding")
         bindings = bindings :+ Binding.Def(id, block)
         bvars = bvars :+ Block.BlockVar(id, block.tpe, block.capt)
         copyUsage(bparam.id, id)

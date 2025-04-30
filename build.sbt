@@ -67,7 +67,7 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("ki
   )
 
 lazy val root = project.in(file("effekt"))
-  .aggregate(effekt.js, effekt.jvm)
+  .aggregate(effekt.jvm)
   .settings(noPublishSettings)
   .settings(Seq(
     Compile / run := (effekt.jvm / Compile / run).evaluated

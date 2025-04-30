@@ -2,7 +2,6 @@ package effekt
 package core
 package optimizer
 
-import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 
 import kiama.util.Source
@@ -13,15 +12,14 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
-      case CoreTransformed(source, tree, mod, core) =>
-        val term = Context.checkMain(mod)
-        val optimized = Context.timed("optimize", source.name) { optimize(source, term, core) }
-        Some(CoreTransformed(source, tree, mod, optimized))
+      case CoreTransformed(source, core, main) =>
+        val optimized = Context.timed("optimize", source.name) { optimize(source, main, core) }
+        Some(CoreTransformed(source, optimized, main))
     }
 
-  def optimize(source: Source, mainSymbol: symbols.Symbol, core: ModuleDecl)(using Context): ModuleDecl =
+  def optimize(source: Source, mainSymbol: Id, core: ModuleDecl)(using Context): ModuleDecl =
 
-    val isLLVM = Context.config.backend().name == "llvm"
+    val isLLVM = false
 
     var tree = core
 

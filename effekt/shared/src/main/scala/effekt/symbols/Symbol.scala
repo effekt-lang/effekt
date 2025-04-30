@@ -44,4 +44,13 @@ trait Symbol {
 }
 object Symbol {
   val fresh = new Counter(0)
+
+  def apply(n: Name): Symbol = new Symbol {
+    val name = n
+  }
+}
+
+object Wildcard {
+  def apply() = Symbol(Name.local("_"))
+  def unapply(s: Symbol): Boolean = s.name == Name.local("_")
 }

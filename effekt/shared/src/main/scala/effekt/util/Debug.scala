@@ -1,9 +1,6 @@
 package effekt
 package util
 
-import effekt.symbols.TypePrinter
-
-
 val showGeneric: PartialFunction[Any, String] = {
   case l: List[_] =>
     l.map(show).mkString("List(", ", ", ")")
@@ -13,10 +10,7 @@ val showGeneric: PartialFunction[Any, String] = {
 }
 
 val show: PartialFunction[Any, String] =
-  TypePrinter.show orElse
     core.PrettyPrinter.show orElse
-    generator.js.PrettyPrinter.show orElse
-    cps.PrettyPrinter.show orElse
     showGeneric
 
 inline def debug[A](inline value: A): A =

@@ -1,7 +1,6 @@
 package effekt
 package util
 
-import effekt.source.{ NoSource, Tree }
 import kiama.util.{ Message, Messaging, Positions, Range, Severities }
 import kiama.util.Severities.*
 
@@ -11,8 +10,6 @@ object messages {
 
   sealed trait EffektError extends Message
   case class ParseError(message: String, range: Option[Range]) extends EffektError { val severity = Error }
-  case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends EffektError { val severity = Error }
-  case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends EffektError { val severity = Error }
   case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends EffektError
   case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends EffektError
 
@@ -98,19 +95,17 @@ object messages {
    */
   trait ErrorReporter {
 
-    var focus: Tree // the current focus of the compiler
-
-    def currentRange: Option[Range] = rangeOf(focus)
+    def currentRange: Option[Range] = None
 
     val messaging: BufferedMessaging[EffektError]
 
     def positions: Positions // used to lookup positions of trees
 
     def plainMessage(text: String, severity: Severity): EffektError =
-      PlainTextError(text, rangeOf(focus), severity)
+      PlainTextError(text, None, severity)
 
     def structuredMessage(content: StructuredMessage, severity: Severity): EffektError =
-      StructuredError(content, rangeOf(focus), severity)
+      StructuredError(content, None, severity)
 
     def report(msg: EffektError): Unit = messaging.append(msg)
 
@@ -140,25 +135,5 @@ object messages {
       reraise(msgs)
       abort(msg)
     }
-
-    def at[T](t: Tree)(block: => T): T = {
-      val before = focus
-      focus = t;
-      val res = block;
-      focus = before;
-      res
-    }
-
-    def withFocus[T <: Tree, R](block: T => R): T => R = { t =>
-      at(t) { block(t) }
-    }
-
-    /**
-     * Sets the given tree into focus for error reporting
-     */
-    def focusing[T <: Tree, R](t: T)(f: T => R): R =
-      at(t) { f(t) }
-
-    def rangeOf(t: Tree): Option[Range] = positions.getRange(t)
   }
 }

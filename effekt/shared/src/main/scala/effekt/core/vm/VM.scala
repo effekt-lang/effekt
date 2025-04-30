@@ -3,7 +3,6 @@ package core
 package vm
 
 import effekt.core.vm.Computation.Reference
-import effekt.source.FeatureFlag
 
 import scala.annotation.tailrec
 
