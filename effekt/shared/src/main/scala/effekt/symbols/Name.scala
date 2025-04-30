@@ -1,6 +1,5 @@
 package effekt.symbols
 
-import effekt.source.Id
 import effekt.context.Context
 
 sealed trait Name {
@@ -40,8 +39,6 @@ case class QualifiedName(prefix: List[String], name: String) extends Name {
 
 // Pseudo-constructors to safely convert ids and strings into names.
 object Name {
-
-  def local(id: Id): LocalName = local(id.name)
 
   def local(id: String): LocalName = LocalName(id)
 

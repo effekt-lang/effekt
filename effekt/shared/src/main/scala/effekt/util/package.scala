@@ -19,3 +19,7 @@ extension(ch: Char) def escape: String = ch match {
   case ch if ch.toInt >= 32 && ch.toInt <= 126 => String.valueOf(ch)
   case ch => "\\u%04x".format(ch.toInt)
 }
+
+implicit class ErrorMessageInterpolator(private val sc: StringContext) extends AnyVal {
+  def pp(args: Any*): String = sc.s(args.map(effekt.util.show): _*)
+}

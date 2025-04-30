@@ -1,8 +1,7 @@
-package effekt.core
-import effekt.{symbols, Phase}
+package effekt
+package core
 import munit.Location
-import kiama.parsing.{NoSuccess, Success}
-import effekt.PhaseResult.CoreTransformed
+import kiama.parsing.{ NoSuccess, Success }
 
 /** Base class for tests of [[core]]-related stuff.
  * Provides helpers to parse inputs and test for alpha-equivalence(*),
@@ -81,8 +80,6 @@ trait CoreTests extends munit.FunSuite {
         fail(s"Parsing ${nickname} failed\n[${pos.line}:${pos.column}] ${err.message}")
     }
   }
-
-  protected given testContext: TestContext = new TestContext
 }
 
 trait CoreTransformationTests extends CoreTests {
@@ -95,28 +92,5 @@ trait CoreTransformationTests extends CoreTests {
     val pExpected = parse(expected, "expected result", names = names)
     val obtained = transform(pInput)
     assertAlphaEquivalent(obtained, pExpected, clue, names = names)
-  }
-}
-/** [[CoreTransformationTests]] for the common case of testing a specific [[Phase]]. */
-trait CorePhaseTests[P <: Phase[CoreTransformed, CoreTransformed]](phase: P) extends CoreTransformationTests {
-
-  protected val theSource: kiama.util.Source = new kiama.util.Source {
-    override def name: String = "(core test)"
-    override def content: String =
-      throw NotImplementedError("The original Effekt source is not available in core tests.")
-  }
-  protected val theSourceModuleDecl: effekt.source.ModuleDecl = effekt.source.ModuleDecl("(core test)", Nil, Nil) // FIXME sentinel value
-
-  protected val theSourceModule: effekt.symbols.Module = effekt.symbols.Module(theSourceModuleDecl, theSource)
-
-  override def transform(input: ModuleDecl): ModuleDecl = {
-    testContext.in {
-      testContext.module = theSourceModule
-      // (source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl)
-      phase.run(CoreTransformed(theSource, theSourceModuleDecl, theSourceModule, input))(using testContext) match {
-        case Some(CoreTransformed(source, tree, mod, core)) => core
-        case None => fail(s"Phase ${phase.phaseName} failed on test input")
-      }
-    }
   }
 }

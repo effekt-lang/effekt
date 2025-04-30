@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import effekt.symbols.{ Capture, Captures, Effects, ErrorMessageInterpolator, LocalName, Name, NoName, QualifiedName, TypePrinter }
+import effekt.symbols.{ LocalName, Name, NoName, QualifiedName }
 import effekt.util.messages.*
 import kiama.util.{ Messaging, Position, Positions, Severities }
 import kiama.util.Severities._
@@ -61,44 +61,11 @@ trait ColoredMessaging extends EffektMessaging {
     case ParseError(msg, range)               => msg
     case PlainTextError(msg, range, severity) => msg
     case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
-      case id: source.IdDef    => highlight(TypePrinter.show(id))
-      case id: source.IdRef    => highlight(TypePrinter.show(id))
       case name: Name          => highlight(name.name)
-      case t: symbols.Type     => highlight(TypePrinter.show(t))
-      case t: Capture          => highlight(TypePrinter.show(t))
-      case t: Captures         => highlight(TypePrinter.show(t))
-      case t: Effects          => highlight(TypePrinter.show(t))
       case n: Int              => highlight(n.toString)
       case nested: EffektError => formatContent(nested)
       case other               => other.toString
     }: _*)
-    case AmbiguousOverloadError(matches, range) =>
-      val title = bold("Ambiguous overload.\n")
-      val mainMessage = s"${title}There are multiple overloads, which all would type check:"
-
-      val longestNameLength = matches.map { case (sym, tpe) => fullname(sym.name).size }.max
-
-      val explanations = matches map {
-        case (sym, tpe) =>
-          val name = fullname(sym.name)
-          val padding = " " * (longestNameLength - name.size)
-          pp"- ${highlight(name)}: ${padding}${tpe}"
-      }
-
-      mainMessage + "\n" + explanations.mkString("\n")
-    case FailedOverloadError(failedAttempts, range) =>
-      val title = bold("Cannot typecheck call.\n")
-      val mainMessage = s"${title}There are multiple overloads, which all fail to check:"
-
-      val explanations = failedAttempts map {
-        case (sym, tpe, msgs) =>
-          val nestedErrors = msgs.map { msg => formatContent(msg) }.mkString("\n")
-
-          val header = underlined(pp"Possible overload: ${highlight(fullname(sym.name))}") + underlined(pp" of type ${tpe}")
-          s"$header\n${indent(nestedErrors)}"
-      }
-
-      mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
   }
 
   def fullname(n: Name): String = n match {

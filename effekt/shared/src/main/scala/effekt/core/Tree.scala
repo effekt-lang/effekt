@@ -1,7 +1,6 @@
 package effekt
 package core
 
-import effekt.source.FeatureFlag
 import effekt.util.Structural
 import effekt.util.messages.INTERNAL_ERROR
 import effekt.util.messages.ErrorReporter
@@ -124,6 +123,11 @@ export Declaration.*
 case class Constructor(id: Id, fields: List[Field]) extends Tree
 case class Field(id: Id, tpe: ValueType) extends Tree
 case class Property(id: Id, tpe: BlockType) extends Tree
+
+enum FeatureFlag extends Tree {
+  case NamedFeatureFlag(id: String)
+  case Default
+}
 
 /**
  * FFI external definitions

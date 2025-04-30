@@ -24,9 +24,8 @@ object DropBindings extends Phase[CoreTransformed, CoreTransformed] {
 
   def run(input: CoreTransformed)(using C: Context): Option[CoreTransformed] =
     input match {
-      case CoreTransformed(source, tree, mod, core) =>
-        val main = C.checkMain(mod)
-        Some(CoreTransformed(source, tree, mod, apply(Set(main), core)))
+      case CoreTransformed(source, core, main) =>
+        Some(CoreTransformed(source, apply(Set(main), core), main))
     }
 
   def apply(entrypoints: Set[Id], m: ModuleDecl): ModuleDecl =
