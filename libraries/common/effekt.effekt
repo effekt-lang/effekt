@@ -203,7 +203,7 @@ def println(o: Ordering): Unit = println(o.show)
 /// Structural equality: Not available in the LLVM backend
 extern pure def equals[R](x: R, y: R): Bool =
   js "$effekt.equals(${x}, ${y})"
-  chez "(equal? ${x} ${y})"
+  chez "(equal_impl ${x} ${y})"
 
 def differsFrom[R](x: R, y: R): Bool =
   not(equals(x, y))
