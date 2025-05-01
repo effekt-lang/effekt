@@ -84,7 +84,7 @@
                (let ([field1 ((record-accessor rtd1 i) obj1)]
                      [field2 ((record-accessor rtd2 i) obj2)])
                  (if (not (equal_impl field1 field2))
-                     (set! result #f))))
+                     (set! result #f)))))
            #f))]
     
     ; For lists, compare elements recursively
