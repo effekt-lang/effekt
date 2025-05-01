@@ -64,8 +64,39 @@
   (display str)
   (newline))
 
+; Custom structural equality that properly handles records
 (define (equal_impl obj1 obj2)
-  (equal? obj1 obj2))
+  (cond
+    ; Same object reference (fast path)
+    [(eq? obj1 obj2) #t]
+    
+    ; If both are records, compare them structurally
+    [(and (record? obj1) (record? obj2))
+     (let* ([rtd1 (record-rtd obj1)]
+            [rtd2 (record-rtd obj2)])
+       ; Check if same record type
+       (if (eq? rtd1 rtd2)
+           (let* ([n (vector-length (record-type-field-names rtd1))]
+                  [result #t])
+             ; Compare all fields recursively
+             (do ([i 0 (+ i 1)])
+                 ((or (= i n) (not result)) result)
+               (let ([field1 ((record-accessor rtd1 i) obj1)]
+                     [field2 ((record-accessor rtd2 i) obj2)])
+                 (if (not (equal_impl field1 field2))
+                     (set! result #f))))
+           #f))]
+    
+    ; For lists, compare elements recursively
+    [(and (list? obj1) (list? obj2))
+     (and (= (length obj1) (length obj2))
+          (let loop ([l1 obj1] [l2 obj2])
+            (or (null? l1)
+                (and (equal_impl (car l1) (car l2))
+                     (loop (cdr l1) (cdr l2))))))]
+    
+    ; For all other types, use Scheme's built-in equal?
+    [else (equal? obj1 obj2)]))
 
 (define-syntax thunk
   (syntax-rules ()
