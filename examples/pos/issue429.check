@@ -1,5 +1,29 @@
+=== Basic equality tests ===
 true
 true
 true
 true
 true
+
+=== Record equality tests ===
+true
+false
+true
+
+=== Nested structure tests ===
+true
+false
+true
+false
+
+=== Tree equality tests ===
+true
+false
+false
+true
+
+=== Complex nested structure tests ===
+true
+false
+true
+false
