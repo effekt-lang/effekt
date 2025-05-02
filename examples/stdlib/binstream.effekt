@@ -1,0 +1,55 @@
+import binstream
+import stream
+import test
+
+def main() = {
+  suite("Binstream", false){
+    test("literal hex 10"){ assertEqual(x"10${()}", 16) }
+    test("literal hex ff"){ assertEqual(x"ff${()}", 255) }
+    test("literal char a"){ assertEqual(x"${'a'}", x"61${()}") }
+    test("literal string ba"){ assertEqual(x"${"ba"}", x"62${()}" * 256 + x"61${()}") }
+    test("int back-and-forth (17)"){ assertEqual(x"${17}", 17)}
+    test("int back-and-forth (17), explicit BE"){ assertEqual(x"${17.BE}", 17) }
+    test("int back-and-forth (17), explicit LE"){ assertEqual(x"${17.LE}", 17 * 256 * 256 * 256) }
+    test("byte 00101010"){
+      with on[MissingValue].default{ assertEqual(true, false) }
+      assertEqual(first[Byte]{groupBytes{ bit"00101010${()}" }}.toInt, 42)
+    }
+    test("to bits and back"){ 
+      with on[MissingValue].default{ assertEqual(true, false) }
+      [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
+        assertEqual(first[Byte]{ groupBytes{ bits(v) } }, v)
+      }
+    }
+    test("to bits and back LE bitorder"){ 
+      with on[MissingValue].default{ assertEqual(true, false) }
+      [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
+        assertEqual(first[Byte]{ groupBytesLE{ bitsLE(v) } }, v)
+      }
+    }
+    test("to bits and back BE bitorder"){ 
+      with on[MissingValue].default{ assertEqual(true, false) }
+      [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
+        assertEqual(first[Byte]{ groupBytesBE{ bitsBE(v) } }, v)
+      }
+    }
+    test("append 0 means *2"){
+      with on[MissingValue].default{ assertEqual(true, false) }
+      [42.toByte, 12.toByte, 127.toByte].foreach{ v =>
+        assertEqual(nth[Byte](1){ groupBytes{ repeat(7){ do emit(B0()) }; bits(v); do emit(B0()) } }, (v.toInt * 2).toByte)
+      }
+    }
+    test("pow agrees with double one"){
+      assertEqual(pow(2,5), pow(2.0,5).toInt)
+    }
+    test("LE 2s-complement"){
+      with on[MissingValue].default{ assertEqual(true, false) }
+      assertEqual(first[Byte]{ groupBytesLE{ twoscomplementLE{ bitsLE(6.toByte) } } }, 250.toByte)
+    }
+    test("BE 2s-complement"){
+      with on[MissingValue].default{ assertEqual(true, false) }
+      assertEqual(first[Byte]{ groupBytesBE{ bit"${-6.Signed.BE.OfWidth(8)}" } }, 250.toByte)
+    }
+  }
+  ()
+}
