@@ -4,6 +4,7 @@ def iterate(i: Int, a: Int) { f: Int => Int }: Int =
   if (i == 0) {
     a
   } else {
+    // We are using `i.mod(2^63-1)` to prevent LLVM from constant folding this whole program
     iterate(i.mod(9223372036854775807) - 1, f(a)) { f }
   }
 
