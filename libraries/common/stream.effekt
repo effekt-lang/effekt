@@ -409,7 +409,9 @@ def each(string: String): Unit / emit[Char] =
 def collectString { stream: () => Unit / emit[Char] }: String =
   returning::collectString[Unit]{stream}.second
 
-effect snapshot(): Unit
+namespace internal {
+  effect snapshot(): Unit
+}
 
 /// Use cons to handle prod, but also emit to the outside.
 /// The outside controls iteration, i.e., if cons aborts, the rest of prod will still be emitted.
@@ -432,7 +434,7 @@ def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }:
         prod()
         k = box { () }
       } with emit[A] { v =>
-        do snapshot() // remember that we need to continue here if cons aborts
+        do internal::snapshot() // remember that we need to continue here if cons aborts
         if(not(consDone)) do emit(v)
         outer.emit(v)
         resume(())
@@ -443,7 +445,7 @@ def teeing[A]{ cons: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }:
   }
   with stop { () => () }
   with outer: emit[A]{ v => resume(do emit(v)) }
-  with snapshot{ () =>
+  with internal::snapshot{ () =>
     k = box { resume(()) }
     resume(())
   }
