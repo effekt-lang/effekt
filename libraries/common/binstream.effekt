@@ -280,35 +280,6 @@ def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
 def groupBytes{ body: => Unit / emit[Bit] }: Unit / emit[Byte] =
   groupBytesBE{body}
 
-/// Return just nth element of the given stream.
-/// Raises MissingValue if not enough elements are emitted
-// TODO could be in stream
-def nth[A](n: Int){ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
-  var m = n
-  try {
-    body()
-    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
-    r
-  } with emit[A] { a => 
-    if (m == 0) {
-      a
-    } else {
-      m = m - 1
-      resume(())
-    }
-  }
-}
-
-/// Return just first element of the given stream.
-/// Raises MissingValue if no elements are emitted
-// TODO could be in stream
-def first[A]{ body: => Unit / emit[A] }: A / Exception[MissingValue] = {
-  try {
-    body()
-    val r: A = do raise[MissingValue](MissingValue(), "code in first did not emit any values")
-    r
-  } with emit[A] { a => a }
-}
 // Literals/splices
 // ----------------
 /// Splices allowed in bit stream literals
