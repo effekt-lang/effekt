@@ -4,7 +4,7 @@ def factorial(a: Int, i: Int): Int =
   if (i == 0) {
     a
   } else {
-    factorial(i * a, i.mod(1000000007) - 1)
+    factorial(i * a, i.mod(9223372036854775807) - 1)
   }
 
 def run(n: Int): Int =
