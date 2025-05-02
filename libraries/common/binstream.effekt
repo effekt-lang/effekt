@@ -152,32 +152,28 @@ def x{ body: => Unit / { literal, HexSplices } }: Int = {
 // --------------------
 // TODO could also be part of stream library
 
-/// Request padding to a multiple of fac, by calling gen for each
-effect pad[A](fac: Int){ gen: => A }: Unit
-
 /// get current position in stream
 effect getPos(): Int
 
 /// Track position in stream, starting with init
 /// Handles getPos and pad
-def tracking[A](init: Int){ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] = {
+def tracking[A](init: Int){ body: => Unit / { emit[A], getPos } }: Unit / emit[A] = {
   var n = init
   try body()
   with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
   with getPos{ resume(n) }
-  with pad[A] { fac => 
-    resume { {gen} =>
-      while(mod(n, fac) != 0){
-        do emit[A](gen())
-        n = n + 1
-      }
-    }
+}
+
+/// Pad to a multiple of fac, by calling gen for each
+def pad[A](fac: Int){ gen: => A }: Unit  / {getPos, emit[A]} = {
+  while(mod(do getPos(), fac) != 0) {
+    do emit[A](gen())
   }
 }
 
 /// Track how many bytes were emitted
 /// Handles getPos and pad
-def tracking[A]{ body: => Unit / { emit[A], getPos, pad[A] } }: Unit / emit[A] =
+def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
   tracking[A](0){body}
 
 // Sub-Byte
